@@ -1,6 +1,6 @@
 import { getToken, logout } from "./auth.js";
 
-const DEFAULT_BASE_URL = "http://localhost:4000";
+const DEFAULT_BASE_URL = "http://127.0.0.1:4000";
 
 export function getApiBaseUrl() {
   return localStorage.getItem("inforcliente.apiBaseUrl") || DEFAULT_BASE_URL;
@@ -38,7 +38,44 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
   if (res.status === 401) {
     logout();
     const here = window.location.pathname.split("/").slice(-2).join("/");
-    const loginUrl = `/frontend/src/pages/Auth/login.html?next=${encodeURIComponent(here)}`;
+    const loginUrl = `/Auth/login.html?next=${encodeURIComponent(here)}`;
+    window.location.href = loginUrl;
+    throw new Error("UNAUTHORIZED");
+  }
+
+  const data = await parseJsonSafe(res);
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP_${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+export async function apiUpload(path, { file, fieldName = "file", extraFields } = {}) {
+  const token = getToken();
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+
+  const form = new FormData();
+  form.append(fieldName, file);
+  if (extraFields) {
+    Object.entries(extraFields).forEach(([k, v]) => form.append(k, String(v)));
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: form,
+  });
+
+  if (res.status === 401) {
+    logout();
+    const here = window.location.pathname.split("/").slice(-2).join("/");
+    const loginUrl = `/Auth/login.html?next=${encodeURIComponent(here)}`;
     window.location.href = loginUrl;
     throw new Error("UNAUTHORIZED");
   }

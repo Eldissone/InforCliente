@@ -30,7 +30,14 @@ export function toast(message, { type = "info", timeoutMs = 3000 } = {}) {
   }, timeoutMs);
 }
 
-export function openModal({ title, contentHtml, primaryLabel = "Salvar", onPrimary, secondaryLabel = "Cancelar" }) {
+export function openModal({
+  title,
+  contentHtml,
+  primaryLabel = "Salvar",
+  onPrimary,
+  secondaryLabel = "Cancelar",
+  onSecondary,
+}) {
   const overlay = document.createElement("div");
   overlay.className = "fixed inset-0 bg-black/50 z-[9998] flex items-center justify-center p-6";
 
@@ -60,7 +67,14 @@ export function openModal({ title, contentHtml, primaryLabel = "Salvar", onPrima
     if (e.target === overlay) close();
   });
   panel.querySelector("[data-close]")?.addEventListener("click", close);
-  panel.querySelector("[data-secondary]")?.addEventListener("click", close);
+  panel.querySelector("[data-secondary]")?.addEventListener("click", async () => {
+    if (onSecondary) {
+      const body = panel.querySelector("[data-body]");
+      await onSecondary({ close, panel, body });
+    } else {
+      close();
+    }
+  });
   panel.querySelector("[data-primary]")?.addEventListener("click", async () => {
     if (onPrimary) {
       const body = panel.querySelector("[data-body]");

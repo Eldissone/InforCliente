@@ -3,9 +3,16 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const multer = require("multer");
+const { parseBudgetSheet } = require("../utils/budgetImport");
 
 const projectRoutes = express.Router();
 projectRoutes.use(authRequired);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+});
 
 projectRoutes.get(
   "/",
@@ -219,6 +226,16 @@ projectRoutes.patch(
   })
 );
 
+projectRoutes.delete(
+  "/:id",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await prisma.project.delete({ where: { id } });
+    return res.json({ ok: true });
+  })
+);
+
 projectRoutes.get(
   "/:id/transactions",
   asyncHandler(async (req, res) => {
@@ -285,6 +302,82 @@ projectRoutes.post(
     });
 
     return res.status(201).json({ id: created.id });
+  })
+);
+
+projectRoutes.get(
+  "/:id/budget/lines",
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const items = await prisma.projectBudgetLine.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    return res.json({
+      items: items.map((l) => ({
+        ...l,
+        quantity: l.quantity === null ? null : String(l.quantity),
+        unitPrice: l.unitPrice === null ? null : String(l.unitPrice),
+        total: String(l.total),
+      })),
+    });
+  })
+);
+
+projectRoutes.post(
+  "/:id/budget/upload",
+  requireRole(["admin", "operador"]),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "MISSING_FILE" });
+
+    const name = String(file.originalname || "budget.xlsx");
+    const lower = name.toLowerCase();
+    if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls") && !lower.endsWith(".csv")) {
+      return res.status(400).json({ error: "UNSUPPORTED_FILE_TYPE" });
+    }
+
+    const { lines, warnings } = parseBudgetSheet(file.buffer, name);
+    if (!lines.length) {
+      return res.status(400).json({ error: "NO_LINES_IMPORTED", warnings });
+    }
+
+    // Estratégia MVP: substituir orçamento anterior (apaga linhas antigas e insere novas)
+    await prisma.$transaction(async (tx) => {
+      await tx.projectBudgetLine.deleteMany({ where: { projectId } });
+      await tx.projectBudgetLine.createMany({
+        data: lines.map((l) => ({
+          projectId,
+          rowNumber: l.rowNumber,
+          sourceFile: l.sourceFile,
+          category: l.category,
+          description: l.description,
+          unit: l.unit,
+          quantity: l.quantity === null ? null : String(l.quantity),
+          unitPrice: l.unitPrice === null ? null : String(l.unitPrice),
+          total: String(l.total),
+        })),
+      });
+
+      const sum = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          budgetAllocated: String(sum),
+          budgetTotal: String(sum),
+        },
+      });
+    });
+
+    const total = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
+    return res.json({
+      imported: lines.length,
+      total: String(total.toFixed(2)),
+      warnings,
+    });
   })
 );
 

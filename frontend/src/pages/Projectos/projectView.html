@@ -103,8 +103,7 @@
 <a class="text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
 <a class="text-slate-400 hover:text-white transition-colors" href="../Clientes/clienteLista.html">Clientes</a>
 <a class="text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2" href="../Projectos/ProjectGeral.html">Projetos</a>
-<a class="text-slate-400 hover:text-white transition-colors" href="#">Analytics</a>
-<a class="text-slate-400 hover:text-white transition-colors" href="#">Reports</a>
+<a data-nav-users class="hidden text-slate-400 hover:text-white transition-colors" href="../Users/index.html">Utilizadores</a>
 </div>
 </div>
 <div class="flex items-center gap-6">
@@ -115,6 +114,7 @@
 <div class="flex items-center gap-3 pl-4 border-l border-white/10">
 <img alt="User Profile" class="w-8 h-8 rounded-full border border-white/20" data-alt="professional portrait of a civil engineer in a modern office, soft dramatic side lighting, high-end industrial aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZndTbsygcDVixvj4y4ZAQeMhTJo1O4Vuo2U3dARsEgUcoPw45k2oDl8Uwpxhortgp5gWBl1r4CLTeyOUXE5W-BDsKYAi2nHABGljaw2evELssxjkD5FwFnZAs1lJEnjC1a_aZdpT44w2aFU7CfpfzJQuiof4mfRHFV7r-Ic2eBjfM4U716i5dn7uUcwo9j890dvZbDHc3pGqZ59AEEBdvfyEJGY734AP2l2d-Gno9NrieGB0Hb_U7Qt2bmReUtME91gcVLRK_gjE"/>
 <span class="text-white text-xs font-medium uppercase tracking-widest hidden lg:block">System Operator</span>
+<button data-logout class="ml-3 text-xs font-bold uppercase tracking-widest text-white/80 hover:text-white">Sair <span data-user-role class="ml-2 text-[10px] text-[#2afc8d]"></span></button>
 </div>
 </div>
 </div>
@@ -152,7 +152,7 @@
 <div class="bg-[#2afc8d]/20 px-2 py-1 rounded text-[#2afc8d] text-[10px] font-bold">EM DIA</div>
 </div>
 <div class="flex items-baseline gap-2 mb-2">
-<span class="text-sm font-medium text-slate-400">R$</span>
+<span class="text-sm font-medium text-slate-400">kz</span>
 <span id="budgetTotal" class="text-5xl font-extrabold tracking-tighter">—</span>
 </div>
 <p class="text-xs text-slate-400 mb-8">Aprovado em Março 2024 • Rev. 03</p>
@@ -168,7 +168,7 @@
 <span class="material-symbols-outlined text-[#0d3fd1]" data-icon="payments">payments</span>
 </div>
 <div class="flex items-baseline gap-2 mb-2">
-<span class="text-sm font-medium text-on-surface-variant">R$</span>
+<span class="text-sm font-medium text-on-surface-variant">kz</span>
 <span id="budgetConsumed" class="text-5xl font-extrabold tracking-tighter text-[#212e3e]">—</span>
 </div>
 <div class="flex items-center gap-2 text-sm font-semibold text-error mb-8">

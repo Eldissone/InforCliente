@@ -6,6 +6,7 @@ const { authRoutes } = require("./routes/auth");
 const { dashboardRoutes } = require("./routes/dashboard");
 const { clientRoutes } = require("./routes/clients");
 const { projectRoutes } = require("./routes/projects");
+const { userRoutes } = require("./routes/users");
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/auth", authRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/clients", clientRoutes);
 app.use("/projects", projectRoutes);
+app.use("/users", userRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
@@ -49,7 +51,7 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ error: message });
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, "0.0.0.0", () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${config.port}`);
 });

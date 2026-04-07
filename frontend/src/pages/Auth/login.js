@@ -40,9 +40,9 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     const next = getNext();
     if (next) {
       // next é um caminho relativo curto (ex: "Dashboard/index.html")
-      window.location.href = `/frontend/src/pages/${next}`;
+    window.location.href = `/${next}`;
     } else {
-      window.location.href = "/frontend/src/pages/Dashboard/index.html";
+    window.location.href = "/Dashboard/index.html";
     }
   } catch (err) {
     setError("Falha no login. Verifique email/senha e se a API está rodando.");

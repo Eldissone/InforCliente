@@ -114,10 +114,29 @@ model Project {
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   transactions ProjectTransaction[]
+  budgetLines   ProjectBudgetLine[]
   alerts       Alert[]
 
   @@index([name])
   @@index([status])
+}
+
+model ProjectBudgetLine {
+  id          String   @id @default(cuid())
+  projectId   String
+  rowNumber   Int?
+  sourceFile  String?
+  category    String?
+  description String
+  unit        String?
+  quantity    Decimal? @db.Decimal(16, 4)
+  unitPrice   Decimal? @db.Decimal(16, 4)
+  total       Decimal  @db.Decimal(16, 2)
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
 }
 
 model ProjectTransaction {

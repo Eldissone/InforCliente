@@ -187,6 +187,16 @@ clientRoutes.patch(
   })
 );
 
+clientRoutes.delete(
+  "/:id",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await prisma.client.delete({ where: { id } });
+    return res.json({ ok: true });
+  })
+);
+
 clientRoutes.get(
   "/:id/interactions",
   asyncHandler(async (req, res) => {

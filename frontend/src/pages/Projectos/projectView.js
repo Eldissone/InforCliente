@@ -1,6 +1,7 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, apiUpload } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
 import { formatCurrencyBRL, formatDateBR, formatPercent } from "../../shared/format.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -170,7 +171,7 @@ function wireNewTransaction() {
             <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor (R$)</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor (kz)</label>
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
         </div>
@@ -196,11 +197,66 @@ function wireNewTransaction() {
   });
 }
 
+function wireBudgetUpload() {
+  // adiciona um botão "Importar Orçamento" ao lado do Exportar
+  const exportBtn = el("exportProjectBtn");
+  if (!exportBtn) return;
+  const wrap = exportBtn.parentElement;
+  if (!wrap) return;
+
+  if (!document.getElementById("uploadBudgetBtn")) {
+    const btn = document.createElement("button");
+    btn.id = "uploadBudgetBtn";
+    btn.className =
+      "bg-surface-container-low px-6 py-2.5 text-primary text-sm font-semibold rounded-lg hover:bg-surface-container-high transition-all flex items-center gap-2";
+    btn.innerHTML = `<span class="material-symbols-outlined text-sm">upload_file</span> Importar Orçamento`;
+    wrap.insertBefore(btn, exportBtn);
+  }
+
+  el("uploadBudgetBtn")?.addEventListener("click", () => {
+    openModal({
+      title: "Upload de planilha de orçamento",
+      primaryLabel: "Enviar",
+      contentHtml: `
+        <div class="space-y-3">
+          <div class="text-sm text-slate-700">
+            Formatos aceitos: <span class="font-bold">.xlsx</span> ou <span class="font-bold">.csv</span>.
+            A planilha precisa ter uma coluna de <span class="font-bold">descrição</span> e uma coluna de <span class="font-bold">total/valor</span>.
+          </div>
+          <input id="budgetFile" type="file" accept=".xlsx,.xls,.csv" class="block w-full text-sm" />
+          <div class="text-xs text-slate-500">
+            Dica de colunas: descricao/description, total/valor/valor_total, (opcionais: categoria, unidade, quantidade, preco_unitario).
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, panel }) => {
+        const file = panel.querySelector("#budgetFile")?.files?.[0];
+        if (!file) {
+          toast("Selecione um arquivo para enviar.", { type: "error" });
+          return;
+        }
+
+        const id = getProjectId();
+        const res = await apiUpload(`/projects/${encodeURIComponent(id)}/budget/upload`, { file });
+        toast(`Orçamento importado: ${res.imported} linhas`, { type: "success" });
+        if (res.warnings?.length) {
+          toast(`Avisos: ${res.warnings.slice(0, 1).join(" ")}`, { type: "info", timeoutMs: 6000 });
+        }
+        close();
+        await loadProject();
+      },
+    });
+  });
+}
+
 async function init() {
+  wireLogout();
+  wireUsersNav();
   await loadProject();
   await loadTransactions();
   wireSearch();
   wireExport();
+  wireBudgetUpload();
   wireNewTransaction();
 }
 

@@ -1,6 +1,7 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
 import { formatCurrencyBRL } from "../../shared/format.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -225,10 +226,10 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome</label><input id="f_name" class="w-full rounded-lg border-slate-300" placeholder="Empresa X" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="f_industry" class="w-full rounded-lg border-slate-300" placeholder="Tecnologia (SaaS)" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="f_region" class="w-full rounded-lg border-slate-300" placeholder="Sudeste" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (R$)</label><input id="f_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (kz)</label><input id="f_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Health (0-100)</label><input id="f_health" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="50" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Risco churn (%)</label><input id="f_churn" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Potencial 24m (R$)</label><input id="f_potential" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Potencial 24m (kz)</label><input id="f_potential" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -272,7 +273,7 @@ async function openEdit(id) {
         </div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="e_industry" class="w-full rounded-lg border-slate-300" value="${c.industry || ""}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="e_region" class="w-full rounded-lg border-slate-300" value="${c.region || ""}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (R$)</label><input id="e_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${Number(
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (kz)</label><input id="e_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${Number(
           c.ltvTotal || 0
         )}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Health (0-100)</label><input id="e_health" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${Number(
@@ -297,10 +298,21 @@ async function openEdit(id) {
       close();
       await load();
     },
+    secondaryLabel: "Excluir",
+    onSecondary: async ({ close }) => {
+      if (!window.confirm("Excluir este cliente? Essa ação não pode ser desfeita.")) return;
+      await apiRequest(`/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
+      toast("Cliente excluído", { type: "success" });
+      close();
+      state.page = 1;
+      await load();
+    },
   });
 }
 
 async function init() {
+  wireLogout();
+  wireUsersNav();
   wireFilters();
   wireActions();
   await load();

@@ -1,6 +1,7 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, setText, toast } from "../../shared/ui.js";
 import { formatCompactNumber, formatPercent } from "../../shared/format.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function byId(id) {
   return document.getElementById(id);
@@ -146,7 +147,7 @@ function wireAddClient() {
             <input id="c_region" class="w-full rounded-lg border-slate-300" placeholder="Sudeste" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (R$)</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (kz)</label>
             <input id="c_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div>
@@ -154,7 +155,7 @@ function wireAddClient() {
             <input id="c_churn" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Potencial 24m (R$)</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Potencial 24m (kz)</label>
             <input id="c_potential" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div>
@@ -186,6 +187,8 @@ function wireAddClient() {
 }
 
 async function init() {
+  wireLogout();
+  wireUsersNav();
   await loadKpis();
   await loadClientMatrix({ search: "" });
   wireClientMatrixActions();

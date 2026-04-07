@@ -1,6 +1,7 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, setText, toast } from "../../shared/ui.js";
 import { formatCurrencyBRL, formatPercent, formatDateBR } from "../../shared/format.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -151,6 +152,8 @@ function wireFab() {
 }
 
 async function init() {
+  wireLogout();
+  wireUsersNav();
   await loadClient();
   await loadTimeline();
   wireFullHistory();

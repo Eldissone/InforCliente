@@ -5,12 +5,23 @@ const app = express();
 
 const port = Number(process.env.PORT || 5173);
 const pagesRoot = path.join(__dirname, "src", "pages");
+const srcRoot = path.join(__dirname, "src");
 
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)
 app.use(express.static(pagesRoot));
 
-// Também expõe o resto do /src pra permitir imports como /services e /shared
-app.use("/src", express.static(path.join(__dirname, "src")));
+// Expõe /src inteiro (opcional)
+app.use("/src", express.static(srcRoot));
+
+// Suporte aos imports atuais que resolvem para /services/* e /shared/*
+app.use("/services", express.static(path.join(srcRoot, "services")));
+app.use("/shared", express.static(path.join(srcRoot, "shared")));
+app.use("/assets", express.static(path.join(srcRoot, "assets")));
+app.use("/components", express.static(path.join(srcRoot, "components")));
+app.use("/hooks", express.static(path.join(srcRoot, "hooks")));
+app.use("/types", express.static(path.join(srcRoot, "types")));
+app.use("/context", express.static(path.join(srcRoot, "context")));
+app.use("/routes", express.static(path.join(srcRoot, "routes")));
 
 // Rota padrão → login
 app.get("/", (_req, res) => {

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Infor Cliente - Utilizadores</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-slate-50 font-[Inter] text-slate-900">
+    <nav class="fixed top-0 w-full z-50 bg-[#212e3e] shadow-[0px_20px_40px_rgba(15,28,44,0.08)]">
+      <div class="flex justify-between items-center px-8 h-16 w-full mx-auto">
+        <div class="flex items-center gap-12">
+          <span class="text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
+          <div class="hidden md:flex items-center gap-8 font-inter tracking-tight font-semibold text-sm">
+            <a class="text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
+            <a class="text-slate-400 hover:text-white transition-colors" href="../Clientes/clienteLista.html">Clientes</a>
+            <a class="text-slate-400 hover:text-white transition-colors" href="../Projectos/ProjectGeral.html">Projetos</a>
+            <a class="text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2" href="../Users/index.html">Utilizadores</a>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <button data-logout class="px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all">
+            Sair <span data-user-role class="ml-2 text-[10px] text-[#2afc8d]"></span>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="pt-24 pb-12 px-8 max-w-[1200px] mx-auto">
+      <header class="flex items-end justify-between gap-6 mb-6">
+        <div>
+          <h1 class="text-3xl font-extrabold tracking-tight">Gestão de utilizadores</h1>
+          <p class="text-slate-600 font-medium">Acesso restrito a administradores.</p>
+        </div>
+        <button id="addUserBtn" class="px-5 py-2.5 bg-blue-600 text-white font-extrabold rounded-xl hover:bg-blue-700 transition-colors">
+          Novo utilizador
+        </button>
+      </header>
+
+      <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div class="text-xs font-black uppercase tracking-widest text-slate-500">Utilizadores</div>
+          <div class="text-xs text-slate-500">Role atual: <span data-user-role class="font-black text-slate-900"></span></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead class="bg-slate-50">
+              <tr class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <th class="px-6 py-4">Email</th>
+                <th class="px-6 py-4">Role</th>
+                <th class="px-6 py-4">Criado</th>
+                <th class="px-6 py-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="usersTbody" class="divide-y divide-slate-200"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./users.js"></script>
+  </body>
+</html>
+

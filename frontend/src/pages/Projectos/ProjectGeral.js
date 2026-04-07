@@ -1,6 +1,7 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
 import { formatPercent } from "../../shared/format.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -197,6 +198,8 @@ async function openCreate() {
 }
 
 async function init() {
+  wireLogout();
+  wireUsersNav();
   wireFilters();
   wireActions();
   await load();
