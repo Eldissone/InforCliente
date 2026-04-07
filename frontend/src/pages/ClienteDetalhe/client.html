@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#b8c3ff",
+                        "primary": "#002b9f",
+                        "outline": "#747686",
+                        "on-secondary-fixed-variant": "#3b4859",
+                        "tertiary-container": "#005e2f",
+                        "on-primary-fixed": "#001356",
+                        "inverse-primary": "#b8c3ff",
+                        "secondary-container": "#d6e3f9",
+                        "secondary": "#525f71",
+                        "surface-dim": "#cddbf0",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "tertiary": "#004421",
+                        "on-error": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary-container": "#00e17a",
+                        "tertiary-fixed": "#5fff9b",
+                        "surface-container": "#e5eeff",
+                        "surface": "#f8f9ff",
+                        "primary-fixed": "#dde1ff",
+                        "tertiary-fixed-dim": "#00e47c",
+                        "secondary-fixed-dim": "#bac7dc",
+                        "on-secondary-fixed": "#0f1c2c",
+                        "on-primary-fixed-variant": "#0035be",
+                        "secondary-fixed": "#d6e3f9",
+                        "on-tertiary-fixed": "#00210d",
+                        "outline-variant": "#c4c5d7",
+                        "on-primary-container": "#b6c1ff",
+                        "primary-container": "#0d3fd1",
+                        "on-surface-variant": "#444655",
+                        "surface-tint": "#274fde",
+                        "on-error-container": "#93000a",
+                        "surface-container-lowest": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-highest": "#d6e3f9",
+                        "surface-bright": "#f8f9ff",
+                        "on-surface": "#0f1c2c",
+                        "surface-variant": "#d6e3f9",
+                        "on-tertiary-fixed-variant": "#005229",
+                        "inverse-surface": "#243141",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-background": "#0f1c2c",
+                        "background": "#f8f9ff",
+                        "on-secondary-container": "#586577",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9ff; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+        }
+        .neon-glow {
+            box-shadow: 0 0 8px rgba(42, 252, 141, 0.4);
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#212e3e] flex justify-between items-center px-8 h-16 w-full mx-auto shadow-[0px_20px_40px_rgba(15,28,44,0.08)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
+<a class="font-inter tracking-tight font-semibold text-sm text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2" href="../Clientes/clienteLista.html">Clientes</a>
+<a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors" href="../Projectos/ProjectGeral.html">Projetos</a>
+<a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors" href="#">Analytics</a>
+<a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors" href="#">Reports</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="bg-[#eff4ff]/10 border-none rounded-lg py-1.5 pl-10 pr-4 text-sm text-white placeholder-slate-400 focus:ring-1 focus:ring-[#2afc8d] w-64 transition-all" placeholder="Search clients..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-slate-400 hover:text-[#2afc8d] transition-colors">notifications</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-slate-700" data-alt="professional portrait of a corporate executive in a sharp navy suit with clean studio lighting and neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqYbwdErG9JS7hsB3GzR2FPDto9_p_B-nngnAYIoM91ajuVCJKGEt2IpvA6Lsu4ft8Tw3M3woD-j-zX_vKCW7x0SaCSK4m9N2CDUbcsym4_Ax-Xw2TH2UHrAwSQsN8umRpDREnKCgdradVYbwL2R1E_Gohd78J54SRTvWkNzePlrX7eEmi2acuNLvag1A8lGuLRBqtgJrJuOhKMM9l8nm7c5RC0kH9YARAzxA-buixsMBUsJEZzrOwYTwwKFvv6Sn9QWPaYmexTSo"/>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="pt-24 pb-12 px-8 max-w-[1600px] mx-auto">
+<!-- Header Section: Identity & Health -->
+<header class="flex flex-col lg:flex-row justify-between items-start gap-8 mb-10">
+<div class="flex items-center gap-6">
+<div class="relative">
+<img alt="Client Avatar" class="w-24 h-24 rounded-xl object-cover grayscale hover:grayscale-0 transition-all duration-500 shadow-xl" data-alt="close-up headshot of a mature businessman with graying hair and glasses, warm professional lighting, neutral office background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqOnhacFA8FkKomn_Vq5D6DJw1ixoKvKs2ZTcibAzCg0JaEPh1ENhz0eoP8kWfIXBeIDcTRctCSWF7GGMFYiPBeHmhpUSQc50K2z5U7DzyEkZYFhR93CNzugJfdVpR4CQ-yKmanXT-bShWy6RGPVhnPj-KYDvvrgRskfFakRCl-0XQMtIFASDvkfPBoKjp7sh4llRtJsfdcWes-r4IY8gyXV65irvEEnOm3oGdvgHZb0az41OIhiFBKv1Am7AcM0QioNDTo64YqbA"/>
+<div class="absolute -bottom-2 -right-2 w-8 h-8 bg-[#2afc8d] rounded-full flex items-center justify-center neon-glow">
+<span class="material-symbols-outlined text-[#212e3e] text-sm font-bold" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h1 id="clientName" class="text-3xl font-extrabold tracking-tight text-[#212e3e]">—</h1>
+<span id="clientCode" class="bg-surface-container-high px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase text-secondary">ID: —</span>
+</div>
+<p class="text-on-surface-variant font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                        São Paulo, Brazil • Enterprise Tier
+                    </p>
+<div class="flex gap-2 mt-4">
+<span class="px-3 py-1 rounded-full bg-[#2afc8d]/10 text-[#005229] text-[10px] font-black uppercase tracking-wider">High Velocity</span>
+<span class="px-3 py-1 rounded-full bg-primary-container/10 text-primary text-[10px] font-black uppercase tracking-wider">Tech Adopter</span>
+<span class="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-black uppercase tracking-wider">B2B Heavy</span>
+</div>
+</div>
+</div>
+<!-- Health Gauge & Quick Scores -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-6 w-full lg:w-auto">
+<div class="bg-surface-container-low p-5 rounded-xl border-l-4 border-[#2afc8d] shadow-sm">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-2">Health Score</span>
+<div class="flex items-end gap-2">
+<span id="clientHealthScore" class="text-3xl font-black text-[#212e3e]">—</span>
+<span class="text-sm font-bold text-[#2afc8d] mb-1">/100</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-3 overflow-hidden">
+<div id="clientHealthBar" class="bg-[#2afc8d] h-full w-[0%] rounded-full neon-glow"></div>
+</div>
+</div>
+<div class="bg-surface-container-low p-5 rounded-xl border-l-4 border-primary-container shadow-sm">
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-2">Churn Risk</span>
+<div class="flex items-end gap-2">
+<span id="clientChurnRisk" class="text-3xl font-black text-[#212e3e]">—</span>
+<span class="text-sm font-bold text-primary mb-1">%</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-3 overflow-hidden">
+<div id="clientChurnBar" class="bg-primary-container h-full w-[0%] rounded-full"></div>
+</div>
+</div>
+<div class="bg-[#212e3e] p-5 rounded-xl shadow-xl col-span-2 sm:col-span-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">LTV Potential</span>
+<div id="clientLtvPotential" class="text-2xl font-black text-[#2afc8d]">—</div>
+<p class="text-[10px] text-slate-500 mt-2">Predicted 24mo Revenue</p>
+</div>
+</div>
+</header>
+<!-- Bento Grid Content -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Financial History Chart (Large Card) -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-lowest p-8 rounded-xl shadow-sm">
+<div class="flex justify-between items-center mb-10">
+<div>
+<h3 class="text-xl font-bold text-[#212e3e]">Financial Momentum</h3>
+<p class="text-on-surface-variant text-sm">Revenue vs Operational Spend (Trailing 12 Months)</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 bg-surface-container-low text-on-surface text-xs font-bold rounded-lg hover:bg-surface-container transition-colors">1Y</button>
+<button class="px-4 py-2 bg-primary-container text-white text-xs font-bold rounded-lg shadow-lg">MAX</button>
+</div>
+</div>
+<!-- Simulated Chart -->
+<div class="h-64 flex items-end justify-between gap-2">
+<!-- Column -->
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[40%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[60%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">JAN</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[55%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[75%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">FEB</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[45%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[65%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">MAR</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[70%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[85%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">APR</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[65%] relative">
+<div class="absolute bottom-0 w-full bg-[#2afc8d] rounded-t-sm h-[90%] neon-glow transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-[#2afc8d]">MAY</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[50%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[70%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">JUN</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[80%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[95%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">JUL</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-surface-container-low rounded-t-sm h-[75%] relative">
+<div class="absolute bottom-0 w-full bg-primary-container rounded-t-sm h-[80%] group-hover:bg-primary-fixed-dim transition-all"></div>
+</div>
+<span class="text-[9px] font-bold text-on-surface-variant">AUG</span>
+</div>
+</div>
+</div>
+<!-- Behavioral Profile Tags & Intelligence (Side Card) -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+<div class="bg-[#212e3e] p-8 rounded-xl shadow-xl flex-1 relative overflow-hidden">
+<!-- Decor element -->
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-[#2afc8d]/5 rounded-full blur-3xl"></div>
+<h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-[#2afc8d]">psychology</span>
+                        Behavioral Engine
+                    </h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between items-center mb-2">
+<span class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Product Adoption</span>
+<span class="text-[#2afc8d] text-xs font-bold">Excellent</span>
+</div>
+<div class="w-full h-1 bg-slate-800 rounded-full">
+<div class="w-[88%] h-full bg-[#2afc8d] rounded-full"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-2">
+<span class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Support Response</span>
+<span class="text-primary-fixed-dim text-xs font-bold">Average</span>
+</div>
+<div class="w-full h-1 bg-slate-800 rounded-full">
+<div class="w-[45%] h-full bg-primary-container rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="mt-8 pt-6 border-t border-slate-800">
+<h4 class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-4">Key Insights</h4>
+<ul class="space-y-3">
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-[#2afc8d] mt-1.5"></span>
+<p class="text-xs text-slate-300 leading-relaxed">High engagement with <strong class="text-white">API V3.2</strong> endpoints detected this week.</p>
+</li>
+<li class="flex items-start gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-fixed-dim mt-1.5"></span>
+<p class="text-xs text-slate-300 leading-relaxed">Cross-sell opportunity for <strong class="text-white">AI Modules</strong> based on current workload.</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+<!-- Interaction Timeline (Wide Section) -->
+<div class="col-span-12 bg-surface-container-lowest p-8 rounded-xl shadow-sm">
+<div class="flex justify-between items-center mb-8">
+<h3 class="text-xl font-bold text-[#212e3e]">Interaction Protocol Timeline</h3>
+<button id="viewFullHistory" class="text-primary font-bold text-sm flex items-center gap-1 hover:underline">
+                        View Full History
+                        <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+<div id="clientTimeline" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"></div>
+</div>
+</div>
+<!-- FAB Action (Contextual to Client View) -->
+<button id="clientFab" class="fixed bottom-8 right-8 w-14 h-14 bg-primary-container text-white rounded-xl shadow-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50" title="Adicionar interação">
+<span class="material-symbols-outlined text-2xl">add_reaction</span>
+</button>
+<script type="module" src="./client.js"></script>
+</body></html>

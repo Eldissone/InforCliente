@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .neon-glow {
+            text-shadow: 0 0 8px rgba(42, 252, 141, 0.4);
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #212e3e; }
+        ::-webkit-scrollbar-thumb { background: #444655; border-radius: 10px; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#b8c3ff",
+                        "primary": "#002b9f",
+                        "outline": "#747686",
+                        "on-secondary-fixed-variant": "#3b4859",
+                        "tertiary-container": "#005e2f",
+                        "on-primary-fixed": "#001356",
+                        "inverse-primary": "#b8c3ff",
+                        "secondary-container": "#d6e3f9",
+                        "secondary": "#525f71",
+                        "surface-dim": "#cddbf0",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "tertiary": "#004421",
+                        "on-error": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "on-tertiary-container": "#00e17a",
+                        "tertiary-fixed": "#5fff9b",
+                        "surface-container": "#e5eeff",
+                        "surface": "#f8f9ff",
+                        "primary-fixed": "#dde1ff",
+                        "tertiary-fixed-dim": "#00e47c",
+                        "secondary-fixed-dim": "#bac7dc",
+                        "on-secondary-fixed": "#0f1c2c",
+                        "on-primary-fixed-variant": "#0035be",
+                        "secondary-fixed": "#d6e3f9",
+                        "on-tertiary-fixed": "#00210d",
+                        "outline-variant": "#c4c5d7",
+                        "on-primary-container": "#b6c1ff",
+                        "primary-container": "#0d3fd1",
+                        "on-surface-variant": "#444655",
+                        "surface-tint": "#274fde",
+                        "on-error-container": "#93000a",
+                        "surface-container-lowest": "#ffffff",
+                        "error": "#ba1a1a",
+                        "surface-container-low": "#eff4ff",
+                        "surface-container-highest": "#d6e3f9",
+                        "surface-bright": "#f8f9ff",
+                        "on-surface": "#0f1c2c",
+                        "surface-variant": "#d6e3f9",
+                        "on-tertiary-fixed-variant": "#005229",
+                        "inverse-surface": "#243141",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-background": "#0f1c2c",
+                        "background": "#f8f9ff",
+                        "on-secondary-container": "#586577",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface">
+<!-- Top Navigation Bar -->
+<nav class="fixed top-0 w-full z-50 bg-[#212e3e] shadow-[0px_20px_40px_rgba(15,28,44,0.08)]">
+<div class="flex justify-between items-center px-8 h-16 w-full mx-auto">
+<div class="flex items-center gap-12">
+<span class="text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
+<div class="hidden md:flex items-center gap-8 font-inter tracking-tight font-semibold text-sm">
+<a class="text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
+<a class="text-slate-400 hover:text-white transition-colors" href="../Clientes/clienteLista.html">Clientes</a>
+<a class="text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2" href="../Projectos/ProjectGeral.html">Projetos</a>
+<a class="text-slate-400 hover:text-white transition-colors" href="#">Analytics</a>
+<a class="text-slate-400 hover:text-white transition-colors" href="#">Reports</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-white cursor-pointer" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-[#2afc8d] rounded-full shadow-[0_0_8px_#2afc8d]"></span>
+</div>
+<div class="flex items-center gap-3 pl-4 border-l border-white/10">
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-white/20" data-alt="professional portrait of a civil engineer in a modern office, soft dramatic side lighting, high-end industrial aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZndTbsygcDVixvj4y4ZAQeMhTJo1O4Vuo2U3dARsEgUcoPw45k2oDl8Uwpxhortgp5gWBl1r4CLTeyOUXE5W-BDsKYAi2nHABGljaw2evELssxjkD5FwFnZAs1lJEnjC1a_aZdpT44w2aFU7CfpfzJQuiof4mfRHFV7r-Ic2eBjfM4U716i5dn7uUcwo9j890dvZbDHc3pGqZ59AEEBdvfyEJGY734AP2l2d-Gno9NrieGB0Hb_U7Qt2bmReUtME91gcVLRK_gjE"/>
+<span class="text-white text-xs font-medium uppercase tracking-widest hidden lg:block">System Operator</span>
+</div>
+</div>
+</div>
+</nav>
+<main class="pt-24 pb-12 px-8 max-w-[1600px] mx-auto">
+<!-- Header & Breadcrumbs -->
+<header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<div class="flex items-center gap-2 text-on-surface-variant text-xs font-medium uppercase tracking-widest mb-2">
+<span>Projetos</span>
+<span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span>
+<span id="projectBreadcrumb" class="text-[#0d3fd1]">—</span>
+</div>
+<h1 id="projectTitle" class="text-3xl font-bold tracking-tight text-on-surface leading-none">—</h1>
+</div>
+<div class="flex gap-4">
+<button id="exportProjectBtn" class="bg-surface-container-low px-6 py-2.5 text-primary text-sm font-semibold rounded-lg hover:bg-surface-container-high transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="file_download">file_download</span>
+                    Exportar Relatório
+                </button>
+<button id="newTransactionBtn" class="bg-primary-container px-6 py-2.5 text-white text-sm font-semibold rounded-lg shadow-lg hover:brightness-110 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                    Novo Lançamento
+                </button>
+</div>
+</header>
+<!-- Bento Grid: Financial Summary -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
+<!-- Main Budget Card -->
+<div class="md:col-span-4 bg-[#212e3e] rounded-xl p-8 text-white relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-[#0d3fd1] blur-[80px] opacity-30 group-hover:opacity-50 transition-opacity"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-6">
+<span class="text-xs font-medium uppercase tracking-widest text-slate-400">Orçamento Total</span>
+<div class="bg-[#2afc8d]/20 px-2 py-1 rounded text-[#2afc8d] text-[10px] font-bold">EM DIA</div>
+</div>
+<div class="flex items-baseline gap-2 mb-2">
+<span class="text-sm font-medium text-slate-400">R$</span>
+<span id="budgetTotal" class="text-5xl font-extrabold tracking-tighter">—</span>
+</div>
+<p class="text-xs text-slate-400 mb-8">Aprovado em Março 2024 • Rev. 03</p>
+<div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+<div id="budgetBar" class="bg-[#2afc8d] h-full w-0 shadow-[0_0_12px_#2afc8d]"></div>
+</div>
+</div>
+</div>
+<!-- Real-time Cost Card -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-8 shadow-sm border-l-4 border-[#0d3fd1]">
+<div class="flex justify-between items-start mb-6">
+<span class="text-xs font-medium uppercase tracking-widest text-on-surface-variant">Custo Realizado</span>
+<span class="material-symbols-outlined text-[#0d3fd1]" data-icon="payments">payments</span>
+</div>
+<div class="flex items-baseline gap-2 mb-2">
+<span class="text-sm font-medium text-on-surface-variant">R$</span>
+<span id="budgetConsumed" class="text-5xl font-extrabold tracking-tighter text-[#212e3e]">—</span>
+</div>
+<div class="flex items-center gap-2 text-sm font-semibold text-error mb-8">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span id="budgetDelta">—</span>
+</div>
+<div class="flex gap-4">
+<div class="flex-1">
+<span class="block text-[10px] uppercase text-on-surface-variant mb-1">Comprometido</span>
+<span id="budgetCommitted" class="block text-sm font-bold">—</span>
+</div>
+<div class="flex-1 border-l border-outline-variant/30 pl-4">
+<span class="block text-[10px] uppercase text-on-surface-variant mb-1">Disponível</span>
+<span id="budgetAvailable" class="block text-sm font-bold">—</span>
+</div>
+</div>
+</div>
+<!-- Progress Meter -->
+<div class="md:col-span-4 bg-surface-container-lowest rounded-xl p-8 shadow-sm flex flex-col justify-between">
+<div class="flex justify-between items-center mb-4">
+<span class="text-xs font-medium uppercase tracking-widest text-on-surface-variant">Progresso Físico</span>
+<span id="physicalProgress" class="text-xl font-black text-[#2afc8d]">—</span>
+</div>
+<div class="flex-1 flex items-center justify-center py-4">
+<!-- Semi-circular progress representation -->
+<div class="relative w-48 h-24 overflow-hidden">
+<div class="absolute top-0 left-0 w-48 h-48 border-[12px] border-surface-container-low rounded-full"></div>
+<div class="absolute top-0 left-0 w-48 h-48 border-[12px] border-transparent border-t-[#2afc8d] border-l-[#2afc8d] rounded-full rotate-45"></div>
+<div class="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
+<span class="block text-[10px] font-bold text-on-surface-variant">FASE 04</span>
+<span class="block text-xs font-black uppercase">Estrutura</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-4">
+<div class="bg-surface-container-low p-3 rounded-lg">
+<span class="block text-[10px] text-on-surface-variant mb-1">Início</span>
+<span class="block text-xs font-bold">12 Jan 2024</span>
+</div>
+<div class="bg-surface-container-low p-3 rounded-lg">
+<span class="block text-[10px] text-on-surface-variant mb-1">Entrega Prev.</span>
+<span class="block text-xs font-bold">15 Dez 2024</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Middle Section: Charts and Analytics -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+<!-- Commitment Chart -->
+<div class="lg:col-span-2 bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<div class="flex justify-between items-center mb-8">
+<h3 class="text-lg font-bold text-[#212e3e]">Curva S vs. Realizado</h3>
+<div class="flex gap-4 text-xs font-medium">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-[#0d3fd1] rounded-full"></span>
+<span>Planejado</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-[#2afc8d] rounded-full"></span>
+<span>Executado</span>
+</div>
+</div>
+</div>
+<div class="h-64 flex items-end justify-between gap-2 px-2">
+<!-- Simulated chart bars -->
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-20 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<div class="absolute bottom-0 w-full bg-[#0d3fd1]/40 h-16 rounded-t-sm"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant">JAN</span>
+</div>
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-28 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<div class="absolute bottom-0 w-full bg-[#0d3fd1]/40 h-24 rounded-t-sm"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant">FEV</span>
+</div>
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-40 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<div class="absolute bottom-0 w-full bg-[#0d3fd1]/40 h-32 rounded-t-sm"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant">MAR</span>
+</div>
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-48 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<div class="absolute bottom-0 w-full bg-[#0d3fd1] h-44 rounded-t-sm"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant font-bold">ABR</span>
+</div>
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-52 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant">MAI</span>
+</div>
+<div class="flex-1 group relative">
+<div class="w-full bg-[#eff4ff] h-56 rounded-t-sm group-hover:bg-[#dce9ff] transition-colors"></div>
+<span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant">JUN</span>
+</div>
+</div>
+</div>
+<!-- Team & Allocation -->
+<div class="bg-[#212e3e] rounded-xl p-8 shadow-sm flex flex-col">
+<h3 class="text-lg font-bold text-white mb-6">Status de Operação</h3>
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-white/5 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#2afc8d]" data-icon="engineering">engineering</span>
+</div>
+<div>
+<span class="block text-white text-sm font-bold">Mão de Obra</span>
+<span class="block text-slate-400 text-[10px] uppercase">342 Ativos</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-[#2afc8d] font-bold">100%</span>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-white/5 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#0d3fd1]" data-icon="inventory_2">inventory_2</span>
+</div>
+<div>
+<span class="block text-white text-sm font-bold">Materiais</span>
+<span class="block text-slate-400 text-[10px] uppercase">Crítico: Aço</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-error font-bold">78%</span>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-white/5 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400" data-icon="construction">construction</span>
+</div>
+<div>
+<span class="block text-white text-sm font-bold">Maquinário</span>
+<span class="block text-slate-400 text-[10px] uppercase">12 Equipamentos</span>
+</div>
+</div>
+<div class="text-right">
+<span class="text-[#2afc8d] font-bold">92%</span>
+</div>
+</div>
+</div>
+<div class="mt-auto pt-8">
+<img alt="Site Map Overview" class="w-full h-32 object-cover rounded-lg opacity-60 grayscale hover:grayscale-0 transition-all cursor-pointer" data-alt="top-down blueprint map of a large industrial construction site, technical architectural drawing aesthetic, blueprint blue and white tones" data-location="Industrial Zone Alpha" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSgryUf8y8_nr48kdPerXreiaTsmXefSXOU-hRQlbFiqkgO60qmUjo3fBHLxc7adzJ7G9_Kwny6Qa7Ec7pKTEve6wjgKjuHhmFy_zDiJF8i0oE2USb9KMe6geCisMdEpixu-H6laa2Y4E_uvs89lFLOd3TFxnps3P0O9qVimvzQk_UpxWS1iTy5Tscn8AGPDMRE8dnLXXHC5XbrSIMlSP_o2g-a9y4m90fACoBRGKjQMRReX9d1qm6axf-TawYc_9WIeGSZaFUjh8"/>
+</div>
+</div>
+</div>
+<!-- Recent Transactions Table -->
+<section class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-8 py-6 border-b border-surface-container-low flex justify-between items-center">
+<h3 class="text-lg font-bold text-[#212e3e]">Lançamentos Recentes</h3>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="search">search</span>
+<input id="transactionsSearch" class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-[#0d3fd1] w-64" placeholder="Buscar transação..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-[#0d3fd1]" data-icon="filter_list">filter_list</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-surface-container-low">
+<th class="px-8 py-4">Data</th>
+<th class="px-8 py-4">Descrição</th>
+<th class="px-8 py-4">Categoria</th>
+<th class="px-8 py-4">Responsável</th>
+<th class="px-8 py-4">Status</th>
+<th class="px-8 py-4 text-right">Valor</th>
+</tr>
+</thead>
+<tbody id="transactionsTbody" class="divide-y divide-surface-container-low"></tbody>
+</table>
+</div>
+<div class="px-8 py-6 bg-surface-container-low/30 text-center">
+<button class="text-sm font-bold text-[#0d3fd1] hover:underline">Ver Histórico Completo</button>
+</div>
+</section>
+</main>
+<!-- Floating Action Button - Supressed as per detail page focus -->
+<footer class="border-t border-outline-variant/10 py-8 px-8 mt-12 bg-white/50">
+<div class="flex flex-col md:flex-row justify-between items-center gap-4">
+<div class="flex items-center gap-6">
+<span class="text-xs text-on-surface-variant font-medium">© 2024 Industrial Engine - Infor Cliente</span>
+<span class="text-xs text-on-surface-variant/50">v4.8.2-STABLE</span>
+</div>
+<div class="flex items-center gap-8">
+<a class="text-xs font-bold text-on-surface-variant hover:text-[#0d3fd1]" href="#">Documentação</a>
+<a class="text-xs font-bold text-on-surface-variant hover:text-[#0d3fd1]" href="#">Suporte Técnico</a>
+<a class="text-xs font-bold text-on-surface-variant hover:text-[#0d3fd1]" href="#">Privacidade</a>
+</div>
+</div>
+</footer>
+
+<script type="module" src="./projectView.js"></script>
+</body></html>
