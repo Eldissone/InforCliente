@@ -1,6 +1,6 @@
 # InforCliente
 
-Sistema web (HTML + JavaScript) para **gestão e monitorização de Clientes e Projetos**, com **API Node/Express** e **Postgres (Prisma)**.
+Sistema web (HTML + JavaScript) para **gestão e monitorização de Clientes e Gestão de Obras**, com **API Node/Express** e **Postgres (Prisma)**.
 
 ## Visão geral
 - **Frontend**: páginas HTML (Tailwind via CDN) com JS modular (`type="module"`), consumindo a API via `fetch`.
@@ -75,7 +75,7 @@ Após `npm run seed` no backend, você pode usar:
 
 ## Permissões (roles)
 - **leitura**: apenas `GET`.
-- **operador**: `GET` + `POST/PATCH` em clientes/projetos/transações/interações.
+- **operador**: `GET` + `POST/PATCH` em clientes/Gestão de Obras/transações/interações.
 - **admin**: tudo.
 
 ## Páginas implementadas
@@ -83,8 +83,8 @@ As páginas abaixo já consomem a API:
 - **Login**: `frontend/src/pages/Auth/login.html`
 - **Dashboard**: `frontend/src/pages/Dashboard/index.html`
 - **Clientes (lista)**: `frontend/src/pages/Clientes/clienteLista.html`
-- **Cliente detalhe (360)**: `frontend/src/pages/ClienteDetalhe/client.html?id=<clientId>`
-- **Projetos (lista)**: `frontend/src/pages/Projectos/ProjectGeral.html`
+- **Cliente detalhe ()**: `frontend/src/pages/ClienteDetalhe/client.html?id=<clientId>`
+- **Gestão de Obras (lista)**: `frontend/src/pages/Projectos/ProjectGeral.html`
 - **Projeto detalhe**: `frontend/src/pages/Projectos/projectView.html?id=<projectId>`
 
 ## Endpoints principais (API)
@@ -106,7 +106,7 @@ As páginas abaixo já consomem a API:
 - `GET /clients/:id/interactions`
 - `POST /clients/:id/interactions` (admin/operador)
 
-### Projetos
+### Gestão de Obras
 - `GET /projects?search=&status=&region=&dateFrom=&dateTo=&sort=&page=&pageSize=`
 - `POST /projects` (admin/operador)
 - `GET /projects/:id`

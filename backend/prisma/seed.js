@@ -13,18 +13,18 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: { role: "admin", passwordHash },
-    create: { email: adminEmail, role: "admin", passwordHash },
+    update: { role: "admin", passwordHash, clientId: null },
+    create: { email: adminEmail, role: "admin", passwordHash, clientId: null },
   });
   await prisma.user.upsert({
     where: { email: operadorEmail },
-    update: { role: "operador", passwordHash },
-    create: { email: operadorEmail, role: "operador", passwordHash },
+    update: { role: "operador", passwordHash, clientId: null },
+    create: { email: operadorEmail, role: "operador", passwordHash, clientId: null },
   });
   await prisma.user.upsert({
     where: { email: leituraEmail },
-    update: { role: "leitura", passwordHash },
-    create: { email: leituraEmail, role: "leitura", passwordHash },
+    update: { role: "leitura", passwordHash, clientId: null },
+    create: { email: leituraEmail, role: "leitura", passwordHash, clientId: null },
   });
 
   const clientsData = [
@@ -122,6 +122,7 @@ async function main() {
     {
       code: "PRJ-2024-001",
       name: "Condomínio Alpha",
+      contact: "Eng. Ricardo Lima • +244 923 000 101",
       location: "Luanda, AO",
       region: "Luanda",
       status: "ACTIVE",
@@ -139,6 +140,7 @@ async function main() {
     {
       code: "PRJ-2024-012",
       name: "Complexo Industrial",
+      contact: "Sup. Carlos Mendes • +244 923 000 212",
       location: "Benguela, AO",
       region: "Benguela",
       status: "ON_HOLD",
@@ -161,6 +163,7 @@ async function main() {
       where: { code: p.code },
       update: {
         name: p.name,
+        contact: p.contact,
         location: p.location,
         region: p.region,
         status: p.status,
@@ -181,6 +184,20 @@ async function main() {
   }
 
   const prj = projects[0];
+
+  if (nexus) {
+    await prisma.user.upsert({
+      where: { email: "cliente.nexus@inforcliente.local" },
+      update: { role: "cliente", passwordHash, clientId: nexus.id },
+      create: {
+        email: "cliente.nexus@inforcliente.local",
+        role: "cliente",
+        passwordHash,
+        clientId: nexus.id,
+      },
+    });
+  }
+
   if (prj) {
     const existing = await prisma.projectTransaction.count({ where: { projectId: prj.id } });
     if (existing === 0) {
@@ -308,6 +325,8 @@ async function main() {
   console.log(`- operador: ${operadorEmail} / ${password}`);
   // eslint-disable-next-line no-console
   console.log(`- leitura: ${leituraEmail} / ${password}`);
+  // eslint-disable-next-line no-console
+  console.log(`- cliente: cliente.nexus@inforcliente.local / ${password}`);
 }
 
 main()
@@ -319,4 +338,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

@@ -26,14 +26,14 @@ authRoutes.post(
     if (!ok) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
 
     const token = jwt.sign(
-      { sub: user.id, email: user.email, role: user.role },
+      { sub: user.id, email: user.email, role: user.role, clientId: user.clientId || null },
       config.jwtSecret,
       { expiresIn: "7d" }
     );
 
     return res.json({
       token,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: { id: user.id, email: user.email, role: user.role, clientId: user.clientId || null },
     });
   })
 );
@@ -44,7 +44,14 @@ authRoutes.get(
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: { id: true, email: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        clientId: true,
+        createdAt: true,
+        client: { select: { id: true, code: true, name: true } },
+      },
     });
     if (!user) return res.status(404).json({ error: "NOT_FOUND" });
     return res.json({ user });
@@ -52,4 +59,3 @@ authRoutes.get(
 );
 
 module.exports = { authRoutes };
-

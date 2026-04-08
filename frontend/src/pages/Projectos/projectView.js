@@ -2,6 +2,7 @@ import { apiRequest, apiUpload } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
 import { formatCurrencyBRL, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { getSessionUser } from "../../services/auth.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -10,6 +11,19 @@ function el(id) {
 function getProjectId() {
   const params = new URLSearchParams(window.location.search);
   return params.get("id");
+}
+
+function splitPhaseLabel(value) {
+  const phaseLabel = String(value || "").trim();
+  if (!phaseLabel) {
+    return { code: "FASE —", name: "Sem fase" };
+  }
+
+  const [code, ...rest] = phaseLabel.split(" - ");
+  return {
+    code: code || phaseLabel,
+    name: rest.join(" - ") || phaseLabel,
+  };
 }
 
 function statusLabel(s) {
@@ -55,6 +69,10 @@ async function loadProject() {
 
   el("projectTitle").textContent = p.name;
   el("projectBreadcrumb").textContent = p.code;
+  el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
+  el("projectClientCode").textContent = p.client?.code || "Sem código";
+  el("projectContact").textContent = p.contact || "-";
+  el("projectLocation").textContent = p.location || p.region || "-";
 
   el("budgetTotal").textContent = formatCurrencyBRL(p.budgetTotal);
   el("budgetConsumed").textContent = formatCurrencyBRL(p.budgetConsumed);
@@ -68,6 +86,12 @@ async function loadProject() {
   if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, pct))}%`;
 
   el("physicalProgress").textContent = formatPercent(p.physicalProgressPct || 0, { digits: 0 });
+  el("projectStartDate").textContent = formatDateBR(p.startDate);
+  el("projectDueDate").textContent = formatDateBR(p.dueDate);
+
+  const phase = splitPhaseLabel(p.phaseLabel);
+  el("projectPhaseLabel").textContent = phase.code;
+  el("projectPhaseName").textContent = phase.name;
 
   return p;
 }
@@ -198,6 +222,7 @@ function wireNewTransaction() {
 }
 
 function wireBudgetUpload() {
+  if (getSessionUser()?.role === "cliente") return;
   // adiciona um botão "Importar Orçamento" ao lado do Exportar
   const exportBtn = el("exportProjectBtn");
   if (!exportBtn) return;
@@ -261,4 +286,3 @@ async function init() {
 }
 
 init().catch(() => toast("Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
-

@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
+  }
+
+  h1,
+  h2,
+  h3,
+  .brand-display {
+    font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
+  }
+}
+
+@layer components {
+  button,
+  [role="button"],
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  table {
+    border-radius: 1rem !important;
+  }
+
+}

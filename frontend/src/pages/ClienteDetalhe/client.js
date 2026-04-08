@@ -18,6 +18,65 @@ function timelineDotColor(type) {
   return "border-[#2afc8d]";
 }
 
+function renderLinkedProjectCard(project) {
+  const progress = Math.max(0, Math.min(100, Number(project.physicalProgressPct || 0)));
+  return `
+    <article class="rounded-2xl border border-outline-variant/30 bg-white p-6 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-primary">${project.code}</div>
+          <h4 class="mt-1 text-lg font-extrabold text-[#212e3e]">${project.name}</h4>
+          <p class="mt-2 text-sm text-on-surface-variant">${project.location || "Morada não informada"}</p>
+        </div>
+        <button data-open-project="${project.id}" class="rounded-lg bg-primary-container px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:brightness-110">
+          Abrir
+        </button>
+      </div>
+      <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="rounded-xl bg-surface-container-low px-4 py-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Contato</div>
+          <div class="mt-1 font-semibold text-on-surface">${project.contact || "-"}</div>
+        </div>
+        <div class="rounded-xl bg-surface-container-low px-4 py-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Orçamento</div>
+          <div class="mt-1 font-semibold text-on-surface">${formatCurrencyBRL(project.budgetTotal)}</div>
+        </div>
+        <div class="rounded-xl bg-surface-container-low px-4 py-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Início</div>
+          <div class="mt-1 font-semibold text-on-surface">${formatDateBR(project.startDate)}</div>
+        </div>
+        <div class="rounded-xl bg-surface-container-low px-4 py-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Fim</div>
+          <div class="mt-1 font-semibold text-on-surface">${formatDateBR(project.dueDate)}</div>
+        </div>
+      </div>
+      <div class="mt-5">
+        <div class="mb-2 flex items-center justify-between text-xs font-bold text-on-surface-variant">
+          <span>Progresso físico</span>
+          <span>${formatPercent(progress, { digits: 0 })}</span>
+        </div>
+        <div class="h-2 rounded-full bg-surface-container overflow-hidden">
+          <div class="h-full rounded-full bg-[#2afc8d]" style="width:${progress}%"></div>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderClientProjects(projects) {
+  const host = el("clientProjects");
+  const count = el("clientProjectsCount");
+  if (!host || !count) return;
+
+  count.textContent = `${projects.length} ${projects.length === 1 ? "obra" : "obras"}`;
+  if (!projects.length) {
+    host.innerHTML = `<div class="rounded-2xl border border-dashed border-outline-variant bg-surface-container-low px-6 py-8 text-sm text-on-surface-variant">Nenhuma obra vinculada a este cliente.</div>`;
+    return;
+  }
+
+  host.innerHTML = projects.map(renderLinkedProjectCard).join("");
+}
+
 function renderTimelineItem(item) {
   return `
     <div class="relative pl-6 border-l-2 border-surface-container group">
@@ -55,6 +114,7 @@ async function loadClient() {
   if (el("clientChurnBar")) el("clientChurnBar").style.width = `${Math.max(0, Math.min(100, churn))}%`;
 
   setText(el("clientLtvPotential"), formatCurrencyBRL(c.ltvPotential));
+  renderClientProjects(c.projects || []);
 
   return c;
 }
@@ -151,9 +211,18 @@ function wireFab() {
   });
 }
 
+function wireProjectLinks() {
+  document.addEventListener("click", (e) => {
+    const id = e.target?.closest?.("[data-open-project]")?.getAttribute?.("data-open-project");
+    if (!id) return;
+    window.location.href = `../Projectos/projectView.html?id=${encodeURIComponent(id)}`;
+  });
+}
+
 async function init() {
   wireLogout();
   wireUsersNav();
+  wireProjectLinks();
   await loadClient();
   await loadTimeline();
   wireFullHistory();
@@ -161,4 +230,3 @@ async function init() {
 }
 
 init().catch(() => toast("Falha ao carregar cliente. Verifique login/API.", { type: "error" }));
-

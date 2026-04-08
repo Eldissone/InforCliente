@@ -7,6 +7,26 @@ const { asyncHandler } = require("../utils/http");
 const clientRoutes = express.Router();
 clientRoutes.use(authRequired);
 
+function getScopedClientId(req) {
+  if (req.user?.role !== "cliente") return null;
+  if (!req.user?.clientId) {
+    const err = new Error("FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+  return req.user.clientId;
+}
+
+function assertClientAccess(req, clientId) {
+  const scopedClientId = getScopedClientId(req);
+  if (!scopedClientId) return;
+  if (scopedClientId !== clientId) {
+    const err = new Error("FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+}
+
 clientRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -17,18 +37,28 @@ clientRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 10)));
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { code: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-      ...(status ? { status } : {}),
-      ...(industry ? { industry: { equals: industry, mode: "insensitive" } } : {}),
-    };
+    const whereClauses = [];
+    const scopedClientId = getScopedClientId(req);
+
+    if (scopedClientId) {
+      whereClauses.push({ id: scopedClientId });
+    }
+    if (search) {
+      whereClauses.push({
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { code: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    }
+    if (status) {
+      whereClauses.push({ status });
+    }
+    if (industry) {
+      whereClauses.push({ industry: { equals: industry, mode: "insensitive" } });
+    }
+
+    const where = whereClauses.length ? { AND: whereClauses } : {};
 
     const orderBy =
       sort === "ltv_desc"
@@ -123,12 +153,24 @@ clientRoutes.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    assertClientAccess(req, id);
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
         tags: { select: { tag: true } },
         projects: {
-          select: { id: true, code: true, name: true, status: true, physicalProgressPct: true },
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            contact: true,
+            location: true,
+            status: true,
+            physicalProgressPct: true,
+            startDate: true,
+            dueDate: true,
+            budgetTotal: true,
+          },
           orderBy: { updatedAt: "desc" },
           take: 20,
         },
@@ -143,6 +185,10 @@ clientRoutes.get(
         churnRisk: String(client.churnRisk),
         ltvPotential: String(client.ltvPotential),
         tags: client.tags.map((t) => t.tag),
+        projects: client.projects.map((project) => ({
+          ...project,
+          budgetTotal: String(project.budgetTotal),
+        })),
       },
     });
   })
@@ -201,6 +247,7 @@ clientRoutes.get(
   "/:id/interactions",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    assertClientAccess(req, id);
     const items = await prisma.interactionEvent.findMany({
       where: { clientId: id },
       orderBy: { occurredAt: "desc" },
@@ -242,4 +289,3 @@ clientRoutes.post(
 );
 
 module.exports = { clientRoutes };
-

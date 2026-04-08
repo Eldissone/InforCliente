@@ -9,6 +9,35 @@ export function wireLogout() {
   });
 }
 
+function applyRoleVisibility(role) {
+  document.querySelectorAll("[data-role-visible]").forEach((el) => {
+    const allowedRoles = String(el.getAttribute("data-role-visible") || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (!allowedRoles.length || allowedRoles.includes(role)) {
+      el.classList.remove("hidden");
+      return;
+    }
+
+    el.classList.add("hidden");
+  });
+
+  document.querySelectorAll("[data-role-hidden]").forEach((el) => {
+    const hiddenRoles = String(el.getAttribute("data-role-hidden") || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    if (hiddenRoles.includes(role)) {
+      el.classList.add("hidden");
+    } else {
+      el.classList.remove("hidden");
+    }
+  });
+}
+
 export function wireUsersNav() {
   const user = getSessionUser();
   const role = user?.role;
@@ -22,5 +51,5 @@ export function wireUsersNav() {
   document.querySelectorAll("[data-user-role]").forEach((el) => {
     el.textContent = role ? String(role).toUpperCase() : "";
   });
+  applyRoleVisibility(role);
 }
-

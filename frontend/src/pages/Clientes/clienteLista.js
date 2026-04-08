@@ -57,7 +57,7 @@ function renderRow(c) {
       </td>
       <td class="px-6 py-5">
         <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button data-view="${c.id}" class="flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-[10px] font-bold uppercase text-white hover:opacity-90">Visualizar 360</button>
+          <button data-view="${c.id}" class="flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-[10px] font-bold uppercase text-white hover:opacity-90">Visualizar</button>
           <button data-edit="${c.id}" class="flex h-8 w-8 items-center justify-center rounded border border-outline-variant hover:bg-surface-container-high text-secondary">
             <span class="material-symbols-outlined text-[18px]">edit</span>
           </button>
@@ -210,10 +210,7 @@ function wireActions() {
     }
   });
 
-  const addBtn = Array.from(document.querySelectorAll("button")).find((b) =>
-    b.textContent?.toLowerCase?.().includes("adicionar novo cliente")
-  );
-  addBtn?.addEventListener("click", () => openCreate());
+  el("addClientBtn")?.addEventListener("click", () => openCreate());
 }
 
 async function openCreate() {
@@ -319,4 +316,3 @@ async function init() {
 }
 
 init().catch(() => toast("Falha ao carregar clientes. Verifique login/API.", { type: "error" }));
-

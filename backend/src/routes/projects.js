@@ -14,6 +14,67 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
 });
 
+function getScopedClientId(req) {
+  if (req.user?.role !== "cliente") return null;
+  if (!req.user?.clientId) {
+    const err = new Error("FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+  return req.user.clientId;
+}
+
+async function ensureClientExists(clientId) {
+  if (!clientId) return;
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true },
+  });
+  if (!client) {
+    const err = new Error("CLIENT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+}
+
+async function ensureProjectReadable(req, projectId) {
+  const scopedClientId = getScopedClientId(req);
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ...(scopedClientId ? { clientId: scopedClientId } : {}),
+    },
+    include: {
+      client: { select: { id: true, name: true, code: true } },
+    },
+  });
+
+  if (!project) {
+    const err = new Error("NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  return project;
+}
+
+async function generateProjectCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const entropy = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `OBR-${timestamp}-${entropy}`;
+    const exists = await prisma.project.findUnique({
+      where: { code },
+      select: { id: true },
+    });
+    if (!exists) return code;
+  }
+
+  const err = new Error("PROJECT_CODE_GENERATION_FAILED");
+  err.status = 500;
+  throw err;
+}
+
 projectRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -26,36 +87,46 @@ projectRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 10)));
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { code: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-      ...(status ? { status } : {}),
-      ...(region ? { region: { contains: region, mode: "insensitive" } } : {}),
-      ...(dateFrom || dateTo
-        ? {
-            OR: [
-              {
-                startDate: {
-                  ...(dateFrom ? { gte: dateFrom } : {}),
-                  ...(dateTo ? { lte: dateTo } : {}),
-                },
-              },
-              {
-                dueDate: {
-                  ...(dateFrom ? { gte: dateFrom } : {}),
-                  ...(dateTo ? { lte: dateTo } : {}),
-                },
-              },
-            ],
-          }
-        : {}),
-    };
+    const whereClauses = [];
+    const scopedClientId = getScopedClientId(req);
+
+    if (scopedClientId) {
+      whereClauses.push({ clientId: scopedClientId });
+    }
+    if (search) {
+      whereClauses.push({
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { code: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    }
+    if (status) {
+      whereClauses.push({ status });
+    }
+    if (region) {
+      whereClauses.push({ region: { contains: region, mode: "insensitive" } });
+    }
+    if (dateFrom || dateTo) {
+      whereClauses.push({
+        OR: [
+          {
+            startDate: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            },
+          },
+          {
+            dueDate: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            },
+          },
+        ],
+      });
+    }
+
+    const where = whereClauses.length ? { AND: whereClauses } : {};
 
     const orderBy =
       sort === "progress_desc"
@@ -97,38 +168,52 @@ projectRoutes.post(
   asyncHandler(async (req, res) => {
     const body = z
       .object({
-        code: z.string().min(3),
+        code: z.string().min(3).optional(),
         name: z.string().min(2),
+        contact: z.string().optional().nullable(),
         location: z.string().optional().nullable(),
         region: z.string().optional().nullable(),
         status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
         startDate: z.string().datetime().optional().nullable(),
         dueDate: z.string().datetime().optional().nullable(),
         budgetTotal: z.union([z.number(), z.string()]),
-        budgetAllocated: z.union([z.number(), z.string()]),
-        budgetConsumed: z.union([z.number(), z.string()]),
-        budgetCommitted: z.union([z.number(), z.string()]),
-        budgetAvailable: z.union([z.number(), z.string()]),
+        budgetAllocated: z.union([z.number(), z.string()]).optional(),
+        budgetConsumed: z.union([z.number(), z.string()]).optional(),
+        budgetCommitted: z.union([z.number(), z.string()]).optional(),
+        budgetAvailable: z.union([z.number(), z.string()]).optional(),
         physicalProgressPct: z.number().int().min(0).max(100).optional(),
         phaseLabel: z.string().optional().nullable(),
         clientId: z.string().optional().nullable(),
       })
       .parse(req.body);
 
+    await ensureClientExists(body.clientId || null);
+    const budgetTotal = String(body.budgetTotal);
+    const budgetAllocated =
+      body.budgetAllocated !== undefined ? String(body.budgetAllocated) : budgetTotal;
+    const budgetConsumed =
+      body.budgetConsumed !== undefined ? String(body.budgetConsumed) : "0";
+    const budgetCommitted =
+      body.budgetCommitted !== undefined ? String(body.budgetCommitted) : "0";
+    const budgetAvailable =
+      body.budgetAvailable !== undefined ? String(body.budgetAvailable) : budgetTotal;
+    const code = body.code?.trim() || (await generateProjectCode());
+
     const created = await prisma.project.create({
       data: {
-        code: body.code,
+        code,
         name: body.name,
+        contact: body.contact || null,
         location: body.location || null,
         region: body.region || null,
         status: body.status || "ACTIVE",
         startDate: body.startDate ? new Date(body.startDate) : null,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
-        budgetTotal: String(body.budgetTotal),
-        budgetAllocated: String(body.budgetAllocated),
-        budgetConsumed: String(body.budgetConsumed),
-        budgetCommitted: String(body.budgetCommitted),
-        budgetAvailable: String(body.budgetAvailable),
+        budgetTotal,
+        budgetAllocated,
+        budgetConsumed,
+        budgetCommitted,
+        budgetAvailable,
         physicalProgressPct: body.physicalProgressPct ?? 0,
         phaseLabel: body.phaseLabel || null,
         clientId: body.clientId || null,
@@ -144,13 +229,7 @@ projectRoutes.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    const project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        client: { select: { id: true, name: true, code: true } },
-      },
-    });
-    if (!project) return res.status(404).json({ error: "NOT_FOUND" });
+    const project = await ensureProjectReadable(req, id);
 
     return res.json({
       project: {
@@ -173,6 +252,7 @@ projectRoutes.patch(
     const body = z
       .object({
         name: z.string().min(2).optional(),
+        contact: z.string().optional().nullable(),
         location: z.string().optional().nullable(),
         region: z.string().optional().nullable(),
         status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
@@ -189,10 +269,13 @@ projectRoutes.patch(
       })
       .parse(req.body);
 
+    await ensureClientExists(body.clientId || null);
+
     const updated = await prisma.project.update({
       where: { id },
       data: {
         ...(body.name ? { name: body.name } : {}),
+        ...(body.contact !== undefined ? { contact: body.contact } : {}),
         ...(body.location !== undefined ? { location: body.location } : {}),
         ...(body.region !== undefined ? { region: body.region } : {}),
         ...(body.status ? { status: body.status } : {}),
@@ -240,6 +323,7 @@ projectRoutes.get(
   "/:id/transactions",
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const search = String(req.query.search || "").trim();
     const status = req.query.status ? String(req.query.status) : "";
     const category = req.query.category ? String(req.query.category) : "";
@@ -309,6 +393,7 @@ projectRoutes.get(
   "/:id/budget/lines",
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const items = await prisma.projectBudgetLine.findMany({
       where: { projectId },
       orderBy: { createdAt: "desc" },
@@ -331,6 +416,7 @@ projectRoutes.post(
   upload.single("file"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const file = req.file;
     if (!file) return res.status(400).json({ error: "MISSING_FILE" });
 
@@ -382,4 +468,3 @@ projectRoutes.post(
 );
 
 module.exports = { projectRoutes };
-

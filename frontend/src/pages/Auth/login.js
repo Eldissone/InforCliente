@@ -42,7 +42,8 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
       // next é um caminho relativo curto (ex: "Dashboard/index.html")
     window.location.href = `/${next}`;
     } else {
-    window.location.href = "/Dashboard/index.html";
+    window.location.href =
+      res?.user?.role === "cliente" ? "/Projectos/ProjectGeral.html" : "/Dashboard/index.html";
     }
   } catch (err) {
     setError("Falha no login. Verifique email/senha e se a API está rodando.");
@@ -50,4 +51,3 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     if (submitBtn) submitBtn.disabled = false;
   }
 });
-

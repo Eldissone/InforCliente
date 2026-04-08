@@ -11,6 +11,7 @@ enum Role {
   admin
   operador
   leitura
+  cliente
 }
 
 enum ClientStatus {
@@ -54,7 +55,12 @@ model User {
   email        String   @unique
   passwordHash String
   role         Role     @default(leitura)
+  clientId     String?
   createdAt    DateTime @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
 }
 
 model Client {
@@ -76,6 +82,7 @@ model Client {
   projects     Project[]
   interactions InteractionEvent[]
   alerts       Alert[]
+  users        User[]
 
   @@index([name])
   @@index([status])
@@ -95,6 +102,7 @@ model Project {
   id                  String        @id @default(cuid())
   code                String        @unique
   name                String
+  contact             String?
   location            String?
   region              String?
   status              ProjectStatus @default(ACTIVE)
@@ -184,4 +192,3 @@ model Alert {
 
   @@index([status, severity, createdAt])
 }
-

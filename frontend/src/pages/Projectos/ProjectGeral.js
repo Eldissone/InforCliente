@@ -1,10 +1,29 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
-import { formatPercent } from "../../shared/format.js";
+import { formatCurrencyBRL, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
   return document.getElementById(id);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function toIsoDate(value) {
+  if (!value) return null;
+  return new Date(`${value}T00:00:00.000Z`).toISOString();
+}
+
+async function loadClients() {
+  const data = await apiRequest("/clients?page=1&pageSize=100&sort=updatedAt_desc");
+  return data.items || [];
 }
 
 let state = {
@@ -19,7 +38,7 @@ let state = {
 
 function renderStatusPill(status) {
   if (status === "ON_HOLD") {
-    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-secondary-fixed text-on-secondary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>On Hold</span>`;
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-secondary-fixed text-on-secondary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>andamento</span>`;
   }
   if (status === "COMPLETED") {
     return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-primary-fixed text-on-primary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>Completed</span>`;
@@ -53,20 +72,18 @@ function renderRow(p) {
       <td class="px-6 py-6">
         <div>
           <span class="block text-sm font-semibold text-on-surface">${p.client?.name || "-"}</span>
-          <span class="text-xs text-on-surface-variant">${p.client ? "Cliente vinculado" : "Sem cliente"}</span>
+          <span class="text-xs text-on-surface-variant">${p.contact || (p.client ? "Cliente vinculado" : "Sem cliente")}</span>
         </div>
       </td>
       <td class="px-6 py-6">
         <div class="flex flex-col gap-1">
           <div class="flex justify-between text-xs mb-1">
-            <span class="text-on-surface-variant">Allocated:</span>
-            <span class="font-bold">${Number(p.budgetAllocated || 0).toLocaleString("pt-BR")} </span>
+            <span class="text-on-surface-variant">Orçamento:</span>
+            <span class="font-bold">${formatCurrencyBRL(p.budgetTotal || 0)}</span>
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-on-surface-variant">Consumed:</span>
-            <span class="${p.status === "ON_HOLD" ? "text-on-surface" : "text-error"} font-medium">${Number(
-              p.budgetConsumed || 0
-            ).toLocaleString("pt-BR")}</span>
+            <span class="text-on-surface-variant">Morada:</span>
+            <span class="font-medium text-on-surface">${p.location || p.region || "-"}</span>
           </div>
         </div>
       </td>
@@ -104,7 +121,7 @@ async function load() {
   state.total = data.total || 0;
 
   if (!data.items?.length) {
-    tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="6">Nenhum projeto encontrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="6">Nenhuma obra encontrada.</td></tr>`;
     return;
   }
 
@@ -126,22 +143,22 @@ function wireFilters() {
     state.search = e.target.value.trim();
     state.page = 1;
     if (t) window.clearTimeout(t);
-    t = window.setTimeout(() => load().catch(() => toast("Erro ao carregar projetos", { type: "error" })), 250);
+    t = window.setTimeout(() => load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" })), 250);
   });
   el("projectsStatus")?.addEventListener("change", (e) => {
     state.status = e.target.value;
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar projetos", { type: "error" }));
+    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
   });
   el("projectsRegion")?.addEventListener("change", (e) => {
     state.region = e.target.value;
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar projetos", { type: "error" }));
+    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
   });
   el("projectsDateFrom")?.addEventListener("change", (e) => {
     state.dateFrom = e.target.value.trim();
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar projetos", { type: "error" }));
+    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
   });
 }
 
@@ -156,20 +173,29 @@ function wireActions() {
 }
 
 async function openCreate() {
-  // MVP: criar projeto com campos mínimos; cliente opcional.
+  const clients = await loadClients();
+  const clientOptions = [
+    `<option value="">Sem cliente vinculado</option>`,
+    ...clients.map(
+      (client) =>
+        `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)} (${escapeHtml(client.code)})</option>`
+    ),
+  ].join("");
+
   openModal({
-    title: "Adicionar projeto",
+    title: "Cadastrar nova obra",
     primaryLabel: "Criar",
     contentHtml: `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Código</label><input id="p_code" class="w-full rounded-lg border-slate-300" placeholder="PRJ-2024-099" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Projeto X" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Nome e telefone do responsável" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Luanda" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Luanda, AO" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Alocado</label><input id="p_alloc" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Consumido</label><input id="p_cons" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Rua, bairro, município" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -177,19 +203,18 @@ async function openCreate() {
       await apiRequest("/projects", {
         method: "POST",
         body: {
-          code: v("p_code"),
           name: v("p_name"),
+          clientId: v("p_client") || null,
+          contact: v("p_contact") || null,
           region: v("p_region") || null,
           location: v("p_location") || null,
           budgetTotal: Number(v("p_total") || 0),
-          budgetAllocated: Number(v("p_alloc") || 0),
-          budgetConsumed: Number(v("p_cons") || 0),
-          budgetCommitted: 0,
-          budgetAvailable: 0,
           physicalProgressPct: Number(v("p_prog") || 0),
+          startDate: toIsoDate(v("p_start")),
+          dueDate: toIsoDate(v("p_due")),
         },
       });
-      toast("Projeto criado", { type: "success" });
+      toast("Obra criada", { type: "success" });
       close();
       state.page = 1;
       await load();
@@ -205,5 +230,4 @@ async function init() {
   await load();
 }
 
-init().catch(() => toast("Falha ao carregar projetos. Verifique login/API.", { type: "error" }));
-
+init().catch(() => toast("Falha ao carregar Gestão de Obras. Verifique login/API.", { type: "error" }));

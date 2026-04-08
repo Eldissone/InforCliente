@@ -4,13 +4,9 @@
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>Infor Cliente - Login</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap"
-      rel="stylesheet"
-    />
+    <link href="/assets/styles/tailwind-base.css" rel="stylesheet" />
   </head>
-  <body class="bg-slate-50 font-[Inter] text-slate-900 min-h-screen flex items-center justify-center p-6">
+  <body class="bg-slate-50 font-body text-slate-900 min-h-screen flex items-center justify-center p-6">
     <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
       <div class="px-8 py-6 bg-[#212e3e] text-white">
         <div class="text-xs font-black tracking-[0.25em] uppercase text-[#2afc8d]">Infor Cliente</div>
@@ -51,7 +47,8 @@
         </div>
 
         <div class="text-xs text-slate-500 leading-relaxed">
-          Seed (padrão): <span class="font-bold">admin@inforcliente.local</span> / <span class="font-bold">admin123</span>
+          Seed (admin): <span class="font-bold">admin@inforcliente.local</span> / <span class="font-bold">admin123</span><br />
+          Seed (cliente): <span class="font-bold">cliente.nexus@inforcliente.local</span> / <span class="font-bold">admin123</span>
         </div>
 
         <div id="errorBox" class="hidden text-sm font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3"></div>
@@ -61,4 +58,3 @@
     <script type="module" src="./login.js"></script>
   </body>
 </html>
-
