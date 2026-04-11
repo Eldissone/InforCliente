@@ -34,8 +34,9 @@ function renderLinkedProjectCard(project) {
       </div>
       <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div class="rounded-xl bg-surface-container-low px-4 py-3">
-          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Contato</div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Contatos</div>
           <div class="mt-1 font-semibold text-on-surface">${project.contact || "-"}</div>
+          <div class="mt-1 font-semibold text-on-surface">${project.accountEmail || "-"}</div>
         </div>
         <div class="rounded-xl bg-surface-container-low px-4 py-3">
           <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Orçamento</div>

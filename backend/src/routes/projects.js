@@ -202,6 +202,14 @@ projectRoutes.post(
         physicalProgressPct: z.number().int().min(0).max(100).optional(),
         phaseLabel: z.string().optional().nullable(),
         clientId: z.string().optional().nullable(),
+        projectType: z.string().optional().nullable(),
+        empreiteiro: z.string().optional().nullable(),
+        subempreiteiro: z.string().optional().nullable(),
+        directorObra: z.string().optional().nullable(),
+        referencia: z.string().optional().nullable(),
+        maoDeObraIndireta: z.any().optional().nullable(),
+        maoDeObraDireta: z.any().optional().nullable(),
+        equipamentos: z.any().optional().nullable(),
       })
       .parse(req.body);
 
@@ -246,6 +254,14 @@ projectRoutes.post(
         physicalProgressPct: body.physicalProgressPct ?? 0,
         phaseLabel: body.phaseLabel || null,
         clientId: body.clientId || null,
+        projectType: body.projectType || null,
+        empreiteiro: body.empreiteiro || null,
+        subempreiteiro: body.subempreiteiro || null,
+        directorObra: body.directorObra || null,
+        referencia: body.referencia || null,
+        maoDeObraIndireta: body.maoDeObraIndireta || null,
+        maoDeObraDireta: body.maoDeObraDireta || null,
+        equipamentos: body.equipamentos || null,
       },
       select: { id: true },
     });
@@ -295,6 +311,14 @@ projectRoutes.patch(
         physicalProgressPct: z.number().int().min(0).max(100).optional(),
         phaseLabel: z.string().optional().nullable(),
         clientId: z.string().optional().nullable(),
+        projectType: z.string().optional().nullable(),
+        empreiteiro: z.string().optional().nullable(),
+        subempreiteiro: z.string().optional().nullable(),
+        directorObra: z.string().optional().nullable(),
+        referencia: z.string().optional().nullable(),
+        maoDeObraIndireta: z.any().optional().nullable(),
+        maoDeObraDireta: z.any().optional().nullable(),
+        equipamentos: z.any().optional().nullable(),
       })
       .parse(req.body);
 
@@ -344,6 +368,14 @@ projectRoutes.patch(
           : {}),
         ...(body.phaseLabel !== undefined ? { phaseLabel: body.phaseLabel } : {}),
         ...(body.clientId !== undefined ? { clientId: body.clientId } : {}),
+        ...(body.projectType !== undefined ? { projectType: body.projectType } : {}),
+        ...(body.empreiteiro !== undefined ? { empreiteiro: body.empreiteiro } : {}),
+        ...(body.subempreiteiro !== undefined ? { subempreiteiro: body.subempreiteiro } : {}),
+        ...(body.directorObra !== undefined ? { directorObra: body.directorObra } : {}),
+        ...(body.referencia !== undefined ? { referencia: body.referencia } : {}),
+        ...(body.maoDeObraIndireta !== undefined ? { maoDeObraIndireta: body.maoDeObraIndireta } : {}),
+        ...(body.maoDeObraDireta !== undefined ? { maoDeObraDireta: body.maoDeObraDireta } : {}),
+        ...(body.equipamentos !== undefined ? { equipamentos: body.equipamentos } : {}),
       },
       select: { id: true },
     });

@@ -217,6 +217,16 @@ async function openEdit(id) {
     { v: "COMPLETED", l: "Concluído" }
   ].map(s => `<option value="${s.v}" ${p.status === s.v ? 'selected' : ''}>${s.l}</option>`).join("");
 
+  const projectTypesOptions = [
+    "MÉDIA TENSÃO",
+    "POSTO DE TRANSFORMAÇÃO 160KVA",
+    "POSTO DE TRANSFORMAÇÃO 250KVA",
+    "BAIXA TENSÃO",
+    "ABERTURA E FECHAMENTO DE VALA",
+    "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
+    "BAIXA TENSÃO E TERRAS"
+  ].map(t => `<option value="${t}" ${p.projectType === t ? 'selected' : ''}>${t}</option>`).join("");
+
   openModal({
     title: `Editar Obra: ${p.code}`,
     primaryLabel: "Salvar Alterações",
@@ -229,12 +239,21 @@ async function openEdit(id) {
       await load();
     },
     contentHtml: `
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.name)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.contact)}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra</label><input id="p_region" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.region)}" /></div>
-        <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.location)}" /></div>
+        
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Referências</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.empreiteiro)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.subempreiteiro)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.directorObra)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.referencia)}" /></div>
+
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.region)}" /></div>
+        <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.location)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total (kz)</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso Físico (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
@@ -262,6 +281,11 @@ async function openEdit(id) {
             phaseLabel: v("p_phase") || null,
             startDate: toIsoDate(v("p_start")),
             dueDate: toIsoDate(v("p_due")),
+            projectType: v("p_type") || null,
+            empreiteiro: v("p_empreiteiro") || null,
+            subempreiteiro: v("p_subempreiteiro") || null,
+            directorObra: v("p_director") || null,
+            referencia: v("p_referencia") || null,
           },
         });
         toast("Obra atualizada com sucesso", { type: "success" });
@@ -285,20 +309,44 @@ async function openCreate() {
     ),
   ].join("");
 
+  const projectTypesOptions = [
+    "MÉDIA TENSÃO",
+    "POSTO DE TRANSFORMAÇÃO 160KVA",
+    "POSTO DE TRANSFORMAÇÃO 250KVA",
+    "BAIXA TENSÃO",
+    "ABERTURA E FECHAMENTO DE VALA",
+    "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
+    "BAIXA TENSÃO E TERRAS"
+  ].map(t => `<option value="${t}">${t}</option>`).join("");
+
   openModal({
     title: "Cadastrar nova obra",
     primaryLabel: "Criar",
     contentHtml: `
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" value="PROJECTO DE ELECTRIFICAÇÃO DOS MUNICÍPIOS DO HUAMBO" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Luanda" /></div>
-        <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Rua, bairro, município" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
+        
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Referências</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" value="ProRedes Utilities Ltd" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: MBT ENERGIA" value="MBT ENERGIA" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" placeholder="Ex: LUCAS ZANGUEU" value="LUCAS ZANGUEU" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" value="NM/ADM/PROREDES/003/2025" /></div>
+
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Ex: Luanda" value="LONGONJO" /></div>
+        <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Ex: Rua, Bairro" value="MUNICÍPIO DE LONGONJO" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="14" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="2025-10-22" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
+
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Recursos (Padrão)</h3></div>
+        <div class="col-span-1 md:col-span-2 text-[10px] text-slate-500 -mt-1 font-medium bg-slate-50 p-2 rounded border border-slate-100">
+           Serão anexados automaticamente Mão de Obra e Equipamentos no perfil da obra.
+        </div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -318,6 +366,29 @@ async function openCreate() {
             physicalProgressPct: Number(v("p_prog") || 0),
             startDate: toIsoDate(v("p_start")),
             dueDate: toIsoDate(v("p_due")),
+            projectType: v("p_type") || null,
+            empreiteiro: v("p_empreiteiro") || null,
+            subempreiteiro: v("p_subempreiteiro") || null,
+            directorObra: v("p_director") || null,
+            referencia: v("p_referencia") || null,
+            maoDeObraIndireta: {
+              "COORDENADOR TÉCNICO": 1,
+              "COORDENADOR DE PROJECTOS": 2,
+              "COORDENADOR LOGÍSTICO": 1
+            },
+            maoDeObraDireta: {
+              "LOGÍSTICO": 1,
+              "TÉCNICOS DE ELECTRICIDADE": 18,
+              "AUXILIAR DE ESTOQUE": 1,
+              "SUBCONTRATADOS": 13
+            },
+            equipamentos: {
+              "CAMINHÃO GRUA": 1,
+              "MULTIFUNÇÕES MANITOU": 1,
+              "CARRINHA HINO": 1,
+              "MOTAS 3 RODAS": 3,
+              "AUTOBETONEIRA": 1
+            }
           },
         });
         toast("Obra criada", { type: "success" });

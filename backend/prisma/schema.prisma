@@ -74,6 +74,14 @@ model Project {
   updatedAt           DateTime             @updatedAt
   clientId            String?
   contact             String?
+  projectType         String?
+  empreiteiro         String?
+  subempreiteiro      String?
+  directorObra        String?
+  referencia          String?
+  maoDeObraIndireta   Json?
+  maoDeObraDireta     Json?
+  equipamentos        Json?
   alerts              Alert[]
   client              Client?              @relation(fields: [clientId], references: [id])
   budgetLines         ProjectBudgetLine[]
