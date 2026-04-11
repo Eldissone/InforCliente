@@ -59,6 +59,14 @@ userRoutes.post(
 
     await ensureClientExists(clientId);
 
+    const existing = await prisma.user.findUnique({
+      where: { email: body.email },
+      select: { id: true },
+    });
+    if (existing) {
+      return res.status(400).json({ error: "EMAIL_ALREADY_EXISTS" });
+    }
+
     const passwordHash = await bcrypt.hash(body.password, 10);
     const created = await prisma.user.create({
       data: { email: body.email, role: body.role, passwordHash, clientId },
@@ -99,6 +107,16 @@ userRoutes.patch(
     }
 
     await ensureClientExists(nextClientId);
+
+    if (body.email) {
+      const existing = await prisma.user.findFirst({
+        where: { email: body.email, NOT: { id } },
+        select: { id: true },
+      });
+      if (existing) {
+        return res.status(400).json({ error: "EMAIL_ALREADY_EXISTS" });
+      }
+    }
 
     const updated = await prisma.user.update({
       where: { id },

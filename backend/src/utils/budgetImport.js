@@ -17,61 +17,81 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Espera colunas (qualquer uma serve):
- * - description | descricao | item | name
- * - total | valor_total | valor | total_geral
- * Opcionais: category, unit, quantity, unit_price
- */
 function parseBudgetSheet(buffer, originalName) {
   const ext = path.extname(originalName || "").toLowerCase();
-  const wb =
-    ext === ".csv"
-      ? XLSX.read(buffer, { type: "buffer", raw: true })
-      : XLSX.read(buffer, { type: "buffer" });
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
 
   const firstSheet = wb.SheetNames[0];
   if (!firstSheet) return { lines: [], warnings: ["Planilha vazia."] };
 
   const ws = wb.Sheets[firstSheet];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: "", raw: true });
+  // Convertemos para matriz de arrays para detectar onde o header começa
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-  if (!rows.length) return { lines: [], warnings: ["Nenhuma linha encontrada."] };
+  if (!data.length) return { lines: [], warnings: ["Nenhuma linha encontrada."] };
 
-  // Detect headers by normalizing first row keys (sheet_to_json already uses headers from first row)
+  // Heurística para encontrar a linha de cabeçalho (procura palavras-chave nas primeiras 20 linhas)
+  let headerIndex = -1;
+  const keywords = ["descrição", "descricao", "item", "designação", "total", "valor", "preco", "preço", "importe"];
+
+  for (let i = 0; i < Math.min(data.length, 20); i++) {
+    const row = data[i].map(c => normalizeHeader(String(c)));
+    const hasKeywords = row.some(cell => keywords.includes(cell) || keywords.some(k => cell.includes(k)));
+    if (hasKeywords) {
+      headerIndex = i;
+      break;
+    }
+  }
+
+  // Se não encontrou cabeçalho claro, assume a linha 0
+  const startIndex = headerIndex === -1 ? 0 : headerIndex;
+  const headers = data[startIndex].map(h => normalizeHeader(String(h)));
+  const rows = data.slice(startIndex + 1);
+
   const warnings = [];
   const lines = [];
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const entries = Object.entries(r);
-    const map = new Map(entries.map(([k, v]) => [normalizeHeader(k), v]));
+    const map = new Map();
+    headers.forEach((h, idx) => {
+      if (h) map.set(h, r[idx]);
+    });
 
     const description =
       map.get("description") ||
       map.get("descricao") ||
+      map.get("designacao") ||
       map.get("item") ||
       map.get("name") ||
       map.get("servico") ||
       map.get("produto");
 
-    const total =
-      toNumber(map.get("total")) ??
-      toNumber(map.get("valor_total")) ??
-      toNumber(map.get("valor")) ??
-      toNumber(map.get("total_geral"));
+    const totalStr =
+      map.get("total") ||
+      map.get("valor_total") ||
+      map.get("valor") ||
+      map.get("importe") ||
+      map.get("total_geral") ||
+      map.get("preco_total") ||
+      map.get("preço_total");
+
+    const total = toNumber(totalStr);
 
     if (!String(description || "").trim()) continue; // ignora linhas vazias
     if (total === null) {
-      warnings.push(`Linha ${i + 2}: sem total numérico (coluna total/valor_total/valor).`);
+      // Pequeno log de aviso se tiver descrição mas sem valor
+      if (description) {
+        warnings.push(`Linha ${startIndex + i + 2}: Valor não identificado na coluna 'Total/Valor'.`);
+      }
       continue;
     }
 
-    const quantity = toNumber(map.get("quantity") ?? map.get("quantidade") ?? map.get("qtd"));
-    const unitPrice = toNumber(map.get("unit_price") ?? map.get("preco_unitario") ?? map.get("valor_unitario"));
+    const quantity = toNumber(map.get("quantity") ?? map.get("quantidade") ?? map.get("qtd") ?? map.get("unid"));
+    const unitPrice = toNumber(map.get("unit_price") ?? map.get("preco_unitario") ?? map.get("valor_unitario") ?? map.get("preco"));
 
     lines.push({
-      rowNumber: i + 2, // considerando header na linha 1
+      rowNumber: startIndex + i + 2,
       sourceFile: originalName || null,
       category: String(map.get("category") ?? map.get("categoria") ?? "").trim() || null,
       description: String(description).trim(),
@@ -84,7 +104,7 @@ function parseBudgetSheet(buffer, originalName) {
 
   if (!lines.length) {
     warnings.push(
-      "Nenhuma linha válida foi importada. Confirme se existe uma coluna de descrição e uma coluna de total (valor)."
+      "Nenhuma linha válida foi importada. O sistema procurou por colunas como 'Descrição/Item' e 'Total/Valor'."
     );
   }
 

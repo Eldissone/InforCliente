@@ -1,0 +1,4 @@
+{
+  "ignore": ["scratch/*", "uploads/*", "prisma/*", "*.test.js"],
+  "watch": ["src/"]
+}

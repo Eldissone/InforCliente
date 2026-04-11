@@ -12,6 +12,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
     rel="stylesheet" />
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+  <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <style>
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -33,7 +34,7 @@
   <nav
     class="fixed top-0 w-full z-50 bg-[#212e3e] flex justify-between items-center px-8 h-16 w-full mx-auto shadow-[0px_20px_40px_rgba(15,28,44,0.08)] no-border">
     <div class="flex items-center gap-12">
-<span class="brand-display text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
+      <span class="brand-display text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
       <div class="hidden md:flex items-center gap-8">
         <a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors hover:bg-[#eff4ff]/10"
           href="../Dashboard/index.html">Dashboard</a>
@@ -98,7 +99,8 @@
         </select>
       </div>
       <div class="flex flex-col gap-1">
-        <label class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant px-1">Data de início</label>
+        <label class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant px-1">Data de
+          início</label>
         <div class="flex items-center gap-2 bg-white rounded-lg px-3 shadow-sm">
           <span class="material-symbols-outlined text-sm text-slate-400">calendar_month</span>
           <input id="projectsDateFrom" class="border-none bg-transparent text-sm font-medium py-2 w-32 focus:ring-0"
@@ -136,8 +138,9 @@
         class="md:col-span-2 glass-panel p-8 rounded-2xl border border-outline-variant/10 flex flex-col justify-between overflow-hidden relative min-h-[220px]">
         <div class="z-10">
           <span class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">Inteligência de Sistemas</span>
-          <h3 class="text-2xl font-extrabold text-on-surface mt-1">Velocidade do Projecto</h3>
-          <p class="text-sm text-on-surface-variant mt-2 max-w-xs">O progresso físico médio em todos os setores ativos aumentou 14% neste trimestre.</p>
+          <h3 class="text-2xl font-extrabold text-on-surface mt-1">Velocidade das Obras</h3>
+          <p class="text-sm text-on-surface-variant mt-2 max-w-xs">Progresso de cada Obra em andamento em
+            tempo real.</p>
         </div>
         <div class="flex items-end gap-1 z-10 mt-6">
           <div class="w-full h-12 bg-primary-container/10 rounded-t-md relative overflow-hidden">
@@ -175,7 +178,8 @@
             Activos</span>
         </div>
         <div>
-          <span class="text-xs text-on-surface-variant font-medium uppercase tracking-widest">Implantação da equipe</span>
+          <span class="text-xs text-on-surface-variant font-medium uppercase tracking-widest">Implantação da
+            equipe</span>
           <h3 class="text-2xl font-bold text-on-surface mt-1">428 Operativos</h3>
         </div>
       </div>

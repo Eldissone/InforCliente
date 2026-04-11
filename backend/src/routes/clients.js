@@ -1,8 +1,33 @@
 const express = require("express");
+const bcrypt = require("bcryptjs");
 const { z } = require("zod");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 const { prisma } = require("../db");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+const fileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join("uploads", "clients", req.params.id);
+    ensureDir(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, uniqueSuffix + ext);
+  },
+});
+const upload = multer({ 
+  storage: fileStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for avatars
+});
 
 const clientRoutes = express.Router();
 clientRoutes.use(authRequired);
@@ -82,6 +107,7 @@ clientRoutes.get(
           region: true,
           tier: true,
           status: true,
+          profilePic: true,
           healthScore: true,
           ltvTotal: true,
           churnRisk: true,
@@ -98,9 +124,9 @@ clientRoutes.get(
       total,
       items: items.map((c) => ({
         ...c,
-        ltvTotal: String(c.ltvTotal),
-        churnRisk: String(c.churnRisk),
-        ltvPotential: String(c.ltvPotential),
+        ltvTotal: c.ltvTotal ? String(c.ltvTotal) : "0",
+        churnRisk: c.churnRisk ? String(c.churnRisk) : "0",
+        ltvPotential: c.ltvPotential ? String(c.ltvPotential) : "0",
       })),
     });
   })
@@ -118,34 +144,73 @@ clientRoutes.post(
         region: z.string().optional().nullable(),
         tier: z.string().optional().nullable(),
         status: z.enum(["ACTIVE", "AT_RISK", "INACTIVE"]).optional(),
+        profilePic: z.string().optional().nullable(),
         healthScore: z.number().int().min(0).max(100).optional(),
-        ltvTotal: z.union([z.number(), z.string()]),
-        churnRisk: z.union([z.number(), z.string()]),
-        ltvPotential: z.union([z.number(), z.string()]),
-        tags: z.array(z.string().min(1)).optional(),
+        ltvTotal: z.union([z.number(), z.string()]).default(0),
+        churnRisk: z.union([z.number(), z.string()]).default(0),
+        ltvPotential: z.union([z.number(), z.string()]).default(0),
+        tags: z.array(z.string().min(1)).optional().default([]),
+        // Novos campos para automação de acesso
+        email: z.string().email(),
+        password: z.string().min(6),
       })
       .parse(req.body);
 
-    const created = await prisma.client.create({
-      data: {
-        code: body.code,
-        name: body.name,
-        industry: body.industry || null,
-        region: body.region || null,
-        tier: body.tier || null,
-        status: body.status || "ACTIVE",
-        healthScore: body.healthScore ?? 50,
-        ltvTotal: String(body.ltvTotal),
-        churnRisk: String(body.churnRisk),
-        ltvPotential: String(body.ltvPotential),
-        tags: body.tags?.length
-          ? { create: body.tags.map((t) => ({ tag: t })) }
-          : undefined,
-      },
-      select: { id: true },
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    // Uniqueness checks
+    const [existingEmail, existingCode] = await Promise.all([
+      prisma.user.findUnique({
+        where: { email: body.email },
+        select: { id: true },
+      }),
+      prisma.client.findUnique({
+        where: { code: body.code },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingEmail) {
+      return res.status(400).json({ error: "EMAIL_ALREADY_EXISTS" });
+    }
+    if (existingCode) {
+      return res.status(400).json({ error: "CLIENT_CODE_ALREADY_EXISTS" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const client = await tx.client.create({
+        data: {
+          code: body.code,
+          name: body.name,
+          industry: body.industry || null,
+          region: body.region || null,
+          tier: body.tier || null,
+          status: body.status || "ACTIVE",
+          profilePic: body.profilePic || null,
+          healthScore: body.healthScore ?? 50,
+          ltvTotal: String(body.ltvTotal),
+          churnRisk: String(body.churnRisk),
+          ltvPotential: String(body.ltvPotential),
+          tags: body.tags?.length
+            ? { create: body.tags.map((t) => ({ tag: t })) }
+            : undefined,
+        },
+        select: { id: true },
+      });
+
+      await tx.user.create({
+        data: {
+          email: body.email,
+          passwordHash,
+          role: "cliente",
+          clientId: client.id,
+        },
+      });
+
+      return client;
     });
 
-    return res.status(201).json({ id: created.id });
+    return res.status(201).json({ id: result.id });
   })
 );
 
@@ -158,6 +223,7 @@ clientRoutes.get(
       where: { id },
       include: {
         tags: { select: { tag: true } },
+        users: { select: { email: true }, take: 1 },
         projects: {
           select: {
             id: true,
@@ -181,10 +247,11 @@ clientRoutes.get(
     return res.json({
       client: {
         ...client,
-        ltvTotal: String(client.ltvTotal),
-        churnRisk: String(client.churnRisk),
-        ltvPotential: String(client.ltvPotential),
+        ltvTotal: client.ltvTotal ? String(client.ltvTotal) : "0",
+        churnRisk: client.churnRisk ? String(client.churnRisk) : "0",
+        ltvPotential: client.ltvPotential ? String(client.ltvPotential) : "0",
         tags: client.tags.map((t) => t.tag),
+        accountEmail: client.users?.[0]?.email || null,
         projects: client.projects.map((project) => ({
           ...project,
           budgetTotal: String(project.budgetTotal),
@@ -201,35 +268,90 @@ clientRoutes.patch(
     const id = String(req.params.id);
     const body = z
       .object({
+        code: z.string().min(2).optional(),
         name: z.string().min(2).optional(),
         industry: z.string().optional().nullable(),
         region: z.string().optional().nullable(),
         tier: z.string().optional().nullable(),
         status: z.enum(["ACTIVE", "AT_RISK", "INACTIVE"]).optional(),
+        profilePic: z.string().optional().nullable(),
         healthScore: z.number().int().min(0).max(100).optional(),
         ltvTotal: z.union([z.number(), z.string()]).optional(),
         churnRisk: z.union([z.number(), z.string()]).optional(),
         ltvPotential: z.union([z.number(), z.string()]).optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).optional(),
       })
       .parse(req.body);
 
-    const updated = await prisma.client.update({
-      where: { id },
-      data: {
+    const result = await prisma.$transaction(async (tx) => {
+      // Uniqueness checks
+      if (body.code) {
+        const existing = await tx.client.findFirst({
+          where: { code: body.code, id: { not: id } },
+        });
+        if (existing) {
+          const err = new Error("CLIENT_CODE_ALREADY_EXISTS");
+          err.status = 400;
+          throw err;
+        }
+      }
+
+      const updateData = {
+        ...(body.code ? { code: body.code } : {}),
         ...(body.name ? { name: body.name } : {}),
         ...(body.industry !== undefined ? { industry: body.industry } : {}),
         ...(body.region !== undefined ? { region: body.region } : {}),
         ...(body.tier !== undefined ? { tier: body.tier } : {}),
         ...(body.status ? { status: body.status } : {}),
+        ...(body.profilePic !== undefined ? { profilePic: body.profilePic } : {}),
         ...(body.healthScore !== undefined ? { healthScore: body.healthScore } : {}),
         ...(body.ltvTotal !== undefined ? { ltvTotal: String(body.ltvTotal) } : {}),
         ...(body.churnRisk !== undefined ? { churnRisk: String(body.churnRisk) } : {}),
         ...(body.ltvPotential !== undefined ? { ltvPotential: String(body.ltvPotential) } : {}),
-      },
-      select: { id: true },
+      };
+
+      const updated = await tx.client.update({
+        where: { id },
+        data: updateData,
+        select: { id: true },
+      });
+
+      if (body.email || body.password) {
+        const user = await tx.user.findFirst({
+          where: { clientId: id, role: "cliente" },
+          select: { id: true, email: true },
+        });
+
+        if (user) {
+          if (body.email && body.email !== user.email) {
+            const emailExists = await tx.user.findFirst({
+              where: { email: body.email, id: { not: user.id } },
+            });
+            if (emailExists) {
+              const err = new Error("EMAIL_ALREADY_EXISTS");
+              err.status = 400;
+              throw err;
+            }
+          }
+
+          const userUpdateData = {};
+          if (body.email) userUpdateData.email = body.email;
+          if (body.password) {
+            userUpdateData.passwordHash = await bcrypt.hash(body.password, 10);
+          }
+
+          await tx.user.update({
+            where: { id: user.id },
+            data: userUpdateData,
+          });
+        }
+      }
+
+      return updated;
     });
 
-    return res.json({ id: updated.id });
+    return res.json({ id: result.id });
   })
 );
 
@@ -285,6 +407,28 @@ clientRoutes.post(
     });
 
     return res.status(201).json({ id: created.id });
+  })
+);
+
+clientRoutes.post(
+  "/:id/avatar",
+  requireRole(["admin", "operador"]),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const clientId = String(req.params.id);
+    assertClientAccess(req, clientId);
+    if (!req.file) throw new Error("FILE_REQUIRED");
+
+    // The URL where the file can be accessed from the frontend
+    // Windows paths use \, so replace with /
+    const fileUrl = `${req.protocol}://${req.get('host')}/${req.file.path.replace(/\\/g, "/")}`;
+
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { profilePic: fileUrl }
+    });
+
+    return res.status(201).json({ profilePic: fileUrl });
   })
 );
 

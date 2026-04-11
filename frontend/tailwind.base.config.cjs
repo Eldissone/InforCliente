@@ -2,6 +2,7 @@ module.exports = {
   content: [
     "./src/pages/Auth/**/*.{html,js}",
     "./src/pages/Users/**/*.{html,js}",
+    "./src/shared/**/*.{html,js}",
   ],
   theme: {
     extend: {

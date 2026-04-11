@@ -1,6 +1,6 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, apiUpload } from "../../services/api.js";
 import { openModal, toast } from "../../shared/ui.js";
-import { formatCurrencyBRL } from "../../shared/format.js";
+import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
@@ -20,9 +20,12 @@ function renderRow(c) {
     <tr class="hover:bg-surface-container-low transition-colors group">
       <td class="px-6 py-5">
         <div class="flex items-center gap-4">
-          <div class="size-10 flex-shrink-0 rounded border border-outline-variant bg-white p-1 flex items-center justify-center font-black text-primary">
-            ${String(c.code || "ID").slice(0, 2)}
-          </div>
+          ${c.profilePic 
+            ? `<img src="${c.profilePic}" alt="Foto de perfil" class="size-10 flex-shrink-0 rounded border border-outline-variant object-cover" />`
+            : `<div class="size-10 flex-shrink-0 rounded border border-outline-variant bg-white p-1 flex items-center justify-center font-black text-primary">
+                 ${String(c.code || "ID").slice(0, 2)}
+               </div>`
+          }
           <div>
             <p class="text-sm font-bold leading-tight text-secondary">${c.name}</p>
             <p class="text-[10px] font-bold text-outline uppercase tracking-tighter">ID: ${c.code}</p>
@@ -35,20 +38,6 @@ function renderRow(c) {
         </span>
       </td>
       <td class="px-6 py-5 text-sm font-semibold text-secondary">${c.region || "-"}</td>
-      <td class="px-6 py-5 text-right text-sm font-black text-secondary">${formatCurrencyBRL(c.ltvTotal)}</td>
-      <td class="px-6 py-5">
-        <div class="flex items-center gap-3">
-          <div class="h-1.5 w-24 overflow-hidden rounded-full bg-surface-container-high">
-            <div class="h-full ${c.status === "AT_RISK" ? "bg-primary" : "bg-tertiary"}" style="width: ${Math.max(
-              0,
-              Math.min(100, Number(c.healthScore || 0))
-            )}%;"></div>
-          </div>
-          <span class="text-xs font-bold ${c.status === "AT_RISK" ? "text-primary" : "text-tertiary"}">${
-            c.healthScore ?? "-"
-          }</span>
-        </div>
-      </td>
       <td class="px-6 py-5">
         <div class="flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase w-fit ${badge.cls}">
           <span class="size-1.5 rounded-full ${c.status === "AT_RISK" ? "bg-error" : c.status === "INACTIVE" ? "bg-outline" : "bg-tertiary"}"></span>
@@ -74,7 +63,7 @@ let state = {
   search: "",
   status: "",
   industry: "",
-  sort: "ltv_desc",
+  sort: "updatedAt_desc",
 };
 
 function setPagingText() {
@@ -223,10 +212,9 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome</label><input id="f_name" class="w-full rounded-lg border-slate-300" placeholder="Empresa X" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="f_industry" class="w-full rounded-lg border-slate-300" placeholder="Tecnologia (SaaS)" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="f_region" class="w-full rounded-lg border-slate-300" placeholder="Sudeste" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (kz)</label><input id="f_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Health (0-100)</label><input id="f_health" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="50" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Risco churn (%)</label><input id="f_churn" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Potencial 24m (kz)</label><input id="f_potential" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Foto de Perfil</label><input id="f_profilePicFile" type="file" accept="image/*" class="w-full rounded-lg border-slate-300 bg-white" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email de Acesso</label><input id="f_email" type="email" class="w-full rounded-lg border-slate-300" placeholder="gestor@empresa.com" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Senha Inicial</label><input id="f_password" type="password" class="w-full rounded-lg border-slate-300" placeholder="******" /></div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -238,12 +226,18 @@ async function openCreate() {
           name: v("f_name"),
           industry: v("f_industry") || null,
           region: v("f_region") || null,
-          ltvTotal: Number(v("f_ltv") || 0),
-          healthScore: Number(v("f_health") || 50),
-          churnRisk: Number(v("f_churn") || 0),
-          ltvPotential: Number(v("f_potential") || 0),
+          email: v("f_email"),
+          password: v("f_password"),
         },
       });
+      
+      const fileInput = panel.querySelector("#f_profilePicFile");
+      if (fileInput && fileInput.files.length > 0) {
+        await apiUpload(`/clients/${created.id}/avatar`, {
+          file: fileInput.files[0]
+        });
+      }
+      
       toast("Cliente criado", { type: "success" });
       close();
       state.page = 1;
@@ -270,12 +264,9 @@ async function openEdit(id) {
         </div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="e_industry" class="w-full rounded-lg border-slate-300" value="${c.industry || ""}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="e_region" class="w-full rounded-lg border-slate-300" value="${c.region || ""}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">LTV Total (kz)</label><input id="e_ltv" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${Number(
-          c.ltvTotal || 0
-        )}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Health (0-100)</label><input id="e_health" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${Number(
-          c.healthScore || 50
-        )}" /></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Atualizar Foto de Perfil</label><input id="e_profilePicFile" type="file" accept="image/*" class="w-full rounded-lg border-slate-300 bg-white" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email de Acesso</label><input id="e_email" type="email" class="w-full rounded-lg border-slate-300" value="${c.accountEmail || ""}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nova Senha (opcional)</label><input id="e_password" type="password" class="w-full rounded-lg border-slate-300" placeholder="Deixe em branco para manter" /></div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -287,10 +278,18 @@ async function openEdit(id) {
           status: v("e_status"),
           industry: v("e_industry") || null,
           region: v("e_region") || null,
-          ltvTotal: Number(v("e_ltv") || 0),
-          healthScore: Number(v("e_health") || 50),
+          email: v("e_email"),
+          password: v("e_password") || undefined,
         },
       });
+
+      const fileInput = panel.querySelector("#e_profilePicFile");
+      if (fileInput && fileInput.files.length > 0) {
+        await apiUpload(`/clients/${id}/avatar`, {
+          file: fileInput.files[0]
+        });
+      }
+
       toast("Cliente atualizado", { type: "success" });
       close();
       await load();

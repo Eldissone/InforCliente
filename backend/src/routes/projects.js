@@ -5,6 +5,11 @@ const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
+const path = require("path");
+const fs = require("fs");
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
 
 const projectRoutes = express.Router();
 projectRoutes.use(authRequired);
@@ -13,6 +18,19 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
 });
+
+const fileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join("uploads", "projects", req.params.id);
+    ensureDir(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
+  },
+});
+const fileUpload = multer({ storage: fileStorage });
 
 function getScopedClientId(req) {
   if (req.user?.role !== "cliente") return null;
@@ -197,7 +215,18 @@ projectRoutes.post(
       body.budgetCommitted !== undefined ? String(body.budgetCommitted) : "0";
     const budgetAvailable =
       body.budgetAvailable !== undefined ? String(body.budgetAvailable) : budgetTotal;
-    const code = body.code?.trim() || (await generateProjectCode());
+    let code = body.code?.trim();
+    if (code) {
+      const existing = await prisma.project.findUnique({
+        where: { code },
+        select: { id: true },
+      });
+      if (existing) {
+        return res.status(400).json({ error: "PROJECT_CODE_ALREADY_EXISTS" });
+      }
+    } else {
+      code = await generateProjectCode();
+    }
 
     const created = await prisma.project.create({
       data: {
@@ -369,23 +398,77 @@ projectRoutes.post(
         ownerName: z.string().optional().nullable(),
         status: z.enum(["PAID", "PENDING", "LATE"]).optional(),
         amount: z.union([z.number(), z.string()]),
+        budgetLineId: z.string().optional().nullable(),
       })
       .parse(req.body);
 
-    const created = await prisma.projectTransaction.create({
-      data: {
-        projectId,
-        date: body.date ? new Date(body.date) : new Date(),
-        description: body.description,
-        category: body.category || "OTHER",
-        ownerName: body.ownerName || null,
-        status: body.status || "PENDING",
-        amount: String(body.amount),
-      },
-      select: { id: true },
+    const amount = Number(body.amount);
+    const isPaid = body.status === "PAID";
+
+    const created = await prisma.$transaction(async (tx) => {
+      // 1. Criar a transação
+      const t = await tx.projectTransaction.create({
+        data: {
+          projectId,
+          date: body.date ? new Date(body.date) : new Date(),
+          description: body.description,
+          category: body.category || "OTHER",
+          ownerName: body.ownerName || null,
+          status: body.status || "PENDING",
+          amount: String(amount),
+          budgetLineId: body.budgetLineId || null,
+        },
+        select: { id: true },
+      });
+
+      // 2. Atualizar o saldo do projeto conforme o status
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          budgetConsumed: { increment: isPaid ? amount : 0 },
+          budgetCommitted: { increment: !isPaid ? amount : 0 },
+          budgetAvailable: { decrement: amount },
+        },
+      });
+
+      return t;
     });
 
     return res.status(201).json({ id: created.id });
+  })
+);
+
+projectRoutes.patch(
+  "/:id/transactions/:txId/liquidate",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const txId = String(req.params.txId);
+
+    const txRecord = await prisma.projectTransaction.findUnique({
+      where: { id: txId, projectId },
+    });
+
+    if (!txRecord) return res.status(404).json({ error: "TRANSACTION_NOT_FOUND" });
+    if (txRecord.status === "PAID") return res.status(400).json({ error: "ALREADY_PAID" });
+
+    const amount = Number(txRecord.amount);
+
+    await prisma.$transaction([
+      prisma.projectTransaction.update({
+        where: { id: txId },
+        data: { status: "PAID" },
+      }),
+      prisma.project.update({
+        where: { id: projectId },
+        data: {
+          budgetCommitted: { decrement: amount },
+          budgetConsumed: { increment: amount },
+        },
+      }),
+    ]);
+
+    return res.json({ ok: true });
   })
 );
 
@@ -396,16 +479,25 @@ projectRoutes.get(
     await ensureProjectReadable(req, projectId);
     const items = await prisma.projectBudgetLine.findMany({
       where: { projectId },
+      include: {
+        transactions: {
+          select: { amount: true }
+        }
+      },
       orderBy: { createdAt: "desc" },
       take: 500,
     });
     return res.json({
-      items: items.map((l) => ({
-        ...l,
-        quantity: l.quantity === null ? null : String(l.quantity),
-        unitPrice: l.unitPrice === null ? null : String(l.unitPrice),
-        total: String(l.total),
-      })),
+      items: items.map((l) => {
+        const consumed = l.transactions.reduce((acc, t) => acc + Number(t.amount), 0);
+        return {
+          ...l,
+          quantity: l.quantity === null ? null : String(l.quantity),
+          unitPrice: l.unitPrice === null ? null : String(l.unitPrice),
+          total: String(l.total),
+          consumed: String(consumed),
+        };
+      }),
     });
   })
 );
@@ -449,11 +541,15 @@ projectRoutes.post(
       });
 
       const sum = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
+      const project = await tx.project.findUnique({ where: { id: projectId }, select: { budgetConsumed: true } });
+      const consumed = Number(project?.budgetConsumed || 0);
+
       await tx.project.update({
         where: { id: projectId },
         data: {
           budgetAllocated: String(sum),
           budgetTotal: String(sum),
+          budgetAvailable: String(sum - consumed),
         },
       });
     });
@@ -464,6 +560,157 @@ projectRoutes.post(
       total: String(total.toFixed(2)),
       warnings,
     });
+  })
+);
+
+// -----------------------------------------------------------------------------
+// FILE MANAGEMENT
+// -----------------------------------------------------------------------------
+
+projectRoutes.get(
+  "/:id/files",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { folderId } = req.query;
+    await ensureProjectReadable(req, id);
+
+    const files = await prisma.projectFile.findMany({
+      where: { 
+        projectId: id,
+        folderId: folderId === "root" ? null : (folderId || undefined),
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ items: files });
+  })
+);
+
+projectRoutes.post(
+  "/:id/files",
+  requireRole(["admin", "operador"]),
+  fileUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!req.file) throw new Error("FILE_REQUIRED");
+    await ensureProjectReadable(req, id);
+
+    const fileRecord = await prisma.projectFile.create({
+      data: {
+        projectId: id,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path.replace(/\\/g, "/"),
+        category: req.body.category || "OUTROS",
+        folderId: req.body.folderId || null,
+      },
+    });
+
+    res.status(201).json(fileRecord);
+  })
+);
+
+projectRoutes.delete(
+  "/:id/files/:fileId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, fileId } = req.params;
+
+    const file = await prisma.projectFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file || file.projectId !== id) {
+      const err = new Error("FILE_NOT_FOUND");
+      err.status = 404;
+      throw err;
+    }
+
+    // Remove from DB
+    await prisma.projectFile.delete({
+      where: { id: fileId },
+    });
+
+    // Remove physical file
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    res.json({ ok: true });
+  })
+);
+
+// -----------------------------------------------------------------------------
+// FOLDERS
+// -----------------------------------------------------------------------------
+
+projectRoutes.get(
+  "/:id/folders",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await ensureProjectReadable(req, id);
+
+    const folders = await prisma.projectFolder.findMany({
+      where: { projectId: id },
+      orderBy: { name: "asc" },
+    });
+
+    res.json({ items: folders });
+  })
+);
+
+projectRoutes.post(
+  "/:id/folders",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name) throw new Error("FOLDER_NAME_REQUIRED");
+
+    await ensureProjectReadable(req, id);
+
+    const folder = await prisma.projectFolder.create({
+      data: {
+        projectId: id,
+        name,
+      },
+    });
+
+    res.status(201).json(folder);
+  })
+);
+
+projectRoutes.delete(
+  "/:id/folders/:folderId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, folderId } = req.params;
+
+    const folder = await prisma.projectFolder.findUnique({
+      where: { id: folderId },
+      include: { files: true },
+    });
+
+    if (!folder || folder.projectId !== id) {
+      const err = new Error("FOLDER_NOT_FOUND");
+      err.status = 404;
+      throw err;
+    }
+
+    // Delete all files physically
+    for (const f of folder.files) {
+      if (fs.existsSync(f.path)) {
+        fs.unlinkSync(f.path);
+      }
+    }
+
+    // Prisma onDelete: Cascade will handle files in DB
+    await prisma.projectFolder.delete({
+      where: { id: folderId },
+    });
+
+    res.json({ ok: true });
   })
 );
 

@@ -1,6 +1,6 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, setText, toast } from "../../shared/ui.js";
-import { formatCurrencyBRL, formatPercent, formatDateBR } from "../../shared/format.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { formatCurrencyKZ, formatPercent, formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
@@ -39,7 +39,7 @@ function renderLinkedProjectCard(project) {
         </div>
         <div class="rounded-xl bg-surface-container-low px-4 py-3">
           <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Orçamento</div>
-          <div class="mt-1 font-semibold text-on-surface">${formatCurrencyBRL(project.budgetTotal)}</div>
+          <div class="mt-1 font-semibold text-on-surface">${formatCurrencyKZ(project.budgetTotal)}</div>
         </div>
         <div class="rounded-xl bg-surface-container-low px-4 py-3">
           <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Início</div>
@@ -104,16 +104,37 @@ async function loadClient() {
 
   setText(el("clientName"), c.name);
   setText(el("clientCode"), `ID: ${c.code}`);
+  if (c.profilePic) {
+    const imgEl = el("clientProfilePic");
+    if (imgEl) {
+      imgEl.src = c.profilePic;
+      imgEl.classList.remove("grayscale"); // Optional: remove grayscale if it's a custom photo
+    }
+  }
 
-  const health = Math.max(0, Math.min(100, Number(c.healthScore || 0)));
-  setText(el("clientHealthScore"), String(health));
-  if (el("clientHealthBar")) el("clientHealthBar").style.width = `${health}%`;
+  setText(el("clientLocationTier"), `${c.region || "Região não informada"} • ${c.tier || "Tier não informado"}`);
+  setText(el("clientAccountEmail"), c.accountEmail || "Sem conta vinculada");
 
-  const churn = Math.max(0, Math.min(100, Number(c.churnRisk || 0)));
-  setText(el("clientChurnRisk"), String(c.churnRisk ?? "-"));
-  if (el("clientChurnBar")) el("clientChurnBar").style.width = `${Math.max(0, Math.min(100, churn))}%`;
+  const statusBadgeEl = el("clientStatusBadge");
+  if (statusBadgeEl) {
+    const s = c.status || "ACTIVE";
+    const labels = { ACTIVE: "Ativo", AT_RISK: "Em Risco", INACTIVE: "Inativo" };
+    const colors = {
+      ACTIVE: "border-tertiary/30 bg-tertiary/10 text-tertiary",
+      AT_RISK: "border-error/30 bg-error/10 text-error",
+      INACTIVE: "border-outline/30 bg-surface-container-high text-on-surface-variant"
+    };
+    statusBadgeEl.className = `flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase w-fit ${colors[s]}`;
+    statusBadgeEl.innerHTML = `<span class="size-1.5 rounded-full ${s === 'AT_RISK' ? 'bg-error' : s === 'INACTIVE' ? 'bg-outline' : 'bg-tertiary'}"></span>${labels[s]}`;
+  }
 
-  setText(el("clientLtvPotential"), formatCurrencyBRL(c.ltvPotential));
+  const tagsHost = el("clientTags");
+  if (tagsHost) {
+    const industryTag = c.industry ? `<span class="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-black uppercase tracking-wider">${c.industry}</span>` : "";
+    const otherTags = (c.tags || []).map(t => `<span class="px-3 py-1 rounded-full bg-[#2afc8d]/10 text-[#005229] text-[10px] font-black uppercase tracking-wider">${t}</span>`).join("");
+    tagsHost.innerHTML = industryTag + otherTags;
+  }
+
   renderClientProjects(c.projects || []);
 
   return c;
@@ -123,7 +144,7 @@ async function loadTimeline() {
   const id = getClientId();
   const host = el("clientTimeline");
   if (!host) return;
-  host.innerHTML = `<div class="text-sm text-on-surface-variant">Carregando...</div>`;
+  host.innerHTML = renderLoadingRow(1);
 
   const data = await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`);
   const items = data.items || [];
@@ -194,18 +215,25 @@ function wireFab() {
       onPrimary: async ({ close, panel }) => {
         const id = getClientId();
         const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
-        await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`, {
-          method: "POST",
-          body: {
-            type: v("i_type") || "Note",
-            title: v("i_title") || "Interação",
-            description: v("i_desc") || null,
-            leadName: v("i_lead") || null,
-          },
-        });
-        toast("Interação adicionada", { type: "success" });
-        close();
-        await loadTimeline();
+        const btn = panel.querySelector("[data-primary]");
+        try {
+          setButtonLoading(btn, true);
+          await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`, {
+            method: "POST",
+            body: {
+              type: v("i_type") || "Note",
+              title: v("i_title") || "Interação",
+              description: v("i_desc") || null,
+              leadName: v("i_lead") || null,
+            },
+          });
+          toast("Interação adicionada", { type: "success" });
+          close();
+          await loadTimeline();
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast(err.message || "Erro ao adicionar interação", { type: "error" });
+        }
       },
     });
   });

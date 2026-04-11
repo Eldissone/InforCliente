@@ -1,6 +1,6 @@
 import { apiRequest, getApiBaseUrl } from "../../services/api.js";
 import { setSession } from "../../services/auth.js";
-import { toast } from "../../shared/ui.js";
+import { toast, setButtonLoading } from "../../shared/ui.js";
 
 function qs(id) {
   return document.getElementById(id);
@@ -32,22 +32,20 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
   const submitBtn = qs("submitBtn");
 
   try {
-    if (submitBtn) submitBtn.disabled = true;
+    setButtonLoading(submitBtn, true);
     const res = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
     setSession(res);
     toast(`Conectado em ${getApiBaseUrl()}`, { type: "success" });
 
     const next = getNext();
     if (next) {
-      // next é um caminho relativo curto (ex: "Dashboard/index.html")
-    window.location.href = `/${next}`;
+      window.location.href = `/${next}`;
     } else {
-    window.location.href =
-      res?.user?.role === "cliente" ? "/Projectos/ProjectGeral.html" : "/Dashboard/index.html";
+      window.location.href =
+        res?.user?.role === "cliente" ? "/Projectos/ProjectGeral.html" : "/Dashboard/index.html";
     }
   } catch (err) {
+    setButtonLoading(submitBtn, false);
     setError("Falha no login. Verifique email/senha e se a API está rodando.");
-  } finally {
-    if (submitBtn) submitBtn.disabled = false;
   }
 });

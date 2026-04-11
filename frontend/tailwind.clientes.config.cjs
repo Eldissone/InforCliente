@@ -1,6 +1,7 @@
 module.exports = {
   content: [
     "./src/pages/Clientes/**/*.{html,js}",
+    "./src/shared/**/*.{html,js}"
   ],
   theme: {
     extend: {

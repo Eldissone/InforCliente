@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast } from "../../shared/ui.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
 import { formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -76,7 +76,7 @@ function renderRow(u) {
 
 async function load() {
   const tbody = el("usersTbody");
-  tbody.innerHTML = `<tr><td class="px-6 py-6 text-slate-500" colspan="5">Carregando...</td></tr>`;
+  tbody.innerHTML = renderLoadingRow(5);
   const data = await apiRequest("/users");
   tbody.innerHTML = (data.items || []).map(renderRow).join("") || `<tr><td class="px-6 py-6 text-slate-500" colspan="5">Sem utilizadores.</td></tr>`;
 }
@@ -87,8 +87,8 @@ async function openCreate() {
     title: "Novo utilizador",
     primaryLabel: "Criar",
     contentHtml: `
-      <div class="grid grid-cols-1 gap-4">
-        <div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
           <input id="u_email" type="email" class="w-full rounded-lg border-slate-300" placeholder="user@empresa.com" />
         </div>
@@ -105,7 +105,7 @@ async function openCreate() {
             <option value="cliente">cliente</option>
           </select>
         </div>
-        <div id="u_client_wrap" class="hidden">
+        <div id="u_client_wrap" class="md:col-span-2 hidden">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente vinculado</label>
           <select id="u_client" class="w-full rounded-lg border-slate-300">
             ${renderClientOptions(clients)}
@@ -115,19 +115,26 @@ async function openCreate() {
     `,
     onPrimary: async ({ close, panel }) => {
       const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
+      const btn = panel.querySelector("[data-primary]");
       const role = v("u_role");
       const clientId = v("u_client") || null;
       if (role === "cliente" && !clientId) {
         toast("Selecione o cliente vinculado para este acesso.", { type: "error" });
         return;
       }
-      await apiRequest("/users", {
-        method: "POST",
-        body: { email: v("u_email"), password: v("u_password"), role, clientId },
-      });
-      toast("Utilizador criado", { type: "success" });
-      close();
-      await load();
+      try {
+        setButtonLoading(btn, true);
+        await apiRequest("/users", {
+          method: "POST",
+          body: { email: v("u_email"), password: v("u_password"), role, clientId },
+        });
+        toast("Utilizador criado", { type: "success" });
+        close();
+        await load();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro ao criar utilizador", { type: "error" });
+      }
     },
   });
   wireClientSelector(modal.panel, { roleSelectorId: "u_role", clientWrapId: "u_client_wrap" });
@@ -143,10 +150,10 @@ async function openEdit(id) {
     primaryLabel: "Salvar",
     secondaryLabel: "Excluir",
     contentHtml: `
-      <div class="grid grid-cols-1 gap-4">
-        <div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
-          <input id="e_email" type="email" class="w-full rounded-lg border-slate-300" value="${u.email}" />
+          <input id="e_email" type="email" class="w-full rounded-lg border-slate-300" value="${escapeHtml(u.email)}" />
         </div>
         <div>
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Role</label>
@@ -163,37 +170,51 @@ async function openEdit(id) {
             ${renderClientOptions(clients, u.clientId || "")}
           </select>
         </div>
-        <div class="border-t pt-4">
+        <div class="md:col-span-2 border-t pt-4">
           <div class="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Reset senha</div>
-          <div class="flex gap-3">
-            <input id="e_password" type="password" class="flex-1 rounded-lg border-slate-300" placeholder="nova senha (min 6)" />
-            <button id="resetBtn" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold">Reset</button>
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <input id="e_password" type="password" class="min-w-0 flex-1 rounded-lg border-slate-300" placeholder="nova senha (min 6)" />
+            <button id="resetBtn" class="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors sm:w-auto">Reset</button>
           </div>
         </div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
       const v = (id2) => panel.querySelector(`#${id2}`)?.value?.trim?.();
+      const btn = panel.querySelector("[data-primary]");
       const role = v("e_role");
       const clientId = v("e_client") || null;
       if (role === "cliente" && !clientId) {
         toast("Selecione o cliente vinculado para este acesso.", { type: "error" });
         return;
       }
-      await apiRequest(`/users/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        body: { email: v("e_email"), role, clientId },
-      });
-      toast("Utilizador atualizado", { type: "success" });
-      close();
-      await load();
+      try {
+        setButtonLoading(btn, true);
+        await apiRequest(`/users/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: { email: v("e_email"), role, clientId },
+        });
+        toast("Utilizador atualizado", { type: "success" });
+        close();
+        await load();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro ao atualizar utilizador", { type: "error" });
+      }
     },
-    onSecondary: async ({ close }) => {
+    onSecondary: async ({ close, panel }) => {
       if (!window.confirm("Excluir este utilizador?")) return;
-      await apiRequest(`/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-      toast("Utilizador excluído", { type: "success" });
-      close();
-      await load();
+      const btn = panel.querySelector("[data-secondary]");
+      try {
+        setButtonLoading(btn, true);
+        await apiRequest(`/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+        toast("Utilizador excluído", { type: "success" });
+        close();
+        await load();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro ao excluir utilizador", { type: "error" });
+      }
     },
   });
   wireClientSelector(modal.panel, { roleSelectorId: "e_role", clientWrapId: "e_client_wrap" });
@@ -208,8 +229,18 @@ async function openEdit(id) {
         toast("Senha inválida (mín. 6).", { type: "error" });
         return;
       }
-      await apiRequest(`/users/${encodeURIComponent(id)}/reset-password`, { method: "POST", body: { password: pass } });
-      toast("Senha atualizada", { type: "success" });
+      try {
+        setButtonLoading(resetBtn, true);
+        await apiRequest(`/users/${encodeURIComponent(id)}/reset-password`, {
+          method: "POST",
+          body: { password: pass },
+        });
+        setButtonLoading(resetBtn, false);
+        toast("Senha atualizada", { type: "success" });
+      } catch (err) {
+        setButtonLoading(resetBtn, false);
+        toast(err.message || "Erro ao resetar senha", { type: "error" });
+      }
     });
   }, 0);
 }

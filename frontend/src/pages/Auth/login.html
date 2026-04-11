@@ -1,60 +1,54 @@
 <!DOCTYPE html>
 <html class="light" lang="pt-BR">
-  <head>
-    <meta charset="utf-8" />
-    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Infor Cliente - Login</title>
-    <link href="/assets/styles/tailwind-base.css" rel="stylesheet" />
-  </head>
-  <body class="bg-slate-50 font-body text-slate-900 min-h-screen flex items-center justify-center p-6">
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-      <div class="px-8 py-6 bg-[#212e3e] text-white">
-        <div class="text-xs font-black tracking-[0.25em] uppercase text-[#2afc8d]">Infor Cliente</div>
-        <h1 class="mt-2 text-2xl font-extrabold tracking-tight">Entrar</h1>
-        <p class="mt-1 text-sm text-slate-300">Use suas credenciais para acessar o painel.</p>
-      </div>
 
-      <form id="loginForm" class="px-8 py-8 space-y-5">
-        <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
-          <input
-            id="email"
-            type="email"
-            class="w-full rounded-xl border-slate-300 focus:border-blue-600 focus:ring-blue-600"
-            placeholder="admin@inforcliente.local"
-            required
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Senha</label>
-          <input
-            id="password"
-            type="password"
-            class="w-full rounded-xl border-slate-300 focus:border-blue-600 focus:ring-blue-600"
-            placeholder="admin123"
-            required
-          />
-        </div>
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Infor Cliente - Login</title>
+  <link href="/assets/styles/tailwind-base.css" rel="stylesheet" />
+  <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+</head>
 
-        <div class="flex items-center justify-between">
-          <button
-            id="submitBtn"
-            type="submit"
-            class="w-full rounded-xl bg-blue-600 text-white font-extrabold py-3 hover:bg-blue-700 transition-colors"
-          >
-            Entrar
-          </button>
-        </div>
-
-        <div class="text-xs text-slate-500 leading-relaxed">
-          Seed (admin): <span class="font-bold">admin@inforcliente.local</span> / <span class="font-bold">admin123</span><br />
-          Seed (cliente): <span class="font-bold">cliente.nexus@inforcliente.local</span> / <span class="font-bold">admin123</span>
-        </div>
-
-        <div id="errorBox" class="hidden text-sm font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3"></div>
-      </form>
+<body class="bg-slate-50 font-body text-slate-900 min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+    <div class="px-8 py-6 bg-[#212e3e] text-white">
+      <div class="text-xs font-black tracking-[0.25em] uppercase text-[#2afc8d]">Infor Cliente</div>
+      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">Entrar</h1>
+      <p class="mt-1 text-sm text-slate-300">Use suas credenciais para acessar o painel.</p>
     </div>
 
-    <script type="module" src="./login.js"></script>
-  </body>
+    <form id="loginForm" class="px-8 py-8 space-y-5">
+      <div>
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
+        <input id="email" type="email"
+          class="w-full rounded-xl border-slate-300 focus:border-blue-600 focus:ring-blue-600"
+          placeholder="admin@inforcliente.local" required />
+      </div>
+      <div>
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Senha</label>
+        <input id="password" type="password"
+          class="w-full rounded-xl border-slate-300 focus:border-blue-600 focus:ring-blue-600" placeholder="admin123"
+          required />
+      </div>
+
+      <div class="flex items-center justify-between">
+        <button id="submitBtn" type="submit"
+          class="w-full rounded-xl bg-blue-600 text-white font-extrabold py-3 hover:bg-blue-700 transition-colors">
+          Entrar
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 leading-relaxed">
+        Seed (admin): <span class="font-bold">admin@inforcliente.local</span> / <span
+          class="font-bold">admin123</span><br />
+      </div>
+
+      <div id="errorBox"
+        class="hidden text-sm font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3"></div>
+    </form>
+  </div>
+
+  <script type="module" src="./login.js"></script>
+</body>
+
 </html>

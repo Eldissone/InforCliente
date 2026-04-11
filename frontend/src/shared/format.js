@@ -1,11 +1,11 @@
-export function formatCurrencyBRL(value) {
+export function formatCurrencyKZ(value) {
   const num = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(num)) return "-";
-  return new Intl.NumberFormat("pt-BR", {
+  return new Intl.NumberFormat("pt-AO", {
     style: "currency",
-    currency: "BRL",
+    currency: "AOA",
     maximumFractionDigits: 2,
-  }).format(num);
+  }).format(num).replace('AOA', 'kz').replace('Kz', 'kz');
 }
 
 export function formatCompactNumber(value) {

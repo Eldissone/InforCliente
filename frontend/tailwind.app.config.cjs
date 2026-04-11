@@ -3,6 +3,7 @@ module.exports = {
     "./src/pages/Dashboard/**/*.{html,js}",
     "./src/pages/ClienteDetalhe/**/*.{html,js}",
     "./src/pages/Projectos/**/*.{html,js}",
+    "./src/shared/**/*.{html,js}"
   ],
   theme: {
     extend: {

@@ -7,6 +7,173 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(leitura)
+  createdAt    DateTime @default(now())
+  clientId     String?
+  client       Client?  @relation(fields: [clientId], references: [id])
+
+  @@index([clientId])
+}
+
+model Client {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  name         String
+  industry     String?
+  region       String?
+  tier         String?
+  status       ClientStatus       @default(ACTIVE)
+  healthScore  Int                @default(50)
+  ltvTotal     Decimal            @db.Decimal(14, 2)
+  churnRisk    Decimal            @db.Decimal(5, 2)
+  ltvPotential Decimal            @db.Decimal(14, 2)
+  profilePic   String?
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  alerts       Alert[]
+  tags         ClientTag[]
+  interactions InteractionEvent[]
+  projects     Project[]
+  users        User[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model ClientTag {
+  id       String @id @default(cuid())
+  clientId String
+  tag      String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, tag])
+}
+
+model Project {
+  id                  String               @id @default(cuid())
+  code                String               @unique
+  name                String
+  location            String?
+  region              String?
+  status              ProjectStatus        @default(ACTIVE)
+  startDate           DateTime?
+  dueDate             DateTime?
+  budgetTotal         Decimal              @db.Decimal(16, 2)
+  budgetAllocated     Decimal              @db.Decimal(16, 2)
+  budgetConsumed      Decimal              @db.Decimal(16, 2)
+  budgetCommitted     Decimal              @db.Decimal(16, 2)
+  budgetAvailable     Decimal              @db.Decimal(16, 2)
+  physicalProgressPct Int                  @default(0)
+  phaseLabel          String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  clientId            String?
+  contact             String?
+  alerts              Alert[]
+  client              Client?              @relation(fields: [clientId], references: [id])
+  budgetLines         ProjectBudgetLine[]
+  files               ProjectFile[]
+  folders             ProjectFolder[]
+  transactions        ProjectTransaction[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model ProjectFolder {
+  id        String        @id @default(cuid())
+  name      String
+  projectId String
+  createdAt DateTime      @default(now())
+  files     ProjectFile[]
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
+
+model ProjectFile {
+  id           String         @id @default(cuid())
+  projectId    String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  category     String?        @default("OUTROS")
+  createdAt    DateTime       @default(now())
+  folderId     String?
+  folder       ProjectFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
+
+model ProjectBudgetLine {
+  id           String               @id @default(cuid())
+  projectId    String
+  rowNumber    Int?
+  sourceFile   String?
+  category     String?
+  description  String
+  unit         String?
+  quantity     Decimal?             @db.Decimal(16, 4)
+  unitPrice    Decimal?             @db.Decimal(16, 4)
+  total        Decimal              @db.Decimal(16, 2)
+  createdAt    DateTime             @default(now())
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  transactions ProjectTransaction[]
+
+  @@index([projectId, createdAt])
+}
+
+model ProjectTransaction {
+  id           String              @id @default(cuid())
+  projectId    String
+  date         DateTime
+  description  String
+  category     TransactionCategory @default(OTHER)
+  ownerName    String?
+  status       TransactionStatus   @default(PENDING)
+  amount       Decimal             @db.Decimal(16, 2)
+  budgetLineId String?
+  budgetLine   ProjectBudgetLine?  @relation(fields: [budgetLineId], references: [id])
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, date])
+}
+
+model InteractionEvent {
+  id          String   @id @default(cuid())
+  clientId    String
+  type        String
+  title       String
+  description String?
+  occurredAt  DateTime
+  leadName    String?
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, occurredAt])
+}
+
+model Alert {
+  id        String        @id @default(cuid())
+  severity  AlertSeverity @default(MEDIUM)
+  status    AlertStatus   @default(OPEN)
+  title     String
+  body      String?
+  createdAt DateTime      @default(now())
+  clientId  String?
+  projectId String?
+  client    Client?       @relation(fields: [clientId], references: [id])
+  project   Project?      @relation(fields: [projectId], references: [id])
+
+  @@index([status, severity, createdAt])
+}
+
 enum Role {
   admin
   operador
@@ -48,147 +215,4 @@ enum AlertSeverity {
 enum AlertStatus {
   OPEN
   ACK
-}
-
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(leitura)
-  clientId     String?
-  createdAt    DateTime @default(now())
-
-  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
-
-  @@index([clientId])
-}
-
-model Client {
-  id           String       @id @default(cuid())
-  code         String       @unique
-  name         String
-  industry     String?
-  region       String?
-  tier         String?
-  status       ClientStatus @default(ACTIVE)
-  healthScore  Int          @default(50)
-  ltvTotal     Decimal      @db.Decimal(14, 2)
-  churnRisk    Decimal      @db.Decimal(5, 2)
-  ltvPotential Decimal      @db.Decimal(14, 2)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  tags         ClientTag[]
-  projects     Project[]
-  interactions InteractionEvent[]
-  alerts       Alert[]
-  users        User[]
-
-  @@index([name])
-  @@index([status])
-}
-
-model ClientTag {
-  id       String @id @default(cuid())
-  clientId String
-  tag      String
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@unique([clientId, tag])
-}
-
-model Project {
-  id                  String        @id @default(cuid())
-  code                String        @unique
-  name                String
-  contact             String?
-  location            String?
-  region              String?
-  status              ProjectStatus @default(ACTIVE)
-  startDate           DateTime?
-  dueDate             DateTime?
-  budgetTotal         Decimal       @db.Decimal(16, 2)
-  budgetAllocated     Decimal       @db.Decimal(16, 2)
-  budgetConsumed      Decimal       @db.Decimal(16, 2)
-  budgetCommitted     Decimal       @db.Decimal(16, 2)
-  budgetAvailable     Decimal       @db.Decimal(16, 2)
-  physicalProgressPct Int           @default(0)
-  phaseLabel          String?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-
-  clientId String?
-  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
-
-  transactions ProjectTransaction[]
-  budgetLines   ProjectBudgetLine[]
-  alerts       Alert[]
-
-  @@index([name])
-  @@index([status])
-}
-
-model ProjectBudgetLine {
-  id          String   @id @default(cuid())
-  projectId   String
-  rowNumber   Int?
-  sourceFile  String?
-  category    String?
-  description String
-  unit        String?
-  quantity    Decimal? @db.Decimal(16, 4)
-  unitPrice   Decimal? @db.Decimal(16, 4)
-  total       Decimal  @db.Decimal(16, 2)
-  createdAt   DateTime @default(now())
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId, createdAt])
-}
-
-model ProjectTransaction {
-  id          String              @id @default(cuid())
-  projectId   String
-  date        DateTime
-  description String
-  category    TransactionCategory @default(OTHER)
-  ownerName   String?
-  status      TransactionStatus   @default(PENDING)
-  amount      Decimal             @db.Decimal(16, 2)
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId, date])
-}
-
-model InteractionEvent {
-  id          String   @id @default(cuid())
-  clientId    String
-  type        String
-  title       String
-  description String?
-  occurredAt  DateTime
-  leadName    String?
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([clientId, occurredAt])
-}
-
-model Alert {
-  id        String        @id @default(cuid())
-  severity  AlertSeverity @default(MEDIUM)
-  status    AlertStatus   @default(OPEN)
-  title     String
-  body      String?
-  createdAt DateTime      @default(now())
-
-  clientId  String?
-  projectId String?
-
-  client  Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-
-  @@index([status, severity, createdAt])
 }

@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, setText, toast } from "../../shared/ui.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
 import { formatCompactNumber, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -84,7 +84,7 @@ let searchTimer = null;
 async function loadClientMatrix({ search = "" } = {}) {
   const body = byId("clientMatrixBody");
   if (!body) return;
-  body.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="5">Carregando...</td></tr>`;
+  body.innerHTML = renderLoadingRow(5);
 
   const data = await apiRequest(`/dashboard/clients?search=${encodeURIComponent(search)}&page=1&pageSize=10`);
   if (!data.items?.length) {
@@ -166,6 +166,7 @@ function wireAddClient() {
       `,
       onPrimary: async ({ close, panel }) => {
         const get = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
+        const btn = panel.querySelector("[data-primary]");
         const payload = {
           code: get("c_code"),
           name: get("c_name"),
@@ -176,11 +177,17 @@ function wireAddClient() {
           ltvPotential: Number(get("c_potential") || 0),
           healthScore: Number(get("c_health") || 50),
         };
-        await apiRequest("/clients", { method: "POST", body: payload });
-        toast("Cliente criado", { type: "success" });
-        close();
-        await loadKpis();
-        await loadClientMatrix({ search: byId("clientMatrixFilter")?.value?.trim?.() || "" });
+        try {
+          setButtonLoading(btn, true);
+          await apiRequest("/clients", { method: "POST", body: payload });
+          toast("Cliente criado", { type: "success" });
+          close();
+          await loadKpis();
+          await loadClientMatrix({ search: byId("clientMatrixFilter")?.value?.trim?.() || "" });
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast(err.message || "Erro ao criar cliente", { type: "error" });
+        }
       },
     });
   });
