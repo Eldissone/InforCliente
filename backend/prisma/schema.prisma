@@ -86,14 +86,17 @@ model Project {
 }
 
 model ProjectFolder {
-  id        String        @id @default(cuid())
+  id        String          @id @default(cuid())
   name      String
   projectId String
-  createdAt DateTime      @default(now())
+  parentId  String?
+  createdAt DateTime        @default(now())
   files     ProjectFile[]
-  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  children  ProjectFolder[] @relation("FolderChildren")
+  parent    ProjectFolder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([projectId, createdAt])
+  @@index([projectId, parentId, createdAt])
 }
 
 model ProjectFile {

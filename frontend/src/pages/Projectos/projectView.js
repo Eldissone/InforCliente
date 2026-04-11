@@ -106,7 +106,7 @@ function renderFileCard(f) {
   const isImage = f.mimeType.startsWith("image/");
   const icon = isImage ? "image" : (f.mimeType === "application/pdf" ? "picture_as_pdf" : "description");
   const iconColor = isImage ? "text-primary" : (f.mimeType === "application/pdf" ? "text-error" : "text-slate-400");
-  const baseUrl = window.location.origin.replace(/:5173$/, ":4000"); // Ajuste conforme porta da API
+  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
   const fileUrl = `${baseUrl}/${f.path}`;
 
   return `
@@ -116,6 +116,9 @@ function renderFileCard(f) {
                 <span class="material-symbols-outlined">${icon}</span>
             </div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button data-edit-file="${f.id}" data-file-name="${escapeHtml(f.originalName)}" data-file-folder="${f.folderId || ''}" data-file-cat="${f.category || ''}" title="Editar" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                </button>
                 <a href="${fileUrl}" target="_blank" title="Abrir em Nova Aba" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
                     <span class="material-symbols-outlined text-sm">open_in_new</span>
                 </a>
@@ -142,9 +145,14 @@ function renderFolderCard(f) {
             <div class="w-12 h-12 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
                 <span class="material-symbols-outlined text-3xl">folder</span>
             </div>
-            <button data-delete-folder="${f.id}" title="Apagar Pasta" class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-error/10 rounded-lg text-error transition-all">
-                <span class="material-symbols-outlined text-sm">delete</span>
-            </button>
+            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                <button data-edit-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" title="Renomear Pasta" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                </button>
+                <button data-delete-folder="${f.id}" title="Apagar Pasta" class="p-1.5 hover:bg-error/10 rounded-lg text-error transition-colors">
+                    <span class="material-symbols-outlined text-sm">delete</span>
+                </button>
+            </div>
         </div>
         <div>
             <h4 class="text-sm font-bold text-[#212e3e] truncate">${escapeHtml(f.name)}</h4>
@@ -200,7 +208,8 @@ async function loadProject() {
 }
 
 let txState = { search: "" };
-let fileState = { currentFolderId: null, breadcrumbs: [], items: [] };
+// breadcrumbs: [{id, name}] — pilha de pastas actuais
+let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
 
 async function loadTransactions() {
   const id = getProjectId();
@@ -257,7 +266,8 @@ function renderScurve(allTxs, project, budgetLines) {
     return (fd.getFullYear() - rangeStart.getFullYear()) * 12 + (fd.getMonth() - rangeStart.getMonth());
   };
 
-  // --- Planejado: distribuir budget lines pelos meses (excluindo capital) ---
+  // --- Planejado: idêntico à coluna "Previsto (P.)" da tabela ---
+  // 1) Budget lines distribuídas linearmente (excluindo capital)
   const plannedByMonth = Array(numMonths).fill(0);
   const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS","DEPRECIACAO"].includes(l.category));
   if (opLines.length > 0) {
@@ -270,11 +280,23 @@ function renderScurve(allTxs, project, budgetLines) {
     for (let i = 0; i < numMonths; i++) plannedByMonth[i] = perMonth;
   }
 
-  // --- Realizado: PAID → realizedAmount ou amount ---
+  // 2) Transações PENDING/LATE adicionadas ao mês específico da data (tal como a tabela)
+  (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").forEach(t => {
+    const idx = getColIdx(new Date(t.date));
+    const cat = t.category || "";
+    if (!["INVESTIMENTOS","DEPRECIACAO"].includes(cat)) {
+      plannedByMonth[idx] += Number(t.amount || 0);
+    }
+  });
+
+  // --- Realizado: PAID → realizedAmount ou amount (excluindo capital) ---
   const realizedByMonth = Array(numMonths).fill(0);
   (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
-    const idx = getColIdx(new Date(t.date));
-    realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
+    const cat = t.category || "";
+    if (!["INVESTIMENTOS","DEPRECIACAO"].includes(cat)) {
+      const idx = getColIdx(new Date(t.date));
+      realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
+    }
   });
 
   // --- Acumulados (Curva S) ---
@@ -295,6 +317,16 @@ function renderScurve(allTxs, project, budgetLines) {
   }
 
   const maxVal = Math.max(...planCum, ...realCum.filter(v => v !== null), 1);
+
+  // --- DEBUG (remover depois) ---
+  console.group("🔵 Curva S — Diagnóstico");
+  console.log("totalBudget:", totalBudget);
+  console.log("opLines:", opLines.length, opLines.map(l => `${l.description}=${l.total}`));
+  console.log("allTxs:", (allTxs||[]).length, "| PENDING/LATE:", (allTxs||[]).filter(t=>t.status==="PENDING"||t.status==="LATE").length, "| PAID:", (allTxs||[]).filter(t=>t.status==="PAID").length);
+  console.log("plannedByMonth:", plannedByMonth.map((v,i)=>`${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
+  console.log("realizedByMonth:", realizedByMonth.map((v,i)=>`${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
+  console.log("planCum[-1]:", Math.round(planCum.at(-1)), "| realCum last:", Math.round(realCum.filter(v=>v!==null).at(-1)??0), "| maxVal:", Math.round(maxVal));
+  console.groupEnd();
 
   const formatKZ = (v) => {
     if (v == null || v === 0) return "0";
@@ -786,59 +818,78 @@ async function loadFiles() {
   const empty = el("noFilesMsg");
   if (!list) return;
 
-  // Add Breadcrumbs container if missing
+  // Criar breadcrumbs container se não existir
   if (!el("fileBreadcrumbs")) {
     const header = list.parentElement.querySelector("div.flex.justify-between");
     const bread = document.createElement("div");
     bread.id = "fileBreadcrumbs";
     bread.className = "flex items-center gap-2 mb-6 text-xs font-bold uppercase tracking-widest text-slate-400";
-    header.insertAdjacentElement("afterend", bread);
+    header?.insertAdjacentElement("afterend", bread);
   }
 
   try {
     const { currentFolderId, breadcrumbs } = fileState;
 
-    // Update breadcrumbs UI
-    const breadHtml = [
-      `<button data-go-folder="root" class="hover:text-primary transition-colors">Início</button>`,
-      ...breadcrumbs.map((b, idx) => `
-        <span class="material-symbols-outlined text-[10px]" data-icon="chevron_right">chevron_right</span>
-        <button data-go-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e]' : 'hover:text-primary'} transition-colors">${b.name}</button>
-      `)
-    ].join("");
-    el("fileBreadcrumbs").innerHTML = breadHtml;
+    // Actualizar UI dos breadcrumbs
+    const breadEl = el("fileBreadcrumbs");
+    if (breadEl) {
+      const breadHtml = [
+        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Início</button>`,
+        ...breadcrumbs.map((b, idx) => `
+          <span class="material-symbols-outlined text-xs">chevron_right</span>
+          <button data-go-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e] font-black' : 'hover:text-primary'} transition-colors">${escapeHtml(b.name)}</button>
+        `)
+      ].join("");
+      breadEl.innerHTML = breadHtml;
+    }
 
-    // Load Folders (only if at root for now, or all folders in project)
-    const foldersRes = await apiRequest(`/projects/${encodeURIComponent(id)}/folders`);
-    // Filter folders by parentId if we had nested, but for now we list all at root
-    // For MVP: if not at root, we show no folders (one level only)
-    const folders = currentFolderId ? [] : foldersRes.items;
+    // Carregar subpastas do nível actual
+    const parentParam = currentFolderId ? `?parentId=${currentFolderId}` : `?parentId=root`;
+    const foldersRes = await apiRequest(`/projects/${encodeURIComponent(id)}/folders${parentParam}`);
+    const folders = foldersRes.items || [];
+    fileState.folders = folders;
 
-    // Load Files
+    // Carregar ficheiros do nível actual
     const qs = currentFolderId ? `?folderId=${currentFolderId}` : `?folderId=root`;
     const filesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/files${qs}`);
+    const files = filesRes.items || [];
+    fileState.items = files;
 
-    if (!folders.length && !filesRes.items?.length) {
+    if (!folders.length && !files.length) {
       list.innerHTML = "";
       empty?.classList.remove("hidden");
     } else {
-      fileState.items = filesRes.items; // Store for preview
       empty?.classList.add("hidden");
       list.innerHTML = [
         ...folders.map(renderFolderCard),
-        ...filesRes.items.map(renderFileCard)
+        ...files.map(renderFileCard)
       ].join("");
     }
   } catch (err) {
+    console.error(err);
     toast("Erro ao carregar arquivos", { type: "error" });
   }
 }
 
 function wireFilesUpload() {
-  el("uploadFileBtn")?.addEventListener("click", () => {
+  el("uploadFileBtn")?.addEventListener("click", async () => {
     const currentFolderName = fileState.breadcrumbs.length ? fileState.breadcrumbs[fileState.breadcrumbs.length - 1].name : "Raiz";
+    const id = getProjectId();
+    
+    // Carrega todas as pastas para o selector de mover
+    let allFolders = [];
+    try {
+      const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
+      allFolders = fr.items || [];
+    } catch (_) {}
+
+    const folderOptions = [
+      `<option value="" ${!fileState.currentFolderId ? 'selected' : ''}>Raiz (sem pasta)</option>`,
+      ...allFolders.map(f => `<option value="${f.id}" ${fileState.currentFolderId === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`)
+    ].join("");
+
     openModal({
-      title: `Submeter Documento [Pasta: ${currentFolderName}]`,
+      title: `Submeter Documento`,
       primaryLabel: "Enviar",
       contentHtml: `
         <div class="space-y-4">
@@ -847,7 +898,6 @@ function wireFilesUpload() {
             <span class="material-symbols-outlined text-3xl text-primary mb-3">cloud_upload</span>
             <input id="f_input" type="file" class="block w-full text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
           </div>
-          <input type="hidden" id="f_folderId" value="${fileState.currentFolderId || ''}" />
           <div>
             <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Categoria</label>
             <select id="f_category" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm">
@@ -857,6 +907,10 @@ function wireFilesUpload() {
               <option value="FOTO">Registo Fotográfico</option>
               <option value="RELATORIO">Relatório Técnico</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Pasta de Destino</label>
+            <select id="f_folderId" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm">${folderOptions}</select>
           </div>
         </div>
       `,
@@ -868,12 +922,14 @@ function wireFilesUpload() {
         }
         const category = panel.querySelector("#f_category")?.value;
         const folderId = panel.querySelector("#f_folderId")?.value;
-        const id = getProjectId();
         const btn = panel.querySelector("[data-primary]");
 
         try {
           setButtonLoading(btn, true);
-          await apiUpload(`/projects/${encodeURIComponent(id)}/files`, { file, body: { category, folderId: folderId || undefined } });
+          await apiUpload(`/projects/${encodeURIComponent(id)}/files`, { 
+            file, 
+            extraFields: { category, folderId: folderId || undefined } 
+          });
           toast("Arquivo submetido com sucesso", { type: "success" });
           close();
           await loadFiles();
@@ -888,7 +944,6 @@ function wireFilesUpload() {
 
 function wireNewFolder() {
   if (!el("uploadFileBtn")) return;
-  // Add Create Folder button next to upload
   if (!el("createNewFolderBtn")) {
     const btn = document.createElement("button");
     btn.id = "createNewFolderBtn";
@@ -898,8 +953,13 @@ function wireNewFolder() {
   }
 
   el("createNewFolderBtn")?.addEventListener("click", () => {
+    const parentId = fileState.currentFolderId;
+    const parentName = parentId && fileState.breadcrumbs.length
+      ? fileState.breadcrumbs.at(-1).name
+      : "Raiz";
+
     openModal({
-      title: "Nova Pasta",
+      title: `Nova Pasta ${parentId ? `dentro de "${parentName}"` : ''}`,
       primaryLabel: "Criar",
       contentHtml: `
         <div class="space-y-3">
@@ -909,15 +969,15 @@ function wireNewFolder() {
       `,
       onPrimary: async ({ close, panel }) => {
         const name = panel.querySelector("#fold_name")?.value?.trim();
-        if (!name) {
-          toast("Nome obrigatório", { type: "error" });
-          return;
-        }
+        if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
         const id = getProjectId();
         const btn = panel.querySelector("[data-primary]");
         try {
           setButtonLoading(btn, true);
-          await apiRequest(`/projects/${encodeURIComponent(id)}/folders`, { method: "POST", body: { name } });
+          await apiRequest(`/projects/${encodeURIComponent(id)}/folders`, {
+            method: "POST",
+            body: { name, parentId: parentId || null }
+          });
           toast("Pasta criada com sucesso", { type: "success" });
           close();
           await loadFiles();
@@ -932,28 +992,28 @@ function wireNewFolder() {
 
 function wireFileNavigation() {
   document.addEventListener("click", async (e) => {
-    // Enter Folder
+    // Entrar numa pasta
     const enterBtn = e.target?.closest("[data-enter-folder]");
-    if (enterBtn) {
-      const id = enterBtn.getAttribute("data-enter-folder");
-      const name = enterBtn.getAttribute("data-folder-name");
-      fileState.currentFolderId = id;
-      fileState.breadcrumbs.push({ id, name });
+    if (enterBtn && !e.target.closest("button[data-edit-folder]") && !e.target.closest("button[data-delete-folder]")) {
+      const fid = enterBtn.getAttribute("data-enter-folder");
+      const fname = enterBtn.getAttribute("data-folder-name");
+      fileState.currentFolderId = fid;
+      fileState.breadcrumbs.push({ id: fid, name: fname });
       loadFiles();
       return;
     }
 
-    // Go to Folder (Breadcrumbs)
+    // Navegar pelos breadcrumbs
     const goBtn = e.target?.closest("[data-go-folder]");
     if (goBtn) {
-      const id = goBtn.getAttribute("data-go-folder");
-      if (id === "root") {
+      const gid = goBtn.getAttribute("data-go-folder");
+      if (gid === "root") {
         fileState.currentFolderId = null;
         fileState.breadcrumbs = [];
       } else {
-        const idx = fileState.breadcrumbs.findIndex(b => b.id === id);
+        const idx = fileState.breadcrumbs.findIndex(b => b.id === gid);
         if (idx !== -1) {
-          fileState.currentFolderId = id;
+          fileState.currentFolderId = gid;
           fileState.breadcrumbs = fileState.breadcrumbs.slice(0, idx + 1);
         }
       }
@@ -961,11 +1021,12 @@ function wireFileNavigation() {
       return;
     }
 
-    // Delete Folder
-    const delBtn = e.target?.closest("[data-delete-folder]");
-    if (delBtn) {
-      if (!confirm("Apagar esta pasta eliminará permanentemente TODOS os arquivos contidos nela. Continuar?")) return;
-      const folderId = delBtn.getAttribute("data-delete-folder");
+    // Apagar pasta
+    const delFolderBtn = e.target?.closest("[data-delete-folder]");
+    if (delFolderBtn) {
+      e.stopPropagation();
+      if (!confirm("Apagar esta pasta eliminará permanentemente TODOS os arquivos e subpastas. Continuar?")) return;
+      const folderId = delFolderBtn.getAttribute("data-delete-folder");
       const id = getProjectId();
       try {
         await apiRequest(`/projects/${encodeURIComponent(id)}/folders/${encodeURIComponent(folderId)}`, { method: "DELETE" });
@@ -974,28 +1035,137 @@ function wireFileNavigation() {
       } catch (err) {
         toast("Erro ao apagar pasta", { type: "error" });
       }
+      return;
+    }
+
+    // Apagar ficheiro
+    const delFileBtn = e.target?.closest("[data-delete-file]");
+    if (delFileBtn) {
+      e.stopPropagation();
+      if (!confirm("Eliminar este arquivo permanentemente?")) return;
+      const fileId = delFileBtn.getAttribute("data-delete-file");
+      const id = getProjectId();
+      try {
+        await apiRequest(`/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+        toast("Arquivo removido", { type: "success" });
+        await loadFiles();
+      } catch (err) {
+        toast("Erro ao apagar arquivo", { type: "error" });
+      }
+      return;
+    }
+
+    // Editar (renomear) pasta
+    const editFolderBtn = e.target?.closest("[data-edit-folder]");
+    if (editFolderBtn) {
+      e.stopPropagation();
+      const folderId = editFolderBtn.getAttribute("data-edit-folder");
+      const currentName = editFolderBtn.getAttribute("data-folder-name");
+      const id = getProjectId();
+      openModal({
+        title: "Renomear Pasta",
+        primaryLabel: "Guardar",
+        contentHtml: `
+          <div class="space-y-3">
+            <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Novo Nome</label>
+            <input id="rename_folder" class="w-full rounded-xl border-slate-300 text-sm" value="${escapeHtml(currentName)}" />
+          </div>
+        `,
+        onPrimary: async ({ close, panel }) => {
+          const name = panel.querySelector("#rename_folder")?.value?.trim();
+          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
+          const btn = panel.querySelector("[data-primary]");
+          try {
+            setButtonLoading(btn, true);
+            await apiRequest(`/projects/${encodeURIComponent(id)}/folders/${encodeURIComponent(folderId)}`, {
+              method: "PATCH", body: { name }
+            });
+            toast("Pasta renomeada", { type: "success" });
+            close();
+            await loadFiles();
+          } catch (err) {
+            setButtonLoading(btn, false);
+            toast("Falha ao renomear pasta", { type: "error" });
+          }
+        }
+      });
+      return;
+    }
+
+    // Editar ficheiro
+    const editFileBtn = e.target?.closest("[data-edit-file]");
+    if (editFileBtn) {
+      e.stopPropagation();
+      const fileId = editFileBtn.getAttribute("data-edit-file");
+      const currentName = editFileBtn.getAttribute("data-file-name");
+      const currentCat = editFileBtn.getAttribute("data-file-cat") || "OUTROS";
+      const id = getProjectId();
+
+      // Carrega todas as pastas para o selector de mover
+      let allFolders = [];
+      try {
+        const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
+        allFolders = fr.items || [];
+      } catch (_) {}
+
+      const folderOptions = [
+        `<option value="">Raiz (sem pasta)</option>`,
+        ...allFolders.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`)
+      ].join("");
+
+      openModal({
+        title: "Editar Arquivo",
+        primaryLabel: "Guardar",
+        contentHtml: `
+          <div class="space-y-4">
+            <div>
+              <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Nome do Arquivo</label>
+              <input id="edit_fname" class="w-full rounded-xl border-slate-300 text-sm" value="${escapeHtml(currentName)}" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Categoria</label>
+              <select id="edit_fcat" class="w-full rounded-xl border-slate-300 text-sm">
+                <option value="OUTROS" ${currentCat==='OUTROS'?'selected':''}>Outros</option>
+                <option value="PLANTA" ${currentCat==='PLANTA'?'selected':''}>Planta / Projecto</option>
+                <option value="CONTRATO" ${currentCat==='CONTRATO'?'selected':''}>Contrato / Legal</option>
+                <option value="FOTO" ${currentCat==='FOTO'?'selected':''}>Registo Fotográfico</option>
+                <option value="RELATORIO" ${currentCat==='RELATORIO'?'selected':''}>Relatório Técnico</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Mover para Pasta</label>
+              <select id="edit_ffolder" class="w-full rounded-xl border-slate-300 text-sm">${folderOptions}</select>
+            </div>
+          </div>
+        `,
+        onPrimary: async ({ close, panel }) => {
+          const name = panel.querySelector("#edit_fname")?.value?.trim();
+          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
+          const category = panel.querySelector("#edit_fcat")?.value;
+          const folderId = panel.querySelector("#edit_ffolder")?.value || null;
+          const btn = panel.querySelector("[data-primary]");
+          try {
+            setButtonLoading(btn, true);
+            await apiRequest(`/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`, {
+              method: "PATCH",
+              body: { originalName: name, category, folderId: folderId || null }
+            });
+            toast("Arquivo actualizado", { type: "success" });
+            close();
+            await loadFiles();
+          } catch (err) {
+            setButtonLoading(btn, false);
+            toast("Falha ao actualizar arquivo", { type: "error" });
+          }
+        }
+      });
+      return;
     }
   });
 }
 
 function wireFileDeletion() {
-  document.addEventListener("click", async (e) => {
-    const btn = e.target?.closest("[data-delete-file]");
-    if (!btn) return;
-
-    if (!confirm("Tem a certeza que deseja eliminar este arquivo permanentemente?")) return;
-
-    const fileId = btn.getAttribute("data-delete-file");
-    const id = getProjectId();
-
-    try {
-      await apiRequest(`/projects/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
-      toast("Arquivo removido", { type: "success" });
-      await loadFiles();
-    } catch (err) {
-      toast("Erro ao apagar arquivo", { type: "error" });
-    }
-  });
+  // Delegação unificada em wireFileNavigation — este stub mantém compatibilidade
 }
 
 function wireSearch() {

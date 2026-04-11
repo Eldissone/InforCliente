@@ -122,6 +122,9 @@
             <button data-tab-trigger="dashboard"
                 class="p-2 text-sm font-bold border-2 border-primary text-primary transition-all">Painel de
                 Controlo</button>
+            <button data-tab-trigger="relatorio"
+                class="p-2 text-sm font-bold border-2 border-primary text-primary transition-all">Relatório
+                de avanço</button>
             <button data-tab-trigger="files"
                 class="p-2 text-sm font-bold text-on-surface-variant hover:text-on-surface border-2 border-transparent transition-all">Gestão
                 de Arquivo</button>
@@ -262,11 +265,14 @@
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-[#2afc8d] text-sm" data-icon="engineering">engineering</span>
+                                    <span class="material-symbols-outlined text-[#2afc8d] text-sm"
+                                        data-icon="engineering">engineering</span>
                                 </div>
                                 <div class="min-w-0">
-                                    <span class="block text-white text-xs font-bold truncate">Mão de Obra e Serviços</span>
-                                    <span id="stat_labor_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span class="block text-white text-xs font-bold truncate">Mão de Obra e
+                                        Serviços</span>
+                                    <span id="stat_labor_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
                             <span id="stat_labor_pct" class="text-[#2afc8d] font-black text-sm flex-shrink-0">0%</span>
@@ -275,76 +281,94 @@
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-[#0d3fd1] text-sm" data-icon="inventory_2">inventory_2</span>
+                                    <span class="material-symbols-outlined text-[#0d3fd1] text-sm"
+                                        data-icon="inventory_2">inventory_2</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Materiais e Insumos</span>
-                                    <span id="stat_materials_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_materials_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
-                            <span id="stat_materials_pct" class="text-[#0d3fd1] font-black text-sm flex-shrink-0">0%</span>
+                            <span id="stat_materials_pct"
+                                class="text-[#0d3fd1] font-black text-sm flex-shrink-0">0%</span>
                         </div>
                         <!-- 3. Gastos com Pessoal -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-yellow-400 text-sm" data-icon="groups">groups</span>
+                                    <span class="material-symbols-outlined text-yellow-400 text-sm"
+                                        data-icon="groups">groups</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Gastos com Pessoal</span>
-                                    <span id="stat_pessoal_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_pessoal_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
-                            <span id="stat_pessoal_pct" class="text-yellow-400 font-black text-sm flex-shrink-0">0%</span>
+                            <span id="stat_pessoal_pct"
+                                class="text-yellow-400 font-black text-sm flex-shrink-0">0%</span>
                         </div>
                         <!-- 4. Despesas Operacionais -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-orange-400 text-sm" data-icon="receipt_long">receipt_long</span>
+                                    <span class="material-symbols-outlined text-orange-400 text-sm"
+                                        data-icon="receipt_long">receipt_long</span>
                                 </div>
                                 <div class="min-w-0">
-                                    <span class="block text-white text-xs font-bold truncate">Despesas Operacionais</span>
-                                    <span id="stat_operacional_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span class="block text-white text-xs font-bold truncate">Despesas
+                                        Operacionais</span>
+                                    <span id="stat_operacional_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
-                            <span id="stat_operacional_pct" class="text-orange-400 font-black text-sm flex-shrink-0">0%</span>
+                            <span id="stat_operacional_pct"
+                                class="text-orange-400 font-black text-sm flex-shrink-0">0%</span>
                         </div>
                         <!-- 5. Investimentos -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-emerald-400 text-sm" data-icon="trending_up">trending_up</span>
+                                    <span class="material-symbols-outlined text-emerald-400 text-sm"
+                                        data-icon="trending_up">trending_up</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Investimentos</span>
-                                    <span id="stat_investimento_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_investimento_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
-                            <span id="stat_investimento_pct" class="text-emerald-400 font-black text-sm flex-shrink-0">—</span>
+                            <span id="stat_investimento_pct"
+                                class="text-emerald-400 font-black text-sm flex-shrink-0">—</span>
                         </div>
                         <!-- 6. Depreciação -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-slate-400 text-sm" data-icon="show_chart">show_chart</span>
+                                    <span class="material-symbols-outlined text-slate-400 text-sm"
+                                        data-icon="show_chart">show_chart</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Depreciação</span>
-                                    <span id="stat_depreciacao_sub" class="block text-slate-400 text-[9px] uppercase">Informativo</span>
+                                    <span id="stat_depreciacao_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Informativo</span>
                                 </div>
                             </div>
-                            <span id="stat_depreciacao_pct" class="text-slate-400 font-black text-sm flex-shrink-0">—</span>
+                            <span id="stat_depreciacao_pct"
+                                class="text-slate-400 font-black text-sm flex-shrink-0">—</span>
                         </div>
                         <!-- 7. Impostos -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-red-400 text-sm" data-icon="account_balance">account_balance</span>
+                                    <span class="material-symbols-outlined text-red-400 text-sm"
+                                        data-icon="account_balance">account_balance</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Impostos</span>
-                                    <span id="stat_impostos_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_impostos_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
                             <span id="stat_impostos_pct" class="text-red-400 font-black text-sm flex-shrink-0">0%</span>
@@ -353,24 +377,29 @@
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-purple-400 text-sm" data-icon="remove_circle">remove_circle</span>
+                                    <span class="material-symbols-outlined text-purple-400 text-sm"
+                                        data-icon="remove_circle">remove_circle</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Deduções de Custo</span>
-                                    <span id="stat_deducoes_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_deducoes_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
-                            <span id="stat_deducoes_pct" class="text-purple-400 font-black text-sm flex-shrink-0">—</span>
+                            <span id="stat_deducoes_pct"
+                                class="text-purple-400 font-black text-sm flex-shrink-0">—</span>
                         </div>
                         <!-- 9. Outras Despesas -->
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded bg-white/5 flex-shrink-0 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-slate-300 text-sm" data-icon="more_horiz">more_horiz</span>
+                                    <span class="material-symbols-outlined text-slate-300 text-sm"
+                                        data-icon="more_horiz">more_horiz</span>
                                 </div>
                                 <div class="min-w-0">
                                     <span class="block text-white text-xs font-bold truncate">Outras Despesas</span>
-                                    <span id="stat_outras_sub" class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
+                                    <span id="stat_outras_sub"
+                                        class="block text-slate-400 text-[9px] uppercase">Aguardando...</span>
                                 </div>
                             </div>
                             <span id="stat_outras_pct" class="text-slate-300 font-black text-sm flex-shrink-0">0%</span>
@@ -399,7 +428,7 @@
             </section>
             <style>
                 .custom-scroll::-webkit-scrollbar {
-                    height: 10px;
+                    height: 8px;
                 }
 
                 .custom-scroll::-webkit-scrollbar-track {
@@ -461,8 +490,8 @@
                 </div>
                 <button id="uploadFileBtn" data-role-visible="admin,operador"
                     class="bg-primary-container text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:shadow-xl hover:scale-[1.02] transition-all">
-                    <span class="material-symbols-outlined">upload_file</span>
-                    Submeter Documento
+                    <span class="material-symbols-outlined">file_upload</span>
+                    Anexar Documento
                 </button>
             </div>
 

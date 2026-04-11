@@ -672,31 +672,49 @@ projectRoutes.post(
   })
 );
 
+// PATCH — renomear ficheiro ou mover para outra pasta
+projectRoutes.patch(
+  "/:id/files/:fileId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, fileId } = req.params;
+    const body = z.object({
+      originalName: z.string().min(1).optional(),
+      folderId: z.string().nullable().optional(),
+      category: z.string().optional(),
+    }).parse(req.body);
+
+    const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
+    if (!file || file.projectId !== id) {
+      return res.status(404).json({ error: "FILE_NOT_FOUND" });
+    }
+
+    const updated = await prisma.projectFile.update({
+      where: { id: fileId },
+      data: {
+        ...(body.originalName !== undefined ? { originalName: body.originalName } : {}),
+        ...(body.folderId !== undefined ? { folderId: body.folderId } : {}),
+        ...(body.category !== undefined ? { category: body.category } : {}),
+      },
+    });
+
+    res.json(updated);
+  })
+);
+
 projectRoutes.delete(
   "/:id/files/:fileId",
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id, fileId } = req.params;
 
-    const file = await prisma.projectFile.findUnique({
-      where: { id: fileId },
-    });
-
+    const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
     if (!file || file.projectId !== id) {
-      const err = new Error("FILE_NOT_FOUND");
-      err.status = 404;
-      throw err;
+      return res.status(404).json({ error: "FILE_NOT_FOUND" });
     }
 
-    // Remove from DB
-    await prisma.projectFile.delete({
-      where: { id: fileId },
-    });
-
-    // Remove physical file
-    if (fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
-    }
+    await prisma.projectFile.delete({ where: { id: fileId } });
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     res.json({ ok: true });
   })
@@ -706,14 +724,44 @@ projectRoutes.delete(
 // FOLDERS
 // -----------------------------------------------------------------------------
 
+// Helper: apagar pasta e todos os seus descendentes recursivamente
+async function deleteFolderRecursive(folderId, projectId) {
+  const folder = await prisma.projectFolder.findUnique({
+    where: { id: folderId },
+    include: {
+      files: true,
+      children: true,
+    },
+  });
+  if (!folder || folder.projectId !== projectId) return;
+
+  // Recursivamente apagar subpastas
+  for (const child of folder.children) {
+    await deleteFolderRecursive(child.id, projectId);
+  }
+
+  // Apagar ficheiros físicos desta pasta
+  for (const f of folder.files) {
+    if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
+  }
+
+  // Apagar pasta (files apagados em cascata pelo DB)
+  await prisma.projectFolder.delete({ where: { id: folderId } });
+}
+
+// GET — listar pastas de um nível (raiz ou dentro de outra pasta)
 projectRoutes.get(
   "/:id/folders",
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    const { parentId } = req.query;
     await ensureProjectReadable(req, id);
 
     const folders = await prisma.projectFolder.findMany({
-      where: { projectId: id },
+      where: {
+        projectId: id,
+        parentId: parentId === "root" || !parentId ? null : parentId,
+      },
       orderBy: { name: "asc" },
     });
 
@@ -721,20 +769,32 @@ projectRoutes.get(
   })
 );
 
+// POST — criar pasta (com parentId opcional para subpastas)
 projectRoutes.post(
   "/:id/folders",
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { name } = req.body;
-    if (!name) throw new Error("FOLDER_NAME_REQUIRED");
+    const body = z.object({
+      name: z.string().min(1),
+      parentId: z.string().nullable().optional(),
+    }).parse(req.body);
 
     await ensureProjectReadable(req, id);
+
+    // Validar que o parentId existe e pertence ao projeto
+    if (body.parentId) {
+      const parent = await prisma.projectFolder.findUnique({ where: { id: body.parentId } });
+      if (!parent || parent.projectId !== id) {
+        return res.status(400).json({ error: "INVALID_PARENT_FOLDER" });
+      }
+    }
 
     const folder = await prisma.projectFolder.create({
       data: {
         projectId: id,
-        name,
+        name: body.name,
+        parentId: body.parentId || null,
       },
     });
 
@@ -742,37 +802,47 @@ projectRoutes.post(
   })
 );
 
+// PATCH — renomear pasta
+projectRoutes.patch(
+  "/:id/folders/:folderId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, folderId } = req.params;
+    const body = z.object({
+      name: z.string().min(1),
+    }).parse(req.body);
+
+    const folder = await prisma.projectFolder.findUnique({ where: { id: folderId } });
+    if (!folder || folder.projectId !== id) {
+      return res.status(404).json({ error: "FOLDER_NOT_FOUND" });
+    }
+
+    const updated = await prisma.projectFolder.update({
+      where: { id: folderId },
+      data: { name: body.name },
+    });
+
+    res.json(updated);
+  })
+);
+
+// DELETE — apagar pasta e subpastas/ficheiros em cascata
 projectRoutes.delete(
   "/:id/folders/:folderId",
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id, folderId } = req.params;
 
-    const folder = await prisma.projectFolder.findUnique({
-      where: { id: folderId },
-      include: { files: true },
-    });
-
+    const folder = await prisma.projectFolder.findUnique({ where: { id: folderId } });
     if (!folder || folder.projectId !== id) {
-      const err = new Error("FOLDER_NOT_FOUND");
-      err.status = 404;
-      throw err;
+      return res.status(404).json({ error: "FOLDER_NOT_FOUND" });
     }
 
-    // Delete all files physically
-    for (const f of folder.files) {
-      if (fs.existsSync(f.path)) {
-        fs.unlinkSync(f.path);
-      }
-    }
-
-    // Prisma onDelete: Cascade will handle files in DB
-    await prisma.projectFolder.delete({
-      where: { id: folderId },
-    });
+    await deleteFolderRecursive(folderId, id);
 
     res.json({ ok: true });
   })
 );
 
 module.exports = { projectRoutes };
+
