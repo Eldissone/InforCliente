@@ -212,14 +212,12 @@
                         <!-- Circular Pie Chart Representation -->
                         <div class="relative w-40 h-40 flex items-center justify-center">
                             <div id="physicalProgressPie"
-                                class="w-full h-full rounded-full border-[6px] border-surface-container-low transition-all duration-1000"
-                                style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #f1f5f9 0%, #f1f5f9 100%)">
+                                class="w-full h-full rounded-full border border-outline-variant/20 shadow-lg transition-all duration-1000"
+                                style="background: conic-gradient(#f43f5e 0%, #f43f5e 0%, #e2e8f0 0%, #e2e8f0 100%)">
                             </div>
                             <!-- Centered Percentage -->
-                            <div
-                                class="absolute w-[calc(100%-40px)] h-[calc(100%-40px)] bg-surface-container-lowest rounded-full shadow-inner flex items-center justify-center">
-                                <span id="physicalProgress"
-                                    class="text-3xl font-black text-[#212e3e] tracking-tighter">—</span>
+                            <div class="absolute w-[calc(100%-35px)] h-[calc(100%-35px)] bg-surface-container-lowest rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] flex items-center justify-center">
+                                <span id="physicalProgress" class="text-4xl font-black text-[#212e3e] tracking-tighter">—</span>
                             </div>
                         </div>
                     </div>
