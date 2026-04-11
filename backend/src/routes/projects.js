@@ -930,7 +930,7 @@ projectRoutes.post(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    await ensureProjectWriteable(req, id);
+    await ensureProjectReadable(req, id);
     const body = z
       .object({
         itemGroup: z.string().optional().nullable(),
@@ -960,17 +960,21 @@ projectRoutes.patch(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id, taskId } = req.params;
-    await ensureProjectWriteable(req, id);
+    await ensureProjectReadable(req, id);
     const body = z
       .object({
         executedQty: z.union([z.number(), z.string()]).optional(),
         expectedQty: z.union([z.number(), z.string()]).optional(),
+        unit: z.string().optional(),
       })
       .parse(req.body);
 
     const data = {};
     if (body.executedQty !== undefined) data.executedQty = body.executedQty;
     if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
+    if (body.unit !== undefined) data.unit = body.unit;
+
+    console.log(`Updating task ${taskId}:`, data);
 
     const task = await prisma.projectProgressTask.update({
       where: { id: taskId, projectId: id },
@@ -985,7 +989,7 @@ projectRoutes.delete(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id, taskId } = req.params;
-    await ensureProjectWriteable(req, id);
+    await ensureProjectReadable(req, id);
     await prisma.projectProgressTask.delete({
       where: { id: taskId, projectId: id },
     });

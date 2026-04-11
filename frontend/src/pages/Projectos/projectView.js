@@ -68,6 +68,25 @@ function catLabel(c) {
   };
   return map[c] || c || "—";
 }
+const unitMap = {
+  un: "UN",
+  mts: "MTS",
+  km: "KM",
+  m2: "M2",
+  m3: "M3",
+  kg: "KG",
+  ton: "TON",
+  par: "PAR",
+  litros: "LITROS",
+  horas: "HORAS",
+  dias: "DIAS",
+  mes: "MÊS",
+  global: "GLOBAL",
+};
+
+function formatUnit(u) {
+  return unitMap[u] || u || "un";
+}
 
 function renderTxRow(t) {
   const st = statusLabel(t.status);
@@ -169,7 +188,7 @@ async function loadProject() {
   projectState = p;
 
   el("projectTitle").textContent = p.name;
-  if(el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
   el("projectBreadcrumb").textContent = p.code;
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   el("projectClientCode").textContent = p.client?.code || "Sem código";
@@ -239,13 +258,13 @@ function renderScurve(allTxs, project, budgetLines) {
   if (!container) return;
 
   const totalBudget = Number(project.budgetTotal || 0);
-  const monthNames = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
   // --- Intervalo real do projeto ---
-  const startDate  = project.startDate ? new Date(project.startDate) : new Date();
-  const dueDate    = project.dueDate   ? new Date(project.dueDate)   : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
+  const startDate = project.startDate ? new Date(project.startDate) : new Date();
+  const dueDate = project.dueDate ? new Date(project.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
   const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const rangeEnd   = new Date(dueDate.getFullYear(),   dueDate.getMonth(),   1);
+  const rangeEnd = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
   if (rangeEnd <= rangeStart) rangeEnd.setMonth(rangeStart.getMonth() + 2);
 
   // Construir lista de meses
@@ -264,14 +283,14 @@ function renderScurve(allTxs, project, budgetLines) {
   const getColIdx = (d) => {
     const fd = new Date(d.getFullYear(), d.getMonth(), 1);
     if (fd < rangeStart) return 0;
-    if (fd > rangeEnd)   return numMonths - 1;
+    if (fd > rangeEnd) return numMonths - 1;
     return (fd.getFullYear() - rangeStart.getFullYear()) * 12 + (fd.getMonth() - rangeStart.getMonth());
   };
 
   // --- Planejado: idêntico à coluna "Previsto (P.)" da tabela ---
   // 1) Budget lines distribuídas linearmente (excluindo capital)
   const plannedByMonth = Array(numMonths).fill(0);
-  const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS","DEPRECIACAO"].includes(l.category));
+  const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS", "DEPRECIACAO"].includes(l.category));
   if (opLines.length > 0) {
     opLines.forEach(l => {
       const perMonth = Number(l.total || 0) / numMonths;
@@ -286,7 +305,7 @@ function renderScurve(allTxs, project, budgetLines) {
   (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").forEach(t => {
     const idx = getColIdx(new Date(t.date));
     const cat = t.category || "";
-    if (!["INVESTIMENTOS","DEPRECIACAO"].includes(cat)) {
+    if (!["INVESTIMENTOS", "DEPRECIACAO"].includes(cat)) {
       plannedByMonth[idx] += Number(t.amount || 0);
     }
   });
@@ -295,17 +314,17 @@ function renderScurve(allTxs, project, budgetLines) {
   const realizedByMonth = Array(numMonths).fill(0);
   (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
     const cat = t.category || "";
-    if (!["INVESTIMENTOS","DEPRECIACAO"].includes(cat)) {
+    if (!["INVESTIMENTOS", "DEPRECIACAO"].includes(cat)) {
       const idx = getColIdx(new Date(t.date));
       realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
     }
   });
 
   // --- Acumulados (Curva S) ---
-  const today    = new Date();
+  const today = new Date();
   const todayIdx = getColIdx(today);
-  const planCum  = [];
-  const realCum  = [];
+  const planCum = [];
+  const realCum = [];
   let sumP = 0, sumR = 0;
   for (let i = 0; i < numMonths; i++) {
     sumP += plannedByMonth[i];
@@ -324,10 +343,10 @@ function renderScurve(allTxs, project, budgetLines) {
   console.group("🔵 Curva S — Diagnóstico");
   console.log("totalBudget:", totalBudget);
   console.log("opLines:", opLines.length, opLines.map(l => `${l.description}=${l.total}`));
-  console.log("allTxs:", (allTxs||[]).length, "| PENDING/LATE:", (allTxs||[]).filter(t=>t.status==="PENDING"||t.status==="LATE").length, "| PAID:", (allTxs||[]).filter(t=>t.status==="PAID").length);
-  console.log("plannedByMonth:", plannedByMonth.map((v,i)=>`${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
-  console.log("realizedByMonth:", realizedByMonth.map((v,i)=>`${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
-  console.log("planCum[-1]:", Math.round(planCum.at(-1)), "| realCum last:", Math.round(realCum.filter(v=>v!==null).at(-1)??0), "| maxVal:", Math.round(maxVal));
+  console.log("allTxs:", (allTxs || []).length, "| PENDING/LATE:", (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").length, "| PAID:", (allTxs || []).filter(t => t.status === "PAID").length);
+  console.log("plannedByMonth:", plannedByMonth.map((v, i) => `${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
+  console.log("realizedByMonth:", realizedByMonth.map((v, i) => `${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
+  console.log("planCum[-1]:", Math.round(planCum.at(-1)), "| realCum last:", Math.round(realCum.filter(v => v !== null).at(-1) ?? 0), "| maxVal:", Math.round(maxVal));
   console.groupEnd();
 
   const formatKZ = (v) => {
@@ -819,7 +838,7 @@ function renderProgressTaskRow(t, index) {
   const exp = Number(t.expectedQty || 0);
   const exe = Number(t.executedQty || 0);
   const left = exp > exe ? (exp - exe) : 0;
-  
+
   const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
   const leftPct = Math.max(0, 100 - exePct);
 
@@ -833,13 +852,13 @@ function renderProgressTaskRow(t, index) {
         </div>
       </td>
       <td class="px-4 py-4 text-center font-black">${exp.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center text-xs tracking-widest text-slate-500 font-bold uppercase">${escapeHtml(t.unit)}</td>
+      <td class="px-4 py-4 text-center text-[10px] tracking-widest text-[#212e3e] font-black uppercase bg-surface-container-low/30 rounded-lg shadow-inner">${formatUnit(t.unit)}</td>
       <td class="px-4 py-4 text-center font-black text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-black text-[#0d3fd1]">${exePct}%</td>
       <td class="px-4 py-4 text-center font-black text-slate-500">${left.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
       <td class="px-4 py-4 text-right">
-        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
       </td>
     </tr>
@@ -866,7 +885,7 @@ async function loadProgressTasks() {
 
 function wireProgressTasks() {
   const id = getProjectId();
-  
+
   el("addProgressTaskBtn")?.addEventListener("click", () => {
     openModal({
       title: "Adicionar Item de Progresso",
@@ -877,7 +896,24 @@ function wireProgressTasks() {
           <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label><input id="rt_uni" class="w-full rounded-lg border-slate-300" placeholder="Ex: un, km, m" /></div>
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
+              <select id="rt_uni" class="w-full rounded-lg border-slate-300">
+                <option value="un">un (unidade)</option>
+                <option value="mts">mts (metros)</option>
+                <option value="km">km (quilómetros)</option>
+                <option value="m2">m² (metros quadrados)</option>
+                <option value="m3">m³ (metros cúbicos)</option>
+                <option value="kg">kg (quilogramas)</option>
+                <option value="ton">ton (toneladas)</option>
+                <option value="par">par</option>
+                <option value="litros">litros</option>
+                <option value="horas">horas</option>
+                <option value="dias">dias</option>
+                <option value="mes">mês</option>
+                <option value="global">global</option>
+              </select>
+            </div>
           </div>
         </div>
       `,
@@ -914,6 +950,7 @@ function wireProgressTasks() {
       const desc = editBtn.getAttribute("data-task-desc");
       const exe = editBtn.getAttribute("data-task-exe");
       const exp = editBtn.getAttribute("data-task-exp");
+      const uni = editBtn.getAttribute("data-task-unit");
 
       openModal({
         title: "Atualizar Progresso",
@@ -922,6 +959,25 @@ function wireProgressTasks() {
           <div class="space-y-4">
             <p class="font-bold text-[#212e3e] text-sm">${escapeHtml(desc)}</p>
             <div class="grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
+                <select id="up_uni" class="w-full rounded-lg border-slate-300">
+                  <option value="un" ${uni === 'un' ? 'selected' : ''}>un (unidade)</option>
+                  <option value="mts" ${uni === 'mts' ? 'selected' : ''}>mts (metros)</option>
+                  <option value="km" ${uni === 'km' ? 'selected' : ''}>km (quilómetros)</option>
+                  <option value="m" ${uni === 'm' ? 'selected' : ''}>m (metros lineares)</option>
+                  <option value="m2" ${uni === 'm2' ? 'selected' : ''}>m² (metros quadrados)</option>
+                  <option value="m3" ${uni === 'm3' ? 'selected' : ''}>m³ (metros cúbicos)</option>
+                  <option value="kg" ${uni === 'kg' ? 'selected' : ''}>kg (quilogramas)</option>
+                  <option value="ton" ${uni === 'ton' ? 'selected' : ''}>ton (toneladas)</option>
+                  <option value="par" ${uni === 'par' ? 'selected' : ''}>par</option>
+                  <option value="litros" ${uni === 'litros' ? 'selected' : ''}>litros</option>
+                  <option value="horas" ${uni === 'horas' ? 'selected' : ''}>horas</option>
+                  <option value="dias" ${uni === 'dias' ? 'selected' : ''}>dias</option>
+                  <option value="mes" ${uni === 'mes' ? 'selected' : ''}>mês</option>
+                  <option value="global" ${uni === 'global' ? 'selected' : ''}>global</option>
+                </select>
+              </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Prevista</label>
                 <input id="up_exp" type="number" step="0.01" value="${exp}" class="w-full rounded-lg border-slate-300" />
@@ -942,14 +998,15 @@ function wireProgressTasks() {
               body: {
                 executedQty: Number(panel.querySelector("#up_exe").value || 0),
                 expectedQty: Number(panel.querySelector("#up_exp").value || 0),
+                unit: panel.querySelector("#up_uni").value.trim() || undefined,
               }
             });
             toast("Progresso atualizado", { type: "success" });
             close();
             loadProgressTasks();
           } catch (err) {
-             setButtonLoading(primaryBtn, false);
-             toast(err.message, { type: "error" });
+            setButtonLoading(primaryBtn, false);
+            toast(err.message, { type: "error" });
           }
         }
       });
@@ -1034,13 +1091,13 @@ function wireFilesUpload() {
   el("uploadFileBtn")?.addEventListener("click", async () => {
     const currentFolderName = fileState.breadcrumbs.length ? fileState.breadcrumbs[fileState.breadcrumbs.length - 1].name : "Raiz";
     const id = getProjectId();
-    
+
     // Carrega todas as pastas para o selector de mover
     let allFolders = [];
     try {
       const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
       allFolders = fr.items || [];
-    } catch (_) {}
+    } catch (_) { }
 
     const folderOptions = [
       `<option value="" ${!fileState.currentFolderId ? 'selected' : ''}>Raiz (sem pasta)</option>`,
@@ -1085,9 +1142,9 @@ function wireFilesUpload() {
 
         try {
           setButtonLoading(btn, true);
-          await apiUpload(`/projects/${encodeURIComponent(id)}/files`, { 
-            file, 
-            extraFields: { category, folderId: folderId || undefined } 
+          await apiUpload(`/projects/${encodeURIComponent(id)}/files`, {
+            file,
+            extraFields: { category, folderId: folderId || undefined }
           });
           toast("Arquivo submetido com sucesso", { type: "success" });
           close();
@@ -1265,7 +1322,7 @@ function wireFileNavigation() {
       try {
         const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
         allFolders = fr.items || [];
-      } catch (_) {}
+      } catch (_) { }
 
       const folderOptions = [
         `<option value="">Raiz (sem pasta)</option>`,
@@ -1284,11 +1341,11 @@ function wireFileNavigation() {
             <div>
               <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Categoria</label>
               <select id="edit_fcat" class="w-full rounded-xl border-slate-300 text-sm">
-                <option value="OUTROS" ${currentCat==='OUTROS'?'selected':''}>Outros</option>
-                <option value="PLANTA" ${currentCat==='PLANTA'?'selected':''}>Planta / Projecto</option>
-                <option value="CONTRATO" ${currentCat==='CONTRATO'?'selected':''}>Contrato / Legal</option>
-                <option value="FOTO" ${currentCat==='FOTO'?'selected':''}>Registo Fotográfico</option>
-                <option value="RELATORIO" ${currentCat==='RELATORIO'?'selected':''}>Relatório Técnico</option>
+                <option value="OUTROS" ${currentCat === 'OUTROS' ? 'selected' : ''}>Outros</option>
+                <option value="PLANTA" ${currentCat === 'PLANTA' ? 'selected' : ''}>Planta / Projecto</option>
+                <option value="CONTRATO" ${currentCat === 'CONTRATO' ? 'selected' : ''}>Contrato / Legal</option>
+                <option value="FOTO" ${currentCat === 'FOTO' ? 'selected' : ''}>Registo Fotográfico</option>
+                <option value="RELATORIO" ${currentCat === 'RELATORIO' ? 'selected' : ''}>Relatório Técnico</option>
               </select>
             </div>
             <div>
