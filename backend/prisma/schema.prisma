@@ -88,6 +88,7 @@ model Project {
   files               ProjectFile[]
   folders             ProjectFolder[]
   transactions        ProjectTransaction[]
+  progressTasks       ProjectProgressTask[]
 
   @@index([name])
   @@index([status])
@@ -184,6 +185,21 @@ model Alert {
   project   Project?      @relation(fields: [projectId], references: [id])
 
   @@index([status, severity, createdAt])
+}
+
+model ProjectProgressTask {
+  id              String   @id @default(cuid())
+  projectId       String
+  itemGroup       String?
+  order           Int      @default(0)
+  description     String
+  expectedQty     Decimal  @db.Decimal(10, 2)
+  executedQty     Decimal  @default(0) @db.Decimal(10, 2)
+  unit            String
+  createdAt       DateTime @default(now())
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, itemGroup, order])
 }
 
 enum Role {

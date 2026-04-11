@@ -123,7 +123,7 @@
                 class="p-2 text-sm font-bold border-2 border-primary text-primary transition-all">Painel de
                 Controlo</button>
             <button data-tab-trigger="relatorio"
-                class="p-2 text-sm font-bold border-2 border-primary text-primary transition-all">Relatório
+                class="p-2 text-sm font-bold text-on-surface-variant hover:text-on-surface border-2 border-transparent transition-all">Relatório
                 de avanço</button>
             <button data-tab-trigger="files"
                 class="p-2 text-sm font-bold text-on-surface-variant hover:text-on-surface border-2 border-transparent transition-all">Gestão
@@ -474,6 +474,42 @@
                             </tr>
                         </thead>
                         <tbody id="transactionsTbody" class="divide-y divide-surface-container-low"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Relatorio Tab Content -->
+        <div id="tab_relatorio" class="tab-content hidden transition-all duration-300">
+            <div class="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-surface-container-low">
+                <div>
+                    <h2 class="text-xl font-black text-[#212e3e]">Relatório de Avanço</h2>
+                    <p class="text-[10px] text-on-surface-variant mt-1 uppercase tracking-widest font-black">Progresso das tarefas e métricas da obra</p>
+                </div>
+                <button id="addProgressTaskBtn" data-role-visible="admin,operador"
+                    class="bg-primary-container text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:shadow-xl hover:scale-[1.02] transition-all">
+                    <span class="material-symbols-outlined">add_task</span>
+                    Adicionar Item
+                </button>
+            </div>
+            
+            <section class="bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden border border-outline-variant/20 mb-8">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left rounded-2xl">
+                        <thead>
+                            <tr class="bg-surface-container text-[10px] uppercase tracking-widest text-[#212e3e] font-black border-b border-surface-container-low">
+                                <th class="px-6 py-4">Item (Descrição)</th>
+                                <th class="px-4 py-4 text-center">Qtd. Prevista</th>
+                                <th class="px-4 py-4 text-center">UN</th>
+                                <th class="px-4 py-4 text-center">Qtd. Executada</th>
+                                <th class="px-4 py-4 text-center text-[#0d3fd1]">% Executada</th>
+                                <th class="px-4 py-4 text-center">Qtd. a Executar</th>
+                                <th class="px-4 py-4 text-center text-error">% a Executar</th>
+                                <th class="px-4 py-4 text-right">Acções</th>
+                            </tr>
+                        </thead>
+                        <tbody id="progressTasksTbody" class="divide-y divide-surface-container-low text-sm font-medium">
+                        </tbody>
                     </table>
                 </div>
             </section>

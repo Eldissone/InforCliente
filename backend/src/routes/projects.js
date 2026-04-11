@@ -5,6 +5,7 @@ const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
+const { getTemplateForProjectType } = require("../utils/projectTemplates");
 const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
@@ -262,6 +263,18 @@ projectRoutes.post(
         maoDeObraIndireta: body.maoDeObraIndireta || null,
         maoDeObraDireta: body.maoDeObraDireta || null,
         equipamentos: body.equipamentos || null,
+        progressTasks: body.projectType
+          ? {
+              create: getTemplateForProjectType(body.projectType).map((t) => ({
+                itemGroup: body.projectType,
+                order: t.order,
+                description: t.description,
+                expectedQty: t.expectedQty,
+                unit: t.unit,
+                executedQty: 0
+              }))
+            }
+          : undefined,
       },
       select: { id: true },
     });
@@ -878,3 +891,84 @@ projectRoutes.delete(
 
 module.exports = { projectRoutes };
 
+// Progress Tasks Routes
+projectRoutes.get(
+  "/:id/progress-tasks",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
+    const tasks = await prisma.projectProgressTask.findMany({
+      where: { projectId: id },
+      orderBy: [{ itemGroup: "asc" }, { order: "asc" }],
+    });
+    return res.json({ tasks });
+  })
+);
+
+projectRoutes.post(
+  "/:id/progress-tasks",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectWriteable(req, id);
+    const body = z
+      .object({
+        itemGroup: z.string().optional().nullable(),
+        description: z.string().min(1),
+        expectedQty: z.union([z.number(), z.string()]),
+        executedQty: z.union([z.number(), z.string()]).optional(),
+        unit: z.string(),
+      })
+      .parse(req.body);
+
+    const task = await prisma.projectProgressTask.create({
+      data: {
+        projectId: id,
+        itemGroup: body.itemGroup || null,
+        description: body.description,
+        expectedQty: body.expectedQty,
+        executedQty: body.executedQty || 0,
+        unit: body.unit,
+      },
+    });
+    return res.status(201).json({ task });
+  })
+);
+
+projectRoutes.patch(
+  "/:id/progress-tasks/:taskId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, taskId } = req.params;
+    await ensureProjectWriteable(req, id);
+    const body = z
+      .object({
+        executedQty: z.union([z.number(), z.string()]).optional(),
+        expectedQty: z.union([z.number(), z.string()]).optional(),
+      })
+      .parse(req.body);
+
+    const data = {};
+    if (body.executedQty !== undefined) data.executedQty = body.executedQty;
+    if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
+
+    const task = await prisma.projectProgressTask.update({
+      where: { id: taskId, projectId: id },
+      data,
+    });
+    return res.json({ task });
+  })
+);
+
+projectRoutes.delete(
+  "/:id/progress-tasks/:taskId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, taskId } = req.params;
+    await ensureProjectWriteable(req, id);
+    await prisma.projectProgressTask.delete({
+      where: { id: taskId, projectId: id },
+    });
+    return res.json({ success: true });
+  })
+);

@@ -808,7 +808,163 @@ function wireTabs() {
       el(`tab_${tabId}`)?.classList.remove("hidden");
 
       if (tabId === "files") loadFiles();
+      if (tabId === "relatorio") loadProgressTasks();
     });
+  });
+}
+
+function renderProgressTaskRow(t) {
+  const exp = Number(t.expectedQty || 0);
+  const exe = Number(t.executedQty || 0);
+  const left = exp > exe ? (exp - exe) : 0;
+  
+  const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
+  const leftPct = Math.max(0, 100 - exePct);
+
+  return `
+    <tr class="hover:bg-surface-container-low transition-colors group">
+      <td class="px-6 py-4">
+        <div class="font-bold text-[#212e3e] flex flex-col">
+          <span>${escapeHtml(t.description)}</span>
+          ${t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest">${escapeHtml(t.itemGroup)}</span>` : ""}
+        </div>
+      </td>
+      <td class="px-4 py-4 text-center font-black">${exp.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center text-xs tracking-widest text-slate-500 font-bold uppercase">${escapeHtml(t.unit)}</td>
+      <td class="px-4 py-4 text-center font-black text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-black text-[#0d3fd1]">${exePct}%</td>
+      <td class="px-4 py-4 text-center font-black text-slate-500">${left.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
+      <td class="px-4 py-4 text-right">
+        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+        <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
+      </td>
+    </tr>
+  `;
+}
+
+async function loadProgressTasks() {
+  const id = getProjectId();
+  const tbody = el("progressTasksTbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = renderLoadingRow(8);
+  try {
+    const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
+    if (data.tasks.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+    } else {
+      tbody.innerHTML = data.tasks.map(renderProgressTaskRow).join("");
+    }
+  } catch (err) {
+    toast("Erro ao carregar o relatório de avanço", { type: "error" });
+  }
+}
+
+function wireProgressTasks() {
+  const id = getProjectId();
+  
+  el("addProgressTaskBtn")?.addEventListener("click", () => {
+    openModal({
+      title: "Adicionar Item de Progresso",
+      primaryLabel: "Salvar",
+      contentHtml: `
+        <div class="space-y-4">
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label><input id="rt_uni" class="w-full rounded-lg border-slate-300" placeholder="Ex: un, km, m" /></div>
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, panel }) => {
+        const primaryBtn = panel.querySelector("[data-primary]");
+        setButtonLoading(primaryBtn, true);
+        try {
+          const v = (id) => panel.querySelector("#" + id).value.trim();
+          await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks", {
+            method: "POST",
+            body: {
+              itemGroup: v("rt_group") || null,
+              description: v("rt_desc"),
+              expectedQty: Number(v("rt_exp") || 0),
+              executedQty: 0,
+              unit: v("rt_uni") || "un",
+            }
+          });
+          toast("Item adicionado com sucesso", { type: "success" });
+          close();
+          loadProgressTasks();
+        } catch (err) {
+          setButtonLoading(primaryBtn, false);
+          toast(err.message, { type: "error" });
+        }
+      }
+    });
+  });
+
+  document.addEventListener("click", async (e) => {
+    const editBtn = e.target?.closest("[data-edit-task]");
+    if (editBtn) {
+      const taskId = editBtn.getAttribute("data-edit-task");
+      const desc = editBtn.getAttribute("data-task-desc");
+      const exe = editBtn.getAttribute("data-task-exe");
+      const exp = editBtn.getAttribute("data-task-exp");
+
+      openModal({
+        title: "Atualizar Progresso",
+        primaryLabel: "Atualizar",
+        contentHtml: `
+          <div class="space-y-4">
+            <p class="font-bold text-[#212e3e] text-sm">${escapeHtml(desc)}</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Prevista</label>
+                <input id="up_exp" type="number" step="0.01" value="${exp}" class="w-full rounded-lg border-slate-300" />
+              </div>
+              <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Executada</label>
+                <input id="up_exe" type="number" step="0.01" value="${exe}" class="w-full rounded-lg border-primary" />
+              </div>
+            </div>
+          </div>
+        `,
+        onPrimary: async ({ close, panel }) => {
+          const primaryBtn = panel.querySelector("[data-primary]");
+          setButtonLoading(primaryBtn, true);
+          try {
+            await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks/" + encodeURIComponent(taskId), {
+              method: "PATCH",
+              body: {
+                executedQty: Number(panel.querySelector("#up_exe").value || 0),
+                expectedQty: Number(panel.querySelector("#up_exp").value || 0),
+              }
+            });
+            toast("Progresso atualizado", { type: "success" });
+            close();
+            loadProgressTasks();
+          } catch (err) {
+             setButtonLoading(primaryBtn, false);
+             toast(err.message, { type: "error" });
+          }
+        }
+      });
+      return;
+    }
+
+    const delBtn = e.target?.closest("[data-delete-task]");
+    if (delBtn) {
+      const taskId = delBtn.getAttribute("data-delete-task");
+      if (!confirm("Tem certeza de que pretende apagar este item de progresso?")) return;
+      try {
+        await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks/" + encodeURIComponent(taskId), { method: "DELETE" });
+        toast("Apagado com sucesso!", { type: "success" });
+        loadProgressTasks();
+      } catch (err) {
+        toast("Erro ao apagar", { type: "error" });
+      }
+    }
   });
 }
 
@@ -1384,6 +1540,7 @@ async function init() {
   wireFileNavigation();
   wireFileDeletion();
   wirePreview();
+  wireProgressTasks();
 }
 
 function openPreview(fileId) {
