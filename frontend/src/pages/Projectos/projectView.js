@@ -166,8 +166,10 @@ async function loadProject() {
   const id = getProjectId();
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}`);
   const p = data.project;
+  projectState = p;
 
   el("projectTitle").textContent = p.name;
+  if(el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
   el("projectBreadcrumb").textContent = p.code;
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   el("projectClientCode").textContent = p.client?.code || "Sem código";
@@ -207,8 +209,8 @@ async function loadProject() {
   return p;
 }
 
+let projectState = null;
 let txState = { search: "" };
-// breadcrumbs: [{id, name}] — pilha de pastas actuais
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
 
 async function loadTransactions() {
@@ -813,7 +815,7 @@ function wireTabs() {
   });
 }
 
-function renderProgressTaskRow(t) {
+function renderProgressTaskRow(t, index) {
   const exp = Number(t.expectedQty || 0);
   const exe = Number(t.executedQty || 0);
   const left = exp > exe ? (exp - exe) : 0;
@@ -823,6 +825,7 @@ function renderProgressTaskRow(t) {
 
   return `
     <tr class="hover:bg-surface-container-low transition-colors group">
+      <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index + 1}</td>
       <td class="px-6 py-4">
         <div class="font-bold text-[#212e3e] flex flex-col">
           <span>${escapeHtml(t.description)}</span>
@@ -852,9 +855,9 @@ async function loadProgressTasks() {
   try {
     const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
     if (data.tasks.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
     } else {
-      tbody.innerHTML = data.tasks.map(renderProgressTaskRow).join("");
+      tbody.innerHTML = data.tasks.map((t, i) => renderProgressTaskRow(t, i)).join("");
     }
   } catch (err) {
     toast("Erro ao carregar o relatório de avanço", { type: "error" });
@@ -870,7 +873,7 @@ function wireProgressTasks() {
       primaryLabel: "Salvar",
       contentHtml: `
         <div class="space-y-4">
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
           <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>

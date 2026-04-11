@@ -393,6 +393,26 @@ projectRoutes.patch(
       select: { id: true },
     });
 
+    if (body.projectType) {
+      const existingTasks = await prisma.projectProgressTask.count({ where: { projectId: id } });
+      if (existingTasks === 0) {
+        const templates = getTemplateForProjectType(body.projectType);
+        if (templates.length > 0) {
+          await prisma.projectProgressTask.createMany({
+            data: templates.map(t => ({
+              projectId: id,
+              itemGroup: body.projectType,
+              order: t.order,
+              description: t.description,
+              expectedQty: t.expectedQty,
+              executedQty: 0,
+              unit: t.unit
+            }))
+          });
+        }
+      }
+    }
+
     return res.json({ id: updated.id });
   })
 );
