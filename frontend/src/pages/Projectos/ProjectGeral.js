@@ -218,7 +218,8 @@ async function openEdit(id) {
     "BAIXA TENSÃO",
     "ABERTURA E FECHAMENTO DE VALA",
     "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
-    "BAIXA TENSÃO E TERRAS"
+    "BAIXA TENSÃO E TERRAS",
+    "OBRA COMPLEXA"
   ].map(t => `<option value="${t}" ${p.projectType === t ? 'selected' : ''}>${t}</option>`).join("");
 
   openModal({
@@ -249,7 +250,7 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.region)}" /></div>
         <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.location)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total (kz)</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso Físico (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fase (Etiqueta)</label><input id="p_phase" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.phaseLabel)}" placeholder="FASE 01 - Nome" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
@@ -310,7 +311,8 @@ async function openCreate() {
     "BAIXA TENSÃO",
     "ABERTURA E FECHAMENTO DE VALA",
     "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
-    "BAIXA TENSÃO E TERRAS"
+    "BAIXA TENSÃO E TERRAS",
+    "OBRA COMPLEXA"
   ].map(t => `<option value="${t}">${t}</option>`).join("");
 
   openModal({

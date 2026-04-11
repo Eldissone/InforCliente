@@ -166,7 +166,7 @@
                             <span class="text-sm font-medium text-slate-400">kz</span>
                             <span id="budgetTotal" class="text-5xl font-extrabold tracking-tighter">—</span>
                         </div>
-                        <p class="text-xs text-slate-400 mb-8">Aprovado em Abril 2026 • Rev. 01</p>
+                        <p class="text-xs text-slate-400 mb-8">Aprovado</p>
                         <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                             <div id="budgetBar" class="bg-[#2afc8d] h-full w-0 shadow-[0_0_12px_#2afc8d]"></div>
                         </div>
@@ -206,33 +206,39 @@
                     class="md:col-span-4 bg-surface-container-lowest rounded-xl p-8 shadow-sm flex flex-col justify-between">
                     <div class="flex justify-between items-center mb-4">
                         <span class="text-xs font-medium uppercase tracking-widest text-on-surface-variant">Progresso
-                            Físico</span>
-                        <span id="physicalProgress" class="text-xl font-black text-[#2afc8d]">—</span>
+                        </span>
                     </div>
-                    <div class="flex-1 flex items-center justify-center py-4">
-                        <!-- Semi-circular progress representation -->
-                        <div class="relative w-48 h-24 overflow-hidden">
+                    <div class="flex-1 flex flex-col items-center justify-center py-4">
+                        <!-- Circular Pie Chart Representation -->
+                        <div class="relative w-40 h-40 flex items-center justify-center">
+                            <div id="physicalProgressPie"
+                                class="w-full h-full rounded-full border-[6px] border-surface-container-low transition-all duration-1000"
+                                style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #f1f5f9 0%, #f1f5f9 100%)">
+                            </div>
+                            <!-- Centered Percentage -->
                             <div
-                                class="absolute top-0 left-0 w-48 h-48 border-[12px] border-surface-container-low rounded-full">
-                            </div>
-                            <div id="physicalProgressGauge"
-                                class="absolute top-0 left-0 w-48 h-48 border-[12px] border-transparent border-t-[#2afc8d] border-l-[#2afc8d] rounded-full transition-all duration-1000"
-                                style="transform: rotate(-135deg)"></div>
-                            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
-                                <span id="projectPhaseLabel"
-                                    class="block text-[10px] font-bold text-on-surface-variant">FASE —</span>
-                                <span id="projectPhaseName" class="block text-xs font-black uppercase">Sem fase</span>
+                                class="absolute w-[calc(100%-40px)] h-[calc(100%-40px)] bg-surface-container-lowest rounded-full shadow-inner flex items-center justify-center">
+                                <span id="physicalProgress"
+                                    class="text-3xl font-black text-[#212e3e] tracking-tighter">—</span>
                             </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4 mt-4">
-                        <div class="bg-surface-container-low p-3 rounded-lg">
-                            <span class="block text-[10px] text-on-surface-variant mb-1">Início</span>
-                            <span id="projectStartDate" class="block text-xs font-bold">—</span>
+                    <div class="mt-4 pt-4 border-t border-outline-variant/10">
+                        <div class="flex flex-col gap-2 mb-4">
+                            <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                                <span class="text-on-surface-variant">Data de Início</span>
+                                <span id="projectStartDate" class="text-[#212e3e]">—</span>
+                            </div>
+                            <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                                <span class="text-on-surface-variant">Entrega Prevista</span>
+                                <span id="projectDueDate" class="text-[#212e3e]">—</span>
+                            </div>
                         </div>
-                        <div class="bg-surface-container-low p-3 rounded-lg">
-                            <span class="block text-[10px] text-on-surface-variant mb-1">Entrega Prev.</span>
-                            <span id="projectDueDate" class="block text-xs font-bold">—</span>
+                        <div id="dateAnalysis" class="bg-primary/5 p-3 rounded-xl border border-primary/10 text-center">
+                            <span
+                                class="block text-[9px] font-black uppercase tracking-[0.2em] text-primary mb-1">Previsão
+                                de Tempo</span>
+                            <span id="daysRemaining" class="text-xs font-black text-[#212e3e]">—</span>
                         </div>
                     </div>
                 </div>
@@ -489,11 +495,18 @@
                     <p class="text-[10px] text-on-surface-variant mt-1 uppercase tracking-widest font-black">Progresso
                         das tarefas e métricas da obra</p>
                 </div>
-                <button id="addProgressTaskBtn" data-role-visible="admin,operador"
-                    class="bg-primary-container text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:shadow-xl hover:scale-[1.02] transition-all">
-                    <span class="material-symbols-outlined">add_task</span>
-                    Adicionar Item
-                </button>
+                <div class="flex items-center gap-3">
+                    <button id="importTemplateBtn" data-role-visible="admin,operador"
+                        class="bg-surface-container-high text-[#212e3e] px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:shadow-xl hover:scale-[1.02] transition-all border border-outline-variant/30">
+                        <span class="material-symbols-outlined">library_add</span>
+                        Importar Modelo
+                    </button>
+                    <button id="addProgressTaskBtn" data-role-visible="admin,operador"
+                        class="bg-primary-container text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:shadow-xl hover:scale-[1.02] transition-all">
+                        <span class="material-symbols-outlined">add_task</span>
+                        Adicionar Item
+                    </button>
+                </div>
             </div>
 
             <section

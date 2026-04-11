@@ -212,19 +212,18 @@ async function loadProject() {
   if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, pct))}%`;
 
   const progress = Number(p.physicalProgressPct || 0);
-  el("physicalProgress").textContent = formatPercent(progress, { digits: 0 });
-  const gaugeEl = el("physicalProgressGauge");
-  if (gaugeEl) {
-    // 0% = -135deg (início), 100% = 45deg (fim do semi-círculo)
-    const rotation = (progress * 1.8) - 135;
-    gaugeEl.style.transform = `rotate(${rotation}deg)`;
+  el("physicalProgress").textContent = `${progress}%`;
+  if (el("physicalProgressPie")) {
+    el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #f1f5f9 ${progress}%, #f1f5f9 100%)`;
   }
+
   el("projectStartDate").textContent = formatDateBR(p.startDate);
   el("projectDueDate").textContent = formatDateBR(p.dueDate);
+  updateDateAnalysis(p);
 
   const phase = splitPhaseLabel(p.phaseLabel);
-  el("projectPhaseLabel").textContent = phase.code;
-  el("projectPhaseName").textContent = phase.name;
+  if (el("projectPhaseLabel")) el("projectPhaseLabel").textContent = phase.code;
+  if (el("projectPhaseName")) el("projectPhaseName").textContent = phase.name;
 
   return p;
 }
@@ -232,6 +231,33 @@ async function loadProject() {
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
+
+function updateDateAnalysis(p) {
+  if (!el("daysRemaining")) return;
+  const now = new Date();
+  const due = p.dueDate ? new Date(p.dueDate) : null;
+  const start = p.startDate ? new Date(p.startDate) : null;
+
+  if (due) {
+    const diffTime = due - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 0) {
+      el("daysRemaining").textContent = `${diffDays} Dias Restantes`;
+      el("dateAnalysis")?.classList.remove("bg-error/10", "border-error/20", "text-error");
+      el("dateAnalysis")?.classList.add("bg-primary/5", "border-primary/10", "text-primary");
+    } else if (diffDays === 0) {
+      el("daysRemaining").textContent = "Entrega Hoje";
+      el("dateAnalysis")?.classList.add("bg-warning/10", "border-warning/20");
+    } else {
+      el("daysRemaining").textContent = `${Math.abs(diffDays)} Dias de Atraso`;
+      el("dateAnalysis")?.classList.remove("bg-primary/5", "border-primary/10", "text-primary");
+      el("dateAnalysis")?.classList.add("bg-error/10", "border-error/20", "text-error");
+    }
+  } else {
+    el("daysRemaining").textContent = "Sem prazo definido";
+  }
+}
 
 async function loadTransactions() {
   const id = getProjectId();
@@ -835,6 +861,19 @@ function wireTabs() {
   });
 }
 
+function renderGroupHeader(group) {
+  return `
+    <tr class="bg-surface-container-low/50">
+      <td colspan="9" class="px-6 py-2 border-y border-outline-variant/10">
+        <div class="flex items-center gap-3">
+          <span class="w-1 h-4 bg-primary rounded-full"></span>
+          <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${escapeHtml(group || "Outros / Geral")}</span>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 function renderProgressTaskRow(t, index) {
   const exp = Number(t.expectedQty || 0);
   const exe = Number(t.executedQty || 0);
@@ -877,7 +916,49 @@ async function loadProgressTasks() {
     if (data.tasks.length === 0) {
       tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
     } else {
-      tbody.innerHTML = data.tasks.map((t, i) => renderProgressTaskRow(t, i)).join("");
+      let html = "";
+      let lastGroup = null;
+      data.tasks.forEach((t, i) => {
+        if (t.itemGroup !== lastGroup) {
+          html += renderGroupHeader(t.itemGroup);
+          lastGroup = t.itemGroup;
+        }
+        html += renderProgressTaskRow(t, i);
+      });
+      tbody.innerHTML = html;
+
+      // Calculate overall physical progress
+      const totalTasks = data.tasks.length;
+      if (totalTasks > 0) {
+        const totalPct = data.tasks.reduce((acc, t) => {
+          const exp = Number(t.expectedQty || 0);
+          const exe = Number(t.executedQty || 0);
+          const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
+          return acc + Math.min(100, pct); // Cap at 100 per task
+        }, 0);
+
+        const avgPct = Math.round(totalPct / totalTasks);
+        
+        // Update UI: Pie Chart
+        if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
+        if (el("physicalProgressPie")) {
+          el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${avgPct}%, #f1f5f9 ${avgPct}%, #f1f5f9 100%)`;
+        }
+
+        // Date Calculations
+        if (projectState) {
+          updateDateAnalysis(projectState);
+        }
+
+        // Sync with backend if projectState is available and value changed
+        if (projectState && projectState.physicalProgressPct !== avgPct) {
+          projectState.physicalProgressPct = avgPct;
+          apiRequest(`/projects/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            body: { physicalProgressPct: avgPct }
+          }).catch(err => console.error("Failed to sync physical progress:", err));
+        }
+      }
     }
   } catch (err) {
     toast("Erro ao carregar o relatório de avanço", { type: "error" });
@@ -934,6 +1015,57 @@ function wireProgressTasks() {
             }
           });
           toast("Item adicionado com sucesso", { type: "success" });
+          close();
+          loadProgressTasks();
+        } catch (err) {
+          setButtonLoading(primaryBtn, false);
+          toast(err.message, { type: "error" });
+        }
+      }
+    });
+  });
+
+  el("importTemplateBtn")?.addEventListener("click", () => {
+    const id = getProjectId();
+    openModal({
+      title: "Importar Modelo de Tarefas",
+      primaryLabel: "Importar",
+      contentHtml: `
+        <div class="space-y-4">
+          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vários modelos faseadamente.</p>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Modelo de Obra</label>
+            <select id="import_type" class="w-full rounded-lg border-slate-300">
+              <optgroup label="Postos de Transformação">
+                <option value="POSTO DE TRANSFORMAÇÃO 160KVA">PT 160kVA (Aéreo)</option>
+                <option value="POSTO DE TRANSFORMAÇÃO 250KVA">PT 250kVA (Aéreo)</option>
+                <option value="BAIXA TENSÃO E TERRAS">PT em Alvenaria (BT e Terras)</option>
+              </optgroup>
+              <optgroup label="Redes de Distribuição">
+                <option value="MÉDIA TENSÃO">Média Tensão (Postes)</option>
+                <option value="BAIXA TENSÃO">Baixa Tensão (Iluminação/Dom.)</option>
+                <option value="RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO">Ramal Subterrâneo MT</option>
+              </optgroup>
+              <optgroup label="Infraestrutura">
+                <option value="ABERTURA E FECHAMENTO DE VALA">Valas Técnicas (Abertura/Fecho)</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="p-3 bg-primary/5 rounded-lg border border-primary/10">
+            <p class="text-[11px] text-primary font-bold italic leading-snug">Nota: As tarefas serão adicionadas ao final da lista actual sem substituir as existentes.</p>
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, panel }) => {
+        const primaryBtn = panel.querySelector("[data-primary]");
+        setButtonLoading(primaryBtn, true);
+        try {
+          const type = panel.querySelector("#import_type").value;
+          await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks/import-template", {
+            method: "POST",
+            body: { templateType: type }
+          });
+          toast("Modelo importado com sucesso", { type: "success" });
           close();
           loadProgressTasks();
         } catch (err) {

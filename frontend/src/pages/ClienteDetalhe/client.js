@@ -53,8 +53,7 @@ function renderLinkedProjectCard(project) {
       </div>
       <div class="mt-5">
         <div class="mb-2 flex items-center justify-between text-xs font-bold text-on-surface-variant">
-          <span>Progresso físico</span>
-          <span>${formatPercent(progress, { digits: 0 })}</span>
+          <span>Progresso</span>
         </div>
         <div class="h-2 rounded-full bg-surface-container overflow-hidden">
           <div class="h-full rounded-full bg-[#2afc8d]" style="width:${progress}%"></div>

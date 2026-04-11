@@ -919,7 +919,7 @@ projectRoutes.get(
     await ensureProjectReadable(req, id);
     const tasks = await prisma.projectProgressTask.findMany({
       where: { projectId: id },
-      orderBy: [{ itemGroup: "asc" }, { order: "asc" }],
+      orderBy: { order: "asc" },
     });
     return res.json({ tasks });
   })
@@ -979,6 +979,44 @@ projectRoutes.patch(
       data,
     });
     return res.json({ task });
+  })
+);
+
+projectRoutes.post(
+  "/:id/progress-tasks/import-template",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await ensureProjectReadable(req, id);
+    const { templateType } = z.object({ templateType: z.string() }).parse(req.body);
+
+    const { projectTemplates, getTemplateForProjectType } = require("../utils/projectTemplates");
+    const template = getTemplateForProjectType(templateType);
+
+    if (!template || template.length === 0) {
+      return res.status(400).json({ error: "Modelo não encontrado ou vazio" });
+    }
+
+    // Get current max order to append
+    const lastTask = await prisma.projectProgressTask.findFirst({
+      where: { projectId: id },
+      orderBy: { order: "desc" },
+    });
+    let startOrder = (lastTask?.order || 0) + 1;
+
+    const createdTasks = await prisma.projectProgressTask.createMany({
+      data: template.map((t) => ({
+        projectId: id,
+        itemGroup: templateType.toUpperCase(),
+        description: t.description,
+        expectedQty: t.expectedQty || 0,
+        executedQty: 0,
+        unit: t.unit || "un",
+        order: startOrder++,
+      })),
+    });
+
+    return res.json({ success: true, count: createdTasks.count });
   })
 );
 

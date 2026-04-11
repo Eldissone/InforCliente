@@ -6,8 +6,8 @@ const projectTemplates = {
     { order: 4, description: "Arvoramento de postes e montagem de ferragens", expectedQty: 0, unit: "un" },
     { order: 5, description: "Maciçamento dos postes (betão ciclópico)", expectedQty: 0, unit: "un" },
     { order: 6, description: "Lançamento e regulação de condutor ACSR 1X110mm2", expectedQty: 0, unit: "mts" },
-    { order: 7, description: "Lançamento e regulação de condutor ACSR 1X160mm2", expectedQty: 69000, unit: "mts" },
-    { order: 8, description: "Verificação de conformidade do ramal", expectedQty: 1, unit: "un" }
+    { order: 7, description: "Lançamento e regulação de condutor ACSR 1X160mm2", expectedQty: 0, unit: "mts" },
+    { order: 8, description: "Verificação de conformidade do ramal", expectedQty: 0, unit: "un" }
   ],
   "POSTO DE TRANSFORMAÇÃO 160KVA": [
     { order: 1, description: "Marcação da obra (PTAS)", expectedQty: 0, unit: "un" },
@@ -65,7 +65,8 @@ const projectTemplates = {
     { order: 4, description: "Electrificação do PT em alvenaria", expectedQty: 0, unit: "un" },
     { order: 5, description: "Ponto de Ligação e Teste do posto de transformação", expectedQty: 0, unit: "un" },
     { order: 6, description: "Teste à Ligação", expectedQty: 0, unit: "un" }
-  ]
+  ],
+  "OBRA COMPLEXA": []
 };
 
 function getTemplateForProjectType(type) {
