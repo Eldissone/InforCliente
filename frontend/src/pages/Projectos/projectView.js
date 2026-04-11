@@ -225,12 +225,58 @@ async function loadProject() {
   if (el("projectPhaseLabel")) el("projectPhaseLabel").textContent = phase.code;
   if (el("projectPhaseName")) el("projectPhaseName").textContent = phase.name;
 
+  // New: Update Operation Status (CBS)
+  if (p.cbsSummary) {
+    updateOperationStatus(p.cbsSummary);
+  }
+
   return p;
 }
 
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
+
+function updateOperationStatus(summary) {
+  const mapping = {
+    SERVICOS_MAO_DE_OBRA: "stat_labor",
+    MATERIAIS_INSUMOS: "stat_materials",
+    GASTOS_PESSOAL: "stat_pessoal",
+    DESPESAS_OPERACIONAIS: "stat_operacional",
+    INVESTIMENTOS: "stat_investimento",
+    DEPRECIACAO: "stat_depreciacao",
+    IMPOSTOS: "stat_impostos",
+    DEDUCOES: "stat_deducoes",
+    OUTRAS_DESPESAS: "stat_outras"
+  };
+
+  Object.entries(mapping).forEach(([cat, idPrefix]) => {
+    const data = summary[cat] || { budgeted: 0, realized: 0 };
+    const pctEl = el(`${idPrefix}_pct`);
+    const subEl = el(`${idPrefix}_sub`);
+
+    if (pctEl) {
+      const pct = data.budgeted > 0 ? Math.round((data.realized / data.budgeted) * 100) : (data.realized > 0 ? 100 : 0);
+      pctEl.textContent = `${pct}%`;
+      
+      // Visual indicator if over budget
+      if (pct > 100) {
+        pctEl.classList.remove("text-[#2afc8d]", "text-[#0d3fd1]", "text-yellow-400", "text-orange-400", "text-emerald-400", "text-slate-400", "text-red-400", "text-purple-400", "text-slate-300");
+        pctEl.classList.add("text-error", "animate-pulse");
+      }
+    }
+
+    if (subEl) {
+      if (data.budgeted > 0 || data.realized > 0) {
+        subEl.textContent = `${formatCurrencyKZ(data.realized)} / ${formatCurrencyKZ(data.budgeted)}`;
+        subEl.classList.remove("text-slate-400");
+        subEl.classList.add("text-slate-200");
+      } else {
+        subEl.textContent = "Sem lançamentos";
+      }
+    }
+  });
+}
 
 function updateDateAnalysis(p) {
   if (!el("daysRemaining")) return;

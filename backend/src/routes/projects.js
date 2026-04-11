@@ -289,6 +289,47 @@ projectRoutes.get(
     const id = String(req.params.id);
     const project = await ensureProjectReadable(req, id);
 
+    // Aggregate Budget by Category
+    const budgetAgg = await prisma.projectBudgetLine.groupBy({
+      by: ["category"],
+      where: { projectId: id },
+      _sum: { total: true },
+    });
+
+    // Aggregate Transactions by Category
+    const transAgg = await prisma.projectTransaction.groupBy({
+      by: ["category"],
+      where: { projectId: id },
+      _sum: { amount: true, realizedAmount: true },
+    });
+
+    // Build CBS Summary Map
+    const cbsSummary = {};
+    
+    // Initialize with all categories from the enum to ensure they exist
+    const categories = [
+      "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL", 
+      "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO", 
+      "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS"
+    ];
+    
+    categories.forEach(cat => {
+      cbsSummary[cat] = { budgeted: 0, realized: 0 };
+    });
+
+    budgetAgg.forEach(b => {
+      if (b.category && cbsSummary[b.category]) {
+        cbsSummary[b.category].budgeted = Number(b._sum.total || 0);
+      }
+    });
+
+    transAgg.forEach(t => {
+      if (t.category && cbsSummary[t.category]) {
+        // Use realizedAmount if available, otherwise amount
+        cbsSummary[t.category].realized = Number(t._sum.realizedAmount || t._sum.amount || 0);
+      }
+    });
+
     return res.json({
       project: {
         ...project,
@@ -297,6 +338,7 @@ projectRoutes.get(
         budgetConsumed: String(project.budgetConsumed),
         budgetCommitted: String(project.budgetCommitted),
         budgetAvailable: String(project.budgetAvailable),
+        cbsSummary
       },
     });
   })
