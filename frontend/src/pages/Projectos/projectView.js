@@ -85,7 +85,8 @@ const unitMap = {
 };
 
 function formatUnit(u) {
-  return unitMap[u] || u || "un";
+  const key = String(u || "un").toLowerCase().trim();
+  return unitMap[key] || key.toUpperCase();
 }
 
 function renderTxRow(t) {
@@ -929,7 +930,7 @@ function wireProgressTasks() {
               description: v("rt_desc"),
               expectedQty: Number(v("rt_exp") || 0),
               executedQty: 0,
-              unit: v("rt_uni") || "un",
+              unit: v("rt_uni").toLowerCase() || "un",
             }
           });
           toast("Item adicionado com sucesso", { type: "success" });
@@ -998,7 +999,7 @@ function wireProgressTasks() {
               body: {
                 executedQty: Number(panel.querySelector("#up_exe").value || 0),
                 expectedQty: Number(panel.querySelector("#up_exp").value || 0),
-                unit: panel.querySelector("#up_uni").value.trim() || undefined,
+                unit: panel.querySelector("#up_uni").value.trim().toLowerCase() || "un",
               }
             });
             toast("Progresso atualizado", { type: "success" });

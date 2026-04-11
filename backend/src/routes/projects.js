@@ -948,7 +948,7 @@ projectRoutes.post(
         description: body.description,
         expectedQty: body.expectedQty,
         executedQty: body.executedQty || 0,
-        unit: body.unit,
+        unit: (body.unit || "un").toLowerCase().trim(),
       },
     });
     return res.status(201).json({ task });
@@ -972,9 +972,7 @@ projectRoutes.patch(
     const data = {};
     if (body.executedQty !== undefined) data.executedQty = body.executedQty;
     if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
-    if (body.unit !== undefined) data.unit = body.unit;
-
-    console.log(`Updating task ${taskId}:`, data);
+    if (body.unit !== undefined) data.unit = body.unit.toLowerCase().trim();
 
     const task = await prisma.projectProgressTask.update({
       where: { id: taskId, projectId: id },
