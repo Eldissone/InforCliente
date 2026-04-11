@@ -215,64 +215,191 @@ async function loadTransactions() {
   });
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?${qs.toString()}`);
   tbody.innerHTML = data.items.map(renderTxRow).join("");
-
-  const projectData = await apiRequest(`/projects/${encodeURIComponent(id)}`);
-  renderScurve(data.items, projectData.project);
 }
 
-function renderScurve(transactions, project) {
+// Instância global do gráfico da Curva S para destruir antes de recriar
+let _scurveChart = null;
+
+/**
+ * Renderiza a Curva S real usando Chart.js.
+ * @param {Array}  allTxs      - todos os lançamentos do projeto
+ * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
+ * @param {Array}  budgetLines - linhas de orçamento (total por linha)
+ */
+function renderScurve(allTxs, project, budgetLines) {
   const container = el("scurve_container");
   if (!container) return;
 
   const totalBudget = Number(project.budgetTotal || 0);
-  if (totalBudget <= 0) {
-    container.innerHTML = `<div class="flex items-center justify-center w-full h-full text-slate-400 text-xs">Defina o orçamento para visualizar o gráfico.</div>`;
-    return;
+  const monthNames = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  // Intervalo real do projeto
+  const startDate = project.startDate ? new Date(project.startDate) : new Date();
+  const dueDate   = project.dueDate   ? new Date(project.dueDate)   : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
+
+  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const rangeEnd   = new Date(dueDate.getFullYear(),   dueDate.getMonth(),   1);
+  if (rangeEnd <= rangeStart) rangeEnd.setMonth(rangeStart.getMonth() + 2);
+
+  // Construir lista de meses
+  const projectMonths = [];
+  const cur = new Date(rangeStart);
+  while (cur <= rangeEnd) {
+    projectMonths.push({ year: cur.getFullYear(), month: cur.getMonth(),
+      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}` });
+    cur.setMonth(cur.getMonth() + 1);
   }
 
-  const months = [];
-  const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({
-      label: d.toLocaleString('pt-BR', { month: 'short' }).toUpperCase(),
-      year: d.getFullYear(),
-      month: d.getMonth(),
-      executed: 0,
-      planned: 0
+  const numMonths = projectMonths.length;
+
+  const getColIdx = (d) => {
+    const fd = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (fd < rangeStart) return 0;
+    if (fd > rangeEnd)   return numMonths - 1;
+    return (fd.getFullYear() - rangeStart.getFullYear()) * 12 +
+           (fd.getMonth()    - rangeStart.getMonth());
+  };
+
+  // Planejado: distribuir budget lines uniformemente entre os meses
+  const plannedByMonth = Array(numMonths).fill(0);
+  const lines = (budgetLines || []).filter(l => !["INVESTIMENTOS","DEPRECIACAO"].includes(l.category));
+
+  if (lines.length > 0) {
+    lines.forEach(l => {
+      const perMonth = Number(l.total || 0) / numMonths;
+      for (let i = 0; i < numMonths; i++) plannedByMonth[i] += perMonth;
     });
+  } else if (totalBudget > 0) {
+    const perMonth = totalBudget / numMonths;
+    for (let i = 0; i < numMonths; i++) plannedByMonth[i] = perMonth;
   }
 
-  months.forEach((m, idx) => { m.planned = (totalBudget / 6) * (idx + 1); });
-
-  let cumulative = 0;
-  const sortedTx = transactions
-    .filter(t => t.status === "PAID")
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  months.forEach(m => {
-    const monthTx = sortedTx.filter(t => {
-      const td = new Date(t.date);
-      return td.getMonth() === m.month && td.getFullYear() === m.year;
-    });
-    cumulative += monthTx.reduce((acc, t) => acc + Number(t.amount || 0), 0);
-    m.executed = cumulative;
+  // Realizado: transações PAID → usar realizedAmount se existir
+  const realizedByMonth = Array(numMonths).fill(0);
+  (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
+    const idx = getColIdx(new Date(t.date));
+    realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
   });
 
-  const maxVal = Math.max(totalBudget, ...months.map(m => m.executed));
+  // Curva S = acumulado por mês
+  const today    = new Date();
+  const todayIdx = getColIdx(today);
+  const labels             = projectMonths.map(m => m.label);
+  const cumulativePlanned  = [];
+  const cumulativeRealized = [];
+  let sumP = 0, sumR = 0;
+  for (let i = 0; i < numMonths; i++) {
+    sumP += plannedByMonth[i];
+    cumulativePlanned.push(Math.round(sumP));
+    if (i <= todayIdx) {
+      sumR += realizedByMonth[i];
+      cumulativeRealized.push(Math.round(sumR));
+    } else {
+      cumulativeRealized.push(null); // não mostrar futuro
+    }
+  }
 
-  container.innerHTML = months.map((m, idx) => {
-    const planH = Math.round((m.planned / maxVal) * 100);
-    const execH = Math.round((m.executed / maxVal) * 100);
-    const isCurrent = idx === 5;
-    return `
-      <div class="flex-1 group relative">
-        <div class="w-full bg-[#eff4ff] rounded-t-sm group-hover:bg-[#dce9ff] transition-all duration-500" style="height: ${planH}%"></div>
-        <div class="absolute bottom-0 w-full bg-[#0d3fd1] rounded-t-sm transition-all duration-700 delay-100" style="height: ${execH}%; opacity: ${isCurrent ? 1 : 0.4}"></div>
-        <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant ${isCurrent ? 'font-bold' : ''}">${m.label}</span>
-      </div>
-    `;
-  }).join("");
+  // Limpar e criar canvas
+  container.innerHTML = `<canvas id="scurveCanvas" style="width:100%;height:100%;display:block;"></canvas>`;
+  const canvas = document.getElementById("scurveCanvas");
+
+  if (_scurveChart) { _scurveChart.destroy(); _scurveChart = null; }
+
+  const formatKZ = (v) => {
+    if (!v && v !== 0) return "—";
+    if (v >= 1e9) return (v / 1e9).toFixed(2) + " Bi kz";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + " M kz";
+    if (v >= 1e3) return (v / 1e3).toFixed(0) + " K kz";
+    return v + " kz";
+  };
+
+  const doRender = () => {
+    const maxP = cumulativePlanned.at(-1) || 1;
+    const maxR = Math.max(...cumulativeRealized.filter(v => v !== null), 0);
+    const yMax = Math.max(maxP, maxR) * 1.12;
+
+    _scurveChart = new window.Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Planejado (Curva S)",
+            data: cumulativePlanned,
+            borderColor: "#0d3fd1",
+            backgroundColor: "rgba(13,63,209,0.07)",
+            borderWidth: 2.5,
+            borderDash: [7, 4],
+            pointBackgroundColor: "#0d3fd1",
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            fill: true,
+            tension: 0.42,
+          },
+          {
+            label: "Realizado",
+            data: cumulativeRealized,
+            borderColor: "#2afc8d",
+            backgroundColor: "rgba(42,252,141,0.10)",
+            borderWidth: 3,
+            pointBackgroundColor: "#2afc8d",
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            fill: true,
+            tension: 0.42,
+            spanGaps: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#1e293b",
+            titleColor: "#94a3b8",
+            bodyColor: "#f1f5f9",
+            borderColor: "#334155",
+            borderWidth: 1,
+            padding: 14,
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed.y;
+                return v != null ? ` ${ctx.dataset.label}: ${formatKZ(v)}` : null;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: { font: { size: 10, weight: "600" }, color: "#64748b",
+              maxTicksLimit: 14, maxRotation: 45 }
+          },
+          y: {
+            min: 0,
+            suggestedMax: yMax,
+            grid: { color: "rgba(0,0,0,0.05)" },
+            ticks: {
+              font: { size: 10 }, color: "#64748b",
+              callback: (v) => formatKZ(v)
+            }
+          }
+        }
+      }
+    });
+  };
+
+  if (window.Chart) {
+    doRender();
+  } else {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js";
+    s.onload = doRender;
+    document.head.appendChild(s);
+  }
 }
 
 async function loadBudgetExecution() {
@@ -524,6 +651,9 @@ async function loadBudgetExecution() {
     const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
     el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
   }
+
+  // Renderiza Curva S com dados reais (todas as transações + linhas de orçamento)
+  renderScurve(txs, p, lines);
 
   renderOperationStatus(lines);
 }
