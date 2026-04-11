@@ -476,8 +476,8 @@ async function loadBudgetExecution() {
         ${projectMonths.map(m => `<th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 text-black">${m.label}</th>`).join('')}
       </tr>
       <tr class="bg-[#334155] text-black text-[9px] uppercase tracking-wider">
-        <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-white/70">Prev.</th>
-        <th class="px-2 py-1 text-right font-bold text-white/70">Real.</th>
+        <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-black">Prev.</th>
+        <th class="px-2 py-1 text-right font-bold text-black">Real.</th>
         <th class="px-2 py-1 text-right font-bold text-white/70">(%)</th>
         ${projectMonths.map(() => `
           <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-white/70">P.</th>
