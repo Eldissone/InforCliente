@@ -292,20 +292,55 @@ async function loadBudgetExecution() {
   const lines = linesRes.items || [];
   const txs = txRes.items || [];
 
-  const projectYear = p.startDate ? new Date(p.startDate).getFullYear() : new Date().getFullYear();
-  const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+  // --- Build dynamic month range from project start → due date ---
+  const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+  const startDate = p.startDate ? new Date(p.startDate) : new Date();
+  const endDate = p.dueDate ? new Date(p.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
 
-  // Categorize
+  // Normalise to first of month
+  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+
+  // Build ordered list of {year, month, label}
+  const projectMonths = [];
+  const cur = new Date(rangeStart);
+  while (cur <= rangeEnd) {
+    projectMonths.push({
+      year: cur.getFullYear(),
+      month: cur.getMonth(),
+      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`
+    });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  // Ensure at least 1 month
+  if (projectMonths.length === 0) {
+    projectMonths.push({ year: rangeStart.getFullYear(), month: rangeStart.getMonth(), label: `${monthNames[rangeStart.getMonth()]}/${String(rangeStart.getFullYear()).slice(2)}` });
+  }
+
+  const numMonths = projectMonths.length;
+
+  // Helper: get column index for a given Date (clamp to range)
+  const getColIdx = (date) => {
+    const d = new Date(date.getFullYear(), date.getMonth(), 1);
+    if (d < rangeStart) return 0;
+    if (d > rangeEnd) return numMonths - 1;
+    const diffYears = d.getFullYear() - rangeStart.getFullYear();
+    const diffMonths = d.getMonth() - rangeStart.getMonth();
+    return diffYears * 12 + diffMonths;
+  };
+
+  // --- Categorize ---
   const cats = {
-    MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    INVESTIMENTOS: { name: "INVESTIMENTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
+    MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    INVESTIMENTOS: { name: "INVESTIMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
   };
 
   const getCatKey = (c) => {
@@ -322,35 +357,32 @@ async function loadBudgetExecution() {
   lines.forEach(l => {
     const cKey = getCatKey(l.category);
     const totalP = Number(l.total || 0);
-    const monthlyP = totalP / 12; // Divisão linear do orçamento
+    const monthlyP = totalP / numMonths; // distribute linearly across all project months
 
     const obj = {
       id: l.id,
       desc: l.description,
       totalP,
       totalC: 0,
-      byMonth: Array(12).fill(0).map(() => ({ p: monthlyP, c: 0 }))
+      byMonth: Array(numMonths).fill(0).map(() => ({ p: monthlyP, c: 0 }))
     };
     cats[cKey].items.push(obj);
     itemsMap.set(l.id, obj);
 
     cats[cKey].total += totalP;
-    cats[cKey].byMonth.forEach((m, i) => m.p += monthlyP);
+    cats[cKey].byMonth.forEach((m) => m.p += monthlyP);
   });
 
   // Calculate forecast (Previsto) and consumed (Realizado) from transactions
   txs.forEach(t => {
     const d = new Date(t.date);
-    if (d.getFullYear() !== projectYear) return;
-    const mIdx = d.getMonth();
+    const mIdx = getColIdx(d); // map to column in project range (clamped)
     const forecastAmount = Number(t.amount || 0);
-    // realizedAmount = what was actually paid (may differ from forecast)
     const realizedAmount = t.realizedAmount != null ? Number(t.realizedAmount) : forecastAmount;
 
     const cKey = getCatKey(t.category);
 
     if (t.status === "PENDING" || t.status === "LATE") {
-      // Pending transactions feed the Previsto (forecast) column
       cats[cKey].total += forecastAmount;
       cats[cKey].byMonth[mIdx].p += forecastAmount;
 
@@ -358,31 +390,27 @@ async function loadBudgetExecution() {
       const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
       let row = cats[cKey].items.find(i => i._key === descKey);
       if (!row) {
-        row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: 0, totalC: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })) };
+        row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: 0, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
         cats[cKey].items.push(row);
       }
       row.totalP += forecastAmount;
       row.byMonth[mIdx].p += forecastAmount;
 
     } else if (t.status === "PAID") {
-      // Paid transactions feed the Realizado (consumed) column
       cats[cKey].consumed += realizedAmount;
       cats[cKey].byMonth[mIdx].c += realizedAmount;
 
       if (t.budgetLineId && itemsMap.has(t.budgetLineId)) {
-        // Linked to a budget line — update that line's realized
         const bItem = itemsMap.get(t.budgetLineId);
         bItem.totalC += realizedAmount;
         bItem.byMonth[mIdx].c += realizedAmount;
       } else {
-        // Unlinked — also keep the forecast (from original committed amount)
         const cleanDesc = (t.description || "Lançamento Avulso").trim();
         const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
         let row = cats[cKey].items.find(i => i._key === descKey);
         if (!row) {
-          row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: forecastAmount, totalC: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })) };
+          row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: forecastAmount, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
           cats[cKey].items.push(row);
-          // Also add to category's planned total so the "P." column is populated
           cats[cKey].total += forecastAmount;
           cats[cKey].byMonth[mIdx].p += forecastAmount;
           row.byMonth[mIdx].p += forecastAmount;
@@ -396,7 +424,7 @@ async function loadBudgetExecution() {
   // Render Table
   let gTotalP = 0;
   let gTotalC = 0;
-  let gByMonth = Array(12).fill(0).map(() => ({ p: 0, c: 0 }));
+  let gByMonth = Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 }));
 
   Object.keys(cats).forEach(key => {
     const cat = cats[key];
@@ -443,18 +471,18 @@ async function loadBudgetExecution() {
   let theadHtml = `
     <thead>
       <tr class="bg-[#1e293b] text-[#121210]">
-        <th rowspan="2" class="px-4 py-2 sticky left-0 bg-[#1e293b] z-20 whitespace-nowrap min-w-[250px] text-left text-xs font-black uppercase tracking-widest">Descrição</th>
-        <th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 bg-primary/20">TOTAL ${projectYear}</th>
-        ${months.map(m => `<th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20">${m}</th>`).join('')}
+        <th rowspan="2" class="px-4 py-2 sticky left-0 bg-[#1e293b] z-20 whitespace-nowrap min-w-[250px] text-left text-xs font-black uppercase tracking-widest text-black">Descrição</th>
+        <th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 bg-primary/20 text-black">TOTAL OBRA</th>
+        ${projectMonths.map(m => `<th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 text-black">${m.label}</th>`).join('')}
       </tr>
       <tr class="bg-[#334155] text-black text-[9px] uppercase tracking-wider">
-        <th class="px-2 py-1 text-right font-bold border-l border-white/20">Prev.</th>
-        <th class="px-2 py-1 text-right font-bold">Real.</th>
-        <th class="px-2 py-1 text-right font-bold">(%)</th>
-        ${months.map(() => `
-          <th class="px-2 py-1 text-right font-bold border-l border-white/20">P.</th>
+        <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-white/70">Prev.</th>
+        <th class="px-2 py-1 text-right font-bold text-white/70">Real.</th>
+        <th class="px-2 py-1 text-right font-bold text-white/70">(%)</th>
+        ${projectMonths.map(() => `
+          <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-white/70">P.</th>
           <th class="px-2 py-1 text-right font-bold text-[#2afc8d]">R.</th>
-          <th class="px-2 py-1 text-right font-bold">%</th>
+          <th class="px-2 py-1 text-right font-bold text-white/70">%</th>
         `).join('')}
       </tr>
     </thead>
