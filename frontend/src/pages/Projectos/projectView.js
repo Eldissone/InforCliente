@@ -51,10 +51,22 @@ function statusLabel(s) {
 }
 
 function catLabel(c) {
-  if (c === "MATERIALS") return "MATERIAIS";
-  if (c === "EQUIPMENT") return "EQUIPAMENTOS";
-  if (c === "LABOR") return "MÃO DE OBRA";
-  return "OUTROS";
+  const map = {
+    MATERIALS: "Materiais",
+    EQUIPMENT: "Equipamentos",
+    LABOR: "Mão de Obra",
+    OTHER: "Outros",
+    MATERIAIS_INSUMOS: "Materiais e Insumos",
+    SERVICOS_MAO_DE_OBRA: "Mão de Obra e Serviços",
+    GASTOS_PESSOAL: "Gastos com Pessoal",
+    DESPESAS_OPERACIONAIS: "Despesas Operacionais",
+    INVESTIMENTOS: "Investimentos",
+    DEPRECIACAO: "Depreciação",
+    OUTRAS_DESPESAS: "Outras Despesas",
+    DEDUCOES: "Dedução de Custos",
+    IMPOSTOS: "Impostos",
+  };
+  return map[c] || c || "—";
 }
 
 function renderTxRow(t) {
@@ -75,10 +87,13 @@ function renderTxRow(t) {
           <span class="text-xs font-semibold">${st.text}</span>
         </div>
       </td>
-      <td class="px-8 py-4 text-right font-bold text-on-surface">${formatCurrencyKZ(t.amount)}</td>
+      <td class="px-8 py-4 text-right font-bold text-on-surface">
+        ${formatCurrencyKZ(t.amount)}
+        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[10px] text-[#2afc8d] font-black">Real: ${formatCurrencyKZ(t.realizedAmount)}</div>` : ""}
+      </td>
       <td class="px-8 py-4 text-center">
         ${t.status !== "PAID" ? `
-          <button data-liquidate-tx="${t.id}" title="Marcar como Liquidado" class="material-symbols-outlined text-slate-400 hover:text-[#2afc8d] transition-colors p-1 rounded-md hover:bg-[#2afc8d]/10">check_circle</button>
+          <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Marcar como Liquidado" class="material-symbols-outlined text-slate-400 hover:text-[#2afc8d] transition-colors p-1 rounded-md hover:bg-[#2afc8d]/10">check_circle</button>
         ` : `
           <span class="material-symbols-outlined text-[#2afc8d] opacity-50">done_all</span>
         `}
@@ -151,13 +166,17 @@ async function loadProject() {
   el("projectContact").textContent = p.contact || "-";
   el("projectLocation").textContent = p.location || p.region || "-";
 
-  el("budgetTotal").textContent = formatCurrencyKZ(p.budgetTotal);
-  el("budgetConsumed").textContent = formatCurrencyKZ(p.budgetConsumed);
-  el("budgetCommitted").textContent = "-" + formatCurrencyKZ(Math.max(0, Number(p.budgetCommitted || 0)));
-  el("budgetAvailable").textContent = formatCurrencyKZ(p.budgetAvailable);
-
   const total = Number(p.budgetTotal || 0);
   const consumed = Number(p.budgetConsumed || 0);
+  const committed = Number(p.budgetCommitted || 0);
+  // Always re-derive available so it's consistent even if DB lags
+  const available = total - consumed - committed;
+
+  el("budgetTotal").textContent = formatCurrencyKZ(total);
+  el("budgetConsumed").textContent = formatCurrencyKZ(consumed);
+  el("budgetCommitted").textContent = "-" + formatCurrencyKZ(Math.max(0, committed));
+  el("budgetAvailable").textContent = formatCurrencyKZ(available);
+
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
   if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, pct))}%`;
@@ -272,97 +291,140 @@ async function loadBudgetExecution() {
   const p = projRes.project;
   const lines = linesRes.items || [];
   const txs = txRes.items || [];
-  
-  if (!lines.length) {
-    container.innerHTML = `<div class="p-8 text-center text-sm text-on-surface-variant">Nenhum item de orçamento importado para esta obra.</div>`;
-    return;
-  }
 
   const projectYear = p.startDate ? new Date(p.startDate).getFullYear() : new Date().getFullYear();
   const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-  
+
   // Categorize
   const cats = {
-    LABOR: { name: "MÃO DE OBRA", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(()=>({p:0, c:0})), items: [] },
-    MATERIALS: { name: "MATERIAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(()=>({p:0, c:0})), items: [] },
-    EQUIPMENT: { name: "EQUIPAMENTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(()=>({p:0, c:0})), items: [] },
-    OTHER: { name: "SERVIÇOS GERAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(()=>({p:0, c:0})), items: [] }
+    MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    INVESTIMENTOS: { name: "INVESTIMENTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
+  };
+
+  const getCatKey = (c) => {
+    if (c === "LABOR") return "SERVICOS_MAO_DE_OBRA";
+    if (c === "MATERIALS") return "MATERIAIS_INSUMOS";
+    if (c === "EQUIPMENT") return "INVESTIMENTOS";
+    if (cats[c]) return c;
+    return "OUTRAS_DESPESAS";
   };
 
   // Pre-process items mapping
   const itemsMap = new Map();
 
   lines.forEach(l => {
-    const cKey = cats[l.category] ? l.category : "OTHER";
+    const cKey = getCatKey(l.category);
     const totalP = Number(l.total || 0);
     const monthlyP = totalP / 12; // Divisão linear do orçamento
-    
+
     const obj = {
       id: l.id,
       desc: l.description,
       totalP,
       totalC: 0,
-      byMonth: Array(12).fill(0).map(()=>({ p: monthlyP, c: 0 }))
+      byMonth: Array(12).fill(0).map(() => ({ p: monthlyP, c: 0 }))
     };
     cats[cKey].items.push(obj);
     itemsMap.set(l.id, obj);
-    
+
     cats[cKey].total += totalP;
     cats[cKey].byMonth.forEach((m, i) => m.p += monthlyP);
   });
 
-  // Calculate consumed from transactions
+  // Calculate forecast (Previsto) and consumed (Realizado) from transactions
   txs.forEach(t => {
     const d = new Date(t.date);
-    if (d.getFullYear() !== projectYear) return; // ignore out of year for this view
+    if (d.getFullYear() !== projectYear) return;
     const mIdx = d.getMonth();
-    const amount = Number(t.amount || 0);
+    const forecastAmount = Number(t.amount || 0);
+    // realizedAmount = what was actually paid (may differ from forecast)
+    const realizedAmount = t.realizedAmount != null ? Number(t.realizedAmount) : forecastAmount;
 
-    const cKey = cats[t.category] ? t.category : "OTHER";
-    cats[cKey].consumed += amount;
-    cats[cKey].byMonth[mIdx].c += amount;
+    const cKey = getCatKey(t.category);
 
-    if (t.budgetLineId && itemsMap.has(t.budgetLineId)) {
-      const bItem = itemsMap.get(t.budgetLineId);
-      bItem.totalC += amount;
-      bItem.byMonth[mIdx].c += amount;
-    } else {
-      // If no line attached, create a dummy item "Lançamentos Não Vinculados" dynamically if needed?
-      // For simplicity, we just add it to the category total, but creating a dummy line is better to balance the DRE.
-      let unlinked = cats[cKey].items.find(i => i.id === `unlinked_${cKey}`);
-      if (!unlinked) {
-        unlinked = { id: `unlinked_${cKey}`, desc: "Lançamentos Não Vinculados", totalP: 0, totalC: 0, byMonth: Array(12).fill(0).map(()=>({p:0,c:0})) };
-        cats[cKey].items.push(unlinked);
+    if (t.status === "PENDING" || t.status === "LATE") {
+      // Pending transactions feed the Previsto (forecast) column
+      cats[cKey].total += forecastAmount;
+      cats[cKey].byMonth[mIdx].p += forecastAmount;
+
+      const cleanDesc = (t.description || "Lançamento Avulso").trim();
+      const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
+      let row = cats[cKey].items.find(i => i._key === descKey);
+      if (!row) {
+        row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: 0, totalC: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })) };
+        cats[cKey].items.push(row);
       }
-      unlinked.totalC += amount;
-      unlinked.byMonth[mIdx].c += amount;
+      row.totalP += forecastAmount;
+      row.byMonth[mIdx].p += forecastAmount;
+
+    } else if (t.status === "PAID") {
+      // Paid transactions feed the Realizado (consumed) column
+      cats[cKey].consumed += realizedAmount;
+      cats[cKey].byMonth[mIdx].c += realizedAmount;
+
+      if (t.budgetLineId && itemsMap.has(t.budgetLineId)) {
+        // Linked to a budget line — update that line's realized
+        const bItem = itemsMap.get(t.budgetLineId);
+        bItem.totalC += realizedAmount;
+        bItem.byMonth[mIdx].c += realizedAmount;
+      } else {
+        // Unlinked — also keep the forecast (from original committed amount)
+        const cleanDesc = (t.description || "Lançamento Avulso").trim();
+        const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
+        let row = cats[cKey].items.find(i => i._key === descKey);
+        if (!row) {
+          row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: forecastAmount, totalC: 0, byMonth: Array(12).fill(0).map(() => ({ p: 0, c: 0 })) };
+          cats[cKey].items.push(row);
+          // Also add to category's planned total so the "P." column is populated
+          cats[cKey].total += forecastAmount;
+          cats[cKey].byMonth[mIdx].p += forecastAmount;
+          row.byMonth[mIdx].p += forecastAmount;
+        }
+        row.totalC += realizedAmount;
+        row.byMonth[mIdx].c += realizedAmount;
+      }
     }
   });
 
   // Render Table
   let gTotalP = 0;
   let gTotalC = 0;
-  let gByMonth = Array(12).fill(0).map(()=>({p:0, c:0}));
-  
-  Object.values(cats).forEach(cat => {
-    gTotalP += cat.total;
-    gTotalC += cat.consumed;
+  let gByMonth = Array(12).fill(0).map(() => ({ p: 0, c: 0 }));
+
+  Object.keys(cats).forEach(key => {
+    const cat = cats[key];
+    const isDed = key === "DEDUCOES";
+    const isCapital = ["INVESTIMENTOS", "DEPRECIACAO"].includes(key);
+    // Capital and depreciation categories are off-budget — excluded from grand totals
+    if (isCapital) return;
+    const sign = isDed ? -1 : 1;
+
+    // Add logic here to invert logic of display if needed, but for sum calculations:
+    gTotalP += cat.total * sign;
+    gTotalC += cat.consumed * sign;
     cat.byMonth.forEach((m, i) => {
-      gByMonth[i].p += m.p;
-      gByMonth[i].c += m.c;
+      gByMonth[i].p += m.p * sign;
+      gByMonth[i].c += m.c * sign;
     });
   });
 
   const formatTableCurrency = (val) => val === 0 ? "-" : new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
   const formatPct = (c, p) => p > 0 ? Math.round((c / p) * 100) + '%' : (c > 0 ? '100%' : '0%');
-  
-  const drawRow = (title, totalP, totalC, monthsData, isHeader = false) => {
-    let rowCls = isHeader ? "bg-[#e2e8f0] font-black text-[#212e3e]" : "bg-white text-on-surface hover:bg-surface-container-low transition-colors";
-    let titleCls = isHeader ? "px-4 py-2 sticky left-0 bg-[#e2e8f0] z-10 whitespace-nowrap" : "px-4 py-1.5 sticky left-0 bg-white group-hover:bg-surface-container-low transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[250px] pl-8 text-xs font-semibold";
-    
+
+  const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null) => {
+    let rowCls = customRowCls || (isHeader ? "bg-[#e2e8f0] font-black text-[#212e3e]" : "bg-white text-on-surface hover:bg-surface-container-low transition-colors");
+    let titleCls = customRowCls ? `px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls}` : (isHeader ? "px-4 py-2 sticky left-0 bg-[#e2e8f0] z-10 whitespace-nowrap" : "px-4 py-1.5 sticky left-0 bg-white group-hover:bg-surface-container-low transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[250px] pl-8 text-xs font-semibold");
+
     let html = `<tr class="border-b border-outline-variant/30 group ${rowCls}">`;
     html += `<td class="${titleCls}" title="${escapeHtml(title)}">${escapeHtml(title)}</td>`;
-    
+
     // Total column
     html += `<td class="px-2 py-1.5 text-right font-black border-l border-outline-variant/30 bg-primary/5">${formatTableCurrency(totalP)}</td>`;
     html += `<td class="px-2 py-1.5 text-right ${totalC > totalP ? 'text-error' : ''}">${formatTableCurrency(totalC)}</td>`;
@@ -373,19 +435,19 @@ async function loadBudgetExecution() {
       html += `<td class="px-2 py-1.5 text-right text-[11px] font-bold ${m.c > m.p ? 'text-error' : 'text-[#212e3e]'}">${formatTableCurrency(m.c)}</td>`;
       html += `<td class="px-2 py-1.5 text-right text-[9px] text-on-surface-variant">${formatPct(m.c, m.p)}</td>`;
     });
-    
+
     html += `</tr>`;
     return html;
   };
 
   let theadHtml = `
     <thead>
-      <tr class="bg-[#1e293b] text-white">
+      <tr class="bg-[#1e293b] text-[#121210]">
         <th rowspan="2" class="px-4 py-2 sticky left-0 bg-[#1e293b] z-20 whitespace-nowrap min-w-[250px] text-left text-xs font-black uppercase tracking-widest">Descrição</th>
         <th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 bg-primary/20">TOTAL ${projectYear}</th>
         ${months.map(m => `<th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20">${m}</th>`).join('')}
       </tr>
-      <tr class="bg-[#334155] text-white/80 text-[9px] uppercase tracking-wider">
+      <tr class="bg-[#334155] text-black text-[9px] uppercase tracking-wider">
         <th class="px-2 py-1 text-right font-bold border-l border-white/20">Prev.</th>
         <th class="px-2 py-1 text-right font-bold">Real.</th>
         <th class="px-2 py-1 text-right font-bold">(%)</th>
@@ -399,22 +461,31 @@ async function loadBudgetExecution() {
   `;
 
   let tbodyHtml = `<tbody class="divide-y divide-outline-variant/30">`;
-  
-  // Grand Total First Row (like DRE)
-  tbodyHtml += drawRow(`= ORÇAMENTO GERAL`, gTotalP, gTotalC, gByMonth, true);
 
-  Object.values(cats).forEach(cat => {
+  // Grand Total First Row (like DRE)
+  tbodyHtml += drawRow(`= CUSTO LÍQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
+
+  Object.keys(cats).forEach(key => {
+    const cat = cats[key];
     if (cat.items.length === 0 && cat.total === 0 && cat.consumed === 0) return;
-    
+
+    const isInvestment = key === "INVESTIMENTOS";
+    const isInfoOnly = key === "DEPRECIACAO"; // purely informational, no amounts shown
+
     // Category Header
-    tbodyHtml += drawRow(`+ ${cat.name}`, cat.total, cat.consumed, cat.byMonth, true);
-    
+    let catTitle = key === "DEDUCOES" ? cat.name : `+ ${cat.name}`;
+    if (isInvestment) catTitle = `▲ ${cat.name}`;
+    if (isInfoOnly) catTitle = `~ ${cat.name}`;
+
+    const customCls = isInvestment ? "bg-[#0f2e1a] font-black text-[#2afc8d]" : (isInfoOnly ? "bg-[#0f2540] font-black text-slate-300" : null);
+    tbodyHtml += drawRow(catTitle, isInfoOnly ? 0 : cat.total, isInfoOnly ? 0 : cat.consumed, cat.byMonth, true, customCls);
+
     // Category Items
     cat.items.forEach(item => {
-      tbodyHtml += drawRow(item.desc, item.totalP, item.totalC, item.byMonth, false);
+      tbodyHtml += drawRow(item.desc, isInfoOnly ? 0 : item.totalP, isInfoOnly ? 0 : item.totalC, item.byMonth, false);
     });
   });
-  
+
   tbodyHtml += `</tbody>`;
 
   container.innerHTML = `<table class="w-full text-left whitespace-nowrap border-collapse">${theadHtml}${tbodyHtml}</table>`;
@@ -433,27 +504,33 @@ async function renderOperationStatus(lines) {
   const id = getProjectId();
   // Busca todos os lançamentos para não depender apenas dos vinculados
   const txData = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`);
-  
+
   const cats = {
     MATERIALS: { total: 0, consumed: 0, pctId: "stat_materials_pct", subId: "stat_materials_sub" },
     LABOR: { total: 0, consumed: 0, pctId: "stat_labor_pct", subId: "stat_labor_sub" },
     EQUIPMENT: { total: 0, consumed: 0, pctId: "stat_machinery_pct", subId: "stat_machinery_sub" }
   };
 
+  const getGroup = (c) => {
+    if (c === "MATERIALS" || c === "MATERIAIS_INSUMOS") return "MATERIALS";
+    if (c === "LABOR" || c === "SERVICOS_MAO_DE_OBRA" || c === "GASTOS_PESSOAL") return "LABOR";
+    if (c === "EQUIPMENT" || c === "INVESTIMENTOS" || c === "DEPRECIACAO") return "EQUIPMENT";
+    return null;
+  };
+
   // Somar orçamento total por categoria (das linhas de orçamento)
   lines.forEach(l => {
-    const c = l.category;
-    if (cats[c]) {
-      cats[c].total += Number(l.total || 0);
+    const group = getGroup(l.category);
+    if (group && cats[group]) {
+      cats[group].total += Number(l.total || 0);
     }
   });
 
   // Somar todos os custos lançados por categoria
   (txData.items || []).forEach(t => {
-    // Usaremos "lançados" (todos os lançamentos consumidos/comprometidos)
-    const c = t.category;
-    if (cats[c]) {
-      cats[c].consumed += Number(t.amount || 0);
+    const group = getGroup(t.category);
+    if (group && cats[group]) {
+      cats[group].consumed += Number(t.amount || 0);
     }
   });
 
@@ -477,22 +554,65 @@ function wireLiquidation() {
     if (!btn) return;
 
     const txId = btn.getAttribute("data-liquidate-tx");
+    const txDesc = btn.getAttribute("data-tx-desc") || "este lançamento";
+    const txAmount = btn.getAttribute("data-tx-amount") || "0";
     const projectId = getProjectId();
 
-    try {
-      setButtonLoading(btn, true);
-      await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}/liquidate`, {
-        method: "PATCH"
-      });
-      toast("Lançamento liquidado com sucesso!", { type: "success" });
-      
-      await loadProject();
-      await loadTransactions();
-      await loadBudgetExecution();
-    } catch (err) {
-      setButtonLoading(btn, false);
-      toast("Erro ao liquidar lançamento", { type: "error" });
-    }
+    openModal({
+      title: "Liquidar Despesa",
+      primaryLabel: "Confirmar Liquidação",
+      contentHtml: `
+        <div class="space-y-4">
+          <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
+            <p class="text-xs text-on-surface-variant uppercase font-black tracking-widest mb-1">Despesa</p>
+            <p class="font-bold text-[#212e3e] text-sm">${escapeHtml(txDesc)}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
+              Valor Previsto / Comprometido (kz)
+            </label>
+            <div class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-400 text-sm font-mono">
+              ${Number(txAmount).toLocaleString('pt-AO')} kz
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">
+              Valor Realmente Pago (kz)
+            </label>
+            <input 
+              id="liq_realizedAmount" 
+              type="number" 
+              step="0.01" 
+              value="${txAmount}" 
+              class="w-full rounded-lg border-slate-300 font-mono text-sm focus:border-primary focus:ring-primary"
+            />
+            <p class="mt-1 text-[11px] text-on-surface-variant">
+              Se o valor pago foi diferente do previsto, altere aqui. A diferença será devolvida ao orçamento disponível.
+            </p>
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, panel }) => {
+        const realizedInput = panel.querySelector("#liq_realizedAmount");
+        const realizedAmount = Number(realizedInput?.value || txAmount);
+        const primaryBtn = panel.querySelector("[data-primary]");
+        try {
+          setButtonLoading(primaryBtn, true);
+          await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}/liquidate`, {
+            method: "PATCH",
+            body: { realizedAmount },
+          });
+          toast("Lançamento liquidado com sucesso!", { type: "success" });
+          close();
+          await loadProject();
+          await loadTransactions();
+          await loadBudgetExecution();
+        } catch (err) {
+          setButtonLoading(primaryBtn, false);
+          toast(err.message || "Erro ao liquidar lançamento", { type: "error" });
+        }
+      },
+    });
   });
 }
 
@@ -501,7 +621,7 @@ function wireTabs() {
   triggers.forEach(t => {
     t.addEventListener("click", () => {
       const tabId = t.getAttribute("data-tab-trigger");
-      
+
       // Update Triggers
       triggers.forEach(tr => {
         tr.classList.remove("border-primary", "text-primary");
@@ -536,7 +656,7 @@ async function loadFiles() {
 
   try {
     const { currentFolderId, breadcrumbs } = fileState;
-    
+
     // Update breadcrumbs UI
     const breadHtml = [
       `<button data-go-folder="root" class="hover:text-primary transition-colors">Início</button>`,
@@ -556,7 +676,7 @@ async function loadFiles() {
     // Load Files
     const qs = currentFolderId ? `?folderId=${currentFolderId}` : `?folderId=root`;
     const filesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/files${qs}`);
-    
+
     if (!folders.length && !filesRes.items?.length) {
       list.innerHTML = "";
       empty?.classList.remove("hidden");
@@ -803,10 +923,21 @@ function wireNewTransaction() {
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
             <select id="t_cat" class="w-full rounded-lg border-slate-300">
-              <option value="MATERIALS">Materiais</option>
-              <option value="EQUIPMENT">Equipamentos</option>
-              <option value="LABOR">Mão de obra</option>
-              <option value="OTHER">Outros</option>
+              <optgroup label="Custos Operacionais e Diretos">
+                <option value="MATERIAIS_INSUMOS">Materiais e Insumos</option>
+                <option value="SERVICOS_MAO_DE_OBRA">Mão de Obra e Serviços</option>
+              </optgroup>
+              <optgroup label="Gastos e Despesas">
+                <option value="GASTOS_PESSOAL">Gastos com Pessoal</option>
+                <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
+                <option value="INVESTIMENTOS">Investimentos</option>
+                <option value="DEPRECIACAO">Depreciação</option>
+                <option value="IMPOSTOS">Impostos</option>
+                <option value="OUTRAS_DESPESAS">Outras Despesas</option>
+              </optgroup>
+              <optgroup label="Deduções">
+                <option value="DEDUCOES">Dedução de Custos / Reembolso</option>
+              </optgroup>
             </select>
           </div>
           <div>

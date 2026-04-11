@@ -139,6 +139,7 @@ model ProjectTransaction {
   ownerName    String?
   status       TransactionStatus   @default(PENDING)
   amount       Decimal             @db.Decimal(16, 2)
+  realizedAmount Decimal?          @db.Decimal(16, 2)
   budgetLineId String?
   budgetLine   ProjectBudgetLine?  @relation(fields: [budgetLineId], references: [id])
   project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -198,6 +199,17 @@ enum TransactionCategory {
   EQUIPMENT
   LABOR
   OTHER
+
+  // New CBS Categories
+  MATERIAIS_INSUMOS
+  SERVICOS_MAO_DE_OBRA
+  GASTOS_PESSOAL
+  DESPESAS_OPERACIONAIS
+  INVESTIMENTOS
+  DEPRECIACAO
+  OUTRAS_DESPESAS
+  DEDUCOES
+  IMPOSTOS
 }
 
 enum TransactionStatus {

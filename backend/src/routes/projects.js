@@ -300,6 +300,19 @@ projectRoutes.patch(
 
     await ensureClientExists(body.clientId || null);
 
+    let extraFields = {};
+    if (body.budgetTotal !== undefined) {
+      // Auto-recalculate budgetAvailable whenever budgetTotal changes
+      const current = await prisma.project.findUnique({
+        where: { id },
+        select: { budgetConsumed: true, budgetCommitted: true },
+      });
+      const consumed = Number(current?.budgetConsumed || 0);
+      const committed = Number(current?.budgetCommitted || 0);
+      const newTotal = Number(body.budgetTotal);
+      extraFields = { budgetAvailable: String(newTotal - consumed - committed) };
+    }
+
     const updated = await prisma.project.update({
       where: { id },
       data: {
@@ -322,9 +335,10 @@ projectRoutes.patch(
         ...(body.budgetCommitted !== undefined
           ? { budgetCommitted: String(body.budgetCommitted) }
           : {}),
+        // If caller explicitly passed budgetAvailable, use that; otherwise auto-calc from budgetTotal change
         ...(body.budgetAvailable !== undefined
           ? { budgetAvailable: String(body.budgetAvailable) }
-          : {}),
+          : extraFields),
         ...(body.physicalProgressPct !== undefined
           ? { physicalProgressPct: body.physicalProgressPct }
           : {}),
@@ -380,7 +394,7 @@ projectRoutes.get(
       page,
       pageSize,
       total,
-      items: items.map((t) => ({ ...t, amount: String(t.amount) })),
+      items: items.map((t) => ({ ...t, amount: String(t.amount), realizedAmount: t.realizedAmount != null ? String(t.realizedAmount) : null })),
     });
   })
 );
@@ -394,7 +408,12 @@ projectRoutes.post(
       .object({
         date: z.string().datetime().optional(),
         description: z.string().min(2),
-        category: z.enum(["MATERIALS", "EQUIPMENT", "LABOR", "OTHER"]).optional(),
+        category: z.enum([
+          "MATERIALS", "EQUIPMENT", "LABOR", "OTHER",
+          "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL",
+          "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO",
+          "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS"
+        ]).optional(),
         ownerName: z.string().optional().nullable(),
         status: z.enum(["PAID", "PENDING", "LATE"]).optional(),
         amount: z.union([z.number(), z.string()]),
@@ -404,6 +423,9 @@ projectRoutes.post(
 
     const amount = Number(body.amount);
     const isPaid = body.status === "PAID";
+    const isInvestment = body.category === "INVESTIMENTOS";
+    // DEPRECIACAO is purely informational and never affects the budget
+    const isInfoOnly = body.category === "DEPRECIACAO";
 
     const created = await prisma.$transaction(async (tx) => {
       // 1. Criar a transação
@@ -421,15 +443,19 @@ projectRoutes.post(
         select: { id: true },
       });
 
-      // 2. Atualizar o saldo do projeto conforme o status
-      await tx.project.update({
-        where: { id: projectId },
-        data: {
-          budgetConsumed: { increment: isPaid ? amount : 0 },
-          budgetCommitted: { increment: !isPaid ? amount : 0 },
-          budgetAvailable: { decrement: amount },
-        },
-      });
+      if (isInvestment || isInfoOnly) {
+        // Investment and depreciation: no budget impact on creation (only on liquidation)
+      } else {
+        // Regular operational cost: affects consumed/committed/available
+        await tx.project.update({
+          where: { id: projectId },
+          data: {
+            budgetConsumed: { increment: isPaid ? amount : 0 },
+            budgetCommitted: { increment: !isPaid ? amount : 0 },
+            budgetAvailable: { decrement: amount },
+          },
+        });
+      }
 
       return t;
     });
@@ -445,6 +471,10 @@ projectRoutes.patch(
     const projectId = String(req.params.id);
     const txId = String(req.params.txId);
 
+    const body = z.object({
+      realizedAmount: z.union([z.number(), z.string()]).optional(),
+    }).parse(req.body || {});
+
     const txRecord = await prisma.projectTransaction.findUnique({
       where: { id: txId, projectId },
     });
@@ -452,21 +482,52 @@ projectRoutes.patch(
     if (!txRecord) return res.status(404).json({ error: "TRANSACTION_NOT_FOUND" });
     if (txRecord.status === "PAID") return res.status(400).json({ error: "ALREADY_PAID" });
 
-    const amount = Number(txRecord.amount);
+    const isInvestment = txRecord.category === "INVESTIMENTOS";
+    const isInfoOnly = txRecord.category === "DEPRECIACAO";
 
-    await prisma.$transaction([
+    const committedAmount = Number(txRecord.amount);
+    const realizedAmount = body.realizedAmount != null ? Number(body.realizedAmount) : committedAmount;
+    const diff = committedAmount - realizedAmount;
+
+    const txOps = [
       prisma.projectTransaction.update({
         where: { id: txId },
-        data: { status: "PAID" },
-      }),
-      prisma.project.update({
-        where: { id: projectId },
         data: {
-          budgetCommitted: { decrement: amount },
-          budgetConsumed: { increment: amount },
+          status: "PAID",
+          realizedAmount: String(realizedAmount),
         },
       }),
-    ]);
+    ];
+
+    if (isInvestment) {
+      // Investment liquidated: capital injection reflected now.
+      // budgetTotal grows by the realized amount (new capital added to the project).
+      // budgetConsumed also grows by realized (the capital is now deployed/spent).
+      // Net effect on budgetAvailable = 0 (total up, consumed up equally).
+      txOps.push(
+        prisma.project.update({
+          where: { id: projectId },
+          data: {
+            budgetTotal: { increment: realizedAmount },
+            budgetConsumed: { increment: realizedAmount },
+          },
+        })
+      );
+    } else if (!isInfoOnly) {
+      // Regular cost: normal liquidation flow
+      txOps.push(
+        prisma.project.update({
+          where: { id: projectId },
+          data: {
+            budgetCommitted: { decrement: committedAmount },
+            budgetConsumed: { increment: realizedAmount },
+            budgetAvailable: { increment: diff },
+          },
+        })
+      );
+    }
+
+    await prisma.$transaction(txOps);
 
     return res.json({ ok: true });
   })
@@ -575,7 +636,7 @@ projectRoutes.get(
     await ensureProjectReadable(req, id);
 
     const files = await prisma.projectFile.findMany({
-      where: { 
+      where: {
         projectId: id,
         folderId: folderId === "root" ? null : (folderId || undefined),
       },
