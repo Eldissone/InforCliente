@@ -217,14 +217,11 @@ async function loadTransactions() {
   tbody.innerHTML = data.items.map(renderTxRow).join("");
 }
 
-// Instância global do gráfico da Curva S para destruir antes de recriar
-let _scurveChart = null;
-
 /**
- * Renderiza a Curva S real usando Chart.js.
+ * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
  * @param {Array}  allTxs      - todos os lançamentos do projeto
  * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
- * @param {Array}  budgetLines - linhas de orçamento (total por linha)
+ * @param {Array}  budgetLines - linhas de orçamento
  */
 function renderScurve(allTxs, project, budgetLines) {
   const container = el("scurve_container");
@@ -233,10 +230,9 @@ function renderScurve(allTxs, project, budgetLines) {
   const totalBudget = Number(project.budgetTotal || 0);
   const monthNames = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
-  // Intervalo real do projeto
-  const startDate = project.startDate ? new Date(project.startDate) : new Date();
-  const dueDate   = project.dueDate   ? new Date(project.dueDate)   : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
-
+  // --- Intervalo real do projeto ---
+  const startDate  = project.startDate ? new Date(project.startDate) : new Date();
+  const dueDate    = project.dueDate   ? new Date(project.dueDate)   : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
   const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
   const rangeEnd   = new Date(dueDate.getFullYear(),   dueDate.getMonth(),   1);
   if (rangeEnd <= rangeStart) rangeEnd.setMonth(rangeStart.getMonth() + 2);
@@ -245,27 +241,27 @@ function renderScurve(allTxs, project, budgetLines) {
   const projectMonths = [];
   const cur = new Date(rangeStart);
   while (cur <= rangeEnd) {
-    projectMonths.push({ year: cur.getFullYear(), month: cur.getMonth(),
-      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}` });
+    projectMonths.push({
+      year: cur.getFullYear(),
+      month: cur.getMonth(),
+      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`
+    });
     cur.setMonth(cur.getMonth() + 1);
   }
-
   const numMonths = projectMonths.length;
 
   const getColIdx = (d) => {
     const fd = new Date(d.getFullYear(), d.getMonth(), 1);
     if (fd < rangeStart) return 0;
     if (fd > rangeEnd)   return numMonths - 1;
-    return (fd.getFullYear() - rangeStart.getFullYear()) * 12 +
-           (fd.getMonth()    - rangeStart.getMonth());
+    return (fd.getFullYear() - rangeStart.getFullYear()) * 12 + (fd.getMonth() - rangeStart.getMonth());
   };
 
-  // Planejado: distribuir budget lines uniformemente entre os meses
+  // --- Planejado: distribuir budget lines pelos meses (excluindo capital) ---
   const plannedByMonth = Array(numMonths).fill(0);
-  const lines = (budgetLines || []).filter(l => !["INVESTIMENTOS","DEPRECIACAO"].includes(l.category));
-
-  if (lines.length > 0) {
-    lines.forEach(l => {
+  const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS","DEPRECIACAO"].includes(l.category));
+  if (opLines.length > 0) {
+    opLines.forEach(l => {
       const perMonth = Number(l.total || 0) / numMonths;
       for (let i = 0; i < numMonths; i++) plannedByMonth[i] += perMonth;
     });
@@ -274,132 +270,119 @@ function renderScurve(allTxs, project, budgetLines) {
     for (let i = 0; i < numMonths; i++) plannedByMonth[i] = perMonth;
   }
 
-  // Realizado: transações PAID → usar realizedAmount se existir
+  // --- Realizado: PAID → realizedAmount ou amount ---
   const realizedByMonth = Array(numMonths).fill(0);
   (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
     const idx = getColIdx(new Date(t.date));
     realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
   });
 
-  // Curva S = acumulado por mês
+  // --- Acumulados (Curva S) ---
   const today    = new Date();
   const todayIdx = getColIdx(today);
-  const labels             = projectMonths.map(m => m.label);
-  const cumulativePlanned  = [];
-  const cumulativeRealized = [];
+  const planCum  = [];
+  const realCum  = [];
   let sumP = 0, sumR = 0;
   for (let i = 0; i < numMonths; i++) {
     sumP += plannedByMonth[i];
-    cumulativePlanned.push(Math.round(sumP));
+    planCum.push(sumP);
     if (i <= todayIdx) {
       sumR += realizedByMonth[i];
-      cumulativeRealized.push(Math.round(sumR));
+      realCum.push(sumR);
     } else {
-      cumulativeRealized.push(null); // não mostrar futuro
+      realCum.push(null);
     }
   }
 
-  // Limpar e criar canvas
-  container.innerHTML = `<canvas id="scurveCanvas" style="width:100%;height:100%;display:block;"></canvas>`;
-  const canvas = document.getElementById("scurveCanvas");
-
-  if (_scurveChart) { _scurveChart.destroy(); _scurveChart = null; }
+  const maxVal = Math.max(...planCum, ...realCum.filter(v => v !== null), 1);
 
   const formatKZ = (v) => {
-    if (!v && v !== 0) return "—";
-    if (v >= 1e9) return (v / 1e9).toFixed(2) + " Bi kz";
-    if (v >= 1e6) return (v / 1e6).toFixed(1) + " M kz";
-    if (v >= 1e3) return (v / 1e3).toFixed(0) + " K kz";
-    return v + " kz";
+    if (v == null || v === 0) return "0";
+    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+    if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
+    return String(Math.round(v));
   };
 
-  const doRender = () => {
-    const maxP = cumulativePlanned.at(-1) || 1;
-    const maxR = Math.max(...cumulativeRealized.filter(v => v !== null), 0);
-    const yMax = Math.max(maxP, maxR) * 1.12;
+  // --- Renderizar barras via DOM API (evita bloqueio CSP de inline styles) ---
+  container.innerHTML = "";
+  container.style.overflowX = "auto";
 
-    _scurveChart = new window.Chart(canvas, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "Planejado (Curva S)",
-            data: cumulativePlanned,
-            borderColor: "#0d3fd1",
-            backgroundColor: "rgba(13,63,209,0.07)",
-            borderWidth: 2.5,
-            borderDash: [7, 4],
-            pointBackgroundColor: "#0d3fd1",
-            pointRadius: 3,
-            pointHoverRadius: 6,
-            fill: true,
-            tension: 0.42,
-          },
-          {
-            label: "Realizado",
-            data: cumulativeRealized,
-            borderColor: "#2afc8d",
-            backgroundColor: "rgba(42,252,141,0.10)",
-            borderWidth: 3,
-            pointBackgroundColor: "#2afc8d",
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            fill: true,
-            tension: 0.42,
-            spanGaps: false,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: "#1e293b",
-            titleColor: "#94a3b8",
-            bodyColor: "#f1f5f9",
-            borderColor: "#334155",
-            borderWidth: 1,
-            padding: 14,
-            callbacks: {
-              label: (ctx) => {
-                const v = ctx.parsed.y;
-                return v != null ? ` ${ctx.dataset.label}: ${formatKZ(v)}` : null;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            grid: { color: "rgba(0,0,0,0.05)" },
-            ticks: { font: { size: 10, weight: "600" }, color: "#64748b",
-              maxTicksLimit: 14, maxRotation: 45 }
-          },
-          y: {
-            min: 0,
-            suggestedMax: yMax,
-            grid: { color: "rgba(0,0,0,0.05)" },
-            ticks: {
-              font: { size: 10 }, color: "#64748b",
-              callback: (v) => formatKZ(v)
-            }
-          }
-        }
-      }
-    });
-  };
+  const wrap = document.createElement("div");
+  wrap.style.cssText = `display:flex;align-items:flex-end;gap:6px;height:220px;padding:0 4px 28px;min-width:${numMonths * 48}px;`;
+  container.appendChild(wrap);
 
-  if (window.Chart) {
-    doRender();
-  } else {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js";
-    s.onload = doRender;
-    document.head.appendChild(s);
-  }
+  const isCurrent = (i) => i === Math.min(todayIdx, numMonths - 1);
+
+  projectMonths.forEach((m, i) => {
+    const pH = planCum[i] != null ? Math.max(2, Math.round((planCum[i] / maxVal) * 100)) : 0;
+    const rH = realCum[i] != null ? Math.max(2, Math.round((realCum[i] / maxVal) * 100)) : 0;
+    const isNow = isCurrent(i);
+    const hasPaid = realCum[i] != null && realCum[i] > 0;
+    const over = hasPaid && realCum[i] > planCum[i];
+
+    // Coluna do mês
+    const col = document.createElement("div");
+    col.style.cssText = "flex:1;min-width:36px;position:relative;height:100%;";
+
+    // Barra Planejado (fundo, azul claro)
+    const barPlan = document.createElement("div");
+    barPlan.title = `Planejado: ${formatKZ(planCum[i])} kz`;
+    barPlan.style.position = "absolute";
+    barPlan.style.bottom = "0";
+    barPlan.style.left = "0";
+    barPlan.style.width = "100%";
+    barPlan.style.height = pH + "%";
+    barPlan.style.backgroundColor = isNow ? "#93c5fd" : "#bfdbfe";
+    barPlan.style.borderRadius = "4px 4px 0 0";
+    barPlan.style.transition = "height 0.6s ease";
+    col.appendChild(barPlan);
+
+    // Barra Realizado (frente, verde ou vermelho se acima do planejado)
+    if (realCum[i] != null) {
+      const barReal = document.createElement("div");
+      barReal.title = `Realizado: ${formatKZ(realCum[i])} kz`;
+      barReal.style.position = "absolute";
+      barReal.style.bottom = "0";
+      barReal.style.left = "20%";
+      barReal.style.width = "60%";
+      barReal.style.height = rH + "%";
+      barReal.style.backgroundColor = over ? "#f87171" : "#2afc8d";
+      barReal.style.borderRadius = "4px 4px 0 0";
+      barReal.style.transition = "height 0.7s ease 0.1s";
+      if (hasPaid) barReal.style.boxShadow = "0 0 10px rgba(42,252,141,0.6)";
+      col.appendChild(barReal);
+    }
+
+    // Label do mês
+    const label = document.createElement("span");
+    label.textContent = m.label;
+    label.style.position = "absolute";
+    label.style.bottom = "-20px";
+    label.style.left = "50%";
+    label.style.transform = "translateX(-50%)";
+    label.style.fontSize = "9px";
+    label.style.fontWeight = isNow ? "800" : "600";
+    label.style.color = isNow ? "#0d3fd1" : "#94a3b8";
+    label.style.whiteSpace = "nowrap";
+    col.appendChild(label);
+
+    // Ponto marcador do mês atual
+    if (isNow) {
+      const dot = document.createElement("span");
+      dot.style.position = "absolute";
+      dot.style.bottom = "-5px";
+      dot.style.left = "50%";
+      dot.style.transform = "translateX(-50%)";
+      dot.style.width = "4px";
+      dot.style.height = "4px";
+      dot.style.borderRadius = "50%";
+      dot.style.backgroundColor = "#0d3fd1";
+      col.appendChild(dot);
+    }
+
+    wrap.appendChild(col);
+  });
 }
 
 async function loadBudgetExecution() {
