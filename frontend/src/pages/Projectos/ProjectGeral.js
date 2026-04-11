@@ -342,11 +342,6 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="14" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="2025-10-22" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
-
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Recursos (Padrão)</h3></div>
-        <div class="col-span-1 md:col-span-2 text-[10px] text-slate-500 -mt-1 font-medium bg-slate-50 p-2 rounded border border-slate-100">
-           Serão anexados automaticamente Mão de Obra e Equipamentos no perfil da obra.
-        </div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -371,24 +366,6 @@ async function openCreate() {
             subempreiteiro: v("p_subempreiteiro") || null,
             directorObra: v("p_director") || null,
             referencia: v("p_referencia") || null,
-            maoDeObraIndireta: {
-              "COORDENADOR TÉCNICO": 1,
-              "COORDENADOR DE PROJECTOS": 2,
-              "COORDENADOR LOGÍSTICO": 1
-            },
-            maoDeObraDireta: {
-              "LOGÍSTICO": 1,
-              "TÉCNICOS DE ELECTRICIDADE": 18,
-              "AUXILIAR DE ESTOQUE": 1,
-              "SUBCONTRATADOS": 13
-            },
-            equipamentos: {
-              "CAMINHÃO GRUA": 1,
-              "MULTIFUNÇÕES MANITOU": 1,
-              "CARRINHA HINO": 1,
-              "MOTAS 3 RODAS": 3,
-              "AUTOBETONEIRA": 1
-            }
           },
         });
         toast("Obra criada", { type: "success" });
