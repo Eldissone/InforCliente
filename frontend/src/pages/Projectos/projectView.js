@@ -1319,7 +1319,7 @@ function wireBudgetUpload() {
     btn.id = "uploadBudgetBtn";
     btn.className =
       "bg-surface-container-low px-6 py-2.5 text-primary text-sm font-semibold rounded-lg hover:bg-surface-container-high transition-all flex items-center gap-2";
-    btn.innerHTML = `<span class="material-symbols-outlined text-sm">upload_file</span> Importar Orçamento`;
+    btn.innerHTML = `<span class="material-symbols-outlined text-sm">upload_file</span> Importar`;
     wrap.insertBefore(btn, exportBtn);
   }
 

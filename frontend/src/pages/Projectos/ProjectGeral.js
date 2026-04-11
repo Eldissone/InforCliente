@@ -76,16 +76,10 @@ function renderRow(p) {
         </div>
       </td>
       <td class="px-6 py-6">
-        <div class="flex flex-col gap-1">
-          <div class="flex justify-between text-xs mb-1">
-            <span class="text-on-surface-variant">Orçamento:</span>
-            <span class="font-bold">${formatCurrencyKZ(p.budgetTotal || 0)}</span>
-          </div>
-          <div class="flex justify-between text-xs">
-            <span class="text-on-surface-variant">Morada:</span>
-            <span class="font-medium text-on-surface">${p.location || p.region || "-"}</span>
-          </div>
-        </div>
+        <span class="text-sm font-medium text-on-surface">${p.location || p.region || "-"}</span>
+      </td>
+      <td class="px-6 py-6">
+        <span class="font-bold text-sm text-on-surface">${formatCurrencyKZ(p.budgetTotal || 0)}</span>
       </td>
       <td class="px-6 py-6 min-w-[200px]">
         <div class="flex items-center gap-3">
@@ -324,25 +318,25 @@ async function openCreate() {
     primaryLabel: "Criar",
     contentHtml: `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" value="PROJECTO DE ELECTRIFICAÇÃO DOS MUNICÍPIOS DO HUAMBO" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
         
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Referências</h3></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" value="ProRedes Utilities Ltd" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: MBT ENERGIA" value="MBT ENERGIA" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" placeholder="Ex: LUCAS ZANGUEU" value="LUCAS ZANGUEU" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" value="NM/ADM/PROREDES/003/2025" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: MBT ENERGIA" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" placeholder="Ex: LUCAS ZANGUEU" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Ex: Luanda" value="LONGONJO" /></div>
-        <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Ex: Rua, Bairro" value="MUNICÍPIO DE LONGONJO" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Ex: Luanda" /></div>
+        <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Ex: Rua, Bairro" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="14" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="2025-10-22" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
-      </div>
+      </div> 
     `,
     onPrimary: async ({ close, panel }) => {
       const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
