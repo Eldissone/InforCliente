@@ -2,7 +2,7 @@ import { apiRequest, apiUpload } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
-import { getSessionUser } from "../../services/auth.js";
+import { getSessionUser, getToken } from "../../services/auth.js";
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return "0 Bytes";
@@ -47,7 +47,7 @@ function catLabel(c) {
     SERVICOS_MAO_DE_OBRA: "Mão de Obra e Serviços",
     GASTOS_PESSOAL: "Gastos com Pessoal",
     DESPESAS_OPERACIONAIS: "Despesas Operacionais",
-    INVESTIMENTOS: "Investimentos",
+    INVESTIMENTOS: "Pagamentos",
     DEPRECIACAO: "Depreciação",
     OUTRAS_DESPESAS: "Outras Despesas",
     DEDUCOES: "Dedução de Custos",
@@ -552,7 +552,7 @@ async function loadBudgetExecution() {
     SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    INVESTIMENTOS: { name: "INVESTIMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    INVESTIMENTOS: { name: "PAGAMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
@@ -854,6 +854,7 @@ function wireLiquidation() {
           await loadProject();
           await loadTransactions();
           await loadBudgetExecution();
+          await loadPayments();
         } catch (err) {
           setButtonLoading(primaryBtn, false);
           toast(err.message || "Erro ao liquidar lançamento", { type: "error" });
@@ -1616,7 +1617,6 @@ function wireNewTransaction() {
               <optgroup label="Gastos e Despesas">
                 <option value="GASTOS_PESSOAL">Gastos com Pessoal</option>
                 <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
-                <option value="INVESTIMENTOS">Investimentos</option>
                 <option value="DEPRECIACAO">Depreciação</option>
                 <option value="IMPOSTOS">Impostos</option>
                 <option value="OUTRAS_DESPESAS">Outras Despesas</option>
@@ -1742,6 +1742,238 @@ function wireBudgetUpload() {
   });
 }
 
+// =============================================================================
+// PAGAMENTOS DO CLIENTE
+// =============================================================================
+
+function metodoPagtoLabel(m) {
+  const map = {
+    transferencia: "Transferência",
+    cash: "Numerário",
+    cheque: "Cheque",
+    mbway: "MBWay",
+    outro: "Outro",
+  };
+  return m ? (map[m.toLowerCase()] || m) : "—";
+}
+
+function renderPaymentRow(p, role) {
+  const isConf = p.status === "CONFIRMADO";
+  const statusCls = isConf ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-amber-600 bg-amber-50 border border-amber-100";
+  const statusDot = isConf ? "bg-emerald-500" : "bg-amber-400";
+  const statusText = isConf ? "Confirmado" : "Pendente";
+  const canConfirm = !isConf && role === "admin";
+  const canDelete = role === "admin";
+
+  return `
+    <tr class="hover:bg-slate-50/70 transition-colors">
+      <td class="px-10 py-4 text-xs font-semibold text-slate-500 whitespace-nowrap">${formatDateBR(p.dataPagamento)}</td>
+      <td class="px-6 md:px-10 py-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${metodoPagtoLabel(p.metodo)}</td>
+      <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "—")}</td>
+      <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "—")}</td>
+      <td class="px-10 py-4 text-right font-black text-slate-900 whitespace-nowrap">${formatCurrencyKZ(p.valor)}</td>
+      <td class="px-10 py-4 text-center">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${statusCls}">
+          <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>${statusText}
+        </span>
+      </td>
+      <td class="px-10 py-4 text-center">
+        <div class="flex items-center justify-center gap-2">
+          ${p.comprovativoPath ? `<a href="${window.location.origin.replace(/:5173$/, ":4000")}/${p.comprovativoPath}" target="_blank" title="Ver Comprovativo" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">picture_as_pdf</span></a>` : ""}
+          ${canConfirm ? `<button data-confirm-payment="${p.id}" title="Confirmar pagamento" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">check_circle</span></button>` : ""}
+          ${canDelete ? `<button data-delete-payment="${p.id}" title="Apagar pagamento" class="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">delete</span></button>` : ""}
+          ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">—</span>` : ""}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function updatePaymentKPIs(data) {
+  const pct = Math.min(100, Math.max(0, data.percentualPago || 0));
+  if (el("paymentTotalPago")) el("paymentTotalPago").textContent = formatCurrencyKZ(data.totalPago || 0);
+  if (el("paymentDivida")) el("paymentDivida").textContent = formatCurrencyKZ(Math.max(0, data.divida || 0));
+  if (el("paymentPct")) el("paymentPct").textContent = `${pct}%`;
+  if (el("paymentPctLabel")) el("paymentPctLabel").textContent = `${pct}%`;
+  if (el("paymentProgressBar")) {
+    el("paymentProgressBar").style.width = `${pct}%`;
+    if (pct >= 100) {
+      el("paymentProgressBar").classList.replace("bg-emerald-500", "bg-blue-500");
+    }
+  }
+}
+
+async function loadPayments() {
+  const id = getProjectId();
+  const tbody = el("paymentsTbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-8 text-center text-xs text-slate-400">A carregar...</td></tr>`;
+  try {
+    const role = getSessionUser()?.role;
+    const data = await apiRequest(`/projects/${encodeURIComponent(id)}/payments`);
+    updatePaymentKPIs(data);
+    if (!data.items.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-xs text-slate-400"><span class="material-symbols-outlined text-3xl block mb-2 mx-auto text-slate-200">account_balance_wallet</span>Nenhum pagamento registado</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.items.map(p => renderPaymentRow(p, role)).join("");
+  } catch {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-8 text-center text-xs text-red-400">Erro ao carregar pagamentos</td></tr>`;
+  }
+}
+
+function openPaymentModal() {
+  const today = new Date().toISOString().split("T")[0];
+  openModal({
+    title: "Registar Pagamento",
+    contentHtml: `
+      <div class="space-y-5">
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor (KZ) *</label>
+          <input id="pm_valor" type="number" min="1" step="0.01" placeholder="0.00" required
+            class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data do Pagamento *</label>
+          <input id="pm_data" type="date" value="${today}" required
+            class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Método</label>
+            <select id="pm_metodo" class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+              <option value="">— Seleccionar —</option>
+              <option value="transferencia">Transferência Bancária</option>
+              <option value="cash">Numerário (Cash)</option>
+              <option value="cheque">Cheque</option>
+              <option value="mbway">MBWay</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Referência</label>
+            <input id="pm_ref" type="text" placeholder="Ex: TRF-001"
+              class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Comprovativo (PDF)</label>
+          <div class="relative group">
+            <input id="pm_file" type="file" accept="application/pdf"
+              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+            <div class="w-full h-12 px-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex items-center gap-2 group-hover:bg-slate-100 transition-all">
+              <span class="material-symbols-outlined text-slate-400">upload_file</span>
+              <span id="pm_file_name" class="text-xs text-slate-500 font-semibold truncate">Escolher ficheiro...</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl">
+          <span class="material-symbols-outlined text-amber-500 text-xl">info</span>
+          <p class="text-xs text-amber-700 font-semibold italic">O pagamento ficará <strong>Pendente</strong> até confirmação.</p>
+        </div>
+      </div>
+    `,
+    primaryLabel: "Registar",
+    onPrimary: async ({ btn, close, panel }) => {
+      const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
+      const valor = v("pm_valor");
+      const data = v("pm_data");
+      const fileInput = panel.querySelector("#pm_file");
+
+      if (!valor) return toast("Valor é obrigatório", { type: "error" });
+
+      setButtonLoading(btn, true);
+      try {
+        const id = getProjectId();
+        const fd = new FormData();
+        fd.append("valor", valor);
+        fd.append("dataPagamento", new Date(data).toISOString());
+        fd.append("metodo", v("pm_metodo") || "");
+        fd.append("referencia", v("pm_ref") || "");
+        if (fileInput?.files?.length) {
+          fd.append("comprovativo", fileInput.files[0]);
+        }
+
+        const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
+        const res = await fetch(`${baseUrl}/projects/${encodeURIComponent(id)}/payments`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${getToken()}`
+          },
+          body: fd
+        });
+
+        if (!res.ok) throw new Error("Falha ao registar pagamento");
+
+        toast("Pagamento registado!", { type: "success" });
+        close();
+        await loadPayments();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message, { type: "error" });
+      }
+    },
+  });
+
+  // Atualiza nome do ficheiro ao selecionar
+  setTimeout(() => {
+    const fileInput = document.getElementById("pm_file");
+    const nameEl = document.getElementById("pm_file_name");
+    fileInput?.addEventListener("change", (e) => {
+      if (e.target.files.length) {
+        nameEl.textContent = e.target.files[0].name;
+        nameEl.classList.remove("text-slate-500");
+        nameEl.classList.add("text-emerald-600");
+      }
+    });
+  }, 100);
+}
+
+function wirePayments() {
+  el("addPaymentBtn")?.addEventListener("click", openPaymentModal);
+
+  document.addEventListener("click", async (e) => {
+    // Confirmar pagamento (admin)
+    const confirmBtn = e.target.closest("[data-confirm-payment]");
+    if (confirmBtn) {
+      const pid = confirmBtn.getAttribute("data-confirm-payment");
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `<span class="material-symbols-outlined text-base animate-spin">progress_activity</span>`;
+      try {
+        const id = getProjectId();
+        await apiRequest(`/projects/${encodeURIComponent(id)}/payments/${pid}`, {
+          method: "PATCH",
+          body: { status: "CONFIRMADO" },
+        });
+        toast("Pagamento confirmado", { type: "success" });
+        await loadPayments();
+      } catch (err) {
+        toast(err.message || "Erro ao confirmar", { type: "error" });
+        confirmBtn.disabled = false;
+      }
+      return;
+    }
+
+    // Apagar pagamento (admin)
+    const deleteBtn = e.target.closest("[data-delete-payment]");
+    if (deleteBtn) {
+      const pid = deleteBtn.getAttribute("data-delete-payment");
+      if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acção é irreversível.")) return;
+      deleteBtn.disabled = true;
+      try {
+        const id = getProjectId();
+        await apiRequest(`/projects/${encodeURIComponent(id)}/payments/${pid}`, { method: "DELETE" });
+        toast("Pagamento apagado", { type: "success" });
+        await loadPayments();
+      } catch (err) {
+        toast(err.message || "Erro ao apagar", { type: "error" });
+        deleteBtn.disabled = false;
+      }
+    }
+  });
+}
+
 async function init() {
   initMobileMenu();
   wireLogout();
@@ -1749,6 +1981,7 @@ async function init() {
   await loadProject();
   await loadTransactions();
   await loadBudgetExecution();
+  await loadPayments();
   wireSearch();
   wireExport();
   wireBudgetUpload();
@@ -1761,6 +1994,7 @@ async function init() {
   wireFileDeletion();
   wirePreview();
   wireProgressTasks();
+  wirePayments();
 }
 
 function openPreview(fileId) {

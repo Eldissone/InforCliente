@@ -89,6 +89,7 @@ model Project {
   folders             ProjectFolder[]
   transactions        ProjectTransaction[]
   progressTasks       ProjectProgressTask[]
+  payments            ProjectPayment[]
 
   @@index([name])
   @@index([status])
@@ -202,6 +203,22 @@ model ProjectProgressTask {
   @@index([projectId, itemGroup, order])
 }
 
+model ProjectPayment {
+  id            String        @id @default(cuid())
+  projectId     String
+  valor         Decimal       @db.Decimal(16, 2)
+  dataPagamento DateTime
+  metodo            String?       // "transferencia", "cash", "cheque", "mbway"
+  referencia        String?
+  comprovativoPath  String?
+  criadoPor         String?
+  status        PaymentStatus @default(PENDENTE)
+  createdAt     DateTime      @default(now())
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, dataPagamento])
+}
+
 enum Role {
   admin
   operador
@@ -254,4 +271,9 @@ enum AlertSeverity {
 enum AlertStatus {
   OPEN
   ACK
+}
+
+enum PaymentStatus {
+  CONFIRMADO
+  PENDENTE
 }

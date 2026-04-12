@@ -330,6 +330,19 @@ projectRoutes.get(
       }
     });
 
+    // Aggregate Payments (confirmed)
+    const paymentAgg = await prisma.projectPayment.aggregate({
+      where: { projectId: id, status: "CONFIRMADO" },
+      _sum: { valor: true },
+      _count: { id: true },
+    });
+    const totalPago = Number(paymentAgg._sum.valor || 0);
+    const budgetTotalNum = Number(project.budgetTotal || 0);
+    const divida = budgetTotalNum - totalPago;
+    const percentualPago = budgetTotalNum > 0
+      ? Math.round((totalPago / budgetTotalNum) * 100)
+      : 0;
+
     return res.json({
       project: {
         ...project,
@@ -338,7 +351,10 @@ projectRoutes.get(
         budgetConsumed: String(project.budgetConsumed),
         budgetCommitted: String(project.budgetCommitted),
         budgetAvailable: String(project.budgetAvailable),
-        cbsSummary
+        cbsSummary,
+        totalPago,
+        divida,
+        percentualPago,
       },
     });
   })
@@ -606,21 +622,7 @@ projectRoutes.patch(
       }),
     ];
 
-    if (isInvestment) {
-      // Investment liquidated: capital injection reflected now.
-      // budgetTotal grows by the realized amount (new capital added to the project).
-      // budgetConsumed also grows by realized (the capital is now deployed/spent).
-      // Net effect on budgetAvailable = 0 (total up, consumed up equally).
-      txOps.push(
-        prisma.project.update({
-          where: { id: projectId },
-          data: {
-            budgetTotal: { increment: realizedAmount },
-            budgetConsumed: { increment: realizedAmount },
-          },
-        })
-      );
-    } else if (!isInfoOnly) {
+    if (!isInvestment && !isInfoOnly) {
       // Regular cost: normal liquidation flow
       txOps.push(
         prisma.project.update({
@@ -633,6 +635,8 @@ projectRoutes.patch(
         })
       );
     }
+    // INVESTIMENTOS and DEPRECIACAO: only update status, no budget impact
+    // DEPRECIACAO: only update status, no budget impact
 
     await prisma.$transaction(txOps);
 
@@ -948,6 +952,160 @@ projectRoutes.delete(
     await deleteFolderRecursive(folderId, id);
 
     res.json({ ok: true });
+  })
+);
+
+// -----------------------------------------------------------------------------
+// PAGAMENTOS DO CLIENTE
+// -----------------------------------------------------------------------------
+
+// GET — lista de pagamentos + resumo financeiro
+projectRoutes.get(
+  "/:id/payments",
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+
+    const status = req.query.status ? String(req.query.status) : "";
+
+    const where = {
+      projectId,
+      ...(status ? { status } : {}),
+    };
+
+    const [items, agg] = await Promise.all([
+      prisma.projectPayment.findMany({
+        where,
+        orderBy: { dataPagamento: "desc" },
+      }),
+      prisma.projectPayment.aggregate({
+        where: { projectId, status: "CONFIRMADO" },
+        _sum: { valor: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { budgetTotal: true },
+    });
+
+    const totalPago = Number(agg._sum.valor || 0);
+    const budgetTotal = Number(project?.budgetTotal || 0);
+    const divida = budgetTotal - totalPago;
+    const percentualPago = budgetTotal > 0
+      ? Math.round((totalPago / budgetTotal) * 100)
+      : 0;
+
+    return res.json({
+      items: items.map((p) => ({ ...p, valor: String(p.valor) })),
+      totalPago,
+      divida,
+      percentualPago,
+      totalConfirmados: agg._count?.id || 0,
+    });
+  })
+);
+
+// POST — registar novo pagamento
+projectRoutes.post(
+  "/:id/payments",
+  requireRole(["admin", "operador"]),
+  fileUpload.single("comprovativo"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+
+    const body = z.object({
+      valor: z.union([z.number(), z.string()]),
+      dataPagamento: z.string().datetime(),
+      metodo: z.string().optional().nullable(),
+      referencia: z.string().optional().nullable(),
+      status: z.enum(["CONFIRMADO", "PENDENTE"]).optional(),
+    }).parse(req.body);
+
+    const valor = Number(body.valor);
+    if (valor <= 0) {
+      return res.status(400).json({ error: "VALOR_INVALIDO" });
+    }
+
+    const payment = await prisma.projectPayment.create({
+      data: {
+        projectId,
+        valor: String(valor),
+        dataPagamento: new Date(body.dataPagamento),
+        metodo: body.metodo || null,
+        referencia: body.referencia || null,
+        comprovativoPath: req.file ? req.file.path.replace(/\\/g, "/") : null,
+        criadoPor: req.user?.email || null,
+        status: body.status || "PENDENTE",
+      },
+    });
+
+    return res.status(201).json({ ...payment, valor: String(payment.valor) });
+  })
+);
+
+// PATCH — actualizar pagamento (confirmar exige admin)
+projectRoutes.patch(
+  "/:id/payments/:pid",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const pid = String(req.params.pid);
+
+    const body = z.object({
+      valor: z.union([z.number(), z.string()]).optional(),
+      dataPagamento: z.string().datetime().optional(),
+      metodo: z.string().optional().nullable(),
+      referencia: z.string().optional().nullable(),
+      status: z.enum(["CONFIRMADO", "PENDENTE"]).optional(),
+    }).parse(req.body);
+
+    // Apenas admin pode confirmar pagamento
+    if (body.status === "CONFIRMADO" && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "APENAS_ADMIN_PODE_CONFIRMAR" });
+    }
+
+    if (body.valor !== undefined && Number(body.valor) <= 0) {
+      return res.status(400).json({ error: "VALOR_INVALIDO" });
+    }
+
+    const existing = await prisma.projectPayment.findUnique({ where: { id: pid } });
+    if (!existing || existing.projectId !== projectId) {
+      return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    }
+
+    const updated = await prisma.projectPayment.update({
+      where: { id: pid },
+      data: {
+        ...(body.valor !== undefined ? { valor: String(Number(body.valor)) } : {}),
+        ...(body.dataPagamento !== undefined ? { dataPagamento: new Date(body.dataPagamento) } : {}),
+        ...(body.metodo !== undefined ? { metodo: body.metodo } : {}),
+        ...(body.referencia !== undefined ? { referencia: body.referencia } : {}),
+        ...(body.status !== undefined ? { status: body.status } : {}),
+      },
+    });
+
+    return res.json({ ...updated, valor: String(updated.valor) });
+  })
+);
+
+// DELETE — apagar pagamento (apenas admin)
+projectRoutes.delete(
+  "/:id/payments/:pid",
+  requireRole(["admin"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const pid = String(req.params.pid);
+
+    const existing = await prisma.projectPayment.findUnique({ where: { id: pid } });
+    if (!existing || existing.projectId !== projectId) {
+      return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+    }
+
+    await prisma.projectPayment.delete({ where: { id: pid } });
+    return res.json({ ok: true });
   })
 );
 
