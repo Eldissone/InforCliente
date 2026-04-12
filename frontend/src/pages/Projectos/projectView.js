@@ -872,11 +872,11 @@ function wireTabs() {
 
       // Update Triggers
       triggers.forEach(tr => {
-        tr.classList.remove("border-primary", "text-primary");
-        tr.classList.add("text-on-surface-variant", "border-transparent");
+        tr.classList.remove("border-slate-900", "text-slate-900");
+        tr.classList.add("text-slate-400", "border-transparent");
       });
-      t.classList.add("border-primary", "text-primary");
-      t.classList.remove("text-on-surface-variant", "border-transparent");
+      t.classList.add("border-slate-900", "text-slate-900");
+      t.classList.remove("text-slate-400", "border-transparent");
 
       // Update Contents
       document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
@@ -884,6 +884,24 @@ function wireTabs() {
 
       if (tabId === "files") loadFiles();
       if (tabId === "relatorio") loadProgressTasks();
+      if (tabId === "stock") loadStock();
+    });
+  });
+
+  // Sub-tabs de Stock
+  const subtriggers = document.querySelectorAll("[data-stock-subtab]");
+  subtriggers.forEach(st => {
+    st.addEventListener("click", () => {
+      const subId = st.getAttribute("data-stock-subtab");
+      subtriggers.forEach(s => {
+        s.classList.remove("border-slate-900", "text-slate-900");
+        s.classList.add("text-slate-400", "border-transparent");
+      });
+      st.classList.add("border-slate-900", "text-slate-900");
+      st.classList.remove("text-slate-400", "border-transparent");
+
+      el("stock_history_content").classList.toggle("hidden", subId !== "history");
+      el("stock_gallery_content").classList.toggle("hidden", subId !== "gallery");
     });
   });
 }
@@ -1995,6 +2013,7 @@ async function init() {
   wirePreview();
   wireProgressTasks();
   wirePayments();
+  wireStock();
 }
 
 function openPreview(fileId) {
@@ -2053,3 +2072,304 @@ function wirePreview() {
 }
 
 init().catch(() => toast("Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
+async function loadStock() {
+  const id = getProjectId();
+  renderLoadingRow(el("stockMovementsTbody"), 7);
+
+  try {
+    const [summaryRes, movementsRes] = await Promise.all([
+      apiRequest(`/stock/${encodeURIComponent(id)}/summary`),
+      apiRequest(`/stock/${encodeURIComponent(id)}/movements`),
+    ]);
+
+    renderStockSummary(summaryRes.items);
+    renderStockMovements(movementsRes.items);
+    renderStockGallery(movementsRes.items);
+  } catch (err) {
+    toast("Erro ao carregar dados de stock", { type: "error" });
+  }
+}
+
+function renderStockSummary(items) {
+  const totalItems = items.length;
+  const damaged = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged), 0);
+  const good = items.reduce((acc, curr) => acc + Number(curr.quantityGood), 0);
+
+  el("stockSummary").innerHTML = `
+    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total de Itens em Stock</p>
+        <p class="text-2xl font-bold text-slate-900">${totalItems}</p>
+    </div>
+    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Qtd. Condição Boa</p>
+        <p class="text-2xl font-bold text-emerald-600">${good}</p>
+    </div>
+    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+        <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Qtd. Danificada</p>
+        <p class="text-2xl font-bold text-red-500">${damaged}</p>
+    </div>
+    <div class="bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl">
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Aguardando Aprovação</p>
+        <p id="stockPendingCount" class="text-2xl font-bold text-[#2afc8d]">---</p>
+    </div>
+  `;
+}
+
+function renderStockMovements(items) {
+  const tbody = el("stockMovementsTbody");
+  if (!items || items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
+    el("stockPendingCount").textContent = "0";
+    return;
+  }
+
+  const pendingChanges = items.filter(i => i.auditStatus === "PENDENTE" || i.auditStatus === "VALIDACAO").length;
+  el("stockPendingCount").textContent = pendingChanges;
+
+  tbody.innerHTML = items.map(m => {
+    const auditCls = {
+      PENDENTE: "bg-amber-50 text-amber-600",
+      VALIDACAO: "bg-blue-50 text-blue-600",
+      APROVADO: "bg-emerald-50 text-emerald-600",
+      REJEITADO: "bg-red-50 text-red-600",
+    }[m.auditStatus];
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-10 py-5">
+          <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
+        </td>
+        <td class="px-10 py-5">
+          <div class="text-xs font-bold text-slate-900">${escapeHtml(m.material.name)}</div>
+          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} • ${m.material.category}</div>
+        </td>
+        <td class="px-10 py-5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-black text-slate-900">${m.quantity} ${m.material.unit}</span>
+            <span class="px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${m.condition === "BOA" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}">${m.condition}</span>
+          </div>
+        </td>
+        <td class="px-10 py-5 text-[10px] font-medium text-slate-500">
+           ${escapeHtml(m.driverName || "-")} | ${escapeHtml(m.vehiclePlate || "S/M")} <br>
+           <span class="text-slate-400 uppercase text-[9px] font-black">${m.entryType || "PROPRIO"}</span>
+        </td>
+        <td class="px-10 py-5">
+          <span class="px-3 py-1 rounded-lg text-[9px] font-black bg-slate-100 text-slate-600 uppercase tracking-widest">${m.movementStatus}</span>
+        </td>
+        <td class="px-10 py-5">
+          <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${auditCls}">${m.auditStatus}</span>
+        </td>
+        <td class="px-10 py-5 text-right">
+          ${m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO" ? `
+             <button data-approve-stock="${m.id}" data-role-visible="admin" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+               <span class="material-symbols-outlined text-sm">done_all</span>
+             </button>
+             <button data-reject-stock="${m.id}" data-role-visible="admin" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
+               <span class="material-symbols-outlined text-sm">close</span>
+             </button>
+          ` : `
+             <span class="text-slate-300 material-symbols-outlined">lock</span>
+          `}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  wireStockWorkflow();
+}
+
+function wireStockWorkflow() {
+  document.querySelectorAll("[data-approve-stock]").forEach(btn => {
+    btn.addEventListener("click", () => approveStockMovement(btn.dataset.approveStock));
+  });
+  document.querySelectorAll("[data-reject-stock]").forEach(btn => {
+    btn.addEventListener("click", () => rejectStockMovement(btn.dataset.rejectStock));
+  });
+}
+
+function renderStockGallery(movements) {
+  const photos = movements.flatMap(m => m.photos.map(p => ({ ...p, m })));
+  const grid = el("stockPhotoGrid");
+  
+  if (photos.length === 0) {
+    grid.innerHTML = `<div class="col-span-full py-10 text-center text-slate-400 text-sm font-medium">Nenhuma foto de campo vinculada a este stock.</div>`;
+    return;
+  }
+
+  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
+  grid.innerHTML = photos.map(p => `
+    <div class="relative group aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+      <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover">
+      <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all p-3 flex flex-col justify-end">
+        <p class="text-[9px] font-black text-[#2afc8d] uppercase tracking-widest">${formatDateBR(p.createdAt)}</p>
+        <p class="text-white font-bold text-[10px] truncate">${escapeHtml(p.m?.material?.name)}</p>
+        ${p.lat ? `<p class="text-slate-400 text-[8px] flex items-center gap-1 mt-1"><span class="material-symbols-outlined text-[10px]">location_on</span> ${Number(p.lat).toFixed(4)}, ${Number(p.lng).toFixed(4)}</p>` : ""}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function approveStockMovement(id) {
+  const moveId = id;
+  const projectId = getProjectId();
+  try {
+    await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements/${encodeURIComponent(moveId)}/audit`, {
+      method: "PATCH",
+      body: { status: "APROVADO", notes: "Aprovado via dashboard administrativo." }
+    });
+    toast("Lançamento aprovado com sucesso", { type: "success" });
+    loadStock();
+  } catch (err) {
+    toast(err.message || "Erro ao aprovar lançamento", { type: "error" });
+  }
+}
+
+async function rejectStockMovement(id) {
+  const moveId = id;
+  const projectId = getProjectId();
+  try {
+    await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements/${encodeURIComponent(moveId)}/audit`, {
+      method: "PATCH",
+      body: { status: "REJEITADO", notes: "Rejeitado pelo administrador." }
+    });
+    toast("Lançamento rejeitado", { type: "warning" });
+    loadStock();
+  } catch (err) {
+    toast(err.message || "Erro ao rejeitar lançamento", { type: "error" });
+  }
+}
+async function openStockMovementModal() {
+  const projectId = getProjectId();
+
+  try {
+    const materialsRes = await apiRequest("/stock/materials");
+    const materials = materialsRes.items || [];
+
+    if (materials.length === 0) {
+      toast("Inicializando catálogo básico...", { type: "info" });
+      await apiRequest("/stock/init-catalog", { method: "POST" });
+      return openStockMovementModal();
+    }
+
+    const materialOptions = materials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.unit})</option>`).join("");
+
+    openModal({
+      title: "Novo Lançamento de Stock",
+      contentHtml: `
+        <div class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Material</label>
+              <select id="st_mId" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+                ${materialOptions}
+              </select>
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Tipo de Movimento</label>
+              <select id="st_type" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+                <option value="ENTRADA">Entrada / Recebimento</option>
+                <option value="SAIDA">Saída / Aplicação</option>
+                <option value="TRANSFERENCIA">Transferência</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Quantidade</label>
+              <input type="number" id="st_qty" placeholder="0.00" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Condição</label>
+              <select id="st_cond" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+                <option value="BOA">Boa (Pronto a usar)</option>
+                <option value="DANIFICADA">Danificada / Avariada</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Logística e Dados de Transporte</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+               <input id="st_plate" placeholder="Matrícula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
+               <input id="st_brand" placeholder="Marca Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+                  <option value="cliente">Fornecido pelo Cliente</option>
+                  <option value="proprio">Material Próprio (InforCliente)</option>
+                  <option value="fornecedor">Compra Direta Fornecedor</option>
+               </select>
+               <input id="st_batch" placeholder="Lote / Referência" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fotos de Comprovação (Opcional)</label>
+            <input type="file" id="st_photos" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+          </div>
+        </div>
+      `,
+      primaryText: "Registrar Lançamento",
+      onPrimary: async ({ btn, close, panel }) => {
+        const v = (id) => el(id)?.value?.trim();
+        const qty = Number(v("st_qty"));
+        const materialId = v("st_mId");
+
+        if (!materialId || !qty || qty <= 0) return toast("Preencha material e quantidade corretamente", { type: "error" });
+
+        setButtonLoading(btn, true);
+        try {
+          const move = await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements`, {
+            method: "POST",
+            body: {
+              materialId,
+              type: v("st_type"),
+              quantity: qty,
+              condition: v("st_cond"),
+              entryType: v("st_entryType"),
+              driverName: v("st_driver"),
+              vehiclePlate: v("st_plate"),
+              vehicleBrand: v("st_brand"),
+              batch: v("st_batch"),
+              technicianName: getSessionUser()?.email?.split("@")[0] || "Técnico"
+            }
+          });
+
+          const photoInput = el("st_photos");
+          if (photoInput && photoInput.files.length > 0) {
+            let lat = "", lng = "";
+            try {
+              const pos = await new Promise((res, rej) => {
+                navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 });
+              });
+              lat = pos.coords.latitude.toString();
+              lng = pos.coords.longitude.toString();
+            } catch (e) { console.warn("GPS OFF"); }
+
+            for (const file of photoInput.files) {
+              await apiUpload(`/stock/${encodeURIComponent(projectId)}/photos`, {
+                file,
+                extraFields: { movementId: move.id, materialId, lat, lng }
+              });
+            }
+          }
+
+          toast("Lançamento registrado e aguardando validação", { type: "success" });
+          close();
+          loadStock();
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast(err.message || "Erro ao salvar", { type: "error" });
+        }
+      }
+    });
+  } catch (err) {
+    toast("Erro ao carregar catálogo", { type: "error" });
+  }
+}
+
+function wireStock() {
+  el("newStockMovementBtn")?.addEventListener("click", openStockMovementModal);
+}

@@ -143,7 +143,8 @@ export function openModal({
         firstInvalid.reportValidity();
         return;
       }
-      await onPrimary({ close, panel, body });
+      const btn = panel.querySelector("[data-primary]");
+      await onPrimary({ btn, close, panel, body });
     } else {
       close();
     }

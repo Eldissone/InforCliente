@@ -147,6 +147,9 @@
             <button data-tab-trigger="files"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Arquivos</button>
+            <button data-tab-trigger="stock"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
+                de Stock</button>
         </div>
 
         <!-- Dashboard Tab -->
@@ -446,7 +449,8 @@
                                     class="material-symbols-outlined text-2xl text-emerald-600">account_balance_wallet</span>
                                 Pagamentos do Cliente
                             </h3>
-                            <p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1">Entradas financeiras recebidas da
+                            <p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1">Entradas financeiras
+                                recebidas da
                                 entidade contratante</p>
                         </div>
                         <button id="addPaymentBtn" data-role-visible="admin,operador"
@@ -456,37 +460,48 @@
                         </button>
                     </div>
                     <!-- KPI Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 px-6 py-6 md:px-10 md:py-8 border-b border-slate-50">
-                        <div class="p-4 md:p-5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-4">
+                    <div
+                        class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 px-6 py-6 md:px-10 md:py-8 border-b border-slate-50">
+                        <div
+                            class="p-4 md:p-5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-4">
                             <div
                                 class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-emerald-600 flex items-center justify-center text-white">
                                 <span class="material-symbols-outlined text-xl">payments</span>
                             </div>
                             <div>
-                                <p class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">
                                     Total Recebido</p>
-                                <p id="paymentTotalPago" class="text-lg md:text-xl font-bold text-emerald-700 tracking-tight">---
+                                <p id="paymentTotalPago"
+                                    class="text-lg md:text-xl font-bold text-emerald-700 tracking-tight">---
                                 </p>
                             </div>
                         </div>
                         <div class="p-4 md:p-5 rounded-2xl bg-red-50 border border-red-100 flex items-center gap-4">
-                            <div class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-red-500 flex items-center justify-center text-white">
+                            <div
+                                class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-red-500 flex items-center justify-center text-white">
                                 <span class="material-symbols-outlined text-xl">money_off</span>
                             </div>
                             <div>
-                                <p class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-red-500 mb-0.5">Saldo em
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-red-500 mb-0.5">
+                                    Saldo em
                                     Dívida</p>
-                                <p id="paymentDivida" class="text-lg md:text-xl font-bold text-red-600 tracking-tight">---</p>
+                                <p id="paymentDivida" class="text-lg md:text-xl font-bold text-red-600 tracking-tight">
+                                    ---</p>
                             </div>
                         </div>
                         <div class="p-4 md:p-5 rounded-2xl bg-blue-50 border border-blue-100 flex items-center gap-4">
-                            <div class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white">
+                            <div
+                                class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white">
                                 <span class="material-symbols-outlined text-xl">percent</span>
                             </div>
                             <div>
-                                <p class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">
                                     Percentual Pago</p>
-                                <p id="paymentPct" class="text-lg md:text-xl font-bold text-blue-700 tracking-tight">0%</p>
+                                <p id="paymentPct" class="text-lg md:text-xl font-bold text-blue-700 tracking-tight">0%
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -569,7 +584,7 @@
         </div>
 
         <!-- Files Tab -->
-        <div id="tab_files" class="tab-content hidden">
+        <div id="tab_files" class="tab-content hidden space-y-10">
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-[#0F172A] p-10 rounded-[40px] text-white">
                 <div>
@@ -586,6 +601,69 @@
                 class="hidden flex flex-col items-center justify-center py-32 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-100">
                 <span class="material-symbols-outlined text-4xl text-slate-300 mb-4">folder_open</span>
                 <p class="text-sm text-slate-400">Repositório Vazio</p>
+            </div>
+        </div>
+
+        <!-- Stock Tab -->
+        <div id="tab_stock" class="tab-content hidden space-y-10">
+            <!-- Header Operacional -->
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Inventário e Operações</h2>
+                    <p class="text-slate-500 text-sm font-medium">Controle de entrada, saída e aplicação de materiais em
+                        tempo real.</p>
+                </div>
+                <div class="flex gap-4">
+                    <button id="newStockMovementBtn" data-role-visible="admin,operador"
+                        class="h-12 bg-emerald-600 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                        Novo Lançamento
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard de Stock -->
+            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Rendered JS -->
+            </div>
+
+            <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
+            <div class="bg-white mt-8 rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+                <div class="flex border-b border-slate-50 px-10">
+                    <button data-stock-subtab="history"
+                        class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">Fluxo
+                        de Stock</button>
+                    <button data-stock-subtab="gallery"
+                        class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">Galeria
+                        de Campo</button>
+                </div>
+
+                <div id="stock_history_content" class="p-0">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/50">
+                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <th class="px-10 py-5">Data/Técnico</th>
+                                    <th class="px-10 py-5">Material</th>
+                                    <th class="px-10 py-5">Qtd/Condição</th>
+                                    <th class="px-10 py-5">Logística (Campos/Viatura)</th>
+                                    <th class="px-10 py-5">Status Op.</th>
+                                    <th class="px-10 py-5">Workflow</th>
+                                    <th class="px-10 py-5 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stockMovementsTbody" class="divide-y divide-slate-50 text-slate-600">
+                                <!-- Rendered JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="stock_gallery_content" class="hidden p-10">
+                    <div id="stockPhotoGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                        <!-- Rendered JS -->
+                    </div>
+                </div>
             </div>
         </div>
     </main>

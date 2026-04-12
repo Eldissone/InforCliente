@@ -90,6 +90,9 @@ model Project {
   transactions        ProjectTransaction[]
   progressTasks       ProjectProgressTask[]
   payments            ProjectPayment[]
+  stock               ProjectStock[]
+  stockMovements      StockMovement[]
+  photos              ProjectPhoto[]
 
   @@index([name])
   @@index([status])
@@ -217,6 +220,123 @@ model ProjectPayment {
   project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, dataPagamento])
+}
+
+model Material {
+  id          String               @id @default(cuid())
+  code        String               @unique
+  name        String
+  category    MaterialCategory     @default(OUTROS) // MT, BT, IP, OUTROS
+  unit        String               @default("un")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  stockByProject ProjectStock[]
+  movements      StockMovement[]
+}
+
+model ProjectStock {
+  id              String   @id @default(cuid())
+  projectId       String
+  materialId      String
+  quantityGood    Decimal  @default(0) @db.Decimal(16, 4)
+  quantityDamaged Decimal  @default(0) @db.Decimal(16, 4)
+  updatedAt       DateTime @updatedAt
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  material        Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, materialId])
+}
+
+model StockMovement {
+  id              String           @id @default(cuid())
+  projectId       String
+  materialId      String
+  type            MovementType     @default(ENTRADA)
+  quantity        Decimal          @db.Decimal(16, 4)
+  condition       MaterialCondition @default(BOA)
+  
+  // Logistics Info
+  entryType       String?          // "cliente", "proprio", "fornecedor"
+  driverName      String?
+  vehiclePlate    String?
+  vehicleBrand    String?
+  dateEntry       DateTime         @default(now())
+  
+  // Statuses
+  movementStatus  MovementStatus   @default(RECEBIDO) // EM_TRANSITO, RECEBIDO, APLICADO
+  auditStatus     AuditStatus      @default(PENDENTE) // PENDENTE, VALIDACAO, APROVADO, REJEITADO
+  
+  technicianName  String?
+  batch           String?          // Lote
+  notes           String?
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  material        Material         @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  auditLogs       StockAuditLog[]
+  photos          ProjectPhoto[]
+
+  @@index([projectId, dateEntry])
+}
+
+model StockAuditLog {
+  id              String        @id @default(cuid())
+  movementId      String
+  fromStatus      AuditStatus
+  toStatus        AuditStatus
+  changedBy       String        // User email
+  notes           String?
+  createdAt       DateTime      @default(now())
+  movement        StockMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+}
+
+model ProjectPhoto {
+  id              String         @id @default(cuid())
+  projectId       String
+  movementId      String?
+  materialId      String?
+  path            String         // Original path
+  lat             Decimal?       @db.Decimal(10, 8)
+  lng             Decimal?       @db.Decimal(11, 8)
+  takenAt         DateTime?
+  description     String?
+  createdAt       DateTime       @default(now())
+  
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  movement        StockMovement? @relation(fields: [movementId], references: [id])
+}
+
+enum MaterialCategory {
+  MT
+  BT
+  IP
+  OUTROS
+}
+
+enum MovementType {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA
+}
+
+enum MaterialCondition {
+  BOA
+  DANIFICADA
+}
+
+enum MovementStatus {
+  EM_TRANSITO
+  RECEBIDO
+  APLICADO
+}
+
+enum AuditStatus {
+  PENDENTE
+  VALIDACAO
+  APROVADO
+  REJEITADO
 }
 
 enum Role {
