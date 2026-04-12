@@ -238,7 +238,7 @@ function updateOperationStatus(summary) {
     if (pctEl) {
       const pct = data.budgeted > 0 ? Math.round((data.realized / data.budgeted) * 100) : (data.realized > 0 ? 100 : 0);
       pctEl.textContent = `${pct}%`;
-      
+
       // Visual indicator if over budget
       if (pct > 100) {
         pctEl.classList.remove("text-[#2afc8d]", "text-[#0d3fd1]", "text-yellow-400", "text-orange-400", "text-emerald-400", "text-slate-400", "text-red-400", "text-purple-400", "text-slate-300");
@@ -267,7 +267,7 @@ function updateDateAnalysis(p) {
   if (due) {
     const diffTime = due - now;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays > 0) {
       el("daysRemaining").textContent = `${diffDays} Dias Restantes`;
       el("dateAnalysis")?.classList.remove("bg-error/10", "border-error/20", "text-error");
@@ -964,7 +964,7 @@ async function loadProgressTasks() {
         }, 0);
 
         const avgPct = Math.round(totalPct / totalTasks);
-        
+
         // Update UI: Pie Chart
         if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
         if (el("physicalProgressPie")) {
@@ -1322,7 +1322,7 @@ function wireNewFolder() {
   if (!el("createNewFolderBtn")) {
     const btn = document.createElement("button");
     btn.id = "createNewFolderBtn";
-    btn.className = "bg-primary/10 text-primary px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-3 hover:bg-primary/20 transition-all mr-4";
+    btn.className = "bg-white text-primary px-6 py-3 rounded-xl text-sm font-bold flex items-end gap-3 hover:bg-primary/50 transition-all mr-4";
     btn.innerHTML = `<span class="material-symbols-outlined">create_new_folder</span> Nova Pasta`;
     el("uploadFileBtn").insertAdjacentElement("beforebegin", btn);
   }
