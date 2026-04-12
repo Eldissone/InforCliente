@@ -22,19 +22,6 @@ function getProjectId() {
   return params.get("id");
 }
 
-function splitPhaseLabel(value) {
-  const phaseLabel = String(value || "").trim();
-  if (!phaseLabel) {
-    return { code: "FASE —", name: "Sem fase" };
-  }
-
-  const [code, ...rest] = phaseLabel.split(" - ");
-  return {
-    code: code || phaseLabel,
-    name: rest.join(" - ") || phaseLabel,
-  };
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -217,10 +204,6 @@ async function loadProject() {
   el("projectStartDate").textContent = formatDateBR(p.startDate);
   el("projectDueDate").textContent = formatDateBR(p.dueDate);
   updateDateAnalysis(p);
-
-  const phase = splitPhaseLabel(p.phaseLabel);
-  if (el("projectPhaseLabel")) el("projectPhaseLabel").textContent = phase.code;
-  if (el("projectPhaseName")) el("projectPhaseName").textContent = phase.name;
 
   // New: Update Operation Status (CBS)
   if (p.cbsSummary) {

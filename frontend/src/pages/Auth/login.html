@@ -4,17 +4,22 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Infor Cliente - Acesso restrito</title>
+  <title>Info Cliente - Acesso restrito</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <style>
     body {
       background: radial-gradient(circle at top right, #1e293b 0%, #0f172a 100%);
     }
+
     .login-glass {
       background: rgba(255, 255, 255, 0.03);
       backdrop-filter: blur(20px);
@@ -27,38 +32,44 @@
   <div class="w-full max-w-[440px] relative">
     <!-- Decorative Glow -->
     <div class="absolute -top-24 -left-24 w-64 h-64 bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"></div>
-    <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-[#2afc8d]/10 rounded-full blur-[100px] pointer-events-none"></div>
+    <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-[#2afc8d]/10 rounded-full blur-[100px] pointer-events-none">
+    </div>
 
     <div class="login-glass rounded-[40px] px-8 py-12 md:px-12 shadow-2xl relative overflow-hidden">
       <!-- Logo Branding -->
       <div class="flex flex-col items-center text-center mb-10">
-        <div class="w-16 h-16 bg-[#2afc8d] rounded-2xl flex items-center justify-center text-[#0f172a] font-black italic text-3xl mb-6 shadow-xl shadow-[#2afc8d]/20">I</div>
-        <h1 class="text-3xl font-bold tracking-tight text-white mb-2">Bem-vindo</h1>
-        <p class="text-slate-400 text-sm font-medium">Infor Cliente Management System</p>
+        <div
+          class="w-16 h-16 bg-[#2afc8d] rounded-2xl flex items-center justify-center text-[#0f172a] font-black italic text-3xl mb-6 shadow-xl shadow-[#2afc8d]/20">
+          I</div>
+        <h1 class="text-3xl font-bold tracking-tight text-white mb-2">Bem-vindo ao</h1>
+        <p class="text-slate-400 text-sm font-medium">Info Cliente</p>
       </div>
 
       <form id="loginForm" class="space-y-6">
         <div>
-          <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 ml-1">Endereço de Email</label>
+          <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 ml-1">Endereço de
+            Email</label>
           <div class="relative">
             <input id="email" type="email"
               class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm focus:ring-2 focus:ring-[#2afc8d]/30 focus:border-[#2afc8d]/50 transition-all placeholder:text-slate-600 outline-none"
               placeholder="seu@parceiro.com" required />
-            <span class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">alternate_email</span>
+            <span
+              class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">alternate_email</span>
           </div>
         </div>
 
         <div>
-           <div class="flex justify-between items-center mb-2 ml-1">
-             <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Senha</label>
-             <a href="#" class="text-[10px] font-black uppercase tracking-widest text-[#2afc8d] hover:text-white transition-colors">Esqueceu?</a>
-           </div>
+          <div class="flex justify-between items-center mb-2 ml-1">
+            <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Senha</label>
+            <a href="#"
+              class="text-[10px] font-black uppercase tracking-widest text-[#2afc8d] hover:text-white transition-colors">Esqueceu?</a>
+          </div>
           <div class="relative">
             <input id="password" type="password"
-              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm focus:ring-2 focus:ring-[#2afc8d]/30 focus:border-[#2afc8d]/50 transition-all placeholder:text-slate-600 outline-none" 
-              placeholder="••••••••"
-              required />
-            <span class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">lock</span>
+              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm focus:ring-2 focus:ring-[#2afc8d]/30 focus:border-[#2afc8d]/50 transition-all placeholder:text-slate-600 outline-none"
+              placeholder="••••••••" required />
+            <span
+              class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">lock</span>
           </div>
         </div>
 
@@ -68,16 +79,19 @@
         </button>
 
         <div id="errorBox"
-          class="hidden text-xs font-bold text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-4 animate-pulse"></div>
+          class="hidden text-xs font-bold text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-4 animate-pulse">
+        </div>
       </form>
 
       <div class="mt-12 pt-8 border-t border-white/5 text-center">
         <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Grupo Unione © 2026</p>
       </div>
     </div>
-    
+
     <div class="text-center mt-8">
-      <p class="text-[11px] text-slate-500 font-medium">Não tem acesso? <a href="#" class="text-white hover:text-[#2afc8d] transition-colors underline underline-offset-4">Solicite ao administrador</a></p>
+      <p class="text-[11px] text-slate-500 font-medium">Não tem acesso? <a href="#"
+          class="text-white hover:text-[#2afc8d] transition-colors underline underline-offset-4">Solicite ao
+          administrador</a></p>
     </div>
   </div>
 

@@ -54,7 +54,7 @@ export function toast(message, { type = "info", timeoutMs = 3000 } = {}) {
         ? "bg-emerald-50 text-emerald-800 border-emerald-100"
         : "bg-white text-slate-800 border-slate-100";
   
-  el.className = `pointer-events-auto border flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg shadow-black/5 min-w-[320px] transform translate-y-[-20px] opacity-0 transition-all duration-300 ease-out`;
+  el.className = `pointer-events-auto border ${bg} flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg shadow-black/5 min-w-[320px] transform translate-y-[-20px] opacity-0 transition-all duration-300 ease-out`;
   el.innerHTML = `
     <span class="material-symbols-outlined text-[20px] ${type === 'error' ? 'text-red-500' : type === 'success' ? 'text-emerald-500' : 'text-blue-500'}">
       ${type === 'error' ? 'error' : type === 'success' ? 'check_circle' : 'info'}

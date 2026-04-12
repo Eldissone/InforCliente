@@ -4,45 +4,57 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Infor Cliente - Visualização de Obra</title>
+    <title>Info Cliente - Visualização de Obra</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <style>
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
+
         .side-panel {
             transform: translateX(100%);
             transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
         .side-panel.open {
             transform: translateX(0);
         }
+
         .backdrop {
             opacity: 0;
             transition: opacity 0.3s ease;
             pointer-events: none;
         }
+
         .backdrop.open {
             opacity: 1;
             pointer-events: auto;
         }
+
         .custom-scroll::-webkit-scrollbar {
             height: 8px;
             width: 6px;
         }
+
         .custom-scroll::-webkit-scrollbar-track {
             background: #f1f5f9;
             border-radius: 10px;
         }
+
         .custom-scroll::-webkit-scrollbar-thumb {
             background: #cbd5e1;
             border-radius: 10px;
         }
+
         .tab-content.hidden {
             display: none;
         }
@@ -55,31 +67,42 @@
         <div class="max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
             <div class="flex items-center gap-10">
                 <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <span class="w-8 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">I</span>
-                    Infor Cliente
+                    <span
+                        class="w-8 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">I</span>
+                    Info Cliente
                 </span>
                 <div class="hidden lg:flex items-center gap-6">
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Clientes/clienteLista.html">Clientes</a>
-                    <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg" href="../Projectos/ProjectGeral.html">Obras</a>
+                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        href="../Dashboard/index.html">Dashboard</a>
+                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        href="../Clientes/clienteLista.html">Clientes</a>
+                    <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
+                        href="../Projectos/ProjectGeral.html">Obras</a>
                 </div>
             </div>
-            
+
             <div class="flex items-center gap-4">
-                <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all" href="../Users/index.html">Utilizadores</a>
-                <button data-logout class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
+                <a data-nav-users
+                    class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all"
+                    href="../Users/index.html">Utilizadores</a>
+                <button data-logout
+                    class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
                     Sair <span data-user-role class="text-[#2afc8d]"></span>
                 </button>
-                <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
+                <button id="mobileMenuBtn" aria-expanded="false"
+                    class="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
                     <span class="material-symbols-outlined">menu</span>
                 </button>
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-2">
             <a class="text-sm font-semibold text-slate-400 py-3 px-4" href="../Dashboard/index.html">Dashboard</a>
-            <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50" href="../Clientes/clienteLista.html">Clientes</a>
-            <a class="text-sm font-semibold text-[#2afc8d] py-3 px-4 border-t border-slate-800/50" href="../Projectos/ProjectGeral.html">Obras</a>
-            <button data-logout class="text-left text-sm font-semibold text-red-400 py-3 px-4 border-t border-slate-800/50">Sair</button>
+            <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50"
+                href="../Clientes/clienteLista.html">Clientes</a>
+            <a class="text-sm font-semibold text-[#2afc8d] py-3 px-4 border-t border-slate-800/50"
+                href="../Projectos/ProjectGeral.html">Obras</a>
+            <button data-logout
+                class="text-left text-sm font-semibold text-red-400 py-3 px-4 border-t border-slate-800/50">Sair</button>
         </div>
     </nav>
 
@@ -87,20 +110,24 @@
         <!-- Header & Breadcrumbs -->
         <header class="mb-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
             <div>
-                <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                <nav
+                    class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
                     <span>Gestão de Obras</span>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span id="projectBreadcrumb" class="text-[#0d3fd1]">---</span>
                 </nav>
-                <h1 id="projectTitle" class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
+                <h1 id="projectTitle"
+                    class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
                 <p id="projectType" class="text-slate-500 font-medium">---</p>
             </div>
             <div class="flex flex-wrap gap-4">
-                <button id="exportProjectBtn" class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                <button id="exportProjectBtn"
+                    class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                     <span class="material-symbols-outlined text-xl">file_download</span>
                     Relatório
                 </button>
-                <button id="newTransactionBtn" data-role-visible="admin,operador" class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
+                <button id="newTransactionBtn" data-role-visible="admin,operador"
+                    class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
                     <span class="material-symbols-outlined text-xl">payments</span>
                     Novo Lançamento
                 </button>
@@ -109,9 +136,14 @@
 
         <!-- Tab Navigation -->
         <div class="flex items-center gap-4 border-b border-slate-100 mb-10 overflow-x-auto custom-scroll pb-2">
-            <button data-tab-trigger="dashboard" class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-tab-trigger="relatorio" class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Avanço Físico</button>
-            <button data-tab-trigger="files" class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão de Arquivos</button>
+            <button data-tab-trigger="dashboard"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
+            <button data-tab-trigger="relatorio"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Avanço
+                Físico</button>
+            <button data-tab-trigger="files"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
+                de Arquivos</button>
         </div>
 
         <!-- Dashboard Tab -->
@@ -119,9 +151,11 @@
             <!-- Project Identification Cards -->
             <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Entidade / Parceiro</p>
+                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Entidade / Parceiro
+                    </p>
                     <div id="projectClientName" class="text-lg font-bold text-slate-900">---</div>
-                    <div id="projectClientCode" class="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">---</div>
+                    <div id="projectClientCode"
+                        class="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">---</div>
                 </div>
                 <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
                     <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Gestor / Contato</p>
@@ -136,56 +170,75 @@
             <!-- Bento Grid: Main Stats -->
             <div class="grid grid-cols-12 gap-8 mb-10">
                 <!-- Budget Card -->
-                <div class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-[40px] p-10 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20">
-                    <div class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all"></div>
+                <div
+                    class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-[40px] p-10 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20">
+                    <div
+                        class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all">
+                    </div>
                     <div class="relative z-10 h-full flex flex-col justify-between">
                         <div>
                             <div class="flex justify-between items-center mb-8">
-                                <span class="bg-[#2afc8d]/10 text-[#2afc8d] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#2afc8d]/20">Orçamento Global</span>
+                                <span
+                                    class="bg-[#2afc8d]/10 text-[#2afc8d] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#2afc8d]/20">Orçamento
+                                    Global</span>
                                 <span class="material-symbols-outlined text-slate-500">account_balance</span>
                             </div>
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="text-xs md:text-sm font-medium text-slate-400">KZ</span>
-                                <span id="budgetTotal" class="text-3xl md:text-5xl font-bold tracking-tighter">---</span>
+                                <span id="budgetTotal"
+                                    class="text-3xl md:text-5xl font-bold tracking-tighter">---</span>
                             </div>
                             <div id="budgetDelta" class="text-xs font-bold text-[#2afc8d] mb-8">---</div>
                         </div>
                         <div class="space-y-4">
-                            <div class="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            <div
+                                class="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 <span>Consumo Total</span>
                                 <span id="budgetConsumedText" class="text-white">---</span>
                             </div>
                             <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                <div id="budgetBar" class="h-full bg-blue-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(59,130,246,0.5)]" style="width: 0%"></div>
+                                <div id="budgetBar"
+                                    class="h-full bg-blue-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                                    style="width: 0%"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Detailed Costs Card -->
-                <div class="col-span-12 lg:col-span-4 bg-white rounded-[40px] p-10 border border-slate-100 shadow-sm flex flex-col justify-between">
+                <div
+                    class="col-span-12 lg:col-span-4 bg-white rounded-[40px] p-10 border border-slate-100 shadow-sm flex flex-col justify-between">
                     <div>
                         <div class="flex justify-between items-center mb-10">
-                            <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro</h3>
-                            <div class="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-bold italic">F</div>
+                            <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
+                            </h3>
+                            <div
+                                class="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-bold italic">
+                                F</div>
                         </div>
                         <div class="space-y-6">
                             <div class="flex items-center gap-6">
-                                <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                                     <span class="material-symbols-outlined">payments</span>
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Liquidado</p>
-                                    <p id="budgetConsumed" class="text-xl font-bold text-slate-900 tracking-tight">---</p>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                        Liquidado</p>
+                                    <p id="budgetConsumed" class="text-xl font-bold text-slate-900 tracking-tight">---
+                                    </p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-6">
-                                <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
                                     <span class="material-symbols-outlined">schedule</span>
                                 </div>
                                 <div class="flex-1">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comprometido</p>
-                                    <p id="budgetCommitted" class="text-xl font-bold text-slate-900 tracking-tight">---</p>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                        Comprometido</p>
+                                    <p id="budgetCommitted" class="text-xl font-bold text-slate-900 tracking-tight">---
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -193,23 +246,32 @@
                     <div class="mt-10 pt-10 border-t border-slate-50">
                         <div class="flex justify-between items-end">
                             <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Disponível</p>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                                    Disponível</p>
                                 <p id="budgetAvailable" class="text-2xl font-bold text-blue-600 tracking-tight">---</p>
                             </div>
-                            <div class="h-10 px-4 rounded-xl bg-blue-50 text-blue-600 flex items-center text-[10px] font-black uppercase tracking-widest">Saldo</div>
+                            <div
+                                class="h-10 px-4 rounded-xl bg-blue-50 text-blue-600 flex items-center text-[10px] font-black uppercase tracking-widest">
+                                Saldo</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Progress & Timeline Card -->
-                <div class="col-span-12 lg:col-span-4 bg-[#F8FAFC] rounded-[40px] p-10 border border-slate-100 flex flex-col justify-between">
+                <div
+                    class="col-span-12 lg:col-span-4 bg-[#F8FAFC] rounded-[40px] p-10 border border-slate-100 flex flex-col justify-between">
                     <div>
-                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico</h3>
+                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
+                        </h3>
                         <div class="flex justify-center mb-10 relative">
                             <div class="relative w-40 h-40">
-                                <div id="physicalProgressPie" class="w-full h-full rounded-full transition-all duration-1000" style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)"></div>
+                                <div id="physicalProgressPie"
+                                    class="w-full h-full rounded-full transition-all duration-1000"
+                                    style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)">
+                                </div>
                                 <div class="absolute inset-4 bg-white rounded-full flex items-center justify-center">
-                                    <span id="physicalProgress" class="text-4xl font-bold text-slate-900 tracking-tight">0%</span>
+                                    <span id="physicalProgress"
+                                        class="text-4xl font-bold text-slate-900 tracking-tight">0%</span>
                                 </div>
                             </div>
                         </div>
@@ -224,7 +286,8 @@
                             <span id="projectDueDate" class="text-slate-900">--/--/----</span>
                         </div>
                         <div id="dateAnalysis" class="p-4 rounded-[24px] bg-white border border-slate-100 text-center">
-                            <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---</p>
+                            <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -234,7 +297,8 @@
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
                         <div>
                             <h3 class="text-2xl font-bold text-slate-900">Curva S de Médias</h3>
-                            <p class="text-sm text-slate-500 font-medium">Histórico acumulado planejado vs. realizado</p>
+                            <p class="text-sm text-slate-500 font-medium">Histórico acumulado planejado vs. realizado
+                            </p>
                         </div>
                         <div class="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
                             <div class="flex items-center gap-2 text-slate-400">
@@ -251,49 +315,85 @@
                 </div>
 
                 <!-- CBS Status -->
-                <div class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-[40px] p-10 text-white shadow-2xl shadow-slate-900/10">
+                <div
+                    class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-[40px] p-10 text-white shadow-2xl shadow-slate-900/10">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-500 mb-8">Operação</h3>
                     <div id="cbsList" class="space-y-5 overflow-y-auto max-h-[350px] custom-scroll pr-2">
                         <!-- Stat items with standard IDs for JS updateOperationStatus -->
-                         <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-blue-400"><span class="material-symbols-outlined text-lg">engineering</span></div>
-                                <div class="min-w-0"><p class="text-xs font-bold text-white truncate">Mão de Obra</p><p id="stat_labor_sub" class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p></div>
+                                <div
+                                    class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-blue-400">
+                                    <span class="material-symbols-outlined text-lg">engineering</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-white truncate">Mão de Obra</p>
+                                    <p id="stat_labor_sub"
+                                        class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p>
+                                </div>
                             </div>
                             <span id="stat_labor_pct" class="text-sm font-black text-blue-400">0%</span>
-                         </div>
-                         <div class="flex items-center justify-between">
+                        </div>
+                        <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-emerald-400"><span class="material-symbols-outlined text-lg">inventory_2</span></div>
-                                <div class="min-w-0"><p class="text-xs font-bold text-white truncate">Materiais</p><p id="stat_materials_sub" class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p></div>
+                                <div
+                                    class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-emerald-400">
+                                    <span class="material-symbols-outlined text-lg">inventory_2</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-white truncate">Materiais</p>
+                                    <p id="stat_materials_sub"
+                                        class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p>
+                                </div>
                             </div>
                             <span id="stat_materials_pct" class="text-sm font-black text-emerald-400">0%</span>
-                         </div>
-                         <div class="flex items-center justify-between">
+                        </div>
+                        <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-yellow-400"><span class="material-symbols-outlined text-lg">groups</span></div>
-                                <div class="min-w-0"><p class="text-xs font-bold text-white truncate">Pessoal</p><p id="stat_pessoal_sub" class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p></div>
+                                <div
+                                    class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-yellow-400">
+                                    <span class="material-symbols-outlined text-lg">groups</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-white truncate">Pessoal</p>
+                                    <p id="stat_pessoal_sub"
+                                        class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p>
+                                </div>
                             </div>
                             <span id="stat_pessoal_pct" class="text-sm font-black text-yellow-400">0%</span>
-                         </div>
-                         <div class="flex items-center justify-between">
+                        </div>
+                        <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-orange-400"><span class="material-symbols-outlined text-lg">receipt_long</span></div>
-                                <div class="min-w-0"><p class="text-xs font-bold text-white truncate">Operacional</p><p id="stat_operacional_sub" class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p></div>
+                                <div
+                                    class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-orange-400">
+                                    <span class="material-symbols-outlined text-lg">receipt_long</span>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-white truncate">Operacional</p>
+                                    <p id="stat_operacional_sub"
+                                        class="text-[9px] font-black text-slate-500 uppercase tracking-widest">---</p>
+                                </div>
                             </div>
                             <span id="stat_operacional_pct" class="text-sm font-black text-orange-400">0%</span>
-                         </div>
-                         <!-- Add placeholders for other IDs if needed -->
-                         <div class="hidden"><span id="stat_investimento_pct"></span><span id="stat_investimento_sub"></span><span id="stat_depreciacao_pct"></span><span id="stat_depreciacao_sub"></span><span id="stat_impostos_pct"></span><span id="stat_impostos_sub"></span><span id="stat_deducoes_pct"></span><span id="stat_deducoes_sub"></span><span id="stat_outras_pct"></span><span id="stat_outras_sub"></span></div>
+                        </div>
+                        <!-- Add placeholders for other IDs if needed -->
+                        <div class="hidden"><span id="stat_investimento_pct"></span><span
+                                id="stat_investimento_sub"></span><span id="stat_depreciacao_pct"></span><span
+                                id="stat_depreciacao_sub"></span><span id="stat_impostos_pct"></span><span
+                                id="stat_impostos_sub"></span><span id="stat_deducoes_pct"></span><span
+                                id="stat_deducoes_sub"></span><span id="stat_outras_pct"></span><span
+                                id="stat_outras_sub"></span></div>
                     </div>
                 </div>
 
                 <!-- Budget Execution Matrix -->
                 <div class="col-span-12 bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden mb-8">
-                    <div class="px-10 py-8 border-b border-slate-50 bg-[#0F172A] flex justify-between items-center text-white">
+                    <div
+                        class="px-10 py-8 border-b border-slate-50 bg-[#0F172A] flex justify-between items-center text-white">
                         <div>
                             <h3 class="text-2xl font-bold">Matriz de Execução</h3>
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo granular mensal</p>
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo
+                                granular mensal</p>
                         </div>
                     </div>
                     <div class="overflow-x-auto w-full custom-scroll">
@@ -305,19 +405,24 @@
 
                 <!-- Recent Transactions -->
                 <div class="col-span-12 bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-                    <div class="px-10 py-8 border-b border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
+                    <div
+                        class="px-10 py-8 border-b border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
                         <h3 class="text-2xl font-bold text-slate-900">Lançamentos Recentes</h3>
                         <div class="flex items-center gap-4 w-full md:w-auto">
                             <div class="relative flex-1 md:w-64">
-                                <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                                <input id="transactionsSearch" class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all" placeholder="Buscar lançamentos..." type="text" />
+                                <span
+                                    class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                                <input id="transactionsSearch"
+                                    class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                    placeholder="Buscar lançamentos..." type="text" />
                             </div>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
-                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
+                                <tr
+                                    class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
                                     <th class="px-10 py-5">Data</th>
                                     <th class="px-10 py-5">Descrição</th>
                                     <th class="px-10 py-5">Categoria</th>
@@ -334,16 +439,19 @@
 
         <!-- Relatorio Tab -->
         <div id="tab_relatorio" class="tab-content hidden">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Avanço Físico</h2>
                     <p class="text-sm text-slate-500 font-medium">Controlo detalhado de quantidades.</p>
                 </div>
                 <div class="flex flex-wrap gap-4">
-                    <button id="importTemplateBtn" data-role-visible="admin,operador" class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                    <button id="importTemplateBtn" data-role-visible="admin,operador"
+                        class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-xl">library_add</span> Importar Modelo
                     </button>
-                    <button id="addProgressTaskBtn" data-role-visible="admin,operador" class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
+                    <button id="addProgressTaskBtn" data-role-visible="admin,operador"
+                        class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
                         <span class="material-symbols-outlined text-xl">add_task</span> Novo Item
                     </button>
                 </div>
@@ -371,17 +479,20 @@
 
         <!-- Files Tab -->
         <div id="tab_files" class="tab-content hidden">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-[#0F172A] p-10 rounded-[40px] text-white">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-[#0F172A] p-10 rounded-[40px] text-white">
                 <div>
                     <h2 class="text-2xl font-bold">Documentos</h2>
                     <p class="text-sm text-slate-400 font-medium">Arquivos e evidências da obra.</p>
                 </div>
-                <button id="uploadFileBtn" data-role-visible="admin,operador" class="h-14 bg-blue-600 text-white px-8 rounded-[24px] font-bold flex items-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">
+                <button id="uploadFileBtn" data-role-visible="admin,operador"
+                    class="h-14 bg-blue-600 text-white px-8 rounded-[24px] font-bold flex items-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">
                     <span class="material-symbols-outlined text-2xl">cloud_upload</span> Anexar
                 </button>
             </div>
             <div id="projectFilesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"></div>
-            <div id="noFilesMsg" class="hidden flex flex-col items-center justify-center py-32 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-100">
+            <div id="noFilesMsg"
+                class="hidden flex flex-col items-center justify-center py-32 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-100">
                 <span class="material-symbols-outlined text-4xl text-slate-300 mb-4">folder_open</span>
                 <p class="text-sm text-slate-400">Repositório Vazio</p>
             </div>
@@ -389,20 +500,31 @@
     </main>
 
     <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white">
-        <div class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
-            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InforCliente © 2026 - Todos os direitos reservados</p>
+        <div
+            class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InforCliente © 2026 - Todos os
+                direitos reservados</p>
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Grupo Unione</span>
         </div>
     </footer>
 
     <!-- Side Preview -->
     <div id="previewBackdrop" class="backdrop fixed inset-0 bg-slate-900/60 z-[60] backdrop-blur-sm"></div>
-    <aside id="previewPanel" class="side-panel fixed top-0 right-0 h-screen w-full md:w-[600px] lg:w-[800px] bg-white z-[70] shadow-2xl flex flex-col">
+    <aside id="previewPanel"
+        class="side-panel fixed top-0 right-0 h-screen w-full md:w-[600px] lg:w-[800px] bg-white z-[70] shadow-2xl flex flex-col">
         <div class="px-8 py-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-            <div><h3 id="previewFileName" class="text-xl font-bold text-slate-900 truncate max-w-[400px]">Arquivo</h3><p id="previewFileMeta" class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">---</p></div>
+            <div>
+                <h3 id="previewFileName" class="text-xl font-bold text-slate-900 truncate max-w-[400px]">Arquivo</h3>
+                <p id="previewFileMeta" class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">---
+                </p>
+            </div>
             <div class="flex items-center gap-4">
-                <a id="previewDownloadBtn" href="#" download class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-xl">download</span></a>
-                <button id="closePreviewBtn" class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-xl">close</span></button>
+                <a id="previewDownloadBtn" href="#" download
+                    class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">download</span></a>
+                <button id="closePreviewBtn"
+                    class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">close</span></button>
             </div>
         </div>
         <div id="previewBody" class="flex-1 overflow-auto bg-slate-50 flex items-center justify-center p-10"></div>
@@ -410,4 +532,5 @@
 
     <script type="module" src="./projectView.js"></script>
 </body>
+
 </html>

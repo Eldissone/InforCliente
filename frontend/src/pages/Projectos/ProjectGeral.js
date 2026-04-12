@@ -63,51 +63,51 @@ function iconFor(name) {
 function renderRow(p) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
   const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
-  
+
   return `
-    <tr class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0">
+    <tr data-view-project="${p.id}" class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
-            <span class="material-symbols-outlined text-[#2afc8d]">${iconFor(p.name)}</span>
+          <div class="min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
+            <span class="material-symbols-outlined text-[#2afc8d] group-hover:text-slate-900 text-lg">${iconFor(p.name)}</span>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-sm capitalize">${p.name.toLowerCase()}</h4>
-            <div class="flex items-center gap-2 mt-0.5">
-               <span class="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${p.code}</span>
-               <span class="text-[11px] font-medium text-slate-400">${p.region || "-"}</span>
-            </div>
+            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${p.name}</h4>
+            <span class="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${p.code}</span>
           </div>
         </div>
       </td>
       <td class="px-8 py-5">
-        <div class="flex flex-col">
-          <span class="text-sm font-bold text-slate-700">${p.client?.name || "-"}</span>
-          <span class="text-[11px] text-slate-400 font-medium">${p.contact || "Sem contato"}</span>
-        </div>
+        <span class="text-xs font-bold text-slate-700">${p.client?.name || "-"}</span>
       </td>
-      <td class="px-8 py-5 text-right font-bold text-sm text-slate-900">
+      <td class="px-8 py-5">
+        <span class="text-[11px] text-slate-400 font-medium">${p.contact || "-"}</span>
+      </td>
+      <td class="px-8 py-5">
+        <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${p.location || "-"}</div>
+      </td>
+      <td class="px-8 py-5 text-right font-black text-xs text-slate-900">
         ${formatCurrencyKZ(p.budgetTotal || 0)}
       </td>
-      <td class="px-8 py-5 min-w-[180px]">
+      <td class="px-8 py-5 min-w-[140px]">
         <div class="flex items-center gap-3">
-          <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div class="h-full ${barColor} transition-all duration-1000" style="width: ${progress}%;"></div>
           </div>
-          <span class="text-xs font-bold text-slate-700">${formatPercent(progress, { digits: 0 })}</span>
+          <span class="text-[10px] font-black text-slate-900">${progress}%</span>
         </div>
       </td>
-      <td class="px-8 py-5">${renderStatusPill(p.status)}</td>
+      <td class="px-8 py-5 text-center">${renderStatusPill(p.status)}</td>
       <td class="px-8 py-5 text-right">
-        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <button data-view-project="${p.id}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all">
-            <span class="material-symbols-outlined text-xl">visibility</span>
+        <div class="flex items-center justify-end gap-1">
+          <button data-view-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-lg">visibility</span>
           </button>
-          <button data-edit-project="${p.id}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all">
-            <span class="material-symbols-outlined text-xl">edit</span>
+          <button data-edit-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-lg">edit</span>
           </button>
-          <button data-delete-project="${p.id}" data-name="${escapeHtml(p.name)}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all">
-            <span class="material-symbols-outlined text-xl">delete</span>
+          <button data-delete-project="${p.id}" data-name="${escapeHtml(p.name)}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all">
+            <span class="material-symbols-outlined text-lg">delete</span>
           </button>
         </div>
       </td>
@@ -176,18 +176,14 @@ function wireFilters() {
 
 function wireActions() {
   document.addEventListener("click", (e) => {
-    const viewId = e.target?.closest?.("[data-view-project]")?.getAttribute?.("data-view-project");
-    if (viewId) {
-      window.location.href = `./projectView.html?id=${encodeURIComponent(viewId)}`;
-      return;
-    }
-
+    // 1. Edit?
     const editId = e.target?.closest?.("[data-edit-project]")?.getAttribute?.("data-edit-project");
     if (editId) {
       openEdit(editId);
       return;
     }
 
+    // 2. Delete?
     const deleteBtn = e.target?.closest?.("[data-delete-project]");
     if (deleteBtn) {
       const id = deleteBtn.getAttribute("data-delete-project");
@@ -200,6 +196,13 @@ function wireActions() {
           })
           .catch(() => toast("Erro ao eliminar obra", { type: "error" }));
       }
+      return;
+    }
+
+    // 3. View? (Row Click)
+    const viewId = e.target?.closest?.("[data-view-project]")?.getAttribute?.("data-view-project");
+    if (viewId) {
+      window.location.href = `./projectView.html?id=${encodeURIComponent(viewId)}`;
       return;
     }
   });
@@ -266,7 +269,6 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total (kz)</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fase (Etiqueta)</label><input id="p_phase" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.phaseLabel)}" placeholder="FASE 01 - Nome" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Previsão Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" value="${p.dueDate ? p.dueDate.split('T')[0] : ''}" /></div>
       </div>
@@ -287,7 +289,6 @@ async function openEdit(id) {
             budgetTotal: Number(v("p_total") || 0),
             physicalProgressPct: Number(v("p_prog") || 0),
             status: v("p_status"),
-            phaseLabel: v("p_phase") || null,
             startDate: toIsoDate(v("p_start")),
             dueDate: toIsoDate(v("p_due")),
             projectType: v("p_type") || null,
