@@ -216,6 +216,7 @@ async function loadProject() {
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
+let stockState = { items: [], filters: { search: "", condition: "", status: "", category: "" } };
 
 function updateOperationStatus(summary) {
   const mapping = {
@@ -1699,66 +1700,6 @@ function wireNewTransaction() {
   });
 }
 
-function wireBudgetUpload() {
-  if (getSessionUser()?.role === "cliente") return;
-  // adiciona um botão "Importar Orçamento" ao lado do Exportar
-  const exportBtn = el("exportProjectBtn");
-  if (!exportBtn) return;
-  const wrap = exportBtn.parentElement;
-  if (!wrap) return;
-
-  if (!document.getElementById("uploadBudgetBtn")) {
-    const btn = document.createElement("button");
-    btn.id = "uploadBudgetBtn";
-    btn.className =
-      "bg-surface-container-low px-6 py-2.5 text-primary text-sm font-semibold rounded-lg hover:bg-surface-container-high transition-all flex items-center gap-2";
-    btn.innerHTML = `<span class="material-symbols-outlined text-sm">upload_file</span> Importar`;
-    wrap.insertBefore(btn, exportBtn);
-  }
-
-  el("uploadBudgetBtn")?.addEventListener("click", () => {
-    openModal({
-      title: "Upload de planilha de orçamento",
-      primaryLabel: "Enviar",
-      contentHtml: `
-        <div class="space-y-3">
-          <div class="text-sm text-slate-700">
-            Formatos aceitos: <span class="font-bold">.xlsx</span> ou <span class="font-bold">.csv</span>.
-            A planilha precisa ter uma coluna de <span class="font-bold">descrição</span> e uma coluna de <span class="font-bold">total/valor</span>.
-          </div>
-          <input id="budgetFile" type="file" accept=".xlsx,.xls,.csv" class="block w-full text-sm" />
-          <div class="text-xs text-slate-500">
-            Dica de colunas: descricao/description, total/valor/valor_total, (opcionais: categoria, unidade, quantidade, preco_unitario).
-          </div>
-        </div>
-      `,
-      onPrimary: async ({ close, panel }) => {
-        const file = panel.querySelector("#budgetFile")?.files?.[0];
-        if (!file) {
-          toast("Selecione um arquivo para enviar.", { type: "error" });
-          return;
-        }
-
-        const id = getProjectId();
-        const btn = panel.querySelector("[data-primary]");
-        try {
-          setButtonLoading(btn, true);
-          const res = await apiUpload(`/projects/${encodeURIComponent(id)}/budget/upload`, { file });
-          toast(`Orçamento importado: ${res.imported} linhas`, { type: "success" });
-          if (res.warnings?.length) {
-            toast(`Avisos: ${res.warnings.slice(0, 1).join(" ")}`, { type: "info", timeoutMs: 6000 });
-          }
-          close();
-          await loadProject();
-          await loadBudgetExecution();
-        } catch (err) {
-          setButtonLoading(btn, false);
-          toast("Erro ao importar orçamento", { type: "error" });
-        }
-      },
-    });
-  });
-}
 
 // =============================================================================
 // PAGAMENTOS DO CLIENTE
@@ -2002,7 +1943,6 @@ async function init() {
   await loadPayments();
   wireSearch();
   wireExport();
-  wireBudgetUpload();
   wireNewTransaction();
   wireLiquidation();
   wireTabs();
@@ -2082,9 +2022,9 @@ async function loadStock() {
       apiRequest(`/stock/${encodeURIComponent(id)}/movements`),
     ]);
 
+    stockState.items = movementsRes.items;
     renderStockSummary(summaryRes.items);
-    renderStockMovements(movementsRes.items);
-    renderStockGallery(movementsRes.items);
+    applyStockFilters();
   } catch (err) {
     toast("Erro ao carregar dados de stock", { type: "error" });
   }
@@ -2119,12 +2059,13 @@ function renderStockMovements(items) {
   const tbody = el("stockMovementsTbody");
   if (!items || items.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
-    el("stockPendingCount").textContent = "0";
+    if (el("stockPendingCount")) el("stockPendingCount").textContent = "0";
     return;
   }
 
   const pendingChanges = items.filter(i => i.auditStatus === "PENDENTE" || i.auditStatus === "VALIDACAO").length;
-  el("stockPendingCount").textContent = pendingChanges;
+  const countEl = el("stockPendingCount");
+  if (countEl) countEl.textContent = pendingChanges;
 
   tbody.innerHTML = items.map(m => {
     const auditCls = {
@@ -2370,6 +2311,38 @@ async function openStockMovementModal() {
   }
 }
 
+function applyStockFilters() {
+  const { search, condition, status, category } = stockState.filters;
+  const filtered = stockState.items.filter(m => {
+    const s = search.toLowerCase();
+    const matchesSearch = !s || 
+      m.material.name.toLowerCase().includes(s) || 
+      m.material.code.toLowerCase().includes(s) ||
+      (m.driverName || "").toLowerCase().includes(s) ||
+      (m.vehiclePlate || "").toLowerCase().includes(s);
+    
+    const matchesCond = !condition || m.condition === condition;
+    const matchesStatus = !status || m.auditStatus === status;
+    const matchesCat = !category || m.material.category === category;
+
+    return matchesSearch && matchesCond && matchesStatus && matchesCat;
+  });
+
+  renderStockMovements(filtered);
+  renderStockGallery(filtered);
+}
+
 function wireStock() {
   el("newStockMovementBtn")?.addEventListener("click", openStockMovementModal);
+
+  const filters = ["Search", "Category", "Condition", "Status"];
+  filters.forEach(f => {
+    const input = el(`stockFilter${f}`);
+    if (input) {
+      input.addEventListener(f === "Search" ? "input" : "change", (e) => {
+        stockState.filters[f.toLowerCase()] = e.target.value.trim();
+        applyStockFilters();
+      });
+    }
+  });
 }

@@ -123,18 +123,7 @@
                     class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
                 <p id="projectType" class="text-slate-500 font-medium">---</p>
             </div>
-            <div class="flex flex-wrap gap-4">
-                <button id="exportProjectBtn"
-                    class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
-                    <span class="material-symbols-outlined text-xl">file_download</span>
-                    Relatório
-                </button>
-                <button id="newTransactionBtn" data-role-visible="admin,operador"
-                    class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
-                    <span class="material-symbols-outlined text-xl">add</span>
-                    Lançamento
-                </button>
-            </div>
+            <!-- Action buttons moved to Dashboard Tab -->
         </header>
 
         <!-- Tab Navigation -->
@@ -154,6 +143,19 @@
 
         <!-- Dashboard Tab -->
         <div id="tab_dashboard" class="tab-content">
+            <!-- Dashboard Action Buttons -->
+            <div class="flex justify-end gap-4 mb-8">
+                <button id="exportProjectBtn"
+                    class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                    <span class="material-symbols-outlined text-xl">file_download</span>
+                    Relatório
+                </button>
+                <button id="newTransactionBtn" data-role-visible="admin,operador"
+                    class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-xl">add</span>
+                    Lançamento
+                </button>
+            </div>
             <!-- Project Identification Cards -->
             <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                 <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
@@ -625,6 +627,49 @@
             <!-- Dashboard de Stock -->
             <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <!-- Rendered JS -->
+            </div>
+
+            <!-- Filtros de Stock -->
+            <div
+                class="bg-white p-6 mt-10 rounded-[32px] border border-slate-100 shadow-sm flex flex-wrap items-center gap-6">
+                <!-- Busca -->
+                <div class="flex-1 min-w-[280px] relative">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input id="stockFilterSearch" type="text"
+                        placeholder="Buscar por material, motorista ou matrícula..."
+                        class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
+                </div>
+                <!-- Categoria -->
+                <div class="w-44">
+                    <select id="stockFilterCategory"
+                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                        <option value="">Todas Categorias</option>
+                        <option value="MT">Média Tensão (MT)</option>
+                        <option value="BT">Baixa Tensão (BT)</option>
+                        <option value="IP">Iluminação Pública (IP)</option>
+                    </select>
+                </div>
+                <!-- Condição -->
+                <div class="w-40">
+                    <select id="stockFilterCondition"
+                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                        <option value="">Todas Condições</option>
+                        <option value="BOA">Boa</option>
+                        <option value="DANIFICADA">Danificada</option>
+                    </select>
+                </div>
+                <!-- Status -->
+                <div class="w-40">
+                    <select id="stockFilterStatus"
+                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                        <option value="">Todos Status</option>
+                        <option value="PENDENTE">Pendente</option>
+                        <option value="VALIDACAO">Em Validação</option>
+                        <option value="APROVADO">Aprovado</option>
+                        <option value="REJEITADO">Rejeitado</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
