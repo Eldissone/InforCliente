@@ -80,7 +80,7 @@ function renderRow(u) {
       </td>
       <td class="px-8 py-5 text-sm font-medium text-slate-500">${formatDateBR(u.createdAt)}</td>
       <td class="px-8 py-5 text-right">
-        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div class="flex items-center justify-end gap-1 transition-opacity duration-200">
           <button data-edit-user="${u.id}" class="h-9 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] hover:border-slate-900 transition-all">
             GERENCIAR
           </button>
