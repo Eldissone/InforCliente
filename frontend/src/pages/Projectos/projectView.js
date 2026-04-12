@@ -128,33 +128,27 @@ function renderTxRow(t) {
 function renderFileCard(f) {
   const isImage = f.mimeType.startsWith("image/");
   const icon = isImage ? "image" : (f.mimeType === "application/pdf" ? "picture_as_pdf" : "description");
-  const iconColor = isImage ? "text-primary" : (f.mimeType === "application/pdf" ? "text-error" : "text-slate-400");
+  const iconColor = isImage ? "text-blue-500" : (f.mimeType === "application/pdf" ? "text-red-500" : "text-slate-400");
   const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
   const fileUrl = `${baseUrl}/${f.path}`;
 
   return `
-    <div data-preview-file="${f.id}" class="bg-white rounded-2xl p-5 shadow-sm border border-surface-container hover:shadow-md hover:border-primary/20 transition-all group overflow-hidden cursor-pointer">
-        <div class="flex items-start justify-between mb-4">
-            <div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center ${iconColor}">
-                <span class="material-symbols-outlined">${icon}</span>
+    <div data-preview-file="${f.id}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer overflow-hidden relative">
+        <div class="flex items-start justify-between mb-6">
+            <div class="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center ${iconColor}">
+                <span class="material-symbols-outlined text-2xl">${icon}</span>
             </div>
-            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button data-edit-file="${f.id}" data-file-name="${escapeHtml(f.originalName)}" data-file-folder="${f.folderId || ''}" data-file-cat="${f.category || ''}" title="Editar" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
-                    <span class="material-symbols-outlined text-sm">edit</span>
-                </button>
-                <a href="${fileUrl}" target="_blank" title="Abrir em Nova Aba" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
-                    <span class="material-symbols-outlined text-sm">open_in_new</span>
-                </a>
-                <button data-delete-file="${f.id}" title="Apagar" class="p-1.5 hover:bg-error/10 rounded-lg text-error transition-colors">
+            <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                <button data-delete-file="${f.id}" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
                     <span class="material-symbols-outlined text-sm">delete</span>
                 </button>
             </div>
         </div>
-        <div class="mb-4">
-            <h4 class="text-sm font-bold text-[#212e3e] truncate" title="${escapeHtml(f.originalName)}">${escapeHtml(f.originalName)}</h4>
-            <p class="text-[10px] text-on-surface-variant font-bold uppercase mt-0.5">${formatBytes(f.size)} • ${formatDateBR(f.createdAt)}</p>
+        <div class="mb-6">
+            <h4 class="text-sm font-bold text-slate-900 truncate" title="${escapeHtml(f.originalName)}">${escapeHtml(f.originalName)}</h4>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${formatBytes(f.size)} • ${formatDateBR(f.createdAt)}</p>
         </div>
-        <a href="${fileUrl}" download="${f.originalName}" class="block w-full text-center py-2 bg-surface-container-low rounded-lg text-[10px] font-black uppercase tracking-widest text-[#212e3e] hover:bg-primary hover:text-white transition-all">
+        <a href="${fileUrl}" download="${f.originalName}" class="block w-full text-center py-3 bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-900 hover:text-white transition-all">
             Transferir
         </a>
     </div>
@@ -163,23 +157,23 @@ function renderFileCard(f) {
 
 function renderFolderCard(f) {
   return `
-    <div data-enter-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" class="bg-white rounded-2xl p-5 shadow-sm border border-surface-container hover:shadow-md hover:border-primary/20 transition-all group cursor-pointer">
-        <div class="flex items-start justify-between mb-4">
-            <div class="w-12 h-12 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
+    <div data-enter-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer">
+        <div class="flex items-start justify-between mb-6">
+            <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">folder</span>
             </div>
-            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                <button data-edit-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" title="Renomear Pasta" class="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors">
+            <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                <button data-edit-folder="${f.id}" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
                     <span class="material-symbols-outlined text-sm">edit</span>
                 </button>
-                <button data-delete-folder="${f.id}" title="Apagar Pasta" class="p-1.5 hover:bg-error/10 rounded-lg text-error transition-colors">
+                <button data-delete-folder="${f.id}" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
                     <span class="material-symbols-outlined text-sm">delete</span>
                 </button>
             </div>
         </div>
         <div>
-            <h4 class="text-sm font-bold text-[#212e3e] truncate">${escapeHtml(f.name)}</h4>
-            <p class="text-[10px] text-on-surface-variant font-bold uppercase mt-0.5">Pasta de Arquivos</p>
+            <h4 class="text-sm font-bold text-slate-900 truncate">${escapeHtml(f.name)}</h4>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Pasta de Sistema</p>
         </div>
     </div>
   `;
@@ -686,21 +680,21 @@ async function loadBudgetExecution() {
   const formatPct = (c, p) => p > 0 ? Math.round((c / p) * 100) + '%' : (c > 0 ? '100%' : '0%');
 
   const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null) => {
-    let rowCls = customRowCls || (isHeader ? "bg-[#e2e8f0] font-black text-[#212e3e]" : "bg-white text-on-surface hover:bg-surface-container-low transition-colors");
-    let titleCls = customRowCls ? `px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls}` : (isHeader ? "px-4 py-2 sticky left-0 bg-[#e2e8f0] z-10 whitespace-nowrap" : "px-4 py-1.5 sticky left-0 bg-white group-hover:bg-surface-container-low transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[250px] pl-8 text-xs font-semibold");
+    let rowCls = customRowCls || (isHeader ? "bg-slate-100 font-black text-slate-900" : "bg-white text-slate-800 hover:bg-slate-50 transition-colors");
+    let titleCls = customRowCls ? `px-2 md:px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls} text-[10px] md:text-xs` : (isHeader ? "px-2 md:px-4 py-2 sticky left-0 bg-slate-100 z-10 whitespace-nowrap text-[10px] md:text-xs" : "px-2 md:px-4 py-1.5 sticky left-0 bg-white group-hover:bg-slate-50 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] md:max-w-[250px] pl-4 md:pl-8 text-[9px] md:text-xs font-semibold");
 
-    let html = `<tr class="border-b border-outline-variant/30 group ${rowCls}">`;
+    let html = `<tr class="border-b border-slate-100 group ${rowCls}">`;
     html += `<td class="${titleCls}" title="${escapeHtml(title)}">${escapeHtml(title)}</td>`;
 
     // Total column
-    html += `<td class="px-2 py-1.5 text-right font-black border-l border-outline-variant/30 bg-primary/5">${formatTableCurrency(totalP)}</td>`;
-    html += `<td class="px-2 py-1.5 text-right ${totalC > totalP ? 'text-error' : ''}">${formatTableCurrency(totalC)}</td>`;
-    html += `<td class="px-2 py-1.5 text-right text-[9px] text-on-surface-variant font-bold">${formatPct(totalC, totalP)}</td>`;
+    html += `<td class="px-1.5 md:px-2 py-1.5 text-right font-black border-l border-slate-100 bg-slate-50 text-[10px] md:text-xs text-slate-900">${formatTableCurrency(totalP)}</td>`;
+    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[10px] md:text-xs ${totalC > totalP ? 'text-red-600' : 'text-slate-900'}">${formatTableCurrency(totalC)}</td>`;
+    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400 font-bold">${formatPct(totalC, totalP)}</td>`;
 
     monthsData.forEach((m) => {
-      html += `<td class="px-2 py-1.5 text-right border-l border-outline-variant/30 text-[11px] text-slate-500">${formatTableCurrency(m.p)}</td>`;
-      html += `<td class="px-2 py-1.5 text-right text-[11px] font-bold ${m.c > m.p ? 'text-error' : 'text-[#212e3e]'}">${formatTableCurrency(m.c)}</td>`;
-      html += `<td class="px-2 py-1.5 text-right text-[9px] text-on-surface-variant">${formatPct(m.c, m.p)}</td>`;
+      html += `<td class="px-1.5 md:px-2 py-1.5 text-right border-l border-slate-100 text-[9px] md:text-[11px] text-slate-500">${formatTableCurrency(m.p)}</td>`;
+      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[9px] md:text-[11px] font-bold ${m.c > m.p ? 'text-red-600' : 'text-slate-900'}">${formatTableCurrency(m.c)}</td>`;
+      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400">${formatPct(m.c, m.p)}</td>`;
     });
 
     html += `</tr>`;
@@ -709,19 +703,19 @@ async function loadBudgetExecution() {
 
   let theadHtml = `
     <thead>
-      <tr class="bg-[#1e293b] text-[#121210]">
-        <th rowspan="2" class="px-4 py-2 sticky left-0 bg-[#1e293b] z-20 whitespace-nowrap min-w-[250px] text-left text-xs font-black uppercase tracking-widest text-black">Descrição</th>
-        <th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 bg-primary/20 text-black">TOTAL OBRA</th>
-        ${projectMonths.map(m => `<th colspan="3" class="px-2 py-2 text-center text-xs font-black uppercase tracking-widest border-l border-white/20 text-black">${m.label}</th>`).join('')}
+      <tr class="bg-slate-900 text-white">
+        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">Descrição</th>
+        <th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10 bg-white/5">TOTAL OBRA</th>
+        ${projectMonths.map(m => `<th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10">${m.label}</th>`).join('')}
       </tr>
-      <tr class="bg-[#334155] text-black text-[9px] uppercase tracking-wider">
-        <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-black">Prev.</th>
-        <th class="px-2 py-1 text-right font-bold text-black">Real.</th>
-        <th class="px-2 py-1 text-right font-bold text-white/70">(%)</th>
+      <tr class="bg-slate-800 text-slate-300 text-[8px] md:text-[9px] uppercase tracking-wider">
+        <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10">Prev.</th>
+        <th class="px-1 md:px-2 py-1 text-right font-bold">Real.</th>
+        <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">(%)</th>
         ${projectMonths.map(() => `
-          <th class="px-2 py-1 text-right font-bold border-l border-white/20 text-white/70">P.</th>
-          <th class="px-2 py-1 text-right font-bold text-[#2afc8d]">R.</th>
-          <th class="px-2 py-1 text-right font-bold text-white/70">%</th>
+          <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10 text-slate-500">P.</th>
+          <th class="px-1 md:px-2 py-1 text-right font-bold text-emerald-400">R.</th>
+          <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">%</th>
         `).join('')}
       </tr>
     </thead>
@@ -1766,6 +1760,7 @@ function wireBudgetUpload() {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   await loadProject();
