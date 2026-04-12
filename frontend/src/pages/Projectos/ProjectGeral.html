@@ -5,196 +5,181 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-    rel="stylesheet" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-    rel="stylesheet" />
+  <title>Infor Cliente - Gestão de Obras</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <style>
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
-
-    body {
-      font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
-    }
-
-    .glass-panel {
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-    }
   </style>
 </head>
 
-<body class="bg-surface text-on-background min-h-screen">
-  <!-- TopNavBar -->
-  <nav
-    class="fixed top-0 w-full z-50 bg-[#212e3e] flex justify-between items-center px-8 h-16 w-full mx-auto shadow-[0px_20px_40px_rgba(15,28,44,0.08)] no-border">
-    <div class="flex items-center gap-12">
-      <span class="brand-display text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
-      <div class="hidden md:flex items-center gap-8">
-        <a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors hover:bg-[#eff4ff]/10"
-          href="../Dashboard/index.html">Dashboard</a>
-        <a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors hover:bg-[#eff4ff]/10"
-          href="../Clientes/clienteLista.html">Gestão de Clientes</a>
-        <a class="font-inter tracking-tight font-semibold text-sm text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2 transition-all duration-200 ease-in-out"
-          href="../Projectos/ProjectGeral.html">Gestão de Obras</a>
-      </div>
-    </div>
-    <div class="flex items-center gap-4">
-      <a data-nav-users
-        class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all"
-        href="../Users/index.html">Utilizadores</a>
-      <button data-logout
-        class="px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all">Sair
-        <span data-user-role class="ml-2 text-[10px] text-[#2afc8d]"></span></button>
-    </div>
-  </nav>
-  <main class="max-w-[1920px] mx-auto px-8 pt-24 pb-10">
-    <!-- Header & Primary Action Section -->
-    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-      <div>
-        <nav class="flex gap-2 text-xs font-medium uppercase tracking-widest text-on-surface-variant mb-4">
-          <span class="material-symbols-outlined text-[10px] self-center">chevron_right</span>
-          <span class="text-[#0d3fd1]">Gerenciamento de Obras</span>
-        </nav>
-        <h1 class="text-4xl font-extrabold text-on-surface tracking-tight leading-none mb-2">Portfolio de Obras</h1>
-        <p class="text-on-surface-variant max-w-2xl">Monitoramento de Obras em tempo real</p>
-      </div>
-      <button id="addProjectBtn" data-role-visible="admin,operador"
-        class="bg-primary-container text-on-primary px-6 py-3 rounded-md font-semibold flex items-center gap-2 shadow-lg shadow-primary-container/20 hover:scale-105 active:scale-95 transition-all">
-        <span class="material-symbols-outlined">add_circle</span>
-        Nova Obra
-      </button>
-    </div>
-    <!-- Filter Engine -->
-    <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-12 items-center">
-      <!-- Pesquisa (esquerda) -->
-      <div class="lg:col-span-5">
-        <div class="relative flex h-12 w-full items-center rounded-2xl border border-outline-variant bg-surface px-4">
-          <span class="material-symbols-outlined text-outline">search</span>
-          <input id="projectsSearch"
-            class="w-full border-none bg-transparent px-3 text-sm focus:ring-0 placeholder:text-outline text-on-surface"
-            placeholder="Buscar obras..." type="text" />
+<body class="bg-surface antialiased text-slate-900 min-h-screen">
+  <!-- Top Navigation Bar -->
+  <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
+    <div class="max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+      <div class="flex items-center gap-10">
+        <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <span class="w-8 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">I</span>
+          Infor Cliente
+        </span>
+        <div class="hidden lg:flex items-center gap-6">
+          <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
+          <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Clientes/clienteLista.html">Clientes</a>
+          <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg" href="../Projectos/ProjectGeral.html">Obras</a>
         </div>
       </div>
+      
+      <div class="flex items-center gap-4">
+        <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all" href="../Users/index.html">Utilizadores</a>
+        <button data-logout class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
+          Sair <span data-user-role class="text-[#2afc8d]"></span>
+        </button>
+        <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
+          <span class="material-symbols-outlined">menu</span>
+        </button>
+      </div>
+    </div>
+    <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-2">
+      <a class="text-sm font-semibold text-slate-400 py-3 px-4" href="../Dashboard/index.html">Dashboard</a>
+      <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50" href="../Clientes/clienteLista.html">Clientes</a>
+      <a class="text-sm font-semibold text-[#2afc8d] py-3 px-4 border-t border-slate-800/50" href="../Projectos/ProjectGeral.html">Obras</a>
+      <button data-logout class="text-left text-sm font-semibold text-red-400 py-3 px-4 border-t border-slate-800/50">Sair</button>
+    </div>
+  </nav>
 
-      <!-- Filtros + Botões de visualização (direita) -->
-      <div class="lg:col-span-7 flex flex-wrap justify-end gap-3">
-        <!-- Status -->
-        <div
-          class="flex h-12 min-w-[120px] items-center justify-between rounded-2xl border border-outline-variant bg-surface px-4 border-l-4 border-primary">
-          <select id="projectsStatus"
-            class="border-none bg-transparent p-2 text-sm font-bold focus:ring-0 text-secondary">
-            <option value="">Status</option>
+  <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
+    <!-- Header Section -->
+    <header class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+      <div>
+        <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          <span>Sistemas</span>
+          <span class="material-symbols-outlined text-xs">chevron_right</span>
+          <span class="text-[#0d3fd1]">Portfolio de Obras</span>
+        </nav>
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">Gerenciamento de Obras</h1>
+        <p class="text-slate-500 font-medium max-w-2xl">Monitoramento técnico e financeiro em tempo real.</p>
+      </div>
+      <button id="addProjectBtn" data-role-visible="admin,operador"
+        class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
+        <span class="material-symbols-outlined text-xl">add_circle</span>
+        Nova Obra
+      </button>
+    </header>
+
+    <!-- Filter Bar -->
+    <div class="mb-8 flex flex-col lg:flex-row gap-4">
+      <div class="flex-1 relative">
+        <input id="projectsSearch"
+          class="w-full h-12 bg-white border border-slate-100 rounded-2xl pl-12 pr-4 text-sm focus:ring-2 focus:ring-[#2afc8d]/20 transition-all shadow-sm"
+          placeholder="Buscar obras por nome, código ou cliente..." type="text" />
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="projectsStatus" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Todos Status</option>
             <option value="ACTIVE">Ativo</option>
-            <option value="ON_HOLD">Em andamento</option>
+            <option value="ON_HOLD">Aguardando</option>
             <option value="COMPLETED">Concluído</option>
           </select>
         </div>
 
-        <!-- Região -->
-        <div
-          class="flex h-12 min-w-[120px] items-center justify-between rounded-2xl border border-outline-variant bg-surface px-4">
-          <select id="projectsRegion"
-            class="border-none bg-transparent p-2 text-sm font-bold focus:ring-0 text-secondary">
-            <option value="">Região</option>
-            <!-- Opções serão preenchidas dinamicamente -->
+        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="projectsRegion" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Todas Regiões</option>
           </select>
         </div>
 
-        <!-- Botões de visualização -->
-        <div class="flex h-12 items-center gap-2">
-          <button
-            class="flex h-12 w-12 items-center justify-center rounded-2xl border border-outline-variant bg-surface text-on-surface-variant transition-all hover:bg-surface-container-high">
-            <span class="material-symbols-outlined">grid_view</span>
+        <div class="flex h-12 bg-white border border-slate-100 rounded-2xl p-1 shadow-sm">
+          <button class="w-10 h-full rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors">
+            <span class="material-symbols-outlined text-xl">grid_view</span>
           </button>
-          <button
-            class="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary bg-primary-container text-white shadow-sm">
-            <span class="material-symbols-outlined">list</span>
+          <button class="w-10 h-full rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shadow-lg">
+            <span class="material-symbols-outlined text-xl">list</span>
           </button>
         </div>
       </div>
     </div>
-    <!-- High-Fidelity Project Table -->
-    <div class="overflow-x-auto rounded-2xl bg-white shadow-sm border border-outline-variant/10">
-      <table class="w-full text-left border-collapse rounded-2xl">
-        <thead>
-          <tr class="bg-surface-container text-on-surface-variant text-[11px] font-bold uppercase tracking-widest">
-            <th class="px-6 py-5">Obra</th>
-            <th class="px-6 py-5">Cliente</th>
-            <th class="px-6 py-5">Morada</th>
-            <th class="px-6 py-5">Orçamento</th>
-            <th class="px-6 py-5">Progresso</th>
-            <th class="px-6 py-5">Status</th>
-            <th class="px-6 py-5 text-right">Acção</th>
-          </tr>
-        </thead>
-        <tbody id="projectsTbody" class="divide-y divide-outline-variant/10"></tbody>
-      </table>
-    </div>
-    <!-- Bento Grid Visualization for KPI Insights -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12">
-      <div
-        class="md:col-span-2 glass-panel p-8 rounded-2xl border border-outline-variant/10 flex flex-col justify-between overflow-hidden relative min-h-[220px]">
+
+    <!-- Table Container -->
+    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-12">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+              <th class="px-8 py-5">Obra / Cliente</th>
+              <th class="px-8 py-5">Morada</th>
+              <th class="px-8 py-5 text-right">Orçamento</th>
+              <th class="px-8 py-5">Progresso</th>
+              <th class="px-8 py-5">Status</th>
+              <th class="px-8 py-5 text-right">Acção</th>
+            </tr>
+          </thead>
+          <tbody id="projectsTbody" class="divide-y divide-slate-50"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div class="md:col-span-2 bg-[#F8FAFC] p-8 rounded-3xl border border-slate-100 flex flex-col justify-between min-h-[240px] relative overflow-hidden group">
         <div class="z-10">
-          <span class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">Inteligência de Sistemas</span>
-          <h3 class="text-2xl font-extrabold text-on-surface mt-1">Velocidade das Obras</h3>
-          <p class="text-sm text-on-surface-variant mt-2 max-w-xs">Progresso de cada Obra em andamento em
-            tempo real.</p>
+          <span class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">Analytics</span>
+          <h3 class="text-2xl font-bold text-slate-900 mt-2">Velocidade das Obras</h3>
+          <p class="text-sm text-slate-500 mt-2 max-w-xs">Acompanhamento de prazos e execução física.</p>
         </div>
-        <div class="flex items-end gap-1 z-10 mt-6">
-          <div class="w-full h-12 bg-primary-container/10 rounded-t-md relative overflow-hidden">
-            <div class="absolute bottom-0 left-0 right-0 h-4 bg-primary-container"></div>
-          </div>
-          <div class="w-full h-20 bg-primary-container/10 rounded-t-md relative overflow-hidden">
-            <div class="absolute bottom-0 left-0 right-0 h-10 bg-primary-container"></div>
-          </div>
-          <div class="w-full h-32 bg-primary-container/10 rounded-t-md relative overflow-hidden">
-            <div class="absolute bottom-0 left-0 right-0 h-24 bg-primary-container"></div>
-          </div>
-          <div class="w-full h-24 bg-primary-container/10 rounded-t-md relative overflow-hidden">
-            <div class="absolute bottom-0 left-0 right-0 h-16 bg-primary-container"></div>
-          </div>
+        <div class="flex items-end gap-1.5 z-10 mt-8">
+          <div class="flex-1 h-12 bg-blue-100 rounded-lg group-hover:h-16 transition-all duration-500"></div>
+          <div class="flex-1 h-20 bg-blue-200 rounded-lg group-hover:h-14 transition-all duration-500"></div>
+          <div class="flex-1 h-32 bg-blue-400 rounded-lg group-hover:h-24 transition-all duration-500"></div>
+          <div class="flex-1 h-24 bg-blue-300 rounded-lg group-hover:h-36 transition-all duration-500"></div>
         </div>
-        <!-- Abstract Engine Decoration -->
-        <div class="absolute -right-10 -bottom-10 opacity-5 pointer-events-none">
-          <span class="material-symbols-outlined text-[180px]">precision_manufacturing</span>
-        </div>
+        <span class="material-symbols-outlined absolute -right-6 -bottom-6 text-[140px] text-slate-200/50 group-hover:text-blue-500/10 group-hover:rotate-12 transition-all duration-700">insights</span>
       </div>
-      <div class="bg-[#212e3e] p-8 rounded-2xl flex flex-col justify-between shadow-2xl shadow-black/20">
+
+      <div class="bg-slate-900 p-8 rounded-3xl flex flex-col justify-between shadow-2xl shadow-slate-900/20">
         <div class="flex justify-between items-start">
-          <span class="material-symbols-outlined text-[#2afc8d] text-3xl">payments</span>
-          <span class="bg-[#2afc8d]/10 text-[#2afc8d] text-[10px] font-bold px-2 py-1 rounded">+2.4%</span>
+          <div class="h-12 w-12 bg-white/10 rounded-2xl flex items-center justify-center text-[#2afc8d]">
+            <span class="material-symbols-outlined">payments</span>
+          </div>
+          <span class="bg-emerald-500/10 text-emerald-400 text-[10px] font-black px-2 py-1 rounded-lg">+2.4%</span>
         </div>
         <div>
-          <span class="text-xs text-slate-400 font-medium uppercase tracking-widest">Orçamento Global</span>
+          <span class="text-xs text-slate-400 font-bold uppercase tracking-widest">Orçamento Global</span>
           <h3 class="text-2xl font-bold text-white mt-1">_ Kz</h3>
         </div>
       </div>
-      <div class="bg-white p-8 rounded-2xl flex flex-col justify-between border border-outline-variant/10 shadow-sm">
+
+      <div class="bg-white p-8 rounded-3xl border border-slate-100 flex flex-col justify-between shadow-sm">
         <div class="flex justify-between items-start">
-          <span class="material-symbols-outlined text-primary-container text-3xl">engineering</span>
-          <span class="bg-primary-container/10 text-primary-container text-[10px] font-bold px-2 py-1 rounded">2
-            Activos</span>
+          <div class="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
+            <span class="material-symbols-outlined">engineering</span>
+          </div>
         </div>
         <div>
-          <span class="text-xs text-on-surface-variant font-medium uppercase tracking-widest">
-            equipe</span>
-          <h3 class="text-2xl font-bold text-on-surface mt-1">_ Operativos</h3>
+          <span class="text-xs text-slate-400 font-bold uppercase tracking-widest">Equipe Operativa</span>
+          <h3 class="text-2xl font-bold text-slate-900 mt-1">_ Activos</h3>
         </div>
       </div>
     </div>
   </main>
-  <footer class="mt-auto border-t border-outline-variant px-10 py-6 text-center bg-surface-container-low">
-    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">InforCliente © 2026 - Todos os direitos
-      reservados ao Grupo Unione</p>
+
+  <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white">
+    <div class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+      <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InforCliente © 2026 - Todos os direitos reservados</p>
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Grupo Unione</span>
+    </div>
   </footer>
 
   <script type="module" src="./ProjectGeral.js"></script>
+</body>
 </body>
 
 </html>

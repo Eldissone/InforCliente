@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -38,12 +38,18 @@ let state = {
 
 function renderStatusPill(status) {
   if (status === "ON_HOLD") {
-    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-secondary-fixed text-on-secondary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>andamento</span>`;
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> ANDAMENTO
+    </span>`;
   }
   if (status === "COMPLETED") {
-    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-primary-fixed text-on-primary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>Completed</span>`;
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> CONCLUÍDO
+    </span>`;
   }
-  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter bg-tertiary-fixed text-on-tertiary-fixed"><span class="w-1.5 h-1.5 rounded-full bg-[#2afc8d] shadow-[0_0_8px_#2afc8d]"></span>Active</span>`;
+  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVO
+  </span>`;
 }
 
 function iconFor(name) {
@@ -56,45 +62,53 @@ function iconFor(name) {
 
 function renderRow(p) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
+  const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+  
   return `
-    <tr class="hover:bg-surface-container-low/50 transition-all group">
-      <td class="px-6 py-6">
+    <tr class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0">
+      <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center">
-            <span class="material-symbols-outlined text-primary-container">${iconFor(p.name)}</span>
+          <div class="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
+            <span class="material-symbols-outlined text-[#2afc8d]">${iconFor(p.name)}</span>
           </div>
           <div>
-            <h4 class="font-bold text-on-surface">${p.name}</h4>
-            <p class="text-xs text-on-surface-variant">ID: ${p.code} • ${p.location || p.region || "-"}</p>
+            <h4 class="font-bold text-slate-900 text-sm capitalize">${p.name.toLowerCase()}</h4>
+            <div class="flex items-center gap-2 mt-0.5">
+               <span class="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${p.code}</span>
+               <span class="text-[11px] font-medium text-slate-400">${p.region || "-"}</span>
+            </div>
           </div>
         </div>
       </td>
-      <td class="px-6 py-6">
-        <div>
-          <span class="block text-sm font-semibold text-on-surface">${p.client?.name || "-"}</span>
-          <span class="text-xs text-on-surface-variant">${p.contact || (p.client ? "Cliente vinculado" : "Sem cliente")}</span>
+      <td class="px-8 py-5">
+        <div class="flex flex-col">
+          <span class="text-sm font-bold text-slate-700">${p.client?.name || "-"}</span>
+          <span class="text-[11px] text-slate-400 font-medium">${p.contact || "Sem contato"}</span>
         </div>
       </td>
-      <td class="px-6 py-6">
-        <span class="text-sm font-medium text-on-surface">${p.location || p.region || "-"}</span>
+      <td class="px-8 py-5 text-right font-bold text-sm text-slate-900">
+        ${formatCurrencyKZ(p.budgetTotal || 0)}
       </td>
-      <td class="px-6 py-6">
-        <span class="font-bold text-sm text-on-surface">${formatCurrencyKZ(p.budgetTotal || 0)}</span>
-      </td>
-      <td class="px-6 py-6 min-w-[200px]">
+      <td class="px-8 py-5 min-w-[180px]">
         <div class="flex items-center gap-3">
-          <div class="flex-1 h-1.5 bg-surface-container-high rounded-full overflow-hidden">
-            <div class="h-full ${p.status === "ON_HOLD" ? "bg-secondary" : "bg-[#2afc8d]"} rounded-full" style="width: ${progress}%;"></div>
+          <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full ${barColor} transition-all duration-1000" style="width: ${progress}%;"></div>
           </div>
-          <span class="text-xs font-bold text-on-surface">${formatPercent(progress, { digits: 0 })}</span>
+          <span class="text-xs font-bold text-slate-700">${formatPercent(progress, { digits: 0 })}</span>
         </div>
       </td>
-      <td class="px-6 py-6">${renderStatusPill(p.status)}</td>
-      <td class="px-6 py-6 text-right">
-        <div class="flex items-center justify-end gap-2">
-          <button data-view-project="${p.id}" title="Visualizar Detalhes" class="material-symbols-outlined text-slate-400 hover:text-primary p-2 rounded-md hover:bg-primary/5 transition-all">visibility</button>
-          <button data-edit-project="${p.id}" title="Editar Obra" class="material-symbols-outlined text-slate-400 hover:text-primary-container p-2 rounded-md hover:bg-primary-container/10 transition-all">edit</button>
-          <button data-delete-project="${p.id}" data-name="${escapeHtml(p.name)}" title="Excluir Obra" class="material-symbols-outlined text-slate-400 hover:text-error p-2 rounded-md hover:bg-error/10 transition-all">delete</button>
+      <td class="px-8 py-5">${renderStatusPill(p.status)}</td>
+      <td class="px-8 py-5 text-right">
+        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button data-view-project="${p.id}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-xl">visibility</span>
+          </button>
+          <button data-edit-project="${p.id}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-xl">edit</span>
+          </button>
+          <button data-delete-project="${p.id}" data-name="${escapeHtml(p.name)}" class="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all">
+            <span class="material-symbols-outlined text-xl">delete</span>
+          </button>
         </div>
       </td>
     </tr>
@@ -377,6 +391,7 @@ async function openCreate() {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   wireFilters();

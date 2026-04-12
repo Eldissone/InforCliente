@@ -1,5 +1,5 @@
 import { apiRequest, apiUpload } from "../../services/api.js";
-import { openModal, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser } from "../../services/auth.js";
@@ -92,30 +92,33 @@ function formatUnit(u) {
 function renderTxRow(t) {
   const st = statusLabel(t.status);
   return `
-    <tr class="hover:bg-surface-container-low transition-colors group">
-      <td class="px-8 py-4 text-sm">${formatDateBR(t.date)}</td>
-      <td class="px-8 py-4">
-        <div class="font-bold text-on-surface">${t.description}</div>
+    <tr class="hover:bg-slate-50 transition-colors group">
+      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${formatDateBR(t.date)}</td>
+      <td class="px-10 py-5">
+        <div class="font-bold text-slate-900">${t.description}</div>
       </td>
-      <td class="px-8 py-4">
-        <span class="bg-surface-container px-2 py-1 rounded text-[10px] font-bold">${catLabel(t.category)}</span>
+      <td class="px-10 py-5">
+        <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500">${catLabel(t.category)}</span>
       </td>
-      <td class="px-8 py-4 text-sm font-medium">${t.ownerName || "-"}</td>
-      <td class="px-8 py-4">
+      <td class="px-10 py-5">
         <div class="flex items-center gap-2 ${st.cls}">
-          <span class="w-2 h-2 rounded-full ${st.dot} ${t.status === "PAID" ? "shadow-[0_0_6px_#2afc8d]" : ""}"></span>
-          <span class="text-xs font-semibold">${st.text}</span>
+          <span class="w-1.5 h-1.5 rounded-full ${st.dot} shadow-sm"></span>
+          <span class="text-[10px] font-black uppercase tracking-widest">${st.text}</span>
         </div>
       </td>
-      <td class="px-8 py-4 text-right font-bold text-on-surface">
+      <td class="px-10 py-5 text-right font-black text-slate-900">
         ${formatCurrencyKZ(t.amount)}
-        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[10px] text-[#2afc8d] font-black">Real: ${formatCurrencyKZ(t.realizedAmount)}</div>` : ""}
+        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrencyKZ(t.realizedAmount)}</div>` : ""}
       </td>
-      <td class="px-8 py-4 text-center">
+      <td class="px-10 py-5 text-center">
         ${t.status !== "PAID" ? `
-          <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Marcar como Liquidado" class="material-symbols-outlined text-slate-400 hover:text-[#2afc8d] transition-colors p-1 rounded-md hover:bg-[#2afc8d]/10">check_circle</button>
+          <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Liquidado" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all mx-auto">
+            <span class="material-symbols-outlined text-lg">check_circle</span>
+          </button>
         ` : `
-          <span class="material-symbols-outlined text-[#2afc8d] opacity-50">done_all</span>
+          <div class="w-8 h-8 rounded-lg bg-slate-50 text-slate-300 flex items-center justify-center mx-auto">
+            <span class="material-symbols-outlined text-lg">done_all</span>
+          </div>
         `}
       </td>
     </tr>

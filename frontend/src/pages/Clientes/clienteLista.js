@@ -1,5 +1,5 @@
 import { apiRequest, apiUpload } from "../../services/api.js";
-import { openModal, toast } from "../../shared/ui.js";
+import { openModal, toast, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -7,48 +7,53 @@ function el(id) {
   return document.getElementById(id);
 }
 
-function statusBadge(status) {
-  if (status === "AT_RISK") return { label: "Em Risco", cls: "border-error/30 bg-error/10 text-error" };
-  if (status === "INACTIVE")
-    return { label: "Inativo", cls: "border-outline/30 bg-surface-container-high text-on-surface-variant" };
-  return { label: "Ativo", cls: "border-tertiary/30 bg-tertiary/10 text-tertiary" };
+function renderStatusPill(status) {
+  if (status === "AT_RISK") {
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold border border-red-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> EM RISCO
+    </span>`;
+  }
+  if (status === "INACTIVE") {
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-[10px] font-bold border border-slate-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> INATIVO
+    </span>`;
+  }
+  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVO
+  </span>`;
 }
 
 function renderRow(c) {
-  const badge = statusBadge(c.status);
   return `
-    <tr class="hover:bg-surface-container-low transition-colors group">
-      <td class="px-6 py-5">
+    <tr class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0">
+      <td class="px-8 py-5">
         <div class="flex items-center gap-4">
           ${c.profilePic 
-            ? `<img src="${c.profilePic}" alt="Foto de perfil" class="size-10 flex-shrink-0 rounded border border-outline-variant object-cover" />`
-            : `<div class="size-10 flex-shrink-0 rounded border border-outline-variant bg-white p-1 flex items-center justify-center font-black text-primary">
+            ? `<div class="h-11 w-11 rounded-2xl overflow-hidden border border-slate-100 shadow-sm group-hover:scale-105 transition-transform duration-300">
+                 <img src="${c.profilePic}" alt="Perfil" class="w-full h-full object-cover" />
+               </div>`
+            : `<div class="h-11 w-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
                  ${String(c.code || "ID").slice(0, 2)}
                </div>`
           }
           <div>
-            <p class="text-sm font-bold leading-tight text-secondary">${c.name}</p>
-            <p class="text-[10px] font-bold text-outline uppercase tracking-tighter">ID: ${c.code}</p>
+            <p class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${c.name}</p>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${c.code}</p>
           </div>
         </div>
       </td>
-      <td class="px-6 py-5">
-        <span class="rounded bg-surface-container-high px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-secondary">
+      <td class="px-8 py-5 text-center">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">
           ${c.industry || "-"}
         </span>
       </td>
-      <td class="px-6 py-5 text-sm font-semibold text-secondary">${c.region || "-"}</td>
-      <td class="px-6 py-5">
-        <div class="flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase w-fit ${badge.cls}">
-          <span class="size-1.5 rounded-full ${c.status === "AT_RISK" ? "bg-error" : c.status === "INACTIVE" ? "bg-outline" : "bg-tertiary"}"></span>
-          ${badge.label}
-        </div>
-      </td>
-      <td class="px-6 py-5">
-        <div class="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button data-view="${c.id}" class="flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-[10px] font-bold uppercase text-white hover:opacity-90">Visualizar</button>
-          <button data-edit="${c.id}" class="flex h-8 w-8 items-center justify-center rounded border border-outline-variant hover:bg-surface-container-high text-secondary">
-            <span class="material-symbols-outlined text-[18px]">edit</span>
+      <td class="px-8 py-5 text-sm font-semibold text-slate-600">${c.region || "-"}</td>
+      <td class="px-8 py-5">${renderStatusPill(c.status)}</td>
+      <td class="px-8 py-5 text-right">
+        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button data-view="${c.id}" class="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] transition-all">ABRIR</button>
+          <button data-edit="${c.id}" class="h-9 w-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-900 hover:border-slate-400 transition-all">
+            <span class="material-symbols-outlined text-xl">edit</span>
           </button>
         </div>
       </td>
@@ -93,8 +98,8 @@ function renderPages() {
     const btn = document.createElement("button");
     btn.className =
       p === state.page
-        ? "flex h-8 w-8 items-center justify-center rounded bg-primary text-[11px] font-black uppercase text-white"
-        : "flex h-8 w-8 items-center justify-center rounded border border-outline-variant text-[11px] font-black uppercase text-secondary hover:bg-surface-container-high";
+        ? "flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-[11px] font-black uppercase text-[#2afc8d] shadow-lg"
+        : "flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-[11px] font-black uppercase text-slate-400 hover:text-slate-900 hover:border-slate-300 transition-all";
     btn.textContent = String(p);
     btn.addEventListener("click", () => {
       state.page = p;
@@ -307,6 +312,7 @@ async function openEdit(id) {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   wireFilters();

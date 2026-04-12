@@ -5,25 +5,19 @@
 @layer base {
   html,
   body {
-    font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1,
   h2,
   h3,
   .brand-display {
-    font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
+    font-family: 'Outfit', sans-serif;
   }
 }
 
 @layer components {
-  button,
-  [role="button"],
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-  select,
-  textarea,
-  table {
-    border-radius: 1rem !important;
-  }
-
+  /* Estilos específicos podem ser adicionados aqui */
 }

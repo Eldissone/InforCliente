@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -51,24 +51,40 @@ function wireClientSelector(panel, { roleSelectorId, clientWrapId }) {
 }
 
 function renderRow(u) {
+  const roleStyles = {
+    admin: "bg-slate-900 text-[#2afc8d] border-slate-800",
+    operador: "bg-blue-50 text-blue-700 border-blue-100",
+    cliente: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    leitura: "bg-slate-50 text-slate-500 border-slate-200"
+  };
+  const currentRoleStyle = roleStyles[u.role] || roleStyles.leitura;
+
   return `
-    <tr class="hover:bg-slate-50">
-      <td class="px-6 py-4 font-bold text-slate-900">${u.email}</td>
-      <td class="px-6 py-4">
-        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-          u.role === "admin"
-            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-            : u.role === "operador"
-              ? "bg-blue-50 text-blue-700 border border-blue-200"
-              : u.role === "cliente"
-                ? "bg-amber-50 text-amber-700 border border-amber-200"
-              : "bg-slate-100 text-slate-700 border border-slate-200"
-        }">${u.role}</span>
+    <tr class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0">
+      <td class="px-8 py-5">
+        <div class="flex flex-col">
+          <span class="text-sm font-bold text-slate-900">${u.email}</span>
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${u.id.slice(0, 8)}</span>
+        </div>
       </td>
-      <td class="px-6 py-4 text-slate-700">${u.client ? `${u.client.name} (${u.client.code})` : "—"}</td>
-      <td class="px-6 py-4 text-slate-700">${formatDateBR(u.createdAt)}</td>
-      <td class="px-6 py-4 text-right">
-        <button data-edit-user="${u.id}" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 font-bold hover:bg-white">Editar</button>
+      <td class="px-8 py-5">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border ${currentRoleStyle}">
+          ${u.role}
+        </span>
+      </td>
+      <td class="px-8 py-5">
+        <div class="flex flex-col">
+          <span class="text-sm font-medium text-slate-600">${u.client ? u.client.name : "—"}</span>
+          ${u.client ? `<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Código: ${u.client.code}</span>` : ""}
+        </div>
+      </td>
+      <td class="px-8 py-5 text-sm font-medium text-slate-500">${formatDateBR(u.createdAt)}</td>
+      <td class="px-8 py-5 text-right">
+        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <button data-edit-user="${u.id}" class="h-9 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] hover:border-slate-900 transition-all">
+            GERENCIAR
+          </button>
+        </div>
       </td>
     </tr>
   `;
@@ -254,6 +270,7 @@ function wireActions() {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   wireActions();

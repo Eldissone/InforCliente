@@ -5,189 +5,153 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Infor Cliente - Lista Geral de Clientes</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-        rel="stylesheet" />
-    <link href="/assets/styles/tailwind-clientes.css" rel="stylesheet" />
+    <title>Infor Cliente - Gestão de Clientes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+    <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <style>
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
-
-        body {
-            background-color: #ffffff;
-            color: #212e3e;
-            font-family: "Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif;
-        }
-
-        .glass-header {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(12px);
-        }
-
-        .neon-glow {
-            box-shadow: 0 0 8px rgba(26, 180, 102, 0.3);
-        }
-
-        .kinetic-gradient {
-            background: linear-gradient(135deg, #0d3fd1 0%, #274fde 100%);
-        }
     </style>
 </head>
 
-<body class="bg-background text-on-surface">
-    <div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
-        <nav
-            class="fixed top-0 w-full z-50 bg-[#212e3e] flex justify-between items-center px-8 h-16 w-full mx-auto shadow-[0px_20px_40px_rgba(15,28,44,0.08)] no-border">
-            <div class="flex items-center gap-12">
-                <span class="brand-display text-xl font-bold text-white tracking-tighter">Infor Cliente</span>
-                <div class="hidden md:flex items-center gap-8">
-                    <a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors hover:bg-[#eff4ff]/10"
-                        href="../Dashboard/index.html">Dashboard</a>
-                    <a class="font-inter tracking-tight font-semibold text-sm text-[#2afc8d] border-b-2 border-[#2afc8d] pb-2 transition-all duration-200 ease-in-out"
-                        href="../Clientes/clienteLista.html">Gestão de Clientes</a>
-                    <a class="font-inter tracking-tight font-semibold text-sm text-slate-400 hover:text-white transition-colors hover:bg-[#eff4ff]/10"
-                        href="../Projectos/ProjectGeral.html">Gestão de Obras</a>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <a data-nav-users
-                    class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all"
-                    href="../Users/index.html">Utilizadores</a>
-                <button data-logout
-                    class="px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all">
-                    Sair <span data-user-role class="ml-2 text-[10px] text-[#2afc8d]"></span>
-                </button>
-            </div>
-        </nav>
-        <main class="mx-auto flex w-full max-w-[1480px] flex-col px-10 pt-24 pb-8">
-            <div class="mb-10 flex flex-wrap items-end justify-between gap-6">
-                <div class="flex flex-col gap-2">
-                    <h1 class="text-4xl font-black tracking-[-0.03em] uppercase text-secondary">Lista Geral de Clientes
-                    </h1>
-                    <div class="flex items-center gap-3">
-                        <span class="size-2 rounded-full bg-tertiary neon-glow"></span>
-                        <p class="text-on-surface-variant text-base font-medium">Gestão centralizada de clientes e
-                            acesso</p>
-                    </div>
-                </div>
-                <button id="addClientBtn" data-role-visible="admin,operador"
-                    class="kinetic-gradient flex items-center justify-center gap-2 rounded px-6 py-3 text-sm font-bold tracking-wider text-white hover:opacity-90 shadow-lg shadow-primary/20 transition-all">
-                    <span class="material-symbols-outlined">person_add</span>
-                    Novo Cliente
-                </button>
-            </div>
-            <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-12 items-center">
-                <!-- Pesquisa (esquerda) -->
-                <div class="lg:col-span-5">
-                    <div
-                        class="relative flex h-12 w-full items-center rounded-2xl border border-outline-variant bg-surface px-4">
-                        <span class="material-symbols-outlined text-outline">search</span>
-                        <input id="clientsSearch"
-                            class="w-full border-none bg-transparent px-3 text-sm focus:ring-0 placeholder:text-outline text-on-surface"
-                            placeholder="Buscar por nome, código..." type="text" />
-                    </div>
-                </div>
-
-                <!-- Filtros (direita) -->
-                <div class="lg:col-span-7 flex flex-wrap justify-end gap-3">
-
-                    <div
-                        class="flex h-12 min-w-[120px] items-center justify-between rounded-2xl border border-outline-variant bg-surface px-4 border-l-4 border-primary">
-                        <select id="clientsStatus"
-                            class="border-none bg-transparent p-2 text-sm font-bold focus:ring-0 text-secondary">
-                            <option value="">Status</option>
-                            <option value="ACTIVE">Ativos</option>
-                            <option value="INACTIVE">Inativos</option>
-                            <option value="AT_RISK">Em Risco</option>
-                        </select>
-                    </div>
-
-                    <div
-                        class="flex h-12 min-w-[120px] items-center justify-between rounded-2xl border border-outline-variant bg-surface px-4">
-                        <select id="clientsIndustry"
-                            class="border-none bg-transparent p-0 text-sm font-bold focus:ring-0 text-secondary">
-                            <option value="">Sector</option>
-                        </select>
-                    </div>
-
-                    <div
-                        class="flex h-12 min-w-[120px] items-center justify-between rounded-2xl border border-outline-variant bg-surface px-4">
-                        <select id="clientsSort"
-                            class="border-none bg-transparent p-2 text-sm font-bold focus:ring-0 text-secondary">
-                            <option value="updatedAt_desc">Atualização</option>
-                            <option value="name_asc">Nome (A-Z)</option>
-                        </select>
-                    </div>
-
-                </div>
-            </div>
-
-            <div class="overflow-hidden rounded-2xl border border-outline-variant bg-white shadow-sm">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse rounded-2xl">
-                        <thead>
-                            <tr class="border-b border-outline-variant bg-surface-container-low">
-                                <th
-                                    class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                                    Cliente</th>
-                                <th
-                                    class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                                    Sector</th>
-                                <th
-                                    class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                                    Região </th>
-                                <th
-                                    class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                                    Status</th>
-                                <th
-                                    class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant">
-                                    Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="clientsTbody" class="divide-y divide-outline-variant/50">
-                            <!-- Preenchido via JS -->
-                        </tbody>
-                    </table>
-                </div>
-                <div
-                    class="flex items-center justify-between border-t border-outline-variant bg-surface-container-low px-6 py-4">
-                    <p id="clientsPagingText" class="text-xs font-bold text-on-surface-variant uppercase">Carregando...
-                    </p>
-                    <div class="flex items-center gap-2">
-                        <button id="clientsPrev"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-outline-variant text-outline hover:bg-surface-container-high disabled:opacity-30"
-                            disabled="">
-                            <span class="material-symbols-outlined text-[18px]">chevron_left</span>
-                        </button>
-                        <div id="clientsPages" class="flex items-center gap-2"></div>
-                        <button id="clientsNext"
-                            class="flex h-8 w-8 items-center justify-center rounded border border-outline-variant text-secondary hover:bg-surface-container-high">
-                            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <!-- suporte-->
-        <button
-            class="fixed bottom-8 right-8 h-14 w-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 group">
-            <span class="material-symbols-outlined text-2xl" data-icon="support_agent">support_agent</span>
-            <span
-                class="absolute right-16 bg-[#212e3e] text-white text-[10px] font-bold px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Get
-                Support</span>
+<body class="bg-surface antialiased text-slate-900 min-h-screen">
+  <!-- Top Navigation Bar -->
+  <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
+    <div class="max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+      <div class="flex items-center gap-10">
+        <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <span class="w-8 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">I</span>
+          Infor Cliente
+        </span>
+        <div class="hidden lg:flex items-center gap-6">
+          <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Dashboard/index.html">Dashboard</a>
+          <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg" href="../Clientes/clienteLista.html">Clientes</a>
+          <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../Projectos/ProjectGeral.html">Obras</a>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all" href="../Users/index.html">Utilizadores</a>
+        <button data-logout class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
+          Sair <span data-user-role class="text-[#2afc8d]"></span>
         </button>
+        <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
+          <span class="material-symbols-outlined">menu</span>
+        </button>
+      </div>
+    </div>
+    <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-2">
+      <a class="text-sm font-semibold text-slate-400 py-3 px-4" href="../Dashboard/index.html">Dashboard</a>
+      <a class="text-sm font-semibold text-[#2afc8d] py-3 px-4 border-t border-slate-800/50" href="../Clientes/clienteLista.html">Clientes</a>
+      <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50" href="../Projectos/ProjectGeral.html">Obras</a>
+      <button data-logout class="text-left text-sm font-semibold text-red-400 py-3 px-4 border-t border-slate-800/50">Sair</button>
+    </div>
+  </nav>
 
-        <footer class="mt-auto border-t border-outline-variant px-10 py-6 text-center bg-surface-container-low">
-            <p class="text-[10px] font-black uppercase tracking-[0.2em] text-outline">InforCliente © 2026 - Todos os
-                direitos reservados ao Grupo Unione</p>
-        </footer>
+  <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
+    <!-- Header Section -->
+    <header class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+      <div>
+        <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          <span>Administração</span>
+          <span class="material-symbols-outlined text-xs">chevron_right</span>
+          <span class="text-[#0d3fd1]">Gestão de Clientes</span>
+        </nav>
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">Lista de Clientes</h1>
+        <p class="text-slate-500 font-medium max-w-2xl">Gestão centralizada e monitoramento de saúde do portfólio.</p>
+      </div>
+      <button id="addClientBtn" data-role-visible="admin,operador"
+        class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
+        <span class="material-symbols-outlined text-xl">person_add</span>
+        Novo Cliente
+      </button>
+    </header>
+
+    <!-- Filter Bar -->
+    <div class="mb-8 flex flex-col lg:flex-row gap-4">
+      <div class="flex-1 relative">
+        <input id="clientsSearch"
+          class="w-full h-12 bg-white border border-slate-100 rounded-2xl pl-12 pr-4 text-sm focus:ring-2 focus:ring-[#2afc8d]/20 transition-all shadow-sm"
+          placeholder="Buscar por nome, código ou setor..." type="text" />
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="clientsStatus" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Todos Status</option>
+            <option value="ACTIVE">Ativos</option>
+            <option value="INACTIVE">Inativos</option>
+            <option value="AT_RISK">Em Risco</option>
+          </select>
+        </div>
+
+        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="clientsIndustry" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Filtro Sector</option>
+          </select>
+        </div>
+
+        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="clientsSort" class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="updatedAt_desc">Atualização</option>
+            <option value="name_asc">Nome (A-Z)</option>
+          </select>
+        </div>
+      </div>
     </div>
 
-    <script type="module" src="./clienteLista.js"></script>
+    <!-- Table Container -->
+    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+              <th class="px-8 py-5">Identificação</th>
+              <th class="px-8 py-5 text-center">Sector / Indústria</th>
+              <th class="px-8 py-5">Região</th>
+              <th class="px-8 py-5">Status</th>
+              <th class="px-8 py-5 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="clientsTbody" class="divide-y divide-slate-50"></tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between border-t border-slate-50 bg-slate-50/30 px-8 py-4">
+        <p id="clientsPagingText" class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carregando...</p>
+        <div class="flex items-center gap-3">
+          <button id="clientsPrev" class="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-900 transition-all disabled:opacity-30 disabled:pointer-events-none">
+            <span class="material-symbols-outlined text-xl">chevron_left</span>
+          </button>
+          <div id="clientsPages" class="flex items-center gap-2"></div>
+          <button id="clientsNext" class="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-xl">chevron_right</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white mt-10">
+    <div class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+      <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InforCliente © 2026 - Todos os direitos reservados</p>
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Grupo Unione</span>
+    </div>
+  </footer>
+
+  <button class="fixed bottom-6 right-6 h-14 w-14 bg-slate-900 text-[#2afc8d] rounded-2xl shadow-xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-[100]">
+     <span class="material-symbols-outlined text-2xl">support_agent</span>
+  </button>
+
+  <script type="module" src="./clienteLista.js"></script>
+</body>
 </body>
 
 

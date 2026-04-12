@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, setText, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatPercent, formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -21,42 +21,40 @@ function timelineDotColor(type) {
 function renderLinkedProjectCard(project) {
   const progress = Math.max(0, Math.min(100, Number(project.physicalProgressPct || 0)));
   return `
-    <article class="rounded-2xl border border-outline-variant/30 bg-white p-6 shadow-sm">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <div class="text-[10px] font-black uppercase tracking-widest text-primary">${project.code}</div>
-          <h4 class="mt-1 text-lg font-extrabold text-[#212e3e]">${project.name}</h4>
-          <p class="mt-2 text-sm text-on-surface-variant">${project.location || "Morada não informada"}</p>
+    <article class="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-900/5 transition-all duration-300 group">
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform">
+            <span class="material-symbols-outlined text-xl">construction</span>
+          </div>
+          <div>
+            <div class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">${project.code}</div>
+            <h4 class="text-lg font-bold text-slate-900 leading-tight">${project.name}</h4>
+          </div>
         </div>
-        <button data-open-project="${project.id}" class="rounded-lg bg-primary-container px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:brightness-110">
-          Abrir
+        <button data-open-project="${project.id}" class="h-10 px-5 rounded-xl bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] transition-all">
+          Detalhes
         </button>
       </div>
-      <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        <div class="rounded-xl bg-surface-container-low px-4 py-3">
-          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Contatos</div>
-          <div class="mt-1 font-semibold text-on-surface">${project.contact || "-"}</div>
-          <div class="mt-1 font-semibold text-on-surface">${project.accountEmail || "-"}</div>
+
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100/50">
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Orçamento</p>
+          <p class="text-xs font-bold text-slate-700">${formatCurrencyKZ(project.budgetTotal)}</p>
         </div>
-        <div class="rounded-xl bg-surface-container-low px-4 py-3">
-          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Orçamento</div>
-          <div class="mt-1 font-semibold text-on-surface">${formatCurrencyKZ(project.budgetTotal)}</div>
-        </div>
-        <div class="rounded-xl bg-surface-container-low px-4 py-3">
-          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Início</div>
-          <div class="mt-1 font-semibold text-on-surface">${formatDateBR(project.startDate)}</div>
-        </div>
-        <div class="rounded-xl bg-surface-container-low px-4 py-3">
-          <div class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Fim</div>
-          <div class="mt-1 font-semibold text-on-surface">${formatDateBR(project.dueDate)}</div>
+        <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100/50">
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Início</p>
+          <p class="text-xs font-bold text-slate-700">${formatDateBR(project.startDate)}</p>
         </div>
       </div>
-      <div class="mt-5">
-        <div class="mb-2 flex items-center justify-between text-xs font-bold text-on-surface-variant">
-          <span>Progresso</span>
+
+      <div class="space-y-2">
+        <div class="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+          <span>Progresso Físico</span>
+          <span class="text-slate-900">${formatPercent(progress, { digits: 0 })}</span>
         </div>
-        <div class="h-2 rounded-full bg-surface-container overflow-hidden">
-          <div class="h-full rounded-full bg-[#2afc8d]" style="width:${progress}%"></div>
+        <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width:${progress}%"></div>
         </div>
       </div>
     </article>
@@ -78,17 +76,19 @@ function renderClientProjects(projects) {
 }
 
 function renderTimelineItem(item) {
+  const isPriority = String(item.type).toLowerCase().includes("support") || String(item.type).toLowerCase().includes("upgrade");
   return `
-    <div class="relative pl-6 border-l-2 border-surface-container group">
-      <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 ${timelineDotColor(
-        item.type
-      )} group-hover:scale-125 transition-transform"></div>
-      <span class="text-[10px] font-black text-on-surface-variant block mb-1">${formatDateBR(item.occurredAt)}</span>
-      <h4 class="font-bold text-[#212e3e] text-sm mb-2">${item.title}</h4>
-      <p class="text-xs text-on-surface-variant mb-3 leading-relaxed">${item.description || ""}</p>
+    <div class="relative pl-6 border-l-2 ${isPriority ? 'border-blue-200' : 'border-slate-200'} group pb-8 last:pb-0">
+      <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 ${isPriority ? 'border-blue-600' : 'border-[#2afc8d]'} group-hover:scale-125 transition-transform duration-300 shadow-sm"></div>
+      <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">${formatDateBR(item.occurredAt)}</span>
+      <h4 class="font-bold text-slate-900 text-sm mb-1 leading-tight">${item.title}</h4>
+      <p class="text-xs text-slate-500 mb-3 leading-relaxed">${item.description || ""}</p>
       ${
         item.leadName
-          ? `<span class="text-[10px] text-on-surface-variant italic">Lead: ${item.leadName}</span>`
+          ? `<div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 w-fit">
+               <span class="material-symbols-outlined text-xs text-slate-400">person</span>
+               <span class="text-[10px] font-bold text-slate-500">${item.leadName}</span>
+             </div>`
           : ""
       }
     </div>
@@ -119,19 +119,20 @@ async function loadClient() {
   if (statusBadgeEl) {
     const s = c.status || "ACTIVE";
     const labels = { ACTIVE: "Ativo", AT_RISK: "Em Risco", INACTIVE: "Inativo" };
-    const colors = {
-      ACTIVE: "border-tertiary/30 bg-tertiary/10 text-tertiary",
-      AT_RISK: "border-error/30 bg-error/10 text-error",
-      INACTIVE: "border-outline/30 bg-surface-container-high text-on-surface-variant"
+    const styles = {
+      ACTIVE: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-100", dot: "bg-emerald-500 animate-pulse" },
+      AT_RISK: { bg: "bg-red-50", text: "text-red-700", border: "border-red-100", dot: "bg-red-500" },
+      INACTIVE: { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-100", dot: "bg-slate-400" }
     };
-    statusBadgeEl.className = `flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase w-fit ${colors[s]}`;
-    statusBadgeEl.innerHTML = `<span class="size-1.5 rounded-full ${s === 'AT_RISK' ? 'bg-error' : s === 'INACTIVE' ? 'bg-outline' : 'bg-tertiary'}"></span>${labels[s]}`;
+    const current = styles[s] || styles.ACTIVE;
+    statusBadgeEl.className = `inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${current.bg} ${current.text} border ${current.border}`;
+    statusBadgeEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${current.dot}"></span> ${labels[s]}`;
   }
 
   const tagsHost = el("clientTags");
   if (tagsHost) {
-    const industryTag = c.industry ? `<span class="px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-black uppercase tracking-wider">${c.industry}</span>` : "";
-    const otherTags = (c.tags || []).map(t => `<span class="px-3 py-1 rounded-full bg-[#2afc8d]/10 text-[#005229] text-[10px] font-black uppercase tracking-wider">${t}</span>`).join("");
+    const industryTag = c.industry ? `<span class="px-3 py-1 rounded-xl bg-slate-900 text-[#2afc8d] text-[10px] font-black uppercase tracking-widest shadow-lg shadow-black/10">${c.industry}</span>` : "";
+    const otherTags = (c.tags || []).map(t => `<span class="px-3 py-1 rounded-xl bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">${t}</span>`).join("");
     tagsHost.innerHTML = industryTag + otherTags;
   }
 
@@ -149,7 +150,7 @@ async function loadTimeline() {
   const data = await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`);
   const items = data.items || [];
   if (!items.length) {
-    host.innerHTML = `<div class="text-sm text-on-surface-variant">Sem interações registradas.</div>`;
+    host.innerHTML = `<div class="p-6 rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400 font-medium">Sem interações registradas.</div>`;
     return;
   }
   host.innerHTML = items.slice(0, 8).map(renderTimelineItem).join("");
@@ -248,6 +249,7 @@ function wireProjectLinks() {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   wireProjectLinks();

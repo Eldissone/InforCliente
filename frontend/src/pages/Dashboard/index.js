@@ -1,5 +1,5 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, setText, toast, setButtonLoading, renderLoadingRow } from "../../shared/ui.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCompactNumber, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -9,17 +9,17 @@ function byId(id) {
 
 function statusPill(status) {
   if (status === "AT_RISK") {
-    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-error-container text-on-error-container text-[10px] font-bold">
-      <span class="w-1.5 h-1.5 rounded-full bg-error"></span> EM_RISCO
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-700 text-[10px] font-bold border border-red-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> EM RISCO
     </span>`;
   }
   if (status === "INACTIVE") {
-    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-bold">
-      <span class="w-1.5 h-1.5 rounded-full bg-outline"></span> INATIVO
+    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-50 text-slate-600 text-[10px] font-bold border border-slate-100">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> INATIVO
     </span>`;
   }
-  return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-[10px] font-bold">
-    <span class="w-1.5 h-1.5 rounded-full bg-[#2afc8d] high-voltage-glow"></span> ATIVO
+  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVO
   </span>`;
 }
 
@@ -30,35 +30,33 @@ function initials(name) {
 
 function renderClientRow(c) {
   const health = Math.max(0, Math.min(100, Number(c.healthScore || 0)));
-  const healthBarColor = c.status === "AT_RISK" ? "bg-error" : "bg-[#2afc8d]";
+  const healthBarColor = c.status === "AT_RISK" ? "bg-red-500" : "bg-emerald-500";
   return `
-    <tr class="hover:bg-surface-container-low/30 transition-colors group">
-      <td class="px-6 py-4">
-        <div class="flex items-center gap-3">
-          <div class="h-10 w-10 rounded bg-surface-container flex items-center justify-center font-bold text-primary">
+    <tr class="hover:bg-slate-50/50 transition-all duration-200 group border-b border-slate-50 last:border-0">
+      <td class="px-8 py-5">
+        <div class="flex items-center gap-4">
+          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform">
             ${initials(c.name)}
           </div>
           <div>
-            <div class="text-sm font-bold text-on-surface">${c.name}</div>
-            <div class="text-[11px] text-on-surface-variant">${c.industry || c.code}</div>
+            <div class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${c.name}</div>
+            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${c.industry || c.code}</div>
           </div>
         </div>
       </td>
-      <td class="px-6 py-4">${statusPill(c.status)}</td>
-      <td class="px-6 py-4 text-sm font-semibold text-on-surface text-right">${formatCompactNumber(
-        c.ltvTotal
-      )}</td>
-      <td class="px-6 py-4">
-        <div class="flex items-center gap-2">
-          <div class="flex-1 h-1.5 bg-surface-container rounded-full max-w-[80px]">
-            <div class="h-full ${healthBarColor} rounded-full" style="width:${health}%"></div>
+      <td class="px-8 py-5">${statusPill(c.status)}</td>
+      <td class="px-8 py-5 text-sm font-bold text-slate-900 text-right">${formatCompactNumber(c.ltvTotal)}</td>
+      <td class="px-8 py-5">
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-2 bg-slate-100 rounded-full w-24 overflow-hidden">
+            <div class="h-full ${healthBarColor} rounded-full transition-all duration-1000" style="width:${health}%"></div>
           </div>
-          <span class="text-[11px] font-bold text-on-surface">${health}</span>
+          <span class="text-xs font-bold text-slate-700">${health}%</span>
         </div>
       </td>
-      <td class="px-6 py-4 text-right">
-        <button data-open-client="${c.id}" class="text-on-surface-variant hover:text-primary transition-colors" title="Abrir cliente">
-          <span class="material-symbols-outlined text-xl" data-icon="arrow_forward">arrow_forward</span>
+      <td class="px-8 py-5 text-right">
+        <button data-open-client="${c.id}" class="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-slate-900 hover:border-slate-300 hover:shadow-sm transition-all active:scale-90">
+          <span class="material-symbols-outlined text-xl">east</span>
         </button>
       </td>
     </tr>
@@ -194,6 +192,7 @@ function wireAddClient() {
 }
 
 async function init() {
+  initMobileMenu();
   wireLogout();
   wireUsersNav();
   await loadKpis();

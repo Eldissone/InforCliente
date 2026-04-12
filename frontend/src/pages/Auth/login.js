@@ -35,17 +35,21 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     setButtonLoading(submitBtn, true);
     const res = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
     setSession(res);
-    toast(`Conectado em ${getApiBaseUrl()}`, { type: "success" });
+    
+    // Toast com design premium (já configurado no shared/ui.js)
+    toast(`Bem-vindo, ${res.user.name || 'Usuário'}!`);
 
     const next = getNext();
-    if (next) {
-      window.location.href = `/${next}`;
-    } else {
-      window.location.href =
-        res?.user?.role === "cliente" ? "/Projectos/ProjectGeral.html" : "/Dashboard/index.html";
-    }
+    setTimeout(() => {
+      if (next) {
+        window.location.href = `/${next}`;
+      } else {
+        window.location.href =
+          res?.user?.role === "cliente" ? "../Projectos/ProjectGeral.html" : "../Dashboard/index.html";
+      }
+    }, 800);
   } catch (err) {
     setButtonLoading(submitBtn, false);
-    setError("Falha no login. Verifique email/senha e se a API está rodando.");
+    setError(err.message || "Credenciais inválidas. Tente novamente.");
   }
 });
