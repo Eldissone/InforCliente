@@ -216,7 +216,7 @@ async function loadProject() {
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
-let stockState = { items: [], filters: { search: "", condition: "", status: "", category: "" } };
+let stockState = { items: [], filters: { search: "", category: "", condition: "", status: "", warehouse: "" } };
 
 function updateOperationStatus(summary) {
   const mapping = {
@@ -2031,25 +2031,25 @@ async function loadStock() {
 }
 
 function renderStockSummary(items) {
-  const totalItems = items.length;
-  const damaged = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged || 0), 0);
-  const good = items.reduce((acc, curr) => acc + Number(curr.quantityGood || 0), 0);
+  const materialTypesCount = items.length;
+  const goodTotal = items.reduce((acc, curr) => acc + Number(curr.quantityGood || 0), 0);
+  const damagedTotal = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged || 0), 0);
 
   el("stockSummary").innerHTML = `
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total de Itens em Stock</p>
-        <p class="text-2xl font-bold text-slate-900">${totalItems}</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipos de Materiais</p>
+        <p class="text-2xl font-bold text-slate-900">${materialTypesCount}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Qtd. Condição Boa</p>
-        <p class="text-2xl font-bold text-emerald-600">${good}</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock Útil (BOM)</p>
+        <p class="text-2xl font-bold text-emerald-600">${goodTotal}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Qtd. Danificada</p>
-        <p class="text-2xl font-bold text-red-500">${damaged}</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Perca / Danificado</p>
+        <p class="text-2xl font-bold text-red-500">${damagedTotal}</p>
     </div>
     <div class="bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl">
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Aguardando Aprovação</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Aguardando Auditoria</p>
         <p id="stockPendingCount" class="text-2xl font-bold text-[#2afc8d]">---</p>
     </div>
   `;
@@ -2227,10 +2227,39 @@ async function openStockMovementDetailModal(moveId) {
             <p class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border-l-4 border-slate-200 font-medium">${escapeHtml(m.notes)}</p>
           </div>
         ` : ""}
+
+        ${(m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") ? `
+          <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
+             <span class="material-symbols-outlined text-emerald-600">info</span>
+             <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
+                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) será integrada no inventário útil do armazém. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) será mantido apenas como registo de evidência e não constará no saldo disponível para uso.
+             </p>
+          </div>
+        ` : ""}
       </div>
     `,
-    primaryText: "Fechar",
-    onPrimary: ({ close }) => close()
+    primaryText: (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO") ? "Fechar" : "Aprovar Lançamento",
+    onPrimary: async ({ close, btn }) => {
+      if (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO") {
+        close();
+        return;
+      }
+      
+      setButtonLoading(btn, true);
+      try {
+        await approveStockMovement(m.id);
+        close();
+      } catch (err) {
+        setButtonLoading(btn, false);
+      }
+    },
+    secondaryText: (m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") ? "Rejeitar" : null,
+    onSecondary: async ({ close }) => {
+       if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
+          await rejectStockMovement(m.id);
+          close();
+       }
+    }
   });
 }
 
@@ -2340,11 +2369,17 @@ async function openStockMovementModal() {
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="cliente">Fornecido pelo Cliente</option>
                   <option value="proprio">Material Próprio (InforCliente)</option>
+                  <option value="cliente">Fornecido pelo Cliente</option>
                   <option value="fornecedor">Compra Direta Fornecedor</option>
                </select>
-               <input id="st_batch" placeholder="Lote / Referência" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+                <select id="st_warehouse" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+                  <option value="Armazém Principal">Armazém Principal</option>
+                  <option value="Armazém do Cliente">Armazém do Cliente</option>
+                  <option value="Contentor Obra">Contentor Obra</option>
+                  <option value="Viatura Técnica">Viatura Técnica</option>
+                  <option value="Estaleiro">Estaleiro</option>
+               </select>
             </div>
           </div>
 
@@ -2382,7 +2417,7 @@ async function openStockMovementModal() {
               driverName: v("st_driver"),
               vehiclePlate: v("st_plate"),
               vehicleBrand: v("st_brand"),
-              batch: v("st_batch"),
+              batch: v("st_warehouse"),
               technicianName: getSessionUser()?.email?.split("@")[0] || "Técnico"
             }
           });
@@ -2420,36 +2455,101 @@ async function openStockMovementModal() {
         }
       }
     });
+
+    // Auto-select Armazém do Cliente if entry type is cliente
+    const entryTypeEl = document.getElementById("st_entryType");
+    const warehouseEl = document.getElementById("st_warehouse");
+    entryTypeEl?.addEventListener("change", (e) => {
+       if (e.target.value === "cliente") {
+          warehouseEl.value = "Armazém do Cliente";
+       }
+    });
   } catch (err) {
     toast("Erro ao carregar catálogo", { type: "error" });
   }
 }
 
 function applyStockFilters() {
-  const { search, condition, status, category } = stockState.filters;
-  const filtered = stockState.items.filter(m => {
-    const s = search.toLowerCase();
-    const matchesSearch = !s || 
-      m.material.name.toLowerCase().includes(s) || 
-      m.material.code.toLowerCase().includes(s) ||
-      (m.driverName || "").toLowerCase().includes(s) ||
-      (m.vehiclePlate || "").toLowerCase().includes(s);
-    
-    const matchesCond = !condition || m.condition === condition;
-    const matchesStatus = !status || m.auditStatus === status;
-    const matchesCat = !category || m.material.category === category;
-
-    return matchesSearch && matchesCond && matchesStatus && matchesCat;
-  });
+    const { search, condition, status, category, warehouse } = stockState.filters;
+    const filtered = stockState.items.filter(m => {
+      const s = search.toLowerCase();
+      const matchesSearch = !s || 
+        m.material.name.toLowerCase().includes(s) || 
+        m.material.code.toLowerCase().includes(s) ||
+        (m.driverName || "").toLowerCase().includes(s) ||
+        (m.vehiclePlate || "").toLowerCase().includes(s);
+      
+      const matchesCond = !condition || m.condition === condition;
+      const matchesStatus = !status || m.auditStatus === status;
+      const matchesCat = !category || m.material.category === category;
+      const matchesWarehouse = !warehouse || m.batch === warehouse;
+  
+      return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse;
+    });
 
   renderStockMovements(filtered);
+  renderStockInventory(filtered);
   renderStockGallery(filtered);
+}
+
+function renderStockInventory(movements) {
+  const tbody = el("stockInventoryTbody");
+  if (!tbody) return;
+
+  const approved = movements.filter(m => m.auditStatus === "APROVADO");
+  
+  // Agrupar por Material + Armazém (batch)
+  const inventoryMap = {};
+
+  approved.forEach(m => {
+    // Danificadas não entram no armazém (conforme pedido)
+    const qty = Number(m.quantityGood || 0);
+    if (qty <= 0) return;
+
+    const key = `${m.materialId}_${m.batch || "Geral"}`;
+    if (!inventoryMap[key]) {
+      inventoryMap[key] = {
+        material: m.material,
+        warehouse: m.batch || "Geral",
+        totalIn: 0,
+        totalOut: 0
+      };
+    }
+
+    if (m.type === "ENTRADA") inventoryMap[key].totalIn += qty;
+    else if (m.type === "SAIDA") inventoryMap[key].totalOut += qty;
+  });
+
+  const lines = Object.values(inventoryMap);
+  if (lines.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock útil disponível no armazém.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lines.map(l => {
+    const balance = l.totalIn - l.totalOut;
+    return `
+      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
+        <td class="px-10 py-5">
+           <div class="text-xs font-bold text-slate-900">${escapeHtml(l.material.name)}</div>
+           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code}</div>
+        </td>
+        <td class="px-10 py-5 text-center">
+           <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(l.warehouse)}</span>
+        </td>
+        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500">${l.material.unit}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600">${l.totalIn}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold text-red-500">${l.totalOut}</td>
+        <td class="px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
+      </tr>
+    `;
+  }).join("");
 }
 
 function wireStock() {
   el("newStockMovementBtn")?.addEventListener("click", openStockMovementModal);
 
-  const filters = ["Search", "Category", "Condition", "Status"];
+  const filters = ["Search", "Category", "Condition", "Status", "Warehouse"];
   filters.forEach(f => {
     const input = el(`stockFilter${f}`);
     if (input) {
@@ -2458,5 +2558,26 @@ function wireStock() {
         applyStockFilters();
       });
     }
+  });
+
+  // Sub-tabs de Stock (Fluxo, Inventário, Galeria)
+  document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.stockSubtab;
+      
+      // Estilo dos botões
+      document.querySelectorAll("[data-stock-subtab]").forEach(b => {
+         b.classList.remove("text-slate-900", "border-slate-900");
+         b.classList.add("text-slate-400", "border-transparent");
+      });
+      btn.classList.add("text-slate-900", "border-slate-900");
+      btn.classList.remove("text-slate-400", "border-transparent");
+
+      // Visibilidade do conteúdo
+      ["stock_history_content", "stock_inventory_content", "stock_gallery_content"].forEach(id => {
+         el(id)?.classList.add("hidden");
+      });
+      el(`stock_${tab}_content`)?.classList.remove("hidden");
+    });
   });
 }

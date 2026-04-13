@@ -670,6 +670,18 @@
                         <option value="REJEITADO">Rejeitado</option>
                     </select>
                 </div>
+                <!-- Armazém -->
+                <div class="w-48">
+                    <select id="stockFilterWarehouse"
+                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                        <option value="">Todos Armazéns</option>
+                        <option value="Armazém Principal">Armazém Principal</option>
+                        <option value="Armazém do Cliente">Armazém do Cliente</option>
+                        <option value="Contentor Obra">Contentor Obra</option>
+                        <option value="Viatura Técnica">Viatura Técnica</option>
+                        <option value="Estaleiro">Estaleiro</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
@@ -678,6 +690,8 @@
                     <button data-stock-subtab="history"
                         class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">Fluxo
                         de Stock</button>
+                    <button data-stock-subtab="inventory"
+                        class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">Stock/Armazém</button>
                     <button data-stock-subtab="gallery"
                         class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">Galeria
                         de Campo</button>
@@ -698,6 +712,26 @@
                                 </tr>
                             </thead>
                             <tbody id="stockMovementsTbody" class="divide-y divide-slate-50 text-slate-600">
+                                <!-- Rendered JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="stock_inventory_content" class="hidden p-0">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/50">
+                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <th class="px-10 py-5">Material</th>
+                                    <th class="px-10 py-5 text-center">Armazém/Lote</th>
+                                    <th class="px-10 py-5 text-center">Unidade</th>
+                                    <th class="px-10 py-5 text-center text-emerald-600">Total Entradas</th>
+                                    <th class="px-10 py-5 text-center text-red-600">Total Saídas</th>
+                                    <th class="px-10 py-5 text-right font-black">Saldo Disponível</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stockInventoryTbody" class="divide-y divide-slate-50 text-slate-600">
                                 <!-- Rendered JS -->
                             </tbody>
                         </table>

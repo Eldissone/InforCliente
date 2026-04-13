@@ -89,7 +89,10 @@ stockRoutes.post(
       const move = await tx.stockMovement.create({
         data: {
           ...body,
-          quantity: body.quantity || (body.quantityGood + body.quantityDamaged),
+          // Prioridade absoluta para os novos campos bifurcados
+          quantityGood: body.quantityGood,
+          quantityDamaged: body.quantityDamaged,
+          quantity: body.quantityGood + body.quantityDamaged, // Forçar o total a ser a soma
           projectId,
           auditStatus: "PENDENTE",
           dateEntry: body.dateEntry ? new Date(body.dateEntry) : new Date(),
