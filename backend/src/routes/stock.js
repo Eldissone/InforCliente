@@ -69,7 +69,7 @@ stockRoutes.post(
     const projectId = String(req.params.id);
     const body = z.object({
       materialId: z.string(),
-      type: z.enum(["ENTRADA", "SAIDA", "TRANSFERENCIA"]),
+      type: z.enum(["ENTRADA", "SAIDA", "TRANSFERENCIA", "AJUSTE"]),
       quantity: z.number().optional(), // Legado
       quantityGood: z.number().default(0),
       quantityDamaged: z.number().default(0),
@@ -89,39 +89,55 @@ stockRoutes.post(
       const move = await tx.stockMovement.create({
         data: {
           ...body,
-          // Prioridade absoluta para os novos campos bifurcados
           quantityGood: body.quantityGood,
           quantityDamaged: body.quantityDamaged,
-          quantity: body.quantityGood + body.quantityDamaged, // Forçar o total a ser a soma
+          quantity: body.quantityGood + body.quantityDamaged, 
           projectId,
-          auditStatus: "PENDENTE",
+          auditStatus: body.type === "AJUSTE" ? "APROVADO" : "PENDENTE",
           dateEntry: body.dateEntry ? new Date(body.dateEntry) : new Date(),
         },
         include: { material: true },
       });
 
-      // Se houver quantidades danificadas, atualizar o saldo IMEDIATAMENTE (aprovação opcional para danos)
-      if (body.quantityDamaged > 0) {
-        const sign = body.type === "ENTRADA" ? 1 : -1;
+      // AJUSTE: Atualiza ambos os saldos imediatamente
+      if (body.type === "AJUSTE") {
         await tx.projectStock.upsert({
           where: { projectId_materialId: { projectId, materialId: body.materialId } },
-          update: { quantityDamaged: { increment: body.quantityDamaged * sign } },
+          update: { 
+            quantityGood: { increment: body.quantityGood },
+            quantityDamaged: { increment: body.quantityDamaged }
+          },
           create: { 
             projectId, 
             materialId: body.materialId, 
-            quantityGood: 0,
-            quantityDamaged: body.quantityDamaged * sign
+            quantityGood: body.quantityGood,
+            quantityDamaged: body.quantityDamaged
           },
         });
+      } else {
+        // ENTRADA/SAIDA/TRANSF: Se houver danificadas, atualizar imediatamente (boa espera aprovação)
+        if (body.quantityDamaged > 0) {
+          const sign = body.type === "ENTRADA" ? 1 : -1;
+          await tx.projectStock.upsert({
+            where: { projectId_materialId: { projectId, materialId: body.materialId } },
+            update: { quantityDamaged: { increment: body.quantityDamaged * sign } },
+            create: { 
+              projectId, 
+              materialId: body.materialId, 
+              quantityGood: 0,
+              quantityDamaged: body.quantityDamaged * sign
+            },
+          });
+        }
       }
 
       await tx.stockAuditLog.create({
         data: {
           movementId: move.id,
           fromStatus: "PENDENTE",
-          toStatus: "PENDENTE",
+          toStatus: body.type === "AJUSTE" ? "APROVADO" : "PENDENTE",
           changedBy: req.user.email,
-          notes: "Lançamento inicial registrado pelo técnico. (Danos pré-contabilizados)",
+          notes: body.type === "AJUSTE" ? "Ajuste manual de stock realizado pelo administrador." : "Lançamento inicial registrado pelo técnico.",
         },
       });
 
@@ -203,6 +219,46 @@ stockRoutes.patch(
     });
 
     return res.json(updated);
+  })
+);
+
+// DELETE — Eliminar movimento e REVERTER SALDO (Apenas ADMIN)
+stockRoutes.delete(
+  "/:id/movements/:moveId",
+  requireRole(["admin"]),
+  asyncHandler(async (req, res) => {
+    const { moveId } = req.params;
+
+    const move = await prisma.stockMovement.findUnique({
+      where: { id: moveId }
+    });
+
+    if (!move) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+
+    await prisma.$transaction(async (tx) => {
+      // Reverter impacto no saldo se estivesse aprovado ou se fosse ajuste/danificado
+      // Regra: Revertemos tudo o que já "entrou" no saldo.
+      const sign = (move.type === "ENTRADA" || move.type === "AJUSTE") ? -1 : 1;
+
+      // Reverter Quantidade Boa (apenas se aprovada ou se for ajuste)
+      if (move.auditStatus === "APROVADO" || move.type === "AJUSTE") {
+        await tx.projectStock.update({
+          where: { projectId_materialId: { projectId: move.projectId, materialId: move.materialId } },
+          data: { quantityGood: { increment: Number(move.quantityGood || 0) * sign } }
+        });
+      }
+
+      // Reverter Quantidade Danificada (sempre revertida pois entra no saldo no POST)
+      await tx.projectStock.update({
+        where: { projectId_materialId: { projectId: move.projectId, materialId: move.materialId } },
+        data: { quantityDamaged: { increment: Number(move.quantityDamaged || 0) * sign } }
+      });
+
+      // Apagar o movimento (e fotos/logs por cascade se configurado, ou manualmente)
+      await tx.stockMovement.delete({ where: { id: moveId } });
+    });
+
+    return res.json({ ok: true });
   })
 );
 

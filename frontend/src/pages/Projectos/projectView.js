@@ -22,6 +22,21 @@ function getProjectId() {
   return params.get("id");
 }
 
+function applyRoleVisibility() {
+  const user = getSessionUser();
+  const role = user?.role || "leitura";
+  document.querySelectorAll("[data-role-visible]").forEach(el => {
+    const roles = el.getAttribute("data-role-visible").split(",");
+    if (roles.includes(role)) {
+      el.classList.remove("hidden");
+      if (el.tagName === "BUTTON") el.style.display = "flex";
+    } else {
+      el.classList.add("hidden");
+      el.style.display = "none";
+    }
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -1954,6 +1969,7 @@ async function init() {
   wireProgressTasks();
   wirePayments();
   wireStock();
+  applyRoleVisibility();
 }
 
 function openPreview(fileId) {
@@ -2107,16 +2123,19 @@ function renderStockMovements(items) {
           <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${auditCls}">${m.auditStatus}</span>
         </td>
         <td class="px-10 py-5 text-right">
-          ${m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO" ? `
-             <button data-approve-stock="${m.id}" data-role-visible="admin" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
-               <span class="material-symbols-outlined text-sm">done_all</span>
-             </button>
-             <button data-reject-stock="${m.id}" data-role-visible="admin" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
-               <span class="material-symbols-outlined text-sm">close</span>
-             </button>
-          ` : `
-             <span class="text-slate-300 material-symbols-outlined">lock</span>
-          `}
+           ${(m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") && m.type !== "AJUSTE" ? `
+              <button data-approve-stock="${m.id}" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+                <span class="material-symbols-outlined text-sm">done_all</span>
+              </button>
+              <button data-reject-stock="${m.id}" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
+                <span class="material-symbols-outlined text-sm">close</span>
+              </button>
+           ` : `
+              <span class="text-slate-300 material-symbols-outlined text-sm">lock</span>
+           `}
+           <button data-delete-stock-move="${m.id}" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all ml-1">
+             <span class="material-symbols-outlined text-sm">delete</span>
+           </button>
         </td>
       </tr>
     `;
@@ -2541,13 +2560,239 @@ function renderStockInventory(movements) {
         <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600">${l.totalIn}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-red-500">${l.totalOut}</td>
         <td class="px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
+        <td class="px-10 py-5 text-right">
+           <button data-adjust-stock="${l.material.id}" data-warehouse="${escapeHtml(l.warehouse)}" class="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">
+             Ajustar
+           </button>
+        </td>
       </tr>
     `;
   }).join("");
 }
 
+async function openMaterialManagerModal() {
+  openModal({
+    title: "Gestão do Catálogo de Materiais",
+    contentHtml: `
+      <div class="space-y-6">
+        <div id="materialForm" class="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+           <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Novo Material / Editar</h4>
+           <input type="hidden" id="mt_id">
+           <div class="grid grid-cols-2 gap-4">
+              <input id="mt_code" placeholder="Código (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+              <input id="mt_name" placeholder="Nome do Material" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+           </div>
+           <div class="grid grid-cols-2 gap-4">
+              <select id="mt_cat" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+                 <option value="MT">Média Tensão (MT)</option>
+                 <option value="BT">Baixa Tensão (BT)</option>
+                 <option value="IP">Iluminação Pública (IP)</option>
+                 <option value="OUTROS">Outros</option>
+              </select>
+              <input id="mt_unit" placeholder="Unidade (ex: un, mts, kg)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+           </div>
+           <div class="flex gap-2">
+              <button id="saveMaterialBtn" class="flex-1 h-10 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:brightness-110">Gravar Material</button>
+              <button id="resetMaterialBtn" class="px-4 h-10 bg-white text-slate-400 rounded-lg text-[10px] font-black uppercase border border-slate-200">Limpar</button>
+           </div>
+        </div>
+
+        <div class="max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+           <table class="w-full text-left">
+              <thead class="sticky top-0 bg-white z-10 border-b border-slate-100">
+                 <tr>
+                    <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Material</th>
+                    <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Cat / Un</th>
+                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">Ações</th>
+                 </tr>
+              </thead>
+              <tbody id="materialListTbody">
+                 <!-- JS -->
+              </tbody>
+           </table>
+        </div>
+      </div>
+    `,
+    onPrimary: ({ close }) => close(),
+    primaryLabel: "Fechar"
+  });
+
+  const loadMaterials = async () => {
+    const tbody = el("materialListTbody");
+    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catálogo...</td></tr>`;
+    try {
+      const { items } = await apiRequest("/materials");
+      tbody.innerHTML = items.map(m => `
+        <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+          <td class="py-3 pr-4">
+             <div class="text-xs font-bold text-slate-900">${escapeHtml(m.name)}</div>
+             <div class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${m.code}</div>
+          </td>
+          <td class="py-3">
+             <span class="text-[9px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500">${m.category}</span>
+             <span class="text-[9px] font-bold text-slate-400 ml-1">${m.unit}</span>
+          </td>
+          <td class="py-3 text-right">
+             <button data-edit-mat='${JSON.stringify(m)}' class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"><span class="material-symbols-outlined text-sm">edit</span></button>
+             <button data-delete-mat="${m.id}" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all"><span class="material-symbols-outlined text-sm">delete</span></button>
+          </td>
+        </tr>
+      `).join("");
+
+      // Bind edit
+      document.querySelectorAll("[data-edit-mat]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const m = JSON.parse(btn.dataset.editMat);
+          el("mt_id").value = m.id;
+          el("mt_code").value = m.code;
+          el("mt_name").value = m.name;
+          el("mt_cat").value = m.category;
+          el("mt_unit").value = m.unit;
+          el("saveMaterialBtn").textContent = "Atualizar Material";
+        });
+      });
+
+      // Bind delete
+      document.querySelectorAll("[data-delete-mat]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Tem certeza? Esta ação removerá o material do catálogo global.")) return;
+          try {
+            await apiRequest(`/materials/${btn.dataset.deleteMat}`, { method: "DELETE" });
+            toast("Material removido", { type: "success" });
+            loadMaterials();
+          } catch (err) {
+            toast(err.message || "Erro ao remover material", { type: "error" });
+          }
+        });
+      });
+
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catálogo.</td></tr>`;
+    }
+  };
+
+  el("resetMaterialBtn").addEventListener("click", () => {
+    el("mt_id").value = "";
+    el("mt_code").value = "";
+    el("mt_name").value = "";
+    el("mt_unit").value = "";
+    el("saveMaterialBtn").textContent = "Gravar Material";
+  });
+
+  el("saveMaterialBtn").addEventListener("click", async () => {
+    const btn = el("saveMaterialBtn");
+    const mId = el("mt_id").value;
+    const body = {
+      code: el("mt_code").value,
+      name: el("mt_name").value,
+      category: el("mt_cat").value,
+      unit: el("mt_unit").value
+    };
+
+    if (!body.code || !body.name) return toast("Preencha código e nome", { type: "warning" });
+
+    setButtonLoading(btn, true);
+    try {
+      await apiRequest(mId ? `/materials/${mId}` : "/materials", {
+        method: mId ? "PATCH" : "POST",
+        body
+      });
+      toast(mId ? "Material atualizado" : "Material criado", { type: "success" });
+      el("resetMaterialBtn").click();
+      loadMaterials();
+    } catch (err) {
+      toast(err.message || "Erro ao salvar material", { type: "error" });
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
+
+  loadMaterials();
+}
+
+async function openStockAdjustmentModal(materialId, warehouse) {
+  const materialsRes = await apiRequest("/materials");
+  const mat = materialsRes.items.find(i => i.id === materialId);
+  if (!mat) return;
+
+  openModal({
+    title: "Ajuste de Saldo de Stock",
+    contentHtml: `
+       <div class="space-y-6">
+          <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+             <h4 class="text-[10px] font-black uppercase text-blue-600 mb-1">Material a Ajustar</h4>
+             <p class="text-xs font-bold text-slate-800">${escapeHtml(mat.name)}</p>
+             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">Armazém: <span class="text-slate-900">${warehouse}</span></p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+             <div class="space-y-1.5">
+                <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Dif. Quant. BOA</label>
+                <input type="number" id="adjGood" placeholder="+/- 0.00" class="w-full h-12 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500">
+             </div>
+             <div class="space-y-1.5">
+                <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Dif. Quant. DANIFICADA</label>
+                <input type="number" id="adjBad" placeholder="+/- 0.00" class="w-full h-12 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-red-500">
+             </div>
+          </div>
+
+          <div class="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">
+             <span class="material-symbols-outlined text-amber-500 text-sm">warning</span>
+             <p class="text-[10px] text-amber-800 font-medium leading-relaxed">
+                Este ajuste criará um movimento do tipo <span class="font-bold">AJUSTE</span> aprovado automaticamente. Use para corrigir erros de inventário físico.
+             </p>
+          </div>
+       </div>
+    `,
+    primaryLabel: "Aplicar Ajuste",
+    onPrimary: async ({ btn, close, panel }) => {
+      const g = Number(panel.querySelector("#adjGood").value || 0);
+      const b = Number(panel.querySelector("#adjBad").value || 0);
+
+      if (g === 0 && b === 0) return toast("Informe uma diferença", { type: "warning" });
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/stock/${encodeURIComponent(getProjectId())}/movements`, {
+          method: "POST",
+          body: {
+            materialId,
+            type: "AJUSTE",
+            quantityGood: g,
+            quantityDamaged: b,
+            batch: warehouse,
+            notes: "Ajuste manual administrativo."
+          }
+        });
+        toast("Ajuste concluído", { type: "success" });
+        close();
+        loadStock();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro no ajuste", { type: "error" });
+      }
+    }
+  });
+}
+
+async function deleteStockMovement(moveId) {
+  if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazém será revertido automaticamente.")) return;
+  
+  try {
+    const pid = getProjectId();
+    await apiRequest(`/stock/${encodeURIComponent(pid)}/movements/${encodeURIComponent(moveId)}`, {
+      method: "DELETE"
+    });
+    toast("Movimento eliminado e saldo revertido", { type: "success" });
+    loadStock();
+  } catch (err) {
+    toast(err.message || "Erro ao eliminar movimento", { type: "error" });
+  }
+}
+
 function wireStock() {
   el("newStockMovementBtn")?.addEventListener("click", openStockMovementModal);
+  el("manageMaterialsBtn")?.addEventListener("click", openMaterialManagerModal);
 
   const filters = ["Search", "Category", "Condition", "Status", "Warehouse"];
   filters.forEach(f => {
@@ -2557,6 +2802,29 @@ function wireStock() {
         stockState.filters[f.toLowerCase()] = e.target.value.trim();
         applyStockFilters();
       });
+    }
+  });
+
+  // Delegated events for dynamic buttons
+  document.addEventListener("click", (e) => {
+    const btnDel = e.target.closest("[data-delete-stock-move]");
+    if (btnDel) {
+      e.stopPropagation();
+      deleteStockMovement(btnDel.dataset.deleteStockMove);
+      return;
+    }
+
+    const btnAdj = e.target.closest("[data-adjust-stock]");
+    if (btnAdj) {
+      e.stopPropagation();
+      openStockAdjustmentModal(btnAdj.dataset.adjustStock, btnAdj.dataset.warehouse);
+      return;
+    }
+
+    const rowView = e.target.closest("[data-view-stock]");
+    if (rowView && !e.target.closest("button")) {
+       const mid = rowView.dataset.viewStock;
+       openStockMovementDetailModal(mid);
     }
   });
 

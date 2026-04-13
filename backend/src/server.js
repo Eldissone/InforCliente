@@ -8,6 +8,7 @@ const { clientRoutes } = require("./routes/clients");
 const { projectRoutes } = require("./routes/projects");
 const { userRoutes } = require("./routes/users");
 const { stockRoutes } = require("./routes/stock");
+const { materialRoutes } = require("./routes/materials");
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/clients", clientRoutes);
 app.use("/projects", projectRoutes);
 app.use("/users", userRoutes);
 app.use("/stock", stockRoutes);
+app.use("/materials", materialRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
