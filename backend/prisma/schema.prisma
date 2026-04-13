@@ -252,7 +252,9 @@ model StockMovement {
   projectId       String
   materialId      String
   type            MovementType     @default(ENTRADA)
-  quantity        Decimal          @db.Decimal(16, 4)
+  quantity        Decimal           @db.Decimal(16, 4)
+  quantityGood    Decimal           @default(0) @db.Decimal(16, 4)
+  quantityDamaged Decimal           @default(0) @db.Decimal(16, 4)
   condition       MaterialCondition @default(BOA)
   
   // Logistics Info
@@ -302,6 +304,7 @@ model ProjectPhoto {
   lng             Decimal?       @db.Decimal(11, 8)
   takenAt         DateTime?
   description     String?
+  condition       MaterialCondition?
   createdAt       DateTime       @default(now())
   
   project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -2032,8 +2032,8 @@ async function loadStock() {
 
 function renderStockSummary(items) {
   const totalItems = items.length;
-  const damaged = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged), 0);
-  const good = items.reduce((acc, curr) => acc + Number(curr.quantityGood), 0);
+  const damaged = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged || 0), 0);
+  const good = items.reduce((acc, curr) => acc + Number(curr.quantityGood || 0), 0);
 
   el("stockSummary").innerHTML = `
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
@@ -2057,6 +2057,10 @@ function renderStockSummary(items) {
 
 function renderStockMovements(items) {
   const tbody = el("stockMovementsTbody");
+  if (!tbody) return;
+  
+  // Guardar os dados no próprio elemento para o modal de detalhes
+  el("stockMovementsTable")._movementsData = items;
   if (!items || items.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
     if (el("stockPendingCount")) el("stockPendingCount").textContent = "0";
@@ -2076,7 +2080,7 @@ function renderStockMovements(items) {
     }[m.auditStatus];
 
     return `
-      <tr class="hover:bg-slate-50 transition-colors">
+      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
         <td class="px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
           <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
@@ -2086,9 +2090,10 @@ function renderStockMovements(items) {
           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} • ${m.material.category}</div>
         </td>
         <td class="px-10 py-5">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-black text-slate-900">${m.quantity} ${m.material.unit}</span>
-            <span class="px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest ${m.condition === "BOA" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}">${m.condition}</span>
+          <div class="flex flex-col gap-1">
+            ${m.quantityGood > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityGood} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[8px] font-black">BOM</span></div>` : ""}
+            ${m.quantityDamaged > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityDamaged} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-black">MAU</span></div>` : ""}
+            ${!(Number(m.quantityGood) > 0) && !(Number(m.quantityDamaged) > 0) ? `<span class="text-xs font-black text-slate-900">${m.quantity} ${m.material.unit}</span>` : ""}
           </div>
         </td>
         <td class="px-10 py-5 text-[10px] font-medium text-slate-500">
@@ -2122,10 +2127,110 @@ function renderStockMovements(items) {
 
 function wireStockWorkflow() {
   document.querySelectorAll("[data-approve-stock]").forEach(btn => {
-    btn.addEventListener("click", () => approveStockMovement(btn.dataset.approveStock));
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      approveStockMovement(btn.dataset.approveStock);
+    });
   });
   document.querySelectorAll("[data-reject-stock]").forEach(btn => {
-    btn.addEventListener("click", () => rejectStockMovement(btn.dataset.rejectStock));
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      rejectStockMovement(btn.dataset.rejectStock);
+    });
+  });
+  document.querySelectorAll("[data-view-stock]").forEach(row => {
+    row.addEventListener("click", () => openStockMovementDetailModal(row.dataset.viewStock));
+  });
+}
+
+async function openStockMovementDetailModal(moveId) {
+  const movements = el("stockMovementsTable")._movementsData || [];
+  const m = movements.find(x => x.id === moveId);
+  if (!m) return;
+
+  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
+
+  const renderPhotos = (cond) => {
+    const pList = m.photos.filter(p => !cond || p.condition === cond);
+    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
+    return `<div class="grid grid-cols-4 gap-2">
+      ${pList.map(p => `
+        <div class="aspect-square rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+          <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover">
+        </div>
+      `).join("")}
+    </div>`;
+  };
+
+  openModal({
+    title: "Detalhes do Lançamento",
+    contentHtml: `
+      <div class="space-y-6">
+        <div class="grid grid-cols-2 gap-8">
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Informação Base</p>
+            <div class="space-y-1">
+              <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.material.name)}</h4>
+              <p class="text-xs text-slate-500 font-medium">${m.material.code} • ${m.material.category}</p>
+              <div class="mt-4 flex flex-col gap-2">
+                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-[10px] font-bold text-slate-500">TIPO</span>
+                    <span class="text-[10px] font-black text-slate-900">${m.type}</span>
+                 </div>
+                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-[10px] font-bold text-slate-500">QUANT. BOA</span>
+                    <span class="text-[10px] font-black text-emerald-600">${m.quantityGood || 0} ${m.material.unit}</span>
+                 </div>
+                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-[10px] font-bold text-slate-500">QUANT. DANIFICADA</span>
+                    <span class="text-[10px] font-black text-red-600">${m.quantityDamaged || 0} ${m.material.unit}</span>
+                 </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo Logístico</p>
+            <div class="bg-slate-50 rounded-2xl p-4 space-y-3">
+               <div>
+                  <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "Não informado")}</span>
+               </div>
+               <div>
+                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.vehicleBrand || "")} ${escapeHtml(m.vehiclePlate || "N/D")}</span>
+               </div>
+               <div>
+                  <span class="text-[9px] font-black text-slate-400 block uppercase">Origem</span>
+                  <span class="text-xs font-bold text-slate-900 uppercase">${m.entryType || "PROPRIO"}</span>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Evidências Fotográficas</p>
+          <div class="space-y-4">
+             <div>
+                <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">Material em Bom Estado</span>
+                ${renderPhotos("BOA")}
+             </div>
+             <div>
+                <span class="text-[9px] font-black text-red-600 uppercase tracking-widest mb-2 block">Cargas com Danos / Defeitos</span>
+                ${renderPhotos("DANIFICADA")}
+             </div>
+          </div>
+        </div>
+
+        ${m.notes ? `
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Observações</p>
+            <p class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border-l-4 border-slate-200 font-medium">${escapeHtml(m.notes)}</p>
+          </div>
+        ` : ""}
+      </div>
+    `,
+    primaryText: "Fechar",
+    onPrimary: ({ close }) => close()
   });
 }
 
@@ -2217,15 +2322,12 @@ async function openStockMovementModal() {
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Quantidade</label>
-              <input type="number" id="st_qty" placeholder="0.00" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Quantidade BOA</label>
+              <input type="number" id="st_qtyGood" placeholder="0.00" class="w-full h-12 bg-emerald-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
             </div>
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Condição</label>
-              <select id="st_cond" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-                <option value="BOA">Boa (Pronto a usar)</option>
-                <option value="DANIFICADA">Danificada / Avariada</option>
-              </select>
+              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Quantidade DANIFICADA</label>
+              <input type="number" id="st_qtyDamaged" placeholder="0.00" class="w-full h-12 bg-red-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-red-500 transition-all">
             </div>
           </div>
           
@@ -2246,29 +2348,36 @@ async function openStockMovementModal() {
             </div>
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Fotos de Comprovação (Opcional)</label>
-            <input type="file" id="st_photos" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Evidência: Bom Estado</label>
+              <input type="file" id="st_photos_good" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Evidência: Danificado</label>
+              <input type="file" id="st_photos_bad" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+            </div>
           </div>
         </div>
       `,
       primaryText: "Registrar Lançamento",
       onPrimary: async ({ btn, close, panel }) => {
-        const v = (id) => el(id)?.value?.trim();
-        const qty = Number(v("st_qty"));
-        const materialId = v("st_mId");
-
-        if (!materialId || !qty || qty <= 0) return toast("Preencha material e quantidade corretamente", { type: "error" });
+        const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
+        const mId = v("st_mId");
+        if (!mId) return toast("Selecione um material", { type: "error" });
 
         setButtonLoading(btn, true);
         try {
+          const qtyGood = Number(v("st_qtyGood") || 0);
+          const qtyBad = Number(v("st_qtyDamaged") || 0);
+
           const move = await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements`, {
             method: "POST",
             body: {
-              materialId,
+              materialId: mId,
               type: v("st_type"),
-              quantity: qty,
-              condition: v("st_cond"),
+              quantityGood: qtyGood,
+              quantityDamaged: qtyBad,
               entryType: v("st_entryType"),
               driverName: v("st_driver"),
               vehiclePlate: v("st_plate"),
@@ -2278,24 +2387,29 @@ async function openStockMovementModal() {
             }
           });
 
-          const photoInput = el("st_photos");
-          if (photoInput && photoInput.files.length > 0) {
+          // Upload Photos with condition tags
+          const uploadFiles = async (input, cond) => {
+            if (!input || input.files.length === 0) return;
+            
             let lat = "", lng = "";
             try {
               const pos = await new Promise((res, rej) => {
-                navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 });
+                navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 });
               });
               lat = pos.coords.latitude.toString();
               lng = pos.coords.longitude.toString();
-            } catch (e) { console.warn("GPS OFF"); }
+            } catch (e) {}
 
-            for (const file of photoInput.files) {
+            for (const file of input.files) {
               await apiUpload(`/stock/${encodeURIComponent(projectId)}/photos`, {
                 file,
-                extraFields: { movementId: move.id, materialId, lat, lng }
+                extraFields: { movementId: move.id, materialId: mId, lat: lat, lng: lng, condition: cond }
               });
             }
-          }
+          };
+
+          await uploadFiles(el("st_photos_good"), "BOA");
+          await uploadFiles(el("st_photos_bad"), "DANIFICADA");
 
           toast("Lançamento registrado e aguardando validação", { type: "success" });
           close();

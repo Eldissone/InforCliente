@@ -70,8 +70,10 @@ stockRoutes.post(
     const body = z.object({
       materialId: z.string(),
       type: z.enum(["ENTRADA", "SAIDA", "TRANSFERENCIA"]),
-      quantity: z.number().positive(),
-      condition: z.enum(["BOA", "DANIFICADA"]),
+      quantity: z.number().optional(), // Legado
+      quantityGood: z.number().default(0),
+      quantityDamaged: z.number().default(0),
+      condition: z.enum(["BOA", "DANIFICADA"]).default("BOA"), // Legado
       entryType: z.string().optional(),
       driverName: z.string().optional(),
       vehiclePlate: z.string().optional(),
@@ -83,25 +85,44 @@ stockRoutes.post(
       notes: z.string().optional(),
     }).parse(req.body);
 
-    const movement = await prisma.stockMovement.create({
-      data: {
-        ...body,
-        projectId,
-        auditStatus: "PENDENTE",
-        dateEntry: body.dateEntry ? new Date(body.dateEntry) : new Date(),
-      },
-      include: { material: true },
-    });
+    const { movement, projectStock } = await prisma.$transaction(async (tx) => {
+      const move = await tx.stockMovement.create({
+        data: {
+          ...body,
+          quantity: body.quantity || (body.quantityGood + body.quantityDamaged),
+          projectId,
+          auditStatus: "PENDENTE",
+          dateEntry: body.dateEntry ? new Date(body.dateEntry) : new Date(),
+        },
+        include: { material: true },
+      });
 
-    // Registrar log inicial
-    await prisma.stockAuditLog.create({
-      data: {
-        movementId: movement.id,
-        fromStatus: "PENDENTE",
-        toStatus: "PENDENTE",
-        changedBy: req.user.email,
-        notes: "Lançamento inicial registrado pelo técnico.",
-      },
+      // Se houver quantidades danificadas, atualizar o saldo IMEDIATAMENTE (aprovação opcional para danos)
+      if (body.quantityDamaged > 0) {
+        const sign = body.type === "ENTRADA" ? 1 : -1;
+        await tx.projectStock.upsert({
+          where: { projectId_materialId: { projectId, materialId: body.materialId } },
+          update: { quantityDamaged: { increment: body.quantityDamaged * sign } },
+          create: { 
+            projectId, 
+            materialId: body.materialId, 
+            quantityGood: 0,
+            quantityDamaged: body.quantityDamaged * sign
+          },
+        });
+      }
+
+      await tx.stockAuditLog.create({
+        data: {
+          movementId: move.id,
+          fromStatus: "PENDENTE",
+          toStatus: "PENDENTE",
+          changedBy: req.user.email,
+          notes: "Lançamento inicial registrado pelo técnico. (Danos pré-contabilizados)",
+        },
+      });
+
+      return { movement: move };
     });
 
     return res.status(201).json(movement);
@@ -143,28 +164,34 @@ stockRoutes.patch(
         },
       });
 
-      // Se aprovado, atualizar o saldo de stock do projeto
+      // Se APROVADO: Atualizar apenas QUANTIDADE BOA (Danificada já foi feita no POST)
       if (status === "APROVADO") {
-        const qtyGood = move.condition === "BOA" ? move.quantity : 0;
-        const qtyDamaged = move.condition === "DANIFICADA" ? move.quantity : 0;
         const sign = move.type === "ENTRADA" ? 1 : -1;
-
         await tx.projectStock.upsert({
           where: {
-            projectId_materialId: {
-              projectId: move.projectId,
-              materialId: move.materialId,
-            },
+            projectId_materialId: { projectId: move.projectId, materialId: move.materialId },
           },
           update: {
-            quantityGood: { increment: Number(qtyGood) * sign },
-            quantityDamaged: { increment: Number(qtyDamaged) * sign },
+            quantityGood: { increment: Number(move.quantityGood || 0) * sign },
           },
           create: {
             projectId: move.projectId,
             materialId: move.materialId,
-            quantityGood: Number(qtyGood) * sign,
-            quantityDamaged: Number(qtyDamaged) * sign,
+            quantityGood: Number(move.quantityGood || 0) * sign,
+            quantityDamaged: 0,
+          },
+        });
+      }
+
+      // Se REJEITADO: Reverter QUANTIDADE DANIFICADA (que foi feita no POST)
+      if (status === "REJEITADO" && Number(move.quantityDamaged) > 0) {
+        const sign = move.type === "ENTRADA" ? -1 : 1; // Reversão: inverte o sinal original
+        await tx.projectStock.update({
+          where: {
+            projectId_materialId: { projectId: move.projectId, materialId: move.materialId },
+          },
+          data: {
+            quantityDamaged: { increment: Number(move.quantityDamaged) * sign },
           },
         });
       }
@@ -252,6 +279,7 @@ stockRoutes.post(
         path: req.file.path.replace(/\\/g, "/"),
         lat: lat ? parseFloat(lat) : null,
         lng: lng ? parseFloat(lng) : null,
+        condition: req.body.condition || null,
         takenAt: new Date(),
       },
     });
