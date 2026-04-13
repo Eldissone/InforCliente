@@ -23,6 +23,18 @@ function getNext() {
   return params.get("next");
 }
 
+qs("togglePassword")?.addEventListener("click", () => {
+  const passwordInp = qs("password");
+  const icon = qs("togglePassword").querySelector("span");
+  if (passwordInp.type === "password") {
+    passwordInp.type = "text";
+    icon.textContent = "visibility_off";
+  } else {
+    passwordInp.type = "password";
+    icon.textContent = "visibility";
+  }
+});
+
 document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   setError("");

@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Info Cliente - Acesso restrito</title>
+  <title>Login | Info Cliente</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -16,82 +16,316 @@
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <style>
-    body {
-      background: radial-gradient(circle at top right, #1e293b 0%, #0f172a 100%);
+    :root {
+      --primary: #2afc8d;
+      --bg-dark: #070a13;
     }
 
-    .login-glass {
-      background: rgba(255, 255, 255, 0.03);
-      backdrop-filter: blur(20px);
+    body {
+      background: radial-gradient(circle at top right, #1e293b 0%, var(--bg-dark) 100%);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow-x: hidden;
+    }
+
+    /* Ambient Glows */
+    .glow {
+      position: fixed;
+      width: 400px;
+      height: 400px;
+      background: var(--primary);
+      filter: blur(150px);
+      opacity: 0.05;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .login-container {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 48px;
+      width: 100%;
+      max-width: 480px;
+      padding: 60px 45px;
+      box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.5);
+      margin: 20px;
+      animation: cardEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes cardEnter {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .login-header {
+      margin-bottom: 45px;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 24px;
+      font-weight: 800;
+      color: white;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-pill {
+      width: 60px;
+      height: 32px;
+      background: var(--primary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0F172A;
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-style: italic;
+    }
+
+    .login-title {
+      font-size: 38px;
+      font-weight: 800;
+      margin-top: 25px;
+      position: relative;
+      display: inline-block;
+    }
+
+    .login-title::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: -4px;
+      width: 45px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(42, 252, 141, 0.4);
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      margin-left: 4px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      transition: all 0.3s;
+    }
+
+    .input-field {
+      width: 100%;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 0 24px;
+      font-size: 14px;
+      color: white;
+      transition: all 0.3s ease;
+      outline: none;
+    }
+
+    .input-field::placeholder {
+      color: #475569;
+    }
+
+    .input-field:focus {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--primary);
+      box-shadow: 0 0 20px rgba(42, 252, 141, 0.1);
+    }
+
+    .btn-signin {
+      width: 100%;
+      height: 60px;
+      background: linear-gradient(135deg, #2afc8d 0%, #10b981 100%);
+      border-radius: 20px;
+      color: #070a13;
+      font-weight: 800;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-top: 30px;
+      transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+      box-shadow: 0 10px 25px rgba(42, 252, 141, 0.2);
+    }
+
+    .btn-signin:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px rgba(42, 252, 141, 0.3);
+      filter: brightness(1.1);
+    }
+
+    .social-btn {
+      flex: 1;
+      height: 54px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #cbd5e1;
+      transition: all 0.3s;
+    }
+
+    .social-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 30px 0;
+      color: #475569;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .divider:not(:empty)::before {
+      margin-right: 20px;
+    }
+
+    .divider:not(:empty)::after {
+      margin-left: 20px;
+    }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .remember-me input {
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px;
+    }
+
+    .forgot-password {
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 700;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .forgot-password:hover {
+      opacity: 0.8;
+    }
+
+    .error-box {
+      margin-top: 20px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 16px;
+      padding: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #f87171;
+      text-align: center;
     }
   </style>
 </head>
 
-<body class="font-body text-white min-h-screen flex items-center justify-center p-4 md:p-8">
-  <div class="w-full max-w-[440px] relative">
-    <!-- Decorative Glow -->
-    <div class="absolute -top-24 -left-24 w-64 h-64 bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"></div>
-    <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-[#2afc8d]/10 rounded-full blur-[100px] pointer-events-none">
+<body>
+  <!-- Glow Elements -->
+  <div class="glow" style="top: -100px; right: -100px;"></div>
+  <div class="glow" style="bottom: -100px; left: -100px; background: #6366f1; opacity: 0.03;"></div>
+
+  <div class="login-container">
+    <div class="login-header text-center sm:text-left">
+      <div class="logo-badge mb-4 justify-center sm:justify-start">
+        <div class="logo-pill">Info</div>
+        <span>Cliente</span>
+      </div>
+      <h1 class="login-title">Acesso</h1>
     </div>
 
-    <div class="login-glass rounded-[40px] px-8 py-12 md:px-12 shadow-2xl relative overflow-hidden">
-      <!-- Logo Branding -->
-      <div class="flex flex-col items-center text-center mb-10">
-        <div
-          class="w-16 h-16 bg-[#2afc8d] rounded-2xl flex items-center justify-center text-[#0f172a] font-black italic text-3xl mb-6 shadow-xl shadow-[#2afc8d]/20">
-          I</div>
-        <h1 class="text-3xl font-bold tracking-tight text-white mb-2">Bem-vindo ao</h1>
-        <p class="text-slate-400 text-sm font-medium">Info Cliente</p>
+    <form id="loginForm" class="space-y-7">
+      <div class="form-group">
+        <label for="email">Endereço de Email</label>
+        <div class="input-wrapper">
+          <input id="email" type="email" class="input-field" placeholder="nome@empresa.com" required />
+        </div>
       </div>
 
-      <form id="loginForm" class="space-y-6">
-        <div>
-          <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 ml-1">Endereço de
-            Email</label>
-          <div class="relative">
-            <input id="email" type="email"
-              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm focus:ring-2 focus:ring-[#2afc8d]/30 focus:border-[#2afc8d]/50 transition-all placeholder:text-slate-600 outline-none"
-              placeholder="seu@parceiro.com" required />
-            <span
-              class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">alternate_email</span>
-          </div>
+      <div class="form-group mt-4">
+        <label for="password">Chave de Segurança</label>
+        <div class="relative">
+          <input id="password" type="password" class="input-field pr-12" placeholder="••••••••" required />
+          <button type="button" id="togglePassword"
+            class="absolute right-0 mr-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
+            <span class="material-symbols-outlined text-xl">visibility</span>
+          </button>
         </div>
-
-        <div>
-          <div class="flex justify-between items-center mb-2 ml-1">
-            <label class="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Senha</label>
-            <a href="#"
-              class="text-[10px] font-black uppercase tracking-widest text-[#2afc8d] hover:text-white transition-colors">Esqueceu?</a>
-          </div>
-          <div class="relative">
-            <input id="password" type="password"
-              class="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-5 text-sm focus:ring-2 focus:ring-[#2afc8d]/30 focus:border-[#2afc8d]/50 transition-all placeholder:text-slate-600 outline-none"
-              placeholder="••••••••" required />
-            <span
-              class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-slate-600 text-xl">lock</span>
-          </div>
-        </div>
-
-        <button id="submitBtn" type="submit"
-          class="w-full h-14 rounded-2xl bg-white text-slate-900 font-bold text-sm hover:bg-[#2afc8d] transition-all transform active:scale-95 shadow-lg shadow-white/5 mt-4">
-          Entrar no Sistema
-        </button>
-
-        <div id="errorBox"
-          class="hidden text-xs font-bold text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-4 animate-pulse">
-        </div>
-      </form>
-
-      <div class="mt-12 pt-8 border-t border-white/5 text-center">
-        <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Grupo Unione © 2026</p>
       </div>
-    </div>
 
-    <div class="text-center mt-8">
-      <p class="text-[11px] text-slate-500 font-medium">Não tem acesso? <a href="#"
-          class="text-white hover:text-[#2afc8d] transition-colors underline underline-offset-4">Solicite ao
-          administrador</a></p>
+      <div class="flex mt-4 items-center justify-between px-1">
+        <label class="remember-me">
+          <input type="checkbox">
+          Manter sessão
+        </label>
+
+      </div>
+
+      <button id="submitBtn" type="submit" class="btn-signin">
+        Entrar no Sistema
+      </button>
+
+      <div id="errorBox" class="hidden error-box"></div>
+    </form>
+
+    <div class="divider"><a href="#" class="forgot-password">Recuperar senha?</a></div>
+
+
+    <div class="text-center mt-4 pt-4 border-t border-white/5">
+      <p class="text-[12px] text-slate-500 font-medium tracking-tight">
+        Não tem uma conta?
+        <a href="#" class="text-[#2afc8d] font-bold hover:underline transition-all">Solicitar Acesso</a>
+      </p>
     </div>
   </div>
 
