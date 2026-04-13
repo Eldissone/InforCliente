@@ -133,4 +133,86 @@ dashboardRoutes.get(
   })
 );
 
+dashboardRoutes.get(
+  "/client-summary",
+  asyncHandler(async (req, res) => {
+    const clientId = getScopedClientId(req);
+    if (!clientId) return res.status(403).json({ error: "CLIENT_SCOPE_REQUIRED" });
+
+    // 1. Buscar todos os projetos do cliente
+    const projects = await prisma.project.findMany({
+      where: { clientId },
+      include: {
+        payments: { where: { status: "CONFIRMADO" } },
+      },
+    });
+
+    // 2. Cálculo Financeiro e Projetos
+    let totalContract = 0;
+    let totalPaid = 0;
+    let totalProgressSum = 0;
+
+    const projectMetrics = projects.map((p) => {
+      const budget = Number(p.budgetTotal || 0);
+      const paid = p.payments.reduce((acc, pay) => acc + Number(pay.valor || 0), 0);
+      const progress = Number(p.physicalProgressPct || 0);
+
+      totalContract += budget;
+      totalPaid += paid;
+      totalProgressSum += progress;
+
+      return {
+        id: p.id,
+        name: p.name,
+        budget,
+        paid,
+        debt: budget - paid,
+        progress,
+      };
+    });
+
+    const overallProgress = projects.length > 0 ? Math.round(totalProgressSum / projects.length) : 0;
+
+    // 3. Resumo de Armazém do Cliente (Agregação via Movements)
+    // Buscamos movimentos onde o batch seja "Armazém do Cliente" ou similar
+    const movements = await prisma.stockMovement.findMany({
+      where: {
+        projectId: { in: projects.map((p) => p.id) },
+        batch: "Armazém do Cliente",
+        auditStatus: "APROVADO",
+      },
+      include: { material: true },
+    });
+
+    const stockMap = {};
+    movements.forEach((m) => {
+      const mId = m.materialId;
+      if (!stockMap[mId]) {
+        stockMap[mId] = {
+          name: m.material.name,
+          unit: m.material.unit,
+          qty: 0,
+        };
+      }
+      // Simplificação: ENTRADA/AJUSTE soma, SAIDA subtrai
+      const sign = (m.type === "SAIDA") ? -1 : 1;
+      // Usamos apenas quantityGood para stock disponível
+      stockMap[mId].qty += Number(m.quantityGood || 0) * sign;
+    });
+
+    const stockSummary = Object.values(stockMap).filter((s) => s.qty > 0);
+
+    return res.json({
+      financials: {
+        totalContract,
+        totalPaid,
+        totalDebt: totalContract - totalPaid,
+      },
+      overallProgress,
+      projects: projectMetrics,
+      stock: stockSummary,
+    });
+  })
+);
+
 module.exports = { dashboardRoutes };

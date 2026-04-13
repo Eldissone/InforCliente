@@ -51,5 +51,12 @@ export function wireUsersNav() {
   document.querySelectorAll("[data-user-role]").forEach((el) => {
     el.textContent = role ? String(role).toUpperCase() : "";
   });
+
+  // Dynamic Dashboard Link
+  document.querySelectorAll("[data-nav-dashboard]").forEach((el) => {
+    const target = role === "cliente" ? "../Dashboard/clientDashboard.html" : "../Dashboard/index.html";
+    if (el.tagName === "A") el.href = target;
+  });
+
   applyRoleVisibility(role);
 }

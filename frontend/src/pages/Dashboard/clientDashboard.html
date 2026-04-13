@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>InforCliente - Dashboard do Cliente</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+    <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+
+    <!-- ApexCharts CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 font-body text-slate-900 antialiased">
+    <!-- Navbar -->
+    <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
+        <div class="max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-10">
+                <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <span
+                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
+                    Cliente
+                </span>
+                <span id="clientNameHeader"
+                    class="text-slate-400 text-xs font-bold uppercase tracking-widest hidden md:block">Área do
+                    Cliente</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <button data-logout
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
+                    Sair <span class="material-symbols-outlined text-lg">logout</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+                <p class="text-slate-500 font-medium">Resumo do portfólio de obras e recursos.</p>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="relative min-w-[240px]">
+                    <select id="projectFilter"
+                        class="w-full h-11 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold appearance-none focus:ring-2 focus:ring-[#2afc8d]/20">
+                        <option value="all">Filtro: Todos os Projectos</option>
+                    </select>
+                    <span
+                        class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <!-- KPIs Financeiros -->
+            <div
+                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 transition-all hover:-translate-y-1">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Orçamento Geral</div>
+                <div id="metricTotalContract" class="text-2xl font-black text-slate-900">—</div>
+                <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Valor total da Obra</div>
+            </div>
+
+            <div
+                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-emerald-50 transition-all hover:-translate-y-1">
+                <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total de Pagamentos
+                </div>
+                <div id="metricTotalPaid" class="text-2xl font-black text-slate-900">—</div>
+                <div class="mt-2 flex items-center gap-1">
+                    <span id="percentPaid"
+                        class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">0%</span>
+                    <span class="text-[10px] font-bold text-slate-400 italic">Liquidado</span>
+                </div>
+            </div>
+
+            <div
+                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-red-50 transition-all hover:-translate-y-1">
+                <div class="text-[10px] font-black uppercase tracking-widest text-red-600 mb-2">Saldo em Dívida</div>
+                <div id="metricDebt" class="text-2xl font-black text-slate-900">—</div>
+                <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Pendente de Pagamento</div>
+            </div>
+
+            <div
+                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-[#0F172A] to-[#1E293B] shadow-xl hover:-translate-y-1">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Progresso Médio</div>
+                <div id="metricProgress" class="text-4xl font-black text-[#2afc8d]">0%</div>
+                <div class="w-full h-1 bg-slate-800 rounded-full mt-3 overflow-hidden">
+                    <div id="progressLine"
+                        class="h-full bg-[#2afc8d] shadow-[0_0_10px_#2afc8d] transition-all duration-1000"
+                        style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+            <!-- Financeiro por Projeto (Barras) -->
+            <div class="glass-card p-8 rounded-[2.5rem] bg-white">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="font-bold text-slate-900">Controlo Financeiro</h3>
+                        <p class="text-[11px] font-medium text-slate-400">Comparativo Facturação vs Liquidado (kz)</p>
+                    </div>
+                    <span class="material-symbols-outlined text-slate-300">payments</span>
+                </div>
+                <div id="financialChart" class="min-h-[350px]"></div>
+            </div>
+
+            <!-- Resumo de Armazém (Doughnut) -->
+            <div class="glass-card p-8 rounded-[2.5rem] bg-white">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="font-bold text-slate-900">Armazém</h3>
+                        <p class="text-[11px] font-medium text-slate-400">Distribuição de Materiais Disponíveis</p>
+                    </div>
+                    <span class="material-symbols-outlined text-slate-300">inventory_2</span>
+                </div>
+                <!-- Container for empty or full state -->
+                <div id="stockChart" class="min-h-[350px] flex items-center justify-center">
+                    <div class="text-center">
+                        <span class="material-symbols-outlined text-4xl text-slate-100 mb-3">box_add</span>
+                        <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Sem Stock Registado</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Gauge row -->
+        <div class="grid grid-cols-1 gap-8">
+            <div class="glass-card p-8 rounded-[2.5rem] bg-white text-center">
+                <div class="mb-6">
+                    <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
+                    <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
+                </div>
+                <div id="progressGauge" class="flex justify-center"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-10 px-8 py-10 text-center">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InforCliente Dashboard Visual v1.0</p>
+    </footer>
+
+    <script type="module" src="./clientDashboard.js"></script>
+</body>
+
+</html>

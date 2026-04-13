@@ -57,7 +57,7 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
         window.location.href = `/${next}`;
       } else {
         window.location.href =
-          res?.user?.role === "cliente" ? "../Projectos/ProjectGeral.html" : "../Dashboard/index.html";
+          res?.user?.role === "cliente" ? "../Dashboard/clientDashboard.html" : "../Dashboard/index.html";
       }
     }, 800);
   } catch (err) {
