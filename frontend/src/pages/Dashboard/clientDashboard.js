@@ -403,14 +403,16 @@ function renderProgressBreakdownRows() {
 
       const indentStyle = isSub ? "pl-14 bg-slate-50/40" : "px-6";
       const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
-      const parentClass = hasChildren ? "bg-slate-100 border-y border-slate-200/50" : "";
+      const parentClass = hasChildren ? "bg-slate-100 border-y border-slate-200/50 cursor-pointer select-none" : "";
       const descClass = hasChildren ? "font-black text-slate-900" : "font-medium text-slate-800";
+      const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${task.id}"` : "";
 
       return `
-        <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}">
+        <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
           <td class="py-3 ${descClass} ${indentStyle}">
              <div class="flex items-center">
                 ${iconSub}
+                ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon>expand_more</span>` : ""}
                 <span class="font-bold text-slate-400 mr-2">${prefixStr} -</span>
                 <span>${escapeHtml(task.description)}</span>
              </div>
@@ -429,7 +431,9 @@ function renderProgressBreakdownRows() {
     html += renderRow(t, groupIndex.toString(), false, subs.length > 0);
 
     subs.forEach((sub, subI) => {
-       html += renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
+       const subRow = renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
+       // Injetar o data-sub-of no tr do subitem
+       html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
     });
   });
   let activeProgress = 0;
@@ -774,6 +778,24 @@ function wireEvents() {
       });
       if (icon) {
          icon.textContent = isHidden ? "chevron_right" : "expand_more";
+      }
+      return;
+    }
+
+    // Progress Sub-tasks Toggle
+    const toggleSub = e.target?.closest("[data-toggle-sub-tasks]");
+    if (toggleSub) {
+      const parentId = toggleSub.getAttribute("data-toggle-sub-tasks");
+      const icon = toggleSub.querySelector("[data-sub-icon]");
+      const children = document.querySelectorAll(`[data-sub-of="${parentId}"]`);
+      
+      let isHidden = false;
+      children.forEach(child => {
+        isHidden = child.classList.toggle("hidden");
+      });
+
+      if (icon) {
+        icon.textContent = isHidden ? "chevron_right" : "expand_more";
       }
       return;
     }

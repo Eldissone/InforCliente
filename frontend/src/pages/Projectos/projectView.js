@@ -960,16 +960,18 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
   const indentStyle = isSub ? "pl-12 bg-slate-50/30" : "px-6";
   const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
-  const parentClass = hasChildren ? "bg-blue-50/40 border-y border-blue-100/50" : "";
+  const parentClass = hasChildren ? "bg-blue-50/40 border-y border-blue-100/50 cursor-pointer select-none" : "";
   const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
+  const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${t.id}"` : "";
 
   return `
-    <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}">
+    <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
       <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index}</td>
       <td class="py-4 ${indentStyle}">
         <div class="${descClass} flex flex-col relative">
           <div class="flex items-center">
             ${iconSub}
+            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon>expand_more</span>` : ""}
             <span>${escapeHtml(t.description)}</span>
           </div>
           ${!isSub && t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
@@ -984,8 +986,8 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       <td class="px-4 py-4 text-center font-medium text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
       <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${exePct}%</td>
       <td class="px-4 py-4 text-center font-medium text-slate-500">${left.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-medium text-error">${leftPct}%</td>
-      <td class="px-4 py-4 text-right">
+      <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
+      <td class="px-4 py-4 text-right" data-actions>
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
       </td>
@@ -1070,7 +1072,9 @@ async function loadProgressTasks() {
         html += renderProgressTaskRow(t, groupIndex.toString(), false, t.itemGroup, subs.length > 0);
 
         subs.forEach((sub, subI) => {
-          html += renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false);
+          const subRow = renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false);
+          // Injetar o data-sub-of no tr retornado pelo helper
+          html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
         });
       });
       tbody.innerHTML = html;
@@ -1272,6 +1276,23 @@ function wireProgressTasks() {
       let isHidden = false;
       items.forEach(item => {
         isHidden = item.classList.toggle("hidden");
+      });
+
+      if (icon) {
+        icon.textContent = isHidden ? "chevron_right" : "expand_more";
+      }
+      return;
+    }
+
+    const toggleSub = e.target?.closest("[data-toggle-sub-tasks]");
+    if (toggleSub && !e.target.closest("[data-actions]")) {
+      const parentId = toggleSub.getAttribute("data-toggle-sub-tasks");
+      const icon = toggleSub.querySelector("[data-sub-icon]");
+      const children = document.querySelectorAll(`[data-sub-of="${parentId}"]`);
+      
+      let isHidden = false;
+      children.forEach(child => {
+        isHidden = child.classList.toggle("hidden");
       });
 
       if (icon) {
