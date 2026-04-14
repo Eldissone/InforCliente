@@ -607,6 +607,12 @@ async function loadPhotos() {
        
        groups[cat].forEach(p => {
          const url = `${getApiBaseUrl()}/${p.path}`;
+         
+         const matName = p.movement && p.movement.material ? p.movement.material.name : null;
+         const dynDesc = p.description || matName || "Registo Fotográfico";
+         const safeDesc = escapeHtml(dynDesc);
+         const condStr = p.condition ? ` <span class="bg-slate-100 text-slate-500 text-[8px] px-1 py-0.5 rounded ml-1 font-bold">${p.condition}</span>` : "";
+
          // Visual semelhante ao Windows Explorer: miniatura/ícone à esquerda, 3 linhas de texto à direita
          html += `
           <a href="${url}" target="_blank" class="group flex flex-row items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
@@ -616,8 +622,8 @@ async function loadPhotos() {
             </div>
             <!-- Detalhes estilo File Explorer -->
             <div class="flex-1 min-w-0 flex flex-col justify-center">
-               <p class="text-xs font-semibold text-slate-900 truncate leading-tight" title="${escapeHtml(p.description) || "Imagem da Obra"}">
-                  ${escapeHtml(p.description) || "Registo Fotográfico"}
+               <p class="text-xs font-semibold text-slate-900 truncate leading-tight flex items-center" title="${safeDesc}">
+                  <span class="truncate">${safeDesc}</span>${condStr}
                </p>
                <p class="text-[10px] font-medium text-slate-500 truncate leading-tight">
                   Ficheiro JPG
