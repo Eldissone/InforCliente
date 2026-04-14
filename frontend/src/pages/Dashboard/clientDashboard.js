@@ -381,8 +381,9 @@ function renderProgressBreakdownRows() {
     }
 
     groupIndex++;
+    const subs = children.filter(c => c.parentId === t.id);
 
-    const renderRow = (task, prefixStr, isSub = false) => {
+    const renderRow = (task, prefixStr, isSub = false, hasChildren = false) => {
       const exp = Number(task.expectedQty || 0);
       const exe = Number(task.executedQty || 0);
       const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
@@ -402,10 +403,12 @@ function renderProgressBreakdownRows() {
 
       const indentStyle = isSub ? "pl-14 bg-slate-50/40" : "px-6";
       const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
+      const parentClass = hasChildren ? "bg-slate-100 border-y border-slate-200/50" : "";
+      const descClass = hasChildren ? "font-black text-slate-900" : "font-medium text-slate-800";
 
       return `
-        <tr class="hover:bg-slate-50 transition-colors text-sm" data-progress-item-group="${safeGroupName}">
-          <td class="py-3 font-medium text-slate-800 ${indentStyle}">
+        <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}">
+          <td class="py-3 ${descClass} ${indentStyle}">
              <div class="flex items-center">
                 ${iconSub}
                 <span class="font-bold text-slate-400 mr-2">${prefixStr} -</span>
@@ -423,11 +426,10 @@ function renderProgressBreakdownRows() {
       `;
     };
 
-    html += renderRow(t, groupIndex.toString(), false);
+    html += renderRow(t, groupIndex.toString(), false, subs.length > 0);
 
-    const subs = children.filter(c => c.parentId === t.id);
     subs.forEach((sub, subI) => {
-       html += renderRow(sub, `${groupIndex}.${subI + 1}`, true);
+       html += renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
     });
   });
   let activeProgress = 0;

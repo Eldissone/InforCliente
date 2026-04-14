@@ -933,7 +933,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
   `;
 }
 
-function renderProgressTaskRow(t, index, isSub = false, parentGroup = null) {
+function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false) {
   const exp = Number(t.expectedQty || 0);
   const exe = Number(t.executedQty || 0);
   const left = exp > exe ? (exp - exe) : 0;
@@ -960,12 +960,14 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null) {
 
   const indentStyle = isSub ? "pl-12 bg-slate-50/30" : "px-6";
   const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
+  const parentClass = hasChildren ? "bg-blue-50/40 border-y border-blue-100/50" : "";
+  const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
 
   return `
-    <tr class="hover:bg-surface-container-low transition-colors group" data-progress-item-group="${safeGroupName}">
+    <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}">
       <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index}</td>
       <td class="py-4 ${indentStyle}">
-        <div class="font-bold text-[#212e3e] flex flex-col relative">
+        <div class="${descClass} flex flex-col relative">
           <div class="flex items-center">
             ${iconSub}
             <span>${escapeHtml(t.description)}</span>
@@ -973,16 +975,16 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null) {
           ${!isSub && t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
         </div>
       </td>
-      <td class="px-4 py-4 text-center text-[8px] font-black ">${exp.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center text-[8px] tracking-widest text-[#212e3e] font-black">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-4 text-center font-medium font-black ">${exp.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center tracking-widest text-[#212e3e] font-medium lowercase">${formatUnit(t.unit)}</td>
       <td class="px-4 py-4 text-center font-medium text-blue-500">${uvSStr}</td>
       <td class="px-4 py-4 text-center font-medium text-emerald-500">${uvMStr}</td>
-      <td class="px-4 py-4 text-center font-black pr-6 text-slate-800">${invoicingValStr}</td>
-      <td class="px-4 py-4 text-center font-black text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-black text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
-      <td class="px-4 py-4 text-center font-black text-[#0d3fd1]">${exePct}%</td>
-      <td class="px-4 py-4 text-center font-black text-slate-500">${left.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
+      <td class="px-4 py-4 text-center font-medium pr-6 text-slate-800">${invoicingValStr}</td>
+      <td class="px-4 py-4 text-center font-medium text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-medium text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
+      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${exePct}%</td>
+      <td class="px-4 py-4 text-center font-medium text-slate-500">${left.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-medium text-error">${leftPct}%</td>
       <td class="px-4 py-4 text-right">
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
@@ -1065,10 +1067,10 @@ async function loadProgressTasks() {
         groupIndex++;
         const subs = children.filter(c => c.parentId === t.id);
 
-        html += renderProgressTaskRow(t, groupIndex.toString(), false);
+        html += renderProgressTaskRow(t, groupIndex.toString(), false, t.itemGroup, subs.length > 0);
 
         subs.forEach((sub, subI) => {
-          html += renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup);
+          html += renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false);
         });
       });
       tbody.innerHTML = html;
