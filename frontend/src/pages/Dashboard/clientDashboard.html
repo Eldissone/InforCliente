@@ -30,6 +30,25 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
         }
+
+        .tab-content.hidden {
+            display: none;
+        }
+
+        .custom-scroll::-webkit-scrollbar {
+            height: 8px;
+            width: 6px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
     </style>
 </head>
 
@@ -57,106 +76,184 @@
     </nav>
 
     <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
-        <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
                 <p class="text-slate-500 font-medium">Resumo do portfólio de obras e recursos.</p>
             </div>
 
-            <div class="flex items-center gap-3">
-                <div class="relative min-w-[240px]">
-                    <select id="projectFilter"
-                        class="w-full h-11 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold appearance-none focus:ring-2 focus:ring-[#2afc8d]/20">
-                        <option value="all">Filtro: Todos os Projectos</option>
-                    </select>
-                    <span
-                        class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+            <div class="flex flex-col md:flex-row items-center gap-3">
+                <div class="flex items-center bg-white border border-slate-200 rounded-xl px-2 shadow-sm h-11">
+                    <input type="date" id="filterStart"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
+                    <span class="text-slate-300 font-black px-1">-</span>
+                    <input type="date" id="filterEnd"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
                 </div>
             </div>
         </header>
 
-        <!-- Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-            <!-- KPIs Financeiros -->
-            <div
-                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 transition-all hover:-translate-y-1">
-                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Orçamento Geral</div>
-                <div id="metricTotalContract" class="text-2xl font-black text-slate-900">—</div>
-                <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Valor total da Obra</div>
+        <!-- Tab Navigation -->
+        <div class="flex items-center gap-4 border-b border-slate-200 mb-8 overflow-x-auto custom-scroll pb-2">
+            <button data-tab-trigger="dashboard"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Resumo
+                Executivo</button>
+            <button data-tab-trigger="arquivos"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
+                de Arquivos</button>
+            <button data-tab-trigger="galeria"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
+            </button>
+        </div>
+
+        <div id="tab-dashboard" class="tab-content">
+            <!-- Metrics Grid -->
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                <!-- KPIs Financeiros -->
+                <div
+                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 transition-all hover:-translate-y-1">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Orçamento Geral
+                    </div>
+                    <div id="metricTotalContract" class="text-2xl font-black text-slate-900">—</div>
+                    <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Valor total da Obra</div>
+                </div>
+
+                <div
+                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-emerald-50 transition-all hover:-translate-y-1">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total de
+                        Pagamentos
+                    </div>
+                    <div id="metricTotalPaid" class="text-2xl font-black text-slate-900">—</div>
+                    <div class="mt-2 flex items-center gap-1">
+                        <span id="percentPaid"
+                            class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">0%</span>
+                        <span class="text-[10px] font-bold text-slate-400 italic">Liquidado</span>
+                    </div>
+                </div>
+
+                <div
+                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-red-50 transition-all hover:-translate-y-1">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-red-600 mb-2">Saldo em Dívida
+                    </div>
+                    <div id="metricDebt" class="text-2xl font-black text-slate-900">—</div>
+                    <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Pendente de Pagamento</div>
+                </div>
+
+                <div
+                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-[#0F172A] to-[#1E293B] shadow-xl hover:-translate-y-1">
+                    <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Progresso Médio
+                    </div>
+                    <div id="metricProgress" class="text-4xl font-black text-[#2afc8d]">0%</div>
+                    <div class="w-full h-1 bg-slate-800 rounded-full mt-3 overflow-hidden">
+                        <div id="progressLine"
+                            class="h-full bg-[#2afc8d] shadow-[0_0_10px_#2afc8d] transition-all duration-1000"
+                            style="width: 0%"></div>
+                    </div>
+                </div>
             </div>
 
-            <div
-                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-emerald-50 transition-all hover:-translate-y-1">
-                <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total de Pagamentos
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+                <!-- Financeiro por Projeto (Barras) -->
+                <div class="glass-card p-8 rounded-[2.5rem] bg-white">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Controlo Financeiro</h3>
+                            <p class="text-[11px] font-medium text-slate-400">Comparativo Facturação vs Liquidado (kz)
+                            </p>
+                        </div>
+                        <span class="material-symbols-outlined text-slate-300">payments</span>
+                    </div>
+                    <div id="financialChart" class="min-h-[350px]"></div>
                 </div>
-                <div id="metricTotalPaid" class="text-2xl font-black text-slate-900">—</div>
-                <div class="mt-2 flex items-center gap-1">
-                    <span id="percentPaid"
-                        class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">0%</span>
-                    <span class="text-[10px] font-bold text-slate-400 italic">Liquidado</span>
+
+                <!-- Resumo de Armazém (Doughnut) -->
+                <div class="glass-card p-8 rounded-[2.5rem] bg-white">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Armazém</h3>
+                            <p class="text-[11px] font-medium text-slate-400">Distribuição de Materiais Disponíveis</p>
+                        </div>
+                        <span class="material-symbols-outlined text-slate-300">inventory_2</span>
+                    </div>
+                    <!-- Container for empty or full state -->
+                    <div id="stockChart" class="min-h-[350px] flex items-center justify-center">
+                        <div class="text-center">
+                            <span class="material-symbols-outlined text-4xl text-slate-100 mb-3">box_add</span>
+                            <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Sem Stock Registado
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            <!-- Progress Gauge row -->
+            <div class="grid grid-cols-1 gap-8">
+                <div class="glass-card p-8 rounded-[2.5rem] bg-white text-center">
+                    <div class="mb-6">
+                        <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
+                        <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
+                    </div>
+                    <div id="progressGauge" class="flex justify-center"></div>
+                </div>
+            </div>
+        </div> <!-- End tab-dashboard -->
+
+        <div id="tab-arquivos" class="tab-content hidden">
             <div
-                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-red-50 transition-all hover:-translate-y-1">
-                <div class="text-[10px] font-black uppercase tracking-widest text-red-600 mb-2">Saldo em Dívida</div>
-                <div id="metricDebt" class="text-2xl font-black text-slate-900">—</div>
-                <div class="mt-2 text-[10px] font-bold text-slate-400 italic">Pendente de Pagamento</div>
+                class="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6">
+                <div>
+                    <h3 class="font-bold text-slate-900">Documentação</h3>
+                    <p class="text-xs text-slate-500">Acesse e gerencie arquivos relacionados à obra.</p>
+                </div>
+                <!-- Escondido caso 'Todos os Projectos' esteja selecionado. É preciso um projeto específico para upload -->
+                <button id="btnUploadFile"
+                    class="hidden items-center gap-2 px-4 py-2 bg-slate-900 text-[#2afc8d] rounded-xl text-sm font-bold shadow-md hover:scale-105 transition-transform">
+                    <span class="material-symbols-outlined text-sm">upload</span> Enviar Arquivo
+                </button>
             </div>
 
-            <div
-                class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-[#0F172A] to-[#1E293B] shadow-xl hover:-translate-y-1">
-                <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Progresso Médio</div>
-                <div id="metricProgress" class="text-4xl font-black text-[#2afc8d]">0%</div>
-                <div class="w-full h-1 bg-slate-800 rounded-full mt-3 overflow-hidden">
-                    <div id="progressLine"
-                        class="h-full bg-[#2afc8d] shadow-[0_0_10px_#2afc8d] transition-all duration-1000"
-                        style="width: 0%"></div>
-                </div>
+            <div id="fileBreadcrumbs"
+                class="flex items-center gap-2 mb-4 text-xs font-black uppercase tracking-widest text-slate-400">
+                <button data-go-folder="root"
+                    class="hover:text-slate-900 transition-colors flex items-center gap-1"><span
+                        class="material-symbols-outlined text-sm">home</span> Raiz Geral</button>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden mb-10">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
+                            <th class="px-8 py-5">Nome</th>
+                            <th class="px-8 py-5 hidden md:table-cell">Categoria</th>
+                            <th class="px-8 py-5 text-right">Data</th>
+                        </tr>
+                    </thead>
+                    <tbody id="filesTbody" class="divide-y divide-slate-50 text-slate-600">
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <!-- Charts Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-            <!-- Financeiro por Projeto (Barras) -->
-            <div class="glass-card p-8 rounded-[2.5rem] bg-white">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h3 class="font-bold text-slate-900">Controlo Financeiro</h3>
-                        <p class="text-[11px] font-medium text-slate-400">Comparativo Facturação vs Liquidado (kz)</p>
-                    </div>
-                    <span class="material-symbols-outlined text-slate-300">payments</span>
+        <div id="tab-galeria" class="tab-content hidden">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-900">Galeria</h3>
+                    <p class="text-xs mt-4 text-slate-500">Acompanhamento fotográfico da evolução da obra e armazém.</p>
                 </div>
-                <div id="financialChart" class="min-h-[350px]"></div>
-            </div>
-
-            <!-- Resumo de Armazém (Doughnut) -->
-            <div class="glass-card p-8 rounded-[2.5rem] bg-white">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h3 class="font-bold text-slate-900">Armazém</h3>
-                        <p class="text-[11px] font-medium text-slate-400">Distribuição de Materiais Disponíveis</p>
-                    </div>
-                    <span class="material-symbols-outlined text-slate-300">inventory_2</span>
-                </div>
-                <!-- Container for empty or full state -->
-                <div id="stockChart" class="min-h-[350px] flex items-center justify-center">
-                    <div class="text-center">
-                        <span class="material-symbols-outlined text-4xl text-slate-100 mb-3">box_add</span>
-                        <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Sem Stock Registado</p>
-                    </div>
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">
+                    <input type="date" id="galleryFilterStart"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
+                    <span class="text-slate-300 font-black px-1">-</span>
+                    <input type="date" id="galleryFilterEnd"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
                 </div>
             </div>
-        </div>
-
-        <!-- Progress Gauge row -->
-        <div class="grid grid-cols-1 gap-8">
-            <div class="glass-card p-8 rounded-[2.5rem] bg-white text-center">
-                <div class="mb-6">
-                    <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
-                    <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
-                </div>
-                <div id="progressGauge" class="flex justify-center"></div>
+            <!-- Container de Grupos da Galeria -->
+            <div id="galleryContainer" class="flex flex-col gap-4 mb-10">
+                <!-- Grupos inseridos dinamicamente (Hoje, Ontem, etc) -->
             </div>
         </div>
     </main>

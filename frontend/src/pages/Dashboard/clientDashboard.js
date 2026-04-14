@@ -1,7 +1,7 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, getApiBaseUrl } from "../../services/api.js";
 import { wireLogout } from "../../shared/session.js";
-import { formatCurrencyKZ, formatPercent } from "../../shared/format.js";
-import { toast, initMobileMenu } from "../../shared/ui.js";
+import { formatCurrencyKZ, formatDateBR } from "../../shared/format.js";
+import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml } from "../../shared/ui.js";
 
 let dashboardData = null;
 let charts = {
@@ -10,13 +10,54 @@ let charts = {
   progress: null
 };
 
+let state = {
+  projectId: "all",
+  startDate: "",
+  endDate: "",
+  activeTab: "dashboard",
+  currentFolderId: null,
+  breadcrumbs: [],
+  files: [],
+  photos: [],
+  galleryStartDate: "",
+  galleryEndDate: ""
+};
+
 async function loadDashboardData() {
   try {
-    dashboardData = await apiRequest("/dashboard/client-summary");
-    renderDashboard("all");
-    populateProjectFilter();
+    let url = "/dashboard/client-summary";
+    const params = new URLSearchParams();
+    if (state.startDate) params.append("start", state.startDate);
+    if (state.endDate) params.append("end", state.endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+
+    dashboardData = await apiRequest(url);
+
+    if (state.projectId === "all" && dashboardData.projects && dashboardData.projects.length > 0) {
+      state.projectId = dashboardData.projects[0].id;
+    }
+
+    renderDashboard(state.projectId);
+
+    // Update select filter if it still exists (fallback)
+    const select = document.getElementById("projectFilter");
+    if (select && select.options.length === 1) {
+      dashboardData.projects.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        select.appendChild(opt);
+      });
+    }
+
+    if (state.activeTab === "arquivos" && state.projectId !== "all") {
+       await loadFiles();
+    }
+    if (state.activeTab === "galeria" && state.projectId !== "all") {
+       await loadPhotos();
+    }
   } catch (err) {
-    toast("Não foi possível carregar os dados do dashboard.", { type: "error" });
+    toast("Não foi possível carregar os dados.", { type: "error" });
     console.error(err);
   }
 }
@@ -26,20 +67,56 @@ function renderDashboard(projectId) {
     ? dashboardData 
     : filterDataByProject(projectId);
 
+  if (!data) return;
+
   updateMetrics(data);
   renderFinancialChart(data.projects);
   renderStockChart(data.stock);
   renderProgressGauge(data.overallProgress);
+  
+  updateTabUI();
+}
+
+function updateTabUI() {
+  document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
+  document.getElementById(`tab-${state.activeTab}`)?.classList.remove("hidden");
+
+  document.querySelectorAll("[data-tab-trigger]").forEach(btn => {
+    if (btn.getAttribute("data-tab-trigger") === state.activeTab) {
+      btn.classList.add("border-slate-900", "text-slate-900");
+      btn.classList.remove("border-transparent", "text-slate-400");
+    } else {
+      btn.classList.remove("border-slate-900", "text-slate-900");
+      btn.classList.add("border-transparent", "text-slate-400");
+    }
+  });
+
+  const btnUpload = document.getElementById("btnUploadFile");
+  if (state.activeTab === "arquivos") {
+    if (state.projectId === "all") {
+      if (btnUpload) btnUpload.classList.add("hidden");
+      document.getElementById("filesTbody").innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver os arquivos.</td></tr>`;
+    } else {
+      if (btnUpload) btnUpload.classList.remove("hidden");
+      // loadFiles() is called elsewhere or here
+      loadFiles();
+    }
+  }
+
+  if (state.activeTab === "galeria") {
+    if (state.projectId === "all") {
+      document.getElementById("galleryGrid").innerHTML = `<div class="col-span-full p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver a galeria.</div>`;
+    } else {
+      loadPhotos();
+    }
+  }
 }
 
 function filterDataByProject(pid) {
+  if (!dashboardData) return null;
   const p = dashboardData.projects.find(x => x.id === pid);
   if (!p) return dashboardData;
 
-  // For stock, we'd ideally filter by project too. 
-  // Our backend returns stock summary already, but for 'all'.
-  // We'll just show the same stock for now or re-fetch if needed.
-  // Given the current backend implementation, dashboardData.stock is for ALL projects.
   return {
     financials: {
       totalContract: p.budget,
@@ -48,7 +125,7 @@ function filterDataByProject(pid) {
     },
     overallProgress: p.progress,
     projects: [p],
-    stock: dashboardData.stock // Simplification for now
+    stock: dashboardData.stock
   };
 }
 
@@ -71,10 +148,11 @@ function updateMetrics(data) {
 }
 
 function renderFinancialChart(projects) {
+  if (!projects) return;
   const options = {
     series: [
-      { name: 'Total Contrato', data: projects.map(p => p.budget) },
-      { name: 'Total Pago', data: projects.map(p => p.paid) }
+      { name: 'Orçamento', data: projects.map(p => p.budget) },
+      { name: 'Pago', data: projects.map(p => p.paid) }
     ],
     chart: { type: 'bar', height: 350, toolbar: { show: false }, fontFamily: 'Inter, sans-serif' },
     colors: ['#0F172A', '#2afc8d'],
@@ -82,7 +160,7 @@ function renderFinancialChart(projects) {
     dataLabels: { enabled: false },
     stroke: { show: true, width: 2, colors: ['transparent'] },
     xaxis: { categories: projects.map(p => p.name) },
-    yaxis: { title: { text: 'Valores (kz)' }, labels: { formatter: (val) => val.toLocaleString() } },
+    yaxis: { title: { text: '' }, labels: { formatter: (val) => val.toLocaleString() } },
     fill: { opacity: 1 },
     tooltip: { y: { formatter: (val) => formatCurrencyKZ(val) } },
     legend: { position: 'top', fontWeight: 700 }
@@ -96,10 +174,10 @@ function renderFinancialChart(projects) {
 function renderStockChart(stock) {
   const container = document.querySelector("#stockChart");
   if (!stock || stock.length === 0) {
-    container.innerHTML = `<div class="text-center"><p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Sem Material em Armazém</p></div>`;
+    container.innerHTML = `<div class="text-center"><span class="material-symbols-outlined text-4xl text-slate-100 mb-3">box_add</span><p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Sem Stock Registado</p></div>`;
     return;
   }
-  container.innerHTML = ""; // Clear loader if any
+  container.innerHTML = "";
 
   const options = {
     series: stock.map(s => s.qty),
@@ -169,33 +247,344 @@ function renderProgressGauge(progress) {
   charts.progress.render();
 }
 
-function populateProjectFilter() {
+/* =================================================================================
+ *  FILE MANAGEMENT
+ * ================================================================================= */
+
+async function loadFiles() {
+  if (state.projectId === "all") return;
+  const tbody = document.getElementById("filesTbody");
+  if (!tbody) return;
+
+  try {
+    tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Carregando...</td></tr>`;
+    
+    // Load Folders & Files
+    const qs = state.currentFolderId ? `?parentId=${state.currentFolderId}` : `?parentId=root`;
+    const fqs = state.currentFolderId ? `?folderId=${state.currentFolderId}` : `?folderId=root`;
+
+    const [fRes, filesRes] = await Promise.all([
+      apiRequest(`/projects/${state.projectId}/folders${qs}`),
+      apiRequest(`/projects/${state.projectId}/files${fqs}`)
+    ]);
+
+    const folders = fRes.items || [];
+    const files = filesRes.items || [];
+
+    renderFiles(folders, files);
+    renderBreadcrumbs();
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-red-400">Falha ao carregar arquivos</td></tr>`;
+  }
+}
+
+function renderFiles(folders, files) {
+  const tbody = document.getElementById("filesTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (folders.length === 0 && files.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Nenhum documento encontrado.</td></tr>`;
+    return;
+  }
+
+  folders.forEach(f => {
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr class="hover:bg-slate-50/50 transition-colors group cursor-pointer" data-enter-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}">
+        <td class="px-8 py-4">
+          <div class="flex items-center gap-3">
+             <div class="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-400"><span class="material-symbols-outlined">folder</span></div>
+             <span class="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">${escapeHtml(f.name)}</span>
+          </div>
+        </td>
+        <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">Pasta</td>
+        <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">--</td>
+        <td class="px-8 py-4 text-right text-xs font-bold text-slate-400">${formatDateBR(f.createdAt)}</td>
+      </tr>
+    `);
+  });
+
+  files.forEach(f => {
+    const kb = (f.size / 1024).toFixed(1);
+    const url = `${getApiBaseUrl()}/${f.path}`;
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr class="hover:bg-slate-50/50 transition-colors group">
+        <td class="px-8 py-4">
+          <a href="${url}" target="_blank" class="flex items-center gap-3">
+             <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500"><span class="material-symbols-outlined">description</span></div>
+             <span class="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">${escapeHtml(f.originalName)}</span>
+          </a>
+        </td>
+        <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">${escapeHtml(f.category)}</td>
+        <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">${kb} KB</td>
+        <td class="px-8 py-4 text-right text-xs font-bold text-slate-400">${formatDateBR(f.createdAt)}</td>
+      </tr>
+    `);
+  });
+}
+
+function renderBreadcrumbs() {
+  const container = document.getElementById("fileBreadcrumbs");
+  if (!container) return;
+  let html = `<button data-go-folder="root" class="hover:text-slate-900 transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Raiz Geral</button>`;
+  
+  state.breadcrumbs.forEach(b => {
+    html += ` <span class="text-slate-300">/</span> <button data-go-folder="${b.id}" class="hover:text-slate-900 transition-colors">${escapeHtml(b.name)}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function wireFileNavigation() {
+  document.addEventListener("click", async (e) => {
+    const enterBtn = e.target?.closest("[data-enter-folder]");
+    if (enterBtn) {
+      const fid = enterBtn.getAttribute("data-enter-folder");
+      const fname = enterBtn.getAttribute("data-folder-name");
+      state.currentFolderId = fid;
+      state.breadcrumbs.push({ id: fid, name: fname });
+      loadFiles();
+      return;
+    }
+
+    const goBtn = e.target?.closest("[data-go-folder]");
+    if (goBtn) {
+      const gid = goBtn.getAttribute("data-go-folder");
+      if (gid === "root") {
+        state.currentFolderId = null;
+        state.breadcrumbs = [];
+      } else {
+        const idx = state.breadcrumbs.findIndex(b => b.id === gid);
+        if (idx !== -1) {
+          state.currentFolderId = gid;
+          state.breadcrumbs = state.breadcrumbs.slice(0, idx + 1);
+        }
+      }
+      loadFiles();
+      return;
+    }
+  });
+
+  const uploadBtn = document.getElementById("btnUploadFile");
+  if (uploadBtn) {
+    uploadBtn.addEventListener("click", () => {
+      if (state.projectId === "all") return;
+      openModal({
+        title: "Enviar Arquivo",
+        primaryLabel: "Enviar",
+        contentHtml: `
+           <div class="space-y-4">
+             <div>
+               <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">Arquivo</label>
+               <input type="file" id="upload_file" class="w-full text-sm border border-slate-200 rounded-xl p-2 bg-slate-50"/>
+             </div>
+             <div>
+               <label class="block text-[10px] font-black uppercase text-slate-500 mb-2">Categoria</label>
+               <select id="upload_cat" class="w-full rounded-xl border-slate-300 text-sm">
+                 <option value="OUTROS">Outros</option>
+                 <option value="PLANTA">Planta / Projecto</option>
+                 <option value="CONTRATO">Contrato / Legal</option>
+                 <option value="FOTO">Registo Fotográfico</option>
+                 <option value="RELATORIO">Relatório Técnico</option>
+               </select>
+             </div>
+           </div>
+        `,
+        onPrimary: async ({ close, panel }) => {
+          const fileInput = panel.querySelector("#upload_file");
+          const file = fileInput.files?.[0];
+          if (!file) { toast("Selecione um arquivo", { type: "error" }); return; }
+          const cat = panel.querySelector("#upload_cat").value;
+
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("category", cat);
+          if (state.currentFolderId) formData.append("folderId", state.currentFolderId);
+
+          const btn = panel.querySelector("[data-primary]");
+          try {
+            setButtonLoading(btn, true);
+            await apiRequest(`/projects/${state.projectId}/files`, { method: "POST", body: formData });
+            toast("Arquivo enviado com sucesso", { type: "success" });
+            close();
+            loadFiles();
+          } catch (err) {
+            setButtonLoading(btn, false);
+            toast("Erro ao enviar arquivo", { type: "error" });
+          }
+        }
+      });
+    });
+  }
+}
+
+/* =================================================================================
+ *  PHOTO GALLERY
+ * ================================================================================= */
+
+function getDateCategory(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  
+  const dMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  const diffTime = Math.abs(nowMidnight - dMidnight);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) return "Hoje";
+  if (diffDays === 1) return "Ontem";
+  if (diffDays <= 7) return "Última semana";
+  
+  if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+    return "Anteriormente neste mês";
+  }
+  return "Anteriormente";
+}
+
+async function loadPhotos() {
+  if (state.projectId === "all") return;
+  const grid = document.getElementById("galleryContainer");
+  if (!grid) return;
+
+  try {
+    grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
+    
+    // Fetch all photos for this project
+    const res = await apiRequest(`/projects/${state.projectId}/photos`);
+    let photos = res.items || [];
+    
+    // Filter locally by date
+    if (state.galleryStartDate) {
+      const gs = new Date(state.galleryStartDate).getTime();
+      photos = photos.filter(p => new Date(p.createdAt).getTime() >= gs);
+    }
+    if (state.galleryEndDate) {
+      const ge = new Date(state.galleryEndDate).getTime();
+      // To include the whole End Date, add 24 hours to its time logic if needed 
+      // or set Hours to 23:59:59. For simplicity:
+      const endD = new Date(state.galleryEndDate);
+      endD.setHours(23, 59, 59, 999);
+      photos = photos.filter(p => new Date(p.createdAt).getTime() <= endD.getTime());
+    }
+    
+    if (photos.length === 0) {
+      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotográfico encontrado.</div>`;
+      return;
+    }
+    
+    // Group photos
+    const groups = {};
+    photos.forEach(p => {
+       const cat = getDateCategory(p.createdAt);
+       if (!groups[cat]) groups[cat] = [];
+       groups[cat].push(p);
+    });
+
+    const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
+    
+    grid.innerHTML = "";
+    order.forEach(cat => {
+       if (!groups[cat] || groups[cat].length === 0) return;
+       
+       let html = `
+         <div class="gallery-group mb-8">
+            <button class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-800 hover:text-slate-600 transition-colors w-full text-left focus:outline-none" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('span').innerText = this.nextElementSibling.classList.contains('hidden') ? 'chevron_right' : 'expand_more'">
+               <span class="material-symbols-outlined text-lg">expand_more</span>
+               ${cat}
+            </button>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4">
+       `;
+       
+       groups[cat].forEach(p => {
+         const url = `${getApiBaseUrl()}/${p.path}`;
+         // Visual semelhante ao Windows Explorer: miniatura/ícone à esquerda, 3 linhas de texto à direita
+         html += `
+          <a href="${url}" target="_blank" class="group flex flex-row items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+            <!-- Miniatura da Foto -->
+            <div class="w-10 h-10 shrink-0 rounded overflow-hidden bg-slate-200 shadow-sm relative">
+                <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-0" />
+            </div>
+            <!-- Detalhes estilo File Explorer -->
+            <div class="flex-1 min-w-0 flex flex-col justify-center">
+               <p class="text-xs font-semibold text-slate-900 truncate leading-tight" title="${escapeHtml(p.description) || "Imagem da Obra"}">
+                  ${escapeHtml(p.description) || "Registo Fotográfico"}
+               </p>
+               <p class="text-[10px] font-medium text-slate-500 truncate leading-tight">
+                  Ficheiro JPG
+               </p>
+               <p class="text-[10px] font-medium text-slate-400 truncate leading-tight">
+                  ${formatDateBR(p.createdAt)}
+               </p>
+            </div>
+          </a>
+         `;
+       });
+       
+       html += `</div></div>`;
+       grid.insertAdjacentHTML("beforeend", html);
+    });
+  } catch (err) {
+    grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-400">Erro ao carregar a galeria</div>`;
+  }
+}
+
+/* =================================================================================
+ *  INITIALIZATION & LISTENERS
+ * ================================================================================= */
+
+function wireEvents() {
+  // Filters
   const select = document.getElementById("projectFilter");
-  if (!select || !dashboardData) return;
+  if (select) {
+    select.addEventListener("change", (e) => {
+      state.projectId = e.target.value;
+      state.currentFolderId = null;
+      state.breadcrumbs = [];
+      renderDashboard(state.projectId);
+    });
+  }
 
-  dashboardData.projects.forEach(p => {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.name;
-    select.appendChild(opt);
+  const updateDates = () => {
+    state.startDate = document.getElementById("filterStart")?.value || "";
+    state.endDate = document.getElementById("filterEnd")?.value || "";
+    loadDashboardData();
+  };
+
+  document.getElementById("filterStart")?.addEventListener("change", updateDates);
+  document.getElementById("filterEnd")?.addEventListener("change", updateDates);
+
+  const updateGalleryDates = () => {
+    state.galleryStartDate = document.getElementById("galleryFilterStart")?.value || "";
+    state.galleryEndDate = document.getElementById("galleryFilterEnd")?.value || "";
+    if (state.activeTab === "galeria") loadPhotos();
+  };
+
+  document.getElementById("galleryFilterStart")?.addEventListener("change", updateGalleryDates);
+  document.getElementById("galleryFilterEnd")?.addEventListener("change", updateGalleryDates);
+
+  // Tabs
+  document.querySelectorAll("[data-tab-trigger]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.activeTab = btn.getAttribute("data-tab-trigger");
+      updateTabUI();
+    });
   });
 
-  select.addEventListener("change", (e) => {
-    renderDashboard(e.target.value);
-  });
+  wireFileNavigation();
 }
 
 function init() {
   initMobileMenu();
   wireLogout();
   
-  // Set client name in header from session if available
   const user = JSON.parse(localStorage.getItem("inforcliente.user") || "{}");
   if (user && user.client) {
      const headerName = document.getElementById("clientNameHeader");
      if (headerName) headerName.textContent = user.client.name;
   }
 
+  wireEvents();
   loadDashboardData();
 }
 

@@ -139,11 +139,27 @@ dashboardRoutes.get(
     const clientId = getScopedClientId(req);
     if (!clientId) return res.status(403).json({ error: "CLIENT_SCOPE_REQUIRED" });
 
+    const { start, end } = req.query;
+    const dateStart = start ? new Date(start) : null;
+    const dateEnd = end ? new Date(end) : null;
+
+    const paymentFilter = {
+      status: "CONFIRMADO",
+      ...(dateStart || dateEnd
+        ? {
+            dataPagamento: {
+              ...(dateStart ? { gte: dateStart } : {}),
+              ...(dateEnd ? { lte: dateEnd } : {}),
+            },
+          }
+        : {}),
+    };
+
     // 1. Buscar todos os projetos do cliente
     const projects = await prisma.project.findMany({
       where: { clientId },
       include: {
-        payments: { where: { status: "CONFIRMADO" } },
+        payments: { where: paymentFilter },
       },
     });
 
@@ -194,9 +210,7 @@ dashboardRoutes.get(
           qty: 0,
         };
       }
-      // Simplificação: ENTRADA/AJUSTE soma, SAIDA subtrai
-      const sign = (m.type === "SAIDA") ? -1 : 1;
-      // Usamos apenas quantityGood para stock disponível
+      const sign = m.type === "SAIDA" ? -1 : 1;
       stockMap[mId].qty += Number(m.quantityGood || 0) * sign;
     });
 

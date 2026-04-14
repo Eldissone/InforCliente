@@ -1,5 +1,5 @@
-import { apiRequest, apiUpload } from "../../services/api.js";
-import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
@@ -37,14 +37,6 @@ function applyRoleVisibility() {
   });
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
 
 function statusLabel(s) {
   if (s === "PAID") return { text: "Liquidado", cls: "text-emerald-700", dot: "bg-[#2afc8d]" };
@@ -2074,7 +2066,7 @@ function renderStockSummary(items) {
 function renderStockMovements(items) {
   const tbody = el("stockMovementsTbody");
   if (!tbody) return;
-  
+
   // Guardar os dados no próprio elemento para o modal de detalhes
   el("stockMovementsTable")._movementsData = items;
   if (!items || items.length === 0) {
@@ -2263,7 +2255,7 @@ async function openStockMovementDetailModal(moveId) {
         close();
         return;
       }
-      
+
       setButtonLoading(btn, true);
       try {
         await approveStockMovement(m.id);
@@ -2274,10 +2266,10 @@ async function openStockMovementDetailModal(moveId) {
     },
     secondaryText: (m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") ? "Rejeitar" : null,
     onSecondary: async ({ close }) => {
-       if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
-          await rejectStockMovement(m.id);
-          close();
-       }
+      if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
+        await rejectStockMovement(m.id);
+        close();
+      }
     }
   });
 }
@@ -2285,7 +2277,7 @@ async function openStockMovementDetailModal(moveId) {
 function renderStockGallery(movements) {
   const photos = movements.flatMap(m => m.photos.map(p => ({ ...p, m })));
   const grid = el("stockPhotoGrid");
-  
+
   if (photos.length === 0) {
     grid.innerHTML = `<div class="col-span-full py-10 text-center text-slate-400 text-sm font-medium">Nenhuma foto de campo vinculada a este stock.</div>`;
     return;
@@ -2444,7 +2436,7 @@ async function openStockMovementModal() {
           // Upload Photos with condition tags
           const uploadFiles = async (input, cond) => {
             if (!input || input.files.length === 0) return;
-            
+
             let lat = "", lng = "";
             try {
               const pos = await new Promise((res, rej) => {
@@ -2452,7 +2444,7 @@ async function openStockMovementModal() {
               });
               lat = pos.coords.latitude.toString();
               lng = pos.coords.longitude.toString();
-            } catch (e) {}
+            } catch (e) { }
 
             for (const file of input.files) {
               await apiUpload(`/stock/${encodeURIComponent(projectId)}/photos`, {
@@ -2479,9 +2471,9 @@ async function openStockMovementModal() {
     const entryTypeEl = document.getElementById("st_entryType");
     const warehouseEl = document.getElementById("st_warehouse");
     entryTypeEl?.addEventListener("change", (e) => {
-       if (e.target.value === "cliente") {
-          warehouseEl.value = "Armazém do Cliente";
-       }
+      if (e.target.value === "cliente") {
+        warehouseEl.value = "Armazém do Cliente";
+      }
     });
   } catch (err) {
     toast("Erro ao carregar catálogo", { type: "error" });
@@ -2489,22 +2481,22 @@ async function openStockMovementModal() {
 }
 
 function applyStockFilters() {
-    const { search, condition, status, category, warehouse } = stockState.filters;
-    const filtered = stockState.items.filter(m => {
-      const s = search.toLowerCase();
-      const matchesSearch = !s || 
-        m.material.name.toLowerCase().includes(s) || 
-        m.material.code.toLowerCase().includes(s) ||
-        (m.driverName || "").toLowerCase().includes(s) ||
-        (m.vehiclePlate || "").toLowerCase().includes(s);
-      
-      const matchesCond = !condition || m.condition === condition;
-      const matchesStatus = !status || m.auditStatus === status;
-      const matchesCat = !category || m.material.category === category;
-      const matchesWarehouse = !warehouse || m.batch === warehouse;
-  
-      return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse;
-    });
+  const { search, condition, status, category, warehouse } = stockState.filters;
+  const filtered = stockState.items.filter(m => {
+    const s = search.toLowerCase();
+    const matchesSearch = !s ||
+      m.material.name.toLowerCase().includes(s) ||
+      m.material.code.toLowerCase().includes(s) ||
+      (m.driverName || "").toLowerCase().includes(s) ||
+      (m.vehiclePlate || "").toLowerCase().includes(s);
+
+    const matchesCond = !condition || m.condition === condition;
+    const matchesStatus = !status || m.auditStatus === status;
+    const matchesCat = !category || m.material.category === category;
+    const matchesWarehouse = !warehouse || m.batch === warehouse;
+
+    return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse;
+  });
 
   renderStockMovements(filtered);
   renderStockInventory(filtered);
@@ -2516,7 +2508,7 @@ function renderStockInventory(movements) {
   if (!tbody) return;
 
   const approved = movements.filter(m => m.auditStatus === "APROVADO");
-  
+
   // Agrupar por Material + Armazém (batch)
   const inventoryMap = {};
 
@@ -2777,7 +2769,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
 
 async function deleteStockMovement(moveId) {
   if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazém será revertido automaticamente.")) return;
-  
+
   try {
     const pid = getProjectId();
     await apiRequest(`/stock/${encodeURIComponent(pid)}/movements/${encodeURIComponent(moveId)}`, {
@@ -2823,8 +2815,8 @@ function wireStock() {
 
     const rowView = e.target.closest("[data-view-stock]");
     if (rowView && !e.target.closest("button")) {
-       const mid = rowView.dataset.viewStock;
-       openStockMovementDetailModal(mid);
+      const mid = rowView.dataset.viewStock;
+      openStockMovementDetailModal(mid);
     }
   });
 
@@ -2832,20 +2824,139 @@ function wireStock() {
   document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
     btn.addEventListener("click", () => {
       const tab = btn.dataset.stockSubtab;
-      
+
       // Estilo dos botões
       document.querySelectorAll("[data-stock-subtab]").forEach(b => {
-         b.classList.remove("text-slate-900", "border-slate-900");
-         b.classList.add("text-slate-400", "border-transparent");
+        b.classList.remove("text-slate-900", "border-slate-900");
+        b.classList.add("text-slate-400", "border-transparent");
       });
       btn.classList.add("text-slate-900", "border-slate-900");
       btn.classList.remove("text-slate-400", "border-transparent");
 
       // Visibilidade do conteúdo
       ["stock_history_content", "stock_inventory_content", "stock_gallery_content"].forEach(id => {
-         el(id)?.classList.add("hidden");
+        el(id)?.classList.add("hidden");
       });
       el(`stock_${tab}_content`)?.classList.remove("hidden");
+
+      if (tab === "gallery") {
+        loadStockGallery();
+      }
     });
   });
+
+  const updateGalleryDates = () => {
+    if (!el(`stock_gallery_content`)?.classList.contains("hidden")) {
+      loadStockGallery();
+    }
+  };
+
+  el("stockGalleryFilterStart")?.addEventListener("change", updateGalleryDates);
+  el("stockGalleryFilterEnd")?.addEventListener("change", updateGalleryDates);
+}
+
+function getDateCategory(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+
+  const dMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffTime = Math.abs(nowMidnight - dMidnight);
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Hoje";
+  if (diffDays === 1) return "Ontem";
+  if (diffDays <= 7) return "Última semana";
+
+  if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+    return "Anteriormente neste mês";
+  }
+  return "Anteriormente";
+}
+
+async function loadStockGallery() {
+  const grid = el("stockGalleryContainer");
+  if (!grid) return;
+
+  grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos da obra...</div>`;
+
+  try {
+    const id = getProjectId();
+    const res = await apiRequest(`/projects/${encodeURIComponent(id)}/photos`);
+    let photos = res.items || [];
+
+    // Filter locally
+    const dStart = el("stockGalleryFilterStart")?.value;
+    const dEnd = el("stockGalleryFilterEnd")?.value;
+
+    if (dStart) {
+      const gs = new Date(dStart).getTime();
+      photos = photos.filter(p => new Date(p.createdAt).getTime() >= gs);
+    }
+    if (dEnd) {
+      const endD = new Date(dEnd);
+      endD.setHours(23, 59, 59, 999);
+      photos = photos.filter(p => new Date(p.createdAt).getTime() <= endD.getTime());
+    }
+
+    if (photos.length === 0) {
+      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotográfico encontrado.</div>`;
+      return;
+    }
+
+    const groups = {};
+    photos.forEach(p => {
+      const cat = getDateCategory(p.createdAt); // Need to define getDateCategory inside projectView.js or import it
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(p);
+    });
+
+    const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
+    grid.innerHTML = "";
+
+    order.forEach(cat => {
+      if (!groups[cat] || groups[cat].length === 0) return;
+
+      let html = `
+               <div class="gallery-group mb-8">
+                  <button class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-800 hover:text-slate-600 transition-colors w-full text-left focus:outline-none" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('span').innerText = this.nextElementSibling.classList.contains('hidden') ? 'chevron_right' : 'expand_more'">
+                     <span class="material-symbols-outlined text-lg">expand_more</span>
+                     ${cat}
+                  </button>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4">
+            `;
+            
+            groups[cat].forEach(p => {
+               const url = `${getApiBaseUrl()}/${p.path}`;
+               const equipName = p.movement?.material?.name 
+                                 ? escapeHtml(p.movement.material.name) 
+                                 : "Registo Fotográfico";
+
+               html += `
+                <a href="${url}" target="_blank" class="group flex flex-row items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
+                  <div class="w-10 h-10 shrink-0 rounded overflow-hidden bg-slate-200 shadow-sm relative">
+                      <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-0" />
+                  </div>
+                  <div class="flex-1 min-w-0 flex flex-col justify-center">
+                     <p class="text-xs font-semibold text-slate-900 truncate leading-tight" title="${escapeHtml(p.description) || equipName}">
+                        ${equipName}
+                     </p>
+                     <p class="text-[10px] font-medium text-slate-500 truncate leading-tight">
+                        Ficheiro JPG
+                     </p>
+                     <p class="text-[10px] font-medium text-slate-400 truncate leading-tight">
+                        ${formatDateBR(p.createdAt)}
+                     </p>
+                  </div>
+                </a>
+               `;
+            });
+            html += `</div></div>`;
+            grid.insertAdjacentHTML("beforeend", html);
+        });
+
+    } catch (err) {
+        grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar galeria</div>`;
+    }
 }

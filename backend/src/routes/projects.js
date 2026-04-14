@@ -760,7 +760,7 @@ projectRoutes.get(
 
 projectRoutes.post(
   "/:id/files",
-  requireRole(["admin", "operador"]),
+  requireRole(["admin", "operador", "cliente"]),
   fileUpload.single("file"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -883,7 +883,7 @@ projectRoutes.get(
 // POST — criar pasta (com parentId opcional para subpastas)
 projectRoutes.post(
   "/:id/folders",
-  requireRole(["admin", "operador"]),
+  requireRole(["admin", "operador", "cliente"]),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const body = z.object({
@@ -1106,6 +1106,23 @@ projectRoutes.delete(
 
     await prisma.projectPayment.delete({ where: { id: pid } });
     return res.json({ ok: true });
+  })
+);
+projectRoutes.get(
+  "/:id/photos",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
+    const photos = await prisma.projectPhoto.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: "desc" },
+      include: {
+        movement: {
+          include: { material: true }
+        }
+      }
+    });
+    return res.json({ items: photos });
   })
 );
 
