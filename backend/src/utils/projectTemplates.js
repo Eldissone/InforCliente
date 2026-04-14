@@ -1,6 +1,9 @@
 const projectTemplates = {
   "MÉDIA TENSÃO": [
-    { order: 1, description: "Marcação da obra (Postes de MT)", expectedQty: 0, unit: "km" },
+    { order: 1, description: "Marcação da obra (Postes de MT)", expectedQty: 0, unit: "km", subItems: [
+        { description: "Identificação de pontos", expectedQty: 0, unit: "un" },
+        { description: "Sinalização", expectedQty: 0, unit: "un" }
+    ]},
     { order: 2, description: "Distribuição dos postes", expectedQty: 0, unit: "un" },
     { order: 3, description: "Abertura de buracos", expectedQty: 0, unit: "un" },
     { order: 4, description: "Arvoramento de postes e montagem de ferragens", expectedQty: 0, unit: "un" },

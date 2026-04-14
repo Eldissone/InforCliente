@@ -933,7 +933,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
   `;
 }
 
-function renderProgressTaskRow(t, index) {
+function renderProgressTaskRow(t, index, isSub = false, parentGroup = null) {
   const exp = Number(t.expectedQty || 0);
   const exe = Number(t.executedQty || 0);
   const left = exp > exe ? (exp - exe) : 0;
@@ -941,33 +941,50 @@ function renderProgressTaskRow(t, index) {
   const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
   const leftPct = Math.max(0, 100 - exePct);
 
-  const unitVal = Number(t.unitValue || 0);
-  const totalVal = unitVal * exe;
+  const uvM = Number(t.unitValueMaterial || 0);
+  const uvS = Number(t.unitValueService || 0);
+  // Se backend já mandou unitValue, usa; se não, fallback sum
+  const unitVal = t.unitValue !== null ? Number(t.unitValue) : (uvM + uvS);
+  const invoicingVal = unitVal * exp; // Valor total previsto (Contrato)
+  const invoicedVal = unitVal * exe;  // Valor faturado (Executado)
   const currencyStr = t.currency === "USD" ? "USD" : "Kz";
 
-  const unitValStr = unitVal > 0 ? `${unitVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
-  const totalValStr = totalVal > 0 ? `${totalVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
-  const safeGroupName = escapeHtml(t.itemGroup || "Outros / Geral");
+  const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
+  const uvMStr = uvM > 0 ? `${uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
+  const invoicingValStr = invoicingVal > 0 ? `${invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
+  const invoicedValStr = invoicedVal > 0 ? `${invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
+
+  // Utilizar o parentGroup se passado (SubItem), caso contrário ler do próprio t.itemGroup.
+  const logicalGroup = (isSub && parentGroup !== null) ? parentGroup : t.itemGroup;
+  const safeGroupName = escapeHtml(logicalGroup || "Outros / Geral");
+
+  const indentStyle = isSub ? "pl-12 bg-slate-50/30" : "px-6";
+  const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
 
   return `
     <tr class="hover:bg-surface-container-low transition-colors group" data-progress-item-group="${safeGroupName}">
-      <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index + 1}</td>
-      <td class="px-6 py-4">
-        <div class="font-bold text-[#212e3e] flex flex-col">
-          <span>${escapeHtml(t.description)}</span>
-          ${t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest">${escapeHtml(t.itemGroup)}</span>` : ""}
+      <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index}</td>
+      <td class="py-4 ${indentStyle}">
+        <div class="font-bold text-[#212e3e] flex flex-col relative">
+          <div class="flex items-center">
+            ${iconSub}
+            <span>${escapeHtml(t.description)}</span>
+          </div>
+          ${!isSub && t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
         </div>
       </td>
-      <td class="px-4 py-4 text-center font-black ">${exp.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center text-[10px] tracking-widest text-[#212e3e] font-black">${formatUnit(t.unit)}</td>
-      <td class="px-4 py-4 text-center font-medium text-slate-500">${unitValStr}</td>
-      <td class="px-4 py-4 text-center font-medium pr-6 text-slate-800">${totalValStr}</td>
+      <td class="px-4 py-4 text-center text-[8px] font-black ">${exp.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center text-[8px] tracking-widest text-[#212e3e] font-black">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-4 text-center font-medium text-blue-500">${uvSStr}</td>
+      <td class="px-4 py-4 text-center font-medium text-emerald-500">${uvMStr}</td>
+      <td class="px-4 py-4 text-center font-black pr-6 text-slate-800">${invoicingValStr}</td>
       <td class="px-4 py-4 text-center font-black text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-black text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
       <td class="px-4 py-4 text-center font-black text-[#0d3fd1]">${exePct}%</td>
       <td class="px-4 py-4 text-center font-black text-slate-500">${left.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
       <td class="px-4 py-4 text-right">
-        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
       </td>
     </tr>
@@ -982,8 +999,9 @@ async function loadProgressTasks() {
   tbody.innerHTML = renderLoadingRow(8);
   try {
     const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
+    window.projectProgressTasksCache = data.tasks || [];
     if (data.tasks.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
     } else {
       let html = "";
       let lastGroup = null;
@@ -991,45 +1009,67 @@ async function loadProgressTasks() {
       const groupTotals = {};
       const groupCurrencies = {};
       const groupTasks = {};
-      
-      data.tasks.forEach(t => {
+
+      // Calculate totals for parents or standalone items to avoid double counting if a parent aggregates
+      const parentsAndOrphans = data.tasks.filter(t => !t.parentId);
+      const groupInvoicingTotals = {};
+      const groupInvoicedTotals = {};
+
+      parentsAndOrphans.forEach(t => {
         const g = t.itemGroup || "";
-        if (!groupTotals[g]) groupTotals[g] = 0;
+        if (!groupInvoicingTotals[g]) groupInvoicingTotals[g] = 0;
+        if (!groupInvoicedTotals[g]) groupInvoicedTotals[g] = 0;
         if (!groupTasks[g]) groupTasks[g] = [];
-        
+
+        const exp = Number(t.expectedQty || 0);
         const exe = Number(t.executedQty || 0);
         const uv = Number(t.unitValue || 0);
-        
-        groupTotals[g] += (uv * exe);
+
+        groupInvoicingTotals[g] += (uv * exp);
+        groupInvoicedTotals[g] += (uv * exe);
         groupTasks[g].push(t);
-        
+
         if (!groupCurrencies[g] || t.currency === "USD") {
-           groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
+          groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
         }
       });
 
       const groupProgressMap = {};
       let totalGroupPcts = 0;
       Object.keys(groupTasks).forEach(g => {
-         const tasks = groupTasks[g];
-         const sumPct = tasks.reduce((acc, t) => {
+        const tasks = groupTasks[g];
+        if (tasks.length > 0) {
+          const sumPct = tasks.reduce((acc, t) => {
             const exp = Number(t.expectedQty || 0);
             const exe = Number(t.executedQty || 0);
             const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
             return acc + Math.min(100, pct);
-         }, 0);
-         const avg = sumPct / tasks.length;
-         groupProgressMap[g] = avg;
-         totalGroupPcts += avg;
+          }, 0);
+          const avg = sumPct / tasks.length;
+          groupProgressMap[g] = avg;
+          totalGroupPcts += avg;
+        }
       });
 
-      data.tasks.forEach((t, i) => {
+      const children = data.tasks.filter(t => t.parentId);
+      let groupIndex = 0;
+
+      parentsAndOrphans.forEach((t) => {
         const currentGroup = t.itemGroup || "";
         if (currentGroup !== lastGroup && t.itemGroup !== lastGroup) {
-          html += renderGroupHeader(t.itemGroup, groupTotals[currentGroup], groupCurrencies[currentGroup] || "Kz", groupProgressMap[currentGroup]);
+          html += renderGroupHeader(t.itemGroup, groupInvoicingTotals[currentGroup] || 0, groupCurrencies[currentGroup] || "Kz", groupProgressMap[currentGroup] || 0);
           lastGroup = t.itemGroup;
+          groupIndex = 0; // zera contagem no novo separador
         }
-        html += renderProgressTaskRow(t, i);
+
+        groupIndex++;
+        const subs = children.filter(c => c.parentId === t.id);
+
+        html += renderProgressTaskRow(t, groupIndex.toString(), false);
+
+        subs.forEach((sub, subI) => {
+          html += renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup);
+        });
       });
       tbody.innerHTML = html;
 
@@ -1068,15 +1108,31 @@ function wireProgressTasks() {
   const id = getProjectId();
 
   el("addProgressTaskBtn")?.addEventListener("click", () => {
+    let parentOpts = `<option value="">Nenhuma (Item Principal Independente)</option>`;
+    if (window.projectProgressTasksCache) {
+      const parents = window.projectProgressTasksCache.filter(t => !t.parentId); // max depth 1
+      parents.forEach(p => {
+        parentOpts += `<option value="${p.id}">${escapeHtml(p.description)} (${escapeHtml(p.itemGroup || 'Geral')})</option>`;
+      });
+    }
+
     openModal({
       title: "Adicionar Item de Progresso",
       primaryLabel: "Salvar",
       contentHtml: `
         <div class="space-y-4">
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
+          <div class="grid grid-cols-2 gap-4">
+             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
+             <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Vincular a Subitem de:</label>
+                <select id="rt_parent" class="w-full rounded-lg border-slate-300 bg-slate-50 text-slate-600 font-semibold" onchange="const sel=this.value; const gInput=document.getElementById('rt_group'); if(sel){ const p=(window.projectProgressTasksCache||[]).find(x=>x.id===sel); if(p){ gInput.value=p.itemGroup||''; gInput.setAttribute('readonly','true'); gInput.classList.add('bg-slate-100'); } } else { gInput.removeAttribute('readonly'); gInput.classList.remove('bg-slate-100'); }">
+                   ${parentOpts}
+                </select>
+             </div>
+          </div>
           <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
-            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="let uv=document.getElementById('rt_uv').value; if(uv) document.getElementById('rt_tv').value = (this.value * uv).toFixed(2);" /></div>
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(2);" /></div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">
@@ -1097,7 +1153,7 @@ function wireProgressTasks() {
               </select>
             </div>
           </div>
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-4 gap-4">
             <div class="col-span-1">
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label>
               <select id="rt_currency" class="w-full rounded-lg border-slate-300">
@@ -1106,12 +1162,17 @@ function wireProgressTasks() {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Unitário</label>
-              <input id="rt_uv" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="Opcional" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_exp').value).toFixed(2);" />
+              <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. Serviço</label>
+              <input id="rt_us" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(2); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(2);" />
             </div>
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total</label>
-              <input id="rt_tv" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="Opcional" />
+              <label class="block text-xs font-black uppercase tracking-widest text-emerald-500 mb-2">V. Material</label>
+              <input id="rt_um" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_us').value)).toFixed(2); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(2);" />
+            </div>
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
+              <input id="rt_uv" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300 bg-slate-100" readonly value="0.00" />
+              <input type="hidden" id="rt_tv" value="0.00" />
             </div>
           </div>
         </div>
@@ -1125,11 +1186,14 @@ function wireProgressTasks() {
             method: "POST",
             body: {
               itemGroup: v("rt_group") || null,
+              parentId: v("rt_parent") || null,
               description: v("rt_desc"),
               expectedQty: Number(v("rt_exp") || 0),
               executedQty: 0,
               unit: v("rt_uni").toLowerCase() || "un",
               unitValue: v("rt_uv"),
+              unitValueMaterial: v("rt_um"),
+              unitValueService: v("rt_us"),
               totalValue: v("rt_tv"),
               currency: v("rt_currency")
             }
@@ -1201,15 +1265,15 @@ function wireProgressTasks() {
     if (toggleRow) {
       const groupName = toggleRow.getAttribute("data-toggle-progress-group");
       const icon = toggleRow.querySelector("[data-icon]");
-      
+
       const items = document.querySelectorAll(`[data-progress-item-group="${groupName}"]`);
       let isHidden = false;
       items.forEach(item => {
-         isHidden = item.classList.toggle("hidden");
+        isHidden = item.classList.toggle("hidden");
       });
-      
+
       if (icon) {
-         icon.textContent = isHidden ? "chevron_right" : "expand_more";
+        icon.textContent = isHidden ? "chevron_right" : "expand_more";
       }
       return;
     }
@@ -1221,10 +1285,16 @@ function wireProgressTasks() {
       const exe = editBtn.getAttribute("data-task-exe");
       const exp = editBtn.getAttribute("data-task-exp");
       const uni = editBtn.getAttribute("data-task-unit");
-
+      const us = editBtn.getAttribute("data-task-us") || "";
+      const um = editBtn.getAttribute("data-task-um") || "";
       const uv = editBtn.getAttribute("data-task-unit-value") || "";
       const tv = editBtn.getAttribute("data-task-total-value") || "";
       const currency = editBtn.getAttribute("data-task-currency") || "AOA";
+
+      const hasSubs = (window.projectProgressTasksCache || []).some(t => t.parentId === taskId);
+      const readonlyAttr = hasSubs ? "readonly" : "";
+      const bgClass = hasSubs ? "bg-slate-50 opacity-80" : "";
+      const titleHint = hasSubs ? "Este valor é calculado automaticamente pela soma dos subitens." : "";
 
       openModal({
         title: "Atualizar Progresso",
@@ -1232,6 +1302,7 @@ function wireProgressTasks() {
         contentHtml: `
           <div class="space-y-4">
             <p class="font-bold text-[#212e3e] text-sm">${escapeHtml(desc)}</p>
+            ${hasSubs ? `<p class="text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 p-2 rounded-lg"><span class="material-symbols-outlined text-xs align-middle mr-1">info</span> Item Pai: Valores somados automaticamente</p>` : ""}
             <div class="grid grid-cols-2 gap-4">
               <div class="col-span-2">
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
@@ -1270,12 +1341,20 @@ function wireProgressTasks() {
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Unitário</label>
-                <input id="up_uv" type="number" step="0.01" min="0" value="${uv || ''}" class="w-full rounded-lg border-slate-300" placeholder="Opcional" oninput="document.getElementById('up_tv').value = (this.value * document.getElementById('up_exp').value).toFixed(2);" />
+                <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. Serviço</label>
+                <input id="up_us" type="number" step="0.01" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(2); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(2);" />
               </div>
               <div>
-                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total</label>
-                <input id="up_tv" type="number" step="0.01" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300" placeholder="Opcional" />
+                <label class="block text-xs font-black uppercase text-emerald-500 tracking-widest mb-2">V. Material</label>
+                <input id="up_um" type="number" step="0.01" min="0" value="${um}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_us').value)).toFixed(2); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(2);" />
+              </div>
+              <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
+                <input id="up_uv" type="number" step="0.01" min="0" value="${uv || ''}" class="w-full bg-slate-100 rounded-lg border-slate-300" readonly />
+              </div>
+              <div>
+                <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Faturado <span class="text-slate-300 lowercase text-[9px]">(Global)</span></label>
+                <input id="up_tv" type="number" step="0.01" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
               </div>
             </div>
           </div>
@@ -1291,6 +1370,8 @@ function wireProgressTasks() {
                 expectedQty: Number(panel.querySelector("#up_exp").value || 0),
                 unit: panel.querySelector("#up_uni").value.trim().toLowerCase() || "un",
                 unitValue: panel.querySelector("#up_uv").value,
+                unitValueMaterial: panel.querySelector("#up_um").value,
+                unitValueService: panel.querySelector("#up_us").value,
                 totalValue: panel.querySelector("#up_tv").value,
                 currency: panel.querySelector("#up_currency").value
               }

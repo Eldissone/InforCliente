@@ -195,15 +195,21 @@ model ProjectProgressTask {
   id              String   @id @default(cuid())
   projectId       String
   itemGroup       String?
+  parentId        String?
   order           Int      @default(0)
   description     String
   expectedQty     Decimal  @db.Decimal(10, 2)
   executedQty     Decimal  @default(0) @db.Decimal(10, 2)
   unit            String
   unitValue       Decimal? @db.Decimal(16, 2)
+  unitValueMaterial Decimal? @db.Decimal(16, 2)
+  unitValueService  Decimal? @db.Decimal(16, 2)
   totalValue      Decimal? @db.Decimal(16, 2)
   currency        String?  @default("AOA")
   createdAt       DateTime @default(now())
+
+  parent          ProjectProgressTask? @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subTasks        ProjectProgressTask[] @relation("SubTasks")
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, itemGroup, order])

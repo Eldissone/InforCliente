@@ -1128,6 +1128,45 @@ projectRoutes.get(
 
 module.exports = { projectRoutes };
 
+// -----------------------------------------------------------------------------
+// PROGRESS TASKS HELPERS
+// -----------------------------------------------------------------------------
+
+async function recalculateTaskRollup(parentId, projectId) {
+  if (!parentId) return;
+
+  // Buscar todos os filhos
+  const children = await prisma.projectProgressTask.findMany({
+    where: { parentId, projectId },
+  });
+
+  let sumTotal = 0;
+  let sumMaterial = 0;
+  let sumService = 0;
+
+  children.forEach(c => {
+    // Se o filho já tem um totalValue (pode ser um pai também ou item terminal com valor)
+    sumTotal += Number(c.totalValue || 0);
+    sumMaterial += Number(c.unitValueMaterial || 0) * Number(c.expectedQty || 0);
+    sumService += Number(c.unitValueService || 0) * Number(c.expectedQty || 0);
+  });
+
+  // Atualizar o pai
+  const parent = await prisma.projectProgressTask.update({
+    where: { id: parentId },
+    data: {
+      totalValue: sumTotal,
+      // Opcional: atualizar unitValue do pai se unit for 'un' ou global
+      // Mas por agora focamos no totalValue que é o que compõe o orçamento
+    }
+  });
+
+  // Subir na hierarquia se o pai também tiver um pai
+  if (parent.parentId) {
+    await recalculateTaskRollup(parent.parentId, projectId);
+  }
+}
+
 // Progress Tasks Routes
 projectRoutes.get(
   "/:id/progress-tasks",
@@ -1156,8 +1195,11 @@ projectRoutes.post(
         executedQty: z.union([z.number(), z.string()]).optional(),
         unit: z.string(),
         unitValue: z.union([z.number(), z.string()]).optional().nullable(),
+        unitValueMaterial: z.union([z.number(), z.string()]).optional().nullable(),
+        unitValueService: z.union([z.number(), z.string()]).optional().nullable(),
         totalValue: z.union([z.number(), z.string()]).optional().nullable(),
-        currency: z.string().optional().nullable()
+        currency: z.string().optional().nullable(),
+        parentId: z.string().optional().nullable()
       })
       .parse(req.body);
 
@@ -1169,11 +1211,20 @@ projectRoutes.post(
         expectedQty: body.expectedQty,
         executedQty: body.executedQty || 0,
         unit: (body.unit || "un").toLowerCase().trim(),
-        unitValue: body.unitValue ? Number(body.unitValue) : null,
-        totalValue: body.totalValue ? Number(body.totalValue) : null,
-        currency: body.currency || "AOA"
+        unitValue: body.unitValue !== null && body.unitValue !== undefined ? Number(body.unitValue) : null,
+        unitValueMaterial: body.unitValueMaterial !== null && body.unitValueMaterial !== undefined ? Number(body.unitValueMaterial) : null,
+        unitValueService: body.unitValueService !== null && body.unitValueService !== undefined ? Number(body.unitValueService) : null,
+        totalValue: body.totalValue !== null && body.totalValue !== undefined ? Number(body.totalValue) : null,
+        currency: body.currency || "AOA",
+        parentId: body.parentId || null
       },
     });
+
+    if (task.parentId) {
+      await recalculateTaskRollup(task.parentId, id);
+      // Recarregar para devolver o estado atualizado do pai (se necessário) ou apenas a task
+    }
+
     return res.status(201).json({ task });
   })
 );
@@ -1190,6 +1241,8 @@ projectRoutes.patch(
         expectedQty: z.union([z.number(), z.string()]).optional(),
         unit: z.string().optional(),
         unitValue: z.union([z.number(), z.string()]).optional().nullable(),
+        unitValueMaterial: z.union([z.number(), z.string()]).optional().nullable(),
+        unitValueService: z.union([z.number(), z.string()]).optional().nullable(),
         totalValue: z.union([z.number(), z.string()]).optional().nullable(),
         currency: z.string().optional().nullable()
       })
@@ -1199,14 +1252,21 @@ projectRoutes.patch(
     if (body.executedQty !== undefined) data.executedQty = body.executedQty;
     if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
     if (body.unit !== undefined) data.unit = body.unit.toLowerCase().trim();
-    if (body.unitValue !== undefined) data.unitValue = body.unitValue ? Number(body.unitValue) : null;
-    if (body.totalValue !== undefined) data.totalValue = body.totalValue ? Number(body.totalValue) : null;
+    if (body.unitValue !== undefined) data.unitValue = body.unitValue !== null ? Number(body.unitValue) : null;
+    if (body.unitValueMaterial !== undefined) data.unitValueMaterial = body.unitValueMaterial !== null ? Number(body.unitValueMaterial) : null;
+    if (body.unitValueService !== undefined) data.unitValueService = body.unitValueService !== null ? Number(body.unitValueService) : null;
+    if (body.totalValue !== undefined) data.totalValue = body.totalValue !== null ? Number(body.totalValue) : null;
     if (body.currency !== undefined) data.currency = body.currency || "AOA";
 
     const task = await prisma.projectProgressTask.update({
       where: { id: taskId, projectId: id },
       data,
     });
+
+    if (task.parentId) {
+      await recalculateTaskRollup(task.parentId, id);
+    }
+
     return res.json({ task });
   })
 );
@@ -1231,21 +1291,34 @@ projectRoutes.post(
       where: { projectId: id },
       orderBy: { order: "desc" },
     });
-    let startOrder = (lastTask?.order || 0) + 1;
+    let currentOrder = (lastTask?.order || 0) + 1;
 
-    const createdTasks = await prisma.projectProgressTask.createMany({
-      data: template.map((t) => ({
-        projectId: id,
-        itemGroup: templateType.toUpperCase(),
-        description: t.description,
-        expectedQty: t.expectedQty || 0,
-        executedQty: 0,
-        unit: t.unit || "un",
-        order: startOrder++,
-      })),
-    });
+    async function createRecursive(items, pId = null, group = null) {
+      let count = 0;
+      for (const t of items) {
+        const created = await prisma.projectProgressTask.create({
+          data: {
+            projectId: id,
+            itemGroup: group || templateType.toUpperCase(),
+            description: t.description,
+            expectedQty: t.expectedQty || 0,
+            executedQty: 0,
+            unit: t.unit || "un",
+            order: currentOrder++,
+            parentId: pId
+          }
+        });
+        count++;
+        if (t.subItems && t.subItems.length > 0) {
+           count += await createRecursive(t.subItems, created.id, group || templateType.toUpperCase());
+        }
+      }
+      return count;
+    }
 
-    return res.json({ success: true, count: createdTasks.count });
+    const totalCreated = await createRecursive(template);
+
+    return res.json({ success: true, count: totalCreated });
   })
 );
 
@@ -1255,9 +1328,18 @@ projectRoutes.delete(
   asyncHandler(async (req, res) => {
     const { id, taskId } = req.params;
     await ensureProjectReadable(req, id);
+    const existing = await prisma.projectProgressTask.findUnique({
+      where: { id: taskId, projectId: id }
+    });
+
     await prisma.projectProgressTask.delete({
       where: { id: taskId, projectId: id },
     });
+
+    if (existing && existing.parentId) {
+      await recalculateTaskRollup(existing.parentId, id);
+    }
+
     return res.json({ success: true });
   })
 );
