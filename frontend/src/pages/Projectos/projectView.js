@@ -2273,29 +2273,6 @@ async function openStockMovementDetailModal(moveId) {
     }
   });
 }
-
-function renderStockGallery(movements) {
-  const photos = movements.flatMap(m => m.photos.map(p => ({ ...p, m })));
-  const grid = el("stockPhotoGrid");
-
-  if (photos.length === 0) {
-    grid.innerHTML = `<div class="col-span-full py-10 text-center text-slate-400 text-sm font-medium">Nenhuma foto de campo vinculada a este stock.</div>`;
-    return;
-  }
-
-  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
-  grid.innerHTML = photos.map(p => `
-    <div class="relative group aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
-      <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover">
-      <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all p-3 flex flex-col justify-end">
-        <p class="text-[9px] font-black text-[#2afc8d] uppercase tracking-widest">${formatDateBR(p.createdAt)}</p>
-        <p class="text-white font-bold text-[10px] truncate">${escapeHtml(p.m?.material?.name)}</p>
-        ${p.lat ? `<p class="text-slate-400 text-[8px] flex items-center gap-1 mt-1"><span class="material-symbols-outlined text-[10px]">location_on</span> ${Number(p.lat).toFixed(4)}, ${Number(p.lng).toFixed(4)}</p>` : ""}
-      </div>
-    </div>
-  `).join("");
-}
-
 async function approveStockMovement(id) {
   const moveId = id;
   const projectId = getProjectId();
@@ -2500,7 +2477,6 @@ function applyStockFilters() {
 
   renderStockMovements(filtered);
   renderStockInventory(filtered);
-  renderStockGallery(filtered);
 }
 
 function renderStockInventory(movements) {
