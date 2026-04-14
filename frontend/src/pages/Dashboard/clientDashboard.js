@@ -271,17 +271,33 @@ async function loadProgressBreakdown(projectId) {
 
     const groupTotals = {};
     const groupCurrencies = {};
+    const groupTasks = {};
     data.tasks.forEach(t => {
       const g = t.itemGroup || "";
       if (!groupTotals[g]) groupTotals[g] = 0;
+      if (!groupTasks[g]) groupTasks[g] = [];
       
       const exe = Number(t.executedQty || 0);
       const uv = Number(t.unitValue || 0);
       
       groupTotals[g] += (uv * exe);
+      groupTasks[g].push(t);
+
       if (!groupCurrencies[g] || t.currency === "USD") {
          groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
       }
+    });
+
+    const groupProgressMap = {};
+    Object.keys(groupTasks).forEach(g => {
+       const tasks = groupTasks[g];
+       const sumPct = tasks.reduce((acc, t) => {
+          const exp = Number(t.expectedQty || 0);
+          const exe = Number(t.executedQty || 0);
+          const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
+          return acc + Math.min(100, pct);
+       }, 0);
+       groupProgressMap[g] = sumPct / tasks.length;
     });
 
     data.tasks.forEach(t => {
@@ -290,7 +306,10 @@ async function loadProgressBreakdown(projectId) {
       if (t.itemGroup !== lastGroup) {
         const c = groupCurrencies[t.itemGroup || ""] || "Kz";
         const tgv = groupTotals[t.itemGroup || ""] || 0;
+        const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
+        
         const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
+        const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
         
         html += `
           <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
@@ -299,6 +318,7 @@ async function loadProgressBreakdown(projectId) {
                 <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
                 <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
                 <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+                ${fPct}
                 ${ft}
               </div>
             </td>

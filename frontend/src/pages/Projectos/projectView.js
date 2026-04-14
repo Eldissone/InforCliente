@@ -914,9 +914,10 @@ function wireTabs() {
   });
 }
 
-function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz") {
+function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupProgress = 0) {
   const formattedTotal = `<span class="ml-auto text-xs font-black text-slate-500">${totalGroupValue.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}</span>`;
   const safeGroupName = escapeHtml(group || "Outros / Geral");
+  const formattedProgress = `<span class="ml-3 text-[10px] bg-blue-100 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-black shadow-sm">${Math.round(groupProgress)}% Exec.</span>`;
 
   return `
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
@@ -924,6 +925,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz") {
         <div class="flex items-center gap-3 w-full">
           <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>expand_more</span>
           <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+          ${formattedProgress}
           ${formattedTotal}
         </div>
       </td>
@@ -988,24 +990,43 @@ async function loadProgressTasks() {
 
       const groupTotals = {};
       const groupCurrencies = {};
+      const groupTasks = {};
+      
       data.tasks.forEach(t => {
         const g = t.itemGroup || "";
         if (!groupTotals[g]) groupTotals[g] = 0;
+        if (!groupTasks[g]) groupTasks[g] = [];
         
         const exe = Number(t.executedQty || 0);
         const uv = Number(t.unitValue || 0);
         
         groupTotals[g] += (uv * exe);
+        groupTasks[g].push(t);
         
         if (!groupCurrencies[g] || t.currency === "USD") {
            groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
         }
       });
 
+      const groupProgressMap = {};
+      let totalGroupPcts = 0;
+      Object.keys(groupTasks).forEach(g => {
+         const tasks = groupTasks[g];
+         const sumPct = tasks.reduce((acc, t) => {
+            const exp = Number(t.expectedQty || 0);
+            const exe = Number(t.executedQty || 0);
+            const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
+            return acc + Math.min(100, pct);
+         }, 0);
+         const avg = sumPct / tasks.length;
+         groupProgressMap[g] = avg;
+         totalGroupPcts += avg;
+      });
+
       data.tasks.forEach((t, i) => {
         const currentGroup = t.itemGroup || "";
         if (currentGroup !== lastGroup && t.itemGroup !== lastGroup) {
-          html += renderGroupHeader(t.itemGroup, groupTotals[currentGroup], groupCurrencies[currentGroup] || "Kz");
+          html += renderGroupHeader(t.itemGroup, groupTotals[currentGroup], groupCurrencies[currentGroup] || "Kz", groupProgressMap[currentGroup]);
           lastGroup = t.itemGroup;
         }
         html += renderProgressTaskRow(t, i);
@@ -1013,16 +1034,9 @@ async function loadProgressTasks() {
       tbody.innerHTML = html;
 
       // Calculate overall physical progress
-      const totalTasks = data.tasks.length;
-      if (totalTasks > 0) {
-        const totalPct = data.tasks.reduce((acc, t) => {
-          const exp = Number(t.expectedQty || 0);
-          const exe = Number(t.executedQty || 0);
-          const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
-          return acc + Math.min(100, pct); // Cap at 100 per task
-        }, 0);
-
-        const avgPct = Math.round(totalPct / totalTasks);
+      const numGroups = Object.keys(groupTasks).length;
+      if (numGroups > 0) {
+        const avgPct = Math.round(totalGroupPcts / numGroups);
 
         // Update UI: Pie Chart
         if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
