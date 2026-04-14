@@ -19,6 +19,7 @@ let state = {
   breadcrumbs: [],
   files: [],
   photos: [],
+  progressTasks: [],
   galleryStartDate: "",
   galleryEndDate: ""
 };
@@ -255,105 +256,159 @@ function renderProgressGauge(progress) {
 
 async function loadProgressBreakdown(projectId) {
   const tbody = document.getElementById("progressBreakdownTbody");
+  const filterSelect = document.getElementById("progressGroupFilter");
   if (!tbody) return;
   
   tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Carregando dados...</td></tr>`;
   
   try {
     const data = await apiRequest(`/projects/${projectId}/progress-tasks`);
-    if (!data.tasks || data.tasks.length === 0) {
+    state.progressTasks = data.tasks || [];
+    
+    if (state.progressTasks.length === 0) {
       tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem tarefas de Avanço Físico registadas</td></tr>`;
+      if (filterSelect) filterSelect.innerHTML = `<option value="all">Todos os Separadores</option>`;
       return;
     }
     
-    let html = "";
-    let lastGroup = null;
+    // Popular o Select de Filtro
+    if (filterSelect) {
+       // extraimos os separators unicos mantendo a ordem aproximada
+       const groupNames = Array.from(new Set(state.progressTasks.map(t => escapeHtml(t.itemGroup || "Outros / Geral"))));
+       let opts = `<option value="all">Todos os Separadores</option>`;
+       groupNames.forEach(g => {
+          opts += `<option value="${g}">${g}</option>`;
+       });
+       // não alterar o valor se já estiver selecionado um válido e se ele existir no novo dropdown
+       const currentVal = filterSelect.value;
+       filterSelect.innerHTML = opts;
+       if (groupNames.includes(currentVal)) {
+           filterSelect.value = currentVal;
+       } else {
+           filterSelect.value = "all";
+       }
+    }
 
-    const groupTotals = {};
-    const groupCurrencies = {};
-    const groupTasks = {};
-    data.tasks.forEach(t => {
-      const g = t.itemGroup || "";
-      if (!groupTotals[g]) groupTotals[g] = 0;
-      if (!groupTasks[g]) groupTasks[g] = [];
-      
-      const exe = Number(t.executedQty || 0);
-      const uv = Number(t.unitValue || 0);
-      
-      groupTotals[g] += (uv * exe);
-      groupTasks[g].push(t);
-
-      if (!groupCurrencies[g] || t.currency === "USD") {
-         groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
-      }
-    });
-
-    const groupProgressMap = {};
-    Object.keys(groupTasks).forEach(g => {
-       const tasks = groupTasks[g];
-       const sumPct = tasks.reduce((acc, t) => {
-          const exp = Number(t.expectedQty || 0);
-          const exe = Number(t.executedQty || 0);
-          const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
-          return acc + Math.min(100, pct);
-       }, 0);
-       groupProgressMap[g] = sumPct / tasks.length;
-    });
-
-    data.tasks.forEach(t => {
-      const safeGroupName = escapeHtml(t.itemGroup || "Outros / Geral");
-
-      if (t.itemGroup !== lastGroup) {
-        const c = groupCurrencies[t.itemGroup || ""] || "Kz";
-        const tgv = groupTotals[t.itemGroup || ""] || 0;
-        const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
-        
-        const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
-        const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
-        
-        html += `
-          <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-            <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
-              <div class="flex items-center gap-2 w-full">
-                <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
-                <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
-                <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
-                ${fPct}
-                ${ft}
-              </div>
-            </td>
-          </tr>
-        `;
-        lastGroup = t.itemGroup;
-      }
-      
-      const exp = Number(t.expectedQty || 0);
-      const exe = Number(t.executedQty || 0);
-      const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
-      
-      const uv = Number(t.unitValue || 0);
-      const tv = uv * exe;
-      const cStr = t.currency === "USD" ? "USD" : "Kz";
-      const tvStr = tv > 0 ? `${tv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
-
-      html += `
-        <tr class="hover:bg-slate-50 transition-colors text-sm" data-progress-item-group="${safeGroupName}">
-          <td class="px-6 py-3 font-medium text-slate-800">${escapeHtml(t.description)}</td>
-          <td class="px-4 py-3 text-center text-slate-500">${exp.toLocaleString('pt-AO')} <span class="text-[9px] uppercase tracking-wider">${escapeHtml(t.unit)}</span></td>
-          <td class="px-4 py-3 text-center">
-             <span class="font-bold text-blue-600">${exe.toLocaleString('pt-AO')}</span> 
-             <span class="text-[10px] ml-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${exePct}%</span>
-          </td>
-          <td class="px-6 py-3 text-right font-bold text-slate-700">${tvStr}</td>
-        </tr>
-      `;
-    });
-    
-    tbody.innerHTML = html;
+    renderProgressBreakdownRows();
   } catch (err) {
     console.error("Erro ao carregar avanço físico", err);
     tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados do Avanço Físico</td></tr>`;
   }
+}
+
+function renderProgressBreakdownRows() {
+  const tbody = document.getElementById("progressBreakdownTbody");
+  const filterSelect = document.getElementById("progressGroupFilter");
+  if (!tbody) return;
+
+  const filterVal = filterSelect ? filterSelect.value : "all";
+  const tasksToRender = state.progressTasks.filter(t => filterVal === "all" || escapeHtml(t.itemGroup || "Outros / Geral") === filterVal);
+
+  if (tasksToRender.length === 0) {
+     tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhuma tarefa neste separador</td></tr>`;
+     return;
+  }
+
+  let html = "";
+  let lastGroup = null;
+
+  const groupTotals = {};
+  const groupCurrencies = {};
+  const groupTasks = {};
+  
+  // Agrupar Totais
+  tasksToRender.forEach(t => {
+    const g = t.itemGroup || "";
+    if (!groupTotals[g]) groupTotals[g] = 0;
+    if (!groupTasks[g]) groupTasks[g] = [];
+    
+    const exe = Number(t.executedQty || 0);
+    const uv = Number(t.unitValue || 0);
+    
+    groupTotals[g] += (uv * exe);
+    groupTasks[g].push(t);
+
+    if (!groupCurrencies[g] || t.currency === "USD") {
+       groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
+    }
+  });
+
+  const groupProgressMap = {};
+  Object.keys(groupTasks).forEach(g => {
+     const tasks = groupTasks[g];
+     const sumPct = tasks.reduce((acc, t) => {
+        const exp = Number(t.expectedQty || 0);
+        const exe = Number(t.executedQty || 0);
+        const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
+        return acc + Math.min(100, pct);
+     }, 0);
+     groupProgressMap[g] = sumPct / tasks.length;
+  });
+
+  tasksToRender.forEach(t => {
+    const safeGroupName = escapeHtml(t.itemGroup || "Outros / Geral");
+
+    if (t.itemGroup !== lastGroup) {
+      const c = groupCurrencies[t.itemGroup || ""] || "Kz";
+      const tgv = groupTotals[t.itemGroup || ""] || 0;
+      const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
+      
+      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
+      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
+      
+      html += `
+        <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
+          <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+            <div class="flex items-center gap-2 w-full">
+              <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
+              <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+              ${fPct}
+              ${ft}
+            </div>
+          </td>
+        </tr>
+      `;
+      lastGroup = t.itemGroup;
+    }
+    
+    const exp = Number(t.expectedQty || 0);
+    const exe = Number(t.executedQty || 0);
+    const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
+    
+    const uv = Number(t.unitValue || 0);
+    const tv = uv * exe;
+    const cStr = t.currency === "USD" ? "USD" : "Kz";
+    const tvStr = tv > 0 ? `${tv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
+
+    html += `
+      <tr class="hover:bg-slate-50 transition-colors text-sm" data-progress-item-group="${safeGroupName}">
+        <td class="px-6 py-3 font-medium text-slate-800">${escapeHtml(t.description)}</td>
+        <td class="px-4 py-3 text-center text-slate-500">${exp.toLocaleString('pt-AO')} <span class="text-[9px] uppercase tracking-wider">${escapeHtml(t.unit)}</span></td>
+        <td class="px-4 py-3 text-center">
+           <span class="font-bold text-blue-600">${exe.toLocaleString('pt-AO')}</span> 
+           <span class="text-[10px] ml-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${exePct}%</span>
+        </td>
+        <td class="px-6 py-3 text-right font-bold text-slate-700">${tvStr}</td>
+      </tr>
+    `;
+  });
+  let activeProgress = 0;
+  if (filterVal === "all") {
+      const numGroups = Object.keys(groupProgressMap).length;
+      if (numGroups > 0) {
+          const totalPct = Object.values(groupProgressMap).reduce((a,b)=>a+b, 0);
+          activeProgress = Math.round(totalPct / numGroups);
+      }
+  } else {
+      activeProgress = Math.round(groupProgressMap[filterVal] || 0);
+  }
+
+  if (charts.progress) {
+      charts.progress.updateSeries([activeProgress]);
+  }
+
+  tbody.innerHTML = html;
 }
 
 /* =================================================================================
@@ -656,6 +711,14 @@ function wireEvents() {
       state.projectId = e.target.value;
       renderDashboard(state.projectId);
     });
+  }
+
+  // Progress Group Filter
+  const progressFilter = document.getElementById("progressGroupFilter");
+  if (progressFilter) {
+     progressFilter.addEventListener("change", () => {
+         renderProgressBreakdownRows();
+     });
   }
 
   // Handle document clicks for interactive components like progress group toggles, breadcrumbs, logic
