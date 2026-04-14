@@ -74,6 +74,12 @@ function renderDashboard(projectId) {
   renderStockChart(data.stock);
   renderProgressGauge(data.overallProgress);
   
+  if (projectId !== "all") {
+    loadProgressBreakdown(projectId);
+  } else {
+    document.getElementById("progressBreakdownTbody").innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver os detalhes</td></tr>`;
+  }
+  
   updateTabUI();
 }
 
@@ -245,6 +251,89 @@ function renderProgressGauge(progress) {
   if (charts.progress) charts.progress.destroy();
   charts.progress = new ApexCharts(document.querySelector("#progressGauge"), options);
   charts.progress.render();
+}
+
+async function loadProgressBreakdown(projectId) {
+  const tbody = document.getElementById("progressBreakdownTbody");
+  if (!tbody) return;
+  
+  tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Carregando dados...</td></tr>`;
+  
+  try {
+    const data = await apiRequest(`/projects/${projectId}/progress-tasks`);
+    if (!data.tasks || data.tasks.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem tarefas de Avanço Físico registadas</td></tr>`;
+      return;
+    }
+    
+    let html = "";
+    let lastGroup = null;
+
+    const groupTotals = {};
+    const groupCurrencies = {};
+    data.tasks.forEach(t => {
+      const g = t.itemGroup || "";
+      if (!groupTotals[g]) groupTotals[g] = 0;
+      
+      const exe = Number(t.executedQty || 0);
+      const uv = Number(t.unitValue || 0);
+      
+      groupTotals[g] += (uv * exe);
+      if (!groupCurrencies[g] || t.currency === "USD") {
+         groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
+      }
+    });
+
+    data.tasks.forEach(t => {
+      const safeGroupName = escapeHtml(t.itemGroup || "Outros / Geral");
+
+      if (t.itemGroup !== lastGroup) {
+        const c = groupCurrencies[t.itemGroup || ""] || "Kz";
+        const tgv = groupTotals[t.itemGroup || ""] || 0;
+        const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
+        
+        html += `
+          <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
+            <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+              <div class="flex items-center gap-2 w-full">
+                <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
+                <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
+                <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+                ${ft}
+              </div>
+            </td>
+          </tr>
+        `;
+        lastGroup = t.itemGroup;
+      }
+      
+      const exp = Number(t.expectedQty || 0);
+      const exe = Number(t.executedQty || 0);
+      const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
+      
+      const uv = Number(t.unitValue || 0);
+      const tv = uv * exe;
+      const cStr = t.currency === "USD" ? "USD" : "Kz";
+      const tvStr = tv > 0 ? `${tv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
+
+      html += `
+        <tr class="hover:bg-slate-50 transition-colors text-sm" data-progress-item-group="${safeGroupName}">
+          <td class="px-6 py-3 font-medium text-slate-800">${escapeHtml(t.description)}</td>
+          <td class="px-4 py-3 text-center text-slate-500">${exp.toLocaleString('pt-AO')} <span class="text-[9px] uppercase tracking-wider">${escapeHtml(t.unit)}</span></td>
+          <td class="px-4 py-3 text-center">
+             <span class="font-bold text-blue-600">${exe.toLocaleString('pt-AO')}</span> 
+             <span class="text-[10px] ml-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${exePct}%</span>
+          </td>
+          <td class="px-6 py-3 text-right font-bold text-slate-700">${tvStr}</td>
+        </tr>
+      `;
+    });
+    
+    tbody.innerHTML = html;
+  } catch (err) {
+    console.error("Erro ao carregar avanço físico", err);
+    tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados do Avanço Físico</td></tr>`;
+  }
 }
 
 /* =================================================================================
@@ -535,16 +624,49 @@ async function loadPhotos() {
 
 function wireEvents() {
   // Filters
-  const select = document.getElementById("projectFilter");
-  if (select) {
-    select.addEventListener("change", (e) => {
+  const filterSelect = document.getElementById("projectFilterTable");
+  if (filterSelect) {
+    filterSelect.addEventListener("change", (e) => {
       state.projectId = e.target.value;
-      state.currentFolderId = null;
-      state.breadcrumbs = [];
       renderDashboard(state.projectId);
     });
   }
 
+  // Handle document clicks for interactive components like progress group toggles, breadcrumbs, logic
+  document.addEventListener("click", async (e) => {
+    // Progress Breakdown Group Toggle
+    const toggleRow = e.target?.closest("[data-toggle-progress-group]");
+    if (toggleRow) {
+      const groupName = toggleRow.getAttribute("data-toggle-progress-group");
+      const icon = toggleRow.querySelector("[data-icon]");
+      const items = document.querySelectorAll(`[data-progress-item-group="${groupName}"]`);
+      let isHidden = false;
+      items.forEach(item => {
+         isHidden = item.classList.toggle("hidden");
+      });
+      if (icon) {
+         icon.textContent = isHidden ? "chevron_right" : "expand_more";
+      }
+      return;
+    }
+
+    // Breadcrumbs nav for files
+    const btnBread = e.target.closest("[data-go-folder]");
+    if (btnBread) {
+       const fid = btnBread.getAttribute("data-go-folder");
+       state.currentFolderId = fid === "root" ? null : fid;
+       
+       if (fid === "root") {
+         state.breadcrumbs = [];
+       } else {
+         const crtIdx = state.breadcrumbs.findIndex(x => x.id === fid);
+         if (crtIdx >= 0) {
+           state.breadcrumbs = state.breadcrumbs.slice(0, crtIdx + 1);
+         }
+       }
+       loadFiles();
+    }
+  });
   const updateDates = () => {
     state.startDate = document.getElementById("filterStart")?.value || "";
     state.endDate = document.getElementById("filterEnd")?.value || "";
