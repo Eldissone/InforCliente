@@ -200,6 +200,9 @@ model ProjectProgressTask {
   expectedQty     Decimal  @db.Decimal(10, 2)
   executedQty     Decimal  @default(0) @db.Decimal(10, 2)
   unit            String
+  unitValue       Decimal? @db.Decimal(16, 2)
+  totalValue      Decimal? @db.Decimal(16, 2)
+  currency        String?  @default("AOA")
   createdAt       DateTime @default(now())
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

@@ -1155,6 +1155,9 @@ projectRoutes.post(
         expectedQty: z.union([z.number(), z.string()]),
         executedQty: z.union([z.number(), z.string()]).optional(),
         unit: z.string(),
+        unitValue: z.union([z.number(), z.string()]).optional().nullable(),
+        totalValue: z.union([z.number(), z.string()]).optional().nullable(),
+        currency: z.string().optional().nullable()
       })
       .parse(req.body);
 
@@ -1166,6 +1169,9 @@ projectRoutes.post(
         expectedQty: body.expectedQty,
         executedQty: body.executedQty || 0,
         unit: (body.unit || "un").toLowerCase().trim(),
+        unitValue: body.unitValue ? Number(body.unitValue) : null,
+        totalValue: body.totalValue ? Number(body.totalValue) : null,
+        currency: body.currency || "AOA"
       },
     });
     return res.status(201).json({ task });
@@ -1183,6 +1189,9 @@ projectRoutes.patch(
         executedQty: z.union([z.number(), z.string()]).optional(),
         expectedQty: z.union([z.number(), z.string()]).optional(),
         unit: z.string().optional(),
+        unitValue: z.union([z.number(), z.string()]).optional().nullable(),
+        totalValue: z.union([z.number(), z.string()]).optional().nullable(),
+        currency: z.string().optional().nullable()
       })
       .parse(req.body);
 
@@ -1190,6 +1199,9 @@ projectRoutes.patch(
     if (body.executedQty !== undefined) data.executedQty = body.executedQty;
     if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
     if (body.unit !== undefined) data.unit = body.unit.toLowerCase().trim();
+    if (body.unitValue !== undefined) data.unitValue = body.unitValue ? Number(body.unitValue) : null;
+    if (body.totalValue !== undefined) data.totalValue = body.totalValue ? Number(body.totalValue) : null;
+    if (body.currency !== undefined) data.currency = body.currency || "AOA";
 
     const task = await prisma.projectProgressTask.update({
       where: { id: taskId, projectId: id },
