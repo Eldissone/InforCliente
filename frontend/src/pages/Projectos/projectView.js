@@ -2149,9 +2149,7 @@ function wireStockWorkflow() {
       rejectStockMovement(btn.dataset.rejectStock);
     });
   });
-  document.querySelectorAll("[data-view-stock]").forEach(row => {
-    row.addEventListener("click", () => openStockMovementDetailModal(row.dataset.viewStock));
-  });
+  // Removido o event listener de [data-view-stock] aqui pois ele já é delegado via document no wireStock!
 }
 
 async function openStockMovementDetailModal(moveId) {
@@ -2164,14 +2162,18 @@ async function openStockMovementDetailModal(moveId) {
   const renderPhotos = (cond) => {
     const pList = m.photos.filter(p => !cond || p.condition === cond);
     if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
-    return `<div class="grid grid-cols-4 gap-2">
+    return `<div class="flex flex-wrap gap-3">
       ${pList.map(p => `
-        <div class="aspect-square rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-          <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover">
+        <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+          <a href="${baseUrl}/${p.path}" target="_blank">
+             <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover hover:scale-105 transition-all">
+          </a>
         </div>
       `).join("")}
     </div>`;
   };
+
+  const isClosed = (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO");
 
   openModal({
     title: "Detalhes do Lançamento",
@@ -2239,7 +2241,7 @@ async function openStockMovementDetailModal(moveId) {
           </div>
         ` : ""}
 
-        ${(m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") ? `
+        ${(!isClosed && m.type !== "AJUSTE") ? `
           <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
              <span class="material-symbols-outlined text-emerald-600">info</span>
              <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
@@ -2249,9 +2251,9 @@ async function openStockMovementDetailModal(moveId) {
         ` : ""}
       </div>
     `,
-    primaryText: (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO") ? "Fechar" : "Aprovar Lançamento",
+    primaryLabel: isClosed ? "Fechar" : "Aprovar Lançamento",
     onPrimary: async ({ close, btn }) => {
-      if (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO") {
+      if (isClosed) {
         close();
         return;
       }
@@ -2264,7 +2266,7 @@ async function openStockMovementDetailModal(moveId) {
         setButtonLoading(btn, false);
       }
     },
-    secondaryText: (m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") ? "Rejeitar" : null,
+    secondaryLabel: isClosed ? null : "Rejeitar",
     onSecondary: async ({ close }) => {
       if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
         await rejectStockMovement(m.id);

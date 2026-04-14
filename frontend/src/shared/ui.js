@@ -102,8 +102,8 @@ export function openModal({
     </div>
     <div class="overflow-y-auto px-8 pb-8" data-body>${contentHtml || ""}</div>
     <div class="flex shrink-0 justify-end gap-3 bg-slate-50/50 px-8 py-6">
-      <button data-secondary class="h-11 px-6 rounded-xl text-slate-600 font-semibold hover:bg-slate-100 transition-colors">${secondaryLabel}</button>
-      <button data-primary class="h-11 px-6 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all active:scale-95">${primaryLabel}</button>
+      ${secondaryLabel ? `<button data-secondary class="h-11 px-6 rounded-xl text-slate-600 font-semibold hover:bg-slate-100 transition-colors">${secondaryLabel}</button>` : ""}
+      ${primaryLabel ? `<button data-primary class="h-11 px-6 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all active:scale-95">${primaryLabel}</button>` : ""}
     </div>
   `;
 
