@@ -210,9 +210,23 @@ function renderFinancialChart(projects) {
     legend: { position: 'top', fontWeight: 700 }
   };
 
-  if (charts.finances) charts.finances.destroy();
-  charts.finances = new ApexCharts(document.querySelector("#financialChart"), options);
-  charts.finances.render();
+  const container = document.querySelector("#financialChart");
+  if (!container) {
+    console.warn("Container #financialChart not found. Skipping financial chart render.");
+    return;
+  }
+
+  if (charts.finances) {
+    try {
+      charts.finances.destroy();
+    } catch (e) {
+      console.warn("Error destroying previous financial chart:", e);
+    }
+    charts.finances = null;
+  }
+
+  charts.finances = new ApexCharts(container, options);
+  charts.finances.render().catch(err => console.error("Error rendering financial chart:", err));
 }
 
 function renderStockChart(stock) {
@@ -293,9 +307,23 @@ function renderProgressGauge(progress) {
     labels: ['Execução Geral'],
   };
 
-  if (charts.progress) charts.progress.destroy();
-  charts.progress = new ApexCharts(document.querySelector("#progressGauge"), options);
-  charts.progress.render();
+  const container = document.querySelector("#progressGauge");
+  if (!container) {
+    console.warn("Container #progressGauge not found. Skipping progress gauge render.");
+    return;
+  }
+
+  if (charts.progress) {
+    try {
+      charts.progress.destroy();
+    } catch (e) {
+      console.warn("Error destroying previous progress gauge:", e);
+    }
+    charts.progress = null;
+  }
+
+  charts.progress = new ApexCharts(container, options);
+  charts.progress.render().catch(err => console.error("Error rendering progress gauge:", err));
 }
 
 async function loadProgressBreakdown(projectId) {
