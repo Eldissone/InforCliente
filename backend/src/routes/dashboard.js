@@ -215,19 +215,28 @@ dashboardRoutes.get(
           name: m.material.name,
           unit: m.material.unit,
           qty: 0,
+          totalIn: 0,
+          totalOut: 0,
           lastActivity: m.dataMovimento,
           state: m.auditStatus === "APROVADO" ? "Bom Estado" : "Pendente",
         };
       }
-      const sign = m.type === "SAIDA" ? -1 : 1;
-      stockMap[mId].qty += Number(m.quantityGood || 0) * sign;
+      
+      const val = Number(m.quantityGood || 0);
+      if (m.type === "SAIDA") {
+        stockMap[mId].totalOut += val;
+        stockMap[mId].qty -= val;
+      } else if (m.type === "ENTRADA") {
+        stockMap[mId].totalIn += val;
+        stockMap[mId].qty += val;
+      }
       
       if (new Date(m.dataMovimento) > new Date(stockMap[mId].lastActivity)) {
         stockMap[mId].lastActivity = m.dataMovimento;
       }
     });
 
-    const stockSummary = Object.values(stockMap).filter((s) => s.qty > 0);
+    const stockSummary = Object.values(stockMap);
 
     return res.json({
       financials: {

@@ -261,17 +261,32 @@ function renderStockTable(stock) {
     return;
   }
 
-  tbody.innerHTML = filtered.map(s => `
-    <tr class="hover:bg-slate-50 transition-colors">
-      <td class="px-8 py-4 font-bold text-slate-900">${escapeHtml(s.name)}</td>
-      <td class="px-4 py-4 text-center text-xs font-bold text-slate-400 uppercase">${escapeHtml(s.unit)}</td>
-      <td class="px-4 py-4 text-center font-black text-slate-900">${s.qty.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center text-xs text-slate-400">${s.lastActivity ? new Date(s.lastActivity).toLocaleDateString('pt-PT') : '--'}</td>
-      <td class="px-8 py-4 text-right">
-         <span class="px-2 py-0.5 rounded-md ${s.state === 'Bom Estado' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'} text-[9px] font-black uppercase tracking-widest">${escapeHtml(s.state)}</span>
-      </td>
-    </tr>
-  `).join("");
+  tbody.innerHTML = filtered.map(s => {
+    const usagePct = s.totalIn > 0 ? Math.round((s.totalOut / s.totalIn) * 100) : 0;
+    const usageColor = usagePct > 90 ? 'text-red-600' : (usagePct > 50 ? 'text-orange-600' : 'text-blue-600');
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="px-8 py-4 font-bold text-slate-900">${escapeHtml(s.name)}</td>
+        <td class="px-4 py-4 text-center text-xs font-bold text-slate-400 uppercase">${escapeHtml(s.unit)}</td>
+        <td class="px-4 py-4 text-center font-bold text-slate-600">${s.totalIn.toLocaleString('pt-AO')}</td>
+        <td class="px-4 py-4 text-center font-bold text-slate-600">${s.totalOut.toLocaleString('pt-AO')}</td>
+        <td class="px-4 py-4 text-center font-black text-blue-600 bg-blue-50/30">${s.qty.toLocaleString('pt-AO')}</td>
+        <td class="px-4 py-4 text-center">
+            <div class="flex flex-col items-center">
+                <span class="text-[10px] font-black ${usageColor}">${usagePct}%</span>
+                <div class="w-12 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                    <div class="h-full ${usagePct > 90 ? 'bg-red-500' : (usagePct > 50 ? 'bg-orange-500' : 'bg-blue-500')}" style="width: ${Math.min(100, usagePct)}%"></div>
+                </div>
+            </div>
+        </td>
+        <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-400">${s.lastActivity ? new Date(s.lastActivity).toLocaleDateString('pt-PT') : '--'}</td>
+        <td class="px-8 py-4 text-right">
+           <span class="px-2 py-0.5 rounded-md ${s.state === 'Bom Estado' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'} text-[9px] font-black uppercase tracking-widest">${escapeHtml(s.state)}</span>
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
 function renderProgressGauge(progress) {
