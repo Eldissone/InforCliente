@@ -1,4 +1,4 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -257,10 +257,27 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.contact)}" /></div>
         
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Referências</h3></div>
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Direcção</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.empreiteiro)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.subempreiteiro)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.directorObra)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Telefone do Dir.</label><input id="p_dir_phone" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.directorPhone)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email do Dir.</label><input id="p_dir_email" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.directorEmail)}" /></div>
+        
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Foto do Director</label>
+          <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+             <div class="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0">
+                <img id="p_dir_photo_preview" src="${p.directorPhoto ? getApiBaseUrl() + '/' + p.directorPhoto : '/assets/images/placeholder-user.png'}" class="w-full h-full object-cover"/>
+             </div>
+             <div class="flex-1">
+                <input type="file" id="p_dir_photo_file" class="hidden" accept="image/*" />
+                <button type="button" id="p_dir_photo_btn" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors">Alterar Foto</button>
+                <div id="p_dir_photo_status" class="text-[9px] font-bold text-slate-400 mt-1">PNG ou JPG (Max 5MB)</div>
+                <input type="hidden" id="p_dir_photo_path" value="${escapeHtml(p.directorPhoto)}" />
+             </div>
+          </div>
+        </div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.referencia)}" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
@@ -295,6 +312,9 @@ async function openEdit(id) {
             empreiteiro: v("p_empreiteiro") || null,
             subempreiteiro: v("p_subempreiteiro") || null,
             directorObra: v("p_director") || null,
+            directorPhone: v("p_dir_phone") || null,
+            directorEmail: v("p_dir_email") || null,
+            directorPhoto: v("p_dir_photo_path") || null,
             referencia: v("p_referencia") || null,
           },
         });
@@ -306,6 +326,41 @@ async function openEdit(id) {
         toast(err.message || "Erro ao atualizar obra", { type: "error" });
       }
     },
+    // Listen for file changes
+    onRender: ({ panel }) => {
+      const fileInput = panel.querySelector("#p_dir_photo_file");
+      const btn = panel.querySelector("#p_dir_photo_btn");
+      const preview = panel.querySelector("#p_dir_photo_preview");
+      const status = panel.querySelector("#p_dir_photo_status");
+      const pathInput = panel.querySelector("#p_dir_photo_path");
+
+      btn?.addEventListener("click", () => fileInput?.click());
+
+      fileInput?.addEventListener("change", async () => {
+        if (!fileInput.files.length) return;
+        const file = fileInput.files[0];
+        
+        try {
+          status.textContent = "A carregar...";
+          status.className = "text-[9px] font-black text-blue-600 mt-1 animate-pulse";
+          
+          const result = await apiUpload(`/projects/${encodeURIComponent(id)}/director-photo`, {
+            file,
+            fieldName: "photo"
+          });
+          
+          pathInput.value = result.photo;
+          preview.src = `${getApiBaseUrl()}/${result.photo}?t=${Date.now()}`;
+          status.textContent = "Foto atualizada!";
+          status.className = "text-[9px] font-black text-emerald-600 mt-1";
+          toast("Foto do director atualizada", { type: "success" });
+        } catch (err) {
+          status.textContent = "Erro no upload";
+          status.className = "text-[9px] font-black text-red-600 mt-1";
+          toast("Erro ao carregar foto", { type: "error" });
+        }
+      });
+    }
   });
 }
 
@@ -340,10 +395,27 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
         
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Referências</h3></div>
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Direcção</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: MBT ENERGIA" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" placeholder="Ex: LUCAS ZANGUEU" /></div>
+        
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Foto do Director</label>
+          <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+             <div class="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0">
+                <img id="p_dir_photo_preview_create" src="/assets/images/placeholder-user.png" class="w-full h-full object-cover"/>
+             </div>
+             <div class="flex-1">
+                <input type="file" id="p_dir_photo_file_create" class="hidden" accept="image/*" />
+                <button type="button" id="p_dir_photo_btn_create" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors">Selecionar Foto</button>
+                <div id="p_dir_photo_status_create" class="text-[9px] font-bold text-slate-400 mt-1">PNG ou JPG (Max 5MB)</div>
+             </div>
+          </div>
+        </div>
+
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Telefone do Dir.</label><input id="p_dir_phone" class="w-full rounded-lg border-slate-300" placeholder="9xxxxxxxx" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email do Dir.</label><input id="p_dir_email" class="w-full rounded-lg border-slate-300" placeholder="email@exemplo.com" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
@@ -360,7 +432,7 @@ async function openCreate() {
       const btn = panel.querySelector("[data-primary]");
       try {
         setButtonLoading(btn, true);
-        await apiRequest("/projects", {
+        const res = await apiRequest("/projects", {
           method: "POST",
           body: {
             name: v("p_name"),
@@ -376,10 +448,28 @@ async function openCreate() {
             empreiteiro: v("p_empreiteiro") || null,
             subempreiteiro: v("p_subempreiteiro") || null,
             directorObra: v("p_director") || null,
+            directorPhone: v("p_dir_phone") || null,
+            directorEmail: v("p_dir_email") || null,
             referencia: v("p_referencia") || null,
           },
         });
-        toast("Obra criada", { type: "success" });
+
+        // 2. Upload photo if selected
+        const fileInput = panel.querySelector("#p_dir_photo_file_create");
+        if (fileInput?.files?.length) {
+          try {
+            toast("A carregar foto do director...", { type: "info" });
+            await apiUpload(`/projects/${encodeURIComponent(res.id)}/director-photo`, {
+              file: fileInput.files[0],
+              fieldName: "photo"
+            });
+          } catch (err) {
+            console.error("Erro no upload inicial da foto:", err);
+            toast("Obra criada, mas houve erro no upload da foto.", { type: "warning" });
+          }
+        }
+
+        toast("Obra criada com sucesso", { type: "success" });
         close();
         state.page = 1;
         await load();
@@ -388,6 +478,28 @@ async function openCreate() {
         toast(err.message || "Erro ao criar obra", { type: "error" });
       }
     },
+    onRender: ({ panel }) => {
+      const fileInput = panel.querySelector("#p_dir_photo_file_create");
+      const btn = panel.querySelector("#p_dir_photo_btn_create");
+      const preview = panel.querySelector("#p_dir_photo_preview_create");
+      const status = panel.querySelector("#p_dir_photo_status_create");
+
+      btn?.addEventListener("click", () => fileInput?.click());
+
+      fileInput?.addEventListener("change", () => {
+        if (!fileInput.files.length) return;
+        const file = fileInput.files[0];
+        
+        // Local preview only
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          preview.src = e.target.result;
+          status.textContent = "Foto selecionada";
+          status.className = "text-[9px] font-black text-blue-600 mt-1";
+        };
+        reader.readAsDataURL(file);
+      });
+    }
   });
 }
 

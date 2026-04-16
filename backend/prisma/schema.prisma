@@ -78,6 +78,9 @@ model Project {
   empreiteiro         String?
   subempreiteiro      String?
   directorObra        String?
+  directorPhoto       String?
+  directorPhone       String?
+  directorEmail       String?
   referencia          String?
   maoDeObraIndireta   Json?
   maoDeObraDireta     Json?

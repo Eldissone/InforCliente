@@ -207,6 +207,9 @@ projectRoutes.post(
         empreiteiro: z.string().optional().nullable(),
         subempreiteiro: z.string().optional().nullable(),
         directorObra: z.string().optional().nullable(),
+        directorPhoto: z.string().optional().nullable(),
+        directorPhone: z.string().optional().nullable(),
+        directorEmail: z.string().optional().nullable(),
         referencia: z.string().optional().nullable(),
         maoDeObraIndireta: z.any().optional().nullable(),
         maoDeObraDireta: z.any().optional().nullable(),
@@ -259,6 +262,9 @@ projectRoutes.post(
         empreiteiro: body.empreiteiro || null,
         subempreiteiro: body.subempreiteiro || null,
         directorObra: body.directorObra || null,
+        directorPhoto: body.directorPhoto || null,
+        directorPhone: body.directorPhone || null,
+        directorEmail: body.directorEmail || null,
         referencia: body.referencia || null,
         maoDeObraIndireta: body.maoDeObraIndireta || null,
         maoDeObraDireta: body.maoDeObraDireta || null,
@@ -386,6 +392,9 @@ projectRoutes.patch(
         empreiteiro: z.string().optional().nullable(),
         subempreiteiro: z.string().optional().nullable(),
         directorObra: z.string().optional().nullable(),
+        directorPhoto: z.string().optional().nullable(),
+        directorPhone: z.string().optional().nullable(),
+        directorEmail: z.string().optional().nullable(),
         referencia: z.string().optional().nullable(),
         maoDeObraIndireta: z.any().optional().nullable(),
         maoDeObraDireta: z.any().optional().nullable(),
@@ -443,6 +452,9 @@ projectRoutes.patch(
         ...(body.empreiteiro !== undefined ? { empreiteiro: body.empreiteiro } : {}),
         ...(body.subempreiteiro !== undefined ? { subempreiteiro: body.subempreiteiro } : {}),
         ...(body.directorObra !== undefined ? { directorObra: body.directorObra } : {}),
+        ...(body.directorPhoto !== undefined ? { directorPhoto: body.directorPhoto } : {}),
+        ...(body.directorPhone !== undefined ? { directorPhone: body.directorPhone } : {}),
+        ...(body.directorEmail !== undefined ? { directorEmail: body.directorEmail } : {}),
         ...(body.referencia !== undefined ? { referencia: body.referencia } : {}),
         ...(body.maoDeObraIndireta !== undefined ? { maoDeObraIndireta: body.maoDeObraIndireta } : {}),
         ...(body.maoDeObraDireta !== undefined ? { maoDeObraDireta: body.maoDeObraDireta } : {}),
@@ -472,6 +484,27 @@ projectRoutes.patch(
     }
 
     return res.json({ id: updated.id });
+  })
+);
+
+projectRoutes.post(
+  "/:id/director-photo",
+  requireRole(["admin", "operador"]),
+  fileUpload.single("photo"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
+
+    // Caminho relativo para guardar na BD e servir via static
+    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+
+    const updated = await prisma.project.update({
+      where: { id },
+      data: { directorPhoto: relativePath },
+      select: { directorPhoto: true }
+    });
+
+    return res.json({ photo: updated.directorPhoto });
   })
 );
 
@@ -1140,24 +1173,47 @@ async function recalculateTaskRollup(parentId, projectId) {
     where: { parentId, projectId },
   });
 
+  let sumExp = 0;
+  let sumExe = 0;
   let sumTotal = 0;
-  let sumMaterial = 0;
-  let sumService = 0;
+  let sumMatCost = 0;
+  let sumSerCost = 0;
 
   children.forEach(c => {
-    // Se o filho já tem um totalValue (pode ser um pai também ou item terminal com valor)
+    const exp = Number(c.expectedQty || 0);
+    const exe = Number(c.executedQty || 0);
+    const uvM = Number(c.unitValueMaterial || 0);
+    const uvS = Number(c.unitValueService || 0);
+
+    sumExp += exp;
+    sumExe += exe;
     sumTotal += Number(c.totalValue || 0);
-    sumMaterial += Number(c.unitValueMaterial || 0) * Number(c.expectedQty || 0);
-    sumService += Number(c.unitValueService || 0) * Number(c.expectedQty || 0);
+    sumMatCost += (uvM * exp);
+    sumSerCost += (uvS * exp);
   });
+
+  // Novos unitValues para o pai (baseado na soma total / soma exp)
+  // Se sumExp for 0, mantemos os unitValues como estão ou 0
+  let newUvM = 0;
+  let newUvS = 0;
+  let newUv = 0;
+
+  if (sumExp > 0) {
+    newUvM = sumMatCost / sumExp;
+    newUvS = sumSerCost / sumExp;
+    newUv = sumTotal / sumExp;
+  }
 
   // Atualizar o pai
   const parent = await prisma.projectProgressTask.update({
     where: { id: parentId },
     data: {
+      expectedQty: sumExp,
+      executedQty: sumExe,
       totalValue: sumTotal,
-      // Opcional: atualizar unitValue do pai se unit for 'un' ou global
-      // Mas por agora focamos no totalValue que é o que compõe o orçamento
+      unitValueMaterial: newUvM,
+      unitValueService: newUvS,
+      unitValue: newUv,
     }
   });
 

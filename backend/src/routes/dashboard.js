@@ -184,6 +184,12 @@ dashboardRoutes.get(
         paid,
         debt: budget - paid,
         progress,
+        director: {
+          name: p.directorObra,
+          photo: p.directorPhoto,
+          phone: p.directorPhone,
+          email: p.directorEmail
+        }
       };
     });
 
@@ -205,13 +211,20 @@ dashboardRoutes.get(
       const mId = m.materialId;
       if (!stockMap[mId]) {
         stockMap[mId] = {
+          id: mId,
           name: m.material.name,
           unit: m.material.unit,
           qty: 0,
+          lastActivity: m.dataMovimento,
+          state: m.auditStatus === "APROVADO" ? "Bom Estado" : "Pendente",
         };
       }
       const sign = m.type === "SAIDA" ? -1 : 1;
       stockMap[mId].qty += Number(m.quantityGood || 0) * sign;
+      
+      if (new Date(m.dataMovimento) > new Date(stockMap[mId].lastActivity)) {
+        stockMap[mId].lastActivity = m.dataMovimento;
+      }
     });
 
     const stockSummary = Object.values(stockMap).filter((s) => s.qty > 0);
