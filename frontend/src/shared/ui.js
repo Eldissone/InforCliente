@@ -84,6 +84,7 @@ export function openModal({
   onPrimary,
   secondaryLabel = "Cancelar",
   onSecondary,
+  onRender,
 }) {
   const overlay = document.createElement("div");
   overlay.className =
@@ -149,6 +150,10 @@ export function openModal({
       close();
     }
   });
+  
+  if (onRender) {
+    onRender({ close, overlay, panel });
+  }
 
   return { close, overlay, panel };
 }
