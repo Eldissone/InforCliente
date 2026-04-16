@@ -313,26 +313,31 @@ projectRoutes.get(
     const cbsSummary = {};
     
     // Initialize with all categories from the enum to ensure they exist
-    const categories = [
+    // and include legacy categories if they exist in the DB
+    const allExpectedCategories = [
       "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL", 
       "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO", 
-      "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS"
+      "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS",
+      "MATERIALS", "EQUIPMENT", "LABOR", "OTHER"
     ];
     
-    categories.forEach(cat => {
+    allExpectedCategories.forEach(cat => {
       cbsSummary[cat] = { budgeted: 0, realized: 0 };
     });
 
     budgetAgg.forEach(b => {
-      if (b.category && cbsSummary[b.category]) {
-        cbsSummary[b.category].budgeted = Number(b._sum.total || 0);
+      if (b.category) {
+        if (!cbsSummary[b.category]) cbsSummary[b.category] = { budgeted: 0, realized: 0 };
+        cbsSummary[b.category].budgeted = Number(b._sum?.total || 0);
       }
     });
 
     transAgg.forEach(t => {
-      if (t.category && cbsSummary[t.category]) {
+      if (t.category) {
+        if (!cbsSummary[t.category]) cbsSummary[t.category] = { budgeted: 0, realized: 0 };
         // Use realizedAmount if available, otherwise amount
-        cbsSummary[t.category].realized = Number(t._sum.realizedAmount || t._sum.amount || 0);
+        const amount = Number(t._sum?.realizedAmount || t._sum?.amount || 0);
+        cbsSummary[t.category].realized = amount;
       }
     });
 
@@ -340,23 +345,22 @@ projectRoutes.get(
     const paymentAgg = await prisma.projectPayment.aggregate({
       where: { projectId: id, status: "CONFIRMADO" },
       _sum: { valor: true },
-      _count: { id: true },
     });
-    const totalPago = Number(paymentAgg._sum.valor || 0);
+    const totalPago = Number(paymentAgg._sum?.valor || 0);
     const budgetTotalNum = Number(project.budgetTotal || 0);
-    const divida = budgetTotalNum - totalPago;
+    const divida = Math.max(0, budgetTotalNum - totalPago);
     const percentualPago = budgetTotalNum > 0
-      ? Math.round((totalPago / budgetTotalNum) * 100)
+      ? Math.min(100, Math.round((totalPago / budgetTotalNum) * 100))
       : 0;
 
     return res.json({
       project: {
         ...project,
-        budgetTotal: String(project.budgetTotal),
-        budgetAllocated: String(project.budgetAllocated),
-        budgetConsumed: String(project.budgetConsumed),
-        budgetCommitted: String(project.budgetCommitted),
-        budgetAvailable: String(project.budgetAvailable),
+        budgetTotal: String(project.budgetTotal || 0),
+        budgetAllocated: String(project.budgetAllocated || 0),
+        budgetConsumed: String(project.budgetConsumed || 0),
+        budgetCommitted: String(project.budgetCommitted || 0),
+        budgetAvailable: String(project.budgetAvailable || 0),
         cbsSummary,
         totalPago,
         divida,
@@ -447,7 +451,9 @@ projectRoutes.patch(
           ? { physicalProgressPct: body.physicalProgressPct }
           : {}),
         ...(body.phaseLabel !== undefined ? { phaseLabel: body.phaseLabel } : {}),
-        ...(body.clientId !== undefined ? { clientId: body.clientId } : {}),
+        ...(body.clientId !== undefined
+          ? { client: body.clientId ? { connect: { id: body.clientId } } : { disconnect: true } }
+          : {}),
         ...(body.projectType !== undefined ? { projectType: body.projectType } : {}),
         ...(body.empreiteiro !== undefined ? { empreiteiro: body.empreiteiro } : {}),
         ...(body.subempreiteiro !== undefined ? { subempreiteiro: body.subempreiteiro } : {}),

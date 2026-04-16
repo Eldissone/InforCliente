@@ -123,7 +123,7 @@ userRoutes.patch(
       data: {
         ...(body.role ? { role: body.role } : {}),
         ...(body.email ? { email: body.email } : {}),
-        clientId: nextClientId,
+        client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
       },
       select: { id: true },
     });

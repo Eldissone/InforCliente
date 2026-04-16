@@ -272,7 +272,7 @@ async function openEdit(id) {
              </div>
              <div class="flex-1">
                 <input type="file" id="p_dir_photo_file" class="hidden" accept="image/*" />
-                <button type="button" id="p_dir_photo_btn" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors">Alterar Foto</button>
+                <button type="button" id="p_dir_photo_btn" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors">${p.directorPhoto ? 'Alterar Foto' : 'Selecionar Foto'}</button>
                 <div id="p_dir_photo_status" class="text-[9px] font-bold text-slate-400 mt-1">PNG ou JPG (Max 5MB)</div>
                 <input type="hidden" id="p_dir_photo_path" value="${escapeHtml(p.directorPhoto)}" />
              </div>
