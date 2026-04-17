@@ -456,11 +456,10 @@ async function openEdit(id) {
 async function openCreate() {
   const clients = await loadClients();
   const clientOptions = [
-    `< option value = "" > Sem cliente vinculado</option > `,
+    `<option value="">Sem cliente vinculado</option>`,
     ...clients.map(
       (client) =>
-        `< option value = "${escapeHtml(client.id)}" > ${escapeHtml(client.name)
-        } (${escapeHtml(client.code)})</option > `
+        `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)} (${escapeHtml(client.code)})</option>`
     ),
   ].join("");
 
@@ -473,7 +472,7 @@ async function openCreate() {
     "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
     "BAIXA TENSÃO E TERRAS",
     "OBRA COMPLEXA"
-  ].map(t => `< option value = "${t}" > ${t}</option > `).join("");
+  ].map(t => `<option value="${t}">${t}</option>`).join("");
 
   let currentTechnicians = [];
 
