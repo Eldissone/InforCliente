@@ -213,6 +213,7 @@ projectRoutes.post(
         referencia: z.string().optional().nullable(),
         lastAccidentDate: z.string().datetime().optional().nullable(),
         activeStaffCount: z.number().int().optional().nullable(),
+        technicians: z.any().optional().nullable(),
         safetyHistory: z.any().optional().nullable(),
         maoDeObraIndireta: z.any().optional().nullable(),
         maoDeObraDireta: z.any().optional().nullable(),
@@ -271,6 +272,7 @@ projectRoutes.post(
         referencia: body.referencia || null,
         lastAccidentDate: body.lastAccidentDate ? new Date(body.lastAccidentDate) : null,
         activeStaffCount: body.activeStaffCount ?? 0,
+        technicians: body.technicians || [],
         safetyHistory: body.safetyHistory || null,
         maoDeObraIndireta: body.maoDeObraIndireta || null,
         maoDeObraDireta: body.maoDeObraDireta || null,
@@ -408,6 +410,7 @@ projectRoutes.patch(
         referencia: z.string().optional().nullable(),
         lastAccidentDate: z.string().datetime().optional().nullable(),
         activeStaffCount: z.number().int().optional().nullable(),
+        technicians: z.any().optional().nullable(),
         safetyHistory: z.any().optional().nullable(),
         maoDeObraIndireta: z.any().optional().nullable(),
         maoDeObraDireta: z.any().optional().nullable(),
@@ -475,6 +478,7 @@ projectRoutes.patch(
           ? { lastAccidentDate: body.lastAccidentDate ? new Date(body.lastAccidentDate) : null }
           : {}),
         ...(body.activeStaffCount !== undefined ? { activeStaffCount: body.activeStaffCount } : {}),
+        ...(body.technicians !== undefined ? { technicians: body.technicians } : {}),
         ...(body.safetyHistory !== undefined ? { safetyHistory: body.safetyHistory } : {}),
         ...(body.maoDeObraIndireta !== undefined ? { maoDeObraIndireta: body.maoDeObraIndireta } : {}),
         ...(body.maoDeObraDireta !== undefined ? { maoDeObraDireta: body.maoDeObraDireta } : {}),
@@ -525,6 +529,21 @@ projectRoutes.post(
     });
 
     return res.json({ photo: updated.directorPhoto });
+  })
+);
+
+projectRoutes.post(
+  "/:id/technician-photo",
+  requireRole(["admin", "operador"]),
+  fileUpload.single("photo"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
+
+    // Just return the path, don't save to DB directly since it's nested in a JSON array
+    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+
+    return res.json({ photo: relativePath });
   })
 );
 

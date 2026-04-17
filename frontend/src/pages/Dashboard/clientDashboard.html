@@ -199,7 +199,7 @@
             <!-- Metrics Grid -->
 
             <div class="mb-8">
-                <div class="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 mb-1">Obra Seleccionado
+                <div class="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 mb-1">Obra Seleccionada
                 </div>
                 <h2 id="currentProjectName" class="text-3xl font-black text-slate-900 tracking-tight">—</h2>
             </div>
@@ -256,8 +256,14 @@
 
 
             <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
+             <style>
+                .bt {
+                    border-top: 2px solid #0b0b0b;
+                    border-bottom: 2px solid #0b0b0b;
+                }
+             </style>
             <div
-                class="glass-card bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
+                class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
                         <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual</h3>
@@ -284,7 +290,7 @@
             </div>
 
             <!-- Analytics de Segurança e Pessoal -->
-            <div class="grid w-full mt-10 grid-cols-1 md:grid-cols-4 gap-6 px-1">
+            <div class="grid w-full mt-10 mb-10 grid-cols-1 md:grid-cols-4 gap-6 px-1">
 
                 <!-- Recorde de Segurança -->
                 <div
@@ -449,6 +455,14 @@
                         <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
                     </div>
                     <div id="progressGauge" class="flex justify-center w-full grow pt-4"></div>
+                </div>
+            </div>
+
+            <!-- Equipa Técnica Adicional -->
+            <div id="techTeamSection" class="hidden">
+                <h3 class="font-bold text-slate-900 mb-6 px-2 text-xl">Equipa Técnica Adicional</h3>
+                <div id="techTeamContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-10">
+                    <!-- Cards inseridos via JS -->
                 </div>
             </div>
 
