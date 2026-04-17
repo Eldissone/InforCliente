@@ -223,7 +223,12 @@ clientRoutes.get(
       where: { id },
       include: {
         tags: { select: { tag: true } },
-        users: { select: { email: true }, take: 1 },
+        users: { 
+          select: { 
+            user: { select: { email: true } } 
+          }, 
+          take: 1 
+        },
         projects: {
           select: {
             id: true,

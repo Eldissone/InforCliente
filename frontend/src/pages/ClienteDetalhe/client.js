@@ -197,15 +197,15 @@ function wireFab() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo</label>
-            <input id="i_type" class="w-full rounded-lg border-slate-300" placeholder="SupportTicket" />
+            <input id="i_type" class="w-full rounded-lg border-slate-300" placeholder="Pedido de Suporte" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Lead</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Identificação</label>
             <input id="i_lead" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Título</label>
-            <input id="i_title" class="w-full rounded-lg border-slate-300" placeholder="Executive Review" />
+            <input id="i_title" class="w-full rounded-lg border-slate-300" placeholder="Organizar Arquivo" />
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>

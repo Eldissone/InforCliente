@@ -188,8 +188,12 @@ dashboardRoutes.get(
           name: p.directorObra,
           photo: p.directorPhoto,
           phone: p.directorPhone,
-          email: p.directorEmail
-        }
+          email: p.directorEmail,
+          photo: p.directorPhoto,
+        },
+        lastAccidentDate: p.lastAccidentDate,
+        activeStaffCount: p.activeStaffCount,
+        safetyHistory: p.safetyHistory,
       };
     });
 

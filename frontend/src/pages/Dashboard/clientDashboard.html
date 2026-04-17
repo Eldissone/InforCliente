@@ -258,33 +258,62 @@
                 </div>
             </div>
 
-            <!-- Stats Grid -->
-            <div class="grid mt-10 grid-cols-1 md:grid-cols-4 gap-6 border">
+            <!-- Analytics de Segurança e Pessoal -->
+            <div class="grid mt-10 grid-cols-1 md:grid-cols-4 gap-6 px-1">
+
+                <!-- Recorde de Segurança -->
                 <div
-                    class="md:col-span-2 bg-[#F8FAFC] p-8 rounded-3xl border border-slate-100 flex flex-col justify-between min-h-[240px] relative overflow-hidden group">
+                    class="glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
                     <div class="z-10">
-                        <span class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">Analytics</span>
-                        <h3 class="text-2xl font-bold text-slate-900 mt-2">Acidentes em Obras</h3>
+                        <h3 class="text-2xl font-bold text-slate-900 mt-6">Acidentes em Obra</h3>
+
+                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Registo de
+                            Segurança</span>
+                        <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter" id="dashboardSafetyDays">0
+                        </h3>
+                        <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Dias sem Acidentes
+                        </p>
                     </div>
-               
-                    <span
-                        class="material-symbols-outlined absolute -right-6 -bottom-6 text-[140px] text-slate-200/50 group-hover:text-blue-500/10 group-hover:rotate-12 transition-all duration-700">insights</span>
+                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <span class="material-symbols-outlined text-[100px] text-emerald-600">verified</span>
+                    </div>
                 </div>
 
-                <div class="bg-slate-900 p-8 rounded-3xl flex flex-col justify-between shadow-2xl shadow-slate-900/20">
-                   
-                </div>
-
-                <div class="bg-white p-8 rounded-3xl border border-slate-100 flex flex-col justify-between shadow-sm">
-                    <div class="flex justify-between items-start">
-                        <div class="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
-                            <span class="material-symbols-outlined">engineering</span>
+                <!-- Equipa Operativa -->
+                <div
+                    class="md:col-span-1 glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
+                    <div class="z-10">
+                        <div class="flex justify-between items-start">
+                            <div
+                                class="h-14 w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
+                                <span class="material-symbols-outlined text-3xl">engineering</span>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Equipa
+                                Operativa</span>
+                            <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter"
+                                id="dashboardActiveStaffCount">0</h3>
+                            <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Pessoal Activo
+                                em Campo</p>
                         </div>
                     </div>
-                    <div>
-                        <span class="text-xs text-slate-400 font-bold uppercase tracking-widest">Equipe Operativa</span>
-                        <h3 class="text-2xl font-bold text-slate-900 mt-1">_ Activos</h3>
+                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <span class="material-symbols-outlined text-[100px] text-slate-200">groups</span>
                     </div>
+                </div>
+
+                <!-- Card de Suporte/Placeholder (Para fechar o grid de 4 colunas) -->
+                <div
+                    class="glass-card bg-slate-50/50 p-8 rounded-[2.5rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center group hover:border-blue-400 transition-all">
+                    <div
+                        class="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors shadow-sm mb-4">
+                        <span class="material-symbols-outlined">add</span>
+                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-blue-600">Novas
+                        Métricas</span>
+                    <p class="text-[9px] text-slate-400 mt-1">Brevemente disponíveis no seu portal.</p>
                 </div>
             </div>
 

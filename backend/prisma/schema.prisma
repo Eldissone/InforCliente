@@ -101,6 +101,9 @@ model Project {
   directorPhone       String?
   directorEmail       String?
   referencia          String?
+  lastAccidentDate    DateTime?
+  activeStaffCount    Int?                 @default(0)
+  safetyHistory       Json?                // Histórico mensal: [ { month: 'Jan', count: 0 }, ... ]
   maoDeObraIndireta   Json?
   maoDeObraDireta     Json?
   equipamentos        Json?

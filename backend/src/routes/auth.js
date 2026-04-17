@@ -35,16 +35,17 @@ authRoutes.post(
       }
     });
 
-    // Buscar se existem obras no sistema (para Admin)
-    const projectsCount = (user.role === 'admin' || user.role === 'operador')
+    // Buscar se existem obras no sistema (para Admin e Operador verem tudo)
+    const isAdmin = user.role === 'admin' || user.role === 'operador';
+    const projectsCount = isAdmin
       ? await prisma.project.count()
       : accounts.length;
 
     // Buscar informações do cliente para o nome da empresa
     const primaryClient = user.clientId ? await prisma.client.findUnique({ where: { id: user.clientId }, select: { name: true } }) : null;
 
-    if (projectsCount > 0) {
-      // Forçar redirecionamento para tela de boas-vindas com seleção de obra
+    // Apenas forçar seleção para Clientes que tenham obras vinculadas
+    if (!isAdmin && projectsCount > 0) {
       return res.json({
         status: "MULTI_ACCOUNT",
         user: { 
@@ -152,12 +153,62 @@ authRoutes.get(
           code: true,
           status: true,
           location: true,
+          lastAccidentDate: true,
+          activeStaffCount: true,
+          safetyHistory: true,
           client: { select: { id: true, name: true, profilePic: true } }
       },
       orderBy: { name: "asc" }
     });
 
-    return res.json({ items: projects });
+    // Calcular métricas globais para o Analytics da tela de boas-vindas
+    let totalActiveStaff = 0;
+    let mostRecentAccident = null;
+    const monthlyAccidents = {}; // { "Jan": 2, "Fev": 1, ... }
+
+    projects.forEach(p => {
+        totalActiveStaff += (p.activeStaffCount || 0);
+        
+        if (p.lastAccidentDate) {
+            const d = new Date(p.lastAccidentDate);
+            if (!mostRecentAccident || d > mostRecentAccident) {
+                mostRecentAccident = d;
+            }
+        }
+
+        // Agregar histórico se existir
+        if (p.safetyHistory && Array.isArray(p.safetyHistory)) {
+            p.safetyHistory.forEach(entry => {
+                if (entry.month && entry.count !== undefined) {
+                    monthlyAccidents[entry.month] = (monthlyAccidents[entry.month] || 0) + entry.count;
+                }
+            });
+        }
+    });
+
+    let daysWithoutAccidents = 0;
+    if (mostRecentAccident) {
+        const diff = Date.now() - mostRecentAccident.getTime();
+        daysWithoutAccidents = Math.floor(diff / (1000 * 60 * 60 * 24));
+    } else {
+        // Se nunca houve acidente, podemos mostrar um número baseado na data de criação mais antiga
+        // mas por agora vamos manter 0 ou um placeholder positivo
+        daysWithoutAccidents = projects.length > 0 ? 30 : 0; 
+    }
+
+    // Converter monthlyAccidents de volta para array ordenado se necessário, ou enviar objeto
+    const consolidatedHistory = Object.entries(monthlyAccidents).map(([month, count]) => ({ month, count }));
+
+    return res.json({ 
+        items: projects,
+        stats: {
+            totalActiveStaff,
+            daysWithoutAccidents,
+            safetyHistory: consolidatedHistory.length > 0 ? consolidatedHistory : [
+                { month: "Jan", count: 0 }, { month: "Fev", count: 0 }, { month: "Mar", count: 0 }
+            ]
+        }
+    });
   })
 );
 

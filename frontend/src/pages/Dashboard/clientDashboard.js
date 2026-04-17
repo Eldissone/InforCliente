@@ -7,7 +7,8 @@ let dashboardData = null;
 let charts = {
   finances: null,
   stock: null,
-  progress: null
+  progress: null,
+  safety: null
 };
 
 let state = {
@@ -169,6 +170,9 @@ function updateMetrics(data) {
 
   // Director Info (if on "Resumo da obra" tab or just update anyway)
   renderDirectorInfo(currentProject);
+
+  // Safety & Staff Analytics
+  renderSafetyAnalytics(data);
 }
 
 function renderDirectorInfo(project) {
@@ -344,6 +348,121 @@ function renderProgressGauge(progress) {
 
   charts.progress = new ApexCharts(container, options);
   charts.progress.render().catch(err => console.error("Error rendering progress gauge:", err));
+}
+ 
+function renderSafetyAnalytics(data) {
+    const { projects } = data;
+    
+    // 1. Agregação de Dados
+    let totalActiveStaff = 0;
+    let mostRecentAccident = null;
+    const monthlyAccidents = {}; // { "Jan": 2, ... }
+
+    projects.forEach(p => {
+        totalActiveStaff += (p.activeStaffCount || 0);
+        
+        if (p.lastAccidentDate) {
+            const d = new Date(p.lastAccidentDate);
+            if (!mostRecentAccident || d > mostRecentAccident) {
+                mostRecentAccident = d;
+            }
+        }
+
+        // Agregar histórico
+        if (p.safetyHistory && Array.isArray(p.safetyHistory)) {
+            p.safetyHistory.forEach(entry => {
+                if (entry.month && entry.count !== undefined) {
+                    monthlyAccidents[entry.month] = (monthlyAccidents[entry.month] || 0) + entry.count;
+                }
+            });
+        }
+    });
+
+    // 2. Calcular Dias sem Acidentes
+    let daysWithoutAccidents = 0;
+    if (mostRecentAccident) {
+        const diff = Date.now() - mostRecentAccident.getTime();
+        daysWithoutAccidents = Math.floor(diff / (1000 * 60 * 60 * 24));
+    } else {
+        daysWithoutAccidents = projects.length > 0 ? 30 : 0; // Fallback se nunca houve
+    }
+
+    // 3. Atualizar UI Textual
+    document.getElementById("dashboardSafetyDays").textContent = daysWithoutAccidents;
+    document.getElementById("dashboardActiveStaffCount").textContent = totalActiveStaff;
+
+    // 4. Preparar Gráfico
+    const consolidatedHistory = Object.entries(monthlyAccidents).map(([month, count]) => ({ month, count }));
+    if (consolidatedHistory.length === 0) {
+        // Mock se vazio
+        ["Jan", "Fev", "Mar"].forEach(m => consolidatedHistory.push({ month: m, count: 0 }));
+    }
+
+    const options = {
+        chart: {
+            type: 'area',
+            height: 140,
+            sparkline: { enabled: true },
+            animations: { enabled: true, easing: 'easeinout', speed: 800 },
+            fontFamily: 'Inter, sans-serif',
+            dropShadow: {
+                enabled: true,
+                top: 8,
+                left: 0,
+                blur: 8,
+                opacity: 0.1,
+                color: '#3b82f6'
+            }
+        },
+        stroke: { curve: 'smooth', width: 4, lineCap: 'round' },
+        fill: {
+            type: 'gradient',
+            gradient: { 
+                shadeIntensity: 1, 
+                opacityFrom: 0.5, 
+                opacityTo: 0.0, 
+                stops: [0, 90],
+                colorStops: [
+                    { offset: 0, color: '#3b82f6', opacity: 0.4 },
+                    { offset: 100, color: '#3b82f6', opacity: 0 }
+                ]
+            }
+        },
+        markers: {
+            size: 4,
+            colors: ['#3b82f6'],
+            strokeColors: '#fff',
+            strokeWidth: 2,
+            hover: { size: 6 }
+        },
+        series: [{
+            name: 'Acidentes',
+            data: consolidatedHistory.map(h => h.count)
+        }],
+        xaxis: {
+            categories: consolidatedHistory.map(h => h.month),
+            crosshairs: { show: false }
+        },
+        colors: ['#3b82f6'],
+        tooltip: { 
+            theme: 'light',
+            y: { formatter: (val) => `${val} incidente(s)` },
+            fixed: { enabled: false },
+            x: { show: true },
+            marker: { show: false }
+        }
+    };
+
+    const container = document.querySelector("#dashboardSafetyChart");
+    if (!container) return;
+
+    if (charts.safety) {
+        charts.safety.destroy();
+        charts.safety = null;
+    }
+
+    charts.safety = new ApexCharts(container, options);
+    charts.safety.render();
 }
 
 async function loadProgressBreakdown(projectId) {

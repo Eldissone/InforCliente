@@ -288,6 +288,10 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Previsão Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" value="${p.dueDate ? p.dueDate.split('T')[0] : ''}" /></div>
+
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nº Funcionários Ativos</label><input id="p_staff" type="number" class="w-full rounded-lg border-slate-300" value="${p.activeStaffCount || 0}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Último Acidente</label><input id="p_last_accident" type="date" class="w-full rounded-lg border-slate-300" value="${p.lastAccidentDate ? p.lastAccidentDate.split('T')[0] : ''}" /></div>
       </div>
     `,
     onPrimary: async ({ close, panel }) => {
@@ -316,6 +320,8 @@ async function openEdit(id) {
             directorEmail: v("p_dir_email") || null,
             directorPhoto: v("p_dir_photo_path") || null,
             referencia: v("p_referencia") || null,
+            activeStaffCount: Number(v("p_staff") || 0),
+            lastAccidentDate: toIsoDate(v("p_last_accident")),
           },
         });
         toast("Obra atualizada com sucesso", { type: "success" });
@@ -425,6 +431,10 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
+
+        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nº Funcionários Ativos</label><input id="p_staff" type="number" class="w-full rounded-lg border-slate-300" value="0" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Último Acidente</label><input id="p_last_accident" type="date" class="w-full rounded-lg border-slate-300" /></div>
       </div> 
     `,
     onPrimary: async ({ close, panel }) => {
@@ -451,6 +461,8 @@ async function openCreate() {
             directorPhone: v("p_dir_phone") || null,
             directorEmail: v("p_dir_email") || null,
             referencia: v("p_referencia") || null,
+            activeStaffCount: Number(v("p_staff") || 0),
+            lastAccidentDate: toIsoDate(v("p_last_accident")),
           },
         });
 

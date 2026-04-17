@@ -68,13 +68,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
           overlay.style.display = "flex";
 
-          // Em vez de só enviar userId, descobrimos qual client esta obra pertence
-          // Mas o backend select-account já faz a verificação
           const authRes = await apiRequest("/auth/select-account", {
             method: "POST",
             body: {
               userId: user.id,
-              clientId: p.client?.id || "" // Precisaríamos do ID do cliente no retorno do backend
+              clientId: p.client?.id || ""
             }
           });
 
