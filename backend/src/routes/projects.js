@@ -1179,6 +1179,59 @@ projectRoutes.get(
   })
 );
 
+projectRoutes.post(
+  "/:id/photos",
+  requireRole(["admin", "operador"]),
+  fileUpload.single("photo"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { description, date } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "NO_FILE_UPLOADED" });
+    }
+
+    // Caminho relativo para a BD
+    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+
+    const photo = await prisma.projectPhoto.create({
+      data: {
+        projectId: id,
+        path: relativePath,
+        description: description || null,
+        createdAt: date ? new Date(date) : undefined
+      }
+    });
+
+    return res.status(201).json(photo);
+  })
+);
+
+projectRoutes.delete(
+  "/:id/photos/:photoId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, photoId } = req.params;
+    
+    const photo = await prisma.projectPhoto.findFirst({
+      where: { id: photoId, projectId: id }
+    });
+
+    if (!photo) {
+      return res.status(404).json({ error: "PHOTO_NOT_FOUND" });
+    }
+
+    await prisma.projectPhoto.delete({ where: { id: photoId } });
+    
+    // Apagar ficheiro físico (opcional, mas recomendado)
+    if (fs.existsSync(photo.path)) {
+      fs.unlinkSync(photo.path);
+    }
+
+    return res.json({ success: true });
+  })
+);
+
 module.exports = { projectRoutes };
 
 // -----------------------------------------------------------------------------

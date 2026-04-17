@@ -21,8 +21,10 @@ let state = {
   files: [],
   photos: [],
   progressTasks: [],
-  galleryStartDate: "",
-  galleryEndDate: ""
+  galleryObraStartDate: "",
+  galleryObraEndDate: "",
+  galleryCampoStartDate: "",
+  galleryCampoEndDate: ""
 };
 
 async function loadDashboardData() {
@@ -60,7 +62,10 @@ async function loadDashboardData() {
     if (state.activeTab === "arquivos" && state.projectId !== "all") {
        await loadFiles();
     }
-    if (state.activeTab === "galeria" && state.projectId !== "all") {
+    if (state.activeTab === "galeria-obra" && state.projectId !== "all") {
+       await loadPhotos();
+    }
+    if (state.activeTab === "galeria-campo" && state.projectId !== "all") {
        await loadPhotos();
     }
   } catch (err) {
@@ -91,6 +96,14 @@ function renderDashboard(projectId) {
 }
 
 function updateTabUI() {
+  // Role-based visibility
+  const user = JSON.parse(localStorage.getItem("inforcliente.user") || "{}");
+  if (user.role === "cliente") {
+    const campoBtn = document.querySelector('[data-tab-trigger="galeria-campo"]');
+    if (campoBtn) campoBtn.classList.add("hidden");
+    if (state.activeTab === "galeria-campo") state.activeTab = "galeria-obra";
+  }
+
   document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
   document.getElementById(`tab-${state.activeTab}`)?.classList.remove("hidden");
 
@@ -116,9 +129,17 @@ function updateTabUI() {
     }
   }
 
-  if (state.activeTab === "galeria") {
+  if (state.activeTab === "galeria-obra") {
     if (state.projectId === "all") {
-      document.getElementById("galleryGrid").innerHTML = `<div class="col-span-full p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver a galeria.</div>`;
+      document.getElementById("galleryObraContainer").innerHTML = `<div class="col-span-full p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver a galeria.</div>`;
+    } else {
+      loadPhotos();
+    }
+  }
+
+  if (state.activeTab === "galeria-campo") {
+    if (state.projectId === "all") {
+      document.getElementById("galleryCampoContainer").innerHTML = `<div class="col-span-full p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver a galeria técnica.</div>`;
     } else {
       loadPhotos();
     }
@@ -862,95 +883,111 @@ function getDateCategory(dateStr) {
 
 async function loadPhotos() {
   if (state.projectId === "all") return;
-  const grid = document.getElementById("galleryContainer");
+  
+  const containerObra = document.getElementById("galleryObraContainer");
+  const containerCampo = document.getElementById("galleryCampoContainer");
+  
+  try {
+    if (containerObra) containerObra.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
+    if (containerCampo) containerCampo.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
+    
+    const res = await apiRequest(`/projects/${state.projectId}/photos`);
+    const allPhotos = res.items || [];
+    
+    // 1. Fotos da Obra (movementId is null)
+    let photosObra = allPhotos.filter(p => !p.movementId);
+    if (state.galleryObraStartDate) {
+      const gs = new Date(state.galleryObraStartDate).getTime();
+      photosObra = photosObra.filter(p => new Date(p.createdAt).getTime() >= gs);
+    }
+    if (state.galleryObraEndDate) {
+      const ge = new Date(state.galleryObraEndDate);
+      ge.setHours(23, 59, 59, 999);
+      photosObra = photosObra.filter(p => new Date(p.createdAt).getTime() <= ge.getTime());
+    }
+
+    // 2. Fotos de Campo (movementId is NOT null)
+    let photosCampo = allPhotos.filter(p => !!p.movementId);
+    if (state.galleryCampoStartDate) {
+      const gs = new Date(state.galleryCampoStartDate).getTime();
+      photosCampo = photosCampo.filter(p => new Date(p.createdAt).getTime() >= gs);
+    }
+    if (state.galleryCampoEndDate) {
+      const ge = new Date(state.galleryCampoEndDate);
+      ge.setHours(23, 59, 59, 999);
+      photosCampo = photosCampo.filter(p => new Date(p.createdAt).getTime() <= ge.getTime());
+    }
+
+    renderGallerySection("galleryObraContainer", photosObra, false);
+    renderGallerySection("galleryCampoContainer", photosCampo, true);
+
+  } catch (err) {
+    console.error(err);
+    if (containerObra) containerObra.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-400">Erro ao carregar fotos.</div>`;
+  }
+}
+
+function renderGallerySection(containerId, photos, isCampo) {
+  const grid = document.getElementById(containerId);
   if (!grid) return;
 
-  try {
-    grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
-    
-    // Fetch all photos for this project
-    const res = await apiRequest(`/projects/${state.projectId}/photos`);
-    let photos = res.items || [];
-    
-    // Filter locally by date
-    if (state.galleryStartDate) {
-      const gs = new Date(state.galleryStartDate).getTime();
-      photos = photos.filter(p => new Date(p.createdAt).getTime() >= gs);
-    }
-    if (state.galleryEndDate) {
-      const ge = new Date(state.galleryEndDate).getTime();
-      // To include the whole End Date, add 24 hours to its time logic if needed 
-      // or set Hours to 23:59:59. For simplicity:
-      const endD = new Date(state.galleryEndDate);
-      endD.setHours(23, 59, 59, 999);
-      photos = photos.filter(p => new Date(p.createdAt).getTime() <= endD.getTime());
-    }
-    
-    if (photos.length === 0) {
-      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotográfico encontrado.</div>`;
-      return;
-    }
-    
-    // Group photos
-    const groups = {};
-    photos.forEach(p => {
-       const cat = getDateCategory(p.createdAt);
-       if (!groups[cat]) groups[cat] = [];
-       groups[cat].push(p);
-    });
-
-    const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
-    
-    grid.innerHTML = "";
-    order.forEach(cat => {
-       if (!groups[cat] || groups[cat].length === 0) return;
-       
-       let html = `
-         <div class="gallery-group mb-8">
-            <button class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-800 hover:text-slate-600 transition-colors w-full text-left focus:outline-none" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('span').innerText = this.nextElementSibling.classList.contains('hidden') ? 'chevron_right' : 'expand_more'">
-               <span class="material-symbols-outlined text-lg">expand_more</span>
-               ${cat}
-            </button>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4">
-       `;
-       
-       groups[cat].forEach(p => {
-         const url = `${getApiBaseUrl()}/${p.path}`;
-         
-         const matName = p.movement && p.movement.material ? p.movement.material.name : null;
-         const dynDesc = p.description || matName || "Registo Fotográfico";
-         const safeDesc = escapeHtml(dynDesc);
-         const condStr = p.condition ? ` <span class="bg-slate-100 text-slate-500 text-[8px] px-1 py-0.5 rounded ml-1 font-bold">${p.condition}</span>` : "";
-
-         // Visual semelhante ao Windows Explorer: miniatura/ícone à esquerda, 3 linhas de texto à direita
-         html += `
-          <a href="${url}" target="_blank" class="group flex flex-row items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-            <!-- Miniatura da Foto -->
-            <div class="w-10 h-10 shrink-0 rounded overflow-hidden bg-slate-200 shadow-sm relative">
-                <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-0" />
-            </div>
-            <!-- Detalhes estilo File Explorer -->
-            <div class="flex-1 min-w-0 flex flex-col justify-center">
-               <p class="text-xs font-semibold text-slate-900 truncate leading-tight flex items-center" title="${safeDesc}">
-                  <span class="truncate">${safeDesc}</span>${condStr}
-               </p>
-               <p class="text-[10px] font-medium text-slate-500 truncate leading-tight">
-                  Ficheiro JPG
-               </p>
-               <p class="text-[10px] font-medium text-slate-400 truncate leading-tight">
-                  ${formatDateBR(p.createdAt)}
-               </p>
-            </div>
-          </a>
-         `;
-       });
-       
-       html += `</div></div>`;
-       grid.insertAdjacentHTML("beforeend", html);
-    });
-  } catch (err) {
-    grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-400">Erro ao carregar a galeria</div>`;
+  if (photos.length === 0) {
+    grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest bg-white rounded-[2rem] border border-dashed border-slate-200">Sem registos encontrados nesta galeria</div>`;
+    return;
   }
+
+  // Group photos
+  const groups = {};
+  photos.forEach(p => {
+     const cat = getDateCategory(p.createdAt);
+     if (!groups[cat]) groups[cat] = [];
+     groups[cat].push(p);
+  });
+
+  const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
+  
+  grid.innerHTML = "";
+  order.forEach(cat => {
+     if (!groups[cat] || groups[cat].length === 0) return;
+     
+     const groupId = `${containerId}-${cat.replace(/\s+/g, '-').toLowerCase()}`;
+     
+     let html = `
+       <div class="gallery-group mb-4">
+          <button class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-800 hover:text-slate-600 transition-colors w-full text-left focus:outline-none group/btn" 
+                  onclick="const list = document.getElementById('${groupId}'); list.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-[-90deg]')">
+             <span class="material-symbols-outlined text-lg transition-transform duration-300 chevron">expand_more</span>
+             ${cat}
+          </button>
+          
+          <div id="${groupId}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 transition-all duration-500">
+     `;
+     
+     groups[cat].forEach(p => {
+       const url = `${getApiBaseUrl()}/${p.path}`;
+       const matName = p.movement?.material?.name || p.description || "Registo Fotográfico";
+       const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
+
+       html += `
+         <a href="${url}" target="_blank" class="group flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
+            <!-- Thumbnail -->
+            <div class="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-slate-100 shadow-sm border border-slate-100">
+                <img src="${url}" class="w-full h-full object-cover transition-transform group-hover:scale-110" loading="lazy" />
+            </div>
+            
+            <!-- Metadata -->
+            <div class="flex-1 min-w-0">
+               <p class="text-[11px] font-bold text-slate-900 truncate leading-tight mb-0.5" title="${escapeHtml(matName)}">${escapeHtml(matName)}</p>
+               <p class="text-[9px] font-medium text-slate-400 uppercase tracking-tighter leading-none mb-1">Ficheiro JPG</p>
+               <p class="text-[9px] font-semibold text-slate-500 leading-none">${dateStr}</p>
+            </div>
+         </a>
+       `;
+     });
+     
+     html += `</div></div>`;
+     grid.insertAdjacentHTML("beforeend", html);
+  });
 }
 
 /* =================================================================================
@@ -1046,14 +1083,23 @@ function wireEvents() {
   document.getElementById("filterStart")?.addEventListener("change", updateDates);
   document.getElementById("filterEnd")?.addEventListener("change", updateDates);
 
-  const updateGalleryDates = () => {
-    state.galleryStartDate = document.getElementById("galleryFilterStart")?.value || "";
-    state.galleryEndDate = document.getElementById("galleryFilterEnd")?.value || "";
-    if (state.activeTab === "galeria") loadPhotos();
+  // Gallery Filters - Obra
+  const updateGalleryObraDates = () => {
+    state.galleryObraStartDate = document.getElementById("galleryObraFilterStart")?.value || "";
+    state.galleryObraEndDate = document.getElementById("galleryObraFilterEnd")?.value || "";
+    if (state.activeTab === "galeria-obra") loadPhotos();
   };
+  document.getElementById("galleryObraFilterStart")?.addEventListener("change", updateGalleryObraDates);
+  document.getElementById("galleryObraFilterEnd")?.addEventListener("change", updateGalleryObraDates);
 
-  document.getElementById("galleryFilterStart")?.addEventListener("change", updateGalleryDates);
-  document.getElementById("galleryFilterEnd")?.addEventListener("change", updateGalleryDates);
+  // Gallery Filters - Campo
+  const updateGalleryCampoDates = () => {
+    state.galleryCampoStartDate = document.getElementById("galleryCampoFilterStart")?.value || "";
+    state.galleryCampoEndDate = document.getElementById("galleryCampoFilterEnd")?.value || "";
+    if (state.activeTab === "galeria-campo") loadPhotos();
+  };
+  document.getElementById("galleryCampoFilterStart")?.addEventListener("change", updateGalleryCampoDates);
+  document.getElementById("galleryCampoFilterEnd")?.addEventListener("change", updateGalleryCampoDates);
 
   // Tabs
   document.querySelectorAll("[data-tab-trigger]").forEach(btn => {

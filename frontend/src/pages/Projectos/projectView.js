@@ -224,6 +224,7 @@ let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
 let stockState = { items: [], filters: { search: "", category: "", condition: "", status: "", warehouse: "" } };
+let galleryState = { items: [] }; // Cache para fotos da galeria
 
 function updateOperationStatus(summary) {
   const mapping = {
@@ -893,6 +894,7 @@ function wireTabs() {
       if (tabId === "files") loadFiles();
       if (tabId === "relatorio") loadProgressTasks();
       if (tabId === "stock") loadStock();
+      if (tabId === "galeria_obra") loadGallery();
     });
   });
 
@@ -2173,7 +2175,22 @@ async function init() {
   wireProgressTasks();
   wirePayments();
   wireStock();
-  applyRoleVisibility();
+  wireGallery();
+
+  // Photo Previews
+  document.addEventListener("click", e => {
+    const photoId = e.target.closest("[data-preview-photo]")?.getAttribute("data-preview-photo");
+    if (photoId) openPhotoPreview(photoId);
+  });
+
+  // Redirecionamento automático para cliente
+  const user = getSessionUser();
+  if (user?.role === "cliente" || user?.role === "client") {
+    const tabBtn = el("tabTriggerGaleria");
+    if (tabBtn) tabBtn.click();
+  } else {
+    applyRoleVisibility();
+  }
 }
 
 function openPreview(fileId) {
@@ -2209,6 +2226,34 @@ function openPreview(fileId) {
 
   el("previewPanel").classList.add("open");
   el("previewBackdrop").classList.add("open");
+}
+
+function openPhotoPreview(photoId) {
+  const photo = galleryState.items.find(p => p.id === photoId);
+  if (!photo) return;
+
+  const backdrop = el("previewBackdrop");
+  const panel = el("previewPanel");
+  const body = el("previewBody");
+  const nameEl = el("previewFileName");
+  const metaEl = el("previewFileMeta");
+  const dlBtn = el("previewDownloadBtn");
+
+  const url = `${getApiBaseUrl()}/${photo.path}`;
+  nameEl.textContent = photo.description || "Foto de Obra";
+  metaEl.textContent = `Carregada em ${formatDateBR(photo.createdAt)}`;
+  dlBtn.href = url;
+  dlBtn.download = photo.description || "foto_obra.jpg";
+
+  body.innerHTML = `
+    <div class="flex flex-col items-center gap-6 w-full">
+      <img src="${url}" class="max-w-full max-h-[70vh] rounded-2xl shadow-2xl border border-white" />
+      ${photo.description ? `<p class="text-sm text-slate-600 bg-white p-4 rounded-xl border border-slate-100 italic">"${photo.description}"</p>` : ""}
+    </div>
+  `;
+
+  backdrop.classList.add("open");
+  panel.classList.add("open");
 }
 
 function wirePreview() {
@@ -3149,4 +3194,126 @@ async function loadStockGallery() {
   } catch (err) {
     grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar galeria</div>`;
   }
+}
+
+// =============================================================================
+// GESTÃO DA GALERIA DA OBRA (ADMIN)
+// =============================================================================
+
+async function loadGallery() {
+  const grid = el("adminGalleryGrid");
+  const empty = el("noPhotosMsg");
+  if (!grid) return;
+
+  grid.innerHTML = renderLoadingRow(4); // Adaptado para grid
+  
+  try {
+    const id = getProjectId();
+    const res = await apiRequest(`/projects/${encodeURIComponent(id)}/photos`);
+    const photos = (res.items || []).filter(p => !p.movementId); // Apenas fotos gerais
+    galleryState.items = photos; // Guardar em cache para preview
+
+    if (photos.length === 0) {
+      grid.innerHTML = "";
+      empty?.classList.remove("hidden");
+      return;
+    }
+
+    empty?.classList.add("hidden");
+    grid.innerHTML = photos.map(p => {
+      const url = `${getApiBaseUrl()}/${p.path}`;
+      return `
+        <div class="bg-white rounded-[32px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+          <div class="aspect-video relative overflow-hidden bg-slate-100">
+            <img src="${url}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+            <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+               <button data-preview-photo="${p.id}" class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all">
+                  <span class="material-symbols-outlined text-lg">visibility</span>
+               </button>
+               <button data-role-visible="admin,supervisor,tecnico" data-delete-photo="${p.id}" class="w-10 h-10 rounded-xl bg-red-500/80 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-600 transition-all">
+                  <span class="material-symbols-outlined text-lg">delete</span>
+               </button>
+            </div>
+          </div>
+          <div class="p-5">
+            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-2" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descrição')}</p>
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">${formatDateBR(p.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    // Wire delete buttons
+    grid.querySelectorAll("[data-delete-photo]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Tem certeza que deseja apagar esta foto da galeria?")) return;
+        const photoId = btn.dataset.deletePhoto;
+        try {
+          await apiRequest(`/projects/${encodeURIComponent(id)}/photos/${encodeURIComponent(photoId)}`, { method: "DELETE" });
+          toast("Foto apagada!", { type: "success" });
+          loadGallery();
+        } catch (err) {
+          toast("Erro ao apagar foto", { type: "error" });
+        }
+      });
+    });
+
+  } catch (err) {
+    grid.innerHTML = `<div class="col-span-full py-20 text-center text-red-500 font-bold">Erro ao carregar fotos</div>`;
+  }
+}
+
+function wireGallery() {
+  el("addPhotoBtn")?.addEventListener("click", () => {
+    const id = getProjectId();
+    openModal({
+      title: "Novo Registo Fotográfico",
+      primaryLabel: "Carregar Foto",
+      contentHtml: `
+        <div class="space-y-4">
+          <div class="border-2 border-dashed border-slate-200 rounded-3xl p-10 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-slate-50 transition-colors cursor-pointer relative" onclick="this.querySelector('input').click()">
+            <span class="material-symbols-outlined text-4xl text-slate-300 mb-3">add_a_photo</span>
+            <p class="text-sm font-bold text-slate-500">Clique para selecionar ou arraste a foto</p>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">JPG, PNG até 10MB</p>
+            <input id="gal_input" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="const f=this.files[0]; if(f) { this.previousElementSibling.previousElementSibling.innerText='photo'; this.previousElementSibling.innerText=f.name; }" />
+          </div>
+          <div>
+             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Descrição da Foto</label>
+             <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-[#2afc8d] transition-all" rows="3" placeholder="O que esta imagem representa?"></textarea>
+          </div>
+          <div>
+             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Data do Registo (Opcional)</label>
+             <input id="gal_date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full rounded-xl border-slate-200 bg-slate-50 text-sm" />
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, panel }) => {
+        const file = panel.querySelector("#gal_input")?.files?.[0];
+        if (!file) {
+          toast("Por favor, selecione uma imagem", { type: "error" });
+          return;
+        }
+        const description = panel.querySelector("#gal_desc")?.value;
+        const date = panel.querySelector("#gal_date")?.value;
+        const btn = panel.querySelector("[data-primary]");
+
+        try {
+          setButtonLoading(btn, true);
+          await apiUpload(`/projects/${encodeURIComponent(id)}/photos`, {
+            file,
+            fieldName: "photo",
+            extraFields: { description, date }
+          });
+          toast("Foto carregada com sucesso!", { type: "success" });
+          close();
+          loadGallery();
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast("Erro ao carregar foto", { type: "error" });
+        }
+      }
+    });
+  });
 }

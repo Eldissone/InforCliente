@@ -105,9 +105,13 @@
             <button data-tab-trigger="obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Informação
                 da Obra</button>
-            <button data-tab-trigger="galeria"
+            <button data-tab-trigger="galeria-obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra
+            </button>
+            <button data-tab-trigger="galeria-campo"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
+                de Campo
             </button>
         </div>
 
@@ -173,7 +177,7 @@
 
             <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
             <div
-                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
+                class="glass-card bg-white mt-10 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
                         <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual</h3>
@@ -196,6 +200,65 @@
                         <tbody id="progressBreakdownTbody" class="divide-y divide-slate-50 text-slate-600">
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Analytics de Segurança e Pessoal -->
+            <div class="grid w-full mt-10 grid-cols-1 md:grid-cols-4 gap-6 px-1">
+
+                <!-- Recorde de Segurança -->
+                <div
+                    class="glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
+                    <div class="z-10">
+                        <h3 class="text-2xl font-bold text-slate-900 mt-6">Acidentes em Obra</h3>
+
+                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Registo de
+                            Segurança</span>
+                        <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter" id="dashboardSafetyDays">0
+                        </h3>
+                        <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Dias sem Acidentes
+                        </p>
+                    </div>
+                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <span class="material-symbols-outlined text-[100px] text-emerald-600">verified</span>
+                    </div>
+                </div>
+
+                <!-- Equipa Operativa -->
+                <div
+                    class="md:col-span-1 glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
+                    <div class="z-10">
+                        <div class="flex justify-between items-start">
+                            <div
+                                class="h-14 w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
+                                <span class="material-symbols-outlined text-3xl">engineering</span>
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Equipa
+                                Operativa</span>
+                            <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter"
+                                id="dashboardActiveStaffCount">0</h3>
+                            <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Pessoal Activo
+                                em Campo</p>
+                        </div>
+                    </div>
+                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <span class="material-symbols-outlined text-[100px] text-slate-200">groups</span>
+                    </div>
+                </div>
+
+                <!-- Card de Suporte/Placeholder (Para fechar o grid de 4 colunas) -->
+                <div
+                    class="glass-card bg-slate-50/50 p-8 rounded-[2.5rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center group hover:border-blue-400 transition-all">
+                    <div
+                        class="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors shadow-sm mb-4">
+                        <span class="material-symbols-outlined">add</span>
+                    </div>
+                    <span
+                        class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-blue-600">Novas
+                        Métricas</span>
+                    <p class="text-[9px] text-slate-400 mt-1">Brevemente disponíveis no seu portal.</p>
                 </div>
             </div>
 
@@ -258,64 +321,7 @@
                 </div>
             </div>
 
-            <!-- Analytics de Segurança e Pessoal -->
-            <div class="grid mt-10 grid-cols-1 md:grid-cols-4 gap-6 px-1">
-
-                <!-- Recorde de Segurança -->
-                <div
-                    class="glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
-                    <div class="z-10">
-                        <h3 class="text-2xl font-bold text-slate-900 mt-6">Acidentes em Obra</h3>
-
-                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Registo de
-                            Segurança</span>
-                        <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter" id="dashboardSafetyDays">0
-                        </h3>
-                        <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Dias sem Acidentes
-                        </p>
-                    </div>
-                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <span class="material-symbols-outlined text-[100px] text-emerald-600">verified</span>
-                    </div>
-                </div>
-
-                <!-- Equipa Operativa -->
-                <div
-                    class="md:col-span-1 glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
-                    <div class="z-10">
-                        <div class="flex justify-between items-start">
-                            <div
-                                class="h-14 w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
-                                <span class="material-symbols-outlined text-3xl">engineering</span>
-                            </div>
-                        </div>
-                        <div class="mt-6">
-                            <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Equipa
-                                Operativa</span>
-                            <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter"
-                                id="dashboardActiveStaffCount">0</h3>
-                            <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Pessoal Activo
-                                em Campo</p>
-                        </div>
-                    </div>
-                    <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <span class="material-symbols-outlined text-[100px] text-slate-200">groups</span>
-                    </div>
-                </div>
-
-                <!-- Card de Suporte/Placeholder (Para fechar o grid de 4 colunas) -->
-                <div
-                    class="glass-card bg-slate-50/50 p-8 rounded-[2.5rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center group hover:border-blue-400 transition-all">
-                    <div
-                        class="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors shadow-sm mb-4">
-                        <span class="material-symbols-outlined">add</span>
-                    </div>
-                    <span
-                        class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-blue-600">Novas
-                        Métricas</span>
-                    <p class="text-[9px] text-slate-400 mt-1">Brevemente disponíveis no seu portal.</p>
-                </div>
-            </div>
+            
 
         </div> <!-- End tab-dashboard -->
 
@@ -405,24 +411,45 @@
             </div>
         </div>
 
-        <div id="tab-galeria" class="tab-content hidden">
+        <div id="tab-galeria-obra" class="tab-content hidden">
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
                 <div>
                     <h3 class="font-bold text-slate-900">Galeria da Obra</h3>
-                    <p class="text-xs mt-4 text-slate-500">Acompanhamento fotográfico da evolução da obra e armazém.</p>
+                    <p class="text-xs mt-4 text-slate-500">Imagens gerais do progresso e evolução física da obra.</p>
                 </div>
                 <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">
-                    <input type="date" id="galleryFilterStart"
+                    <input type="date" id="galleryObraFilterStart"
                         class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
                     <span class="text-slate-300 font-black px-1">-</span>
-                    <input type="date" id="galleryFilterEnd"
+                    <input type="date" id="galleryObraFilterEnd"
                         class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
                 </div>
             </div>
-            <!-- Container de Grupos da Galeria -->
-            <div id="galleryContainer" class="flex flex-col gap-4 mb-10">
-                <!-- Grupos inseridos dinamicamente (Hoje, Ontem, etc) -->
+            <!-- Container de Grupos da Galeria da Obra -->
+            <div id="galleryObraContainer" class="flex flex-col gap-4 mb-10">
+                <!-- Grupos inseridos dinamicamente -->
+            </div>
+        </div>
+
+        <div id="tab-galeria-campo" class="tab-content hidden">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-900">Galeria de Campo</h3>
+                    <p class="text-xs mt-4 text-slate-500">Registos visuais das intervenções técnicas e recebimento de material.</p>
+                </div>
+                <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">
+                    <input type="date" id="galleryCampoFilterStart"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
+                    <span class="text-slate-300 font-black px-1">-</span>
+                    <input type="date" id="galleryCampoFilterEnd"
+                        class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
+                </div>
+            </div>
+            <!-- Container de Grupos da Galeria de Campo -->
+            <div id="galleryCampoContainer" class="flex flex-col gap-4 mb-10">
+                <!-- Grupos inseridos dinamicamente -->
             </div>
         </div>
     </main>

@@ -130,17 +130,20 @@
 
         <!-- Tab Navigation -->
         <div class="flex items-center gap-4 border-b border-slate-100 mb-10 overflow-x-auto custom-scroll pb-2">
-            <button data-tab-trigger="dashboard"
+            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="dashboard"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-tab-trigger="relatorio"
+            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="relatorio"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Avanço
                 Físico</button>
-            <button data-tab-trigger="files"
+            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="files"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Arquivos</button>
-            <button data-tab-trigger="stock"
+            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="stock"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Stock</button>
+            <button id="tabTriggerGaleria" data-tab-trigger="galeria_obra"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
+                da Obra</button>
         </div>
 
         <!-- Dashboard Tab -->
@@ -769,6 +772,31 @@
                         <!-- Rendered JS -->
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Galeria da Obra Tab -->
+        <div id="tab_galeria_obra" class="tab-content hidden space-y-10">
+            <div
+                class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 bg-[#0F172A] p-10 rounded-2xl text-white">
+                <div>
+                    <h2 class="text-2xl font-bold">Galeria da Obra</h2>
+                    <p class="text-sm text-slate-400 font-medium">Fotos de progresso geral visíveis ao cliente.</p>
+                </div>
+                <button id="addPhotoBtn" data-role-visible="admin,operador"
+                    class="h-14 bg-[#2afc8d] text-slate-900 px-8 rounded-[24px] font-bold flex items-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all">
+                    <span class="material-symbols-outlined text-2xl">add_a_photo</span> Novo Registo
+                </button>
+            </div>
+            
+            <div id="adminGalleryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">
+                <!-- Fotos inseridas via JS -->
+            </div>
+
+            <div id="noPhotosMsg"
+                class="hidden flex flex-col items-center justify-center py-32 bg-slate-50 rounded-2xl border-4 border-dashed border-slate-100">
+                <span class="material-symbols-outlined text-4xl text-slate-300 mb-4">no_photography</span>
+                <p class="text-sm text-slate-400">Nenhuma foto carregada na galeria geral.</p>
             </div>
         </div>
     </main>
