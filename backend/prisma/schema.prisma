@@ -10,12 +10,30 @@ datasource db {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  name         String?
   passwordHash String
   role         Role     @default(leitura)
   createdAt    DateTime @default(now())
   clientId     String?
-  client       Client?  @relation(fields: [clientId], references: [id])
+  client       Client?  @relation("PrimaryClient", fields: [clientId], references: [id])
+  
+  accounts     UserClient[]
 
+  @@index([clientId])
+}
+
+model UserClient {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  role      Role     @default(leitura)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId])
   @@index([clientId])
 }
 
@@ -39,7 +57,8 @@ model Client {
   tags         ClientTag[]
   interactions InteractionEvent[]
   projects     Project[]
-  users        User[]
+  users        UserClient[]
+  primaryUsers User[]             @relation("PrimaryClient")
 
   @@index([name])
   @@index([status])

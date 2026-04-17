@@ -34,7 +34,12 @@ async function loadDashboardData() {
 
     dashboardData = await apiRequest(url);
 
-    if (state.projectId === "all" && dashboardData.projects && dashboardData.projects.length > 0) {
+    // Prioridade para a obra selecionada na tela de boas-vindas
+    const savedProjectId = localStorage.getItem("selected_project_id");
+    if (savedProjectId && dashboardData.projects.find(p => p.id === savedProjectId)) {
+      state.projectId = savedProjectId;
+      localStorage.removeItem("selected_project_id"); // Limpar após uso
+    } else if (state.projectId === "all" && dashboardData.projects && dashboardData.projects.length > 0) {
       state.projectId = dashboardData.projects[0].id;
     }
 

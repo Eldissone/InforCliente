@@ -103,7 +103,7 @@
                 de Arquivos</button>
 
             <button data-tab-trigger="obra"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Resumo
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Informação
                 da Obra</button>
             <button data-tab-trigger="galeria"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
@@ -164,68 +164,19 @@
             <!-- Financial Chart Section -->
             <div class="glass-card p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
                 <div class="mb-6">
-                    <h3 class="font-bold text-slate-900">Análise Financeira por Projecto</h3>
+                    <h3 class="font-bold text-slate-900">Análise Financeira do Projecto</h3>
                     <p class="text-xs text-slate-500">Comparativo entre orçamento contratual e valores liquidados</p>
                 </div>
                 <div id="financialChart" class="w-full"></div>
             </div>
 
-        </div> <!-- End tab-dashboard -->
-
-        <div id="tab-obra" class="tab-content hidden">
-            <!-- Director & Hero Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
-                <div class="lg:col-span-4 h-full">
-                    <div class="glass-card p-8 rounded-[2.5rem] bg-white h-full flex flex-col items-center text-center">
-                        <div
-                            class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-6 w-full text-left">
-                            Direcção Técnica</div>
-                        <div
-                            class="w-24 h-24 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
-                            <img id="directorPhoto" src="/assets/images/placeholder-user.png" alt="Director"
-                                class="w-full h-full object-cover" />
-                        </div>
-                        <h3 id="directorName" class="text-xl font-bold text-slate-900">Eng. —</h3>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Director de Obra</p>
-
-                        <div class="w-full space-y-3 pt-6 border-t border-slate-50">
-                            <div
-                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                                <span class="material-symbols-outlined text-blue-600 text-lg">call</span>
-                                <div>
-                                    <div class="text-[9px] font-black text-slate-400 uppercase">Contacto</div>
-                                    <div id="directorPhone" class="text-xs font-bold text-slate-700">—</div>
-                                </div>
-                            </div>
-                            <div
-                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                                <span class="material-symbols-outlined text-emerald-600 text-lg">mail</span>
-                                <div>
-                                    <div class="text-[9px] font-black text-slate-400 uppercase">Email</div>
-                                    <div id="directorEmail" class="text-xs font-bold text-slate-700 truncate">—</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    class="lg:col-span-8 glass-card p-8 rounded-[2.5rem] bg-white text-center flex flex-col items-center justify-center">
-                    <div class="mb-6 w-full text-left">
-                        <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
-                        <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
-                    </div>
-                    <div id="progressGauge" class="flex justify-center w-full grow pt-4"></div>
-                </div>
-            </div>
 
             <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
             <div
                 class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
-                        <h3 class="font-bold text-slate-900">Avanço Físico Detalhado</h3>
-                        <p class="text-xs text-slate-500">Acompanhamento e custos alocados por rúbrica/tarefas</p>
+                        <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual</h3>
                     </div>
                     <select id="progressGroupFilter"
                         class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">
@@ -250,11 +201,11 @@
 
             <!-- Armazém / Stock with Filters [NEW Layout] -->
             <div
-                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+                class="glass-card mb-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
                 <div class="p-6 border-b border-slate-100">
                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                         <div>
-                            <h3 class="font-bold text-slate-900">Armazém do Cliente</h3>
+                            <h3 class="font-bold text-3xl text-slate-900">Acompanhamento do Armazém</h3>
                             <p class="text-xs text-slate-500">Controlo de materiais e equipamentos disponíveis em
                                 estaleiro.</p>
                         </div>
@@ -306,6 +257,87 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Stats Grid -->
+            <div class="grid mt-10 grid-cols-1 md:grid-cols-4 gap-6 border">
+                <div
+                    class="md:col-span-2 bg-[#F8FAFC] p-8 rounded-3xl border border-slate-100 flex flex-col justify-between min-h-[240px] relative overflow-hidden group">
+                    <div class="z-10">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">Analytics</span>
+                        <h3 class="text-2xl font-bold text-slate-900 mt-2">Acidentes em Obras</h3>
+                    </div>
+               
+                    <span
+                        class="material-symbols-outlined absolute -right-6 -bottom-6 text-[140px] text-slate-200/50 group-hover:text-blue-500/10 group-hover:rotate-12 transition-all duration-700">insights</span>
+                </div>
+
+                <div class="bg-slate-900 p-8 rounded-3xl flex flex-col justify-between shadow-2xl shadow-slate-900/20">
+                   
+                </div>
+
+                <div class="bg-white p-8 rounded-3xl border border-slate-100 flex flex-col justify-between shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div class="h-12 w-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
+                            <span class="material-symbols-outlined">engineering</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 font-bold uppercase tracking-widest">Equipe Operativa</span>
+                        <h3 class="text-2xl font-bold text-slate-900 mt-1">_ Activos</h3>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- End tab-dashboard -->
+
+        <div id="tab-obra" class="tab-content hidden">
+            <!-- Director & Hero Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
+                <div class="lg:col-span-4 h-full">
+                    <div class="glass-card p-8 rounded-[2.5rem] bg-white h-full flex flex-col items-center text-center">
+                        <div
+                            class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-6 w-full text-left">
+                            Direcção Técnica</div>
+                        <div
+                            class="w-24 h-24 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
+                            <img id="directorPhoto" src="/assets/images/placeholder-user.png" alt="Director"
+                                class="w-full h-full object-cover" />
+                        </div>
+                        <h3 id="directorName" class="text-xl font-bold text-slate-900">Eng. —</h3>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Director de Obra</p>
+
+                        <div class="w-full space-y-3 pt-6 border-t border-slate-50">
+                            <div
+                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                <span class="material-symbols-outlined text-blue-600 text-lg">call</span>
+                                <div>
+                                    <div class="text-[9px] font-black text-slate-400 uppercase">Contacto</div>
+                                    <div id="directorPhone" class="text-xs font-bold text-slate-700">—</div>
+                                </div>
+                            </div>
+                            <div
+                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                <span class="material-symbols-outlined text-emerald-600 text-lg">mail</span>
+                                <div>
+                                    <div class="text-[9px] font-black text-slate-400 uppercase">Email</div>
+                                    <div id="directorEmail" class="text-xs font-bold text-slate-700 truncate">—</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    class="lg:col-span-8 glass-card p-8 rounded-[2.5rem] bg-white text-center flex flex-col items-center justify-center">
+                    <div class="mb-6 w-full text-left">
+                        <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
+                        <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
+                    </div>
+                    <div id="progressGauge" class="flex justify-center w-full grow pt-4"></div>
+                </div>
+            </div>
+
+
         </div> <!-- End tab-dashboard -->
 
         <div id="tab-arquivos" class="tab-content hidden">
@@ -348,7 +380,7 @@
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
                 <div>
-                    <h3 class="font-bold text-slate-900">Galeria</h3>
+                    <h3 class="font-bold text-slate-900">Galeria da Obra</h3>
                     <p class="text-xs mt-4 text-slate-500">Acompanhamento fotográfico da evolução da obra e armazém.</p>
                 </div>
                 <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">

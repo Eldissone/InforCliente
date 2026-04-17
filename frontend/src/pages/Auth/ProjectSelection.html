@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-pt">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Boas-vindas | Info Cliente</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+    rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+  <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #2afc8d;
+      --bg-dark: #070a13;
+    }
+
+    body {
+      background: radial-gradient(circle at top right, #1e293b 0%, var(--bg-dark) 100%);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', sans-serif;
+      color: white;
+      overflow: hidden;
+    }
+
+    /* Full-screen Immersive Background */
+    .splash-overlay {
+      position: fixed;
+      inset: 0;
+      background: url('/src/assets/images/auth-bg.png') center/cover no-repeat;
+      /* Se não houver imagem, o gradiente do body assume */
+      opacity: 0.15;
+      z-index: -1;
+    }
+
+    .glow-blob {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      background: var(--primary);
+      filter: blur(180px);
+      opacity: 0.08;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .welcome-container {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+      animation: fadeIn 1s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .header-section {
+      margin-bottom: 60px;
+    }
+
+    .welcome-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin-bottom: 12px;
+      background: linear-gradient(to bottom, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .welcome-subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      font-weight: 500;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    #userNameDisplay {
+      font-family: 'Outfit', sans-serif;
+      font-size: 48px;
+      font-weight: 800;
+      margin-top: 5px;
+      margin-bottom: 25px;
+      background: linear-gradient(135deg, #fff 0%, #2afc8d 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .projects-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+      justify-content: center;
+      max-width: 1200px;
+      width: 100%;
+      padding: 20px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .projects-grid::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .projects-grid::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+
+    .project-card {
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 32px;
+      padding: 32px;
+      width: 320px;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .project-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(42, 252, 141, 0.1) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .project-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .project-card:hover::before {
+      opacity: 1;
+    }
+
+    .client-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+    }
+
+    .project-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .project-location {
+      font-size: 13px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .p-footer {
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .p-status {
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #0F172A;
+      color: #94a3b8;
+    }
+
+    .enter-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--primary);
+      color: #0F172A;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: translateX(-10px);
+      opacity: 0;
+      transition: all 0.4s;
+    }
+
+    .project-card:hover .enter-icon {
+      transform: translateX(0);
+      opacity: 1;
+    }
+
+    .logout-bar {
+      position: fixed;
+      bottom: 30px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .logout-btn {
+      color: white;
+      font-weight: 700;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    #loadingOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 10, 19, 0.95);
+      backdrop-filter: blur(20px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .loader-ring {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(42, 252, 141, 0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="splash-overlay"></div>
+  <div class="glow-blob" style="top: -200px; left: 10%;"></div>
+  <div class="glow-blob" style="bottom: -100px; right: 20%; background: #6366f1; opacity: 0.04;"></div>
+
+  <div class="welcome-container">
+    <div class="header-section">
+      <h1 class="welcome-title">Bem-vindo ao Info Cliente</h1>
+      <h1 id="welcomeUser"></h1>
+
+      <p class="welcome-subtitle">Seleccione a obra que deseja gerir para aceder aos indicadores e relatórios
+        detalhados.</p>
+    </div>
+
+    <div id="projectsList" class="projects-grid">
+      <!-- Logic will inject projects here -->
+    </div>
+
+    <div class="logout-bar">
+      <span>Não é você? <a href="login.html" class="logout-btn">Entrar com outra conta</a></span>
+    </div>
+  </div>
+
+  <div id="loadingOverlay">
+    <div class="loader-ring"></div>
+    <div class="text-[12px] font-black uppercase tracking-[0.4em] text-[#2afc8d] animate-pulse">Iniciando Dashboard...
+    </div>
+  </div>
+
+  <script type="module" src="./projectSelection.js"></script>
+</body>
+
+</html>

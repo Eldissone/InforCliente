@@ -224,7 +224,7 @@ async function openEdit(id) {
 
   const statusOptions = [
     { v: "ACTIVE", l: "Ativo" },
-    { v: "ON_HOLD", l: "Em andamento" },
+    { v: "ON_HOLD", l: "Suspender" },
     { v: "COMPLETED", l: "Concluído" }
   ].map(s => `<option value="${s.v}" ${p.status === s.v ? 'selected' : ''}>${s.l}</option>`).join("");
 
@@ -339,16 +339,16 @@ async function openEdit(id) {
       fileInput?.addEventListener("change", async () => {
         if (!fileInput.files.length) return;
         const file = fileInput.files[0];
-        
+
         try {
           status.textContent = "A carregar...";
           status.className = "text-[9px] font-black text-blue-600 mt-1 animate-pulse";
-          
+
           const result = await apiUpload(`/projects/${encodeURIComponent(id)}/director-photo`, {
             file,
             fieldName: "photo"
           });
-          
+
           pathInput.value = result.photo;
           preview.src = `${getApiBaseUrl()}/${result.photo}?t=${Date.now()}`;
           status.textContent = "Foto atualizada!";
@@ -489,7 +489,7 @@ async function openCreate() {
       fileInput?.addEventListener("change", () => {
         if (!fileInput.files.length) return;
         const file = fileInput.files[0];
-        
+
         // Local preview only
         const reader = new FileReader();
         reader.onload = (e) => {

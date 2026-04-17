@@ -46,10 +46,18 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
   try {
     setButtonLoading(submitBtn, true);
     const res = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
+    
+    if (res.status === "MULTI_ACCOUNT") {
+      localStorage.setItem("pending_auth_user", JSON.stringify(res.user));
+      localStorage.setItem("pending_auth_accounts", JSON.stringify(res.accounts));
+      window.location.href = "ProjectSelection.html" + (getNext() ? `?next=${getNext()}` : "");
+      return;
+    }
+
     setSession(res);
     
-    // Toast com design premium (já configurado no shared/ui.js)
-    toast(`Bem-vindo, ${res.user.name || 'Usuário'}!`);
+    // Toast com design premium
+    toast(`Bem-vindo, ${res.user.email || 'Usuário'}!`);
 
     const next = getNext();
     setTimeout(() => {
