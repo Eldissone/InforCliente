@@ -2177,10 +2177,25 @@ async function init() {
   wireStock();
   wireGallery();
 
-  // Photo Previews
+  // Photo Previews Lightbox
   document.addEventListener("click", e => {
-    const photoId = e.target.closest("[data-preview-photo]")?.getAttribute("data-preview-photo");
-    if (photoId) openPhotoPreview(photoId);
+    const photoItem = e.target.closest("[data-preview-photo]");
+    if (photoItem) {
+      const photoId = photoItem.getAttribute("data-preview-photo");
+      openPhotoPreview(photoId);
+      return;
+    }
+
+    // Close Lightbox on backdrop click
+    const lightbox = el("imageLightbox");
+    if (e.target === lightbox || e.target.closest("#closeLightbox")) {
+      closeLightbox();
+    }
+  });
+
+  // ESC key for Lightbox
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
   });
 
   // Redirecionamento automático para cliente
@@ -2232,28 +2247,35 @@ function openPhotoPreview(photoId) {
   const photo = galleryState.items.find(p => p.id === photoId);
   if (!photo) return;
 
-  const backdrop = el("previewBackdrop");
-  const panel = el("previewPanel");
-  const body = el("previewBody");
-  const nameEl = el("previewFileName");
-  const metaEl = el("previewFileMeta");
-  const dlBtn = el("previewDownloadBtn");
-
   const url = `${getApiBaseUrl()}/${photo.path}`;
-  nameEl.textContent = photo.description || "Foto de Obra";
-  metaEl.textContent = `Carregada em ${formatDateBR(photo.createdAt)}`;
-  dlBtn.href = url;
-  dlBtn.download = photo.description || "foto_obra.jpg";
+  const title = photo.description || (photo.movement?.material?.name ? `Registo: ${photo.movement.material.name}` : "Foto de Obra");
+  const date = formatDateBR(photo.createdAt);
 
-  body.innerHTML = `
-    <div class="flex flex-col items-center gap-6 w-full">
-      <img src="${url}" class="max-w-full max-h-[70vh] rounded-2xl shadow-2xl border border-white" />
-      ${photo.description ? `<p class="text-sm text-slate-600 bg-white p-4 rounded-xl border border-slate-100 italic">"${photo.description}"</p>` : ""}
-    </div>
-  `;
+  openLightbox(url, title, date);
+}
 
-  backdrop.classList.add("open");
-  panel.classList.add("open");
+function openLightbox(url, title, date) {
+  const lightbox = el("imageLightbox");
+  const img = el("lightboxImage");
+  const titleEl = el("lightboxTitle");
+  const dateEl = el("lightboxDate");
+
+  if (!lightbox || !img) return;
+
+  img.src = url;
+  titleEl.textContent = title;
+  dateEl.textContent = date;
+
+  lightbox.classList.add("active");
+  document.body.style.overflow = "hidden"; // Prevent scrolling
+}
+
+function closeLightbox() {
+  const lightbox = el("imageLightbox");
+  if (!lightbox) return;
+
+  lightbox.classList.remove("active");
+  document.body.style.overflow = ""; // Restore scrolling
 }
 
 function wirePreview() {
@@ -3149,6 +3171,7 @@ async function loadStockGallery() {
 
     const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
     grid.innerHTML = "";
+    galleryState.items = photos; // Update global photo cache
 
     order.forEach(cat => {
       if (!groups[cat] || groups[cat].length === 0) return;
@@ -3159,7 +3182,7 @@ async function loadStockGallery() {
                      <span class="material-symbols-outlined text-lg">expand_more</span>
                      ${cat}
                   </button>
-                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             `;
 
       groups[cat].forEach(p => {
@@ -3169,22 +3192,23 @@ async function loadStockGallery() {
           : "Registo Fotográfico";
 
         html += `
-                <a href="${url}" target="_blank" class="group flex flex-row items-center gap-3 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-200">
-                  <div class="w-10 h-10 shrink-0 rounded overflow-hidden bg-slate-200 shadow-sm relative">
-                      <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 relative z-0" />
+                <div data-preview-photo="${p.id}" class="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer">
+                  <div class="aspect-video relative overflow-hidden bg-slate-100">
+                      <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                         <span class="material-symbols-outlined text-white text-3xl">visibility</span>
+                      </div>
                   </div>
-                  <div class="flex-1 min-w-0 flex flex-col justify-center">
-                     <p class="text-xs font-semibold text-slate-900 truncate leading-tight" title="${escapeHtml(p.description) || equipName}">
+                  <div class="p-4">
+                     <p class="text-xs font-bold text-slate-900 truncate mb-1" title="${escapeHtml(p.description) || equipName}">
                         ${equipName}
                      </p>
-                     <p class="text-[10px] font-medium text-slate-500 truncate leading-tight">
-                        Ficheiro JPG
-                     </p>
-                     <p class="text-[10px] font-medium text-slate-400 truncate leading-tight">
-                        ${formatDateBR(p.createdAt)}
-                     </p>
+                     <div class="flex items-center justify-between mt-2">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
+                        ${p.movement ? `<span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[8px] font-black uppercase">Campo</span>` : ""}
+                     </div>
                   </div>
-                </a>
+                </div>
                `;
       });
       html += `</div></div>`;
@@ -3223,22 +3247,23 @@ async function loadGallery() {
     grid.innerHTML = photos.map(p => {
       const url = `${getApiBaseUrl()}/${p.path}`;
       return `
-        <div class="bg-white rounded-[32px] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
+        <div class="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
           <div class="aspect-video relative overflow-hidden bg-slate-100">
             <img src="${url}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
             <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-               <button data-preview-photo="${p.id}" class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all">
-                  <span class="material-symbols-outlined text-lg">visibility</span>
+               <button data-preview-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all border border-white/20">
+                  <span class="material-symbols-outlined text-2xl">visibility</span>
                </button>
-               <button data-role-visible="admin,supervisor,tecnico" data-delete-photo="${p.id}" class="w-10 h-10 rounded-xl bg-red-500/80 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-600 transition-all">
-                  <span class="material-symbols-outlined text-lg">delete</span>
+               <button data-role-visible="admin,supervisor,tecnico" data-delete-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-red-500/80 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-600 transition-all border border-white/20">
+                  <span class="material-symbols-outlined text-2xl">delete</span>
                </button>
             </div>
           </div>
           <div class="p-5">
-            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-2" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descrição')}</p>
-            <div class="flex items-center justify-between">
-              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">${formatDateBR(p.createdAt)}</span>
+            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descrição')}</p>
+            <div class="flex items-center justify-between pt-3 border-t border-slate-50">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
+              <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span>
             </div>
           </div>
         </div>

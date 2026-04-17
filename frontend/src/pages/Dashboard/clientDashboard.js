@@ -969,7 +969,8 @@ function renderGallerySection(containerId, photos, isCampo) {
        const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
 
        html += `
-         <a href="${url}" target="_blank" class="group flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
+         <div data-preview-url="${url}" data-preview-title="${escapeHtml(matName)}" data-preview-date="${dateStr}" 
+              class="group gallery-item flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
             <!-- Thumbnail -->
             <div class="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-slate-100 shadow-sm border border-slate-100">
                 <img src="${url}" class="w-full h-full object-cover transition-transform group-hover:scale-110" loading="lazy" />
@@ -981,7 +982,7 @@ function renderGallerySection(containerId, photos, isCampo) {
                <p class="text-[9px] font-medium text-slate-400 uppercase tracking-tighter leading-none mb-1">Ficheiro JPG</p>
                <p class="text-[9px] font-semibold text-slate-500 leading-none">${dateStr}</p>
             </div>
-         </a>
+         </div>
        `;
      });
      
@@ -1073,6 +1074,27 @@ function wireEvents() {
        }
        loadFiles();
     }
+
+    // Lightbox Toggle
+    const galleryItem = e.target.closest("[data-preview-url]");
+    if (galleryItem) {
+        const url = galleryItem.getAttribute("data-preview-url");
+        const title = galleryItem.getAttribute("data-preview-title");
+        const date = galleryItem.getAttribute("data-preview-date");
+        openLightbox(url, title, date);
+        return;
+    }
+
+    const lightboxOverlay = document.getElementById("imageLightbox");
+    const closeBtn = e.target.closest("#closeLightbox");
+    if (closeBtn || e.target === lightboxOverlay) {
+        closeLightbox();
+    }
+  });
+
+  // Handle ESC key for Lightbox
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
   });
   const updateDates = () => {
     state.startDate = document.getElementById("filterStart")?.value || "";
@@ -1110,6 +1132,30 @@ function wireEvents() {
   });
 
   wireFileNavigation();
+}
+
+function openLightbox(url, title, date) {
+  const lightbox = document.getElementById("imageLightbox");
+  const img = document.getElementById("lightboxImage");
+  const titleEl = document.getElementById("lightboxTitle");
+  const dateEl = document.getElementById("lightboxDate");
+
+  if (!lightbox || !img) return;
+
+  img.src = url;
+  titleEl.textContent = title;
+  dateEl.textContent = date;
+
+  lightbox.classList.add("active");
+  document.body.style.overflow = "hidden"; // Prevent scrolling
+}
+
+function closeLightbox() {
+  const lightbox = document.getElementById("imageLightbox");
+  if (!lightbox) return;
+
+  lightbox.classList.remove("active");
+  document.body.style.overflow = ""; // Restore scrolling
 }
 
 function init() {
