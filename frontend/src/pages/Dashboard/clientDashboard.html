@@ -35,6 +35,64 @@
             display: none;
         }
 
+        /* Tooltip de Logística */
+        .logistics-tooltip {
+            position: relative;
+            display: inline-flex;
+        }
+
+        .logistics-tooltip .tooltip-box {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 0;
+            min-width: 220px;
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.6;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+            z-index: 100;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            transform: translateY(6px);
+            pointer-events: none;
+        }
+
+        .logistics-tooltip:hover .tooltip-box {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .logistics-tooltip .tooltip-box::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            right: 14px;
+            border: 6px solid transparent;
+            border-top-color: #0f172a;
+        }
+
+        .tooltip-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 0;
+        }
+
+        .tooltip-label {
+            color: #94a3b8;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            min-width: 60px;
+        }
+
         .custom-scroll::-webkit-scrollbar {
             height: 8px;
             width: 6px;
@@ -283,11 +341,12 @@
                 }
             </style>
             <div
-                class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
+                class="glass-card bt bg-blue-100 mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
                         <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual</h3>
                         <p class="text-[11px] font-medium text-slate-400 mt-1">Visão consolidada dos principais itens
+                            contratuais
                         </p>
                     </div>
                     <button type="button" data-tab-trigger="obra"
@@ -379,39 +438,21 @@
         </div> <!-- End tab-dashboard -->
 
         <div id="tab-stock" class="tab-content hidden">
+
+            <!-- Tabela 1: Resumo por Material -->
             <div
                 class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
-                <div class="p-6 border-b border-slate-100">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                        <div>
-                            <h3 class="font-bold text-3xl text-slate-900">Acompanhamento do Armazém</h3>
-                            <p class="text-xs text-slate-500 mt-1">Controlo de materiais e equipamentos disponíveis em
-                                estaleiro.</p>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <div class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center">
-                                <span
-                                    class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
-                                <input type="text" id="stockFilterMaterial" placeholder="Filtrar material..."
-                                    class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-32" />
-                            </div>
-                            <div class="bg-slate-50 border border-slate-200 rounded-xl px-2 h-9 flex items-center">
-                                <input type="date" id="stockFilterDate"
-                                    class="bg-transparent border-none text-[10px] font-bold text-slate-500 focus:ring-0" />
-                            </div>
-                            <select id="stockFilterState"
-                                class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 h-9">
-                                <option value="all">Estado: Todos</option>
-                                <option value="good">Bom Estado</option>
-                                <option value="damaged">Danificado</option>
-                            </select>
-                        </div>
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-2xl text-slate-900">Resumo de Stock por Material</h3>
+                        <p class="text-xs text-slate-400 mt-1">Quantidades previstas, entregues, aplicadas e saldo
+                            actual</p>
                     </div>
-                    <!-- Aggregation Row -->
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div class="p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
-                            <div class="text-[9px] font-black text-blue-600 uppercase mb-1">Total Itens</div>
-                            <div id="stockTotalItems" class="text-xl font-black text-slate-900">0</div>
+                    <div class="flex items-center gap-2">
+                        <div class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center h-9">
+                            <span class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
+                            <input type="text" id="stockSummaryFilter" placeholder="Filtrar..."
+                                class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-28" />
                         </div>
                     </div>
                 </div>
@@ -419,21 +460,77 @@
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 whitespace-nowrap">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-8 py-5">Material / Equipamento</th>
-                                <th class="px-4 py-5 text-center">Unidade</th>
-                                <th class="px-4 py-5 text-center">Entradas</th>
-                                <th class="px-4 py-5 text-center">Saídas</th>
-                                <th class="px-4 py-5 text-center text-blue-600">Stock Actual</th>
-                                <th class="px-4 py-5 text-center">% Utilização</th>
-                                <th class="px-4 py-5 text-center">Última Act.</th>
-                                <th class="px-8 py-5 text-right">Estado</th>
+                                <th class="px-6 py-4">Material</th>
+                                <th class="px-4 py-4 text-center">Previsto</th>
+                                <th class="px-4 py-4 text-center text-emerald-600">Entregue</th>
+                                <th class="px-4 py-4 text-center text-blue-600">Aplicado</th>
+                                <th class="px-4 py-4 text-center text-slate-900">Saldo</th>
                             </tr>
                         </thead>
-                        <tbody id="stockTbody" class="divide-y divide-slate-50 text-slate-600">
+                        <tbody id="stockSummaryTbody" class="divide-y divide-slate-50 text-slate-600">
+                            <tr>
+                                <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma
+                                    obra para ver o stock</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            <!-- Tabela 2: Diário de Movimentos -->
+            <div
+                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-bold text-2xl text-slate-900">Diário do Armazém</h3>
+                            <p class="text-xs text-slate-400 mt-1">Registo diário de entradas e saídas de materiais</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div
+                                class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center h-9">
+                                <span
+                                    class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
+                                <input type="text" id="stockDailyFilterMaterial" placeholder="Material..."
+                                    class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-28" />
+                            </div>
+                            <div
+                                class="bg-slate-50 border border-slate-200 rounded-xl px-3 h-9 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-slate-400 text-sm">calendar_today</span>
+                                <input type="date" id="stockDailyFilterDate"
+                                    class="bg-transparent border-none text-[10px] font-bold text-slate-500 focus:ring-0" />
+                            </div>
+                            <select id="stockDailyFilterType"
+                                class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 h-9">
+                                <option value="all">Todos os tipos</option>
+                                <option value="ENTRADA">Entradas</option>
+                                <option value="SAIDA">Saídas</option>
+                                <option value="AJUSTE">Ajustes</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50/90 whitespace-nowrap">
+                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                <th class="px-6 py-4">Data</th>
+                                <th class="px-4 py-4">Material</th>
+                                <th class="px-4 py-4 text-center">Quantidade</th>
+                                <th class="px-4 py-4 text-center">Tipo</th>
+                                <th class="px-6 py-4 text-right">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockDailyTbody" class="divide-y divide-slate-50 text-slate-600">
+                            <tr>
+                                <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma
+                                    obra para ver o diário</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
         </div> <!-- End tab-stock -->
 
         <div id="tab-obra" class="tab-content hidden">
@@ -449,6 +546,8 @@
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
                         <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual Detalhado</h3>
+                        <p class="text-[11px] font-medium text-slate-400 mt-1">Visão detalhada do avanço da obra
+                        </p>
                     </div>
                     <select id="progressGroupFilter"
                         class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">

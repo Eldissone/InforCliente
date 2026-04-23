@@ -148,7 +148,7 @@ function updateTabUI() {
   }
 
   if (state.activeTab === "stock" && dashboardData) {
-    renderStockTable(dashboardData.stock || []);
+    loadStockData();
   }
 }
 
@@ -298,63 +298,145 @@ function renderFinancialChart(projects) {
 }
 
 function renderStockChart(stock) {
-  // Chamamos agora a função de renderização da tabela de stock também
-  renderStockTable(stock);
-
-  // O gráfico doughnut pode ser removido ou mantido em algum lugar, 
-  // mas o usuário pediu "Armazém com filtro", então focamos na tabela.
-  // Se quiser manter o gráfico, ele precisa de um container que ainda exista.
+  // Não é mais usada para render — os dados do stock são carregados via API direta
 }
 
-function renderStockTable(stock) {
-  const tbody = document.getElementById("stockTbody");
-  const totalItemsEl = document.getElementById("stockTotalItems");
-  if (!tbody) return;
+async function loadStockData() {
+  if (!state.projectId || state.projectId === "all") return;
 
-  // Filtros
-  const fMat = document.getElementById("stockFilterMaterial")?.value?.toLowerCase() || "";
-  const fState = document.getElementById("stockFilterState")?.value || "all";
-  // O filtro de data precisaria de datas individuais nos itens de stock
-  // Por agora fazemos o filtro básico de material e estado se disponível
+  const summaryTbody = document.getElementById("stockSummaryTbody");
+  const dailyTbody = document.getElementById("stockDailyTbody");
+  if (!summaryTbody || !dailyTbody) return;
 
-  const filtered = stock.filter(s => {
-    const matchMat = s.name.toLowerCase().includes(fMat);
-    return matchMat;
-  });
+  summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar...</td></tr>`;
+  dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-slate-400">A carregar...</td></tr>`;
 
-  if (totalItemsEl) totalItemsEl.textContent = filtered.length;
+  try {
+    const [summaryRes, movementsRes] = await Promise.all([
+      apiRequest(`/stock/${state.projectId}/summary`),
+      apiRequest(`/stock/${state.projectId}/movements`)
+    ]);
 
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem Stock correspondente</td></tr>`;
-    return;
-  }
+    const summaryItems = summaryRes.items || [];
+    const movements = movementsRes.items || [];
 
-  tbody.innerHTML = filtered.map(s => {
-    const usagePct = s.totalIn > 0 ? Math.round((s.totalOut / s.totalIn) * 100) : 0;
-    const usageColor = usagePct > 90 ? 'text-red-600' : (usagePct > 50 ? 'text-orange-600' : 'text-blue-600');
+    // --- Tabela 1: Resumo por Material ---
+    // Calcular Entregue e Aplicado a partir dos movimentos aprovados
+    const materialMap = {};
+    movements.forEach(m => {
+      const mId = m.materialId;
+      if (!materialMap[mId]) {
+        materialMap[mId] = {
+          name: m.material?.name || "—",
+          unit: m.material?.unit || "",
+          previsto: 0, entregue: 0, aplicado: 0
+        };
+      }
+      const qty = Number(m.quantityGood || 0) + Number(m.quantityDamaged || 0);
+      if (m.auditStatus === "APROVADO") {
+        if (m.type === "ENTRADA") materialMap[mId].entregue += qty;
+        if (m.type === "SAIDA") materialMap[mId].aplicado += qty;
+      }
+    });
 
-    return `
-      <tr class="hover:bg-slate-50 transition-colors">
-        <td class="px-8 py-4 font-bold text-slate-900">${escapeHtml(s.name)}</td>
-        <td class="px-4 py-4 text-center text-xs font-bold text-slate-400 uppercase">${escapeHtml(s.unit)}</td>
-        <td class="px-4 py-4 text-center font-bold text-slate-600">${s.totalIn.toLocaleString('pt-AO')}</td>
-        <td class="px-4 py-4 text-center font-bold text-slate-600">${s.totalOut.toLocaleString('pt-AO')}</td>
-        <td class="px-4 py-4 text-center font-black text-blue-600 bg-blue-50/30">${s.qty.toLocaleString('pt-AO')}</td>
-        <td class="px-4 py-4 text-center">
-            <div class="flex flex-col items-center">
-                <span class="text-[10px] font-black ${usageColor}">${usagePct}%</span>
-                <div class="w-12 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                    <div class="h-full ${usagePct > 90 ? 'bg-red-500' : (usagePct > 50 ? 'bg-orange-500' : 'bg-blue-500')}" style="width: ${Math.min(100, usagePct)}%"></div>
-                </div>
+    // Integrar com o summary (saldo actual)
+    summaryItems.forEach(s => {
+      const mId = s.materialId;
+      if (!materialMap[mId]) {
+        materialMap[mId] = {
+          name: s.material?.name || "—",
+          unit: s.material?.unit || "",
+          previsto: 0, entregue: 0, aplicado: 0
+        };
+      }
+    });
+
+    const fSummary = document.getElementById("stockSummaryFilter")?.value?.toLowerCase() || "";
+    const summaryRows = Object.values(materialMap).filter(m => m.name.toLowerCase().includes(fSummary));
+
+    if (summaryRows.length === 0) {
+      summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem material registado</td></tr>`;
+    } else {
+      summaryTbody.innerHTML = summaryRows.map(m => {
+        const saldo = m.entregue - m.aplicado;
+        const saldoColor = saldo < 0 ? "text-red-600" : saldo === 0 ? "text-slate-400" : "text-emerald-600";
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-4 font-bold text-slate-900">${escapeHtml(m.name)}</td>
+            <td class="px-4 py-4 text-center text-xs text-slate-400 font-bold">—</td>
+            <td class="px-4 py-4 text-center font-bold text-emerald-600">${m.entregue.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
+            <td class="px-4 py-4 text-center font-bold text-blue-600">${m.aplicado.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
+            <td class="px-4 py-4 text-center font-black ${saldoColor}">${saldo.toLocaleString("pt-AO")} <span class="text-[9px]">${escapeHtml(m.unit)}</span></td>
+          </tr>`;
+      }).join("");
+    }
+
+    // --- Tabela 2: Diário de Movimentos ---
+    const fMat = document.getElementById("stockDailyFilterMaterial")?.value?.toLowerCase() || "";
+    const fDate = document.getElementById("stockDailyFilterDate")?.value || "";
+    const fType = document.getElementById("stockDailyFilterType")?.value || "all";
+
+    const filtered = movements.filter(m => {
+      const matName = m.material?.name?.toLowerCase() || "";
+      const matchMat = matName.includes(fMat);
+      const matchType = fType === "all" || m.type === fType;
+      const matchDate = !fDate || (m.dateEntry && m.dateEntry.startsWith(fDate));
+      return matchMat && matchType && matchDate;
+    });
+
+    if (filtered.length === 0) {
+      dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem registos correspondentes</td></tr>`;
+    } else {
+      const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transferência" };
+      const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-red-50 text-red-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-blue-50 text-blue-700" };
+      const statusLabel = { "PENDENTE": "Pendente", "VALIDACAO": "Em Validação", "APROVADO": "Aprovado", "REJEITADO": "Rejeitado" };
+      const statusColor = { "PENDENTE": "bg-orange-50 text-orange-600", "VALIDACAO": "bg-blue-50 text-blue-600", "APROVADO": "bg-emerald-50 text-emerald-600", "REJEITADO": "bg-red-50 text-red-600" };
+
+      dailyTbody.innerHTML = filtered.map(m => {
+        const date = m.dateEntry ? new Date(m.dateEntry).toLocaleDateString("pt-PT") : "—";
+        const qty = Number(m.quantityGood || 0) + Number(m.quantityDamaged || 0);
+        const tc = typeColor[m.type] || "bg-slate-50 text-slate-600";
+        const sc = statusColor[m.auditStatus] || "bg-slate-50 text-slate-600";
+
+        // Tooltip de logística
+        const hasLogistics = m.driverName || m.vehicleBrand || m.vehiclePlate;
+        const tooltipHtml = hasLogistics ? `
+          <div class="logistics-tooltip">
+            <span class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors text-base cursor-help">local_shipping</span>
+            <div class="tooltip-box">
+              <div class="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-2">Dados de Transporte</div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Motorista</span>
+                <span>${escapeHtml(m.driverName || "—")}</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Viatura</span>
+                <span>${escapeHtml(m.vehicleBrand || "—")}</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Matrícula</span>
+                <span class="font-mono">${escapeHtml(m.vehiclePlate || "—")}</span>
+              </div>
             </div>
-        </td>
-        <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-400">${s.lastActivity ? new Date(s.lastActivity).toLocaleDateString('pt-PT') : '--'}</td>
-        <td class="px-8 py-4 text-right">
-           <span class="px-2 py-0.5 rounded-md ${s.state === 'Bom Estado' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'} text-[9px] font-black uppercase tracking-widest">${escapeHtml(s.state)}</span>
-        </td>
-      </tr>
-    `;
-  }).join("");
+          </div>` : `<span class="text-slate-300 text-sm material-symbols-outlined">local_shipping</span>`;
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-4 text-xs font-bold text-slate-500">${date}</td>
+            <td class="px-4 py-4 font-bold text-slate-900">${escapeHtml(m.material?.name || "—")}</td>
+            <td class="px-4 py-4 text-center font-black text-slate-700">${qty.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.material?.unit || "")}</span></td>
+            <td class="px-4 py-4 text-center"><span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${tc}">${typeLabel[m.type] || m.type}</span></td>
+            <td class="px-4 py-4 text-center">${tooltipHtml}</td>
+            <td class="px-6 py-4 text-right"><span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${sc}">${statusLabel[m.auditStatus] || m.auditStatus}</span></td>
+          </tr>`;
+      }).join("");
+    }
+
+  } catch (err) {
+    console.error("Erro ao carregar stock", err);
+    summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados</td></tr>`;
+    dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados</td></tr>`;
+  }
 }
 
 
@@ -1150,6 +1232,13 @@ function wireEvents() {
   };
   document.getElementById("galleryCampoFilterStart")?.addEventListener("change", updateGalleryCampoDates);
   document.getElementById("galleryCampoFilterEnd")?.addEventListener("change", updateGalleryCampoDates);
+
+  // Stock Filters
+  const reloadStock = () => { if (state.activeTab === "stock") loadStockData(); };
+  document.getElementById("stockSummaryFilter")?.addEventListener("input", reloadStock);
+  document.getElementById("stockDailyFilterMaterial")?.addEventListener("input", reloadStock);
+  document.getElementById("stockDailyFilterDate")?.addEventListener("change", reloadStock);
+  document.getElementById("stockDailyFilterType")?.addEventListener("change", reloadStock);
 
   // Tabs — event delegation para funcionar com botões dentro do conteúdo
   document.addEventListener("click", (e) => {
