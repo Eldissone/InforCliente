@@ -244,7 +244,7 @@
         </header>
 
         <!-- Tab Navigation -->
-        <div class="flex items-center gap-4 border-b border-slate-200 mb-8 overflow-x-auto custom-scroll pb-2">
+        <div class="flex items-center gap-4 border-b border-slate-200 mb-8 overflow-x-auto custom-scroll pb-4">
             <button data-tab-trigger="dashboard"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Resumo
                 Executivo</button>
@@ -255,6 +255,10 @@
             <button data-tab-trigger="obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Informação
                 da Obra</button>
+
+            <button data-tab-trigger="stock"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Stock
+            </button>
 
             <button data-tab-trigger="galeria-obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
@@ -268,15 +272,11 @@
             <button data-tab-trigger="equipa"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Organograma
             </button>
-            <button data-tab-trigger="stock"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Stock
-            </button>
         </div>
 
         <div id="tab-dashboard" class="tab-content">
             <!-- Metrics Grid -->
-
-            <div class="mb-8">
+            <div class="mb-10 mt-4">
                 <div class="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 mb-1">Obra Seleccionada
                 </div>
                 <h2 id="currentProjectName" class="text-3xl font-black text-slate-900 tracking-tight">—</h2>
@@ -285,7 +285,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                 <!-- KPIs Financeiros -->
                 <div
-                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 transition-all hover:-translate-y-1">
+                    class="glass-card p-10 rounded-[2rem] bg-gradient-to-br from-white to-slate-50 transition-all hover:-translate-y-1">
                     <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Valor Contratual
                     </div>
                     <div id="metricTotalContract" class="text-2xl font-black text-slate-900">—</div>
@@ -293,7 +293,7 @@
                 </div>
 
                 <div
-                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-emerald-50 transition-all hover:-translate-y-1">
+                    class="glass-card p-10 rounded-[2rem] bg-gradient-to-br from-white to-emerald-50 transition-all hover:-translate-y-1">
                     <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total de
                         Pagamentos
                     </div>
@@ -302,7 +302,7 @@
                 </div>
 
                 <div
-                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-white to-red-50 transition-all hover:-translate-y-1 border-red-100">
+                    class="glass-card p-10 rounded-[2rem] bg-gradient-to-br from-white to-red-50 transition-all hover:-translate-y-1 border-red-100">
                     <div class="text-[10px] font-black uppercase tracking-widest text-red-600 mb-2">Saldo
                     </div>
                     <div id="metricDebt" class="text-2xl font-black text-slate-900">—</div>
@@ -310,7 +310,7 @@
                 </div>
 
                 <div
-                    class="glass-card p-6 rounded-[2rem] bg-gradient-to-br from-[#0F172A] to-[#1E293B] shadow-xl hover:-translate-y-1">
+                    class="glass-card p-10 rounded-[2rem] bg-gradient-to-br from-[#0F172A] to-[#1E293B] shadow-xl hover:-translate-y-1">
                     <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Progresso do
                         Pagamento
                     </div>
@@ -336,8 +336,7 @@
             <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
             <style>
                 .bt {
-                    border-top: 2px solid #0b0b0b;
-                    border-bottom: 2px solid #0b0b0b;
+                    background-color: #0f172a1c;
                 }
             </style>
             <div
@@ -661,7 +660,7 @@
                         <h3 id="directorName" class="text-xl font-bold text-slate-900">Eng. —</h3>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Director de Obra</p>
 
-                        <div class="w-full space-y-3 pt-6 border-t border-slate-50">
+                        <div class="w-full space-y-3 pt-6 border-t border-slate-50 mt-auto">
                             <div
                                 class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
                                 <span class="material-symbols-outlined text-blue-600 text-lg">call</span>
@@ -685,7 +684,7 @@
                 <!-- Equipa Técnica Adicional -->
                 <div id="techTeamSection" class="lg:col-span-8">
                     <div class="h-full">
-                        <h3 class="font-bold text-slate-900 mb-6 text-xl">Equipa Técnica Adicional</h3>
+                        <h3 class="font-bold text-slate-900 mb-6 text-xl">Equipa Técnica Auxiliar</h3>
                         <div id="techTeamContainer"
                             class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                             <!-- Cards inseridos via JS com o mesmo estilo do card do director -->

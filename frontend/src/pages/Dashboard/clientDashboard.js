@@ -239,14 +239,14 @@ function renderDirectorInfo(project) {
     if (project && project.technicians && Array.isArray(project.technicians) && project.technicians.length > 0) {
       techSection.classList.remove("hidden");
       techContainer.innerHTML = project.technicians.map(t => `
-        <div class="glass-card p-6 rounded-[2rem] bg-white text-center flex flex-col items-center">
+        <div class="glass-card p-6 rounded-[2rem] bg-white text-center flex flex-col items-center h-full">
             <div class="w-16 h-16 rounded-full bg-slate-100 mb-3 overflow-hidden border-2 border-white shadow-md">
                 <img src="${t.photo ? getApiBaseUrl() + '/' + t.photo : '/assets/images/placeholder-user.png'}" alt="${escapeHtml(t.name)}" class="w-full h-full object-cover" />
             </div>
             <h4 class="text-sm font-bold text-slate-800">${escapeHtml(t.name)}</h4>
             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-4">${escapeHtml(t.role || 'Técnico')}</p>
             
-            <div class="w-full space-y-2 pt-4 border-t border-slate-50 text-left">
+            <div class="w-full space-y-2 pt-4 border-t border-slate-50 text-left mt-auto">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-blue-500 text-sm">call</span>
                     <span class="text-[10px] font-bold text-slate-600">${escapeHtml(t.phone || '—')}</span>

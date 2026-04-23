@@ -2154,6 +2154,46 @@ function wirePayments() {
   });
 }
 
+let uiState = {
+  collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.collapsedTables") || "{}")
+};
+
+function toggleTable(tableId, manual = true) {
+  const body = document.querySelector(`[data-table-body="${tableId}"]`);
+  const btn = document.querySelector(`[data-toggle-table="${tableId}"]`);
+  if (!body) return;
+
+  if (manual) {
+    uiState.collapsedTables[tableId] = !uiState.collapsedTables[tableId];
+    localStorage.setItem("InfoCliente.collapsedTables", JSON.stringify(uiState.collapsedTables));
+  }
+
+  const isCollapsed = uiState.collapsedTables[tableId];
+  
+  if (isCollapsed) {
+    body.classList.add("hidden");
+  } else {
+    body.classList.remove("hidden");
+  }
+
+  if (btn) {
+    const icon = btn.querySelector(".material-symbols-outlined");
+    if (icon) {
+      icon.style.transform = isCollapsed ? "rotate(-90deg)" : "rotate(0deg)";
+    }
+  }
+}
+
+function wireTablesToggle() {
+  document.querySelectorAll("[data-toggle-table]").forEach(btn => {
+    const tableId = btn.getAttribute("data-toggle-table");
+    btn.addEventListener("click", () => toggleTable(tableId, true));
+    
+    // Apply initial state
+    toggleTable(tableId, false);
+  });
+}
+
 async function init() {
   initMobileMenu();
   wireLogout();
@@ -2176,6 +2216,7 @@ async function init() {
   wirePayments();
   wireStock();
   wireGallery();
+  wireTablesToggle();
 
   // Photo Previews Lightbox
   document.addEventListener("click", e => {
