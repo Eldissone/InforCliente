@@ -1291,7 +1291,7 @@ function wireProgressTasks() {
       const parentId = toggleSub.getAttribute("data-toggle-sub-tasks");
       const icon = toggleSub.querySelector("[data-sub-icon]");
       const children = document.querySelectorAll(`[data-sub-of="${parentId}"]`);
-      
+
       let isHidden = false;
       children.forEach(child => {
         isHidden = child.classList.toggle("hidden");
@@ -2638,7 +2638,7 @@ async function openStockMovementModal() {
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="proprio">Material Próprio (InforCliente)</option>
+                  <option value="proprio">Material Próprio (InfoCliente)</option>
                   <option value="cliente">Fornecido pelo Cliente</option>
                   <option value="fornecedor">Compra Direta Fornecedor</option>
                </select>
@@ -3230,7 +3230,7 @@ async function loadGallery() {
   if (!grid) return;
 
   grid.innerHTML = renderLoadingRow(4); // Adaptado para grid
-  
+
   try {
     const id = getProjectId();
     const res = await apiRequest(`/projects/${encodeURIComponent(id)}/photos`);

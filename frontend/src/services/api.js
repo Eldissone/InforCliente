@@ -3,11 +3,11 @@ import { getToken, logout } from "./auth.js";
 const DEFAULT_BASE_URL = "http://127.0.0.1:4000";
 
 export function getApiBaseUrl() {
-  return localStorage.getItem("inforcliente.apiBaseUrl") || DEFAULT_BASE_URL;
+  return localStorage.getItem("InfoCliente.apiBaseUrl") || DEFAULT_BASE_URL;
 }
 
 export function setApiBaseUrl(url) {
-  localStorage.setItem("inforcliente.apiBaseUrl", url);
+  localStorage.setItem("InfoCliente.apiBaseUrl", url);
 }
 
 async function parseJsonSafe(res) {

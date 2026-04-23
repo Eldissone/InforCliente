@@ -99,7 +99,7 @@ function renderDashboard(projectId) {
 
 function updateTabUI() {
   // Role-based visibility
-  const user = JSON.parse(localStorage.getItem("inforcliente.user") || "{}");
+  const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
   if (user.role === "cliente") {
     const campoBtn = document.querySelector('[data-tab-trigger="galeria-campo"]');
     if (campoBtn) campoBtn.classList.add("hidden");
@@ -757,8 +757,8 @@ function renderProgressBreakdownRows() {
     if (filterVal === "all") {
       let summaryHtml = "";
       Object.keys(groupProgressMap).forEach(g => {
-          const gPct = Math.round(groupProgressMap[g] || 0);
-          summaryHtml += `
+        const gPct = Math.round(groupProgressMap[g] || 0);
+        summaryHtml += `
             <tr class="hover:bg-slate-50 transition-colors">
               <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(g)}</td>
               <td class="px-4 py-4 text-right">
@@ -1280,7 +1280,7 @@ function init() {
   initMobileMenu();
   wireLogout();
 
-  const user = JSON.parse(localStorage.getItem("inforcliente.user") || "{}");
+  const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
   if (user && user.client) {
     const headerName = document.getElementById("clientNameHeader");
     if (headerName) headerName.textContent = user.client.name;

@@ -12,7 +12,7 @@ async function runTest() {
     // 1. Login
     console.log('1. Autenticando...');
     const loginRes = await axios.post(`${API_URL}/auth/login`, {
-      email: 'admin@inforcliente.com',
+      email: 'admin@InfoCliente.com',
       password: 'admin' // Assumindo default
     });
     token = loginRes.data.token;
@@ -32,12 +32,12 @@ async function runTest() {
     // 3. Upload de Orçamento (Sincronização)
     console.log('3. Importando orçamento (CSV)...');
     const form = new FormData();
-    form.append('file', fs.createReadStream('c:/Users/Evilonga/InforCliente/scratch/test_budget.csv'));
-    
+    form.append('file', fs.createReadStream('c:/Users/Evilonga/InfoCliente/scratch/test_budget.csv'));
+
     await axios.post(`${API_URL}/projects/${projectId}/budget/upload`, form, {
-      headers: { 
+      headers: {
         ...form.getHeaders(),
-        Authorization: `Bearer ${token}` 
+        Authorization: `Bearer ${token}`
       }
     });
 
@@ -47,7 +47,7 @@ async function runTest() {
 
     // 4. Lançamento de Custo (Sincronização Automática)
     console.log('4. Lançando custo vinculado ao orçamento...');
-    
+
     // Pegar uma linha do orçamento
     const lines = (await axios.get(`${API_URL}/projects/${projectId}/budget/lines`, { headers: { Authorization: `Bearer ${token}` } })).data.items;
     const lineId = lines[0].id; // "Material Hidráulico"

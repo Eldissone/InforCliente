@@ -1,5 +1,5 @@
-const TOKEN_KEY = "inforcliente.token";
-const USER_KEY = "inforcliente.user";
+const TOKEN_KEY = "InfoCliente.token";
+const USER_KEY = "InfoCliente.user";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);

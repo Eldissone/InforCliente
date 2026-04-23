@@ -1,4 +1,4 @@
-# InforCliente
+# InfoCliente
 
 Sistema web (HTML + JavaScript) para **gestão e monitorização de Clientes e Gestão de Obras**, com **API Node/Express** e **Postgres (Prisma)**.
 
@@ -29,7 +29,7 @@ Sistema web (HTML + JavaScript) para **gestão e monitorização de Clientes e G
 Você precisa ter um Postgres acessível e uma `DATABASE_URL` válida.
 
 Exemplo (local):
-- `postgresql://postgres:SENHA@localhost:5432/inforcliente?schema=public`
+- `postgresql://postgres:SENHA@localhost:5432/InfoCliente?schema=public`
 
 > Se você receber `P1000 Authentication failed`, a senha/usuário na `DATABASE_URL` está incorreta.
 
@@ -39,7 +39,7 @@ Exemplo (local):
 3. Instale e prepare:
 
 ```powershell
-cd C:\Users\Evilonga\InforCliente\backend
+cd C:\Users\Evilonga\InfoCliente\backend
 npm install
 npx prisma generate
 npx prisma migrate dev --name init
@@ -59,7 +59,7 @@ npm run dev
 O frontend precisa rodar via servidor (não abrir o HTML direto) para suportar imports ES Modules.
 
 ```powershell
-cd C:\Users\Evilonga\InforCliente\frontend
+cd C:\Users\Evilonga\InfoCliente\frontend
 npm install
 npm run dev
 ```
@@ -69,9 +69,9 @@ npm run dev
 
 ## Login (usuários seed)
 Após `npm run seed` no backend, você pode usar:
-- **admin**: `admin@inforcliente.local` / `admin123`
-- **operador**: `operador@inforcliente.local` / `admin123`
-- **leitura**: `leitura@inforcliente.local` / `admin123`
+- **admin**: `admin@InfoCliente.local` / `admin123`
+- **operador**: `operador@InfoCliente.local` / `admin123`
+- **leitura**: `leitura@InfoCliente.local` / `admin123`
 
 ## Permissões (roles)
 - **leitura**: apenas `GET`.

@@ -1,4 +1,4 @@
-# InforCliente Backend
+# InfoCliente Backend
 
 ## Requisitos
 - Node.js (recomendado >= 18)

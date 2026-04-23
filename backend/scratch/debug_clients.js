@@ -2,12 +2,12 @@ const axios = require('axios');
 
 async function debugAPI() {
   const baseURL = 'http://localhost:4000';
-  const email = 'admin@inforcliente.local';
+  const email = 'admin@InfoCliente.local';
   const password = 'admin'; // Assuming password for this local admin is 'admin' or findable.
 
   try {
     console.log(`Starting debug for ${baseURL}/clients...`);
-    
+
     // 1. Authenticate
     console.log('Authenticating...');
     const loginRes = await axios.post(`${baseURL}/auth/login`, {

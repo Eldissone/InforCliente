@@ -6,7 +6,7 @@ Atualmente, o sistema permite listar e criar obras, mas não exporta as funciona
 
 ### Frontend
 
-#### [MODIFY] [ProjectGeral.js](file:///c:/Users/Evilonga/InforCliente/frontend/src/pages/Projectos/ProjectGeral.js)
+#### [MODIFY] [ProjectGeral.js](file:///c:/Users/Evilonga/InfoCliente/frontend/src/pages/Projectos/ProjectGeral.js)
 - **Visualização**: Atualizar `renderRow` para exibir botões de "Visualizar" e "Editar", seguindo o padrão visual do módulo de Clientes.
 - **Edição**: Implementar a função `openEdit(id)` que:
   - Carrega os dados atuais da obra e a lista de clientes para o dropdown.
@@ -16,7 +16,7 @@ Atualmente, o sistema permite listar e criar obras, mas não exporta as funciona
 
 ### Backend
 
-#### [VERIFY] [projects.js](file:///c:/Users/Evilonga/InforCliente/backend/src/routes/projects.js)
+#### [VERIFY] [projects.js](file:///c:/Users/Evilonga/InfoCliente/backend/src/routes/projects.js)
 - Confirmar que as rotas `PATCH` e `DELETE` estão a processar corretamente todos os campos do modelo `Project` (o check inicial confirma que sim).
 
 ## Plano de Verificação
