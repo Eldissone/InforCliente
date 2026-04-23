@@ -2169,7 +2169,7 @@ function toggleTable(tableId, manual = true) {
   }
 
   const isCollapsed = uiState.collapsedTables[tableId];
-  
+
   if (isCollapsed) {
     body.classList.add("hidden");
   } else {
@@ -2188,7 +2188,7 @@ function wireTablesToggle() {
   document.querySelectorAll("[data-toggle-table]").forEach(btn => {
     const tableId = btn.getAttribute("data-toggle-table");
     btn.addEventListener("click", () => toggleTable(tableId, true));
-    
+
     // Apply initial state
     toggleTable(tableId, false);
   });
@@ -3177,7 +3177,12 @@ async function loadStockGallery() {
   const grid = el("stockGalleryContainer");
   if (!grid) return;
 
-  grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos da obra...</div>`;
+  grid.innerHTML = `
+    <div class="col-span-full py-20 flex flex-col items-center justify-center animate-pulse">
+      <div class="w-12 h-12 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin mb-4"></div>
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Carregando registos...</p>
+    </div>
+  `;
 
   try {
     const id = getProjectId();
@@ -3270,7 +3275,12 @@ async function loadGallery() {
   const empty = el("noPhotosMsg");
   if (!grid) return;
 
-  grid.innerHTML = renderLoadingRow(4); // Adaptado para grid
+  grid.innerHTML = `
+    <div class="col-span-full py-20 flex flex-col items-center justify-center animate-pulse">
+      <div class="w-12 h-12 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin mb-4"></div>
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">A carregar galeria...</p>
+    </div>
+  `;
 
   try {
     const id = getProjectId();
@@ -3338,29 +3348,81 @@ function wireGallery() {
       title: "Novo Registo Fotográfico",
       primaryLabel: "Carregar Foto",
       contentHtml: `
-        <div class="space-y-4">
-          <div class="border-2 border-dashed border-slate-200 rounded-3xl p-10 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-slate-50 transition-colors cursor-pointer relative" onclick="this.querySelector('input').click()">
-            <span class="material-symbols-outlined text-4xl text-slate-300 mb-3">add_a_photo</span>
-            <p class="text-sm font-bold text-slate-500">Clique para selecionar ou arraste a foto</p>
-            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">JPG, PNG até 10MB</p>
-            <input id="gal_input" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="const f=this.files[0]; if(f) { this.previousElementSibling.previousElementSibling.innerText='photo'; this.previousElementSibling.innerText=f.name; }" />
+        <div class="space-y-6">
+          <div id="gal_preview_container" class="hidden aspect-video rounded-[32px] overflow-hidden border-4 border-white shadow-2xl relative group bg-slate-100">
+             <img id="gal_preview_img" class="w-full h-full object-cover" src="" />
+             <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                <button type="button" id="gal_remove_btn" class="w-12 h-12 rounded-2xl bg-white text-red-500 flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-all">
+                  <span class="material-symbols-outlined text-2xl">delete</span>
+                </button>
+             </div>
           </div>
-          <div>
-             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Descrição da Foto</label>
-             <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm focus:ring-2 focus:ring-[#2afc8d] transition-all" rows="3" placeholder="O que esta imagem representa?"></textarea>
+
+          <div id="gal_dropzone" class="border-2 border-dashed border-slate-200 rounded-[32px] p-12 flex flex-col items-center justify-center bg-slate-50/50 hover:bg-slate-50 hover:border-[#2afc8d] transition-all relative group">
+            <input id="gal_input" type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer z-20" />
+            <div class="flex flex-col items-center justify-center pointer-events-none">
+              <div class="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 group-hover:text-[#2afc8d] transition-all text-slate-400">
+                <span class="material-symbols-outlined text-3xl">add_a_photo</span>
+              </div>
+              <p class="text-sm font-bold text-slate-600">Clique para selecionar foto</p>
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">JPG, PNG até 10MB</p>
+            </div>
           </div>
-          <div>
-             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Data do Registo (Opcional)</label>
-             <input id="gal_date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full rounded-xl border-slate-200 bg-slate-50 text-sm" />
+
+          <div class="space-y-4">
+            <div>
+               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Descrição do Momento</label>
+               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que está a acontecer na obra..."></textarea>
+            </div>
+            <div>
+               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Data do Registo</label>
+               <input id="gal_date" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full h-12 rounded-xl border-slate-200 bg-slate-50 text-sm font-bold px-4 focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all" />
+            </div>
           </div>
         </div>
       `,
+      onRender: ({ panel }) => {
+        const input = panel.querySelector("#gal_input");
+        const previewContainer = panel.querySelector("#gal_preview_container");
+        const previewImg = panel.querySelector("#gal_preview_img");
+        const dropzone = panel.querySelector("#gal_dropzone");
+        const removeBtn = panel.querySelector("#gal_remove_btn");
+
+        input.addEventListener("change", (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            if (!file.type.startsWith("image/")) {
+              toast("Por favor, selecione um ficheiro de imagem", { type: "error" });
+              input.value = "";
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              previewImg.src = ev.target.result;
+              previewContainer.classList.remove("hidden");
+              dropzone.classList.add("hidden");
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+
+        removeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          input.value = "";
+          previewImg.src = "";
+          previewContainer.classList.add("hidden");
+          dropzone.classList.remove("hidden");
+        });
+      },
       onPrimary: async ({ close, panel }) => {
-        const file = panel.querySelector("#gal_input")?.files?.[0];
+        const fileInput = panel.querySelector("#gal_input");
+        const file = fileInput?.files?.[0];
+
         if (!file) {
           toast("Por favor, selecione uma imagem", { type: "error" });
           return;
         }
+
         const description = panel.querySelector("#gal_desc")?.value;
         const date = panel.querySelector("#gal_date")?.value;
         const btn = panel.querySelector("[data-primary]");
@@ -3372,6 +3434,7 @@ function wireGallery() {
             fieldName: "photo",
             extraFields: { description, date }
           });
+
           toast("Foto carregada com sucesso!", { type: "success" });
           close();
           loadGallery();
