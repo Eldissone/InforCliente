@@ -23,8 +23,10 @@ let state = {
   progressTasks: [],
   galleryObraStartDate: "",
   galleryObraEndDate: "",
+  galleryObraMaterial: "all",
   galleryCampoStartDate: "",
-  galleryCampoEndDate: ""
+  galleryCampoEndDate: "",
+  galleryCampoMaterial: "all"
 };
 
 async function loadDashboardData() {
@@ -1056,6 +1058,9 @@ async function loadPhotos() {
     const res = await apiRequest(`/projects/${state.projectId}/photos`);
     const allPhotos = res.items || [];
 
+    // Populate Material Filters
+    populateMaterialFilters(allPhotos);
+
     // 1. Fotos da Obra (movementId is null)
     let photosObra = allPhotos.filter(p => !p.movementId);
     if (state.galleryObraStartDate) {
@@ -1066,6 +1071,9 @@ async function loadPhotos() {
       const ge = new Date(state.galleryObraEndDate);
       ge.setHours(23, 59, 59, 999);
       photosObra = photosObra.filter(p => new Date(p.createdAt).getTime() <= ge.getTime());
+    }
+    if (state.galleryObraMaterial !== "all") {
+      photosObra = photosObra.filter(p => (p.movement?.material?.name || p.description) === state.galleryObraMaterial);
     }
 
     // 2. Fotos de Campo (movementId is NOT null)
@@ -1079,6 +1087,9 @@ async function loadPhotos() {
       ge.setHours(23, 59, 59, 999);
       photosCampo = photosCampo.filter(p => new Date(p.createdAt).getTime() <= ge.getTime());
     }
+    if (state.galleryCampoMaterial !== "all") {
+      photosCampo = photosCampo.filter(p => (p.movement?.material?.name || p.description) === state.galleryCampoMaterial);
+    }
 
     renderGallerySection("galleryObraContainer", photosObra, false);
     renderGallerySection("galleryCampoContainer", photosCampo, true);
@@ -1087,6 +1098,47 @@ async function loadPhotos() {
     console.error(err);
     if (containerObra) containerObra.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-400">Erro ao carregar fotos.</div>`;
   }
+}
+
+function populateMaterialFilters(photos) {
+  const obraSelect = document.getElementById("galleryObraFilterMaterial");
+  const campoSelect = document.getElementById("galleryCampoFilterMaterial");
+
+  if (!obraSelect || !campoSelect) return;
+
+  const materialsObra = new Set();
+  const materialsCampo = new Set();
+
+  photos.forEach(p => {
+    const name = p.movement?.material?.name || p.description;
+    if (name) {
+      if (!p.movementId) materialsObra.add(name);
+      else materialsCampo.add(name);
+    }
+  });
+
+  const updateSelect = (select, materials, currentVal) => {
+    const options = Array.from(materials).sort();
+    const currentOptions = Array.from(select.options).map(o => o.value);
+    
+    // Only re-populate if options changed
+    const newOptionsStr = ["all", ...options].join(",");
+    const oldOptionsStr = currentOptions.join(",");
+    
+    if (newOptionsStr !== oldOptionsStr) {
+      select.innerHTML = '<option value="all">Todos os Materiais</option>';
+      options.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+      select.value = currentVal;
+    }
+  };
+
+  updateSelect(obraSelect, materialsObra, state.galleryObraMaterial);
+  updateSelect(campoSelect, materialsCampo, state.galleryCampoMaterial);
 }
 
 function renderGallerySection(containerId, photos, isCampo) {
@@ -1275,6 +1327,10 @@ function wireEvents() {
   };
   document.getElementById("galleryObraFilterStart")?.addEventListener("change", updateGalleryObraDates);
   document.getElementById("galleryObraFilterEnd")?.addEventListener("change", updateGalleryObraDates);
+  document.getElementById("galleryObraFilterMaterial")?.addEventListener("change", (e) => {
+    state.galleryObraMaterial = e.target.value;
+    if (state.activeTab === "galeria-obra") loadPhotos();
+  });
 
   // Gallery Filters - Campo
   const updateGalleryCampoDates = () => {
@@ -1284,6 +1340,10 @@ function wireEvents() {
   };
   document.getElementById("galleryCampoFilterStart")?.addEventListener("change", updateGalleryCampoDates);
   document.getElementById("galleryCampoFilterEnd")?.addEventListener("change", updateGalleryCampoDates);
+  document.getElementById("galleryCampoFilterMaterial")?.addEventListener("change", (e) => {
+    state.galleryCampoMaterial = e.target.value;
+    if (state.activeTab === "galeria-campo") loadPhotos();
+  });
 
   // Stock Filters
   const reloadStock = () => { if (state.activeTab === "stock") loadStockData(); };
