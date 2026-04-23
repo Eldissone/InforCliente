@@ -115,6 +115,7 @@ model Project {
   folders             ProjectFolder[]
   transactions        ProjectTransaction[]
   progressTasks       ProjectProgressTask[]
+  progressHistory     ProjectProgressHistory[]
   payments            ProjectPayment[]
   stock               ProjectStock[]
   stockMovements      StockMovement[]
@@ -237,8 +238,26 @@ model ProjectProgressTask {
   parent          ProjectProgressTask? @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
   subTasks        ProjectProgressTask[] @relation("SubTasks")
   project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  history         ProjectProgressHistory[]
 
   @@index([projectId, itemGroup, order])
+}
+
+model ProjectProgressHistory {
+  id              String              @id @default(cuid())
+  projectId       String
+  taskId          String
+  date            DateTime            @default(now())
+  executedQty     Decimal             @db.Decimal(10, 2)
+  accumulatedQty  Decimal             @db.Decimal(10, 2)
+  technicianName  String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task            ProjectProgressTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, taskId, date])
 }
 
 model ProjectPayment {

@@ -1397,7 +1397,11 @@ projectRoutes.patch(
       .parse(req.body);
 
     const data = {};
-    if (body.executedQty !== undefined) data.executedQty = body.executedQty;
+    let oldTask = null;
+    if (body.executedQty !== undefined) {
+      oldTask = await prisma.projectProgressTask.findUnique({ where: { id: taskId } });
+      data.executedQty = body.executedQty;
+    }
     if (body.expectedQty !== undefined) data.expectedQty = body.expectedQty;
     if (body.unit !== undefined) data.unit = body.unit.toLowerCase().trim();
     if (body.unitValue !== undefined) data.unitValue = body.unitValue !== null ? Number(body.unitValue) : null;
@@ -1411,11 +1415,50 @@ projectRoutes.patch(
       data,
     });
 
+    if (oldTask && Number(data.executedQty) !== Number(oldTask.executedQty)) {
+      const diff = Number(data.executedQty) - Number(oldTask.executedQty);
+      if (diff !== 0) {
+        await prisma.projectProgressHistory.create({
+          data: {
+            projectId: id,
+            taskId: taskId,
+            executedQty: diff,
+            accumulatedQty: data.executedQty,
+            technicianName: req.user?.name || req.user?.email || null,
+          }
+        });
+      }
+    }
+
     if (task.parentId) {
       await recalculateTaskRollup(task.parentId, id);
     }
 
     return res.json({ task });
+  })
+);
+
+projectRoutes.get(
+  "/:id/progress-history",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
+    
+    const history = await prisma.projectProgressHistory.findMany({
+      where: { projectId: id },
+      orderBy: { date: "desc" },
+      include: {
+        task: {
+          select: {
+            description: true,
+            unit: true,
+            itemGroup: true
+          }
+        }
+      }
+    });
+    
+    return res.json({ items: history });
   })
 );
 

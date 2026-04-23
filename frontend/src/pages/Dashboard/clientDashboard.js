@@ -150,6 +150,10 @@ function updateTabUI() {
   if (state.activeTab === "stock" && dashboardData) {
     loadStockData();
   }
+
+  if (state.activeTab === "obra" && dashboardData) {
+    loadProgressHistoryData();
+  }
 }
 
 function filterDataByProject(pid) {
@@ -439,6 +443,54 @@ async function loadStockData() {
   }
 }
 
+async function loadProgressHistoryData() {
+  if (!state.projectId || state.projectId === "all") return;
+
+  const dailyTbody = document.getElementById("progressDailyTbody");
+  if (!dailyTbody) return;
+
+  dailyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar...</td></tr>`;
+
+  try {
+    const res = await apiRequest(`/projects/${state.projectId}/progress-history`);
+    const history = res.items || [];
+
+    const fTask = document.getElementById("progressDailyFilterTask")?.value?.toLowerCase() || "";
+    const fDate = document.getElementById("progressDailyFilterDate")?.value || "";
+
+    const filtered = history.filter(h => {
+      const matchTask = h.task?.description?.toLowerCase().includes(fTask) || false;
+      const matchDate = !fDate || (h.date && h.date.startsWith(fDate));
+      return matchTask && matchDate;
+    });
+
+    if (filtered.length === 0) {
+      dailyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem registos correspondentes</td></tr>`;
+    } else {
+      dailyTbody.innerHTML = filtered.map(h => {
+        const date = h.date ? new Date(h.date).toLocaleDateString("pt-PT") : "—";
+        const qtyExec = Number(h.executedQty || 0);
+        const qtyAcc = Number(h.accumulatedQty || 0);
+        const unit = h.task?.unit || "un";
+        const isNegative = qtyExec < 0;
+        const colorClass = isNegative ? "text-red-500" : "text-blue-600";
+        const sign = isNegative ? "" : "+";
+        
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 py-4 text-xs font-bold text-slate-500">${date}</td>
+            <td class="px-4 py-4 font-bold text-slate-900">${escapeHtml(h.task?.description || "—")}</td>
+            <td class="px-4 py-4 text-center font-black ${colorClass}">${sign}${qtyExec.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(unit)}</span></td>
+            <td class="px-4 py-4 text-center font-black text-emerald-600">${qtyAcc.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(unit)}</span></td>
+            <td class="px-6 py-4 text-right"><span class="text-xs font-bold text-slate-500">${escapeHtml(h.technicianName || "—")}</span></td>
+          </tr>`;
+      }).join("");
+    }
+  } catch (err) {
+    console.error("Erro ao carregar histórico de progresso", err);
+    dailyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados</td></tr>`;
+  }
+}
 
 function renderSafetyAnalytics(data) {
   const { projects } = data;
@@ -536,7 +588,7 @@ function renderSafetyAnalytics(data) {
     colors: ['#3b82f6'],
     tooltip: {
       theme: 'light',
-      y: { formatter: (val) => `${val} incidente(s)` },
+      y: { formatter: (val) => `${ val } incidente(s)` },
       fixed: { enabled: false },
       x: { show: true },
       marker: { show: false }
@@ -578,7 +630,7 @@ async function loadProgressBreakdown(projectId) {
       const groupNames = Array.from(new Set(state.progressTasks.map(t => escapeHtml(t.itemGroup || "Outros / Geral"))));
       let opts = `<option value="all">Todos os Separadores</option>`;
       groupNames.forEach(g => {
-        opts += `<option value="${g}">${g}</option>`;
+        opts += `<option value="${g}">${ g }</option>`;
       });
       // não alterar o valor se já estiver selecionado um válido e se ele existir no novo dropdown
       const currentVal = filterSelect.value;
@@ -662,19 +714,19 @@ function renderProgressBreakdownRows() {
       const tgv = groupInvoicingTotals[t.itemGroup || ""] || 0;
       const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
 
-      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
-      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
+      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${ tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ c }</span>`;
+      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${ gPct }% Exec.</span>`;
 
       html += `
-        <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-          <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
-            <div class="flex items-center gap-2 w-full">
-              <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
-              <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
-              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
-              ${fPct}
-            </div>
-          </td>
+    <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
+    <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+      <div class="flex items-center gap-2 w-full">
+        <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
+        <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
+        <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+        ${fPct}
+      </div>
+    </td>
         </tr>
       `;
       lastGroup = t.itemGroup;
@@ -697,10 +749,10 @@ function renderProgressBreakdownRows() {
       const invoicedVal = uv * exe;   // Valor faturado (Total executado)
 
       const cStr = task.currency === "USD" ? "USD" : "Kz";
-      const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
-      const uvMStr = uvM > 0 ? `${uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
-      const invoicingValStr = invoicingVal > 0 ? `${invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
-      const invoicedValStr = invoicedVal > 0 ? `${invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
+      const uvSStr = uvS > 0 ? `${ uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
+      const uvMStr = uvM > 0 ? `${ uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
+      const invoicingValStr = invoicingVal > 0 ? `${ invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
+      const invoicedValStr = invoicedVal > 0 ? `${ invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
 
       const indentStyle = isSub ? "pl-14 bg-slate-50/40" : "px-6";
       const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
@@ -709,7 +761,7 @@ function renderProgressBreakdownRows() {
       const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${task.id}"` : "";
 
       return `
-        <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
+      <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${ toggleAttr }>
           <td class="py-3 ${descClass} ${indentStyle}">
              <div class="flex items-center">
                 ${iconSub}
@@ -732,7 +784,7 @@ function renderProgressBreakdownRows() {
     html += renderRow(t, groupIndex.toString(), false, subs.length > 0);
 
     subs.forEach((sub, subI) => {
-      const subRow = renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
+      const subRow = renderRow(sub, `${ groupIndex }.${ subI + 1 }`, true, false);
       // Injetar o data-sub-of no tr do subitem
       html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
     });
@@ -759,7 +811,7 @@ function renderProgressBreakdownRows() {
       Object.keys(groupProgressMap).forEach(g => {
         const gPct = Math.round(groupProgressMap[g] || 0);
         summaryHtml += `
-            <tr class="hover:bg-slate-50 transition-colors">
+      <tr class="hover:bg-slate-50 transition-colors">
               <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(g)}</td>
               <td class="px-4 py-4 text-right">
                  <div class="flex items-center justify-end gap-3">
@@ -770,14 +822,14 @@ function renderProgressBreakdownRows() {
                  </div>
               </td>
             </tr>
-          `;
+      `;
       });
       summaryTbody.innerHTML = summaryHtml;
     } else {
       let summaryHtml = "";
       const gPct = Math.round(groupProgressMap[filterVal] || 0);
       summaryHtml += `
-        <tr class="hover:bg-slate-50 transition-colors">
+      <tr class="hover:bg-slate-50 transition-colors">
           <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(filterVal)}</td>
           <td class="px-4 py-4 text-right">
              <div class="flex items-center justify-end gap-3">
@@ -1239,6 +1291,11 @@ function wireEvents() {
   document.getElementById("stockDailyFilterMaterial")?.addEventListener("input", reloadStock);
   document.getElementById("stockDailyFilterDate")?.addEventListener("change", reloadStock);
   document.getElementById("stockDailyFilterType")?.addEventListener("change", reloadStock);
+
+  // Progress Diary Filters
+  const reloadProgressDiary = () => { if (state.activeTab === "obra") loadProgressHistoryData(); };
+  document.getElementById("progressDailyFilterTask")?.addEventListener("input", reloadProgressDiary);
+  document.getElementById("progressDailyFilterDate")?.addEventListener("change", reloadProgressDiary);
 
   // Tabs — event delegation para funcionar com botões dentro do conteúdo
   document.addEventListener("click", (e) => {
