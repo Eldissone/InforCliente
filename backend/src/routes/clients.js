@@ -386,9 +386,9 @@ clientRoutes.get(
 
 clientRoutes.post(
   "/:id/interactions",
-  requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const clientId = String(req.params.id);
+    assertClientAccess(req, clientId);
     const body = z
       .object({
         type: z.string().min(1),

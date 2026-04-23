@@ -74,6 +74,8 @@ async function loadDashboardData() {
     if (state.activeTab === "galeria-campo" && state.projectId !== "all") {
       await loadPhotos();
     }
+
+    checkInteractionsBadge();
   } catch (err) {
     toast("Não foi possível carregar os dados.", { type: "error" });
     console.error(err);
@@ -1424,6 +1426,10 @@ function wireEvents() {
     }
   });
 
+  document.getElementById("btnInteractions")?.addEventListener("click", () => {
+    loadInteractions();
+  });
+
   wireFileNavigation();
 }
 
@@ -1441,6 +1447,167 @@ function openLightbox(url, title, date) {
 
   lightbox.classList.add("active");
   document.body.style.overflow = "hidden"; // Prevent scrolling
+}
+
+async function loadInteractions() {
+  if (!dashboardData || !dashboardData.clientId) {
+    return toast("Dados do cliente não carregados", { type: "error" });
+  }
+
+  openModal({
+    title: "Histórico de Interação",
+    contentHtml: `
+          <div id="interactionsContainer" class="flex flex-col gap-4 max-h-[50vh] overflow-y-auto p-4 custom-scroll bg-slate-50/50 rounded-2xl mb-4">
+              <div class="flex items-center justify-center p-12">
+                  <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+          </div>
+          <div class="flex gap-2">
+              <input type="text" id="interactionReplyInput" placeholder="Escreva uma resposta..." class="flex-1 h-12 bg-slate-100 border-none rounded-xl px-4 text-sm font-medium focus:ring-2 focus:ring-blue-500 transition-all">
+              <button id="btnSendInteraction" class="w-12 h-12 bg-[#0F172A] text-[#2afc8d] rounded-xl flex items-center justify-center hover:scale-105 transition-all shadow-lg active:scale-95 disabled:opacity-50">
+                  <span class="material-symbols-outlined">send</span>
+              </button>
+          </div>
+      `,
+    onRender: ({ panel }) => {
+      const input = panel.querySelector("#interactionReplyInput");
+      const btn = panel.querySelector("#btnSendInteraction");
+      if (!input || !btn) return;
+
+      const send = async () => {
+        const text = input.value.trim();
+        if (!text) return;
+
+        setButtonLoading(btn, true);
+        btn.disabled = true;
+        try {
+          await apiRequest(`/clients/${dashboardData.clientId}/interactions`, {
+            method: "POST",
+            body: {
+              type: "CLIENT_REPLY",
+              title: "Resposta do Cliente",
+              description: text
+            }
+          });
+          input.value = "";
+          // Recarregar apenas a lista de interações
+          await fetchAndRenderInteractions();
+        } catch (err) {
+          toast("Erro ao enviar resposta", { type: "error" });
+        } finally {
+          setButtonLoading(btn, false);
+          btn.disabled = false;
+          input.focus();
+        }
+      };
+
+      btn.onclick = send;
+      input.onkeydown = (e) => { if (e.key === "Enter") send(); };
+    },
+    primaryLabel: "Fechar",
+    onPrimary: ({ close }) => close()
+  });
+
+  const fetchAndRenderInteractions = async () => {
+    try {
+      const res = await apiRequest(`/clients/${dashboardData.clientId}/interactions`);
+    const interactions = res.items || [];
+
+    // Marcar como lidas
+    if (interactions.length > 0) {
+      const latest = new Date(interactions[0].occurredAt).getTime();
+      localStorage.setItem(`lastSeenInteractions_${dashboardData.clientId}`, latest);
+      document.getElementById("interactionBadge")?.classList.add("hidden");
+    }
+
+    const container = document.getElementById("interactionsContainer");
+    if (!container) return;
+
+    if (interactions.length === 0) {
+      container.innerHTML = `
+              <div class="flex flex-col items-center justify-center p-12 text-center">
+                  <span class="material-symbols-outlined text-5xl text-slate-200 mb-4">forum</span>
+                  <p class="text-slate-400 font-medium">Sem interações registadas até ao momento.</p>
+              </div>
+          `;
+      return;
+    }
+
+    // Inverter para mostrar a mais recente em baixo ou manter a ordem? 
+    // Geralmente chat é de cima para baixo (antiga -> nova). 
+    // Mas interações de log costumam ser nova -> antiga.
+    // Vamos manter Nova -> Antiga (descendente) como está na API, mas inverter para o visual de "mensagens" se quisermos fluxo de chat.
+    // O pedido diz "como mensagens", então vamos inverter para fluxo cronológico.
+    const chronological = [...interactions].reverse();
+
+    container.innerHTML = chronological.map(i => {
+      const date = new Date(i.occurredAt).toLocaleString("pt-PT", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      const typeLabel = i.type || "Mensagem";
+
+      return `
+              <div class="flex flex-col gap-1 mb-2">
+                  <div class="flex items-center gap-2 mb-1">
+                      <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${date}</span>
+                      <span class="h-px flex-1 bg-slate-200/50"></span>
+                      <span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[8px] font-black uppercase tracking-widest">${escapeHtml(typeLabel)}</span>
+                  </div>
+                  <div class="bg-white rounded-2xl rounded-tl-none p-4 border border-slate-100 shadow-sm transition-all hover:border-blue-100">
+                      <h4 class="text-xs font-black text-slate-900 mb-1 tracking-tight">${escapeHtml(i.title)}</h4>
+                      <p class="text-xs text-slate-600 leading-relaxed font-medium">${escapeHtml(i.description || "")}</p>
+                      ${i.leadName ? `
+                      <div class="mt-3 pt-3 border-t border-slate-50 flex items-center gap-2">
+                          <span class="material-symbols-outlined text-slate-400 text-sm">person</span>
+                          <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Responsável: ${escapeHtml(i.leadName)}</span>
+                      </div>` : ""}
+                  </div>
+              </div>
+          `;
+    }).join("");
+
+    // Scroll to bottom to see latest
+    setTimeout(() => {
+      container.scrollTop = container.scrollHeight;
+    }, 100);
+
+    } catch (err) {
+      console.error("Erro ao carregar interações", err);
+      const container = document.getElementById("interactionsContainer");
+      if (container) {
+        container.innerHTML = `<div class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar interações</div>`;
+      }
+    }
+  };
+
+  await fetchAndRenderInteractions();
+}
+
+async function checkInteractionsBadge() {
+  if (!dashboardData || !dashboardData.clientId) return;
+
+  try {
+    const res = await apiRequest(`/clients/${dashboardData.clientId}/interactions`);
+    const interactions = res.items || [];
+    if (interactions.length === 0) return;
+
+    const latest = new Date(interactions[0].occurredAt).getTime();
+    const lastSeen = Number(localStorage.getItem(`lastSeenInteractions_${dashboardData.clientId}`) || 0);
+
+    const badge = document.getElementById("interactionBadge");
+    if (badge && latest > lastSeen) {
+      badge.classList.remove("hidden");
+    } else if (badge) {
+      badge.classList.add("hidden");
+    }
+  } catch (err) {
+    console.warn("Erro ao verificar badge de interações", err);
+  }
 }
 
 function closeLightbox() {

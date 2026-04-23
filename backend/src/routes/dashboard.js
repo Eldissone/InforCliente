@@ -86,6 +86,7 @@ dashboardRoutes.get(
           industry: true,
           status: true,
           region: true,
+          profilePic: true,
           healthScore: true,
           ltvTotal: true,
         },
@@ -243,6 +244,7 @@ dashboardRoutes.get(
     const stockSummary = Object.values(stockMap);
 
     return res.json({
+      clientId,
       financials: {
         totalContract,
         totalPaid,

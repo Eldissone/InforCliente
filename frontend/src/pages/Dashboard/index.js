@@ -1,4 +1,4 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, getApiBaseUrl } from "../../services/api.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatCompactNumber, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -31,12 +31,15 @@ function initials(name) {
 function renderClientRow(c) {
   const health = Math.max(0, Math.min(100, Number(c.healthScore || 0)));
   const healthBarColor = c.status === "AT_RISK" ? "bg-red-500" : "bg-emerald-500";
+  
+  const picUrl = c.profilePic ? (c.profilePic.startsWith('http') ? c.profilePic : `${getApiBaseUrl()}/${c.profilePic}`) : null;
+
   return `
     <tr class="hover:bg-slate-50/50 transition-all duration-200 group border-b border-slate-50 last:border-0">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform">
-            ${initials(c.name)}
+          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform overflow-hidden">
+            ${picUrl ? `<img src="${picUrl}" alt="${c.name}" class="w-full h-full object-cover" />` : initials(c.name)}
           </div>
           <div>
             <div class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${c.name}</div>
