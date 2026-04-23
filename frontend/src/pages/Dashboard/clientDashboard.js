@@ -50,23 +50,26 @@ async function loadDashboardData() {
 
     // Update select filter if it still exists (fallback)
     const select = document.getElementById("projectFilter");
-    if (select && select.options.length === 1) {
-      dashboardData.projects.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = p.name;
-        select.appendChild(opt);
-      });
+    if (select) {
+      if (select.options.length === 1) {
+        dashboardData.projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+      }
+      select.value = state.projectId;
     }
 
     if (state.activeTab === "arquivos" && state.projectId !== "all") {
-       await loadFiles();
+      await loadFiles();
     }
     if (state.activeTab === "galeria-obra" && state.projectId !== "all") {
-       await loadPhotos();
+      await loadPhotos();
     }
     if (state.activeTab === "galeria-campo" && state.projectId !== "all") {
-       await loadPhotos();
+      await loadPhotos();
     }
   } catch (err) {
     toast("Não foi possível carregar os dados.", { type: "error" });
@@ -75,8 +78,8 @@ async function loadDashboardData() {
 }
 
 function renderDashboard(projectId) {
-  const data = projectId === "all" 
-    ? dashboardData 
+  const data = projectId === "all"
+    ? dashboardData
     : filterDataByProject(projectId);
 
   if (!data) return;
@@ -84,14 +87,13 @@ function renderDashboard(projectId) {
   updateMetrics(data);
   renderFinancialChart(data.projects);
   renderStockChart(data.stock);
-  renderProgressGauge(data.overallProgress);
-  
+
   if (projectId !== "all") {
     loadProgressBreakdown(projectId);
   } else {
     document.getElementById("progressBreakdownTbody").innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver os detalhes</td></tr>`;
   }
-  
+
   updateTabUI();
 }
 
@@ -144,6 +146,10 @@ function updateTabUI() {
       loadPhotos();
     }
   }
+
+  if (state.activeTab === "stock" && dashboardData) {
+    renderStockTable(dashboardData.stock || []);
+  }
 }
 
 function filterDataByProject(pid) {
@@ -165,7 +171,7 @@ function filterDataByProject(pid) {
 
 function updateMetrics(data) {
   const { financials, projects } = data;
-  
+
   // Se tivermos um projecto selecionado (que não seja "all")
   const currentProject = projects.length === 1 ? projects[0] : null;
 
@@ -177,15 +183,15 @@ function updateMetrics(data) {
   document.getElementById("metricTotalContract").textContent = formatCurrencyKZ(financials.totalContract);
   document.getElementById("metricTotalPaid").textContent = formatCurrencyKZ(financials.totalPaid);
   document.getElementById("metricDebt").textContent = formatCurrencyKZ(financials.totalDebt);
-  
+
   // Payment Progress
-  const paymentPct = financials.totalContract > 0 
-    ? (financials.totalPaid / financials.totalContract) * 100 
+  const paymentPct = financials.totalContract > 0
+    ? (financials.totalPaid / financials.totalContract) * 100
     : 0;
 
   const metricPayment = document.getElementById("metricPaymentProgress");
   if (metricPayment) metricPayment.textContent = `${paymentPct.toFixed(1)}%`;
-  
+
   const paymentLine = document.getElementById("paymentProgressLine");
   if (paymentLine) paymentLine.style.width = `${paymentPct}%`;
 
@@ -229,7 +235,7 @@ function renderDirectorInfo(project) {
       techContainer.innerHTML = project.technicians.map(t => `
         <div class="glass-card p-6 rounded-[2rem] bg-white text-center flex flex-col items-center">
             <div class="w-16 h-16 rounded-full bg-slate-100 mb-3 overflow-hidden border-2 border-white shadow-md">
-                <img src="${t.photo ? getApiBaseUrl()+'/'+t.photo : '/assets/images/placeholder-user.png'}" alt="${escapeHtml(t.name)}" class="w-full h-full object-cover" />
+                <img src="${t.photo ? getApiBaseUrl() + '/' + t.photo : '/assets/images/placeholder-user.png'}" alt="${escapeHtml(t.name)}" class="w-full h-full object-cover" />
             </div>
             <h4 class="text-sm font-bold text-slate-800">${escapeHtml(t.name)}</h4>
             <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-4">${escapeHtml(t.role || 'Técnico')}</p>
@@ -310,7 +316,7 @@ function renderStockTable(stock) {
   const fState = document.getElementById("stockFilterState")?.value || "all";
   // O filtro de data precisaria de datas individuais nos itens de stock
   // Por agora fazemos o filtro básico de material e estado se disponível
-  
+
   const filtered = stock.filter(s => {
     const matchMat = s.name.toLowerCase().includes(fMat);
     return matchMat;
@@ -351,206 +357,155 @@ function renderStockTable(stock) {
   }).join("");
 }
 
-function renderProgressGauge(progress) {
-  const options = {
-    series: [progress],
-    chart: { height: 350, type: 'radialBar', fontFamily: 'Inter, sans-serif' },
-    plotOptions: {
-      radialBar: {
-        startAngle: -135,
-        endAngle: 135,
-        hollow: { size: '70%', },
-        track: { background: '#f1f5f9', strokeWidth: '97%', margin: 5, },
-        dataLabels: {
-          name: { show: true, color: '#64748b', fontSize: '12px', fontWeight: 800, offsetY: 20 },
-          value: { offsetY: -20, fontSize: '40px', fontWeight: 900, color: '#0F172A', formatter: (val) => `${val}%` }
+
+function renderSafetyAnalytics(data) {
+  const { projects } = data;
+
+  // 1. Agregação de Dados
+  let totalActiveStaff = 0;
+  let mostRecentAccident = null;
+  const monthlyAccidents = {}; // { "Jan": 2, ... }
+
+  projects.forEach(p => {
+    totalActiveStaff += (p.activeStaffCount || 0);
+
+    if (p.lastAccidentDate) {
+      const d = new Date(p.lastAccidentDate);
+      if (!mostRecentAccident || d > mostRecentAccident) {
+        mostRecentAccident = d;
+      }
+    }
+
+    // Agregar histórico
+    if (p.safetyHistory && Array.isArray(p.safetyHistory)) {
+      p.safetyHistory.forEach(entry => {
+        if (entry.month && entry.count !== undefined) {
+          monthlyAccidents[entry.month] = (monthlyAccidents[entry.month] || 0) + entry.count;
         }
+      });
+    }
+  });
+
+  // 2. Calcular Dias sem Acidentes
+  let daysWithoutAccidents = 0;
+  if (mostRecentAccident) {
+    const diff = Date.now() - mostRecentAccident.getTime();
+    daysWithoutAccidents = Math.floor(diff / (1000 * 60 * 60 * 24));
+  } else {
+    daysWithoutAccidents = projects.length > 0 ? 30 : 0; // Fallback se nunca houve
+  }
+
+  // 3. Atualizar UI Textual
+  document.getElementById("dashboardSafetyDays").textContent = daysWithoutAccidents;
+  document.getElementById("dashboardActiveStaffCount").textContent = totalActiveStaff;
+
+  // 4. Preparar Gráfico
+  const consolidatedHistory = Object.entries(monthlyAccidents).map(([month, count]) => ({ month, count }));
+  if (consolidatedHistory.length === 0) {
+    // Mock se vazio
+    ["Jan", "Fev", "Mar"].forEach(m => consolidatedHistory.push({ month: m, count: 0 }));
+  }
+
+  const options = {
+    chart: {
+      type: 'area',
+      height: 140,
+      sparkline: { enabled: true },
+      animations: { enabled: true, easing: 'easeinout', speed: 800 },
+      fontFamily: 'Inter, sans-serif',
+      dropShadow: {
+        enabled: true,
+        top: 8,
+        left: 0,
+        blur: 8,
+        opacity: 0.1,
+        color: '#3b82f6'
       }
     },
+    stroke: { curve: 'smooth', width: 4, lineCap: 'round' },
     fill: {
       type: 'gradient',
       gradient: {
-        shade: 'dark',
-        type: 'horizontal',
-        shadeIntensity: 0.5,
-        gradientToColors: ['#2afc8d'],
-        inverseColors: true,
-        opacityFrom: 1,
-        opacityTo: 1,
-        stops: [0, 100]
+        shadeIntensity: 1,
+        opacityFrom: 0.5,
+        opacityTo: 0.0,
+        stops: [0, 90],
+        colorStops: [
+          { offset: 0, color: '#3b82f6', opacity: 0.4 },
+          { offset: 100, color: '#3b82f6', opacity: 0 }
+        ]
       }
     },
-    stroke: { lineCap: 'round' },
-    labels: ['Execução Geral'],
+    markers: {
+      size: 4,
+      colors: ['#3b82f6'],
+      strokeColors: '#fff',
+      strokeWidth: 2,
+      hover: { size: 6 }
+    },
+    series: [{
+      name: 'Acidentes',
+      data: consolidatedHistory.map(h => h.count)
+    }],
+    xaxis: {
+      categories: consolidatedHistory.map(h => h.month),
+      crosshairs: { show: false }
+    },
+    colors: ['#3b82f6'],
+    tooltip: {
+      theme: 'light',
+      y: { formatter: (val) => `${val} incidente(s)` },
+      fixed: { enabled: false },
+      x: { show: true },
+      marker: { show: false }
+    }
   };
 
-  const container = document.querySelector("#progressGauge");
-  if (!container) {
-    console.warn("Container #progressGauge not found. Skipping progress gauge render.");
-    return;
+  const container = document.querySelector("#dashboardSafetyChart");
+  if (!container) return;
+
+  if (charts.safety) {
+    charts.safety.destroy();
+    charts.safety = null;
   }
 
-  if (charts.progress) {
-    try {
-      charts.progress.destroy();
-    } catch (e) {
-      console.warn("Error destroying previous progress gauge:", e);
-    }
-    charts.progress = null;
-  }
-
-  charts.progress = new ApexCharts(container, options);
-  charts.progress.render().catch(err => console.error("Error rendering progress gauge:", err));
-}
- 
-function renderSafetyAnalytics(data) {
-    const { projects } = data;
-    
-    // 1. Agregação de Dados
-    let totalActiveStaff = 0;
-    let mostRecentAccident = null;
-    const monthlyAccidents = {}; // { "Jan": 2, ... }
-
-    projects.forEach(p => {
-        totalActiveStaff += (p.activeStaffCount || 0);
-        
-        if (p.lastAccidentDate) {
-            const d = new Date(p.lastAccidentDate);
-            if (!mostRecentAccident || d > mostRecentAccident) {
-                mostRecentAccident = d;
-            }
-        }
-
-        // Agregar histórico
-        if (p.safetyHistory && Array.isArray(p.safetyHistory)) {
-            p.safetyHistory.forEach(entry => {
-                if (entry.month && entry.count !== undefined) {
-                    monthlyAccidents[entry.month] = (monthlyAccidents[entry.month] || 0) + entry.count;
-                }
-            });
-        }
-    });
-
-    // 2. Calcular Dias sem Acidentes
-    let daysWithoutAccidents = 0;
-    if (mostRecentAccident) {
-        const diff = Date.now() - mostRecentAccident.getTime();
-        daysWithoutAccidents = Math.floor(diff / (1000 * 60 * 60 * 24));
-    } else {
-        daysWithoutAccidents = projects.length > 0 ? 30 : 0; // Fallback se nunca houve
-    }
-
-    // 3. Atualizar UI Textual
-    document.getElementById("dashboardSafetyDays").textContent = daysWithoutAccidents;
-    document.getElementById("dashboardActiveStaffCount").textContent = totalActiveStaff;
-
-    // 4. Preparar Gráfico
-    const consolidatedHistory = Object.entries(monthlyAccidents).map(([month, count]) => ({ month, count }));
-    if (consolidatedHistory.length === 0) {
-        // Mock se vazio
-        ["Jan", "Fev", "Mar"].forEach(m => consolidatedHistory.push({ month: m, count: 0 }));
-    }
-
-    const options = {
-        chart: {
-            type: 'area',
-            height: 140,
-            sparkline: { enabled: true },
-            animations: { enabled: true, easing: 'easeinout', speed: 800 },
-            fontFamily: 'Inter, sans-serif',
-            dropShadow: {
-                enabled: true,
-                top: 8,
-                left: 0,
-                blur: 8,
-                opacity: 0.1,
-                color: '#3b82f6'
-            }
-        },
-        stroke: { curve: 'smooth', width: 4, lineCap: 'round' },
-        fill: {
-            type: 'gradient',
-            gradient: { 
-                shadeIntensity: 1, 
-                opacityFrom: 0.5, 
-                opacityTo: 0.0, 
-                stops: [0, 90],
-                colorStops: [
-                    { offset: 0, color: '#3b82f6', opacity: 0.4 },
-                    { offset: 100, color: '#3b82f6', opacity: 0 }
-                ]
-            }
-        },
-        markers: {
-            size: 4,
-            colors: ['#3b82f6'],
-            strokeColors: '#fff',
-            strokeWidth: 2,
-            hover: { size: 6 }
-        },
-        series: [{
-            name: 'Acidentes',
-            data: consolidatedHistory.map(h => h.count)
-        }],
-        xaxis: {
-            categories: consolidatedHistory.map(h => h.month),
-            crosshairs: { show: false }
-        },
-        colors: ['#3b82f6'],
-        tooltip: { 
-            theme: 'light',
-            y: { formatter: (val) => `${val} incidente(s)` },
-            fixed: { enabled: false },
-            x: { show: true },
-            marker: { show: false }
-        }
-    };
-
-    const container = document.querySelector("#dashboardSafetyChart");
-    if (!container) return;
-
-    if (charts.safety) {
-        charts.safety.destroy();
-        charts.safety = null;
-    }
-
-    charts.safety = new ApexCharts(container, options);
-    charts.safety.render();
+  charts.safety = new ApexCharts(container, options);
+  charts.safety.render();
 }
 
 async function loadProgressBreakdown(projectId) {
   const tbody = document.getElementById("progressBreakdownTbody");
   const filterSelect = document.getElementById("progressGroupFilter");
   if (!tbody) return;
-  
+
   tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Carregando dados...</td></tr>`;
-  
+
   try {
     const data = await apiRequest(`/projects/${projectId}/progress-tasks`);
     state.progressTasks = data.tasks || [];
-    
+
     if (state.progressTasks.length === 0) {
       tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem tarefas de Avanço Físico registadas</td></tr>`;
       if (filterSelect) filterSelect.innerHTML = `<option value="all">Todos os Separadores</option>`;
       return;
     }
-    
+
     // Popular o Select de Filtro
     if (filterSelect) {
-       // extraimos os separators unicos mantendo a ordem aproximada
-       const groupNames = Array.from(new Set(state.progressTasks.map(t => escapeHtml(t.itemGroup || "Outros / Geral"))));
-       let opts = `<option value="all">Todos os Separadores</option>`;
-       groupNames.forEach(g => {
-          opts += `<option value="${g}">${g}</option>`;
-       });
-       // não alterar o valor se já estiver selecionado um válido e se ele existir no novo dropdown
-       const currentVal = filterSelect.value;
-       filterSelect.innerHTML = opts;
-       if (groupNames.includes(currentVal)) {
-           filterSelect.value = currentVal;
-       } else {
-           filterSelect.value = "all";
-       }
+      // extraimos os separators unicos mantendo a ordem aproximada
+      const groupNames = Array.from(new Set(state.progressTasks.map(t => escapeHtml(t.itemGroup || "Outros / Geral"))));
+      let opts = `<option value="all">Todos os Separadores</option>`;
+      groupNames.forEach(g => {
+        opts += `<option value="${g}">${g}</option>`;
+      });
+      // não alterar o valor se já estiver selecionado um válido e se ele existir no novo dropdown
+      const currentVal = filterSelect.value;
+      filterSelect.innerHTML = opts;
+      if (groupNames.includes(currentVal)) {
+        filterSelect.value = currentVal;
+      } else {
+        filterSelect.value = "all";
+      }
     }
 
     renderProgressBreakdownRows();
@@ -569,8 +524,8 @@ function renderProgressBreakdownRows() {
   const tasksToRender = state.progressTasks.filter(t => filterVal === "all" || escapeHtml(t.itemGroup || "Outros / Geral") === filterVal);
 
   if (tasksToRender.length === 0) {
-     tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhuma tarefa neste separador</td></tr>`;
-     return;
+    tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhuma tarefa neste separador</td></tr>`;
+    return;
   }
 
   let html = "";
@@ -586,30 +541,30 @@ function renderProgressBreakdownRows() {
     if (!groupInvoicingTotals[g]) groupInvoicingTotals[g] = 0;
     if (!groupInvoicedTotals[g]) groupInvoicedTotals[g] = 0;
     if (!groupTasks[g]) groupTasks[g] = [];
-    
+
     const exp = Number(t.expectedQty || 0);
     const exe = Number(t.executedQty || 0);
     const uv = Number(t.unitValue || 0);
-    
+
     groupInvoicingTotals[g] += (uv * exp);
     groupInvoicedTotals[g] += (uv * exe);
     groupTasks[g].push(t);
 
     if (!groupCurrencies[g] || t.currency === "USD") {
-       groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
+      groupCurrencies[g] = t.currency === "USD" ? "USD" : "Kz";
     }
   });
 
   const groupProgressMap = {};
   Object.keys(groupTasks).forEach(g => {
-     const tasks = groupTasks[g];
-     const sumPct = tasks.reduce((acc, t) => {
-        const exp = Number(t.expectedQty || 0);
-        const exe = Number(t.executedQty || 0);
-        const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
-        return acc + Math.min(100, pct);
-     }, 0);
-     groupProgressMap[g] = sumPct / tasks.length;
+    const tasks = groupTasks[g];
+    const sumPct = tasks.reduce((acc, t) => {
+      const exp = Number(t.expectedQty || 0);
+      const exe = Number(t.executedQty || 0);
+      const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
+      return acc + Math.min(100, pct);
+    }, 0);
+    groupProgressMap[g] = sumPct / tasks.length;
   });
 
   // Separar pais ou independentes e as filhas
@@ -655,10 +610,10 @@ function renderProgressBreakdownRows() {
       const uvS = Number(task.unitValueService || 0);
       const uvM = Number(task.unitValueMaterial || 0);
       const uv = Number(task.unitValue || (uvS + uvM));
-      
+
       const invoicingVal = uv * exp; // Valor da faturação (Total previsto)
       const invoicedVal = uv * exe;   // Valor faturado (Total executado)
-      
+
       const cStr = task.currency === "USD" ? "USD" : "Kz";
       const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
       const uvMStr = uvM > 0 ? `${uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr}` : "-";
@@ -695,24 +650,65 @@ function renderProgressBreakdownRows() {
     html += renderRow(t, groupIndex.toString(), false, subs.length > 0);
 
     subs.forEach((sub, subI) => {
-       const subRow = renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
-       // Injetar o data-sub-of no tr do subitem
-       html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
+      const subRow = renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
+      // Injetar o data-sub-of no tr do subitem
+      html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
     });
   });
   let activeProgress = 0;
   if (filterVal === "all") {
-      const numGroups = Object.keys(groupProgressMap).length;
-      if (numGroups > 0) {
-          const totalPct = Object.values(groupProgressMap).reduce((a,b)=>a+b, 0);
-          activeProgress = Math.round(totalPct / numGroups);
-      }
+    const numGroups = Object.keys(groupProgressMap).length;
+    if (numGroups > 0) {
+      const totalPct = Object.values(groupProgressMap).reduce((a, b) => a + b, 0);
+      activeProgress = Math.round(totalPct / numGroups);
+    }
   } else {
-      activeProgress = Math.round(groupProgressMap[filterVal] || 0);
+    activeProgress = Math.round(groupProgressMap[filterVal] || 0);
   }
 
   if (charts.progress) {
-      charts.progress.updateSeries([activeProgress]);
+    charts.progress.updateSeries([activeProgress]);
+  }
+
+  const summaryTbody = document.getElementById("progressBreakdownSummaryTbody");
+  if (summaryTbody) {
+    if (filterVal === "all") {
+      let summaryHtml = "";
+      Object.keys(groupProgressMap).forEach(g => {
+          const gPct = Math.round(groupProgressMap[g] || 0);
+          summaryHtml += `
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(g)}</td>
+              <td class="px-4 py-4 text-right">
+                 <div class="flex items-center justify-end gap-3">
+                     <div class="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+                         <div class="h-full bg-blue-500" style="width: ${gPct}%"></div>
+                     </div>
+                     <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${gPct}%</span>
+                 </div>
+              </td>
+            </tr>
+          `;
+      });
+      summaryTbody.innerHTML = summaryHtml;
+    } else {
+      let summaryHtml = "";
+      const gPct = Math.round(groupProgressMap[filterVal] || 0);
+      summaryHtml += `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(filterVal)}</td>
+          <td class="px-4 py-4 text-right">
+             <div class="flex items-center justify-end gap-3">
+                 <div class="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+                     <div class="h-full bg-blue-500" style="width: ${gPct}%"></div>
+                 </div>
+                 <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${gPct}%</span>
+             </div>
+          </td>
+        </tr>
+      `;
+      summaryTbody.innerHTML = summaryHtml;
+    }
   }
 
   tbody.innerHTML = html;
@@ -729,7 +725,7 @@ async function loadFiles() {
 
   try {
     tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Carregando...</td></tr>`;
-    
+
     // Load Folders & Files
     const qs = state.currentFolderId ? `?parentId=${state.currentFolderId}` : `?parentId=root`;
     const fqs = state.currentFolderId ? `?folderId=${state.currentFolderId}` : `?folderId=root`;
@@ -799,7 +795,7 @@ function renderBreadcrumbs() {
   const container = document.getElementById("fileBreadcrumbs");
   if (!container) return;
   let html = `<button data-go-folder="root" class="hover:text-slate-900 transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Raiz Geral</button>`;
-  
+
   state.breadcrumbs.forEach(b => {
     html += ` <span class="text-slate-300">/</span> <button data-go-folder="${b.id}" class="hover:text-slate-900 transition-colors">${escapeHtml(b.name)}</button>`;
   });
@@ -896,17 +892,17 @@ function wireFileNavigation() {
 function getDateCategory(dateStr) {
   const d = new Date(dateStr);
   const now = new Date();
-  
+
   const dMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   const diffTime = Math.abs(nowMidnight - dMidnight);
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
+
   if (diffDays === 0) return "Hoje";
   if (diffDays === 1) return "Ontem";
   if (diffDays <= 7) return "Última semana";
-  
+
   if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
     return "Anteriormente neste mês";
   }
@@ -915,17 +911,17 @@ function getDateCategory(dateStr) {
 
 async function loadPhotos() {
   if (state.projectId === "all") return;
-  
+
   const containerObra = document.getElementById("galleryObraContainer");
   const containerCampo = document.getElementById("galleryCampoContainer");
-  
+
   try {
     if (containerObra) containerObra.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
     if (containerCampo) containerCampo.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Carregando fotos...</div>`;
-    
+
     const res = await apiRequest(`/projects/${state.projectId}/photos`);
     const allPhotos = res.items || [];
-    
+
     // 1. Fotos da Obra (movementId is null)
     let photosObra = allPhotos.filter(p => !p.movementId);
     if (state.galleryObraStartDate) {
@@ -971,20 +967,20 @@ function renderGallerySection(containerId, photos, isCampo) {
   // Group photos
   const groups = {};
   photos.forEach(p => {
-     const cat = getDateCategory(p.createdAt);
-     if (!groups[cat]) groups[cat] = [];
-     groups[cat].push(p);
+    const cat = getDateCategory(p.createdAt);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(p);
   });
 
   const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
-  
+
   grid.innerHTML = "";
   order.forEach(cat => {
-     if (!groups[cat] || groups[cat].length === 0) return;
-     
-     const groupId = `${containerId}-${cat.replace(/\s+/g, '-').toLowerCase()}`;
-     
-     let html = `
+    if (!groups[cat] || groups[cat].length === 0) return;
+
+    const groupId = `${containerId}-${cat.replace(/\s+/g, '-').toLowerCase()}`;
+
+    let html = `
        <div class="gallery-group mb-4">
           <button class="flex items-center gap-2 mb-4 text-sm font-bold text-slate-800 hover:text-slate-600 transition-colors w-full text-left focus:outline-none group/btn" 
                   onclick="const list = document.getElementById('${groupId}'); list.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-[-90deg]')">
@@ -994,13 +990,13 @@ function renderGallerySection(containerId, photos, isCampo) {
           
           <div id="${groupId}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 transition-all duration-500">
      `;
-     
-     groups[cat].forEach(p => {
-       const url = `${getApiBaseUrl()}/${p.path}`;
-       const matName = p.movement?.material?.name || p.description || "Registo Fotográfico";
-       const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
 
-       html += `
+    groups[cat].forEach(p => {
+      const url = `${getApiBaseUrl()}/${p.path}`;
+      const matName = p.movement?.material?.name || p.description || "Registo Fotográfico";
+      const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
+
+      html += `
          <div data-preview-url="${url}" data-preview-title="${escapeHtml(matName)}" data-preview-date="${dateStr}" 
               class="group gallery-item flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
             <!-- Thumbnail -->
@@ -1016,10 +1012,10 @@ function renderGallerySection(containerId, photos, isCampo) {
             </div>
          </div>
        `;
-     });
-     
-     html += `</div></div>`;
-     grid.insertAdjacentHTML("beforeend", html);
+    });
+
+    html += `</div></div>`;
+    grid.insertAdjacentHTML("beforeend", html);
   });
 }
 
@@ -1029,7 +1025,7 @@ function renderGallerySection(containerId, photos, isCampo) {
 
 function wireEvents() {
   // Filters
-  const filterSelect = document.getElementById("projectFilterTable");
+  const filterSelect = document.getElementById("projectFilter");
   if (filterSelect) {
     filterSelect.addEventListener("change", (e) => {
       state.projectId = e.target.value;
@@ -1040,9 +1036,9 @@ function wireEvents() {
   // Progress Group Filter
   const progressFilter = document.getElementById("progressGroupFilter");
   if (progressFilter) {
-     progressFilter.addEventListener("change", () => {
-         renderProgressBreakdownRows();
-     });
+    progressFilter.addEventListener("change", () => {
+      renderProgressBreakdownRows();
+    });
   }
 
   // Stock Filters
@@ -1064,10 +1060,10 @@ function wireEvents() {
       const items = document.querySelectorAll(`[data-progress-item-group="${groupName}"]`);
       let isHidden = false;
       items.forEach(item => {
-         isHidden = item.classList.toggle("hidden");
+        isHidden = item.classList.toggle("hidden");
       });
       if (icon) {
-         icon.textContent = isHidden ? "chevron_right" : "expand_more";
+        icon.textContent = isHidden ? "chevron_right" : "expand_more";
       }
       return;
     }
@@ -1078,7 +1074,7 @@ function wireEvents() {
       const parentId = toggleSub.getAttribute("data-toggle-sub-tasks");
       const icon = toggleSub.querySelector("[data-sub-icon]");
       const children = document.querySelectorAll(`[data-sub-of="${parentId}"]`);
-      
+
       let isHidden = false;
       children.forEach(child => {
         isHidden = child.classList.toggle("hidden");
@@ -1093,34 +1089,34 @@ function wireEvents() {
     // Breadcrumbs nav for files
     const btnBread = e.target.closest("[data-go-folder]");
     if (btnBread) {
-       const fid = btnBread.getAttribute("data-go-folder");
-       state.currentFolderId = fid === "root" ? null : fid;
-       
-       if (fid === "root") {
-         state.breadcrumbs = [];
-       } else {
-         const crtIdx = state.breadcrumbs.findIndex(x => x.id === fid);
-         if (crtIdx >= 0) {
-           state.breadcrumbs = state.breadcrumbs.slice(0, crtIdx + 1);
-         }
-       }
-       loadFiles();
+      const fid = btnBread.getAttribute("data-go-folder");
+      state.currentFolderId = fid === "root" ? null : fid;
+
+      if (fid === "root") {
+        state.breadcrumbs = [];
+      } else {
+        const crtIdx = state.breadcrumbs.findIndex(x => x.id === fid);
+        if (crtIdx >= 0) {
+          state.breadcrumbs = state.breadcrumbs.slice(0, crtIdx + 1);
+        }
+      }
+      loadFiles();
     }
 
     // Lightbox Toggle
     const galleryItem = e.target.closest("[data-preview-url]");
     if (galleryItem) {
-        const url = galleryItem.getAttribute("data-preview-url");
-        const title = galleryItem.getAttribute("data-preview-title");
-        const date = galleryItem.getAttribute("data-preview-date");
-        openLightbox(url, title, date);
-        return;
+      const url = galleryItem.getAttribute("data-preview-url");
+      const title = galleryItem.getAttribute("data-preview-title");
+      const date = galleryItem.getAttribute("data-preview-date");
+      openLightbox(url, title, date);
+      return;
     }
 
     const lightboxOverlay = document.getElementById("imageLightbox");
     const closeBtn = e.target.closest("#closeLightbox");
     if (closeBtn || e.target === lightboxOverlay) {
-        closeLightbox();
+      closeLightbox();
     }
   });
 
@@ -1155,12 +1151,13 @@ function wireEvents() {
   document.getElementById("galleryCampoFilterStart")?.addEventListener("change", updateGalleryCampoDates);
   document.getElementById("galleryCampoFilterEnd")?.addEventListener("change", updateGalleryCampoDates);
 
-  // Tabs
-  document.querySelectorAll("[data-tab-trigger]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      state.activeTab = btn.getAttribute("data-tab-trigger");
+  // Tabs — event delegation para funcionar com botões dentro do conteúdo
+  document.addEventListener("click", (e) => {
+    const tabBtn = e.target?.closest("[data-tab-trigger]");
+    if (tabBtn) {
+      state.activeTab = tabBtn.getAttribute("data-tab-trigger");
       updateTabUI();
-    });
+    }
   });
 
   wireFileNavigation();
@@ -1193,11 +1190,11 @@ function closeLightbox() {
 function init() {
   initMobileMenu();
   wireLogout();
-  
+
   const user = JSON.parse(localStorage.getItem("inforcliente.user") || "{}");
   if (user && user.client) {
-     const headerName = document.getElementById("clientNameHeader");
-     if (headerName) headerName.textContent = user.client.name;
+    const headerName = document.getElementById("clientNameHeader");
+    if (headerName) headerName.textContent = user.client.name;
   }
 
   wireEvents();

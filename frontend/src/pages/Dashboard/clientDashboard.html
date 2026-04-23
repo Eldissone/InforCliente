@@ -103,8 +103,15 @@
         }
 
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         #imageLightbox .close-btn {
@@ -163,13 +170,18 @@
             </div>
 
             <div class="flex flex-col md:flex-row items-center gap-3">
-                <div class="flex items-center bg-white border border-slate-200 rounded-xl px-2 shadow-sm h-11">
+                <select id="projectFilter"
+                    class="bg-white border border-slate-200 rounded-xl px-4 h-11 text-sm font-bold text-slate-700 shadow-sm focus:ring-blue-500 focus:border-blue-500 cursor-pointer min-w-[200px]">
+                    <option value="all">Visão Consolidada (Todas)</option>
+                </select>
+
+                <!-- <div class="flex items-center bg-white border border-slate-200 rounded-xl px-2 shadow-sm h-11">
                     <input type="date" id="filterStart"
                         class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
                     <span class="text-slate-300 font-black px-1">-</span>
                     <input type="date" id="filterEnd"
                         class="bg-transparent border-none text-xs font-semibold text-slate-500 focus:ring-0 w-[120px]" />
-                </div>
+                </div> -->
             </div>
         </header>
 
@@ -185,6 +197,7 @@
             <button data-tab-trigger="obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Informação
                 da Obra</button>
+
             <button data-tab-trigger="galeria-obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra
@@ -192,6 +205,13 @@
             <button data-tab-trigger="galeria-campo"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 de Campo
+            </button>
+
+            <button data-tab-trigger="equipa"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Organograma
+            </button>
+            <button data-tab-trigger="stock"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Stock
             </button>
         </div>
 
@@ -246,44 +266,45 @@
             </div>
 
             <!-- Financial Chart Section -->
-            <div class="glass-card p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
+            <!-- <div class="glass-card p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm">
                 <div class="mb-6">
                     <h3 class="font-bold text-slate-900">Análise Financeira do Projecto</h3>
                     <p class="text-xs text-slate-500">Comparativo entre orçamento contratual e valores liquidados</p>
                 </div>
                 <div id="financialChart" class="w-full"></div>
-            </div>
+            </div> -->
 
 
             <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
-             <style>
+            <style>
                 .bt {
                     border-top: 2px solid #0b0b0b;
                     border-bottom: 2px solid #0b0b0b;
                 }
-             </style>
+            </style>
             <div
                 class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
                 <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
                     <div>
                         <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual</h3>
+                        <p class="text-[11px] font-medium text-slate-400 mt-1">Visão consolidada dos principais itens
+                        </p>
                     </div>
-                    <select id="progressGroupFilter"
-                        class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">
-                        <option value="all">Todos os Separadores</option>
-                    </select>
+                    <button type="button" data-tab-trigger="obra"
+                        class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition-colors">
+                        Ver Resumo Detalhado <span
+                            class="material-symbols-outlined text-[10px] align-middle ml-1">arrow_forward</span>
+                    </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 backdrop-blur-sm shadow-sm">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-6 py-4">Item</th>
-                                <th class="px-4 py-4 text-center">Previsto</th>
-                                <th class="px-4 py-4 text-center">Executado</th>
-                                <th class="px-6 py-4 text-right">% V. Faturado</th>
+                                <th class="px-6 py-4">Grupo de Tarefas</th>
+                                <th class="px-4 py-4 text-right">Progresso</th>
                             </tr>
                         </thead>
-                        <tbody id="progressBreakdownTbody" class="divide-y divide-slate-50 text-slate-600">
+                        <tbody id="progressBreakdownSummaryTbody" class="divide-y divide-slate-50 text-slate-600">
                         </tbody>
                     </table>
                 </div>
@@ -296,14 +317,19 @@
                 <div
                     class="glass-card bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col justify-between shadow-sm relative group overflow-hidden transition-all hover:shadow-md">
                     <div class="z-10">
-                        <h3 class="text-2xl font-bold text-slate-900 mt-6">Acidentes em Obra</h3>
+                        <div class="flex justify-between items-start">
+                            <div
+                                class="h-14 w-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
+                                <span class="material-symbols-outlined text-3xl">shield</span>
+                            </div>
+                        </div>
+                        <h3 class="text-2xl font-bold text-slate-900 mt-6">Dias sem Acidentes</h3>
 
-                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Registo de
-                            Segurança</span>
                         <h3 class="text-4xl font-black text-slate-900 mt-2 tracking-tighter" id="dashboardSafetyDays">0
                         </h3>
-                        <p class="text-[11px] font-bold text-slate-500 mt-1 uppercase tracking-wider">Dias sem Acidentes
-                        </p>
+                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Registo de
+                            Segurança</span>
+
                     </div>
                     <div class="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <span class="material-symbols-outlined text-[100px] text-emerald-600">verified</span>
@@ -333,29 +359,33 @@
                         <span class="material-symbols-outlined text-[100px] text-slate-200">groups</span>
                     </div>
                 </div>
-
-                <!-- Card de Suporte/Placeholder (Para fechar o grid de 4 colunas) -->
-                <div
-                    class="glass-card bg-slate-50/50 p-8 rounded-[2.5rem] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center group hover:border-blue-400 transition-all">
-                    <div
-                        class="h-12 w-12 bg-white rounded-xl flex items-center justify-center text-slate-300 group-hover:text-blue-500 transition-colors shadow-sm mb-4">
-                        <span class="material-symbols-outlined">add</span>
-                    </div>
-                    <span
-                        class="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-blue-600">Novas
-                        Métricas</span>
-                    <p class="text-[9px] text-slate-400 mt-1">Brevemente disponíveis no seu portal.</p>
-                </div>
             </div>
 
-            <!-- Armazém / Stock with Filters [NEW Layout] -->
+            <!-- Card de acesso rápido ao Stock -->
             <div
-                class="glass-card mb-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+                class="glass-card mb-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 flex items-center justify-between">
+                <div>
+                    <div class="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Armazém</div>
+                    <h3 class="font-bold text-xl text-slate-900">Acompanhamento do Stock</h3>
+                    <p class="text-xs text-slate-500 mt-1">Controlo de materiais e equipamentos em estaleiro.</p>
+                </div>
+                <button type="button" data-tab-trigger="stock"
+                    class="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-[#2afc8d] rounded-xl text-sm font-bold shadow-md hover:scale-105 transition-transform">
+                    Ver Stock <span class="material-symbols-outlined text-sm">arrow_forward</span>
+                </button>
+            </div>
+
+
+        </div> <!-- End tab-dashboard -->
+
+        <div id="tab-stock" class="tab-content hidden">
+            <div
+                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
                 <div class="p-6 border-b border-slate-100">
                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                         <div>
                             <h3 class="font-bold text-3xl text-slate-900">Acompanhamento do Armazém</h3>
-                            <p class="text-xs text-slate-500">Controlo de materiais e equipamentos disponíveis em
+                            <p class="text-xs text-slate-500 mt-1">Controlo de materiais e equipamentos disponíveis em
                                 estaleiro.</p>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
@@ -377,7 +407,6 @@
                             </select>
                         </div>
                     </div>
-
                     <!-- Aggregation Row -->
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div class="p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
@@ -386,7 +415,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 whitespace-nowrap">
@@ -406,13 +434,47 @@
                     </table>
                 </div>
             </div>
-
-
-
-        </div> <!-- End tab-dashboard -->
+        </div> <!-- End tab-stock -->
 
         <div id="tab-obra" class="tab-content hidden">
-            <!-- Director & Hero Section -->
+            <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
+            <style>
+                .bt {
+                    border-top: 1px solid #0b0b0b91;
+                    border-bottom: 1px solid #0b0b0b91;
+                }
+            </style>
+            <div
+                class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex-shrink-0 flex items-center justify-between">
+                    <div>
+                        <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual Detalhado</h3>
+                    </div>
+                    <select id="progressGroupFilter"
+                        class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">
+                        <option value="all">Todos os Separadores</option>
+                    </select>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50/90 backdrop-blur-sm shadow-sm">
+                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                <th class="px-6 py-4">Item</th>
+                                <th class="px-4 py-4 text-center">Previsto</th>
+                                <th class="px-4 py-4 text-center">Executado</th>
+                                <th class="px-6 py-4 text-right">% V. Faturado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="progressBreakdownTbody" class="divide-y divide-slate-50 text-slate-600">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div> <!-- End tab-obra -->
+
+        <div id="tab-equipa" class="tab-content hidden">
+            <!-- Director Section -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
                 <div class="lg:col-span-4 h-full">
                     <div class="glass-card p-8 rounded-[2.5rem] bg-white h-full flex flex-col items-center text-center">
@@ -448,26 +510,40 @@
                     </div>
                 </div>
 
-                <div
-                    class="lg:col-span-8 glass-card p-8 rounded-[2.5rem] bg-white text-center flex flex-col items-center justify-center">
-                    <div class="mb-6 w-full text-left">
-                        <h3 class="font-bold text-slate-900">Estado de Execução Física</h3>
-                        <p class="text-[11px] font-medium text-slate-400">Totalidade da obra em regime operacional</p>
+                <!-- Equipa Técnica Adicional -->
+                <div id="techTeamSection" class="lg:col-span-8">
+                    <div class="h-full">
+                        <h3 class="font-bold text-slate-900 mb-6 text-xl">Equipa Técnica Adicional</h3>
+                        <div id="techTeamContainer"
+                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                            <!-- Cards inseridos via JS com o mesmo estilo do card do director -->
+                            <div
+                                class="glass-card p-2 rounded-2xl bg-white flex flex-col items-center text-center border border-slate-100">
+                                <div
+                                    class="w-20 h-20 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
+                                    <img src="/assets/images/placeholder-user.png" alt="Team Member"
+                                        class="w-full h-full object-cover" />
+                                </div>
+                                <h4 class="text-lg font-bold text-slate-900">Nome do Membro</h4>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Cargo</p>
+                                <div class="w-full space-y-2 pt-4 border-t border-slate-50">
+                                    <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
+                                        <span class="material-symbols-outlined text-blue-600 text-base">call</span>
+                                        <div class="text-xs font-medium text-slate-700">+244 900 000 000</div>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
+                                        <span class="material-symbols-outlined text-emerald-600 text-base">mail</span>
+                                        <div class="text-xs font-medium text-slate-700 truncate">email@exemplo.com</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div id="progressGauge" class="flex justify-center w-full grow pt-4"></div>
                 </div>
             </div>
-
-            <!-- Equipa Técnica Adicional -->
-            <div id="techTeamSection" class="hidden">
-                <h3 class="font-bold text-slate-900 mb-6 px-2 text-xl">Equipa Técnica Adicional</h3>
-                <div id="techTeamContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-10">
-                    <!-- Cards inseridos via JS -->
-                </div>
-            </div>
+        </div>
 
 
-        </div> <!-- End tab-dashboard -->
 
         <div id="tab-arquivos" class="tab-content hidden">
             <div
@@ -496,6 +572,7 @@
                         <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
                             <th class="px-8 py-5">Nome</th>
                             <th class="px-8 py-5 hidden md:table-cell">Categoria</th>
+                            <th class="px-8 py-5 hidden md:table-cell">__</th>
                             <th class="px-8 py-5 text-right">Data</th>
                         </tr>
                     </thead>
