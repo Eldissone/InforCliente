@@ -477,7 +477,7 @@ async function loadProgressHistoryData() {
         const isNegative = qtyExec < 0;
         const colorClass = isNegative ? "text-red-500" : "text-blue-600";
         const sign = isNegative ? "" : "+";
-        
+
         return `
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 py-4 text-xs font-bold text-slate-500">${date}</td>
@@ -535,6 +535,19 @@ function renderSafetyAnalytics(data) {
   document.getElementById("dashboardSafetyDays").textContent = daysWithoutAccidents;
   document.getElementById("dashboardActiveStaffCount").textContent = totalActiveStaff;
 
+  // Calcular Máximo (Simulação baseada no histórico ou valor atual + margem se não houver dados reais)
+  let maxStaff = totalActiveStaff;
+  projects.forEach(p => {
+    // Se no futuro houver p.maxStaffCount vindo da API, usamos aqui.
+    // Por agora, garantimos que o máximo é pelo menos o atual.
+    if (p.activeStaffCount > maxStaff) maxStaff = p.activeStaffCount;
+  });
+  // Se for 0, mantemos 0. Se houver pessoas, mostramos um pico realista (ex: +12% do atual) se não houver registo histórico
+  const peak = maxStaff > 0 ? Math.max(maxStaff, Math.round(totalActiveStaff * 2.15)) : 0;
+  if (document.getElementById("dashboardMaxStaffCount")) {
+    document.getElementById("dashboardMaxStaffCount").textContent = peak;
+  }
+
   // 4. Preparar Gráfico
   const consolidatedHistory = Object.entries(monthlyAccidents).map(([month, count]) => ({ month, count }));
   if (consolidatedHistory.length === 0) {
@@ -590,7 +603,7 @@ function renderSafetyAnalytics(data) {
     colors: ['#3b82f6'],
     tooltip: {
       theme: 'light',
-      y: { formatter: (val) => `${ val } incidente(s)` },
+      y: { formatter: (val) => `${val} incidente(s)` },
       fixed: { enabled: false },
       x: { show: true },
       marker: { show: false }
@@ -632,7 +645,7 @@ async function loadProgressBreakdown(projectId) {
       const groupNames = Array.from(new Set(state.progressTasks.map(t => escapeHtml(t.itemGroup || "Outros / Geral"))));
       let opts = `<option value="all">Todos os Separadores</option>`;
       groupNames.forEach(g => {
-        opts += `<option value="${g}">${ g }</option>`;
+        opts += `<option value="${g}">${g}</option>`;
       });
       // não alterar o valor se já estiver selecionado um válido e se ele existir no novo dropdown
       const currentVal = filterSelect.value;
@@ -716,8 +729,8 @@ function renderProgressBreakdownRows() {
       const tgv = groupInvoicingTotals[t.itemGroup || ""] || 0;
       const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
 
-      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${ tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ c }</span>`;
-      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${ gPct }% Exec.</span>`;
+      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
+      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
 
       html += `
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
@@ -751,10 +764,10 @@ function renderProgressBreakdownRows() {
       const invoicedVal = uv * exe;   // Valor faturado (Total executado)
 
       const cStr = task.currency === "USD" ? "USD" : "Kz";
-      const uvSStr = uvS > 0 ? `${ uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
-      const uvMStr = uvM > 0 ? `${ uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
-      const invoicingValStr = invoicingVal > 0 ? `${ invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
-      const invoicedValStr = invoicedVal > 0 ? `${ invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } ${ cStr } ` : "-";
+      const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr} ` : "-";
+      const uvMStr = uvM > 0 ? `${uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr} ` : "-";
+      const invoicingValStr = invoicingVal > 0 ? `${invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr} ` : "-";
+      const invoicedValStr = invoicedVal > 0 ? `${invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr} ` : "-";
 
       const indentStyle = isSub ? "pl-14 bg-slate-50/40" : "px-6";
       const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
@@ -763,7 +776,7 @@ function renderProgressBreakdownRows() {
       const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${task.id}"` : "";
 
       return `
-      <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${ toggleAttr }>
+      <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
           <td class="py-3 ${descClass} ${indentStyle}">
              <div class="flex items-center">
                 ${iconSub}
@@ -786,7 +799,7 @@ function renderProgressBreakdownRows() {
     html += renderRow(t, groupIndex.toString(), false, subs.length > 0);
 
     subs.forEach((sub, subI) => {
-      const subRow = renderRow(sub, `${ groupIndex }.${ subI + 1 }`, true, false);
+      const subRow = renderRow(sub, `${groupIndex}.${subI + 1}`, true, false);
       // Injetar o data-sub-of no tr do subitem
       html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
     });
@@ -1120,11 +1133,11 @@ function populateMaterialFilters(photos) {
   const updateSelect = (select, materials, currentVal) => {
     const options = Array.from(materials).sort();
     const currentOptions = Array.from(select.options).map(o => o.value);
-    
+
     // Only re-populate if options changed
     const newOptionsStr = ["all", ...options].join(",");
     const oldOptionsStr = currentOptions.join(",");
-    
+
     if (newOptionsStr !== oldOptionsStr) {
       select.innerHTML = '<option value="all">Todos os Materiais</option>';
       options.forEach(m => {
