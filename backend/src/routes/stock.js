@@ -61,6 +61,28 @@ stockRoutes.get(
   })
 );
 
+// PATCH — Atualizar quantidade prevista de um material na obra
+stockRoutes.patch(
+  "/:id/planned",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const { materialId, quantityPlanned } = z.object({
+      materialId: z.string(),
+      quantityPlanned: z.number().min(0),
+    }).parse(req.body);
+
+    const updated = await prisma.projectStock.upsert({
+      where: { projectId_materialId: { projectId, materialId } },
+      update: { quantityPlanned },
+      create: { projectId, materialId, quantityPlanned, quantityGood: 0, quantityDamaged: 0 },
+      include: { material: true }
+    });
+
+    return res.json(updated);
+  })
+);
+
 // POST — Criar lançamento de stock (Técnico/Operador)
 stockRoutes.post(
   "/:id/movements",

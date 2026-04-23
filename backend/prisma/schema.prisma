@@ -292,6 +292,7 @@ model ProjectStock {
   id              String   @id @default(cuid())
   projectId       String
   materialId      String
+  quantityPlanned Decimal  @default(0) @db.Decimal(16, 4)
   quantityGood    Decimal  @default(0) @db.Decimal(16, 4)
   quantityDamaged Decimal  @default(0) @db.Decimal(16, 4)
   updatedAt       DateTime @updatedAt

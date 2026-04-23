@@ -346,15 +346,19 @@ async function loadStockData() {
       }
     });
 
-    // Integrar com o summary (saldo actual)
+    // Integrar com o summary (saldo actual e previsto)
     summaryItems.forEach(s => {
       const mId = s.materialId;
       if (!materialMap[mId]) {
         materialMap[mId] = {
           name: s.material?.name || "—",
           unit: s.material?.unit || "",
-          previsto: 0, entregue: 0, aplicado: 0
+          previsto: Number(s.quantityPlanned || 0),
+          entregue: 0, 
+          aplicado: 0
         };
+      } else {
+        materialMap[mId].previsto = Number(s.quantityPlanned || 0);
       }
     });
 
@@ -370,7 +374,7 @@ async function loadStockData() {
         return `
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 py-4 font-bold text-slate-900">${escapeHtml(m.name)}</td>
-            <td class="px-4 py-4 text-center text-xs text-slate-400 font-bold">—</td>
+            <td class="px-4 py-4 text-center text-xs text-slate-900 font-bold">${m.previsto.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
             <td class="px-4 py-4 text-center font-bold text-emerald-600">${m.entregue.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
             <td class="px-4 py-4 text-center font-bold text-blue-600">${m.aplicado.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
             <td class="px-4 py-4 text-center font-black ${saldoColor}">${saldo.toLocaleString("pt-AO")} <span class="text-[9px]">${escapeHtml(m.unit)}</span></td>

@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -48,19 +48,19 @@ function catLabel(c) {
   const map = {
     MATERIALS: "Materiais",
     EQUIPMENT: "Equipamentos",
-    LABOR: "Mão de Obra",
+    LABOR: "MÃ£o de Obra",
     OTHER: "Outros",
     MATERIAIS_INSUMOS: "Materiais e Insumos",
-    SERVICOS_MAO_DE_OBRA: "Mão de Obra e Serviços",
+    SERVICOS_MAO_DE_OBRA: "MÃ£o de Obra e ServiÃ§os",
     GASTOS_PESSOAL: "Gastos com Pessoal",
     DESPESAS_OPERACIONAIS: "Despesas Operacionais",
     INVESTIMENTOS: "Pagamentos",
-    DEPRECIACAO: "Depreciação",
+    DEPRECIACAO: "DepreciaÃ§Ã£o",
     OUTRAS_DESPESAS: "Outras Despesas",
-    DEDUCOES: "Dedução de Custos",
+    DEDUCOES: "DeduÃ§Ã£o de Custos",
     IMPOSTOS: "Impostos",
   };
-  return map[c] || c || "—";
+  return map[c] || c || "â€”";
 }
 const unitMap = {
   un: "UN",
@@ -74,7 +74,7 @@ const unitMap = {
   litros: "LITROS",
   horas: "HORAS",
   dias: "DIAS",
-  mes: "MÊS",
+  mes: "MÃŠS",
   global: "GLOBAL",
 };
 
@@ -140,7 +140,7 @@ function renderFileCard(f) {
         </div>
         <div class="mb-6">
             <h4 class="text-sm font-bold text-slate-900 truncate" title="${escapeHtml(f.originalName)}">${escapeHtml(f.originalName)}</h4>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${formatBytes(f.size)} • ${formatDateBR(f.createdAt)}</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${formatBytes(f.size)} â€¢ ${formatDateBR(f.createdAt)}</p>
         </div>
         <a href="${fileUrl}" download="${f.originalName}" class="block w-full text-center py-3 bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-900 hover:text-white transition-all">
             Transferir
@@ -180,10 +180,10 @@ async function loadProject() {
   projectState = p;
 
   el("projectTitle").textContent = p.name;
-  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃƒO DEFINIDO";
   el("projectBreadcrumb").textContent = p.code;
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
-  el("projectClientCode").textContent = p.client?.code || "Sem código";
+  el("projectClientCode").textContent = p.client?.code || "Sem cÃ³digo";
   el("projectContact").textContent = p.contact || "-";
   el("projectLocation").textContent = p.location || p.region || "-";
 
@@ -261,7 +261,7 @@ function updateOperationStatus(summary) {
         subEl.classList.remove("text-slate-400");
         subEl.classList.add("text-slate-200");
       } else {
-        subEl.textContent = "Sem lançamentos";
+        subEl.textContent = "Sem lanÃ§amentos";
       }
     }
   });
@@ -311,9 +311,9 @@ async function loadTransactions() {
 
 /**
  * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
- * @param {Array}  allTxs      - todos os lançamentos do projeto
+ * @param {Array}  allTxs      - todos os lanÃ§amentos do projeto
  * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
- * @param {Array}  budgetLines - linhas de orçamento
+ * @param {Array}  budgetLines - linhas de orÃ§amento
  */
 function renderScurve(allTxs, project, budgetLines) {
   const container = el("scurve_container");
@@ -349,8 +349,8 @@ function renderScurve(allTxs, project, budgetLines) {
     return (fd.getFullYear() - rangeStart.getFullYear()) * 12 + (fd.getMonth() - rangeStart.getMonth());
   };
 
-  // --- Planejado: idêntico à coluna "Previsto (P.)" da tabela ---
-  // 1) Budget lines distribuídas linearmente (excluindo capital)
+  // --- Planejado: idÃªntico Ã  coluna "Previsto (P.)" da tabela ---
+  // 1) Budget lines distribuÃ­das linearmente (excluindo capital)
   const plannedByMonth = Array(numMonths).fill(0);
   const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS", "DEPRECIACAO"].includes(l.category));
   if (opLines.length > 0) {
@@ -363,7 +363,7 @@ function renderScurve(allTxs, project, budgetLines) {
     for (let i = 0; i < numMonths; i++) plannedByMonth[i] = perMonth;
   }
 
-  // 2) Transações PENDING/LATE adicionadas ao mês específico da data (tal como a tabela)
+  // 2) TransaÃ§Ãµes PENDING/LATE adicionadas ao mÃªs especÃ­fico da data (tal como a tabela)
   (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").forEach(t => {
     const idx = getColIdx(new Date(t.date));
     const cat = t.category || "";
@@ -372,7 +372,7 @@ function renderScurve(allTxs, project, budgetLines) {
     }
   });
 
-  // --- Realizado: PAID → realizedAmount ou amount (excluindo capital) ---
+  // --- Realizado: PAID â†’ realizedAmount ou amount (excluindo capital) ---
   const realizedByMonth = Array(numMonths).fill(0);
   (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
     const cat = t.category || "";
@@ -402,7 +402,7 @@ function renderScurve(allTxs, project, budgetLines) {
   const maxVal = Math.max(...planCum, ...realCum.filter(v => v !== null), 1);
 
   // --- DEBUG (remover depois) ---
-  console.group("🔵 Curva S — Diagnóstico");
+  console.group("ðŸ”µ Curva S â€” DiagnÃ³stico");
   console.log("totalBudget:", totalBudget);
   console.log("opLines:", opLines.length, opLines.map(l => `${l.description}=${l.total}`));
   console.log("allTxs:", (allTxs || []).length, "| PENDING/LATE:", (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").length, "| PAID:", (allTxs || []).filter(t => t.status === "PAID").length);
@@ -436,7 +436,7 @@ function renderScurve(allTxs, project, budgetLines) {
     const hasPaid = realCum[i] != null && realCum[i] > 0;
     const over = hasPaid && realCum[i] > planCum[i];
 
-    // Coluna do mês
+    // Coluna do mÃªs
     const col = document.createElement("div");
     col.style.cssText = "flex:1;min-width:36px;position:relative;height:100%;";
 
@@ -469,7 +469,7 @@ function renderScurve(allTxs, project, budgetLines) {
       col.appendChild(barReal);
     }
 
-    // Label do mês
+    // Label do mÃªs
     const label = document.createElement("span");
     label.textContent = m.label;
     label.style.position = "absolute";
@@ -482,7 +482,7 @@ function renderScurve(allTxs, project, budgetLines) {
     label.style.whiteSpace = "nowrap";
     col.appendChild(label);
 
-    // Ponto marcador do mês atual
+    // Ponto marcador do mÃªs atual
     if (isNow) {
       const dot = document.createElement("span");
       dot.style.position = "absolute";
@@ -517,7 +517,7 @@ async function loadBudgetExecution() {
   const lines = linesRes.items || [];
   const txs = txRes.items || [];
 
-  // --- Build dynamic month range from project start → due date ---
+  // --- Build dynamic month range from project start â†’ due date ---
   const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
   const startDate = p.startDate ? new Date(p.startDate) : new Date();
   const endDate = p.dueDate ? new Date(p.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
@@ -558,14 +558,14 @@ async function loadBudgetExecution() {
   // --- Categorize ---
   const cats = {
     MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃƒO DE OBRA E SERVIÃ‡OS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     INVESTIMENTOS: { name: "PAGAMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEPRECIACAO: { name: "DEPRECIAÃ‡ÃƒO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
+    DEDUCOES: { name: "(-) DEDUÃ‡Ã•ES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
   };
 
   const getCatKey = (c) => {
@@ -611,7 +611,7 @@ async function loadBudgetExecution() {
       cats[cKey].total += forecastAmount;
       cats[cKey].byMonth[mIdx].p += forecastAmount;
 
-      const cleanDesc = (t.description || "Lançamento Avulso").trim();
+      const cleanDesc = (t.description || "LanÃ§amento Avulso").trim();
       const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
       let row = cats[cKey].items.find(i => i._key === descKey);
       if (!row) {
@@ -630,7 +630,7 @@ async function loadBudgetExecution() {
         bItem.totalC += realizedAmount;
         bItem.byMonth[mIdx].c += realizedAmount;
       } else {
-        const cleanDesc = (t.description || "Lançamento Avulso").trim();
+        const cleanDesc = (t.description || "LanÃ§amento Avulso").trim();
         const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
         let row = cats[cKey].items.find(i => i._key === descKey);
         if (!row) {
@@ -655,7 +655,7 @@ async function loadBudgetExecution() {
     const cat = cats[key];
     const isDed = key === "DEDUCOES";
     const isCapital = ["INVESTIMENTOS", "DEPRECIACAO"].includes(key);
-    // Capital and depreciation categories are off-budget — excluded from grand totals
+    // Capital and depreciation categories are off-budget â€” excluded from grand totals
     if (isCapital) return;
     const sign = isDed ? -1 : 1;
 
@@ -696,7 +696,7 @@ async function loadBudgetExecution() {
   let theadHtml = `
     <thead>
       <tr class="bg-slate-900 text-white">
-        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">Descrição</th>
+        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">DescriÃ§Ã£o</th>
         <th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10 bg-white/5">TOTAL OBRA</th>
         ${projectMonths.map(m => `<th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10">${m.label}</th>`).join('')}
       </tr>
@@ -716,7 +716,7 @@ async function loadBudgetExecution() {
   let tbodyHtml = `<tbody class="divide-y divide-outline-variant/30">`;
 
   // Grand Total First Row (like DRE)
-  tbodyHtml += drawRow(`= CUSTO LÍQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
+  tbodyHtml += drawRow(`= CUSTO LÃQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
 
   Object.keys(cats).forEach(key => {
     const cat = cats[key];
@@ -727,7 +727,7 @@ async function loadBudgetExecution() {
 
     // Category Header
     let catTitle = key === "DEDUCOES" ? cat.name : `+ ${cat.name}`;
-    if (isInvestment) catTitle = `▲ ${cat.name}`;
+    if (isInvestment) catTitle = `â–² ${cat.name}`;
     if (isInfoOnly) catTitle = `~ ${cat.name}`;
 
     const customCls = isInvestment ? "bg-[#0f2e1a] font-black text-[#2afc8d]" : (isInfoOnly ? "bg-[#0f2540] font-black text-slate-300" : null);
@@ -750,7 +750,7 @@ async function loadBudgetExecution() {
     el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
   }
 
-  // Renderiza Curva S com dados reais (todas as transações + linhas de orçamento)
+  // Renderiza Curva S com dados reais (todas as transaÃ§Ãµes + linhas de orÃ§amento)
   renderScurve(txs, p, lines);
 
   renderOperationStatus(lines);
@@ -758,7 +758,7 @@ async function loadBudgetExecution() {
 
 async function renderOperationStatus(lines) {
   const id = getProjectId();
-  // Busca todos os lançamentos para não depender apenas dos vinculados
+  // Busca todos os lanÃ§amentos para nÃ£o depender apenas dos vinculados
   const txData = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`);
 
   const cats = {
@@ -774,7 +774,7 @@ async function renderOperationStatus(lines) {
     return null;
   };
 
-  // Somar orçamento total por categoria (das linhas de orçamento)
+  // Somar orÃ§amento total por categoria (das linhas de orÃ§amento)
   lines.forEach(l => {
     const group = getGroup(l.category);
     if (group && cats[group]) {
@@ -782,7 +782,7 @@ async function renderOperationStatus(lines) {
     }
   });
 
-  // Somar todos os custos lançados por categoria
+  // Somar todos os custos lanÃ§ados por categoria
   (txData.items || []).forEach(t => {
     const group = getGroup(t.category);
     if (group && cats[group]) {
@@ -799,7 +799,7 @@ async function renderOperationStatus(lines) {
     }
     const subEl = el(c.subId);
     if (subEl) {
-      subEl.textContent = `${formatCurrencyKZ(c.consumed)} lançados`;
+      subEl.textContent = `${formatCurrencyKZ(c.consumed)} lanÃ§ados`;
     }
   });
 }
@@ -810,13 +810,13 @@ function wireLiquidation() {
     if (!btn) return;
 
     const txId = btn.getAttribute("data-liquidate-tx");
-    const txDesc = btn.getAttribute("data-tx-desc") || "este lançamento";
+    const txDesc = btn.getAttribute("data-tx-desc") || "este lanÃ§amento";
     const txAmount = btn.getAttribute("data-tx-amount") || "0";
     const projectId = getProjectId();
 
     openModal({
       title: "Liquidar Despesa",
-      primaryLabel: "Confirmar Liquidação",
+      primaryLabel: "Confirmar LiquidaÃ§Ã£o",
       contentHtml: `
         <div class="space-y-4">
           <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
@@ -843,7 +843,7 @@ function wireLiquidation() {
               class="w-full rounded-lg border-slate-300 font-mono text-sm focus:border-primary focus:ring-primary"
             />
             <p class="mt-1 text-[11px] text-on-surface-variant">
-              Se o valor pago foi diferente do previsto, altere aqui. A diferença será devolvida ao orçamento disponível.
+              Se o valor pago foi diferente do previsto, altere aqui. A diferenÃ§a serÃ¡ devolvida ao orÃ§amento disponÃ­vel.
             </p>
           </div>
         </div>
@@ -858,7 +858,7 @@ function wireLiquidation() {
             method: "PATCH",
             body: { realizedAmount },
           });
-          toast("Lançamento liquidado com sucesso!", { type: "success" });
+          toast("LanÃ§amento liquidado com sucesso!", { type: "success" });
           close();
           await loadProject();
           await loadTransactions();
@@ -866,7 +866,7 @@ function wireLiquidation() {
           await loadPayments();
         } catch (err) {
           setButtonLoading(primaryBtn, false);
-          toast(err.message || "Erro ao liquidar lançamento", { type: "error" });
+          toast(err.message || "Erro ao liquidar lanÃ§amento", { type: "error" });
         }
       },
     });
@@ -945,7 +945,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
   const uvM = Number(t.unitValueMaterial || 0);
   const uvS = Number(t.unitValueService || 0);
-  // Se backend já mandou unitValue, usa; se não, fallback sum
+  // Se backend jÃ¡ mandou unitValue, usa; se nÃ£o, fallback sum
   const unitVal = t.unitValue !== null ? Number(t.unitValue) : (uvM + uvS);
   const invoicingVal = unitVal * exp; // Valor total previsto (Contrato)
   const invoicedVal = unitVal * exe;  // Valor faturado (Executado)
@@ -956,7 +956,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const invoicingValStr = invoicingVal > 0 ? `${invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
   const invoicedValStr = invoicedVal > 0 ? `${invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
 
-  // Utilizar o parentGroup se passado (SubItem), caso contrário ler do próprio t.itemGroup.
+  // Utilizar o parentGroup se passado (SubItem), caso contrÃ¡rio ler do prÃ³prio t.itemGroup.
   const logicalGroup = (isSub && parentGroup !== null) ? parentGroup : t.itemGroup;
   const safeGroupName = escapeHtml(logicalGroup || "Outros / Geral");
 
@@ -1108,7 +1108,7 @@ async function loadProgressTasks() {
       }
     }
   } catch (err) {
-    toast("Erro ao carregar o relatório de avanço", { type: "error" });
+    toast("Erro ao carregar o relatÃ³rio de avanÃ§o", { type: "error" });
   }
 }
 
@@ -1130,7 +1130,7 @@ function wireProgressTasks() {
       contentHtml: `
         <div class="space-y-4">
           <div class="grid grid-cols-2 gap-4">
-             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
+             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÃ‰DIA TENSÃƒO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
              <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Vincular a Subitem de:</label>
                 <select id="rt_parent" class="w-full rounded-lg border-slate-300 bg-slate-50 text-slate-600 font-semibold" onchange="const sel=this.value; const gInput=document.getElementById('rt_group'); if(sel){ const p=(window.projectProgressTasksCache||[]).find(x=>x.id===sel); if(p){ gInput.value=p.itemGroup||''; gInput.setAttribute('readonly','true'); gInput.classList.add('bg-slate-100'); } } else { gInput.removeAttribute('readonly'); gInput.classList.remove('bg-slate-100'); }">
@@ -1138,7 +1138,7 @@ function wireProgressTasks() {
                 </select>
              </div>
           </div>
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">DescriÃ§Ã£o da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: MarcaÃ§Ã£o da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(2);" /></div>
             <div>
@@ -1146,17 +1146,17 @@ function wireProgressTasks() {
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">
                 <option value="un">un (unidade)</option>
                 <option value="mts">mts (metros)</option>
-                <option value="km">km (quilómetros)</option>
+                <option value="km">km (quilÃ³metros)</option>
                 <option value="m">m (metros lineares)</option>
-                <option value="m2">m² (metros quadrados)</option>
-                <option value="m3">m³ (metros cúbicos)</option>
+                <option value="m2">mÂ² (metros quadrados)</option>
+                <option value="m3">mÂ³ (metros cÃºbicos)</option>
                 <option value="kg">kg (quilogramas)</option>
                 <option value="ton">ton (toneladas)</option>
                 <option value="par">par</option>
                 <option value="litros">litros</option>
                 <option value="horas">horas</option>
                 <option value="dias">dias</option>
-                <option value="mes">mês</option>
+                <option value="mes">mÃªs</option>
                 <option value="global">global</option>
               </select>
             </div>
@@ -1170,7 +1170,7 @@ function wireProgressTasks() {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. Serviço</label>
+              <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. ServiÃ§o</label>
               <input id="rt_us" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(2); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(2);" />
             </div>
             <div>
@@ -1224,27 +1224,27 @@ function wireProgressTasks() {
       primaryLabel: "Importar",
       contentHtml: `
         <div class="space-y-4">
-          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vários modelos faseadamente.</p>
+          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vÃ¡rios modelos faseadamente.</p>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Modelo de Obra</label>
             <select id="import_type" class="w-full rounded-lg border-slate-300">
-              <optgroup label="Postos de Transformação">
-                <option value="POSTO DE TRANSFORMAÇÃO 160KVA">PT 160kVA (Aéreo)</option>
-                <option value="POSTO DE TRANSFORMAÇÃO 250KVA">PT 250kVA (Aéreo)</option>
-                <option value="BAIXA TENSÃO E TERRAS">PT em Alvenaria (BT e Terras)</option>
+              <optgroup label="Postos de TransformaÃ§Ã£o">
+                <option value="POSTO DE TRANSFORMAÃ‡ÃƒO 160KVA">PT 160kVA (AÃ©reo)</option>
+                <option value="POSTO DE TRANSFORMAÃ‡ÃƒO 250KVA">PT 250kVA (AÃ©reo)</option>
+                <option value="BAIXA TENSÃƒO E TERRAS">PT em Alvenaria (BT e Terras)</option>
               </optgroup>
-              <optgroup label="Redes de Distribuição">
-                <option value="MÉDIA TENSÃO">Média Tensão (Postes)</option>
-                <option value="BAIXA TENSÃO">Baixa Tensão (Iluminação/Dom.)</option>
-                <option value="RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO">Ramal Subterrâneo MT</option>
+              <optgroup label="Redes de DistribuiÃ§Ã£o">
+                <option value="MÃ‰DIA TENSÃƒO">MÃ©dia TensÃ£o (Postes)</option>
+                <option value="BAIXA TENSÃƒO">Baixa TensÃ£o (IluminaÃ§Ã£o/Dom.)</option>
+                <option value="RAMAL SUBTERRÃ‚NEO DE MÃ‰DIA TENSÃƒO">Ramal SubterrÃ¢neo MT</option>
               </optgroup>
               <optgroup label="Infraestrutura">
-                <option value="ABERTURA E FECHAMENTO DE VALA">Valas Técnicas (Abertura/Fecho)</option>
+                <option value="ABERTURA E FECHAMENTO DE VALA">Valas TÃ©cnicas (Abertura/Fecho)</option>
               </optgroup>
             </select>
           </div>
           <div class="p-3 bg-primary/5 rounded-lg border border-primary/10">
-            <p class="text-[11px] text-primary font-bold italic leading-snug">Nota: As tarefas serão adicionadas ao final da lista actual sem substituir as existentes.</p>
+            <p class="text-[11px] text-primary font-bold italic leading-snug">Nota: As tarefas serÃ£o adicionadas ao final da lista actual sem substituir as existentes.</p>
           </div>
         </div>
       `,
@@ -1319,7 +1319,7 @@ function wireProgressTasks() {
       const hasSubs = (window.projectProgressTasksCache || []).some(t => t.parentId === taskId);
       const readonlyAttr = hasSubs ? "readonly" : "";
       const bgClass = hasSubs ? "bg-slate-50 opacity-80" : "";
-      const titleHint = hasSubs ? "Este valor é calculado automaticamente pela soma dos subitens." : "";
+      const titleHint = hasSubs ? "Este valor Ã© calculado automaticamente pela soma dos subitens." : "";
 
       openModal({
         title: "Atualizar Progresso",
@@ -1334,17 +1334,17 @@ function wireProgressTasks() {
                 <select id="up_uni" class="w-full rounded-lg border-slate-300">
                   <option value="un" ${uni === 'un' ? 'selected' : ''}>un (unidade)</option>
                   <option value="mts" ${uni === 'mts' ? 'selected' : ''}>mts (metros)</option>
-                  <option value="km" ${uni === 'km' ? 'selected' : ''}>km (quilómetros)</option>
+                  <option value="km" ${uni === 'km' ? 'selected' : ''}>km (quilÃ³metros)</option>
                   <option value="m" ${uni === 'm' ? 'selected' : ''}>m (metros lineares)</option>
-                  <option value="m2" ${uni === 'm2' ? 'selected' : ''}>m² (metros quadrados)</option>
-                  <option value="m3" ${uni === 'm3' ? 'selected' : ''}>m³ (metros cúbicos)</option>
+                  <option value="m2" ${uni === 'm2' ? 'selected' : ''}>mÂ² (metros quadrados)</option>
+                  <option value="m3" ${uni === 'm3' ? 'selected' : ''}>mÂ³ (metros cÃºbicos)</option>
                   <option value="kg" ${uni === 'kg' ? 'selected' : ''}>kg (quilogramas)</option>
                   <option value="ton" ${uni === 'ton' ? 'selected' : ''}>ton (toneladas)</option>
                   <option value="par" ${uni === 'par' ? 'selected' : ''}>par</option>
                   <option value="litros" ${uni === 'litros' ? 'selected' : ''}>litros</option>
                   <option value="horas" ${uni === 'horas' ? 'selected' : ''}>horas</option>
                   <option value="dias" ${uni === 'dias' ? 'selected' : ''}>dias</option>
-                  <option value="mes" ${uni === 'mes' ? 'selected' : ''}>mês</option>
+                  <option value="mes" ${uni === 'mes' ? 'selected' : ''}>mÃªs</option>
                   <option value="global" ${uni === 'global' ? 'selected' : ''}>global</option>
                 </select>
               </div>
@@ -1366,7 +1366,7 @@ function wireProgressTasks() {
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. Serviço</label>
+                <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. ServiÃ§o</label>
                 <input id="up_us" type="number" step="0.01" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(2); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(2);" />
               </div>
               <div>
@@ -1434,7 +1434,7 @@ async function loadFiles() {
   const empty = el("noFilesMsg");
   if (!list) return;
 
-  // Criar breadcrumbs container se não existir
+  // Criar breadcrumbs container se nÃ£o existir
   if (!el("fileBreadcrumbs")) {
     const header = list.parentElement.querySelector("div.flex.justify-between");
     const bread = document.createElement("div");
@@ -1450,7 +1450,7 @@ async function loadFiles() {
     const breadEl = el("fileBreadcrumbs");
     if (breadEl) {
       const breadHtml = [
-        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Início</button>`,
+        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> InÃ­cio</button>`,
         ...breadcrumbs.map((b, idx) => `
           <span class="material-symbols-outlined text-xs">chevron_right</span>
           <button data-go-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e] font-black' : 'hover:text-primary'} transition-colors">${escapeHtml(b.name)}</button>
@@ -1459,13 +1459,13 @@ async function loadFiles() {
       breadEl.innerHTML = breadHtml;
     }
 
-    // Carregar subpastas do nível actual
+    // Carregar subpastas do nÃ­vel actual
     const parentParam = currentFolderId ? `?parentId=${currentFolderId}` : `?parentId=root`;
     const foldersRes = await apiRequest(`/projects/${encodeURIComponent(id)}/folders${parentParam}`);
     const folders = foldersRes.items || [];
     fileState.folders = folders;
 
-    // Carregar ficheiros do nível actual
+    // Carregar ficheiros do nÃ­vel actual
     const qs = currentFolderId ? `?folderId=${currentFolderId}` : `?folderId=root`;
     const filesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/files${qs}`);
     const files = filesRes.items || [];
@@ -1509,7 +1509,7 @@ function wireFilesUpload() {
       primaryLabel: "Enviar",
       contentHtml: `
         <div class="space-y-4">
-          <p class="text-xs text-on-surface-variant font-medium">Capture ou selecione documentos técnicos para esta obra.</p>
+          <p class="text-xs text-on-surface-variant font-medium">Capture ou selecione documentos tÃ©cnicos para esta obra.</p>
           <div class="border-2 border-dashed border-surface-container rounded-2xl p-8 flex flex-col items-center justify-center bg-surface-container-low/20">
             <span class="material-symbols-outlined text-3xl text-primary mb-3">cloud_upload</span>
             <input id="f_input" type="file" class="block w-full text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
@@ -1520,8 +1520,8 @@ function wireFilesUpload() {
               <option value="OUTROS">Outros</option>
               <option value="PLANTA">Planta / Projecto</option>
               <option value="CONTRATO">Contrato / Legal</option>
-              <option value="FOTO">Registo Fotográfico</option>
-              <option value="RELATORIO">Relatório Técnico</option>
+              <option value="FOTO">Registo FotogrÃ¡fico</option>
+              <option value="RELATORIO">RelatÃ³rio TÃ©cnico</option>
             </select>
           </div>
           <div>
@@ -1580,12 +1580,12 @@ function wireNewFolder() {
       contentHtml: `
         <div class="space-y-3">
           <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Nome da Pasta</label>
-          <input id="fold_name" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm" placeholder="Ex: Plantas Técnicas" />
+          <input id="fold_name" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm" placeholder="Ex: Plantas TÃ©cnicas" />
         </div>
       `,
       onPrimary: async ({ close, panel }) => {
         const name = panel.querySelector("#fold_name")?.value?.trim();
-        if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
+        if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
         const id = getProjectId();
         const btn = panel.querySelector("[data-primary]");
         try {
@@ -1641,7 +1641,7 @@ function wireFileNavigation() {
     const delFolderBtn = e.target?.closest("[data-delete-folder]");
     if (delFolderBtn) {
       e.stopPropagation();
-      if (!confirm("Apagar esta pasta eliminará permanentemente TODOS os arquivos e subpastas. Continuar?")) return;
+      if (!confirm("Apagar esta pasta eliminarÃ¡ permanentemente TODOS os arquivos e subpastas. Continuar?")) return;
       const folderId = delFolderBtn.getAttribute("data-delete-folder");
       const id = getProjectId();
       try {
@@ -1689,7 +1689,7 @@ function wireFileNavigation() {
         `,
         onPrimary: async ({ close, panel }) => {
           const name = panel.querySelector("#rename_folder")?.value?.trim();
-          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
+          if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
           const btn = panel.querySelector("[data-primary]");
           try {
             setButtonLoading(btn, true);
@@ -1744,8 +1744,8 @@ function wireFileNavigation() {
                 <option value="OUTROS" ${currentCat === 'OUTROS' ? 'selected' : ''}>Outros</option>
                 <option value="PLANTA" ${currentCat === 'PLANTA' ? 'selected' : ''}>Planta / Projecto</option>
                 <option value="CONTRATO" ${currentCat === 'CONTRATO' ? 'selected' : ''}>Contrato / Legal</option>
-                <option value="FOTO" ${currentCat === 'FOTO' ? 'selected' : ''}>Registo Fotográfico</option>
-                <option value="RELATORIO" ${currentCat === 'RELATORIO' ? 'selected' : ''}>Relatório Técnico</option>
+                <option value="FOTO" ${currentCat === 'FOTO' ? 'selected' : ''}>Registo FotogrÃ¡fico</option>
+                <option value="RELATORIO" ${currentCat === 'RELATORIO' ? 'selected' : ''}>RelatÃ³rio TÃ©cnico</option>
               </select>
             </div>
             <div>
@@ -1756,7 +1756,7 @@ function wireFileNavigation() {
         `,
         onPrimary: async ({ close, panel }) => {
           const name = panel.querySelector("#edit_fname")?.value?.trim();
-          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
+          if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
           const category = panel.querySelector("#edit_fcat")?.value;
           const folderId = panel.querySelector("#edit_ffolder")?.value || null;
           const btn = panel.querySelector("[data-primary]");
@@ -1781,7 +1781,7 @@ function wireFileNavigation() {
 }
 
 function wireFileDeletion() {
-  // Delegação unificada em wireFileNavigation — este stub mantém compatibilidade
+  // DelegaÃ§Ã£o unificada em wireFileNavigation â€” este stub mantÃ©m compatibilidade
 }
 
 function wireSearch() {
@@ -1790,7 +1790,7 @@ function wireSearch() {
   input?.addEventListener("input", () => {
     txState.search = input.value.trim();
     if (t) window.clearTimeout(t);
-    t = window.setTimeout(() => loadTransactions().catch(() => toast("Erro ao carregar lançamentos", { type: "error" })), 250);
+    t = window.setTimeout(() => loadTransactions().catch(() => toast("Erro ao carregar lanÃ§amentos", { type: "error" })), 250);
   });
 }
 
@@ -1802,8 +1802,8 @@ function wireExport() {
 
     const lines = [
       ["Projeto", project.name],
-      ["Código", project.code],
-      ["Orçamento_total", project.budgetTotal],
+      ["CÃ³digo", project.code],
+      ["OrÃ§amento_total", project.budgetTotal],
       ["Consumido", project.budgetConsumed],
       [],
       ["data", "descricao", "categoria", "responsavel", "status", "valor"],
@@ -1834,35 +1834,35 @@ function wireNewTransaction() {
     const id = getProjectId();
     const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
     const budgetOptions = [
-      `<option value="">(Nenhum item específico)</option>`,
+      `<option value="">(Nenhum item especÃ­fico)</option>`,
       ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrencyKZ(l.total)}]</option>`)
     ].join("");
 
     openModal({
-      title: "Novo lançamento",
+      title: "Novo lanÃ§amento",
       primaryLabel: "Salvar",
       contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
-            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">DescriÃ§Ã£o</label>
+            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="DescriÃ§Ã£o..." />
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
             <select id="t_cat" class="w-full rounded-lg border-slate-300">
               <optgroup label="Custos Operacionais e Diretos">
                 <option value="MATERIAIS_INSUMOS">Materiais e Insumos</option>
-                <option value="SERVICOS_MAO_DE_OBRA">Mão de Obra e Serviços</option>
+                <option value="SERVICOS_MAO_DE_OBRA">MÃ£o de Obra e ServiÃ§os</option>
               </optgroup>
               <optgroup label="Gastos e Despesas">
                 <option value="GASTOS_PESSOAL">Gastos com Pessoal</option>
                 <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
-                <option value="DEPRECIACAO">Depreciação</option>
+                <option value="DEPRECIACAO">DepreciaÃ§Ã£o</option>
                 <option value="IMPOSTOS">Impostos</option>
                 <option value="OUTRAS_DESPESAS">Outras Despesas</option>
               </optgroup>
-              <optgroup label="Deduções">
-                <option value="DEDUCOES">Dedução de Custos / Reembolso</option>
+              <optgroup label="DeduÃ§Ãµes">
+                <option value="DEDUCOES">DeduÃ§Ã£o de Custos / Reembolso</option>
               </optgroup>
             </select>
           </div>
@@ -1875,7 +1875,7 @@ function wireNewTransaction() {
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Responsável</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">ResponsÃ¡vel</label>
             <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div>
@@ -1883,7 +1883,7 @@ function wireNewTransaction() {
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do Orçamento</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do OrÃ§amento</label>
             <select id="t_line" class="w-full rounded-lg border-slate-300 text-sm">
               ${budgetOptions}
             </select>
@@ -1907,14 +1907,14 @@ function wireNewTransaction() {
               budgetLineId: v("t_line") || null,
             },
           });
-          toast("Lançamento criado com sucesso", { type: "success" });
+          toast("LanÃ§amento criado com sucesso", { type: "success" });
           close();
           await loadProject();
           await loadTransactions();
           await loadBudgetExecution();
         } catch (err) {
           setButtonLoading(btn, false);
-          toast(err.message || "Erro ao criar lançamento", { type: "error" });
+          toast(err.message || "Erro ao criar lanÃ§amento", { type: "error" });
         }
       },
     });
@@ -1928,13 +1928,13 @@ function wireNewTransaction() {
 
 function metodoPagtoLabel(m) {
   const map = {
-    transferencia: "Transferência",
-    cash: "Numerário",
+    transferencia: "TransferÃªncia",
+    cash: "NumerÃ¡rio",
     cheque: "Cheque",
     mbway: "MBWay",
     outro: "Outro",
   };
-  return m ? (map[m.toLowerCase()] || m) : "—";
+  return m ? (map[m.toLowerCase()] || m) : "â€”";
 }
 
 function renderPaymentRow(p, role) {
@@ -1949,8 +1949,8 @@ function renderPaymentRow(p, role) {
     <tr class="hover:bg-slate-50/70 transition-colors">
       <td class="px-10 py-4 text-xs font-semibold text-slate-500 whitespace-nowrap">${formatDateBR(p.dataPagamento)}</td>
       <td class="px-6 md:px-10 py-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${metodoPagtoLabel(p.metodo)}</td>
-      <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "—")}</td>
-      <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "—")}</td>
+      <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "â€”")}</td>
+      <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "â€”")}</td>
       <td class="px-10 py-4 text-right font-black text-slate-900 whitespace-nowrap">${formatCurrencyKZ(p.valor)}</td>
       <td class="px-10 py-4 text-center">
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${statusCls}">
@@ -1962,7 +1962,7 @@ function renderPaymentRow(p, role) {
           ${p.comprovativoPath ? `<a href="${window.location.origin.replace(/:5173$/, ":4000")}/${p.comprovativoPath}" target="_blank" title="Ver Comprovativo" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">picture_as_pdf</span></a>` : ""}
           ${canConfirm ? `<button data-confirm-payment="${p.id}" title="Confirmar pagamento" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">check_circle</span></button>` : ""}
           ${canDelete ? `<button data-delete-payment="${p.id}" title="Apagar pagamento" class="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">delete</span></button>` : ""}
-          ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">—</span>` : ""}
+          ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">â€”</span>` : ""}
         </div>
       </td>
     </tr>
@@ -2021,18 +2021,18 @@ function openPaymentModal() {
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Método</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">MÃ©todo</label>
             <select id="pm_metodo" class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
-              <option value="">— Seleccionar —</option>
-              <option value="transferencia">Transferência Bancária</option>
-              <option value="cash">Numerário (Cash)</option>
+              <option value="">â€” Seleccionar â€”</option>
+              <option value="transferencia">TransferÃªncia BancÃ¡ria</option>
+              <option value="cash">NumerÃ¡rio (Cash)</option>
               <option value="cheque">Cheque</option>
               <option value="mbway">MBWay</option>
               <option value="outro">Outro</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Referência</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">ReferÃªncia</label>
             <input id="pm_ref" type="text" placeholder="Ex: TRF-001"
               class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
           </div>
@@ -2050,7 +2050,7 @@ function openPaymentModal() {
         </div>
         <div class="flex items-center gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl">
           <span class="material-symbols-outlined text-amber-500 text-xl">info</span>
-          <p class="text-xs text-amber-700 font-semibold italic">O pagamento ficará <strong>Pendente</strong> até confirmação.</p>
+          <p class="text-xs text-amber-700 font-semibold italic">O pagamento ficarÃ¡ <strong>Pendente</strong> atÃ© confirmaÃ§Ã£o.</p>
         </div>
       </div>
     `,
@@ -2061,7 +2061,7 @@ function openPaymentModal() {
       const data = v("pm_data");
       const fileInput = panel.querySelector("#pm_file");
 
-      if (!valor) return toast("Valor é obrigatório", { type: "error" });
+      if (!valor) return toast("Valor Ã© obrigatÃ³rio", { type: "error" });
 
       setButtonLoading(btn, true);
       try {
@@ -2139,7 +2139,7 @@ function wirePayments() {
     const deleteBtn = e.target.closest("[data-delete-payment]");
     if (deleteBtn) {
       const pid = deleteBtn.getAttribute("data-delete-payment");
-      if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acção é irreversível.")) return;
+      if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acÃ§Ã£o Ã© irreversÃ­vel.")) return;
       deleteBtn.disabled = true;
       try {
         const id = getProjectId();
@@ -2239,7 +2239,7 @@ async function init() {
     if (e.key === "Escape") closeLightbox();
   });
 
-  // Redirecionamento automático para cliente
+  // Redirecionamento automÃ¡tico para cliente
   const user = getSessionUser();
   if (user?.role === "cliente" || user?.role === "client") {
     const tabBtn = el("tabTriggerGaleria");
@@ -2257,7 +2257,7 @@ function openPreview(fileId) {
   const fileUrl = `${baseUrl}/${file.path}`;
 
   el("previewFileName").textContent = file.originalName;
-  el("previewFileMeta").textContent = `${formatBytes(file.size)} • ${formatDateBR(file.createdAt)} • ${file.category}`;
+  el("previewFileMeta").textContent = `${formatBytes(file.size)} â€¢ ${formatDateBR(file.createdAt)} â€¢ ${file.category}`;
   el("previewDownloadBtn").href = fileUrl;
   el("previewDownloadBtn").setAttribute("download", file.originalName);
 
@@ -2272,7 +2272,7 @@ function openPreview(fileId) {
     body.innerHTML = `
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-on-surface-variant/20 mb-6">description</span>
-        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
+        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo nÃ£o suporta prÃ©-visualizaÃ§Ã£o direta.</p>
         <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold hover:brightness-110 transition-all">
           <span class="material-symbols-outlined">download</span> Download do Arquivo
         </a>
@@ -2351,6 +2351,7 @@ async function loadStock() {
     ]);
 
     stockState.items = movementsRes.items;
+    stockState.summary = summaryRes.items; // Guardar o resumo consolidado
     renderStockSummary(summaryRes.items);
     applyStockFilters();
   } catch (err) {
@@ -2369,7 +2370,7 @@ function renderStockSummary(items) {
         <p class="text-2xl font-bold text-slate-900">${materialTypesCount}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock Útil (BOM)</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock (BOM)</p>
         <p class="text-2xl font-bold text-emerald-600">${goodTotal}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
@@ -2387,7 +2388,7 @@ function renderStockMovements(items) {
   const tbody = el("stockMovementsTbody");
   if (!tbody) return;
 
-  // Guardar os dados no próprio elemento para o modal de detalhes
+  // Guardar os dados no prÃ³prio elemento para o modal de detalhes
   el("stockMovementsTable")._movementsData = items;
   if (!items || items.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
@@ -2411,11 +2412,11 @@ function renderStockMovements(items) {
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
         <td class="px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
-          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÃ‰CNICO")}</div>
         </td>
         <td class="px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${escapeHtml(m.material.name)}</div>
-          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} • ${m.material.category}</div>
+          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} â€¢ ${m.material.category}</div>
         </td>
         <td class="px-10 py-5">
           <div class="flex flex-col gap-1">
@@ -2469,7 +2470,7 @@ function wireStockWorkflow() {
       rejectStockMovement(btn.dataset.rejectStock);
     });
   });
-  // Removido o event listener de [data-view-stock] aqui pois ele já é delegado via document no wireStock!
+  // Removido o event listener de [data-view-stock] aqui pois ele jÃ¡ Ã© delegado via document no wireStock!
 }
 
 async function openStockMovementDetailModal(moveId) {
@@ -2481,7 +2482,7 @@ async function openStockMovementDetailModal(moveId) {
 
   const renderPhotos = (cond) => {
     const pList = m.photos.filter(p => !cond || p.condition === cond);
-    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
+    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidÃªncias.</p>`;
     return `<div class="flex flex-wrap gap-3">
       ${pList.map(p => `
         <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
@@ -2496,15 +2497,15 @@ async function openStockMovementDetailModal(moveId) {
   const isClosed = (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO");
 
   openModal({
-    title: "Detalhes do Lançamento",
+    title: "Detalhes do LanÃ§amento",
     contentHtml: `
       <div class="space-y-6">
         <div class="grid grid-cols-2 gap-8">
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Informação Base</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">InformaÃ§Ã£o Base</p>
             <div class="space-y-1">
               <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.material.name)}</h4>
-              <p class="text-xs text-slate-500 font-medium">${m.material.code} • ${m.material.category}</p>
+              <p class="text-xs text-slate-500 font-medium">${m.material.code} â€¢ ${m.material.category}</p>
               <div class="mt-4 flex flex-col gap-2">
                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
                     <span class="text-[10px] font-bold text-slate-500">TIPO</span>
@@ -2522,14 +2523,14 @@ async function openStockMovementDetailModal(moveId) {
             </div>
           </div>
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo Logístico</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo LogÃ­stico</p>
             <div class="bg-slate-50 rounded-2xl p-4 space-y-3">
                <div>
                   <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "Não informado")}</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "NÃ£o informado")}</span>
                </div>
                <div>
-                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
+                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / MatrÃ­cula</span>
                   <span class="text-xs font-bold text-slate-900">${escapeHtml(m.vehicleBrand || "")} ${escapeHtml(m.vehiclePlate || "N/D")}</span>
                </div>
                <div>
@@ -2541,7 +2542,7 @@ async function openStockMovementDetailModal(moveId) {
         </div>
 
         <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Evidências Fotográficas</p>
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">EvidÃªncias FotogrÃ¡ficas</p>
           <div class="space-y-4">
              <div>
                 <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">Material em Bom Estado</span>
@@ -2556,7 +2557,7 @@ async function openStockMovementDetailModal(moveId) {
 
         ${m.notes ? `
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Observações</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">ObservaÃ§Ãµes</p>
             <p class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border-l-4 border-slate-200 font-medium">${escapeHtml(m.notes)}</p>
           </div>
         ` : ""}
@@ -2565,13 +2566,13 @@ async function openStockMovementDetailModal(moveId) {
           <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
              <span class="material-symbols-outlined text-emerald-600">info</span>
              <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
-                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) será integrada no inventário útil do armazém. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) será mantido apenas como registo de evidência e não constará no saldo disponível para uso.
+                Ao <strong>Aprovar</strong> este lanÃ§amento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) serÃ¡ integrada no inventÃ¡rio Ãºtil do armazÃ©m. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) serÃ¡ mantido apenas como registo de evidÃªncia e nÃ£o constarÃ¡ no saldo disponÃ­vel para uso.
              </p>
           </div>
         ` : ""}
       </div>
     `,
-    primaryLabel: isClosed ? "Fechar" : "Aprovar Lançamento",
+    primaryLabel: isClosed ? "Fechar" : "Aprovar LanÃ§amento",
     onPrimary: async ({ close, btn }) => {
       if (isClosed) {
         close();
@@ -2588,7 +2589,7 @@ async function openStockMovementDetailModal(moveId) {
     },
     secondaryLabel: isClosed ? null : "Rejeitar",
     onSecondary: async ({ close }) => {
-      if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
+      if (confirm("Tem certeza que deseja REJEITAR este lanÃ§amento?")) {
         await rejectStockMovement(m.id);
         close();
       }
@@ -2603,10 +2604,10 @@ async function approveStockMovement(id) {
       method: "PATCH",
       body: { status: "APROVADO", notes: "Aprovado via dashboard administrativo." }
     });
-    toast("Lançamento aprovado com sucesso", { type: "success" });
+    toast("LanÃ§amento aprovado com sucesso", { type: "success" });
     loadStock();
   } catch (err) {
-    toast(err.message || "Erro ao aprovar lançamento", { type: "error" });
+    toast(err.message || "Erro ao aprovar lanÃ§amento", { type: "error" });
   }
 }
 
@@ -2618,10 +2619,10 @@ async function rejectStockMovement(id) {
       method: "PATCH",
       body: { status: "REJEITADO", notes: "Rejeitado pelo administrador." }
     });
-    toast("Lançamento rejeitado", { type: "warning" });
+    toast("LanÃ§amento rejeitado", { type: "warning" });
     loadStock();
   } catch (err) {
-    toast(err.message || "Erro ao rejeitar lançamento", { type: "error" });
+    toast(err.message || "Erro ao rejeitar lanÃ§amento", { type: "error" });
   }
 }
 async function openStockMovementModal() {
@@ -2632,7 +2633,7 @@ async function openStockMovementModal() {
     const materials = materialsRes.items || [];
 
     if (materials.length === 0) {
-      toast("Inicializando catálogo básico...", { type: "info" });
+      toast("Inicializando catÃ¡logo bÃ¡sico...", { type: "info" });
       await apiRequest("/stock/init-catalog", { method: "POST" });
       return openStockMovementModal();
     }
@@ -2640,7 +2641,7 @@ async function openStockMovementModal() {
     const materialOptions = materials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.unit})</option>`).join("");
 
     openModal({
-      title: "Novo Lançamento de Stock",
+      title: "Novo LanÃ§amento de Stock",
       contentHtml: `
         <div class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2654,8 +2655,8 @@ async function openStockMovementModal() {
               <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Tipo de Movimento</label>
               <select id="st_type" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
                 <option value="ENTRADA">Entrada / Recebimento</option>
-                <option value="SAIDA">Saída / Aplicação</option>
-                <option value="TRANSFERENCIA">Transferência</option>
+                <option value="SAIDA">SaÃ­da / AplicaÃ§Ã£o</option>
+                <option value="TRANSFERENCIA">TransferÃªncia</option>
               </select>
             </div>
           </div>
@@ -2671,23 +2672,23 @@ async function openStockMovementModal() {
           </div>
           
           <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Logística e Dados de Transporte</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">LogÃ­stica e Dados de Transporte</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-               <input id="st_plate" placeholder="Matrícula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
+               <input id="st_plate" placeholder="MatrÃ­cula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
                <input id="st_brand" placeholder="Marca Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="proprio">Material Próprio (InfoCliente)</option>
+                  <option value="proprio">Material PrÃ³prio (InfoCliente)</option>
                   <option value="cliente">Fornecido pelo Cliente</option>
                   <option value="fornecedor">Compra Direta Fornecedor</option>
                </select>
                 <select id="st_warehouse" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="Armazém Principal">Armazém Principal</option>
-                  <option value="Armazém do Cliente">Armazém do Cliente</option>
+                  <option value="ArmazÃ©m Principal">ArmazÃ©m Principal</option>
+                  <option value="ArmazÃ©m do Cliente">ArmazÃ©m do Cliente</option>
                   <option value="Contentor Obra">Contentor Obra</option>
-                  <option value="Viatura Técnica">Viatura Técnica</option>
+                  <option value="Viatura TÃ©cnica">Viatura TÃ©cnica</option>
                   <option value="Estaleiro">Estaleiro</option>
                </select>
             </div>
@@ -2695,17 +2696,17 @@ async function openStockMovementModal() {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Evidência: Bom Estado</label>
+              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">EvidÃªncia: Bom Estado</label>
               <input type="file" id="st_photos_good" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
             </div>
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Evidência: Danificado</label>
+              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">EvidÃªncia: Danificado</label>
               <input type="file" id="st_photos_bad" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
             </div>
           </div>
         </div>
       `,
-      primaryText: "Registrar Lançamento",
+      primaryText: "Registrar LanÃ§amento",
       onPrimary: async ({ btn, close, panel }) => {
         const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
         const mId = v("st_mId");
@@ -2728,7 +2729,7 @@ async function openStockMovementModal() {
               vehiclePlate: v("st_plate"),
               vehicleBrand: v("st_brand"),
               batch: v("st_warehouse"),
-              technicianName: getSessionUser()?.email?.split("@")[0] || "Técnico"
+              technicianName: getSessionUser()?.email?.split("@")[0] || "TÃ©cnico"
             }
           });
 
@@ -2756,7 +2757,7 @@ async function openStockMovementModal() {
           await uploadFiles(el("st_photos_good"), "BOA");
           await uploadFiles(el("st_photos_bad"), "DANIFICADA");
 
-          toast("Lançamento registrado e aguardando validação", { type: "success" });
+          toast("LanÃ§amento registrado e aguardando validaÃ§Ã£o", { type: "success" });
           close();
           loadStock();
         } catch (err) {
@@ -2766,16 +2767,16 @@ async function openStockMovementModal() {
       }
     });
 
-    // Auto-select Armazém do Cliente if entry type is cliente
+    // Auto-select ArmazÃ©m do Cliente if entry type is cliente
     const entryTypeEl = document.getElementById("st_entryType");
     const warehouseEl = document.getElementById("st_warehouse");
     entryTypeEl?.addEventListener("change", (e) => {
       if (e.target.value === "cliente") {
-        warehouseEl.value = "Armazém do Cliente";
+        warehouseEl.value = "ArmazÃ©m do Cliente";
       }
     });
   } catch (err) {
-    toast("Erro ao carregar catálogo", { type: "error" });
+    toast("Erro ao carregar catÃ¡logo", { type: "error" });
   }
 }
 
@@ -2798,26 +2799,27 @@ function applyStockFilters() {
   });
 
   renderStockMovements(filtered);
-  renderStockInventory(filtered);
+  renderStockInventory(filtered, stockState.summary || []);
 }
 
-function renderStockInventory(movements) {
+function renderStockInventory(movements, summary) {
   const tbody = el("stockInventoryTbody");
   if (!tbody) return;
 
   const approved = movements.filter(m => m.auditStatus === "APROVADO");
 
-  // Agrupar por Material + Armazém (batch)
+  // Agrupar por Material + ArmazÃ©m (batch)
   const inventoryMap = {};
 
   approved.forEach(m => {
-    // Danificadas não entram no armazém (conforme pedido)
+    // Danificadas nÃ£o entram no armazÃ©m (conforme pedido)
     const qty = Number(m.quantityGood || 0);
     if (qty <= 0) return;
 
     const key = `${m.materialId}_${m.batch || "Geral"}`;
     if (!inventoryMap[key]) {
       inventoryMap[key] = {
+        materialId: m.materialId,
         material: m.material,
         warehouse: m.batch || "Geral",
         totalIn: 0,
@@ -2831,26 +2833,32 @@ function renderStockInventory(movements) {
 
   const lines = Object.values(inventoryMap);
   if (lines.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock útil disponível no armazém.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock Ãºtil disponÃ­vel no armazÃ©m.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = lines.map(l => {
     const balance = l.totalIn - l.totalOut;
+    const sItem = summary.find(s => s.materialId === l.materialId);
+    const planned = sItem ? Number(sItem.quantityPlanned || 0) : 0;
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
         <td class="px-10 py-5">
            <div class="text-xs font-bold text-slate-900">${escapeHtml(l.material.name)}</div>
-           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code}</div>
+           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code} â€¢ ${l.material.category}</div>
         </td>
         <td class="px-10 py-5 text-center">
            <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(l.warehouse)}</span>
         </td>
         <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500">${l.material.unit}</td>
+        <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30">${planned}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600">${l.totalIn}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-red-500">${l.totalOut}</td>
         <td class="px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
-        <td class="px-10 py-5 text-right">
+        <td class="px-10 py-5 text-right flex items-center justify-end gap-2">
+           <button onclick="openEditPlannedModal('${l.materialId}', '${escapeHtml(l.material.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
+              <span class="material-symbols-outlined text-sm">edit_square</span>
+           </button>
            <button data-adjust-stock="${l.material.id}" data-warehouse="${escapeHtml(l.warehouse)}" class="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">
              Ajustar
            </button>
@@ -2862,21 +2870,21 @@ function renderStockInventory(movements) {
 
 async function openMaterialManagerModal() {
   openModal({
-    title: "Gestão do Catálogo de Materiais",
+    title: "GestÃ£o do CatÃ¡logo de Materiais",
     contentHtml: `
       <div class="space-y-6">
         <div id="materialForm" class="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
            <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Novo Material / Editar</h4>
            <input type="hidden" id="mt_id">
            <div class="grid grid-cols-2 gap-4">
-              <input id="mt_code" placeholder="Código (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+              <input id="mt_code" placeholder="CÃ³digo (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
               <input id="mt_name" placeholder="Nome do Material" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
            </div>
            <div class="grid grid-cols-2 gap-4">
               <select id="mt_cat" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
-                 <option value="MT">Média Tensão (MT)</option>
-                 <option value="BT">Baixa Tensão (BT)</option>
-                 <option value="IP">Iluminação Pública (IP)</option>
+                 <option value="MT">MÃ©dia TensÃ£o (MT)</option>
+                 <option value="BT">Baixa TensÃ£o (BT)</option>
+                 <option value="IP">IluminaÃ§Ã£o PÃºblica (IP)</option>
                  <option value="OUTROS">Outros</option>
               </select>
               <input id="mt_unit" placeholder="Unidade (ex: un, mts, kg)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
@@ -2893,7 +2901,7 @@ async function openMaterialManagerModal() {
                  <tr>
                     <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Material</th>
                     <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Cat / Un</th>
-                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">Ações</th>
+                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">AÃ§Ãµes</th>
                  </tr>
               </thead>
               <tbody id="materialListTbody">
@@ -2909,7 +2917,7 @@ async function openMaterialManagerModal() {
 
   const loadMaterials = async () => {
     const tbody = el("materialListTbody");
-    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catálogo...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catÃ¡logo...</td></tr>`;
     try {
       const { items } = await apiRequest("/materials");
       tbody.innerHTML = items.map(m => `
@@ -2945,7 +2953,7 @@ async function openMaterialManagerModal() {
       // Bind delete
       document.querySelectorAll("[data-delete-mat]").forEach(btn => {
         btn.addEventListener("click", async () => {
-          if (!confirm("Tem certeza? Esta ação removerá o material do catálogo global.")) return;
+          if (!confirm("Tem certeza? Esta aÃ§Ã£o removerÃ¡ o material do catÃ¡logo global.")) return;
           try {
             await apiRequest(`/materials/${btn.dataset.deleteMat}`, { method: "DELETE" });
             toast("Material removido", { type: "success" });
@@ -2957,7 +2965,7 @@ async function openMaterialManagerModal() {
       });
 
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catálogo.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catÃ¡logo.</td></tr>`;
     }
   };
 
@@ -2979,7 +2987,7 @@ async function openMaterialManagerModal() {
       unit: el("mt_unit").value
     };
 
-    if (!body.code || !body.name) return toast("Preencha código e nome", { type: "warning" });
+    if (!body.code || !body.name) return toast("Preencha cÃ³digo e nome", { type: "warning" });
 
     setButtonLoading(btn, true);
     try {
@@ -3012,7 +3020,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
           <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
              <h4 class="text-[10px] font-black uppercase text-blue-600 mb-1">Material a Ajustar</h4>
              <p class="text-xs font-bold text-slate-800">${escapeHtml(mat.name)}</p>
-             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">Armazém: <span class="text-slate-900">${warehouse}</span></p>
+             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">ArmazÃ©m: <span class="text-slate-900">${warehouse}</span></p>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -3029,7 +3037,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
           <div class="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">
              <span class="material-symbols-outlined text-amber-500 text-sm">warning</span>
              <p class="text-[10px] text-amber-800 font-medium leading-relaxed">
-                Este ajuste criará um movimento do tipo <span class="font-bold">AJUSTE</span> aprovado automaticamente. Use para corrigir erros de inventário físico.
+                Este ajuste criará um movimento do tipo <span class="font-bold">AJUSTE</span> aprovado automaticamente. Use para corrigir erros de inventÃ¡rio fÃ­sico.
              </p>
           </div>
        </div>
@@ -3039,7 +3047,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
       const g = Number(panel.querySelector("#adjGood").value || 0);
       const b = Number(panel.querySelector("#adjBad").value || 0);
 
-      if (g === 0 && b === 0) return toast("Informe uma diferença", { type: "warning" });
+      if (g === 0 && b === 0) return toast("Informe uma diferenÃ§a", { type: "warning" });
 
       setButtonLoading(btn, true);
       try {
@@ -3054,7 +3062,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
             notes: "Ajuste manual administrativo."
           }
         });
-        toast("Ajuste concluído", { type: "success" });
+        toast("Ajuste concluí­do", { type: "success" });
         close();
         loadStock();
       } catch (err) {
@@ -3066,7 +3074,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
 }
 
 async function deleteStockMovement(moveId) {
-  if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazém será revertido automaticamente.")) return;
+  if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazÃ©m serÃ¡ revertido automaticamente.")) return;
 
   try {
     const pid = getProjectId();
@@ -3118,12 +3126,12 @@ function wireStock() {
     }
   });
 
-  // Sub-tabs de Stock (Fluxo, Inventário, Galeria)
+  // Sub-tabs de Stock (Fluxo, InventÃ¡rio, Galeria)
   document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
     btn.addEventListener("click", () => {
       const tab = btn.dataset.stockSubtab;
 
-      // Estilo dos botões
+      // Estilo dos botÃµes
       document.querySelectorAll("[data-stock-subtab]").forEach(b => {
         b.classList.remove("text-slate-900", "border-slate-900");
         b.classList.add("text-slate-400", "border-transparent");
@@ -3131,7 +3139,7 @@ function wireStock() {
       btn.classList.add("text-slate-900", "border-slate-900");
       btn.classList.remove("text-slate-400", "border-transparent");
 
-      // Visibilidade do conteúdo
+      // Visibilidade do conteÃºdo
       ["stock_history_content", "stock_inventory_content", "stock_gallery_content"].forEach(id => {
         el(id)?.classList.add("hidden");
       });
@@ -3165,10 +3173,10 @@ function getDateCategory(dateStr) {
 
   if (diffDays === 0) return "Hoje";
   if (diffDays === 1) return "Ontem";
-  if (diffDays <= 7) return "Última semana";
+  if (diffDays <= 7) return "Ãšltima semana";
 
   if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
-    return "Anteriormente neste mês";
+    return "Anteriormente neste mÃªs";
   }
   return "Anteriormente";
 }
@@ -3204,7 +3212,7 @@ async function loadStockGallery() {
     }
 
     if (photos.length === 0) {
-      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotográfico encontrado.</div>`;
+      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotogrÃ¡fico encontrado.</div>`;
       return;
     }
 
@@ -3215,7 +3223,7 @@ async function loadStockGallery() {
       groups[cat].push(p);
     });
 
-    const order = ["Hoje", "Ontem", "Última semana", "Anteriormente neste mês", "Anteriormente"];
+    const order = ["Hoje", "Ontem", "Ãšltima semana", "Anteriormente neste mÃªs", "Anteriormente"];
     grid.innerHTML = "";
     galleryState.items = photos; // Update global photo cache
 
@@ -3235,7 +3243,7 @@ async function loadStockGallery() {
         const url = `${getApiBaseUrl()}/${p.path}`;
         const equipName = p.movement?.material?.name
           ? escapeHtml(p.movement.material.name)
-          : "Registo Fotográfico";
+          : "Registo FotogrÃ¡fico";
 
         html += `
                 <div data-preview-photo="${p.id}" class="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer">
@@ -3267,7 +3275,7 @@ async function loadStockGallery() {
 }
 
 // =============================================================================
-// GESTÃO DA GALERIA DA OBRA (ADMIN)
+// GESTÃƒO DA GALERIA DA OBRA (ADMIN)
 // =============================================================================
 
 async function loadGallery() {
@@ -3311,7 +3319,7 @@ async function loadGallery() {
             </div>
           </div>
           <div class="p-5">
-            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descrição')}</p>
+            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descriÃ§Ã£o')}</p>
             <div class="flex items-center justify-between pt-3 border-t border-slate-50">
               <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
               <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span>
@@ -3345,7 +3353,7 @@ function wireGallery() {
   el("addPhotoBtn")?.addEventListener("click", () => {
     const id = getProjectId();
     openModal({
-      title: "Novo Registo Fotográfico",
+      title: "Novo Registo FotogrÃ¡fico",
       primaryLabel: "Carregar Foto",
       contentHtml: `
         <div class="space-y-6">
@@ -3365,14 +3373,14 @@ function wireGallery() {
                 <span class="material-symbols-outlined text-3xl">add_a_photo</span>
               </div>
               <p class="text-sm font-bold text-slate-600">Clique para selecionar foto</p>
-              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">JPG, PNG até 10MB</p>
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">JPG, PNG atÃ© 10MB</p>
             </div>
           </div>
 
           <div class="space-y-4">
             <div>
-               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Descrição do Momento</label>
-               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que está a acontecer na obra..."></textarea>
+               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">DescriÃ§Ã£o do Momento</label>
+               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que estÃ¡ a acontecer na obra..."></textarea>
             </div>
             <div>
                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Data do Registo</label>
@@ -3446,3 +3454,44 @@ function wireGallery() {
     });
   });
 }
+async function openEditPlannedModal(materialId, materialName, currentPlanned) {
+  const projectId = getProjectId();
+  openModal({
+    title: "Definir Quantidade Prevista",
+    contentHtml: `
+      <div class="space-y-4">
+        <div>
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Material</p>
+          <p class="text-sm font-bold text-slate-900">${materialName}</p>
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Quantidade Prevista Total (BoQ)</label>
+          <input type="number" id="edit_planned_qty" value="${currentPlanned}" step="0.01" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+          <p class="text-[9px] text-slate-400 font-medium">Esta quantidade representa o total planeado para este projeto independente do armazÃ©m.</p>
+        </div>
+      </div>
+    `,
+    primaryLabel: "Guardar Alteração",
+    onPrimary: async ({ close, btn, panel }) => {
+      const qtyInput = panel.querySelector("#edit_planned_qty");
+      const qty = Number(qtyInput.value);
+
+      if (isNaN(qty)) return toast("Valor invÃ¡lido", { type: "error" });
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/stock/${encodeURIComponent(projectId)}/planned`, {
+          method: "PATCH",
+          body: { materialId, quantityPlanned: qty }
+        });
+        toast("Quantidade prevista atualizada", { type: "success" });
+        close();
+        loadStock();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast("Erro ao atualizar", { type: "error" });
+      }
+    }
+  });
+}
+window.openEditPlannedModal = openEditPlannedModal;
