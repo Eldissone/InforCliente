@@ -26,7 +26,8 @@ let state = {
   galleryObraMaterial: "all",
   galleryCampoStartDate: "",
   galleryCampoEndDate: "",
-  galleryCampoMaterial: "all"
+  galleryCampoMaterial: "all",
+  collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.clientCollapsedTables") || "{}")
 };
 
 async function loadDashboardData() {
@@ -1218,6 +1219,32 @@ function renderGallerySection(containerId, photos, isCampo) {
   });
 }
 
+function toggleTable(tableId, manual = true) {
+  const body = document.querySelector(`[data-table-body="${tableId}"]`);
+  const btn = document.querySelector(`[data-toggle-table="${tableId}"]`);
+  if (!body) return;
+
+  if (manual) {
+    state.collapsedTables[tableId] = !state.collapsedTables[tableId];
+    localStorage.setItem("InfoCliente.clientCollapsedTables", JSON.stringify(state.collapsedTables));
+  }
+
+  const isCollapsed = state.collapsedTables[tableId];
+  
+  if (isCollapsed) {
+    body.classList.add("hidden");
+  } else {
+    body.classList.remove("hidden");
+  }
+
+  if (btn) {
+    const icon = btn.querySelector(".material-symbols-outlined");
+    if (icon) {
+      icon.style.transform = isCollapsed ? "rotate(-90deg)" : "rotate(0deg)";
+    }
+  }
+}
+
 /* =================================================================================
  *  INITIALIZATION & LISTENERS
  * ================================================================================= */
@@ -1317,6 +1344,20 @@ function wireEvents() {
     if (closeBtn || e.target === lightboxOverlay) {
       closeLightbox();
     }
+
+    // Individual Table Toggles
+    const toggleTableBtn = e.target.closest("[data-toggle-table]");
+    if (toggleTableBtn) {
+      const tableId = toggleTableBtn.getAttribute("data-toggle-table");
+      toggleTable(tableId, true);
+      return;
+    }
+  });
+
+  // Apply initial states for tables
+  document.querySelectorAll("[data-toggle-table]").forEach(btn => {
+    const tableId = btn.getAttribute("data-toggle-table");
+    toggleTable(tableId, false);
   });
 
   // Handle ESC key for Lightbox

@@ -472,19 +472,23 @@
                 class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
                 <div class="p-6 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                        <h3 class="font-bold text-2xl text-slate-900">Resumo de Stock por Material</h3>
+                        <h3 class="font-bold text-3xl text-slate-900">Resumo de Stock por Material</h3>
                         <p class="text-xs text-slate-400 mt-1">Quantidades previstas, entregues, aplicadas e saldo
                             actual</p>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-4">
                         <div class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center h-9">
                             <span class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
                             <input type="text" id="stockSummaryFilter" placeholder="Filtrar..."
                                 class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-28" />
                         </div>
+                        <button data-toggle-table="stock_summary"
+                            class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                            <span class="material-symbols-outlined transition-transform">expand_more</span>
+                        </button>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
+                <div data-table-body="stock_summary" class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 whitespace-nowrap">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -535,10 +539,14 @@
                                 <option value="SAIDA">Saídas</option>
                                 <option value="AJUSTE">Ajustes</option>
                             </select>
+                            <button data-toggle-table="stock_daily"
+                                class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                                <span class="material-symbols-outlined transition-transform">expand_more</span>
+                            </button>
                         </div>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
+                <div data-table-body="stock_daily" class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 whitespace-nowrap">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -578,12 +586,18 @@
                         <p class="text-[11px] font-medium text-slate-400 mt-1">Visão detalhada do avanço da obra
                         </p>
                     </div>
-                    <select id="progressGroupFilter"
-                        class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">
-                        <option value="all">Todos os Separadores</option>
-                    </select>
+                    <div class="flex items-center gap-4">
+                        <select id="progressGroupFilter"
+                            class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 max-w-[200px]">
+                            <option value="all">Todos os Separadores</option>
+                        </select>
+                        <button data-toggle-table="contractual_summary"
+                            class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                            <span class="material-symbols-outlined transition-transform">expand_more</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="overflow-x-auto">
+                <div data-table-body="contractual_summary" class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 backdrop-blur-sm shadow-sm">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -618,10 +632,14 @@
                             </div>
                             <input type="date" id="progressDailyFilterDate"
                                 class="rounded-xl border-slate-100 text-[11px] font-bold text-slate-600 bg-slate-50 focus:ring-0 shadow-sm" />
+                            <button data-toggle-table="execution_daily"
+                                class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                                <span class="material-symbols-outlined transition-transform">expand_more</span>
+                            </button>
                         </div>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
+                <div data-table-body="execution_daily" class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead class="bg-slate-50/90 whitespace-nowrap">
                             <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -717,10 +735,10 @@
 
         <div id="tab-arquivos" class="tab-content hidden">
             <div
-                class="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6">
+                class="flex justify-between items-center bg-white p-10 rounded-3xl border border-slate-100 shadow-sm mb-6">
                 <div>
-                    <h3 class="font-bold text-2xl text-slate-900">Documentação</h3>
-                    <p class="text-xs text-slate-500">Acesse arquivos relacionados à obra.</p>
+                    <h3 class="font-bold text-3xl text-slate-900">Documentação</h3>
+                    <p class="text-xs text-slate-500">Acesso completo aos arquivos relacionados ao projecto atual.</p>
                 </div>
                 <!-- Escondido caso 'Todos os Projectos' esteja selecionado. É preciso um projeto específico para upload -->
                 <!-- <button id="btnUploadFile"
@@ -741,7 +759,7 @@
                     <thead>
                         <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
                             <th class="px-8 py-5">Nome</th>
-                            <th class="px-8 py-5 hidden md:table-cell">Categoria</th>
+                            <th class="px-8 py-5 hidden md:table-cell text-left">Categoria</th>
                             <th class="px-8 py-5 hidden md:table-cell">__</th>
                             <th class="px-8 py-5 text-right">Data</th>
                         </tr>
