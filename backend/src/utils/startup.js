@@ -43,42 +43,29 @@ async function checkTables() {
  * Runs Prisma migrations automatically.
  */
 async function runMigrations() {
-  return new Promise((resolve, reject) => {
-    console.log("--------------------------------------------------");
-    console.log("🚀 Running database migrations...");
+  console.log("--------------------------------------------------");
+  console.log("🚀 Running database migrations...");
 
-    if (!process.env.DATABASE_URL) {
-      console.error("❌ DATABASE_URL is not defined!");
-      return reject(new Error("DATABASE_URL_MISSING"));
-    }
+  if (!process.env.DATABASE_URL) {
+    console.error("❌ DATABASE_URL is not defined!");
+    throw new Error("DATABASE_URL_MISSING");
+  }
 
-    const proc = spawn("npx", ["prisma", "migrate", "deploy"], {
-      env: process.env,
-      shell: true,
+  try {
+    const { execSync } = require("child_process");
+    console.log("📂 Directory:", process.cwd());
+    
+    // Using execSync with stdio: 'inherit' ensures output goes directly to Render logs
+    execSync("npx prisma migrate deploy", { 
+      env: process.env, 
+      stdio: "inherit" 
     });
-
-    proc.stdout.on("data", (data) => {
-      process.stdout.write(`✅ ${data}`);
-    });
-
-    proc.stderr.on("data", (data) => {
-      // Only log stderr if it's not a known warning
-      const msg = data.toString();
-      if (!msg.includes("The database is already up to date")) {
-        process.stderr.write(`⚠️ ${msg}`);
-      }
-    });
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        console.log("✨ Migrations finished successfully.");
-        resolve();
-      } else {
-        console.error(`❌ Migrations failed with code ${code}`);
-        reject(new Error(`Migration failed with code ${code}`));
-      }
-    });
-  });
+    
+    console.log("✨ Migrations finished successfully.");
+  } catch (error) {
+    console.error(`❌ Migrations failed: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
