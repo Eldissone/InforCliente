@@ -1,6 +1,7 @@
 const { exec } = require("child_process");
 const { prisma } = require("../db");
 const bcrypt = require("bcryptjs");
+require("dotenv").config();
 
 /**
  * Tests the database connection.
@@ -45,9 +46,14 @@ async function runMigrations() {
   return new Promise((resolve, reject) => {
     console.log("--------------------------------------------------");
     console.log("🚀 Running database migrations...");
+    
+    if (!process.env.DATABASE_URL) {
+      console.error("❌ DATABASE_URL is not defined!");
+      return reject(new Error("DATABASE_URL_MISSING"));
+    }
 
     // Use 'npx prisma migrate deploy' for applying pending migrations in production/automated environments
-    exec("npx prisma migrate deploy", (error, stdout, stderr) => {
+    exec("npx prisma migrate deploy", { env: process.env }, (error, stdout, stderr) => {
       if (error) {
         console.error(`❌ Migration error: ${error.message}`);
         return reject(error);

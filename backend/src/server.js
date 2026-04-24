@@ -57,11 +57,11 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ error: message });
 });
 
-// Initialize database and seed data before starting the server
-initialize().then(() => {
-  app.listen(config.port, "0.0.0.0", () => {
-    // eslint-disable-next-line no-console
-    console.log(`API listening on http://localhost:${config.port}`);
-  });
+// Start listening immediately to avoid timeouts (especially on Render)
+app.listen(config.port, "0.0.0.0", async () => {
+  console.log(`API listening on http://localhost:${config.port}`);
+  
+  // Run database migrations and initialization in the background
+  await initialize();
 });
 
