@@ -202,7 +202,7 @@ async function loadProject() {
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
   if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, pct))}%`;
 
-  const progress = Number(p.physicalProgressPct || 0);
+  const progress = Number(p.physicalProgressPct || 0).toFixed(2);
   el("physicalProgress").textContent = `${progress}%`;
   if (el("physicalProgressPie")) {
     el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #f1f5f9 ${progress}%, #f1f5f9 100%)`;
@@ -402,7 +402,7 @@ function renderScurve(allTxs, project, budgetLines) {
   const maxVal = Math.max(...planCum, ...realCum.filter(v => v !== null), 1);
 
   // --- DEBUG (remover depois) ---
-  console.group("ðŸ”µ Curva S â€” DiagnÃ³stico");
+  console.group("Curva S Diagnóstico");
   console.log("totalBudget:", totalBudget);
   console.log("opLines:", opLines.length, opLines.map(l => `${l.description}=${l.total}`));
   console.log("allTxs:", (allTxs || []).length, "| PENDING/LATE:", (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").length, "| PAID:", (allTxs || []).filter(t => t.status === "PAID").length);
@@ -917,13 +917,17 @@ function wireTabs() {
 }
 
 function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupProgress = 0) {
-  const formattedTotal = `<span class="ml-auto text-xs font-black text-slate-500">${totalGroupValue.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}</span>`;
+  const num = (v) => {
+    const n = Number(v);
+    return isNaN(n) ? 0 : n;
+  };
+  const formattedTotal = `<span class="ml-auto text-xs font-black text-slate-500">${num(totalGroupValue).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}</span>`;
   const safeGroupName = escapeHtml(group || "Outros / Geral");
-  const formattedProgress = `<span class="ml-3 text-[10px] bg-blue-100 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-black shadow-sm">${Math.round(groupProgress)}% Exec.</span>`;
+  const formattedProgress = `<span class="ml-3 text-[10px] bg-blue-100 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-black shadow-sm">${num(groupProgress).toFixed(2)}% Exec.</span>`;
 
   return `
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-      <td colspan="11" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+      <td colspan="13" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
         <div class="flex items-center gap-3 w-full">
           <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>expand_more</span>
           <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
@@ -936,38 +940,59 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
 }
 
 function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false, childItems = []) {
-  // Para item principal com subitens: agrega exe/exp dos filhos
-  let exp, exe;
-  if (hasChildren && childItems.length > 0) {
-    exp = childItems.reduce((s, c) => s + Number(c.expectedQty || 0), 0);
-    exe = childItems.reduce((s, c) => s + Number(c.executedQty || 0), 0);
-  } else {
-    exp = Number(t.expectedQty || 0);
-    exe = Number(t.executedQty || 0);
-  }
-  const left = exp > exe ? (exp - exe) : 0;
+  const num = (v) => {
+    const n = Number(v);
+    return isNaN(n) ? 0 : n;
+  };
 
-  const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
+  let exp, exe, invoicingVal, invoicedVal;
+
+  const uvM = num(t.unitValueMaterial);
+  const uvS = num(t.unitValueService);
+  const unitVal = (t.unitValue !== null && t.unitValue !== undefined) ? num(t.unitValue) : (uvM + uvS);
+
+  if (hasChildren && childItems.length > 0) {
+    // Para item principal: Agrega os VALORES totais dos filhos
+    exp = childItems.reduce((s, c) => s + num(c.expectedQty), 0);
+    exe = childItems.reduce((s, c) => s + num(c.executedQty), 0);
+
+    invoicingVal = childItems.reduce((s, c) => {
+      const uvC = (c.unitValue !== null && c.unitValue !== undefined) ? num(c.unitValue) : (num(c.unitValueMaterial) + num(c.unitValueService));
+      return s + (uvC * num(c.expectedQty));
+    }, 0);
+
+    invoicedVal = childItems.reduce((s, c) => {
+      const uvC = (c.unitValue !== null && c.unitValue !== undefined) ? num(c.unitValue) : (num(c.unitValueMaterial) + num(c.unitValueService));
+      return s + (uvC * num(c.executedQty));
+    }, 0);
+  } else {
+    // Para itens simples ou subitens
+    exp = num(t.expectedQty);
+    exe = num(t.executedQty);
+    invoicingVal = unitVal * exp;
+    invoicedVal = unitVal * exe;
+  }
+
+  const left = exp > exe ? (exp - exe) : 0;
+  // Percentagem com 2 casas decimais (sem arredondar para inteiro)
+  const rawPct = invoicingVal > 0 ? (invoicedVal / invoicingVal) * 100 : (exe > 0 ? 100 : 0);
+  const exePct = Math.min(100, num(rawPct.toFixed(2)));
   const leftPct = Math.max(0, 100 - exePct);
 
-  // Fórmula visível no tooltip da célula %
-  const pctFormula = hasChildren && childItems.length > 0
-    ? `Fórmula: Σ exe (${exe.toLocaleString('pt-AO')}) ÷ Σ prev (${exp.toLocaleString('pt-AO')}) = ${exePct}%`
-    : `Fórmula: ${exe.toLocaleString('pt-AO')} ÷ ${exp.toLocaleString('pt-AO')} = ${exePct}%`;
-
-  const uvM = Number(t.unitValueMaterial || 0);
-  const uvS = Number(t.unitValueService || 0);
-  // Se backend já mandou unitValue, usa; se nÃ£o, fallback sum
-  const unitVal = t.unitValue !== null ? Number(t.unitValue) : (uvM + uvS);
-  const invoicingVal = unitVal * exp; // Valor total previsto (Contrato)
-  const invoicedVal = unitVal * exe;  // Valor faturado (Executado)
   const currencyStr = t.currency === "USD" ? "USD" : "Kz";
+  const fmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const fmt2 = (v) => parseFloat(v.toFixed(5)).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const uvSStr = uvS > 0 ? `${fmt2(uvS)} ${currencyStr}` : "-";
-  const uvMStr = uvM > 0 ? `${fmt2(uvM)} ${currencyStr}` : "-";
-  const invoicingValStr = invoicingVal > 0 ? `${fmt2(invoicingVal)} ${currencyStr}` : "-";
-  const invoicedValStr = invoicedVal > 0 ? `${fmt2(invoicedVal)} ${currencyStr}` : "-";
+  // No item pai, não mostramos preço unitário individual, pois é um somatório
+  const uvSStr = (!hasChildren && num(t.unitValueService) > 0) ? `${fmt(t.unitValueService)} ${currencyStr}` : "-";
+  const uvMStr = (!hasChildren && num(t.unitValueMaterial) > 0) ? `${fmt(t.unitValueMaterial)} ${currencyStr}` : "-";
+
+  const invoicingValStr = invoicingVal > 0 ? `${fmt(invoicingVal)} ${currencyStr}` : "-";
+  const invoicedValStr = invoicedVal > 0 ? `${fmt(invoicedVal)} ${currencyStr}` : "-";
+
+  const pctFormula = hasChildren
+    ? `Σ V.Faturado Filhos (${fmt(invoicedVal)}) ÷ Σ V.Faturação Filhos (${fmt(invoicingVal)}) × 100 = ${exePct.toFixed(2)}%`
+    : `${exe.toLocaleString('pt-AO')} ÷ ${exp.toLocaleString('pt-AO')} × 100 = ${exePct.toFixed(2)}%`;
+
 
   // Utilizar o parentGroup se passado (SubItem), caso contrÃ¡rio ler do prÃ³prio t.itemGroup.
   const logicalGroup = (isSub && parentGroup !== null) ? parentGroup : t.itemGroup;
@@ -979,10 +1004,27 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
   const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${t.id}"` : "";
 
-  // Badge de fórmula visível na célula % do item pai
+  // Célula % Exec do item pai — fórmula sempre visível
   const pctBadge = hasChildren
-    ? `<span class="block text-[8px] text-blue-400 font-bold mt-0.5 leading-tight" title="${escapeHtml(pctFormula)}">Σ filhos</span>`
-    : "";
+    ? (() => {
+      const color = exePct >= 100 ? '#2afc8d' : exePct >= 50 ? '#f59e0b' : '#ef4444';
+      const barColor = color;
+      // Extrai as partes da fórmula: "Σ V.Fat.filhos (X) ÷ V.Fat.pai (Y) × 100 = Z%"
+      const formulaParts = pctFormula.split(' ÷ ');
+      const numeradorLabel = formulaParts[0] || '';
+      const restLabel = formulaParts[1] ? '÷ ' + formulaParts[1] : '';
+      return `
+          <div class="flex flex-col items-center gap-1 min-w-[80px]">
+            <span class="text-base font-black" style="color:${color}">${exePct.toFixed(2)}%</span>
+            <div style="width:56px;height:4px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+              <div style="width:${exePct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.6s;"></div>
+            </div>
+            <span class="text-[8px] text-slate-400 font-semibold leading-snug text-center whitespace-nowrap">${escapeHtml(numeradorLabel)}</span>
+            <span class="text-[8px] text-slate-400 font-semibold leading-snug text-center whitespace-nowrap">${escapeHtml(restLabel)}</span>
+          </div>`;
+    })()
+    : `<span class="text-[#0d3fd1] font-medium">${exePct.toFixed(2)}%</span>`;
+
 
   return `
     <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
@@ -1004,9 +1046,9 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       <td class="px-4 py-4 text-center font-medium pr-6 text-slate-800">${invoicingValStr}</td>
       <td class="px-4 py-4 text-center font-medium text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-medium text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
-      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]" title="${escapeHtml(pctFormula)}">${exePct}%${pctBadge}</td>
+      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${pctBadge}</td>
       <td class="px-4 py-4 text-center font-medium text-slate-500">${left.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
+      <td class="px-4 py-4 text-center font-black text-error">${leftPct.toFixed(2)}%</td>
       <td class="px-4 py-4 text-right" data-actions>
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
@@ -1025,7 +1067,7 @@ async function loadProgressTasks() {
     const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
     window.projectProgressTasksCache = data.tasks || [];
     if (data.tasks.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="11" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
     } else {
       let html = "";
       let lastGroup = null;
@@ -1042,15 +1084,24 @@ async function loadProgressTasks() {
       const groupInvoicingTotals = {};
       const groupInvoicedTotals = {};
 
+      const num = (v) => {
+        const n = Number(v);
+        return isNaN(n) ? 0 : n;
+      };
+
       parentsAndOrphans.forEach(t => {
         const g = t.itemGroup || "";
         if (!groupInvoicingTotals[g]) groupInvoicingTotals[g] = 0;
         if (!groupInvoicedTotals[g]) groupInvoicedTotals[g] = 0;
         if (!groupTasks[g]) groupTasks[g] = [];
 
-        const exp = Number(t.expectedQty || 0);
-        const exe = Number(t.executedQty || 0);
-        const uv = Number(t.unitValue || 0);
+        const exp = num(t.expectedQty);
+        const exe = num(t.executedQty);
+
+        // Unidade de Valor (com fallback para US+UM)
+        const uvM = num(t.unitValueMaterial);
+        const uvS = num(t.unitValueService);
+        const uv = (t.unitValue !== null && t.unitValue !== undefined) ? num(t.unitValue) : (uvM + uvS);
 
         groupInvoicingTotals[g] += (uv * exp);
         groupInvoicedTotals[g] += (uv * exe);
@@ -1061,22 +1112,40 @@ async function loadProgressTasks() {
         }
       });
 
+      let globalInvoicing = 0;
+      let globalInvoiced = 0;
+
       const groupProgressMap = {};
-      let totalGroupPcts = 0;
       Object.keys(groupTasks).forEach(g => {
-        const tasks = groupTasks[g];
-        if (tasks.length > 0) {
-          const sumPct = tasks.reduce((acc, t) => {
-            const exp = Number(t.expectedQty || 0);
-            const exe = Number(t.executedQty || 0);
-            const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
-            return acc + Math.min(100, pct);
-          }, 0);
-          const avg = sumPct / tasks.length;
-          groupProgressMap[g] = avg;
-          totalGroupPcts += avg;
+        const totalInvoicing = groupInvoicingTotals[g] || 0;
+        const totalInvoiced = groupInvoicedTotals[g] || 0;
+        
+        globalInvoicing += totalInvoicing;
+        globalInvoiced += totalInvoiced;
+
+        if (totalInvoicing > 0) {
+          groupProgressMap[g] = Math.min(100, (totalInvoiced / totalInvoicing) * 100);
+        } else {
+          groupProgressMap[g] = 0;
         }
       });
+
+      // Atualizar o resumo global no topo da página (Progresso Físico)
+      // O denominador passa a ser o Valor Global (budgetTotal) do projeto
+      const valorGlobal = (projectState && Number(projectState.budgetTotal) > 0) 
+        ? Number(projectState.budgetTotal) 
+        : globalInvoicing; // Fallback caso o projeto não tenha orçamento definido
+
+      const globalPct = valorGlobal > 0 ? Math.min(100, (globalInvoiced / valorGlobal) * 100) : 0;
+      
+      const progressEl = el("physicalProgress");
+      if (progressEl) {
+        progressEl.textContent = `${globalPct.toFixed(2)}%`;
+      }
+      const pieEl = el("physicalProgressPie");
+      if (pieEl) {
+        pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #f1f5f9 ${globalPct}%, #f1f5f9 100%)`;
+      }
 
       const children = data.tasks.filter(t => t.parentId);
       let groupIndex = 0;
@@ -1105,7 +1174,8 @@ async function loadProgressTasks() {
       // Calculate overall physical progress
       const numGroups = Object.keys(groupTasks).length;
       if (numGroups > 0) {
-        const avgPct = Math.round(totalGroupPcts / numGroups);
+        const avgPct = globalPct.toFixed(2);
+
 
         // Update UI: Pie Chart
         if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
@@ -1129,7 +1199,7 @@ async function loadProgressTasks() {
       }
     }
   } catch (err) {
-    toast("Erro ao carregar o relatÃ³rio de avanÃ§o", { type: "error" });
+    toast("Erro ao carregar o relatório de avanço", { type: "error" });
   }
 }
 
@@ -1340,7 +1410,7 @@ function wireProgressTasks() {
       const hasSubs = (window.projectProgressTasksCache || []).some(t => t.parentId === taskId);
       const readonlyAttr = hasSubs ? "readonly" : "";
       const bgClass = hasSubs ? "bg-slate-50 opacity-80" : "";
-      const titleHint = hasSubs ? "Este valor Ã© calculado automaticamente pela soma dos subitens." : "";
+      const titleHint = hasSubs ? "Este valor é calculado automaticamente pela soma dos subitens." : "";
 
       openModal({
         title: "Atualizar Progresso",
