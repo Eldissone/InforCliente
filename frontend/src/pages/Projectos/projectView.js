@@ -1,4 +1,4 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -558,14 +558,14 @@ async function loadBudgetExecution() {
   // --- Categorize ---
   const cats = {
     MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃƒO DE OBRA E SERVIÃ‡OS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     INVESTIMENTOS: { name: "PAGAMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEPRECIACAO: { name: "DEPRECIAÃ‡ÃƒO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
+    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
     IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEDUCOES: { name: "(-) DEDUÃ‡Ã•ES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
+    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
   };
 
   const getCatKey = (c) => {
@@ -716,7 +716,7 @@ async function loadBudgetExecution() {
   let tbodyHtml = `<tbody class="divide-y divide-outline-variant/30">`;
 
   // Grand Total First Row (like DRE)
-  tbodyHtml += drawRow(`= CUSTO LÃQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
+  tbodyHtml += drawRow(`= CUSTO LÍQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
 
   Object.keys(cats).forEach(key => {
     const cat = cats[key];
@@ -935,26 +935,39 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
   `;
 }
 
-function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false) {
-  const exp = Number(t.expectedQty || 0);
-  const exe = Number(t.executedQty || 0);
+function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false, childItems = []) {
+  // Para item principal com subitens: agrega exe/exp dos filhos
+  let exp, exe;
+  if (hasChildren && childItems.length > 0) {
+    exp = childItems.reduce((s, c) => s + Number(c.expectedQty || 0), 0);
+    exe = childItems.reduce((s, c) => s + Number(c.executedQty || 0), 0);
+  } else {
+    exp = Number(t.expectedQty || 0);
+    exe = Number(t.executedQty || 0);
+  }
   const left = exp > exe ? (exp - exe) : 0;
 
   const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
   const leftPct = Math.max(0, 100 - exePct);
 
+  // Fórmula visível no tooltip da célula %
+  const pctFormula = hasChildren && childItems.length > 0
+    ? `Fórmula: Σ exe (${exe.toLocaleString('pt-AO')}) ÷ Σ prev (${exp.toLocaleString('pt-AO')}) = ${exePct}%`
+    : `Fórmula: ${exe.toLocaleString('pt-AO')} ÷ ${exp.toLocaleString('pt-AO')} = ${exePct}%`;
+
   const uvM = Number(t.unitValueMaterial || 0);
   const uvS = Number(t.unitValueService || 0);
-  // Se backend jÃ¡ mandou unitValue, usa; se nÃ£o, fallback sum
+  // Se backend já mandou unitValue, usa; se nÃ£o, fallback sum
   const unitVal = t.unitValue !== null ? Number(t.unitValue) : (uvM + uvS);
   const invoicingVal = unitVal * exp; // Valor total previsto (Contrato)
   const invoicedVal = unitVal * exe;  // Valor faturado (Executado)
   const currencyStr = t.currency === "USD" ? "USD" : "Kz";
 
-  const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
-  const uvMStr = uvM > 0 ? `${uvM.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
-  const invoicingValStr = invoicingVal > 0 ? `${invoicingVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
-  const invoicedValStr = invoicedVal > 0 ? `${invoicedVal.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyStr}` : "-";
+  const fmt2 = (v) => parseFloat(v.toFixed(5)).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const uvSStr = uvS > 0 ? `${fmt2(uvS)} ${currencyStr}` : "-";
+  const uvMStr = uvM > 0 ? `${fmt2(uvM)} ${currencyStr}` : "-";
+  const invoicingValStr = invoicingVal > 0 ? `${fmt2(invoicingVal)} ${currencyStr}` : "-";
+  const invoicedValStr = invoicedVal > 0 ? `${fmt2(invoicedVal)} ${currencyStr}` : "-";
 
   // Utilizar o parentGroup se passado (SubItem), caso contrÃ¡rio ler do prÃ³prio t.itemGroup.
   const logicalGroup = (isSub && parentGroup !== null) ? parentGroup : t.itemGroup;
@@ -965,6 +978,11 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const parentClass = hasChildren ? "bg-blue-50/40 border-y border-blue-100/50 cursor-pointer select-none" : "";
   const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
   const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${t.id}"` : "";
+
+  // Badge de fórmula visível na célula % do item pai
+  const pctBadge = hasChildren
+    ? `<span class="block text-[8px] text-blue-400 font-bold mt-0.5 leading-tight" title="${escapeHtml(pctFormula)}">Σ filhos</span>`
+    : "";
 
   return `
     <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
@@ -986,7 +1004,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       <td class="px-4 py-4 text-center font-medium pr-6 text-slate-800">${invoicingValStr}</td>
       <td class="px-4 py-4 text-center font-medium text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-medium text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
-      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${exePct}%</td>
+      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]" title="${escapeHtml(pctFormula)}">${exePct}%${pctBadge}</td>
       <td class="px-4 py-4 text-center font-medium text-slate-500">${left.toLocaleString('pt-AO')}</td>
       <td class="px-4 py-4 text-center font-black text-error">${leftPct}%</td>
       <td class="px-4 py-4 text-right" data-actions>
@@ -1017,7 +1035,10 @@ async function loadProgressTasks() {
       const groupTasks = {};
 
       // Calculate totals for parents or standalone items to avoid double counting if a parent aggregates
-      const parentsAndOrphans = data.tasks.filter(t => !t.parentId);
+      // Sort by itemGroup so items of the same group are always consecutive
+      const parentsAndOrphans = data.tasks
+        .filter(t => !t.parentId)
+        .sort((a, b) => (a.itemGroup || "").localeCompare(b.itemGroup || "", 'pt', { sensitivity: 'base' }));
       const groupInvoicingTotals = {};
       const groupInvoicedTotals = {};
 
@@ -1062,19 +1083,19 @@ async function loadProgressTasks() {
 
       parentsAndOrphans.forEach((t) => {
         const currentGroup = t.itemGroup || "";
-        if (currentGroup !== lastGroup && t.itemGroup !== lastGroup) {
+        if (currentGroup !== lastGroup) {
           html += renderGroupHeader(t.itemGroup, groupInvoicingTotals[currentGroup] || 0, groupCurrencies[currentGroup] || "Kz", groupProgressMap[currentGroup] || 0);
-          lastGroup = t.itemGroup;
+          lastGroup = currentGroup;
           groupIndex = 0; // zera contagem no novo separador
         }
 
         groupIndex++;
         const subs = children.filter(c => c.parentId === t.id);
 
-        html += renderProgressTaskRow(t, groupIndex.toString(), false, t.itemGroup, subs.length > 0);
+        html += renderProgressTaskRow(t, groupIndex.toString(), false, t.itemGroup, subs.length > 0, subs);
 
         subs.forEach((sub, subI) => {
-          const subRow = renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false);
+          const subRow = renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false, []);
           // Injetar o data-sub-of no tr retornado pelo helper
           html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
         });
@@ -1130,7 +1151,7 @@ function wireProgressTasks() {
       contentHtml: `
         <div class="space-y-4">
           <div class="grid grid-cols-2 gap-4">
-             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÃ‰DIA TENSÃƒO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
+             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Grupo/Tipo</label><input id="rt_group" class="w-full rounded-lg border-slate-300" placeholder="Ex: MÉDIA TENSÃO" value="${escapeHtml(projectState?.projectType || '')}" /></div>
              <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Vincular a Subitem de:</label>
                 <select id="rt_parent" class="w-full rounded-lg border-slate-300 bg-slate-50 text-slate-600 font-semibold" onchange="const sel=this.value; const gInput=document.getElementById('rt_group'); if(sel){ const p=(window.projectProgressTasksCache||[]).find(x=>x.id===sel); if(p){ gInput.value=p.itemGroup||''; gInput.setAttribute('readonly','true'); gInput.classList.add('bg-slate-100'); } } else { gInput.removeAttribute('readonly'); gInput.classList.remove('bg-slate-100'); }">
@@ -1138,9 +1159,9 @@ function wireProgressTasks() {
                 </select>
              </div>
           </div>
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: MarcaÃ§Ã£o da obra" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
-            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(2);" /></div>
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(5);" /></div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">
@@ -1170,17 +1191,17 @@ function wireProgressTasks() {
               </select>
             </div>
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. ServiÃ§o</label>
-              <input id="rt_us" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(2); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(2);" />
+              <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. Serviço</label>
+              <input id="rt_us" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(5); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(5);" />
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-emerald-500 mb-2">V. Material</label>
-              <input id="rt_um" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_us').value)).toFixed(2); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(2);" />
+              <input id="rt_um" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_us').value)).toFixed(5); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(5);" />
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
-              <input id="rt_uv" type="number" step="0.01" min="0" class="w-full rounded-lg border-slate-300 bg-slate-100" readonly value="0.00" />
-              <input type="hidden" id="rt_tv" value="0.00" />
+              <input id="rt_uv" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300 bg-slate-100" readonly value="0.00000" />
+              <input type="hidden" id="rt_tv" value="0.00000" />
             </div>
           </div>
         </div>
@@ -1224,22 +1245,22 @@ function wireProgressTasks() {
       primaryLabel: "Importar",
       contentHtml: `
         <div class="space-y-4">
-          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vÃ¡rios modelos faseadamente.</p>
+          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vários modelos faseadamente.</p>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Modelo de Obra</label>
             <select id="import_type" class="w-full rounded-lg border-slate-300">
-              <optgroup label="Postos de TransformaÃ§Ã£o">
-                <option value="POSTO DE TRANSFORMAÃ‡ÃƒO 160KVA">PT 160kVA (AÃ©reo)</option>
-                <option value="POSTO DE TRANSFORMAÃ‡ÃƒO 250KVA">PT 250kVA (AÃ©reo)</option>
-                <option value="BAIXA TENSÃƒO E TERRAS">PT em Alvenaria (BT e Terras)</option>
+              <optgroup label="Postos de Transformação">
+                <option value="POSTO DE TRANSFORMAÇÃO 160KVA">PT 160kVA (Aéreo)</option>
+                <option value="POSTO DE TRANSFORMAÇÃO 250KVA">PT 250kVA (Aéreo)</option>
+                <option value="BAIXA TENSÃO E TERRAS">PT em Alvenaria (BT e Terras)</option>
               </optgroup>
-              <optgroup label="Redes de DistribuiÃ§Ã£o">
-                <option value="MÃ‰DIA TENSÃƒO">MÃ©dia TensÃ£o (Postes)</option>
-                <option value="BAIXA TENSÃƒO">Baixa TensÃ£o (IluminaÃ§Ã£o/Dom.)</option>
-                <option value="RAMAL SUBTERRÃ‚NEO DE MÃ‰DIA TENSÃƒO">Ramal SubterrÃ¢neo MT</option>
+              <optgroup label="Redes de Distribuição">
+                <option value="MÉDIA TENSÃO">Média Tensão (Postes)</option>
+                <option value="BAIXA TENSÃO">Baixa Tensão (Iluminação/Dom.)</option>
+                <option value="RAMAL SUBTERRANEO DE MÉDIA TENSÃO">Ramal Subterrâneo MT</option>
               </optgroup>
               <optgroup label="Infraestrutura">
-                <option value="ABERTURA E FECHAMENTO DE VALA">Valas TÃ©cnicas (Abertura/Fecho)</option>
+                <option value="ABERTURA E FECHAMENTO DE VALA">Valas Técnicas (Abertura/Fecho)</option>
               </optgroup>
             </select>
           </div>
@@ -1334,27 +1355,27 @@ function wireProgressTasks() {
                 <select id="up_uni" class="w-full rounded-lg border-slate-300">
                   <option value="un" ${uni === 'un' ? 'selected' : ''}>un (unidade)</option>
                   <option value="mts" ${uni === 'mts' ? 'selected' : ''}>mts (metros)</option>
-                  <option value="km" ${uni === 'km' ? 'selected' : ''}>km (quilÃ³metros)</option>
+                  <option value="km" ${uni === 'km' ? 'selected' : ''}>km (quilómetros)</option>
                   <option value="m" ${uni === 'm' ? 'selected' : ''}>m (metros lineares)</option>
-                  <option value="m2" ${uni === 'm2' ? 'selected' : ''}>mÂ² (metros quadrados)</option>
-                  <option value="m3" ${uni === 'm3' ? 'selected' : ''}>mÂ³ (metros cÃºbicos)</option>
+                  <option value="m2" ${uni === 'm2' ? 'selected' : ''}>m² (metros quadrados)</option>
+                  <option value="m3" ${uni === 'm3' ? 'selected' : ''}>m³ (metros cúbicos)</option>
                   <option value="kg" ${uni === 'kg' ? 'selected' : ''}>kg (quilogramas)</option>
                   <option value="ton" ${uni === 'ton' ? 'selected' : ''}>ton (toneladas)</option>
                   <option value="par" ${uni === 'par' ? 'selected' : ''}>par</option>
                   <option value="litros" ${uni === 'litros' ? 'selected' : ''}>litros</option>
                   <option value="horas" ${uni === 'horas' ? 'selected' : ''}>horas</option>
                   <option value="dias" ${uni === 'dias' ? 'selected' : ''}>dias</option>
-                  <option value="mes" ${uni === 'mes' ? 'selected' : ''}>mÃªs</option>
+                  <option value="mes" ${uni === 'mes' ? 'selected' : ''}>més</option>
                   <option value="global" ${uni === 'global' ? 'selected' : ''}>global</option>
                 </select>
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Prevista</label>
-                <input id="up_exp" type="number" step="0.01" value="${exp}" class="w-full rounded-lg border-slate-300" oninput="let uv=document.getElementById('up_uv').value; if(uv) document.getElementById('up_tv').value = (this.value * uv).toFixed(2);" />
+                <input id="up_exp" type="number" step="0.00001" value="${exp}" class="w-full rounded-lg border-slate-300" oninput="let uv=document.getElementById('up_uv').value; if(uv) document.getElementById('up_tv').value = (this.value * uv).toFixed(5);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Executada</label>
-                <input id="up_exe" type="number" step="0.01" value="${exe}" class="w-full rounded-lg border-primary" />
+                <input id="up_exe" type="number" step="0.00001" value="${exe}" class="w-full rounded-lg border-primary" />
               </div>
             </div>
             <div class="grid grid-cols-3 gap-4">
@@ -1366,20 +1387,20 @@ function wireProgressTasks() {
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. ServiÃ§o</label>
-                <input id="up_us" type="number" step="0.01" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(2); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(2);" />
+                <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. Serviço</label>
+                <input id="up_us" type="number" step="0.00001" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(5); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(5);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase text-emerald-500 tracking-widest mb-2">V. Material</label>
-                <input id="up_um" type="number" step="0.01" min="0" value="${um}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_us').value)).toFixed(2); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(2);" />
+                <input id="up_um" type="number" step="0.00001" min="0" value="${um}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_us').value)).toFixed(5); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(5);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
-                <input id="up_uv" type="number" step="0.01" min="0" value="${uv || ''}" class="w-full bg-slate-100 rounded-lg border-slate-300" readonly />
+                <input id="up_uv" type="number" step="0.00001" min="0" value="${uv || ''}" class="w-full bg-slate-100 rounded-lg border-slate-300" readonly />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Faturado <span class="text-slate-300 lowercase text-[9px]">(Global)</span></label>
-                <input id="up_tv" type="number" step="0.01" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
+                <input id="up_tv" type="number" step="0.00001" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
               </div>
             </div>
           </div>

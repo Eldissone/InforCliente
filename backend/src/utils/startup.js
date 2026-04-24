@@ -44,7 +44,7 @@ async function checkTables() {
  */
 async function runMigrations() {
   console.log("--------------------------------------------------");
-  console.log("🚀 Running database migrations...");
+  console.log("🚀 Starting database migrations...");
 
   if (!process.env.DATABASE_URL) {
     console.error("❌ DATABASE_URL is not defined!");
@@ -53,17 +53,25 @@ async function runMigrations() {
 
   try {
     const { execSync } = require("child_process");
-    console.log("📂 Directory:", process.cwd());
+    console.log(`📂 Current CWD: ${process.cwd()}`);
+    console.log(`🌍 DATABASE_URL present: ${!!process.env.DATABASE_URL}`);
     
-    // Using execSync with stdio: 'inherit' ensures output goes directly to Render logs
-    execSync("npx prisma migrate deploy", { 
+    // Explicitly point to the schema to avoid any ambiguity
+    const cmd = "npx prisma migrate deploy --schema=./prisma/schema.prisma";
+    console.log(`🏃 Executing: ${cmd}`);
+    
+    const output = execSync(cmd, { 
       env: process.env, 
-      stdio: "inherit" 
+      stdio: "inherit"
     });
     
     console.log("✨ Migrations finished successfully.");
   } catch (error) {
-    console.error(`❌ Migrations failed: ${error.message}`);
+    console.error("❌ Migrations failed.");
+    if (error.stdout) console.log(`Output: ${error.stdout.toString()}`);
+    if (error.stderr) console.log(`Error Output: ${error.stderr.toString()}`);
+    
+    console.error("Manual fix: Ensure your Render Build Command is 'npm install && npx prisma generate && npx prisma migrate deploy'");
     throw error;
   }
 }

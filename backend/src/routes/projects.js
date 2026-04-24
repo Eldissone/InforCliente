@@ -279,15 +279,15 @@ projectRoutes.post(
         equipamentos: body.equipamentos || null,
         progressTasks: body.projectType
           ? {
-              create: getTemplateForProjectType(body.projectType).map((t) => ({
-                itemGroup: body.projectType,
-                order: t.order,
-                description: t.description,
-                expectedQty: t.expectedQty,
-                unit: t.unit,
-                executedQty: 0
-              }))
-            }
+            create: getTemplateForProjectType(body.projectType).map((t) => ({
+              itemGroup: body.projectType,
+              order: t.order,
+              description: t.description,
+              expectedQty: t.expectedQty,
+              unit: t.unit,
+              executedQty: 0
+            }))
+          }
           : undefined,
       },
       select: { id: true },
@@ -319,16 +319,16 @@ projectRoutes.get(
 
     // Build CBS Summary Map
     const cbsSummary = {};
-    
+
     // Initialize with all categories from the enum to ensure they exist
     // and include legacy categories if they exist in the DB
     const allExpectedCategories = [
-      "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL", 
-      "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO", 
+      "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL",
+      "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO",
       "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS",
       "MATERIALS", "EQUIPMENT", "LABOR", "OTHER"
     ];
-    
+
     allExpectedCategories.forEach(cat => {
       cbsSummary[cat] = { budgeted: 0, realized: 0 };
     });
@@ -801,7 +801,7 @@ projectRoutes.post(
     const total = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
     return res.json({
       imported: lines.length,
-      total: String(total.toFixed(2)),
+      total: String(total.toFixed(5)),
       warnings,
     });
   })
@@ -1205,7 +1205,7 @@ projectRoutes.post(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { description, date } = req.body;
-    
+
     if (!req.file) {
       return res.status(400).json({ error: "NO_FILE_UPLOADED" });
     }
@@ -1231,7 +1231,7 @@ projectRoutes.delete(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const { id, photoId } = req.params;
-    
+
     const photo = await prisma.projectPhoto.findFirst({
       where: { id: photoId, projectId: id }
     });
@@ -1241,7 +1241,7 @@ projectRoutes.delete(
     }
 
     await prisma.projectPhoto.delete({ where: { id: photoId } });
-    
+
     // Apagar ficheiro físico (opcional, mas recomendado)
     if (fs.existsSync(photo.path)) {
       fs.unlinkSync(photo.path);
@@ -1443,7 +1443,7 @@ projectRoutes.get(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
-    
+
     const history = await prisma.projectProgressHistory.findMany({
       where: { projectId: id },
       orderBy: { date: "desc" },
@@ -1457,7 +1457,7 @@ projectRoutes.get(
         }
       }
     });
-    
+
     return res.json({ items: history });
   })
 );
@@ -1501,7 +1501,7 @@ projectRoutes.post(
         });
         count++;
         if (t.subItems && t.subItems.length > 0) {
-           count += await createRecursive(t.subItems, created.id, group || templateType.toUpperCase());
+          count += await createRecursive(t.subItems, created.id, group || templateType.toUpperCase());
         }
       }
       return count;
