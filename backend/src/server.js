@@ -9,6 +9,7 @@ const { projectRoutes } = require("./routes/projects");
 const { userRoutes } = require("./routes/users");
 const { stockRoutes } = require("./routes/stock");
 const { materialRoutes } = require("./routes/materials");
+const { initialize } = require("./utils/startup");
 
 const app = express();
 
@@ -56,8 +57,11 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ error: message });
 });
 
-app.listen(config.port, "0.0.0.0", () => {
-  // eslint-disable-next-line no-console
-  console.log(`API listening on http://localhost:${config.port}`);
+// Initialize database and seed data before starting the server
+initialize().then(() => {
+  app.listen(config.port, "0.0.0.0", () => {
+    // eslint-disable-next-line no-console
+    console.log(`API listening on http://localhost:${config.port}`);
+  });
 });
 
