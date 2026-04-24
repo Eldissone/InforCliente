@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
-import { formatCurrencyKZ, formatDateBR, formatPercent } from "../../shared/format.js";
+import { formatCurrency, formatDateBR, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
@@ -101,8 +101,8 @@ function renderTxRow(t) {
         </div>
       </td>
       <td class="px-10 py-5 text-right font-black text-slate-900">
-        ${formatCurrencyKZ(t.amount)}
-        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrencyKZ(t.realizedAmount)}</div>` : ""}
+        ${formatCurrency(t.amount, projectState?.currency)}
+        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrency(t.realizedAmount, projectState?.currency)}</div>` : ""}
       </td>
       <td class="px-10 py-5 text-center">
         ${t.status !== "PAID" ? `
@@ -193,10 +193,10 @@ async function loadProject() {
   // Always re-derive available so it's consistent even if DB lags
   const available = total - consumed - committed;
 
-  el("budgetTotal").textContent = formatCurrencyKZ(total);
-  el("budgetConsumed").textContent = formatCurrencyKZ(consumed);
-  el("budgetCommitted").textContent = "-" + formatCurrencyKZ(Math.max(0, committed));
-  el("budgetAvailable").textContent = formatCurrencyKZ(available);
+  el("budgetTotal").textContent = formatCurrency(total, projectState?.currency);
+  el("budgetConsumed").textContent = formatCurrency(consumed, projectState?.currency);
+  el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), projectState?.currency);
+  el("budgetAvailable").textContent = formatCurrency(available, projectState?.currency);
 
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
@@ -257,7 +257,7 @@ function updateOperationStatus(summary) {
 
     if (subEl) {
       if (data.budgeted > 0 || data.realized > 0) {
-        subEl.textContent = `${formatCurrencyKZ(data.realized)} / ${formatCurrencyKZ(data.budgeted)}`;
+        subEl.textContent = `${formatCurrency(data.realized, projectState?.currency)} / ${formatCurrency(data.budgeted, projectState?.currency)}`;
         subEl.classList.remove("text-slate-400");
         subEl.classList.add("text-slate-200");
       } else {
@@ -743,8 +743,8 @@ async function loadBudgetExecution() {
 
   container.innerHTML = `<table class="w-full text-left whitespace-nowrap border-collapse">${theadHtml}${tbodyHtml}</table>`;
 
-  if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrencyKZ(gTotalP);
-  if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrencyKZ(gTotalC);
+  if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
+  if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
   if (el("totalExecutionPct")) {
     const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
     el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
@@ -799,7 +799,7 @@ async function renderOperationStatus(lines) {
     }
     const subEl = el(c.subId);
     if (subEl) {
-      subEl.textContent = `${formatCurrencyKZ(c.consumed)} lanÃ§ados`;
+      subEl.textContent = `${formatCurrency(c.consumed, projectState?.currency)} lançados`;
     }
   });
 }
@@ -825,15 +825,15 @@ function wireLiquidation() {
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">
-              Valor Previsto / Comprometido (kz)
+              Valor Previsto / Comprometido (${projectState?.currency || "Kz"})
             </label>
             <div class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-400 text-sm font-mono">
-              ${Number(txAmount).toLocaleString('pt-AO')} kz
+              ${Number(txAmount).toLocaleString('pt-AO')} ${projectState?.currency || "Kz"}
             </div>
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">
-              Valor Realmente Pago (kz)
+              Valor Realmente Pago (${projectState?.currency || "Kz"})
             </label>
             <input 
               id="liq_realizedAmount" 
@@ -1926,7 +1926,7 @@ function wireNewTransaction() {
     const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
     const budgetOptions = [
       `<option value="">(Nenhum item especÃ­fico)</option>`,
-      ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrencyKZ(l.total)}]</option>`)
+      ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`)
     ].join("");
 
     openModal({
@@ -1970,7 +1970,7 @@ function wireNewTransaction() {
             <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor (kz)</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor (${projectState?.currency || "Kz"})</label>
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div class="md:col-span-2">
@@ -2039,10 +2039,10 @@ function renderPaymentRow(p, role) {
   return `
     <tr class="hover:bg-slate-50/70 transition-colors">
       <td class="px-10 py-4 text-xs font-semibold text-slate-500 whitespace-nowrap">${formatDateBR(p.dataPagamento)}</td>
-      <td class="px-6 md:px-10 py-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${metodoPagtoLabel(p.metodo)}</td>
+      <td class="px-10 py-4 font-bold text-slate-700 whitespace-nowrap">${p.metodo ? escapeHtml(p.metodo).toUpperCase() : "-"}</td>
       <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "â€”")}</td>
       <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "â€”")}</td>
-      <td class="px-10 py-4 text-right font-black text-slate-900 whitespace-nowrap">${formatCurrencyKZ(p.valor)}</td>
+      <td class="px-10 py-4 text-right font-black text-slate-900 whitespace-nowrap">${formatCurrency(p.valor, projectState?.currency)}</td>
       <td class="px-10 py-4 text-center">
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${statusCls}">
           <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>${statusText}
@@ -2062,8 +2062,8 @@ function renderPaymentRow(p, role) {
 
 function updatePaymentKPIs(data) {
   const pct = Math.min(100, Math.max(0, data.percentualPago || 0));
-  if (el("paymentTotalPago")) el("paymentTotalPago").textContent = formatCurrencyKZ(data.totalPago || 0);
-  if (el("paymentDivida")) el("paymentDivida").textContent = formatCurrencyKZ(Math.max(0, data.divida || 0));
+  if (el("paymentTotalPago")) el("paymentTotalPago").textContent = formatCurrency(data.totalPago || 0, projectState?.currency);
+  if (el("paymentDivida")) el("paymentDivida").textContent = formatCurrency(Math.max(0, data.divida || 0), projectState?.currency);
   if (el("paymentPct")) el("paymentPct").textContent = `${pct}%`;
   if (el("paymentPctLabel")) el("paymentPctLabel").textContent = `${pct}%`;
   if (el("paymentProgressBar")) {
@@ -2101,7 +2101,7 @@ function openPaymentModal() {
     contentHtml: `
       <div class="space-y-5">
         <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor (KZ) *</label>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor (${projectState?.currency || "Kz"}) *</label>
           <input id="pm_valor" type="number" min="1" step="0.01" placeholder="0.00" required
             class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
         </div>
@@ -2711,7 +2711,6 @@ async function rejectStockMovement(id) {
       body: { status: "REJEITADO", notes: "Rejeitado pelo administrador." }
     });
     toast("lançamento rejeitado", { type: "warning" });
-    loadStock();
   } catch (err) {
     toast(err.message || "Erro ao rejeitar lançamento", { type: "error" });
   }

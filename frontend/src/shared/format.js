@@ -1,11 +1,26 @@
-export function formatCurrencyKZ(value) {
+export function formatCurrency(value, currencyCode = "AOA") {
   const num = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(num)) return "-";
+  
+  const code = (currencyCode || "AOA").toUpperCase();
+  
+  if (code === "USD") {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    }).format(num);
+  }
+  
   return new Intl.NumberFormat("pt-AO", {
     style: "currency",
     currency: "AOA",
     maximumFractionDigits: 2,
   }).format(num).replace('AOA', 'kz').replace('Kz', 'kz');
+}
+
+export function formatCurrencyKZ(value) {
+  return formatCurrency(value, "AOA");
 }
 
 export function formatCompactNumber(value) {

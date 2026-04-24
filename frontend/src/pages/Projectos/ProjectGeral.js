@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
-import { formatCurrencyKZ, formatPercent } from "../../shared/format.js";
+import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
@@ -88,7 +88,7 @@ function renderRow(p) {
         <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${p.location || "-"}</div>
       </td>
       <td class="px-8 py-5 text-right font-black text-xs text-slate-900">
-        ${formatCurrencyKZ(p.budgetTotal || 0)}
+        ${formatCurrency(p.budgetTotal || 0, p.currency)}
       </td>
       <td class="px-8 py-5 min-w-[140px]">
         <div class="flex items-center gap-3">
@@ -161,7 +161,7 @@ function renderGridItem(p) {
         <div class="flex justify-between items-end mb-3">
           <div class="flex flex-col">
             <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Orçamento</span>
-            <span class="text-sm font-black text-slate-900">${formatCurrencyKZ(p.budgetTotal || 0)}</span>
+            <span class="text-sm font-black text-slate-900">${formatCurrency(p.budgetTotal || 0, p.currency)}</span>
           </div>
           <div class="text-right">
              <span class="text-[10px] font-black text-slate-900 bg-slate-100 px-2 py-1 rounded-lg">${progress}%</span>
@@ -394,7 +394,8 @@ async function openEdit(id) {
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.region)}" /></div>
         <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.location)}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total (kz)</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label><select id="p_currency" class="w-full rounded-lg border-slate-300"><option value="AOA" ${p.currency !== 'USD' ? 'selected' : ''}>Kz (Kwanza)</option><option value="USD" ${p.currency === 'USD' ? 'selected' : ''}>USD (Dólar)</option></select></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
@@ -418,6 +419,7 @@ async function openEdit(id) {
             contact: v("p_contact") || null,
             region: v("p_region") || null,
             location: v("p_location") || null,
+            currency: v("p_currency") || "AOA",
             budgetTotal: Number(v("p_total") || 0),
             physicalProgressPct: Number(v("p_prog") || 0),
             status: v("p_status"),
@@ -622,6 +624,7 @@ async function openCreate() {
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Ex: Luanda" /></div>
         <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Ex: Rua, Bairro" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label><select id="p_currency" class="w-full rounded-lg border-slate-300"><option value="AOA">Kz (Kwanza)</option><option value="USD">USD (Dólar)</option></select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
@@ -645,6 +648,7 @@ async function openCreate() {
             contact: v("p_contact") || null,
             region: v("p_region") || null,
             location: v("p_location") || null,
+            currency: v("p_currency") || "AOA",
             budgetTotal: Number(v("p_total") || 0),
             physicalProgressPct: Number(v("p_prog") || 0),
             startDate: toIsoDate(v("p_start")),

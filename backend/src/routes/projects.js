@@ -201,6 +201,7 @@ projectRoutes.post(
         budgetCommitted: z.union([z.number(), z.string()]).optional(),
         budgetAvailable: z.union([z.number(), z.string()]).optional(),
         physicalProgressPct: z.number().int().min(0).max(100).optional(),
+        currency: z.string().optional().nullable(),
         phaseLabel: z.string().optional().nullable(),
         clientId: z.string().optional().nullable(),
         projectType: z.string().optional().nullable(),
@@ -260,6 +261,7 @@ projectRoutes.post(
         budgetCommitted,
         budgetAvailable,
         physicalProgressPct: body.physicalProgressPct ?? 0,
+        currency: body.currency || "AOA",
         phaseLabel: body.phaseLabel || null,
         clientId: body.clientId || null,
         projectType: body.projectType || null,
@@ -398,6 +400,7 @@ projectRoutes.patch(
         budgetCommitted: z.union([z.number(), z.string()]).optional(),
         budgetAvailable: z.union([z.number(), z.string()]).optional(),
         physicalProgressPct: z.number().int().min(0).max(100).optional(),
+        currency: z.string().optional().nullable(),
         phaseLabel: z.string().optional().nullable(),
         clientId: z.string().optional().nullable(),
         projectType: z.string().optional().nullable(),
@@ -462,6 +465,7 @@ projectRoutes.patch(
         ...(body.physicalProgressPct !== undefined
           ? { physicalProgressPct: body.physicalProgressPct }
           : {}),
+        ...(body.currency !== undefined ? { currency: body.currency } : {}),
         ...(body.phaseLabel !== undefined ? { phaseLabel: body.phaseLabel } : {}),
         ...(body.clientId !== undefined
           ? { client: body.clientId ? { connect: { id: body.clientId } } : { disconnect: true } }
