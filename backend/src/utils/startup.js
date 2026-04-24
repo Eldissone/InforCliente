@@ -3,6 +3,42 @@ const { prisma } = require("../db");
 const bcrypt = require("bcryptjs");
 
 /**
+ * Tests the database connection.
+ */
+async function testConnection() {
+  try {
+    console.log("🔍 Testing database connection...");
+    await prisma.$queryRaw`SELECT 1`;
+    console.log("✅ Database connection successful.");
+  } catch (error) {
+    console.error("❌ Database connection failed!");
+    throw error;
+  }
+}
+
+/**
+ * Checks if tables exist in the database.
+ */
+async function checkTables() {
+  try {
+    const tables = await prisma.$queryRaw`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_type = 'BASE TABLE'
+    `;
+    const tableNames = tables.map(t => t.table_name);
+    if (tableNames.length > 0) {
+      console.log(`📊 Database tables found: ${tableNames.join(", ")}`);
+    } else {
+      console.log("⚠️ No tables found in the database.");
+    }
+  } catch (error) {
+    console.error("❌ Failed to list tables:", error.message);
+  }
+}
+
+/**
  * Runs Prisma migrations automatically.
  */
 async function runMigrations() {
@@ -68,7 +104,9 @@ async function initialize() {
   console.log("--------------------------------------------------");
 
   try {
+    await testConnection();
     await runMigrations();
+    await checkTables();
   } catch (error) {
     console.error("⚠️ Migrations failed to apply automatically. You may need to run 'npx prisma migrate dev' manually.");
   }
