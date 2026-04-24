@@ -52,10 +52,7 @@ async function runMigrations() {
       return reject(new Error("DATABASE_URL_MISSING"));
     }
 
-    console.log("🛠️ Using local Prisma binary...");
-    const prismaPath = require("path").join(__dirname, "../../../node_modules/.bin/prisma");
-    
-    const proc = spawn(prismaPath, ["migrate", "deploy"], {
+    const proc = spawn("npx", ["prisma", "migrate", "deploy"], {
       env: process.env,
       shell: true,
     });
