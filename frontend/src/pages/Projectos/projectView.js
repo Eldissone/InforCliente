@@ -261,7 +261,7 @@ function updateOperationStatus(summary) {
         subEl.classList.remove("text-slate-400");
         subEl.classList.add("text-slate-200");
       } else {
-        subEl.textContent = "Sem lanÃ§amentos";
+        subEl.textContent = "Sem lançamentos";
       }
     }
   });
@@ -311,7 +311,7 @@ async function loadTransactions() {
 
 /**
  * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
- * @param {Array}  allTxs      - todos os lanÃ§amentos do projeto
+ * @param {Array}  allTxs      - todos os lançamentos do projeto
  * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
  * @param {Array}  budgetLines - linhas de orÃ§amento
  */
@@ -611,7 +611,7 @@ async function loadBudgetExecution() {
       cats[cKey].total += forecastAmount;
       cats[cKey].byMonth[mIdx].p += forecastAmount;
 
-      const cleanDesc = (t.description || "LanÃ§amento Avulso").trim();
+      const cleanDesc = (t.description || "lançamento Avulso").trim();
       const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
       let row = cats[cKey].items.find(i => i._key === descKey);
       if (!row) {
@@ -630,7 +630,7 @@ async function loadBudgetExecution() {
         bItem.totalC += realizedAmount;
         bItem.byMonth[mIdx].c += realizedAmount;
       } else {
-        const cleanDesc = (t.description || "LanÃ§amento Avulso").trim();
+        const cleanDesc = (t.description || "lançamento Avulso").trim();
         const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
         let row = cats[cKey].items.find(i => i._key === descKey);
         if (!row) {
@@ -696,7 +696,7 @@ async function loadBudgetExecution() {
   let theadHtml = `
     <thead>
       <tr class="bg-slate-900 text-white">
-        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">DescriÃ§Ã£o</th>
+        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">Descrição</th>
         <th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10 bg-white/5">TOTAL OBRA</th>
         ${projectMonths.map(m => `<th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10">${m.label}</th>`).join('')}
       </tr>
@@ -758,7 +758,7 @@ async function loadBudgetExecution() {
 
 async function renderOperationStatus(lines) {
   const id = getProjectId();
-  // Busca todos os lanÃ§amentos para nÃ£o depender apenas dos vinculados
+  // Busca todos os lançamentos para nÃ£o depender apenas dos vinculados
   const txData = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`);
 
   const cats = {
@@ -810,7 +810,7 @@ function wireLiquidation() {
     if (!btn) return;
 
     const txId = btn.getAttribute("data-liquidate-tx");
-    const txDesc = btn.getAttribute("data-tx-desc") || "este lanÃ§amento";
+    const txDesc = btn.getAttribute("data-tx-desc") || "este lançamento";
     const txAmount = btn.getAttribute("data-tx-amount") || "0";
     const projectId = getProjectId();
 
@@ -858,7 +858,7 @@ function wireLiquidation() {
             method: "PATCH",
             body: { realizedAmount },
           });
-          toast("LanÃ§amento liquidado com sucesso!", { type: "success" });
+          toast("lançamento liquidado com sucesso!", { type: "success" });
           close();
           await loadProject();
           await loadTransactions();
@@ -866,7 +866,7 @@ function wireLiquidation() {
           await loadPayments();
         } catch (err) {
           setButtonLoading(primaryBtn, false);
-          toast(err.message || "Erro ao liquidar lanÃ§amento", { type: "error" });
+          toast(err.message || "Erro ao liquidar lançamento", { type: "error" });
         }
       },
     });
@@ -1138,7 +1138,7 @@ function wireProgressTasks() {
                 </select>
              </div>
           </div>
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">DescriÃ§Ã£o da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: MarcaÃ§Ã£o da obra" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: MarcaÃ§Ã£o da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(2);" /></div>
             <div>
@@ -1790,7 +1790,7 @@ function wireSearch() {
   input?.addEventListener("input", () => {
     txState.search = input.value.trim();
     if (t) window.clearTimeout(t);
-    t = window.setTimeout(() => loadTransactions().catch(() => toast("Erro ao carregar lanÃ§amentos", { type: "error" })), 250);
+    t = window.setTimeout(() => loadTransactions().catch(() => toast("Erro ao carregar lançamentos", { type: "error" })), 250);
   });
 }
 
@@ -1839,13 +1839,13 @@ function wireNewTransaction() {
     ].join("");
 
     openModal({
-      title: "Novo lanÃ§amento",
+      title: "Novo lançamento",
       primaryLabel: "Salvar",
       contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">DescriÃ§Ã£o</label>
-            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="DescriÃ§Ã£o..." />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
+            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." />
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
@@ -1875,7 +1875,7 @@ function wireNewTransaction() {
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">ResponsÃ¡vel</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Responsável</label>
             <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div>
@@ -1883,7 +1883,7 @@ function wireNewTransaction() {
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do OrÃ§amento</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do Orçamento</label>
             <select id="t_line" class="w-full rounded-lg border-slate-300 text-sm">
               ${budgetOptions}
             </select>
@@ -1907,14 +1907,14 @@ function wireNewTransaction() {
               budgetLineId: v("t_line") || null,
             },
           });
-          toast("LanÃ§amento criado com sucesso", { type: "success" });
+          toast("lançamento criado com sucesso", { type: "success" });
           close();
           await loadProject();
           await loadTransactions();
           await loadBudgetExecution();
         } catch (err) {
           setButtonLoading(btn, false);
-          toast(err.message || "Erro ao criar lanÃ§amento", { type: "error" });
+          toast(err.message || "Erro ao criar lançamento", { type: "error" });
         }
       },
     });
@@ -1929,7 +1929,7 @@ function wireNewTransaction() {
 function metodoPagtoLabel(m) {
   const map = {
     transferencia: "TransferÃªncia",
-    cash: "NumerÃ¡rio",
+    cash: "Numerário",
     cheque: "Cheque",
     mbway: "MBWay",
     outro: "Outro",
@@ -2021,18 +2021,18 @@ function openPaymentModal() {
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">MÃ©todo</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Método</label>
             <select id="pm_metodo" class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
               <option value="">â€” Seleccionar â€”</option>
-              <option value="transferencia">TransferÃªncia BancÃ¡ria</option>
-              <option value="cash">NumerÃ¡rio (Cash)</option>
+              <option value="transferencia">Transferência Bancária</option>
+              <option value="cash">Numerário (Cash)</option>
               <option value="cheque">Cheque</option>
               <option value="mbway">MBWay</option>
               <option value="outro">Outro</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">ReferÃªncia</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Referência</label>
             <input id="pm_ref" type="text" placeholder="Ex: TRF-001"
               class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all" />
           </div>
@@ -2050,7 +2050,7 @@ function openPaymentModal() {
         </div>
         <div class="flex items-center gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl">
           <span class="material-symbols-outlined text-amber-500 text-xl">info</span>
-          <p class="text-xs text-amber-700 font-semibold italic">O pagamento ficarÃ¡ <strong>Pendente</strong> atÃ© confirmaÃ§Ã£o.</p>
+          <p class="text-xs text-amber-700 font-semibold italic">O pagamento ficará <strong>Pendente</strong> até confirmação.</p>
         </div>
       </div>
     `,
@@ -2061,7 +2061,7 @@ function openPaymentModal() {
       const data = v("pm_data");
       const fileInput = panel.querySelector("#pm_file");
 
-      if (!valor) return toast("Valor Ã© obrigatÃ³rio", { type: "error" });
+      if (!valor) return toast("Valor obrigatório", { type: "error" });
 
       setButtonLoading(btn, true);
       try {
@@ -2139,7 +2139,7 @@ function wirePayments() {
     const deleteBtn = e.target.closest("[data-delete-payment]");
     if (deleteBtn) {
       const pid = deleteBtn.getAttribute("data-delete-payment");
-      if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acÃ§Ã£o Ã© irreversÃ­vel.")) return;
+      if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acção é irreversí­vel.")) return;
       deleteBtn.disabled = true;
       try {
         const id = getProjectId();
@@ -2497,7 +2497,7 @@ async function openStockMovementDetailModal(moveId) {
   const isClosed = (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO");
 
   openModal({
-    title: "Detalhes do LanÃ§amento",
+    title: "Detalhes do lançamento",
     contentHtml: `
       <div class="space-y-6">
         <div class="grid grid-cols-2 gap-8">
@@ -2566,13 +2566,13 @@ async function openStockMovementDetailModal(moveId) {
           <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
              <span class="material-symbols-outlined text-emerald-600">info</span>
              <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
-                Ao <strong>Aprovar</strong> este lanÃ§amento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) serÃ¡ integrada no inventÃ¡rio Ãºtil do armazÃ©m. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) serÃ¡ mantido apenas como registo de evidÃªncia e nÃ£o constarÃ¡ no saldo disponÃ­vel para uso.
+                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) serÃ¡ integrada no inventÃ¡rio Ãºtil do armazÃ©m. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) serÃ¡ mantido apenas como registo de evidÃªncia e nÃ£o constarÃ¡ no saldo disponÃ­vel para uso.
              </p>
           </div>
         ` : ""}
       </div>
     `,
-    primaryLabel: isClosed ? "Fechar" : "Aprovar LanÃ§amento",
+    primaryLabel: isClosed ? "Fechar" : "Aprovar lançamento",
     onPrimary: async ({ close, btn }) => {
       if (isClosed) {
         close();
@@ -2589,7 +2589,7 @@ async function openStockMovementDetailModal(moveId) {
     },
     secondaryLabel: isClosed ? null : "Rejeitar",
     onSecondary: async ({ close }) => {
-      if (confirm("Tem certeza que deseja REJEITAR este lanÃ§amento?")) {
+      if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
         await rejectStockMovement(m.id);
         close();
       }
@@ -2604,10 +2604,10 @@ async function approveStockMovement(id) {
       method: "PATCH",
       body: { status: "APROVADO", notes: "Aprovado via dashboard administrativo." }
     });
-    toast("LanÃ§amento aprovado com sucesso", { type: "success" });
+    toast("lançamento aprovado com sucesso", { type: "success" });
     loadStock();
   } catch (err) {
-    toast(err.message || "Erro ao aprovar lanÃ§amento", { type: "error" });
+    toast(err.message || "Erro ao aprovar lançamento", { type: "error" });
   }
 }
 
@@ -2619,10 +2619,10 @@ async function rejectStockMovement(id) {
       method: "PATCH",
       body: { status: "REJEITADO", notes: "Rejeitado pelo administrador." }
     });
-    toast("LanÃ§amento rejeitado", { type: "warning" });
+    toast("lançamento rejeitado", { type: "warning" });
     loadStock();
   } catch (err) {
-    toast(err.message || "Erro ao rejeitar lanÃ§amento", { type: "error" });
+    toast(err.message || "Erro ao rejeitar lançamento", { type: "error" });
   }
 }
 async function openStockMovementModal() {
@@ -2641,7 +2641,7 @@ async function openStockMovementModal() {
     const materialOptions = materials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.unit})</option>`).join("");
 
     openModal({
-      title: "Novo LanÃ§amento de Stock",
+      title: "Novo lançamento de Stock",
       contentHtml: `
         <div class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2706,7 +2706,7 @@ async function openStockMovementModal() {
           </div>
         </div>
       `,
-      primaryText: "Registrar LanÃ§amento",
+      primaryText: "Registrar lançamento",
       onPrimary: async ({ btn, close, panel }) => {
         const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
         const mId = v("st_mId");
@@ -2757,7 +2757,7 @@ async function openStockMovementModal() {
           await uploadFiles(el("st_photos_good"), "BOA");
           await uploadFiles(el("st_photos_bad"), "DANIFICADA");
 
-          toast("LanÃ§amento registrado e aguardando validaÃ§Ã£o", { type: "success" });
+          toast("lançamento registrado e aguardando validaÃ§Ã£o", { type: "success" });
           close();
           loadStock();
         } catch (err) {
@@ -3319,7 +3319,7 @@ async function loadGallery() {
             </div>
           </div>
           <div class="p-5">
-            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem descriÃ§Ã£o')}</p>
+            <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem Descrição')}</p>
             <div class="flex items-center justify-between pt-3 border-t border-slate-50">
               <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
               <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span>
@@ -3379,7 +3379,7 @@ function wireGallery() {
 
           <div class="space-y-4">
             <div>
-               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">DescriÃ§Ã£o do Momento</label>
+               <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Descrição do Momento</label>
                <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que estÃ¡ a acontecer na obra..."></textarea>
             </div>
             <div>

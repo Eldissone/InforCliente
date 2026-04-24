@@ -52,7 +52,10 @@ async function runMigrations() {
       return reject(new Error("DATABASE_URL_MISSING"));
     }
 
-    const proc = spawn("npx", ["prisma", "migrate", "deploy"], {
+    console.log("🛠️ Using local Prisma binary...");
+    const prismaPath = require("path").join(__dirname, "../../../node_modules/.bin/prisma");
+    
+    const proc = spawn(prismaPath, ["migrate", "deploy"], {
       env: process.env,
       shell: true,
     });
@@ -85,7 +88,7 @@ async function runMigrations() {
  * Ensures an admin user exists in the database.
  */
 async function ensureAdminUser() {
-  const adminEmail = "admin@infocliente.com";
+  const adminEmail = "admin@inforcliente.com";
   const adminPassword = "admin123";
 
   try {
