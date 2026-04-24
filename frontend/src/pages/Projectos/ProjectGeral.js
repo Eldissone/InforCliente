@@ -34,6 +34,7 @@ let state = {
   status: "",
   region: "",
   dateFrom: "",
+  view: localStorage.getItem("ProjectGeral.view") || "list",
 };
 
 function renderStatusPill(status) {
@@ -115,10 +116,93 @@ function renderRow(p) {
   `;
 }
 
+function renderGridItem(p) {
+  const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
+  const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+
+  return `
+    <div class="bg-white rounded-[2rem] border border-slate-100 p-8 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col h-full" data-view-project="${p.id}">
+      <div class="flex justify-between items-start mb-8">
+        <div class="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:bg-[#2afc8d] transition-colors duration-500">
+          <span class="material-symbols-outlined text-[#2afc8d] group-hover:text-slate-900 text-2xl">${iconFor(p.name)}</span>
+        </div>
+        <div class="flex flex-col items-end gap-2">
+            ${renderStatusPill(p.status)}
+            <span class="text-[10px] font-black text-slate-400 tracking-widest uppercase">${p.code}</span>
+        </div>
+      </div>
+      
+      <div class="mb-8">
+        <h3 class="text-lg font-bold text-slate-900 tracking-tight leading-tight group-hover:text-[#0d3fd1] transition-colors line-clamp-2">${p.name}</h3>
+      </div>
+
+      <div class="space-y-5 mb-auto">
+        <div class="flex items-center gap-4">
+          <div class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+            <span class="material-symbols-outlined text-lg">person</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cliente Responsável</p>
+            <p class="text-sm font-bold text-slate-700 truncate">${p.client?.name || "-"}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+            <span class="material-symbols-outlined text-lg">location_on</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Localização Técnica</p>
+            <p class="text-sm font-bold text-slate-700 truncate">${p.location || "-"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 pt-8 border-t border-slate-50">
+        <div class="flex justify-between items-end mb-3">
+          <div class="flex flex-col">
+            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Orçamento</span>
+            <span class="text-sm font-black text-slate-900">${formatCurrencyKZ(p.budgetTotal || 0)}</span>
+          </div>
+          <div class="text-right">
+             <span class="text-[10px] font-black text-slate-900 bg-slate-100 px-2 py-1 rounded-lg">${progress}%</span>
+          </div>
+        </div>
+        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full ${barColor} transition-all duration-1000 shadow-[0_0_8px_rgba(0,0,0,0.1)]" style="width: ${progress}%"></div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+          <button data-edit-project="${p.id}" class="h-9 w-9 bg-white shadow-xl rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:scale-110 transition-all">
+            <span class="material-symbols-outlined text-lg">edit</span>
+          </button>
+      </div>
+    </div>
+  `;
+}
+
 async function load() {
   const tbody = el("projectsTbody");
-  if (!tbody) return;
-  tbody.innerHTML = renderLoadingRow(6);
+  const grid = el("projectsGrid");
+  const tableContainer = el("projectsTableContainer");
+  if (!tbody || !grid || !tableContainer) return;
+
+  // Update UI Toggle State
+  const isGrid = state.view === "grid";
+  if (isGrid) {
+    grid.classList.remove("hidden");
+    tableContainer.classList.add("hidden");
+    grid.innerHTML = `<div class="col-span-full p-20 text-center text-slate-400 font-bold animate-pulse">A carregar obras...</div>`;
+    el("btnViewGrid").className = "w-10 h-full rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shadow-lg";
+    el("btnViewList").className = "w-10 h-full rounded-xl text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors";
+  } else {
+    grid.classList.add("hidden");
+    tableContainer.classList.remove("hidden");
+    tbody.innerHTML = renderLoadingRow(8);
+    el("btnViewList").className = "w-10 h-full rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shadow-lg";
+    el("btnViewGrid").className = "w-10 h-full rounded-xl text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors";
+  }
 
   const qs = new URLSearchParams({
     search: state.search,
@@ -126,14 +210,16 @@ async function load() {
     region: state.region,
     ...(state.dateFrom ? { dateFrom: new Date(state.dateFrom).toISOString() } : {}),
     page: String(state.page),
-    pageSize: String(state.pageSize),
+    pageSize: isGrid ? "12" : String(state.pageSize),
   });
 
   const data = await apiRequest(`/projects?${qs.toString()}`);
   state.total = data.total || 0;
 
   if (!data.items?.length) {
-    tbody.innerHTML = `<tr><td class="px-6 py-6 text-sm text-on-surface-variant" colspan="6">Nenhuma obra encontrada.</td></tr>`;
+    const emptyMsg = `Nenhuma obra encontrada.`;
+    if (isGrid) grid.innerHTML = `<div class="col-span-full p-20 text-center text-slate-400 font-bold">${emptyMsg}</div>`;
+    else tbody.innerHTML = `<tr><td class="px-8 py-10 text-center text-slate-400 font-bold" colspan="8">${emptyMsg}</td></tr>`;
     return;
   }
 
@@ -146,7 +232,11 @@ async function load() {
     sel.value = cur;
   }
 
-  tbody.innerHTML = data.items.map(renderRow).join("");
+  if (isGrid) {
+    grid.innerHTML = data.items.map(renderGridItem).join("");
+  } else {
+    tbody.innerHTML = data.items.map(renderRow).join("");
+  }
 }
 
 function wireFilters() {
@@ -171,6 +261,18 @@ function wireFilters() {
     state.dateFrom = e.target.value.trim();
     state.page = 1;
     load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
+  });
+
+  // View Toggles
+  el("btnViewGrid")?.addEventListener("click", () => {
+    state.view = "grid";
+    localStorage.setItem("ProjectGeral.view", "grid");
+    load();
+  });
+  el("btnViewList")?.addEventListener("click", () => {
+    state.view = "list";
+    localStorage.setItem("ProjectGeral.view", "list");
+    load();
   });
 }
 

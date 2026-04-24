@@ -120,19 +120,23 @@
         </div>
 
         <div class="flex h-12 bg-white border border-slate-100 rounded-2xl p-1 shadow-sm">
-          <button
-            class="w-10 h-full rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors">
+          <button id="btnViewGrid"
+            class="w-10 h-full rounded-xl text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors">
             <span class="material-symbols-outlined text-xl">grid_view</span>
           </button>
-          <button class="w-10 h-full rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shadow-lg">
+          <button id="btnViewList"
+            class="w-10 h-full rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shadow-lg">
             <span class="material-symbols-outlined text-xl">list</span>
           </button>
         </div>
       </div>
     </div>
 
+    <!-- Grid Container -->
+    <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 hidden"></div>
+
     <!-- Table Container -->
-    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-12">
+    <section id="projectsTableContainer" class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-12">
       <div class="overflow-x-auto">
         <table class="w-full text-left">
           <thead>

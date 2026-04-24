@@ -1,6 +1,6 @@
 import { getToken, logout } from "./auth.js";
 
-const DEFAULT_BASE_URL = "http://127.0.0.1:4000";
+const DEFAULT_BASE_URL = "http://127.0.0.1:4000 || https://backend-infocliente.onrender.com";
 
 export function getApiBaseUrl() {
   return localStorage.getItem("InfoCliente.apiBaseUrl") || DEFAULT_BASE_URL;
