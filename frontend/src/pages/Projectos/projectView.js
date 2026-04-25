@@ -180,10 +180,10 @@ async function loadProject() {
   projectState = p;
 
   el("projectTitle").textContent = p.name;
-  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃƒO DEFINIDO";
+  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
   el("projectBreadcrumb").textContent = p.code;
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
-  el("projectClientCode").textContent = p.client?.code || "Sem cÃ³digo";
+  el("projectClientCode").textContent = p.client?.code || "Sem código";
   el("projectContact").textContent = p.contact || "-";
   el("projectLocation").textContent = p.location || p.region || "-";
 
@@ -1004,26 +1004,24 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
   const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${t.id}"` : "";
 
-  // Célula % Exec do item pai — fórmula sempre visível
+  // Célula % Exec do item pai — fórmula compacta
   const pctBadge = hasChildren
     ? (() => {
       const color = exePct >= 100 ? '#2afc8d' : exePct >= 50 ? '#f59e0b' : '#ef4444';
       const barColor = color;
-      // Extrai as partes da fórmula: "Σ V.Fat.filhos (X) ÷ V.Fat.pai (Y) × 100 = Z%"
-      const formulaParts = pctFormula.split(' ÷ ');
-      const numeradorLabel = formulaParts[0] || '';
-      const restLabel = formulaParts[1] ? '÷ ' + formulaParts[1] : '';
       return `
-          <div class="flex flex-col items-center gap-1 min-w-[80px]">
-            <span class="text-base font-black" style="color:${color}">${exePct.toFixed(2)}%</span>
-            <div style="width:56px;height:4px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+          <div class="flex flex-col items-center gap-0.5 min-w-[100px]">
+            <span class="text-sm font-black" style="color:${color}">${exePct.toFixed(2)}%</span>
+            <div style="width:64px;height:3px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
               <div style="width:${exePct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.6s;"></div>
             </div>
-            <span class="text-[8px] text-slate-400 font-semibold leading-snug text-center whitespace-nowrap">${escapeHtml(numeradorLabel)}</span>
-            <span class="text-[8px] text-slate-400 font-semibold leading-snug text-center whitespace-nowrap">${escapeHtml(restLabel)}</span>
+            <div class="flex flex-col opacity-40 group-hover:opacity-100 transition-opacity">
+               <span class="text-[7px] font-bold text-slate-500 uppercase tracking-tighter leading-none mt-1">Soma Filhos</span>
+               <span class="text-[7px] font-medium text-slate-400 whitespace-nowrap">${fmt(invoicedVal)} / ${fmt(invoicingVal)}</span>
+            </div>
           </div>`;
     })()
-    : `<span class="text-[#0d3fd1] font-medium">${exePct.toFixed(2)}%</span>`;
+    : `<span class="text-[#0d3fd1] font-bold">${exePct.toFixed(2)}%</span>`;
 
 
   return `
@@ -1031,12 +1029,17 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index}</td>
       <td class="py-4 ${indentStyle}">
         <div class="${descClass} flex flex-col relative">
-          <div class="flex items-center">
+          <div class="flex items-start">
             ${iconSub}
-            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon>expand_more</span>` : ""}
-            <span>${escapeHtml(t.description)}</span>
+            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>expand_more</span>` : ""}
+            <div class="flex flex-col">
+              <div class="flex items-center gap-2">
+                ${t.itemCode ? `<span class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.itemCode)}</span>` : ""}
+                <span class="leading-tight">${escapeHtml(t.description)}</span>
+              </div>
+              ${(!isSub && t.itemGroup && t.itemGroup.toUpperCase() !== "GERAL") ? `<span class="text-[9px] text-on-surface-variant/60 uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
+            </div>
           </div>
-          ${!isSub && t.itemGroup ? `<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
         </div>
       </td>
       <td class="px-4 py-4 text-center font-medium font-black ">${exp.toLocaleString('pt-AO')}</td>
@@ -1308,51 +1311,166 @@ function wireProgressTasks() {
     });
   });
 
-  el("importTemplateBtn")?.addEventListener("click", () => {
+  el("importExcelBtn")?.addEventListener("click", () => {
     const id = getProjectId();
     openModal({
-      title: "Importar Modelo de Tarefas",
+      title: "Importar do Excel",
       primaryLabel: "Importar",
       contentHtml: `
         <div class="space-y-4">
-          <p class="text-sm text-on-surface-variant">Selecione um grupo de tarefas para adicionar a esta obra. Pode importar vários modelos faseadamente.</p>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Modelo de Obra</label>
-            <select id="import_type" class="w-full rounded-lg border-slate-300">
-              <optgroup label="Postos de Transformação">
-                <option value="POSTO DE TRANSFORMAÇÃO 160KVA">PT 160kVA (Aéreo)</option>
-                <option value="POSTO DE TRANSFORMAÇÃO 250KVA">PT 250kVA (Aéreo)</option>
-                <option value="BAIXA TENSÃO E TERRAS">PT em Alvenaria (BT e Terras)</option>
-              </optgroup>
-              <optgroup label="Redes de Distribuição">
-                <option value="MÉDIA TENSÃO">Média Tensão (Postes)</option>
-                <option value="BAIXA TENSÃO">Baixa Tensão (Iluminação/Dom.)</option>
-                <option value="RAMAL SUBTERRANEO DE MÉDIA TENSÃO">Ramal Subterrâneo MT</option>
-              </optgroup>
-              <optgroup label="Infraestrutura">
-                <option value="ABERTURA E FECHAMENTO DE VALA">Valas Técnicas (Abertura/Fecho)</option>
-              </optgroup>
-            </select>
+          <p class="text-sm text-on-surface-variant">Selecione uma folha de cálculo Excel com a estrutura de orçamento da obra.</p>
+          <div class="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+            <p class="text-[11px] text-emerald-700 font-bold italic leading-snug">Nota: O sistema detecta automaticamente hierarquias (ex: 1.1) e colunas como Item, Descritivo, Unid. e Quantidade.</p>
           </div>
-          <div class="p-3 bg-primary/5 rounded-lg border border-primary/10">
-            <p class="text-[11px] text-primary font-bold italic leading-snug">Nota: As tarefas serÃ£o adicionadas ao final da lista actual sem substituir as existentes.</p>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ficheiro Excel (.xlsx, .csv)</label>
+            <input type="file" id="import_excel_file" accept=".xlsx, .xls, .csv" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+          </div>
+          <div id="import_preview_container" class="hidden border rounded-xl overflow-hidden bg-slate-50">
+            <div class="px-4 py-2 bg-slate-100 border-b flex justify-between items-center">
+              <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pré-visualização</span>
+              <span id="preview_count" class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"></span>
+            </div>
+            <div class="max-h-[300px] overflow-y-auto">
+              <table class="w-full text-left text-[11px] border-collapse">
+                <thead class="sticky top-0 bg-white border-b shadow-sm">
+                  <tr>
+                    <th class="px-4 py-2 font-black text-slate-400 uppercase tracking-tighter">Item</th>
+                    <th class="px-4 py-2 font-black text-slate-400 uppercase tracking-tighter">Descrição</th>
+                    <th class="px-4 py-2 font-black text-slate-400 uppercase tracking-tighter">Qtd</th>
+                    <th class="px-4 py-2 font-black text-slate-400 uppercase tracking-tighter">Preço</th>
+                  </tr>
+                </thead>
+                <tbody id="import_preview_body" class="divide-y divide-slate-100 bg-white"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       `,
-      onPrimary: async ({ close, panel }) => {
-        const primaryBtn = panel.querySelector("[data-primary]");
-        setButtonLoading(primaryBtn, true);
+      onPrimary: async ({ btn, close, panel }) => {
+        setButtonLoading(btn, true);
         try {
-          const type = panel.querySelector("#import_type").value;
-          await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks/import-template", {
-            method: "POST",
-            body: { templateType: type }
-          });
-          toast("Modelo importado com sucesso", { type: "success" });
+          const fileInput = panel.querySelector("#import_excel_file");
+          const file = fileInput.files[0];
+          
+          if (!file) {
+            toast("Por favor, selecione um ficheiro Excel.", { type: "warning" });
+            setButtonLoading(btn, false);
+            return;
+          }
+
+          const res = await apiUpload(`/projects/${encodeURIComponent(id)}/progress-tasks/upload-excel`, { file });
+          
+          if (res.warnings && res.warnings.length) {
+            toast(`Importação concluída com ${res.warnings.length} avisos.`, { type: "warning" });
+          } else {
+            toast(`${res.imported || 'Várias'} tarefas importadas com sucesso`, { type: "success" });
+          }
+          
           close();
           loadProgressTasks();
         } catch (err) {
-          setButtonLoading(primaryBtn, false);
+          setButtonLoading(btn, false);
+          toast(err.message, { type: "error" });
+        }
+      },
+      onRender: ({ panel }) => {
+        const fileInput = panel.querySelector("#import_excel_file");
+        const previewContainer = panel.querySelector("#import_preview_container");
+        const previewBody = panel.querySelector("#import_preview_body");
+        const previewCount = panel.querySelector("#preview_count");
+
+        fileInput.addEventListener("change", async () => {
+          const file = fileInput.files[0];
+          if (!file) {
+            previewContainer.classList.add("hidden");
+            return;
+          }
+
+          try {
+            previewBody.innerHTML = `<tr><td colspan="4" class="px-4 py-8 text-center text-slate-400 italic">Processando ficheiro...</td></tr>`;
+            previewContainer.classList.remove("hidden");
+
+            const res = await apiUpload(`/projects/${encodeURIComponent(id)}/progress-tasks/preview-excel`, { file });
+            
+            if (!res.tasks || !res.tasks.length) {
+              const warnMsg = res.warnings && res.warnings.length ? res.warnings.join("<br/>") : "Nenhum item encontrado.";
+              previewBody.innerHTML = `<tr><td colspan="4" class="px-4 py-8 text-center text-red-500 font-bold">${warnMsg}</td></tr>`;
+              previewCount.textContent = "0 itens";
+              return;
+            }
+
+            // Flatten for preview
+            const flat = [];
+            const rec = (items, depth = 0) => {
+              items.forEach(it => {
+                flat.push({ ...it, depth });
+                if (it.subItems) rec(it.subItems, depth + 1);
+              });
+            };
+            rec(res.tasks);
+
+            previewCount.textContent = `${flat.length} itens encontrados`;
+            previewBody.innerHTML = flat.map(t => `
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-2 font-mono text-slate-400 border-r">${t.itemCode || t.order || "-"}</td>
+                <td class="px-4 py-2">
+                  <div class="font-bold text-slate-900" style="padding-left: ${t.depth * 1.5}rem">${t.depth > 0 ? 'â†³ ' : ''}${escapeHtml(t.description)}</div>
+                  ${t.itemGroup ? `<div class="text-[8px] text-slate-400 uppercase" style="padding-left: ${t.depth * 1.5}rem">${escapeHtml(t.itemGroup)}</div>` : ""}
+                </td>
+                <td class="px-4 py-2 font-semibold text-slate-600">${t.expectedQty} ${escapeHtml(t.unit)}</td>
+                <td class="px-4 py-2 font-black text-slate-900">${formatCurrency(t.unitValue, projectState?.currency)}</td>
+              </tr>
+            `).join("");
+
+          } catch (err) {
+            toast("Erro na pré-visualização: " + err.message, { type: "error" });
+            previewContainer.classList.add("hidden");
+          }
+        });
+      }
+    });
+  });
+
+  el("importTemplateBtn")?.addEventListener("click", () => {
+    const id = getProjectId();
+    openModal({
+      title: "Importar Modelo de Obra",
+      primaryLabel: "Aplicar Modelo",
+      contentHtml: `
+        <div class="space-y-4">
+          <p class="text-sm text-on-surface-variant">Escolha um dos modelos pré-definidos para preencher a lista de tarefas da obra.</p>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra / Modelo</label>
+            <select id="template_type" class="w-full rounded-xl border-slate-200 h-12 font-bold text-slate-700 bg-slate-50">
+              <option value="MÉDIA TENSÃO">Média Tensão (MT)</option>
+              <option value="BAIXA TENSÃO">Baixa Tensão (BT)</option>
+              <option value="POSTO DE TRANSFORMAÇÃO 160KVA">PT 160kVA</option>
+              <option value="POSTO DE TRANSFORMAÇÃO 250KVA">PT 250kVA</option>
+              <option value="RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO">Ramal Subterrâneo MT</option>
+              <option value="BAIXA TENSÃO E TERRAS">BT e Terras</option>
+              <option value="ABERTURA E FECHAMENTO DE VALA">Valas Técnicas</option>
+            </select>
+          </div>
+          <div class="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-start gap-3">
+            <span class="material-symbols-outlined text-blue-600">info</span>
+            <p class="text-[11px] text-blue-700 leading-snug">Ao aplicar o modelo, as tarefas padrão serão adicionadas à obra. Poderá editá-las ou remover as que não forem necessárias posteriormente.</p>
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ btn, close, panel }) => {
+        setButtonLoading(btn, true);
+        try {
+          const type = panel.querySelector("#template_type").value;
+          const res = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks/import-template`, {
+            method: "POST",
+            body: { templateType: type }
+          });
+          toast(`${res.count} tarefas do modelo "${type}" importadas.`, { type: "success" });
+          close();
+          loadProgressTasks();
+        } catch (err) {
+          setButtonLoading(btn, false);
           toast(err.message, { type: "error" });
         }
       }

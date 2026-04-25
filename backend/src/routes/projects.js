@@ -5,6 +5,7 @@ const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
+const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
 const path = require("path");
 const fs = require("fs");
@@ -1514,6 +1515,89 @@ projectRoutes.post(
     const totalCreated = await createRecursive(template);
 
     return res.json({ success: true, count: totalCreated });
+  })
+);
+
+projectRoutes.post(
+  "/:id/progress-tasks/upload-excel",
+  requireRole(["admin", "operador"]),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+    
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "MISSING_FILE" });
+
+    const name = String(file.originalname || "tarefas.xlsx");
+    const lower = name.toLowerCase();
+    if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls") && !lower.endsWith(".csv")) {
+      return res.status(400).json({ error: "UNSUPPORTED_FILE_TYPE" });
+    }
+
+    const { tasks, warnings } = parseTaskSheet(file.buffer, name);
+    if (!tasks.length) {
+      return res.status(400).json({ error: "NO_LINES_IMPORTED", warnings });
+    }
+
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { currency: true }});
+    const currency = project?.currency || "AOA";
+
+    // Get current max order to append
+    const lastTask = await prisma.projectProgressTask.findFirst({
+      where: { projectId: projectId },
+      orderBy: { order: "desc" },
+    });
+    let currentOrder = (lastTask?.order || 0) + 1;
+
+    async function createRecursive(items, pId = null) {
+      let count = 0;
+      for (const t of items) {
+        const created = await prisma.projectProgressTask.create({
+          data: {
+            projectId,
+            itemGroup: t.itemGroup,
+            order: currentOrder++,
+            description: t.description,
+            expectedQty: t.expectedQty,
+            executedQty: 0,
+            unit: t.unit,
+            unitValue: t.unitValue,
+            unitValueMaterial: t.unitValueMaterial || 0,
+            unitValueService: t.unitValueService || 0,
+            currency,
+            parentId: pId
+          }
+        });
+        count++;
+        if (t.subItems && t.subItems.length > 0) {
+          count += await createRecursive(t.subItems, created.id);
+        }
+      }
+      return count;
+    }
+
+    const importedCount = await createRecursive(tasks);
+
+    return res.json({ ok: true, imported: importedCount, warnings });
+  })
+);
+
+projectRoutes.post(
+  "/:id/progress-tasks/preview-excel",
+  requireRole(["admin", "operador"]),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+    
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "MISSING_FILE" });
+
+    const name = String(file.originalname || "tarefas.xlsx");
+    const { tasks, warnings } = parseTaskSheet(file.buffer, name);
+    
+    return res.json({ tasks, warnings });
   })
 );
 
