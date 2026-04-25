@@ -190,10 +190,25 @@ function updateMetrics(data) {
   }
 
   const projectCurrency = currentProject ? (currentProject.currency || "AOA") : "AOA";
+  const exchangeRate = 918; // Taxa de câmbio: 1 USD = 918 Kz (Ajustável)
   
-  document.getElementById("metricTotalContract").textContent = formatCurrency(financials.totalContract, projectCurrency);
-  document.getElementById("metricTotalPaid").textContent = formatCurrency(financials.totalPaid, projectCurrency);
-  document.getElementById("metricDebt").textContent = formatCurrency(financials.totalDebt, projectCurrency);
+  const setMetric = (id, value, primaryCurrency) => {
+    const el = document.getElementById(id);
+    const secEl = document.getElementById(id + "Secondary");
+    if (!el) return;
+
+    el.textContent = formatCurrency(value, primaryCurrency);
+
+    if (secEl) {
+      const secondaryCurrency = primaryCurrency === "USD" ? "AOA" : "USD";
+      const convertedValue = primaryCurrency === "USD" ? value * exchangeRate : value / exchangeRate;
+      secEl.textContent = formatCurrency(convertedValue, secondaryCurrency);
+    }
+  };
+
+  setMetric("metricTotalContract", financials.totalContract, projectCurrency);
+  setMetric("metricTotalPaid", financials.totalPaid, projectCurrency);
+  setMetric("metricDebt", financials.totalDebt, projectCurrency);
 
   // Payment Progress
   const paymentPct = financials.totalContract > 0
