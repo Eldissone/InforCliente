@@ -1,6 +1,6 @@
 import { apiRequest, getApiBaseUrl } from "../../services/api.js";
 import { wireLogout } from "../../shared/session.js";
-import { formatCurrencyKZ, formatCurrency, formatDateBR } from "../../shared/format.js";
+import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml } from "../../shared/ui.js";
 
 let dashboardData = null;
@@ -82,14 +82,14 @@ async function loadDashboardData() {
   }
 }
 
-function renderDashboard(projectId) {
+async function renderDashboard(projectId) {
   const data = projectId === "all"
     ? dashboardData
     : filterDataByProject(projectId);
 
   if (!data) return;
 
-  updateMetrics(data);
+  await updateMetrics(data);
   renderFinancialChart(data.projects);
   renderStockChart(data.stock);
 
@@ -178,7 +178,7 @@ function filterDataByProject(pid) {
   };
 }
 
-function updateMetrics(data) {
+async function updateMetrics(data) {
   const { financials, projects } = data;
 
   // Se tivermos um projecto selecionado (que não seja "all")
@@ -190,7 +190,7 @@ function updateMetrics(data) {
   }
 
   const projectCurrency = currentProject ? (currentProject.currency || "AOA") : "AOA";
-  const exchangeRate = 918; // Taxa de câmbio: 1 USD = 918 Kz (Ajustável)
+  const exchangeRate = await getExchangeRate(); 
   
   const setMetric = (id, value, primaryCurrency) => {
     const el = document.getElementById(id);
@@ -1297,9 +1297,9 @@ function wireEvents() {
   // Filters
   const filterSelect = document.getElementById("projectFilter");
   if (filterSelect) {
-    filterSelect.addEventListener("change", (e) => {
+    filterSelect.addEventListener("change", async (e) => {
       state.projectId = e.target.value;
-      renderDashboard(state.projectId);
+      await renderDashboard(state.projectId);
     });
   }
 

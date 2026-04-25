@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
-import { formatCurrency, formatDateBR, formatPercent } from "../../shared/format.js";
+import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
@@ -193,10 +193,19 @@ async function loadProject() {
   // Always re-derive available so it's consistent even if DB lags
   const available = total - consumed - committed;
 
-  el("budgetTotal").textContent = formatCurrency(total, projectState?.currency);
-  el("budgetConsumed").textContent = formatCurrency(consumed, projectState?.currency);
-  el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), projectState?.currency);
-  el("budgetAvailable").textContent = formatCurrency(available, projectState?.currency);
+  const primaryCurrency = projectState?.currency || "AOA";
+  const exchangeRate = await getExchangeRate();
+  const secondaryCurrency = primaryCurrency === "USD" ? "AOA" : "USD";
+  const convertedTotal = primaryCurrency === "USD" ? total * exchangeRate : total / exchangeRate;
+
+  el("budgetTotal").textContent = formatCurrency(total, primaryCurrency);
+  if (el("budgetTotalSecondary")) {
+    el("budgetTotalSecondary").textContent = formatCurrency(convertedTotal, secondaryCurrency);
+  }
+  
+  el("budgetConsumed").textContent = formatCurrency(consumed, primaryCurrency);
+  el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), primaryCurrency);
+  el("budgetAvailable").textContent = formatCurrency(available, primaryCurrency);
 
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;

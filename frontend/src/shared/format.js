@@ -41,3 +41,16 @@ export function formatDateBR(value) {
   return new Intl.DateTimeFormat("pt-BR").format(d);
 }
 
+export async function getExchangeRate() {
+  try {
+    const response = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+    const data = await response.json();
+    if (data && data.rates && data.rates.AOA) {
+      return data.rates.AOA;
+    }
+    return 918;
+  } catch (err) {
+    console.error("Falha ao obter câmbio em tempo real:", err);
+    return 918;
+  }
+}
