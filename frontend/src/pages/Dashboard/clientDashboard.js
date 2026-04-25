@@ -1,6 +1,6 @@
 import { apiRequest, getApiBaseUrl } from "../../services/api.js";
 import { wireLogout } from "../../shared/session.js";
-import { formatCurrencyKZ, formatDateBR } from "../../shared/format.js";
+import { formatCurrencyKZ, formatCurrency, formatDateBR } from "../../shared/format.js";
 import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml } from "../../shared/ui.js";
 
 let dashboardData = null;
@@ -189,9 +189,11 @@ function updateMetrics(data) {
     projNameEl.textContent = currentProject ? currentProject.name : "Visão Consolidada (Todos)";
   }
 
-  document.getElementById("metricTotalContract").textContent = formatCurrencyKZ(financials.totalContract);
-  document.getElementById("metricTotalPaid").textContent = formatCurrencyKZ(financials.totalPaid);
-  document.getElementById("metricDebt").textContent = formatCurrencyKZ(financials.totalDebt);
+  const projectCurrency = currentProject ? (currentProject.currency || "AOA") : "AOA";
+  
+  document.getElementById("metricTotalContract").textContent = formatCurrency(financials.totalContract, projectCurrency);
+  document.getElementById("metricTotalPaid").textContent = formatCurrency(financials.totalPaid, projectCurrency);
+  document.getElementById("metricDebt").textContent = formatCurrency(financials.totalDebt, projectCurrency);
 
   // Payment Progress
   const paymentPct = financials.totalContract > 0
@@ -199,7 +201,7 @@ function updateMetrics(data) {
     : 0;
 
   const metricPayment = document.getElementById("metricPaymentProgress");
-  if (metricPayment) metricPayment.textContent = `${paymentPct.toFixed(1)}%`;
+  if (metricPayment) metricPayment.textContent = `${paymentPct.toFixed(2)}%`;
 
   const paymentLine = document.getElementById("paymentProgressLine");
   if (paymentLine) paymentLine.style.width = `${paymentPct}%`;
@@ -684,6 +686,9 @@ function renderProgressBreakdownRows() {
     return;
   }
 
+  // Ordenar por grupo para evitar repetições
+  tasksToRender.sort((a, b) => (a.itemGroup || "").localeCompare(b.itemGroup || "", 'pt', { sensitivity: 'base' }));
+
   let html = "";
   let lastGroup = null;
 
@@ -713,14 +718,9 @@ function renderProgressBreakdownRows() {
 
   const groupProgressMap = {};
   Object.keys(groupTasks).forEach(g => {
-    const tasks = groupTasks[g];
-    const sumPct = tasks.reduce((acc, t) => {
-      const exp = Number(t.expectedQty || 0);
-      const exe = Number(t.executedQty || 0);
-      const pct = exp > 0 ? (exe / exp) * 100 : (exe > 0 ? 100 : 0);
-      return acc + Math.min(100, pct);
-    }, 0);
-    groupProgressMap[g] = sumPct / tasks.length;
+    const invVal = groupInvoicingTotals[g] || 0;
+    const exdVal = groupInvoicedTotals[g] || 0;
+    groupProgressMap[g] = invVal > 0 ? (exdVal / invVal) * 100 : 0;
   });
 
   // Separar pais ou independentes e as filhas
@@ -732,43 +732,58 @@ function renderProgressBreakdownRows() {
     const safeGroupName = escapeHtml(t.itemGroup || "Outros / Geral");
 
     if (t.itemGroup !== lastGroup) {
-      const c = groupCurrencies[t.itemGroup || ""] || "Kz";
       const tgv = groupInvoicingTotals[t.itemGroup || ""] || 0;
-      const gPct = Math.round(groupProgressMap[t.itemGroup || ""] || 0);
+      const tge = groupInvoicedTotals[t.itemGroup || ""] || 0;
+      const gPct = groupProgressMap[t.itemGroup || ""] || 0;
+      const c = groupCurrencies[t.itemGroup || ""] || "Kz";
 
-      const ft = `<span class="ml-auto text-[11px] font-black text-slate-500">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${c}</span>`;
-      const fPct = `<span class="ml-3 text-[9px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct}% Exec.</span>`;
+      const fPct = `<span class="text-[10px] bg-blue-100 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded-md font-black shadow-sm">${gPct.toFixed(2)}%</span>`;
 
       html += `
-    <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-    <td colspan="4" class="px-6 py-2 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
-      <div class="flex items-center gap-2 w-full">
-        <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
-        <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
-        <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
-        ${fPct}
-      </div>
-    </td>
-        </tr>
+    <tr class="bg-slate-50/80 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
+      <td class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
+          <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
+          <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
+        </div>
+      </td>
+      <td class="px-4 py-3 border-y border-slate-100 text-center font-bold text-slate-400 text-[10px]">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2 })} ${c}</td>
+      <td class="px-4 py-3 border-y border-slate-100 text-center font-bold text-slate-400 text-[10px]">${tge.toLocaleString('pt-AO', { minimumFractionDigits: 2 })} ${c}</td>
+      <td class="px-6 py-3 border-y border-slate-100 text-right">${fPct}</td>
+    </tr>
       `;
       lastGroup = t.itemGroup;
-      groupIndex = 0;
     }
 
     groupIndex++;
     const subs = children.filter(c => c.parentId === t.id);
 
     const renderRow = (task, prefixStr, isSub = false, hasChildren = false) => {
-      const exp = Number(task.expectedQty || 0);
-      const exe = Number(task.executedQty || 0);
-      const exePct = exp > 0 ? Math.round((exe / exp) * 100) : (exe > 0 ? 100 : 0);
-
+      let exp = Number(task.expectedQty || 0);
+      let exe = Number(task.executedQty || 0);
+      
       const uvS = Number(task.unitValueService || 0);
       const uvM = Number(task.unitValueMaterial || 0);
       const uv = Number(task.unitValue || (uvS + uvM));
 
-      const invoicingVal = uv * exp; // Valor da faturação (Total previsto)
-      const invoicedVal = uv * exe;   // Valor faturado (Total executado)
+      let invoicingVal = uv * exp;
+      let invoicedVal = uv * exe;
+
+      if (hasChildren) {
+        const subs = children.filter(c => c.parentId === task.id);
+        const sInv = subs.reduce((acc, s) => acc + (Number(s.unitValue || 0) * Number(s.expectedQty || 0)), 0);
+        const sExd = subs.reduce((acc, s) => acc + (Number(s.unitValue || 0) * Number(s.executedQty || 0)), 0);
+        const sExp = subs.reduce((acc, s) => acc + Number(s.expectedQty || 0), 0);
+        const sExe = subs.reduce((acc, s) => acc + Number(s.executedQty || 0), 0);
+        
+        invoicingVal = sInv;
+        invoicedVal = sExd;
+        exp = sExp;
+        exe = sExe;
+      }
+
+      const exePct = invoicingVal > 0 ? (invoicedVal / invoicingVal) * 100 : (exe > 0 ? 100 : 0);
 
       const cStr = task.currency === "USD" ? "USD" : "Kz";
       const uvSStr = uvS > 0 ? `${uvS.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cStr} ` : "-";
@@ -788,8 +803,10 @@ function renderProgressBreakdownRows() {
              <div class="flex items-center">
                 ${iconSub}
                 ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon>expand_more</span>` : ""}
-                <span class="font-bold text-slate-400 mr-2">${prefixStr} -</span>
-                <span>${escapeHtml(task.description)}</span>
+                <div class="flex items-center gap-2">
+                  ${task.itemCode ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-100 px-1 py-0.5 rounded border border-slate-200/50">${escapeHtml(task.itemCode)}</span>` : ""}
+                  <span>${escapeHtml(task.description)}</span>
+                </div>
              </div>
           </td>
           <td class="px-4 py-3 text-center text-slate-500">${exp.toLocaleString('pt-AO')} <span class="text-[9px] uppercase tracking-wider">${escapeHtml(task.unit)}</span></td>
@@ -797,7 +814,7 @@ function renderProgressBreakdownRows() {
              ${exe.toLocaleString('pt-AO')}
           </td>
           <td class="px-6 py-3 text-right">
-             <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${exePct}%</span>
+             <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${exePct.toFixed(2)}%</span>
           </td>
         </tr>
       `;
@@ -831,16 +848,22 @@ function renderProgressBreakdownRows() {
     if (filterVal === "all") {
       let summaryHtml = "";
       Object.keys(groupProgressMap).forEach(g => {
-        const gPct = Math.round(groupProgressMap[g] || 0);
+        const gPct = groupProgressMap[g] || 0;
+        const tgv = groupInvoicingTotals[g] || 0;
+        const tge = groupInvoicedTotals[g] || 0;
+        const c = (groupCurrencies[g] || "Kz").replace('kz', 'Kz');
+
         summaryHtml += `
       <tr class="hover:bg-slate-50 transition-colors">
               <td class="px-6 py-4 font-bold text-slate-800 text-xs">${escapeHtml(g)}</td>
+              <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-400">${tgv.toLocaleString('pt-AO', { minimumFractionDigits: 2 })} ${c}</td>
+              <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-400">${tge.toLocaleString('pt-AO', { minimumFractionDigits: 2 })} ${c}</td>
               <td class="px-4 py-4 text-right">
                  <div class="flex items-center justify-end gap-3">
                      <div class="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
                          <div class="h-full bg-blue-500" style="width: ${gPct}%"></div>
                      </div>
-                     <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${gPct}%</span>
+                     <span class="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-bold">${gPct.toFixed(2)}%</span>
                  </div>
               </td>
             </tr>

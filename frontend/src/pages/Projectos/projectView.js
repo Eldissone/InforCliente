@@ -980,11 +980,13 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const leftPct = Math.max(0, 100 - exePct);
 
   const currencyStr = t.currency === "USD" ? "USD" : "Kz";
+  // Formatadores: 2 casas para totais, até 5 para preços unitários
   const fmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtUV = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 5 });
 
   // No item pai, não mostramos preço unitário individual, pois é um somatório
-  const uvSStr = (!hasChildren && num(t.unitValueService) > 0) ? `${fmt(t.unitValueService)} ${currencyStr}` : "-";
-  const uvMStr = (!hasChildren && num(t.unitValueMaterial) > 0) ? `${fmt(t.unitValueMaterial)} ${currencyStr}` : "-";
+  const uvSStr = (!hasChildren && num(t.unitValueService) > 0) ? `${fmtUV(t.unitValueService)} ${currencyStr}` : "-";
+  const uvMStr = (!hasChildren && num(t.unitValueMaterial) > 0) ? `${fmtUV(t.unitValueMaterial)} ${currencyStr}` : "-";
 
   const invoicingValStr = invoicingVal > 0 ? `${fmt(invoicingVal)} ${currencyStr}` : "-";
   const invoicedValStr = invoicedVal > 0 ? `${fmt(invoicedVal)} ${currencyStr}` : "-";
@@ -1234,7 +1236,7 @@ function wireProgressTasks() {
           </div>
           <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
-            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(5);" /></div>
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.00001" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(5);" /></div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">

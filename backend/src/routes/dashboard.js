@@ -185,6 +185,7 @@ dashboardRoutes.get(
         paid,
         debt: budget - paid,
         progress,
+        currency: p.currency,
         director: {
           name: p.directorObra,
           photo: p.directorPhoto,

@@ -16,7 +16,7 @@ export function formatCurrency(value, currencyCode = "AOA") {
     style: "currency",
     currency: "AOA",
     maximumFractionDigits: 2,
-  }).format(num).replace('AOA', 'kz').replace('Kz', 'kz');
+  }).format(num).replace('AOA', 'Kz').replace('kz', 'Kz');
 }
 
 export function formatCurrencyKZ(value) {
