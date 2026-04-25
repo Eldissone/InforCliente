@@ -1027,8 +1027,8 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
               <div style="width:${exePct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.6s;"></div>
             </div>
             <div class="flex flex-col opacity-40 group-hover:opacity-100 transition-opacity">
-               <span class="text-[7px] font-bold text-slate-500 uppercase tracking-tighter leading-none mt-1">Soma Filhos</span>
-               <span class="text-[7px] font-medium text-slate-400 whitespace-nowrap">${fmt(invoicedVal)} / ${fmt(invoicingVal)}</span>
+               <span class="text-[9px] font-bold text-slate-500 uppercase tracking-tighter leading-none mt-1">Soma Filhos</span>
+               <span class="text-[9px] font-medium text-slate-400 whitespace-nowrap">${fmt(invoicedVal)} / ${fmt(invoicingVal)}</span>
             </div>
           </div>`;
     })()
@@ -1037,7 +1037,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
   return `
     <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
-      <td class="px-6 py-4 text-center font-black text-slate-400 text-xs">${index}</td>
+      <td class="px-6 py-4 text-center font-black text-slate-400 text-[11px]">${index}</td>
       <td class="py-4 ${indentStyle}">
         <div class="${descClass} flex flex-col relative">
           <div class="flex items-start">
@@ -1045,24 +1045,24 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
             ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>expand_more</span>` : ""}
             <div class="flex flex-col">
               <div class="flex items-center gap-2">
-                ${t.itemCode ? `<span class="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.itemCode)}</span>` : ""}
-                <span class="leading-tight">${escapeHtml(t.description)}</span>
+                ${t.itemCode ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.itemCode)}</span>` : ""}
+                <span class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(t.description)}</span>
               </div>
-              ${(!isSub && t.itemGroup && t.itemGroup.toUpperCase() !== "GERAL") ? `<span class="text-[9px] text-on-surface-variant/60 uppercase tracking-widest mt-1">${escapeHtml(t.itemGroup)}</span>` : ""}
+              ${(!isSub && t.itemGroup && t.itemGroup.toUpperCase() !== "GERAL") ? `<span class="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-black">${escapeHtml(t.itemGroup)}</span>` : ""}
             </div>
           </div>
         </div>
       </td>
-      <td class="px-4 py-4 text-center font-medium font-black ">${exp.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center tracking-widest text-[#212e3e] font-medium lowercase">${formatUnit(t.unit)}</td>
-      <td class="px-4 py-4 text-center font-medium text-blue-500">${uvSStr}</td>
-      <td class="px-4 py-4 text-center font-medium text-emerald-500">${uvMStr}</td>
-      <td class="px-4 py-4 text-center font-medium pr-6 text-slate-800">${invoicingValStr}</td>
-      <td class="px-4 py-4 text-center font-medium text-[#212e3e]">${exe.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-medium text-emerald-600 bg-emerald-50/30">${invoicedValStr}</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${exp.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-4 text-center font-bold text-blue-600 text-xs">${uvSStr}</td>
+      <td class="px-4 py-4 text-center font-bold text-emerald-600 text-xs">${uvMStr}</td>
+      <td class="px-4 py-4 text-center font-black text-slate-900 text-xs">${invoicingValStr}</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${exe.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs">${invoicedValStr}</td>
       <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${pctBadge}</td>
-      <td class="px-4 py-4 text-center font-medium text-slate-500">${left.toLocaleString('pt-AO')}</td>
-      <td class="px-4 py-4 text-center font-black text-error">${leftPct.toFixed(2)}%</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-500 text-xs">${left.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-black text-red-600 text-xs">${leftPct.toFixed(2)}%</td>
       <td class="px-4 py-4 text-right" data-actions>
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
@@ -1207,7 +1207,7 @@ async function loadProgressTasks() {
           projectState.physicalProgressPct = avgPct;
           apiRequest(`/projects/${encodeURIComponent(id)}`, {
             method: "PATCH",
-            body: { physicalProgressPct: avgPct }
+            body: { physicalProgressPct: parseFloat(avgPct) }
           }).catch(err => console.error("Failed to sync physical progress:", err));
         }
       }

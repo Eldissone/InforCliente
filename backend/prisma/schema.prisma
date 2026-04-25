@@ -87,7 +87,7 @@ model Project {
   budgetConsumed      Decimal              @db.Decimal(16, 2)
   budgetCommitted     Decimal              @db.Decimal(16, 2)
   budgetAvailable     Decimal              @db.Decimal(16, 2)
-  physicalProgressPct Int                  @default(0)
+  physicalProgressPct Float                @default(0)
   currency            String?              @default("AOA")
   phaseLabel          String?
   createdAt           DateTime             @default(now())
