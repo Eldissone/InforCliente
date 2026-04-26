@@ -287,7 +287,8 @@
                                 <span class="material-symbols-outlined text-slate-500">account_balance</span>
                             </div>
                             <div class="flex flex-col mb-4 mt-10">
-                                <span id="budgetTotal" class="text-2xl md:text-4xl font-bold tracking-tighter leading-none">---</span>
+                                <span id="budgetTotal"
+                                    class="text-2xl md:text-4xl font-bold tracking-tighter leading-none">---</span>
                                 <span id="budgetTotalSecondary" class="text-sm font-bold text-slate-400 mt-2">---</span>
                             </div>
                             <div id="budgetDelta" class="text-xs font-bold text-[#2afc8d] mb-8">---</div>
@@ -712,6 +713,10 @@
                             </tr>
                         </thead>
                         <tbody id="progressTasksTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
+                        <tfoot id="progressTasksTfoot"
+                            class="bg-slate-900 text-white font-black text-xs uppercase tracking-widest border-t-4 border-slate-900">
+                            <!-- JS populated -->
+                        </tfoot>
                     </table>
                 </div>
             </div>

@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -202,7 +202,7 @@ async function loadProject() {
   if (el("budgetTotalSecondary")) {
     el("budgetTotalSecondary").textContent = formatCurrency(convertedTotal, secondaryCurrency);
   }
-  
+
   el("budgetConsumed").textContent = formatCurrency(consumed, primaryCurrency);
   el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), primaryCurrency);
   el("budgetAvailable").textContent = formatCurrency(available, primaryCurrency);
@@ -992,6 +992,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   // Formatadores: 2 casas para totais, até 5 para preços unitários
   const fmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtUV = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 5 });
+  const fmtQty = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // No item pai, não mostramos preço unitário individual, pois é um somatório
   const uvSStr = (!hasChildren && num(t.unitValueService) > 0) ? `${fmtUV(t.unitValueService)} ${currencyStr}` : "-";
@@ -1053,15 +1054,15 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
           </div>
         </div>
       </td>
-      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${exp.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${fmtQty(exp)}</td>
       <td class="px-4 py-4 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
       <td class="px-4 py-4 text-center font-bold text-blue-600 text-xs">${uvSStr}</td>
       <td class="px-4 py-4 text-center font-bold text-emerald-600 text-xs">${uvMStr}</td>
       <td class="px-4 py-4 text-center font-black text-slate-900 text-xs">${invoicingValStr}</td>
-      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${exe.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${fmtQty(exe)}</td>
       <td class="px-4 py-4 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs">${invoicedValStr}</td>
       <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${pctBadge}</td>
-      <td class="px-4 py-4 text-center font-bold text-slate-500 text-xs">${left.toLocaleString('pt-AO')}</td>
+      <td class="px-4 py-4 text-center font-bold text-slate-500 text-xs">${fmtQty(left)}</td>
       <td class="px-4 py-4 text-center font-black text-red-600 text-xs">${leftPct.toFixed(2)}%</td>
       <td class="px-4 py-4 text-right" data-actions>
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
@@ -1133,7 +1134,7 @@ async function loadProgressTasks() {
       Object.keys(groupTasks).forEach(g => {
         const totalInvoicing = groupInvoicingTotals[g] || 0;
         const totalInvoiced = groupInvoicedTotals[g] || 0;
-        
+
         globalInvoicing += totalInvoicing;
         globalInvoiced += totalInvoiced;
 
@@ -1146,12 +1147,12 @@ async function loadProgressTasks() {
 
       // Atualizar o resumo global no topo da página (Progresso Físico)
       // O denominador passa a ser o Valor Global (budgetTotal) do projeto
-      const valorGlobal = (projectState && Number(projectState.budgetTotal) > 0) 
-        ? Number(projectState.budgetTotal) 
+      const valorGlobal = (projectState && Number(projectState.budgetTotal) > 0)
+        ? Number(projectState.budgetTotal)
         : globalInvoicing; // Fallback caso o projeto não tenha orçamento definido
 
       const globalPct = valorGlobal > 0 ? Math.min(100, (globalInvoiced / valorGlobal) * 100) : 0;
-      
+
       const progressEl = el("physicalProgress");
       if (progressEl) {
         progressEl.textContent = `${globalPct.toFixed(2)}%`;
@@ -1184,6 +1185,27 @@ async function loadProgressTasks() {
         });
       });
       tbody.innerHTML = html;
+
+      // Populate Footer (Total Global da Tabela)
+      const tfoot = el("progressTasksTfoot");
+      if (tfoot) {
+        const globalCurrency = (projectState && projectState.currency === "USD") ? "USD" : "Kz";
+        const globalFmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + globalCurrency;
+
+        tfoot.innerHTML = `
+          <tr>
+            <td class="px-4 py-5 text-center" text-sm colspan="2">TOTAL GERAL DA OBRA</td>
+            <td class="px-4 py-5 text-center" colspan="4"></td>
+            <td class="px-4 py-5 text-center bg-slate-800 text-white">${globalFmt(globalInvoicing)}</td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center bg-emerald-900 text-white">${globalFmt(globalInvoiced)}</td>
+            <td class="px-4 py-5 text-center bg-blue-900 text-white">${globalPct.toFixed(2)}%</td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center bg-red-900 text-white">${(100 - globalPct).toFixed(2)}%</td>
+            <td class="px-8 py-5"></td>
+          </tr>
+        `;
+      }
 
       // Calculate overall physical progress
       const numGroups = Object.keys(groupTasks).length;
@@ -1363,7 +1385,7 @@ function wireProgressTasks() {
         try {
           const fileInput = panel.querySelector("#import_excel_file");
           const file = fileInput.files[0];
-          
+
           if (!file) {
             toast("Por favor, selecione um ficheiro Excel.", { type: "warning" });
             setButtonLoading(btn, false);
@@ -1371,13 +1393,13 @@ function wireProgressTasks() {
           }
 
           const res = await apiUpload(`/projects/${encodeURIComponent(id)}/progress-tasks/upload-excel`, { file });
-          
+
           if (res.warnings && res.warnings.length) {
             toast(`Importação concluída com ${res.warnings.length} avisos.`, { type: "warning" });
           } else {
             toast(`${res.imported || 'Várias'} tarefas importadas com sucesso`, { type: "success" });
           }
-          
+
           close();
           loadProgressTasks();
         } catch (err) {
@@ -1403,7 +1425,7 @@ function wireProgressTasks() {
             previewContainer.classList.remove("hidden");
 
             const res = await apiUpload(`/projects/${encodeURIComponent(id)}/progress-tasks/preview-excel`, { file });
-            
+
             if (!res.tasks || !res.tasks.length) {
               const warnMsg = res.warnings && res.warnings.length ? res.warnings.join("<br/>") : "Nenhum item encontrado.";
               previewBody.innerHTML = `<tr><td colspan="4" class="px-4 py-8 text-center text-red-500 font-bold">${warnMsg}</td></tr>`;
