@@ -226,13 +226,13 @@ model ProjectProgressTask {
   parentId        String?
   order           Int      @default(0)
   description     String
-  expectedQty     Decimal  @db.Decimal(10, 2)
-  executedQty     Decimal  @default(0) @db.Decimal(10, 2)
+  expectedQty     Decimal  @db.Decimal(18, 10)
+  executedQty     Decimal  @default(0) @db.Decimal(18, 10)
   unit            String
-  unitValue       Decimal? @db.Decimal(16, 2)
-  unitValueMaterial Decimal? @db.Decimal(16, 2)
-  unitValueService  Decimal? @db.Decimal(16, 2)
-  totalValue      Decimal? @db.Decimal(16, 2)
+  unitValue       Decimal? @db.Decimal(18, 8)
+  unitValueMaterial Decimal? @db.Decimal(18, 8)
+  unitValueService  Decimal? @db.Decimal(18, 8)
+  totalValue      Decimal? @db.Decimal(18, 8)
   currency        String?  @default("AOA")
   createdAt       DateTime @default(now())
 
@@ -249,8 +249,8 @@ model ProjectProgressHistory {
   projectId       String
   taskId          String
   date            DateTime            @default(now())
-  executedQty     Decimal             @db.Decimal(10, 2)
-  accumulatedQty  Decimal             @db.Decimal(10, 2)
+  executedQty     Decimal             @db.Decimal(18, 10)
+  accumulatedQty  Decimal             @db.Decimal(18, 10)
   technicianName  String?
   notes           String?
   createdAt       DateTime            @default(now())

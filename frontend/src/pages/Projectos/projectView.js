@@ -1,4 +1,4 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -991,7 +991,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const currencyStr = t.currency === "USD" ? "USD" : "Kz";
   // Formatadores: 2 casas para totais, até 5 para preços unitários
   const fmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtUV = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 5 });
+  const fmtUV = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 10 });
   const fmtQty = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // No item pai, não mostramos preço unitário individual, pois é um somatório
@@ -1267,7 +1267,7 @@ function wireProgressTasks() {
           </div>
           <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
           <div class="grid grid-cols-2 gap-4">
-            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="0.00001" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(5);" /></div>
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="any" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(10);" /></div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Unidade (UN)</label>
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">
@@ -1298,15 +1298,15 @@ function wireProgressTasks() {
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-blue-500 mb-2">V. Serviço</label>
-              <input id="rt_us" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(5); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(5);" />
+              <input id="rt_us" type="number" step="any" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_um').value)).toFixed(10); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(10);" />
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-emerald-500 mb-2">V. Material</label>
-              <input id="rt_um" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_us').value)).toFixed(5); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(5);" />
+              <input id="rt_um" type="number" step="any" min="0" class="w-full rounded-lg border-slate-300" placeholder="0.00000" oninput="document.getElementById('rt_uv').value = (Number(this.value) + Number(document.getElementById('rt_us').value)).toFixed(10); document.getElementById('rt_tv').value = (document.getElementById('rt_uv').value * document.getElementById('rt_exp').value).toFixed(10);" />
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
-              <input id="rt_uv" type="number" step="0.00001" min="0" class="w-full rounded-lg border-slate-300 bg-slate-100" readonly value="0.00000" />
+              <input id="rt_uv" type="number" step="any" min="0" class="w-full rounded-lg border-slate-300 bg-slate-100" readonly value="0.00000" />
               <input type="hidden" id="rt_tv" value="0.00000" />
             </div>
           </div>
@@ -1592,11 +1592,11 @@ function wireProgressTasks() {
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Prevista</label>
-                <input id="up_exp" type="number" step="0.00001" value="${exp}" class="w-full rounded-lg border-slate-300" oninput="let uv=document.getElementById('up_uv').value; if(uv) document.getElementById('up_tv').value = (this.value * uv).toFixed(5);" />
+                <input id="up_exp" type="number" step="any" value="${exp}" class="w-full rounded-lg border-slate-300" oninput="let uv=document.getElementById('up_uv').value; if(uv) document.getElementById('up_tv').value = (this.value * uv).toFixed(10);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd. Executada</label>
-                <input id="up_exe" type="number" step="0.00001" value="${exe}" class="w-full rounded-lg border-primary" />
+                <input id="up_exe" type="number" step="any" value="${exe}" class="w-full rounded-lg border-primary" />
               </div>
             </div>
             <div class="grid grid-cols-3 gap-4">
@@ -1609,19 +1609,19 @@ function wireProgressTasks() {
               </div>
               <div>
                 <label class="block text-xs font-black uppercase text-blue-500 tracking-widest mb-2">V. Serviço</label>
-                <input id="up_us" type="number" step="0.00001" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(5); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(5);" />
+                <input id="up_us" type="number" step="any" min="0" value="${us}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_um').value)).toFixed(10); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(10);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase text-emerald-500 tracking-widest mb-2">V. Material</label>
-                <input id="up_um" type="number" step="0.00001" min="0" value="${um}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_us').value)).toFixed(5); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(5);" />
+                <input id="up_um" type="number" step="any" min="0" value="${um}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" oninput="document.getElementById('up_uv').value = (Number(this.value) + Number(document.getElementById('up_us').value)).toFixed(10); document.getElementById('up_tv').value = (document.getElementById('up_uv').value * document.getElementById('up_exp').value).toFixed(10);" />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Total (Unit)</label>
-                <input id="up_uv" type="number" step="0.00001" min="0" value="${uv || ''}" class="w-full bg-slate-100 rounded-lg border-slate-300" readonly />
+                <input id="up_uv" type="number" step="any" min="0" value="${uv || ''}" class="w-full bg-slate-100 rounded-lg border-slate-300" readonly />
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Faturado <span class="text-slate-300 lowercase text-[9px]">(Global)</span></label>
-                <input id="up_tv" type="number" step="0.00001" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
+                <input id="up_tv" type="number" step="any" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
               </div>
             </div>
           </div>
@@ -3111,21 +3111,21 @@ function renderStockInventory(movements, summary) {
 
 async function openMaterialManagerModal() {
   openModal({
-    title: "GestÃ£o do CatÃ¡logo de Materiais",
+    title: "Gestão do Catálogo de Materiais",
     contentHtml: `
       <div class="space-y-6">
         <div id="materialForm" class="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
            <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Novo Material / Editar</h4>
            <input type="hidden" id="mt_id">
            <div class="grid grid-cols-2 gap-4">
-              <input id="mt_code" placeholder="CÃ³digo (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+              <input id="mt_code" placeholder="Código (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
               <input id="mt_name" placeholder="Nome do Material" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
            </div>
            <div class="grid grid-cols-2 gap-4">
               <select id="mt_cat" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
-                 <option value="MT">MÃ©dia TensÃ£o (MT)</option>
-                 <option value="BT">Baixa TensÃ£o (BT)</option>
-                 <option value="IP">IluminaÃ§Ã£o PÃºblica (IP)</option>
+                 <option value="MT">Média Tensão (MT)</option>
+                 <option value="BT">Baixa Tensão (BT)</option>
+                 <option value="IP">Iluminação Pública (IP)</option>
                  <option value="OUTROS">Outros</option>
               </select>
               <input id="mt_unit" placeholder="Unidade (ex: un, mts, kg)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
@@ -3142,7 +3142,7 @@ async function openMaterialManagerModal() {
                  <tr>
                     <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Material</th>
                     <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Cat / Un</th>
-                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">AÃ§Ãµes</th>
+                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">Ações</th>
                  </tr>
               </thead>
               <tbody id="materialListTbody">
@@ -3194,7 +3194,7 @@ async function openMaterialManagerModal() {
       // Bind delete
       document.querySelectorAll("[data-delete-mat]").forEach(btn => {
         btn.addEventListener("click", async () => {
-          if (!confirm("Tem certeza? Esta aÃ§Ã£o removerÃ¡ o material do catÃ¡logo global.")) return;
+          if (!confirm("Tem certeza? Esta ação removerá o material do catálogo global.")) return;
           try {
             await apiRequest(`/materials/${btn.dataset.deleteMat}`, { method: "DELETE" });
             toast("Material removido", { type: "success" });
@@ -3206,7 +3206,7 @@ async function openMaterialManagerModal() {
       });
 
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catÃ¡logo.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catálogo.</td></tr>`;
     }
   };
 
@@ -3315,7 +3315,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
 }
 
 async function deleteStockMovement(moveId) {
-  if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazÃ©m serÃ¡ revertido automaticamente.")) return;
+  if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazém será revertido automaticamente.")) return;
 
   try {
     const pid = getProjectId();
@@ -3516,7 +3516,7 @@ async function loadStockGallery() {
 }
 
 // =============================================================================
-// GESTÃƒO DA GALERIA DA OBRA (ADMIN)
+// GESTÃO DA GALERIA DA OBRA (ADMIN)
 // =============================================================================
 
 async function loadGallery() {
