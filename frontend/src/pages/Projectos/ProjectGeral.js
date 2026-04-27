@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
@@ -477,7 +477,7 @@ async function openEdit(id) {
           });
 
           pathInput.value = result.photo;
-          preview.src = `${getApiBaseUrl()}/${result.photo}?t=${Date.now()}`;
+          preview.src = `${getAssetUrl(result.photo)}?t=${Date.now()}`;
           status.textContent = "Foto atualizada!";
           status.className = "text-[9px] font-black text-emerald-600 mt-1";
           toast("Foto do director atualizada", { type: "success" });

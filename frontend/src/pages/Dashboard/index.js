@@ -1,4 +1,4 @@
-import { apiRequest, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
@@ -35,7 +35,7 @@ function renderClientRow(c) {
   const health = Math.max(0, Math.min(100, Number(c.healthScore || 0)));
   const healthBarColor = c.status === "AT_RISK" ? "bg-red-500" : "bg-emerald-500";
   
-  const picUrl = c.profilePic ? (c.profilePic.startsWith('http') ? c.profilePic : `${getApiBaseUrl()}/${c.profilePic}`) : null;
+  const picUrl = getAssetUrl(c.profilePic);
 
   return `
     <tr class="hover:bg-slate-50/50 transition-all duration-200 group border-b border-slate-50 last:border-0">

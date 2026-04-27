@@ -244,7 +244,7 @@ function renderDirectorInfo(project) {
     phoneEl.textContent = project.director.phone || "—";
     emailEl.textContent = project.director.email || "—";
     if (project.director.photo) {
-      photoEl.src = `${getApiBaseUrl()}/${project.director.photo}`;
+      photoEl.src = getAssetUrl(project.director.photo);
     } else {
       photoEl.src = "/assets/images/placeholder-user.png";
     }

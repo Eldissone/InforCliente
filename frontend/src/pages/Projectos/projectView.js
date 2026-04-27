@@ -126,7 +126,7 @@ function renderFileCard(f) {
   const isImage = f.mimeType.startsWith("image/");
   const icon = isImage ? "image" : (f.mimeType === "application/pdf" ? "picture_as_pdf" : "description");
   const iconColor = isImage ? "text-blue-500" : (f.mimeType === "application/pdf" ? "text-red-500" : "text-slate-400");
-  const fileUrl = `${getApiBaseUrl()}/${f.path}`;
+  const fileUrl = getAssetUrl(f.path);
 
   return `
     <div data-preview-file="${f.id}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer overflow-hidden relative">
@@ -2534,7 +2534,7 @@ function openPhotoPreview(photoId) {
   const photo = galleryState.items.find(p => p.id === photoId);
   if (!photo) return;
 
-  const url = `${getApiBaseUrl()}/${photo.path}`;
+  const url = getAssetUrl(photo.path);
   const title = photo.description || (photo.movement?.material?.name ? `Registo: ${photo.movement.material.name}` : "Foto de Obra");
   const date = formatDateBR(photo.createdAt);
 
@@ -3486,7 +3486,7 @@ async function loadStockGallery() {
             `;
 
       groups[cat].forEach(p => {
-        const url = `${getApiBaseUrl()}/${p.path}`;
+        const url = getAssetUrl(p.path);
         const equipName = p.movement?.material?.name
           ? escapeHtml(p.movement.material.name)
           : "Registo Fotográfico";
