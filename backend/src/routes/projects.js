@@ -3,6 +3,7 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
@@ -21,18 +22,10 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
 });
 
-const fileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join("uploads", "projects", req.params.id);
-    ensureDir(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
-  },
+const fileUpload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
 });
-const fileUpload = multer({ storage: fileStorage });
 
 function getScopedClientId(req) {
   if (req.user?.role !== "cliente") return null;
@@ -524,12 +517,14 @@ projectRoutes.post(
     const { id } = req.params;
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
-    // Caminho relativo para guardar na BD e servir via static
-    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const storagePath = `projects/${id}/director-${Date.now()}${extension}`;
+
+    const publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
 
     const updated = await prisma.project.update({
       where: { id },
-      data: { directorPhoto: relativePath },
+      data: { directorPhoto: publicUrl },
       select: { directorPhoto: true }
     });
 
@@ -545,10 +540,12 @@ projectRoutes.post(
     const { id } = req.params;
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
-    // Just return the path, don't save to DB directly since it's nested in a JSON array
-    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const storagePath = `projects/${id}/technician-${Date.now()}${extension}`;
 
-    return res.json({ photo: relativePath });
+    const publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
+    return res.json({ photo: publicUrl });
   })
 );
 
@@ -844,13 +841,18 @@ projectRoutes.post(
     if (!req.file) throw new Error("FILE_REQUIRED");
     await ensureProjectReadable(req, id);
 
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const storagePath = `projects/${id}/files/${Date.now()}-${req.file.originalname}`;
+
+    const publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
     const fileRecord = await prisma.projectFile.create({
       data: {
         projectId: id,
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size,
-        path: req.file.path.replace(/\\/g, "/"),
+        path: publicUrl,
         category: req.body.category || "OUTROS",
         folderId: req.body.folderId || null,
       },
@@ -1106,6 +1108,13 @@ projectRoutes.post(
       return res.status(400).json({ error: "VALOR_INVALIDO" });
     }
 
+    let publicUrl = null;
+    if (req.file) {
+      const extension = path.extname(req.file.originalname).toLowerCase();
+      const storagePath = `projects/${projectId}/payments/${Date.now()}${extension}`;
+      publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    }
+
     const payment = await prisma.projectPayment.create({
       data: {
         projectId,
@@ -1113,7 +1122,7 @@ projectRoutes.post(
         dataPagamento: new Date(body.dataPagamento),
         metodo: body.metodo || null,
         referencia: body.referencia || null,
-        comprovativoPath: req.file ? req.file.path.replace(/\\/g, "/") : null,
+        comprovativoPath: publicUrl,
         criadoPor: req.user?.email || null,
         status: body.status || "PENDENTE",
       },
@@ -1215,13 +1224,15 @@ projectRoutes.post(
       return res.status(400).json({ error: "NO_FILE_UPLOADED" });
     }
 
-    // Caminho relativo para a BD
-    const relativePath = path.join("uploads", "projects", id, req.file.filename).replace(/\\/g, "/");
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const storagePath = `projects/${id}/photos/${Date.now()}${extension}`;
+
+    const publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
 
     const photo = await prisma.projectPhoto.create({
       data: {
         projectId: id,
-        path: relativePath,
+        path: publicUrl,
         description: description || null,
         createdAt: date ? new Date(date) : undefined
       }

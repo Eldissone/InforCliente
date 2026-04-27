@@ -7,25 +7,14 @@ const fs = require("fs");
 const { prisma } = require("../db");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-const fileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join("uploads", "clients", req.params.id);
-    ensureDir(dir);
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, uniqueSuffix + ext);
-  },
-});
 const upload = multer({ 
-  storage: fileStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for avatars
 });
 
@@ -425,15 +414,18 @@ clientRoutes.post(
     assertClientAccess(req, clientId);
     if (!req.file) throw new Error("FILE_REQUIRED");
 
-    // Guardamos o caminho relativo para ser consistente com o resto da app
-    const relativePath = req.file.path.replace(/\\/g, "/");
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const fileName = `${Date.now()}${extension}`;
+    const storagePath = `clients/${clientId}/${fileName}`;
+
+    const publicUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
 
     await prisma.client.update({
       where: { id: clientId },
-      data: { profilePic: relativePath }
+      data: { profilePic: publicUrl }
     });
 
-    return res.status(201).json({ profilePic: relativePath });
+    return res.status(201).json({ profilePic: publicUrl });
   })
 );
 
