@@ -57,9 +57,9 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ error: message });
 });
 
-// Start listening immediately to avoid timeouts (especially on Render)
-app.listen(config.port, "0.0.0.0", async () => {
-  console.log(`API listening on http://localhost:${config.port}`);
+// Start listening
+app.listen(config.port, async () => {
+  console.log(`API listening on port ${config.port}`);
   
   // Run database migrations and initialization in the background
   await initialize();

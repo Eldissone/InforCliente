@@ -9,7 +9,7 @@ function requireEnv(name) {
 }
 
 const config = {
-  port: Number(process.env.PORT || 4000),
+  port: process.env.PORT || 4000,
   jwtSecret: requireEnv("JWT_SECRET"),
   frontendOrigin: process.env.FRONTEND_ORIGIN || "*",
 };
