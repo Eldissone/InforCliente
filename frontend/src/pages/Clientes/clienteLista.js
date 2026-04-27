@@ -1,5 +1,8 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
-import { openModal, toast, initMobileMenu } from "../../shared/ui.js";
+import { checkAuth } from "../../services/auth.js";
+import { openModal, toast, initMobileMenu, setButtonLoading } from "../../shared/ui.js";
+
+checkAuth({ allowedRoles: ["admin", "operador"] });
 import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -222,31 +225,38 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Senha Inicial</label><input id="f_password" type="password" class="w-full rounded-lg border-slate-300" placeholder="******" /></div>
       </div>
     `,
-    onPrimary: async ({ close, panel }) => {
-      const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
-      const created = await apiRequest("/clients", {
-        method: "POST",
-        body: {
-          code: v("f_code"),
-          name: v("f_name"),
-          industry: v("f_industry") || null,
-          region: v("f_region") || null,
-          email: v("f_email"),
-          password: v("f_password"),
-        },
-      });
-      
-      const fileInput = panel.querySelector("#f_profilePicFile");
-      if (fileInput && fileInput.files.length > 0) {
-        await apiUpload(`/clients/${created.id}/avatar`, {
-          file: fileInput.files[0]
+    onPrimary: async ({ btn, close, panel }) => {
+      try {
+        setButtonLoading(btn, true);
+        const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
+        const created = await apiRequest("/clients", {
+          method: "POST",
+          body: {
+            code: v("f_code"),
+            name: v("f_name"),
+            industry: v("f_industry") || null,
+            region: v("f_region") || null,
+            email: v("f_email"),
+            password: v("f_password"),
+          },
         });
+        
+        const fileInput = panel.querySelector("#f_profilePicFile");
+        if (fileInput && fileInput.files.length > 0) {
+          await apiUpload(`/clients/${created.id}/avatar`, {
+            file: fileInput.files[0]
+          });
+        }
+        
+        toast("Cliente criado", { type: "success" });
+        close();
+        state.page = 1;
+        await load();
+      } catch (err) {
+        toast(err.message, { type: "error" });
+      } finally {
+        setButtonLoading(btn, false);
       }
-      
-      toast("Cliente criado", { type: "success" });
-      close();
-      state.page = 1;
-      await load();
     },
   });
 }
@@ -274,30 +284,37 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nova Senha (opcional)</label><input id="e_password" type="password" class="w-full rounded-lg border-slate-300" placeholder="Deixe em branco para manter" /></div>
       </div>
     `,
-    onPrimary: async ({ close, panel }) => {
-      const v = (id2) => panel.querySelector(`#${id2}`)?.value?.trim?.();
-      await apiRequest(`/clients/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        body: {
-          name: v("e_name"),
-          status: v("e_status"),
-          industry: v("e_industry") || null,
-          region: v("e_region") || null,
-          email: v("e_email"),
-          password: v("e_password") || undefined,
-        },
-      });
-
-      const fileInput = panel.querySelector("#e_profilePicFile");
-      if (fileInput && fileInput.files.length > 0) {
-        await apiUpload(`/clients/${id}/avatar`, {
-          file: fileInput.files[0]
+    onPrimary: async ({ btn, close, panel }) => {
+      try {
+        setButtonLoading(btn, true);
+        const v = (id2) => panel.querySelector(`#${id2}`)?.value?.trim?.();
+        await apiRequest(`/clients/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: {
+            name: v("e_name"),
+            status: v("e_status"),
+            industry: v("e_industry") || null,
+            region: v("e_region") || null,
+            email: v("e_email"),
+            password: v("e_password") || undefined,
+          },
         });
-      }
 
-      toast("Cliente atualizado", { type: "success" });
-      close();
-      await load();
+        const fileInput = panel.querySelector("#e_profilePicFile");
+        if (fileInput && fileInput.files.length > 0) {
+          await apiUpload(`/clients/${id}/avatar`, {
+            file: fileInput.files[0]
+          });
+        }
+
+        toast("Cliente atualizado", { type: "success" });
+        close();
+        await load();
+      } catch (err) {
+        toast(err.message, { type: "error" });
+      } finally {
+        setButtonLoading(btn, false);
+      }
     },
     secondaryLabel: "Excluir",
     onSecondary: async ({ close }) => {

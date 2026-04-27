@@ -1,5 +1,8 @@
 import { apiRequest } from "../../services/api.js";
+import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+
+checkAuth({ allowedRoles: ["admin", "operador"] });
 import { formatCurrency, formatPercent, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 

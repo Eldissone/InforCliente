@@ -46,12 +46,18 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
   try {
     setButtonLoading(submitBtn, true);
     const res = await apiRequest("/auth/login", { method: "POST", body: { email, password } });
+    console.log("Full Login Response:", res);
     
-    if (res.status === "MULTI_ACCOUNT") {
+    if (res && res.status === "MULTI_ACCOUNT") {
+      console.log("Redirecting to ProjectSelection.html...");
       localStorage.setItem("pending_auth_user", JSON.stringify(res.user));
-      localStorage.setItem("pending_auth_accounts", JSON.stringify(res.accounts));
+      localStorage.setItem("pending_auth_accounts", JSON.stringify(res.accounts || []));
       window.location.href = "ProjectSelection.html" + (getNext() ? `?next=${getNext()}` : "");
       return;
+    }
+
+    if (!res || !res.token) {
+       throw new Error("Resposta inválida do servidor.");
     }
 
     setSession(res);

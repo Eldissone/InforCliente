@@ -1,5 +1,8 @@
 import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+
+checkAuth({ allowedRoles: ["admin", "operador"] });
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -291,12 +294,16 @@ function wireActions() {
       const id = deleteBtn.getAttribute("data-delete-project");
       const name = deleteBtn.getAttribute("data-name");
       if (confirm(`Deseja mesmo eliminar permanentemente a obra "${name}"?`)) {
+        setButtonLoading(deleteBtn, true);
         apiRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" })
           .then(() => {
             toast("Obra eliminada");
             load();
           })
-          .catch(() => toast("Erro ao eliminar obra", { type: "error" }));
+          .catch((err) => {
+            setButtonLoading(deleteBtn, false);
+            toast("Erro ao eliminar obra", { type: "error" });
+          });
       }
       return;
     }

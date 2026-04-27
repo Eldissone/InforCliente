@@ -35,17 +35,26 @@ authRoutes.post(
       }
     });
 
-    // Buscar se existem obras no sistema (para Admin e Operador verem tudo)
+    // Buscar se existem obras no sistema
     const isAdmin = user.role === 'admin' || user.role === 'operador';
-    const projectsCount = isAdmin
-      ? await prisma.project.count()
-      : accounts.length;
+    
+    let projectsCount = 0;
+    if (isAdmin) {
+      projectsCount = await prisma.project.count();
+    } else {
+      const clientIds = accounts.map(a => a.clientId);
+      if (user.clientId) clientIds.push(user.clientId);
+      const uniqueClientIds = [...new Set(clientIds)];
+      projectsCount = await prisma.project.count({
+        where: { clientId: { in: uniqueClientIds } }
+      });
+    }
 
     // Buscar informações do cliente para o nome da empresa
     const primaryClient = user.clientId ? await prisma.client.findUnique({ where: { id: user.clientId }, select: { name: true } }) : null;
 
-    // Apenas forçar seleção para Clientes que tenham obras vinculadas
-    if (!isAdmin && projectsCount > 0) {
+    // Se o utilizador não for admin/operador, enviamos para a seleção de obras
+    if (user.role !== 'admin' && user.role !== 'operador') {
       return res.json({
         status: "MULTI_ACCOUNT",
         user: { 
@@ -102,8 +111,13 @@ authRoutes.post(
             userId_clientId: { userId, clientId }
           }
         });
-        if (!link) return res.status(403).json({ error: "UNAUTHORIZED_ACCESS" });
-        activeRole = link.role;
+        
+        // Se não tem link na UserClient, verificamos se é o clientId principal do utilizador
+        if (!link && user.clientId !== clientId) {
+          return res.status(403).json({ error: "UNAUTHORIZED_ACCESS" });
+        }
+        
+        activeRole = link ? link.role : user.role;
     }
 
     // Atualizar o clientId padrão
@@ -142,7 +156,9 @@ authRoutes.get(
             select: { clientId: true }
         });
         const clientIds = links.map(l => l.clientId);
-        where = { clientId: { in: clientIds } };
+        if (user.clientId) clientIds.push(user.clientId);
+        const uniqueClientIds = [...new Set(clientIds)];
+        where = { clientId: { in: uniqueClientIds } };
     }
 
     const projects = await prisma.project.findMany({

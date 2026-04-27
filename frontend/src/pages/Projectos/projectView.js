@@ -1,8 +1,11 @@
 import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
+
+checkAuth({ allowedRoles: ["admin", "operador", "cliente"] });
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return "0 Bytes";
@@ -1659,10 +1662,12 @@ function wireProgressTasks() {
       const taskId = delBtn.getAttribute("data-delete-task");
       if (!confirm("Tem certeza de que pretende apagar este item de progresso?")) return;
       try {
+        setButtonLoading(delBtn, true);
         await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks/" + encodeURIComponent(taskId), { method: "DELETE" });
         toast("Apagado com sucesso!", { type: "success" });
         loadProgressTasks();
       } catch (err) {
+        setButtonLoading(delBtn, false);
         toast("Erro ao apagar", { type: "error" });
       }
     }
@@ -2359,9 +2364,8 @@ function wirePayments() {
     const confirmBtn = e.target.closest("[data-confirm-payment]");
     if (confirmBtn) {
       const pid = confirmBtn.getAttribute("data-confirm-payment");
-      confirmBtn.disabled = true;
-      confirmBtn.innerHTML = `<span class="material-symbols-outlined text-base animate-spin">progress_activity</span>`;
       try {
+        setButtonLoading(confirmBtn, true);
         const id = getProjectId();
         await apiRequest(`/projects/${encodeURIComponent(id)}/payments/${pid}`, {
           method: "PATCH",
@@ -2370,8 +2374,8 @@ function wirePayments() {
         toast("Pagamento confirmado", { type: "success" });
         await loadPayments();
       } catch (err) {
+        setButtonLoading(confirmBtn, false);
         toast(err.message || "Erro ao confirmar", { type: "error" });
-        confirmBtn.disabled = false;
       }
       return;
     }
@@ -2381,15 +2385,15 @@ function wirePayments() {
     if (deleteBtn) {
       const pid = deleteBtn.getAttribute("data-delete-payment");
       if (!confirm("Tem a certeza que deseja apagar este pagamento? Esta acção é irreversí­vel.")) return;
-      deleteBtn.disabled = true;
       try {
+        setButtonLoading(deleteBtn, true);
         const id = getProjectId();
         await apiRequest(`/projects/${encodeURIComponent(id)}/payments/${pid}`, { method: "DELETE" });
         toast("Pagamento apagado", { type: "success" });
         await loadPayments();
       } catch (err) {
+        setButtonLoading(deleteBtn, false);
         toast(err.message || "Erro ao apagar", { type: "error" });
-        deleteBtn.disabled = false;
       }
     }
   });

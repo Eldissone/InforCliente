@@ -187,13 +187,21 @@ clientRoutes.post(
         select: { id: true },
       });
 
-      await tx.user.create({
+      const newUser = await tx.user.create({
         data: {
           email: body.email,
           passwordHash,
           role: "cliente",
           clientId: client.id,
         },
+      });
+
+      await tx.userClient.create({
+        data: {
+          userId: newUser.id,
+          clientId: client.id,
+          role: "cliente"
+        }
       });
 
       return client;
