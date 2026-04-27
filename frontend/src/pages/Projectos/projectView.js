@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
@@ -1755,7 +1755,7 @@ function wireFilesUpload() {
       primaryLabel: "Enviar",
       contentHtml: `
         <div class="space-y-4">
-          <p class="text-xs text-on-surface-variant font-medium">Capture ou selecione documentos tÃ©cnicos para esta obra.</p>
+          <p class="text-xs text-on-surface-variant font-medium">Capture ou selecione documentos técnicos para esta obra.</p>
           <div class="border-2 border-dashed border-surface-container rounded-2xl p-8 flex flex-col items-center justify-center bg-surface-container-low/20">
             <span class="material-symbols-outlined text-3xl text-primary mb-3">cloud_upload</span>
             <input id="f_input" type="file" class="block w-full text-xs text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
@@ -1766,8 +1766,8 @@ function wireFilesUpload() {
               <option value="OUTROS">Outros</option>
               <option value="PLANTA">Planta / Projecto</option>
               <option value="CONTRATO">Contrato / Legal</option>
-              <option value="FOTO">Registo FotogrÃ¡fico</option>
-              <option value="RELATORIO">RelatÃ³rio TÃ©cnico</option>
+              <option value="FOTO">Registo Fotográfico</option>
+              <option value="RELATORIO">Relatório Técnico</option>
             </select>
           </div>
           <div>
@@ -1826,12 +1826,12 @@ function wireNewFolder() {
       contentHtml: `
         <div class="space-y-3">
           <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Nome da Pasta</label>
-          <input id="fold_name" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm" placeholder="Ex: Plantas TÃ©cnicas" />
+          <input id="fold_name" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm" placeholder="Ex: 1- Administrativo" />
         </div>
       `,
       onPrimary: async ({ close, panel }) => {
         const name = panel.querySelector("#fold_name")?.value?.trim();
-        if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
+        if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
         const id = getProjectId();
         const btn = panel.querySelector("[data-primary]");
         try {
@@ -1887,7 +1887,7 @@ function wireFileNavigation() {
     const delFolderBtn = e.target?.closest("[data-delete-folder]");
     if (delFolderBtn) {
       e.stopPropagation();
-      if (!confirm("Apagar esta pasta eliminarÃ¡ permanentemente TODOS os arquivos e subpastas. Continuar?")) return;
+      if (!confirm("Apagar esta pasta eliminará permanentemente TODOS os arquivos e subpastas. Continuar?")) return;
       const folderId = delFolderBtn.getAttribute("data-delete-folder");
       const id = getProjectId();
       try {
@@ -1935,7 +1935,7 @@ function wireFileNavigation() {
         `,
         onPrimary: async ({ close, panel }) => {
           const name = panel.querySelector("#rename_folder")?.value?.trim();
-          if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
+          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
           const btn = panel.querySelector("[data-primary]");
           try {
             setButtonLoading(btn, true);
@@ -1990,8 +1990,8 @@ function wireFileNavigation() {
                 <option value="OUTROS" ${currentCat === 'OUTROS' ? 'selected' : ''}>Outros</option>
                 <option value="PLANTA" ${currentCat === 'PLANTA' ? 'selected' : ''}>Planta / Projecto</option>
                 <option value="CONTRATO" ${currentCat === 'CONTRATO' ? 'selected' : ''}>Contrato / Legal</option>
-                <option value="FOTO" ${currentCat === 'FOTO' ? 'selected' : ''}>Registo FotogrÃ¡fico</option>
-                <option value="RELATORIO" ${currentCat === 'RELATORIO' ? 'selected' : ''}>RelatÃ³rio TÃ©cnico</option>
+                <option value="FOTO" ${currentCat === 'FOTO' ? 'selected' : ''}>Registo Fotográfico</option>
+                <option value="RELATORIO" ${currentCat === 'RELATORIO' ? 'selected' : ''}>Relatório Técnico</option>
               </select>
             </div>
             <div>
@@ -2002,7 +2002,7 @@ function wireFileNavigation() {
         `,
         onPrimary: async ({ close, panel }) => {
           const name = panel.querySelector("#edit_fname")?.value?.trim();
-          if (!name) { toast("Nome obrigatÃ³rio", { type: "error" }); return; }
+          if (!name) { toast("Nome obrigatório", { type: "error" }); return; }
           const category = panel.querySelector("#edit_fcat")?.value;
           const folderId = panel.querySelector("#edit_ffolder")?.value || null;
           const btn = panel.querySelector("[data-primary]");
@@ -2048,8 +2048,8 @@ function wireExport() {
 
     const lines = [
       ["Projeto", project.name],
-      ["CÃ³digo", project.code],
-      ["OrÃ§amento_total", project.budgetTotal],
+      ["Código", project.code],
+      ["Orçamento_total", project.budgetTotal],
       ["Consumido", project.budgetConsumed],
       [],
       ["data", "descricao", "categoria", "responsavel", "status", "valor"],
@@ -2174,7 +2174,7 @@ function wireNewTransaction() {
 
 function metodoPagtoLabel(m) {
   const map = {
-    transferencia: "TransferÃªncia",
+    transferencia: "Transferência",
     cash: "Numerário",
     cheque: "Cheque",
     mbway: "MBWay",
@@ -2877,7 +2877,7 @@ async function openStockMovementModal() {
     const materials = materialsRes.items || [];
 
     if (materials.length === 0) {
-      toast("Inicializando catÃ¡logo bÃ¡sico...", { type: "info" });
+      toast("Inicializando catálogo básico...", { type: "info" });
       await apiRequest("/stock/init-catalog", { method: "POST" });
       return openStockMovementModal();
     }
@@ -3016,11 +3016,11 @@ async function openStockMovementModal() {
     const warehouseEl = document.getElementById("st_warehouse");
     entryTypeEl?.addEventListener("change", (e) => {
       if (e.target.value === "cliente") {
-        warehouseEl.value = "ArmazÃ©m do Cliente";
+        warehouseEl.value = "Armazém do Cliente";
       }
     });
   } catch (err) {
-    toast("Erro ao carregar catÃ¡logo", { type: "error" });
+    toast("Erro ao carregar catálogo", { type: "error" });
   }
 }
 
@@ -3720,7 +3720,7 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
       const qtyInput = panel.querySelector("#edit_planned_qty");
       const qty = Number(qtyInput.value);
 
-      if (isNaN(qty)) return toast("Valor invÃ¡lido", { type: "error" });
+      if (isNaN(qty)) return toast("Valor inválido", { type: "error" });
 
       setButtonLoading(btn, true);
       try {
