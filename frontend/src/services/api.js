@@ -12,6 +12,13 @@ export function setApiBaseUrl(url) {
   localStorage.setItem("InfoCliente.apiBaseUrl", url);
 }
 
+export function getAssetUrl(path) {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  const baseUrl = getApiBaseUrl();
+  return `${baseUrl}/${path.startsWith("/") ? path.slice(1) : path}`;
+}
+
 async function parseJsonSafe(res) {
   const text = await res.text();
   if (!text) return null;

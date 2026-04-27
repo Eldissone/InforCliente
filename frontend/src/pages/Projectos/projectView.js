@@ -1,4 +1,4 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -123,8 +123,7 @@ function renderFileCard(f) {
   const isImage = f.mimeType.startsWith("image/");
   const icon = isImage ? "image" : (f.mimeType === "application/pdf" ? "picture_as_pdf" : "description");
   const iconColor = isImage ? "text-blue-500" : (f.mimeType === "application/pdf" ? "text-red-500" : "text-slate-400");
-  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
-  const fileUrl = `${baseUrl}/${f.path}`;
+  const fileUrl = `${getApiBaseUrl()}/${f.path}`;
 
   return `
     <div data-preview-file="${f.id}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer overflow-hidden relative">

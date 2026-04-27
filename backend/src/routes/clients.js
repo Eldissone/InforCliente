@@ -425,16 +425,15 @@ clientRoutes.post(
     assertClientAccess(req, clientId);
     if (!req.file) throw new Error("FILE_REQUIRED");
 
-    // The URL where the file can be accessed from the frontend
-    // Windows paths use \, so replace with /
-    const fileUrl = `${req.protocol}://${req.get('host')}/${req.file.path.replace(/\\/g, "/")}`;
+    // Guardamos o caminho relativo para ser consistente com o resto da app
+    const relativePath = req.file.path.replace(/\\/g, "/");
 
     await prisma.client.update({
       where: { id: clientId },
-      data: { profilePic: fileUrl }
+      data: { profilePic: relativePath }
     });
 
-    return res.status(201).json({ profilePic: fileUrl });
+    return res.status(201).json({ profilePic: relativePath });
   })
 );
 

@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from "../../services/api.js";
+import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { openModal, toast, initMobileMenu } from "../../shared/ui.js";
 import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -30,7 +30,7 @@ function renderRow(c) {
         <div class="flex items-center gap-4">
           ${c.profilePic 
             ? `<div class="h-11 w-11 rounded-2xl overflow-hidden border border-slate-100 shadow-sm group-hover:scale-105 transition-transform duration-300">
-                 <img src="${c.profilePic}" alt="Perfil" class="w-full h-full object-cover" />
+                 <img src="${getAssetUrl(c.profilePic)}" alt="Perfil" class="w-full h-full object-cover" />
                </div>`
             : `<div class="h-11 w-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
                  ${String(c.code || "ID").slice(0, 2)}
@@ -224,7 +224,7 @@ async function openCreate() {
     `,
     onPrimary: async ({ close, panel }) => {
       const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
-      await apiRequest("/clients", {
+      const created = await apiRequest("/clients", {
         method: "POST",
         body: {
           code: v("f_code"),
