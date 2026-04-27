@@ -15,4 +15,10 @@ fs.copyFileSync(
     path.join(dist, "server.js")
 );
 
+// Copiar web.config para o IIS
+fs.copyFileSync(
+    path.join(__dirname, "web.config"),
+    path.join(dist, "web.config")
+);
+
 console.log("✅ Build pronto para deploy (IIS ou static server)");
