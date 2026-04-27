@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
@@ -2076,7 +2076,7 @@ function wireNewTransaction() {
     const id = getProjectId();
     const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
     const budgetOptions = [
-      `<option value="">(Nenhum item especÃ­fico)</option>`,
+      `<option value="">(Nenhum item específico)</option>`,
       ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`)
     ].join("");
 
@@ -2094,17 +2094,17 @@ function wireNewTransaction() {
             <select id="t_cat" class="w-full rounded-lg border-slate-300">
               <optgroup label="Custos Operacionais e Diretos">
                 <option value="MATERIAIS_INSUMOS">Materiais e Insumos</option>
-                <option value="SERVICOS_MAO_DE_OBRA">MÃ£o de Obra e ServiÃ§os</option>
+                <option value="SERVICOS_MAO_DE_OBRA">Mão de Obra e Serviços</option>
               </optgroup>
               <optgroup label="Gastos e Despesas">
                 <option value="GASTOS_PESSOAL">Gastos com Pessoal</option>
                 <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
-                <option value="DEPRECIACAO">DepreciaÃ§Ã£o</option>
+                <option value="DEPRECIACAO">Depreciação</option>
                 <option value="IMPOSTOS">Impostos</option>
                 <option value="OUTRAS_DESPESAS">Outras Despesas</option>
               </optgroup>
-              <optgroup label="DeduÃ§Ãµes">
-                <option value="DEDUCOES">DeduÃ§Ã£o de Custos / Reembolso</option>
+              <optgroup label="Deduções">
+                <option value="DEDUCOES">Dedução de Custos / Reembolso</option>
               </optgroup>
             </select>
           </div>
@@ -2896,8 +2896,8 @@ async function openStockMovementModal() {
               <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Tipo de Movimento</label>
               <select id="st_type" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
                 <option value="ENTRADA">Entrada / Recebimento</option>
-                <option value="SAIDA">SaÃ­da / AplicaÃ§Ã£o</option>
-                <option value="TRANSFERENCIA">TransferÃªncia</option>
+                <option value="SAIDA">Saída / Aplicação</option>
+                <option value="TRANSFERENCIA">Transferência</option>
               </select>
             </div>
           </div>
@@ -2913,23 +2913,23 @@ async function openStockMovementModal() {
           </div>
           
           <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">LogÃ­stica e Dados de Transporte</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Logística e Dados de Transporte</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-               <input id="st_plate" placeholder="MatrÃ­cula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
+               <input id="st_plate" placeholder="Matrícula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
                <input id="st_brand" placeholder="Marca Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="proprio">Material PrÃ³prio (InfoCliente)</option>
+                  <option value="proprio">Material Próprio (InfoCliente)</option>
                   <option value="cliente">Fornecido pelo Cliente</option>
                   <option value="fornecedor">Compra Direta Fornecedor</option>
                </select>
                 <select id="st_warehouse" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="ArmazÃ©m Principal">ArmazÃ©m Principal</option>
-                  <option value="ArmazÃ©m do Cliente">ArmazÃ©m do Cliente</option>
+                  <option value="Armazém Principal">Armazém Principal</option>
+                  <option value="Armazém do Cliente">Armazém do Cliente</option>
                   <option value="Contentor Obra">Contentor Obra</option>
-                  <option value="Viatura TÃ©cnica">Viatura TÃ©cnica</option>
+                  <option value="Viatura Técnica">Viatura Técnica</option>
                   <option value="Estaleiro">Estaleiro</option>
                </select>
             </div>
@@ -2937,11 +2937,11 @@ async function openStockMovementModal() {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">EvidÃªncia: Bom Estado</label>
+              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Evidência: Bom Estado</label>
               <input type="file" id="st_photos_good" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
             </div>
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">EvidÃªncia: Danificado</label>
+              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Evidência: Danificado</label>
               <input type="file" id="st_photos_bad" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
             </div>
           </div>
