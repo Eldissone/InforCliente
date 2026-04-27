@@ -4,13 +4,12 @@
   "private": true,
   "main": "server.js",
   "scripts": {
+    "dev": "nodemon server.js",
     "build:css:base": "tailwindcss -i ./src/assets/styles/tailwind.input.css -o ./src/assets/styles/tailwind-base.css -c ./tailwind.base.config.cjs --minify",
     "build:css:app": "tailwindcss -i ./src/assets/styles/tailwind.input.css -o ./src/assets/styles/tailwind-app.css -c ./tailwind.app.config.cjs --minify",
     "build:css:clientes": "tailwindcss -i ./src/assets/styles/tailwind.input.css -o ./src/assets/styles/tailwind-clientes.css -c ./tailwind.clientes.config.cjs --minify",
     "build:css": "npm run build:css:base && npm run build:css:app && npm run build:css:clientes",
-    "predev": "npm run build:css",
-    "dev": "nodemon server.js",
-    "prestart": "npm run build:css",
+    "build": "npm run build:css && node build.js",
     "start": "node server.js"
   },
   "dependencies": {
