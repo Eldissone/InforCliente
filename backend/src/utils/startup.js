@@ -39,42 +39,6 @@ async function checkTables() {
   }
 }
 
-/**
- * Runs Prisma migrations automatically.
- */
-async function runMigrations() {
-  console.log("--------------------------------------------------");
-  console.log("🚀 Starting database migrations...");
-
-  if (!process.env.DATABASE_URL) {
-    console.error("❌ DATABASE_URL is not defined!");
-    throw new Error("DATABASE_URL_MISSING");
-  }
-
-  try {
-    const { execSync } = require("child_process");
-    console.log(`📂 Current CWD: ${process.cwd()}`);
-    console.log(`🌍 DATABASE_URL present: ${!!process.env.DATABASE_URL}`);
-
-    // Explicitly point to the schema to avoid any ambiguity
-    const cmd = "npx prisma migrate deploy --schema=./prisma/schema.prisma";
-    console.log(`🏃 Executing: ${cmd}`);
-
-    const output = execSync(cmd, {
-      env: process.env,
-      stdio: "inherit"
-    });
-
-    console.log("✨ Migrations finished successfully.");
-  } catch (error) {
-    console.error("❌ Migrations failed.");
-    if (error.stdout) console.log(`Output: ${error.stdout.toString()}`);
-    if (error.stderr) console.log(`Error Output: ${error.stderr.toString()}`);
-
-    console.error("Manual fix: Ensure your Render Build Command is 'npm install && npx prisma generate && npx prisma migrate deploy'");
-    throw error;
-  }
-}
 
 /**
  * Ensures an admin user exists in the database.
@@ -117,22 +81,24 @@ async function ensureAdminUser() {
  */
 async function initialize() {
   console.log("--------------------------------------------------");
+  console.log("🚀 Iniciando inicialização do sistema...");
 
   try {
+    console.log("Step 1: Testando conexão...");
     await testConnection();
-    await runMigrations();
+    
+    console.log("Step 2: Verificando tabelas...");
     await checkTables();
-  } catch (error) {
-    console.error("⚠️ Migrations failed to apply automatically. You may need to run 'npx prisma migrate dev' manually.");
-  }
-
-  try {
+    
+    console.log("Step 3: Verificando/Criando Admin...");
     await ensureAdminUser();
+    
+    console.log("✅ Sistema inicializado com sucesso.");
   } catch (error) {
-    console.error("❌ Failed to ensure admin user.");
+    console.error("❌ A inicialização falhou criticamente!");
+    console.error("Erro detalhado:", error);
   }
-
-  console.log("✨ Startup initialization attempt completed.");
+  
   console.log("--------------------------------------------------");
 }
 
