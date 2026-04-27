@@ -1,6 +1,6 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
-import { formatCurrencyKZ, formatPercent, formatDateBR } from "../../shared/format.js";
+import { formatCurrency, formatPercent, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 function el(id) {
@@ -18,8 +18,13 @@ function timelineDotColor(type) {
   return "border-[#2afc8d]";
 }
 
-function renderLinkedProjectCard(project) {
+function renderLinkedProjectCard(project, exchangeRate) {
   const progress = Math.max(0, Math.min(100, Number(project.physicalProgressPct || 0)));
+  const primaryCurrency = project.currency || "AOA";
+  const secondaryCurrency = primaryCurrency === "USD" ? "AOA" : "USD";
+  const total = Number(project.budgetTotal || 0);
+  const convertedTotal = primaryCurrency === "USD" ? total * exchangeRate : total / exchangeRate;
+
   return `
     <article class="p-6 rounded-[32px] bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-900/5 transition-all duration-300 group">
       <div class="flex items-start justify-between gap-4 mb-6">
@@ -40,7 +45,8 @@ function renderLinkedProjectCard(project) {
       <div class="grid grid-cols-2 gap-4 mb-6">
         <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100/50">
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Orçamento</p>
-          <p class="text-xs font-bold text-slate-700">${formatCurrencyKZ(project.budgetTotal)}</p>
+          <p class="text-xs font-bold text-slate-900">${formatCurrency(total, primaryCurrency)}</p>
+          <p class="text-[10px] font-bold text-slate-400 mt-0.5">${formatCurrency(convertedTotal, secondaryCurrency)}</p>
         </div>
         <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100/50">
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Início</p>
@@ -61,7 +67,7 @@ function renderLinkedProjectCard(project) {
   `;
 }
 
-function renderClientProjects(projects) {
+function renderClientProjects(projects, exchangeRate) {
   const host = el("clientProjects");
   const count = el("clientProjectsCount");
   if (!host || !count) return;
@@ -72,7 +78,7 @@ function renderClientProjects(projects) {
     return;
   }
 
-  host.innerHTML = projects.map(renderLinkedProjectCard).join("");
+  host.innerHTML = projects.map(p => renderLinkedProjectCard(p, exchangeRate)).join("");
 }
 
 function renderTimelineItem(item) {
@@ -136,7 +142,8 @@ async function loadClient() {
     tagsHost.innerHTML = industryTag + otherTags;
   }
 
-  renderClientProjects(c.projects || []);
+  const exchangeRate = await getExchangeRate();
+  renderClientProjects(c.projects || [], exchangeRate);
 
   return c;
 }

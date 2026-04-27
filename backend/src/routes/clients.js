@@ -241,6 +241,7 @@ clientRoutes.get(
             startDate: true,
             dueDate: true,
             budgetTotal: true,
+            currency: true,
           },
           orderBy: { updatedAt: "desc" },
           take: 20,
