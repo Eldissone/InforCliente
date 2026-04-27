@@ -1,4 +1,4 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
@@ -142,7 +142,7 @@ function renderFileCard(f) {
         </div>
         <div class="mb-6">
             <h4 class="text-sm font-bold text-slate-900 truncate" title="${escapeHtml(f.originalName)}">${escapeHtml(f.originalName)}</h4>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${formatBytes(f.size)} â€¢ ${formatDateBR(f.createdAt)}</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${formatBytes(f.size)}à ${formatDateBR(f.createdAt)}</p>
         </div>
         <a href="${fileUrl}" download="${f.originalName}" class="block w-full text-center py-3 bg-slate-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-900 hover:text-white transition-all">
             Transferir
@@ -666,7 +666,7 @@ async function loadBudgetExecution() {
     const cat = cats[key];
     const isDed = key === "DEDUCOES";
     const isCapital = ["INVESTIMENTOS", "DEPRECIACAO"].includes(key);
-    // Capital and depreciation categories are off-budget â€” excluded from grand totals
+    // Capital and depreciation categories are off-budget à” excluded from grand totals
     if (isCapital) return;
     const sign = isDed ? -1 : 1;
 
@@ -1696,7 +1696,7 @@ async function loadFiles() {
     const breadEl = el("fileBreadcrumbs");
     if (breadEl) {
       const breadHtml = [
-        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> InÃ­cio</button>`,
+        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Iní­cio</button>`,
         ...breadcrumbs.map((b, idx) => `
           <span class="material-symbols-outlined text-xs">chevron_right</span>
           <button data-go-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e] font-black' : 'hover:text-primary'} transition-colors">${escapeHtml(b.name)}</button>
@@ -2027,7 +2027,7 @@ function wireFileNavigation() {
 }
 
 function wireFileDeletion() {
-  // DelegaÃ§Ã£o unificada em wireFileNavigation â€” este stub mantÃ©m compatibilidade
+  // DelegaÃ§Ã£o unificada em wireFileNavigation à” este stub mantÃ©m compatibilidade
 }
 
 function wireSearch() {
@@ -2205,7 +2205,7 @@ function renderPaymentRow(p, role) {
       </td>
       <td class="px-10 py-4 text-center">
         <div class="flex items-center justify-center gap-2">
-          ${p.comprovativoPath ? `<a href="${window.location.origin.replace(/:5173$/, ":4000")}/${p.comprovativoPath}" target="_blank" title="Ver Comprovativo" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">picture_as_pdf</span></a>` : ""}
+          ${p.comprovativoPath ? `<a href="${getAssetUrl(p.comprovativoPath)}" target="_blank" title="Ver Comprovativo" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">picture_as_pdf</span></a>` : ""}
           ${canConfirm ? `<button data-confirm-payment="${p.id}" title="Confirmar pagamento" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">check_circle</span></button>` : ""}
           ${canDelete ? `<button data-delete-payment="${p.id}" title="Apagar pagamento" class="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">delete</span></button>` : ""}
           ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">â€”</span>` : ""}
@@ -2269,7 +2269,7 @@ function openPaymentModal() {
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Método</label>
             <select id="pm_metodo" class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
-              <option value="">â€” Seleccionar â€”</option>
+              <option value="">â€” Seleccionar à”</option>
               <option value="transferencia">Transferência Bancária</option>
               <option value="cash">Numerário (Cash)</option>
               <option value="cheque">Cheque</option>
@@ -2321,16 +2321,18 @@ function openPaymentModal() {
           fd.append("comprovativo", fileInput.files[0]);
         }
 
-        const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
-        const res = await fetch(`${baseUrl}/projects/${encodeURIComponent(id)}/payments`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${getToken()}`
-          },
-          body: fd
+        await apiUpload(`/projects/${encodeURIComponent(id)}/payments`, {
+          file: fileInput?.files?.[0],
+          fieldName: "comprovativo",
+          extraFields: {
+            valor,
+            dataPagamento: new Date(data).toISOString(),
+            metodo: v("pm_metodo") || "",
+            referencia: v("pm_ref") || ""
+          }
         });
 
-        if (!res.ok) throw new Error("Falha ao registar pagamento");
+
 
         toast("Pagamento registado!", { type: "success" });
         close();
@@ -2498,11 +2500,10 @@ function openPreview(fileId) {
   const file = fileState.items.find(f => f.id === fileId);
   if (!file) return;
 
-  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
-  const fileUrl = `${baseUrl}/${file.path}`;
+  const fileUrl = getAssetUrl(file.path);
 
   el("previewFileName").textContent = file.originalName;
-  el("previewFileMeta").textContent = `${formatBytes(file.size)} â€¢ ${formatDateBR(file.createdAt)} â€¢ ${file.category}`;
+  el("previewFileMeta").textContent = `${formatBytes(file.size)}à ${formatDateBR(file.createdAt)}à ${file.category}`;
   el("previewDownloadBtn").href = fileUrl;
   el("previewDownloadBtn").setAttribute("download", file.originalName);
 
@@ -2661,7 +2662,7 @@ function renderStockMovements(items) {
         </td>
         <td class="px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${escapeHtml(m.material.name)}</div>
-          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} â€¢ ${m.material.category}</div>
+          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code}à ${m.material.category}</div>
         </td>
         <td class="px-10 py-5">
           <div class="flex flex-col gap-1">
@@ -2723,19 +2724,20 @@ async function openStockMovementDetailModal(moveId) {
   const m = movements.find(x => x.id === moveId);
   if (!m) return;
 
-  const baseUrl = window.location.origin.replace(/:5173$/, ":4000");
-
   const renderPhotos = (cond) => {
     const pList = m.photos.filter(p => !cond || p.condition === cond);
-    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidÃªncias.</p>`;
+    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
     return `<div class="flex flex-wrap gap-3">
-      ${pList.map(p => `
-        <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-          <a href="${baseUrl}/${p.path}" target="_blank">
-             <img src="${baseUrl}/${p.path}" class="w-full h-full object-cover hover:scale-105 transition-all">
-          </a>
-        </div>
-      `).join("")}
+      ${pList.map(p => {
+        const url = getAssetUrl(p.path);
+        return `
+          <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+            <a href="${url}" target="_blank">
+               <img src="${url}" class="w-full h-full object-cover hover:scale-105 transition-all">
+            </a>
+          </div>
+        `;
+      }).join("")}
     </div>`;
   };
 
@@ -2750,7 +2752,7 @@ async function openStockMovementDetailModal(moveId) {
             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">InformaÃ§Ã£o Base</p>
             <div class="space-y-1">
               <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.material.name)}</h4>
-              <p class="text-xs text-slate-500 font-medium">${m.material.code} â€¢ ${m.material.category}</p>
+              <p class="text-xs text-slate-500 font-medium">${m.material.code}à ${m.material.category}</p>
               <div class="mt-4 flex flex-col gap-2">
                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
                     <span class="text-[10px] font-bold text-slate-500">TIPO</span>
@@ -3077,7 +3079,7 @@ function renderStockInventory(movements, summary) {
 
   const lines = Object.values(inventoryMap);
   if (lines.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock Ãºtil disponÃ­vel no armazÃ©m.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock útil disponível no armazém.</td></tr>`;
     return;
   }
 
@@ -3089,7 +3091,7 @@ function renderStockInventory(movements, summary) {
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
         <td class="px-10 py-5">
            <div class="text-xs font-bold text-slate-900">${escapeHtml(l.material.name)}</div>
-           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code} â€¢ ${l.material.category}</div>
+           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code}à ${l.material.category}</div>
         </td>
         <td class="px-10 py-5 text-center">
            <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(l.warehouse)}</span>
@@ -3456,7 +3458,7 @@ async function loadStockGallery() {
     }
 
     if (photos.length === 0) {
-      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotogrÃ¡fico encontrado.</div>`;
+      grid.innerHTML = `<div class="p-8 text-center text-sm font-bold text-slate-400">Nenhum registo fotográfico encontrado.</div>`;
       return;
     }
 
@@ -3487,7 +3489,7 @@ async function loadStockGallery() {
         const url = `${getApiBaseUrl()}/${p.path}`;
         const equipName = p.movement?.material?.name
           ? escapeHtml(p.movement.material.name)
-          : "Registo FotogrÃ¡fico";
+          : "Registo Fotográfico";
 
         html += `
                 <div data-preview-photo="${p.id}" class="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer">
@@ -3548,7 +3550,7 @@ async function loadGallery() {
 
     empty?.classList.add("hidden");
     grid.innerHTML = photos.map(p => {
-      const url = `${getApiBaseUrl()}/${p.path}`;
+      const url = getAssetUrl(p.path);
       return `
         <div class="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
           <div class="aspect-video relative overflow-hidden bg-slate-100">
@@ -3597,7 +3599,7 @@ function wireGallery() {
   el("addPhotoBtn")?.addEventListener("click", () => {
     const id = getProjectId();
     openModal({
-      title: "Novo Registo FotogrÃ¡fico",
+      title: "Novo Registo Fotográfico",
       primaryLabel: "Carregar Foto",
       contentHtml: `
         <div class="space-y-6">
@@ -3624,7 +3626,7 @@ function wireGallery() {
           <div class="space-y-4">
             <div>
                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Descrição do Momento</label>
-               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que estÃ¡ a acontecer na obra..."></textarea>
+               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que está a acontecer na obra..."></textarea>
             </div>
             <div>
                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Data do Registo</label>

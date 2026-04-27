@@ -1,4 +1,4 @@
-import { apiRequest, getApiBaseUrl } from "../../services/api.js";
+import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { wireLogout } from "../../shared/session.js";
 
@@ -971,7 +971,7 @@ function renderFiles(folders, files) {
 
   files.forEach(f => {
     const kb = (f.size / 1024).toFixed(1);
-    const url = `${getApiBaseUrl()}/${f.path}`;
+    const url = getAssetUrl(f.path);
     tbody.insertAdjacentHTML("beforeend", `
       <tr class="hover:bg-slate-50/50 transition-colors group">
         <td class="px-8 py-4">
@@ -1239,7 +1239,7 @@ function renderGallerySection(containerId, photos, isCampo) {
      `;
 
     groups[cat].forEach(p => {
-      const url = `${getApiBaseUrl()}/${p.path}`;
+      const url = getAssetUrl(p.path);
       const matName = p.movement?.material?.name || p.description || "Registo Fotográfico";
       const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
 

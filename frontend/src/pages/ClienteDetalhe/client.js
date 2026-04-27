@@ -1,4 +1,4 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
@@ -116,7 +116,7 @@ async function loadClient() {
   if (c.profilePic) {
     const imgEl = el("clientProfilePic");
     if (imgEl) {
-      imgEl.src = c.profilePic;
+      imgEl.src = getAssetUrl(c.profilePic);
       imgEl.classList.remove("grayscale"); // Optional: remove grayscale if it's a custom photo
     }
   }
