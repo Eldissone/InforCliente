@@ -55,22 +55,22 @@ async function runMigrations() {
     const { execSync } = require("child_process");
     console.log(`📂 Current CWD: ${process.cwd()}`);
     console.log(`🌍 DATABASE_URL present: ${!!process.env.DATABASE_URL}`);
-    
+
     // Explicitly point to the schema to avoid any ambiguity
     const cmd = "npx prisma migrate deploy --schema=./prisma/schema.prisma";
     console.log(`🏃 Executing: ${cmd}`);
-    
-    const output = execSync(cmd, { 
-      env: process.env, 
+
+    const output = execSync(cmd, {
+      env: process.env,
       stdio: "inherit"
     });
-    
+
     console.log("✨ Migrations finished successfully.");
   } catch (error) {
     console.error("❌ Migrations failed.");
     if (error.stdout) console.log(`Output: ${error.stdout.toString()}`);
     if (error.stderr) console.log(`Error Output: ${error.stderr.toString()}`);
-    
+
     console.error("Manual fix: Ensure your Render Build Command is 'npm install && npx prisma generate && npx prisma migrate deploy'");
     throw error;
   }
@@ -80,7 +80,7 @@ async function runMigrations() {
  * Ensures an admin user exists in the database.
  */
 async function ensureAdminUser() {
-  const adminEmail = "admin@inforcliente.com";
+  const adminEmail = "admin@infocliente.com";
   const adminPassword = "admin123";
 
   try {
