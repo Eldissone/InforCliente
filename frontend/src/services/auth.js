@@ -21,8 +21,17 @@ export function getSessionUser() {
 }
 
 export function logout() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  const keysToKeep = ["InfoCliente.apiBaseUrl"];
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith("InfoCliente.") && !keysToKeep.includes(key)) {
+      localStorage.removeItem(key);
+    }
+  });
+  
+  // Specific keys used without the InfoCliente prefix
+  ["pending_auth_user", "pending_auth_accounts", "selected_project_id"].forEach(k => {
+    localStorage.removeItem(k);
+  });
 }
 
 /**
