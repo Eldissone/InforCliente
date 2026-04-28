@@ -827,7 +827,7 @@ function wireLiquidation() {
 
     openModal({
       title: "Liquidar Despesa",
-      primaryLabel: "Confirmar LiquidaÃ§Ã£o",
+      primaryLabel: "Confirmar Liquidação",
       contentHtml: `
         <div class="space-y-4">
           <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/30">
@@ -854,7 +854,7 @@ function wireLiquidation() {
               class="w-full rounded-lg border-slate-300 font-mono text-sm focus:border-primary focus:ring-primary"
             />
             <p class="mt-1 text-[11px] text-on-surface-variant">
-              Se o valor pago foi diferente do previsto, altere aqui. A diferenÃ§a serÃ¡ devolvida ao orÃ§amento disponÃ­vel.
+              Se o valor pago foi diferente do previsto, altere aqui. A diferença será devolvida ao orçamento disponível.
             </p>
           </div>
         </div>
@@ -2081,16 +2081,16 @@ function wireNewTransaction() {
     setButtonLoading(btn, true);
     try {
       const id = getProjectId();
-    const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
-    const budgetOptions = [
-      `<option value="">(Nenhum item específico)</option>`,
-      ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`)
-    ].join("");
+      const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
+      const budgetOptions = [
+        `<option value="">(Nenhum item específico)</option>`,
+        ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`)
+      ].join("");
 
-    openModal({
-      title: "Novo lançamento",
-      primaryLabel: "Salvar",
-      contentHtml: `
+      openModal({
+        title: "Novo lançamento",
+        primaryLabel: "Salvar",
+        contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
@@ -2139,34 +2139,34 @@ function wireNewTransaction() {
           </div>
         </div>
       `,
-      onPrimary: async ({ close, panel }) => {
-        const id = getProjectId();
-        const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
-        const btn = panel.querySelector("[data-primary]");
-        try {
-          setButtonLoading(btn, true);
-          await apiRequest(`/projects/${encodeURIComponent(id)}/transactions`, {
-            method: "POST",
-            body: {
-              description: v("t_desc"),
-              category: v("t_cat"),
-              status: v("t_status"),
-              ownerName: v("t_owner") || null,
-              amount: Number(v("t_amount") || 0),
-              budgetLineId: v("t_line") || null,
-            },
-          });
-          toast("lançamento criado com sucesso", { type: "success" });
-          close();
-          await loadProject();
-          await loadTransactions();
-          await loadBudgetExecution();
-        } catch (err) {
-          setButtonLoading(btn, false);
-          toast(err.message || "Erro ao criar lançamento", { type: "error" });
-        }
-      },
-    });
+        onPrimary: async ({ close, panel }) => {
+          const id = getProjectId();
+          const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
+          const btn = panel.querySelector("[data-primary]");
+          try {
+            setButtonLoading(btn, true);
+            await apiRequest(`/projects/${encodeURIComponent(id)}/transactions`, {
+              method: "POST",
+              body: {
+                description: v("t_desc"),
+                category: v("t_cat"),
+                status: v("t_status"),
+                ownerName: v("t_owner") || null,
+                amount: Number(v("t_amount") || 0),
+                budgetLineId: v("t_line") || null,
+              },
+            });
+            toast("lançamento criado com sucesso", { type: "success" });
+            close();
+            await loadProject();
+            await loadTransactions();
+            await loadBudgetExecution();
+          } catch (err) {
+            setButtonLoading(btn, false);
+            toast(err.message || "Erro ao criar lançamento", { type: "error" });
+          }
+        },
+      });
     } finally {
       setButtonLoading(btn, false);
     }
