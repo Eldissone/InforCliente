@@ -254,7 +254,7 @@ clientRoutes.get(
         churnRisk: client.churnRisk ? String(client.churnRisk) : "0",
         ltvPotential: client.ltvPotential ? String(client.ltvPotential) : "0",
         tags: client.tags.map((t) => t.tag),
-        accountEmail: client.users?.[0]?.email || null,
+        accountEmail: client.users?.[0]?.user?.email || null,
         projects: client.projects.map((project) => ({
           ...project,
           budgetTotal: String(project.budgetTotal),

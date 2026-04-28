@@ -118,14 +118,30 @@ userRoutes.patch(
       }
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: {
-        ...(body.role ? { role: body.role } : {}),
-        ...(body.email ? { email: body.email } : {}),
-        client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
-      },
-      select: { id: true },
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id },
+        data: {
+          ...(body.role ? { role: body.role } : {}),
+          ...(body.email ? { email: body.email } : {}),
+          client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
+        },
+        select: { id: true },
+      });
+
+      // Sync UserClient join table so GET /clients/:id can find the linked user
+      if (nextClientId) {
+        await tx.userClient.upsert({
+          where: { userId_clientId: { userId: user.id, clientId: nextClientId } },
+          create: { userId: user.id, clientId: nextClientId, role: nextRole },
+          update: { role: nextRole },
+        });
+      } else {
+        // Remove any existing UserClient entries for this user (unlinking)
+        await tx.userClient.deleteMany({ where: { userId: user.id } });
+      }
+
+      return user;
     });
     return res.json({ id: updated.id });
   })
