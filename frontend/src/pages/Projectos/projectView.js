@@ -2076,8 +2076,11 @@ function wireExport() {
 }
 
 function wireNewTransaction() {
-  el("newTransactionBtn")?.addEventListener("click", async () => {
-    const id = getProjectId();
+  el("newTransactionBtn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      const id = getProjectId();
     const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
     const budgetOptions = [
       `<option value="">(Nenhum item específico)</option>`,
@@ -2164,6 +2167,9 @@ function wireNewTransaction() {
         }
       },
     });
+    } finally {
+      setButtonLoading(btn, false);
+    }
   });
 }
 
@@ -3335,8 +3341,25 @@ async function deleteStockMovement(moveId) {
 }
 
 function wireStock() {
-  el("newStockMovementBtn")?.addEventListener("click", openStockMovementModal);
-  el("manageMaterialsBtn")?.addEventListener("click", openMaterialManagerModal);
+  el("newStockMovementBtn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await openStockMovementModal();
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
+
+  el("manageMaterialsBtn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await openMaterialManagerModal();
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
 
   const filters = ["Search", "Category", "Condition", "Status", "Warehouse"];
   filters.forEach(f => {
