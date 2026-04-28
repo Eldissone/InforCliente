@@ -17,6 +17,7 @@ model User {
   clientId     String?
   client       Client?  @relation("PrimaryClient", fields: [clientId], references: [id])
   
+  profilePic   String?
   accounts     UserClient[]
 
   @@index([clientId])

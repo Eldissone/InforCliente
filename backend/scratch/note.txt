@@ -1,0 +1,3 @@
+import { apiRequest } from './frontend/src/services/api.js';
+// This won't work easily because it's frontend code.
+// I'll use the backend script again but check what the route actually returns.

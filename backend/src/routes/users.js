@@ -32,8 +32,9 @@ userRoutes.get(
         email: true,
         role: true,
         clientId: true,
+        profilePic: true,
         createdAt: true,
-        client: { select: { id: true, name: true, code: true } },
+        client: { select: { id: true, name: true, code: true, profilePic: true } },
       },
     });
     return res.json({ items });
@@ -49,6 +50,7 @@ userRoutes.post(
         password: z.string().min(6),
         role: z.enum(["admin", "operador", "leitura", "cliente"]).default("leitura"),
         clientId: z.string().optional().nullable(),
+        profilePic: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -69,7 +71,13 @@ userRoutes.post(
 
     const passwordHash = await bcrypt.hash(body.password, 10);
     const created = await prisma.user.create({
-      data: { email: body.email, role: body.role, passwordHash, clientId },
+      data: {
+        email: body.email,
+        role: body.role,
+        passwordHash,
+        clientId,
+        profilePic: body.profilePic || null,
+      },
       select: { id: true },
     });
     return res.status(201).json({ id: created.id });
@@ -85,6 +93,7 @@ userRoutes.patch(
         role: z.enum(["admin", "operador", "leitura", "cliente"]).optional(),
         email: z.string().email().optional(),
         clientId: z.string().optional().nullable(),
+        profilePic: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -124,6 +133,7 @@ userRoutes.patch(
         data: {
           ...(body.role ? { role: body.role } : {}),
           ...(body.email ? { email: body.email } : {}),
+          ...(body.profilePic !== undefined ? { profilePic: body.profilePic } : {}),
           client: nextClientId ? { connect: { id: nextClientId } } : { disconnect: true },
         },
         select: { id: true },

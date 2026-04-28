@@ -2729,15 +2729,15 @@ async function openStockMovementDetailModal(moveId) {
     if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
     return `<div class="flex flex-wrap gap-3">
       ${pList.map(p => {
-        const url = getAssetUrl(p.path);
-        return `
+      const url = getAssetUrl(p.path);
+      return `
           <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
             <a href="${url}" target="_blank">
                <img src="${url}" class="w-full h-full object-cover hover:scale-105 transition-all">
             </a>
           </div>
         `;
-      }).join("")}
+    }).join("")}
     </div>`;
   };
 
@@ -2770,14 +2770,14 @@ async function openStockMovementDetailModal(moveId) {
             </div>
           </div>
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo LogÃ­stico</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo Logístico</p>
             <div class="bg-slate-50 rounded-2xl p-4 space-y-3">
                <div>
                   <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "NÃ£o informado")}</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "Não informado")}</span>
                </div>
                <div>
-                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / MatrÃ­cula</span>
+                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
                   <span class="text-xs font-bold text-slate-900">${escapeHtml(m.vehicleBrand || "")} ${escapeHtml(m.vehiclePlate || "N/D")}</span>
                </div>
                <div>
@@ -2789,7 +2789,7 @@ async function openStockMovementDetailModal(moveId) {
         </div>
 
         <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">EvidÃªncias FotogrÃ¡ficas</p>
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Evidências Fotográficas</p>
           <div class="space-y-4">
              <div>
                 <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">Material em Bom Estado</span>
@@ -2804,7 +2804,7 @@ async function openStockMovementDetailModal(moveId) {
 
         ${m.notes ? `
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">ObservaÃ§Ãµes</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Observações</p>
             <p class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border-l-4 border-slate-200 font-medium">${escapeHtml(m.notes)}</p>
           </div>
         ` : ""}
@@ -2813,7 +2813,7 @@ async function openStockMovementDetailModal(moveId) {
           <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
              <span class="material-symbols-outlined text-emerald-600">info</span>
              <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
-                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) serÃ¡ integrada no inventÃ¡rio Ãºtil do armazÃ©m. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) serÃ¡ mantido apenas como registo de evidÃªncia e nÃ£o constarÃ¡ no saldo disponÃ­vel para uso.
+                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) será integrada no inventário útil do armazém. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) será mantido apenas como registo de evidência e não constará no saldo disponível para uso.
              </p>
           </div>
         ` : ""}
@@ -3003,7 +3003,7 @@ async function openStockMovementModal() {
           await uploadFiles(el("st_photos_good"), "BOA");
           await uploadFiles(el("st_photos_bad"), "DANIFICADA");
 
-          toast("lançamento registrado e aguardando validaÃ§Ã£o", { type: "success" });
+          toast("lançamento registrado e aguardando validação", { type: "success" });
           close();
           loadStock();
         } catch (err) {
