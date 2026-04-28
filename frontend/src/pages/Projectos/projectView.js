@@ -51,19 +51,19 @@ function catLabel(c) {
   const map = {
     MATERIALS: "Materiais",
     EQUIPMENT: "Equipamentos",
-    LABOR: "MÃ£o de Obra",
+    LABOR: "Mão de Obra",
     OTHER: "Outros",
     MATERIAIS_INSUMOS: "Materiais e Insumos",
-    SERVICOS_MAO_DE_OBRA: "MÃ£o de Obra e ServiÃ§os",
+    SERVICOS_MAO_DE_OBRA: "Mão de Obra e Serviços",
     GASTOS_PESSOAL: "Gastos com Pessoal",
     DESPESAS_OPERACIONAIS: "Despesas Operacionais",
     INVESTIMENTOS: "Pagamentos",
-    DEPRECIACAO: "DepreciaÃ§Ã£o",
+    DEPRECIACAO: "Depreciação",
     OUTRAS_DESPESAS: "Outras Despesas",
-    DEDUCOES: "DeduÃ§Ã£o de Custos",
+    DEDUCOES: "Dedução de Custos",
     IMPOSTOS: "Impostos",
   };
-  return map[c] || c || "â€”";
+  return map[c] || c || " ";
 }
 const unitMap = {
   un: "UN",
@@ -77,7 +77,7 @@ const unitMap = {
   litros: "LITROS",
   horas: "HORAS",
   dias: "DIAS",
-  mes: "MÃŠS",
+  mes: "MÊS",
   global: "GLOBAL",
 };
 
@@ -324,7 +324,7 @@ async function loadTransactions() {
  * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
  * @param {Array}  allTxs      - todos os lançamentos do projeto
  * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
- * @param {Array}  budgetLines - linhas de orÃ§amento
+ * @param {Array}  budgetLines - linhas de orçamento
  */
 function renderScurve(allTxs, project, budgetLines) {
   const container = el("scurve_container");
@@ -2279,7 +2279,7 @@ function openPaymentModal() {
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Método</label>
             <select id="pm_metodo" class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
-              <option value="">â€” Seleccionar à”</option>
+              <option value="">Seleccionar</option>
               <option value="transferencia">Transferência Bancária</option>
               <option value="cash">Numerário (Cash)</option>
               <option value="cheque">Cheque</option>
