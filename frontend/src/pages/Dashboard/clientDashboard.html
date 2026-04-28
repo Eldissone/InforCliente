@@ -110,6 +110,26 @@
             border-radius: 10px;
         }
 
+        .side-panel {
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .side-panel.open {
+            transform: translateX(0);
+        }
+
+        .backdrop {
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
         /* Lightbox Styles */
         #imageLightbox {
             position: fixed;
@@ -844,6 +864,28 @@
     <footer class="mt-4 px-8 py-10 text-center">
         <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InfoCliente Dashboard Visual v1.0</p>
     </footer>
+
+    <!-- Side Preview -->
+    <div id="previewBackdrop" class="backdrop fixed inset-0 bg-slate-900/60 z-[60] backdrop-blur-sm"></div>
+    <aside id="previewPanel"
+        class="side-panel fixed top-0 right-0 h-screen w-full md:w-[600px] lg:w-[800px] bg-white z-[70] shadow-2xl flex flex-col">
+        <div class="px-8 py-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
+            <div>
+                <h3 id="previewFileName" class="text-xl font-bold text-slate-900 truncate max-w-[400px]">Arquivo</h3>
+                <p id="previewFileMeta" class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">---
+                </p>
+            </div>
+            <div class="flex items-center gap-4">
+                <a id="previewDownloadBtn" href="#" download
+                    class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">download</span></a>
+                <button id="closePreviewBtn"
+                    class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">close</span></button>
+            </div>
+        </div>
+        <div id="previewBody" class="flex-1 overflow-auto bg-slate-50 flex items-center justify-center p-10"></div>
+    </aside>
 
     <!-- Lightbox -->
     <div id="imageLightbox">

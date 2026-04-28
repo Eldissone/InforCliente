@@ -947,6 +947,7 @@ function renderFiles(folders, files) {
   const tbody = document.getElementById("filesTbody");
   if (!tbody) return;
   tbody.innerHTML = "";
+  state.files = files; // Store files for lookup in openPreview
 
   if (folders.length === 0 && files.length === 0) {
     tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Nenhum documento encontrado.</td></tr>`;
@@ -973,12 +974,12 @@ function renderFiles(folders, files) {
     const kb = (f.size / 1024).toFixed(1);
     const url = getAssetUrl(f.path);
     tbody.insertAdjacentHTML("beforeend", `
-      <tr class="hover:bg-slate-50/50 transition-colors group">
+      <tr class="hover:bg-slate-50/50 transition-colors group cursor-pointer" data-preview-file="${f.id}">
         <td class="px-8 py-4">
-          <a href="${url}" target="_blank" class="flex items-center gap-3">
+          <div class="flex items-center gap-3">
              <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500"><span class="material-symbols-outlined">description</span></div>
              <span class="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">${escapeHtml(f.originalName)}</span>
-          </a>
+          </div>
         </td>
         <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">${escapeHtml(f.category)}</td>
         <td class="px-8 py-4 hidden md:table-cell text-xs font-bold text-slate-400">${kb} KB</td>
@@ -1292,9 +1293,71 @@ function toggleTable(tableId, manual = true) {
   }
 }
 
-/* =================================================================================
- *  INITIALIZATION & LISTENERS
- * ================================================================================= */
+function formatBytes(bytes, decimals = 2) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function openPreview(fileId) {
+  const file = state.files.find(f => f.id === fileId);
+  if (!file) return;
+
+  const fileUrl = getAssetUrl(file.path);
+
+  document.getElementById("previewFileName").textContent = file.originalName;
+  document.getElementById("previewFileMeta").textContent = `${formatBytes(file.size)} • ${formatDateBR(file.createdAt)} • ${file.category}`;
+  const downloadBtn = document.getElementById("previewDownloadBtn");
+  downloadBtn.href = fileUrl;
+  downloadBtn.setAttribute("download", file.originalName);
+
+  const body = document.getElementById("previewBody");
+  body.innerHTML = "";
+
+  const mime = (file.mimeType || "").toLowerCase();
+
+  if (mime.startsWith("image/")) {
+    body.innerHTML = `<img src="${fileUrl}" class="max-w-full max-h-full rounded-lg shadow-lg object-contain" />`;
+  } else if (mime === "application/pdf") {
+    body.innerHTML = `<iframe src="${fileUrl}" class="w-full h-full rounded-lg border-0 bg-white"></iframe>`;
+  } else {
+    body.innerHTML = `
+      <div class="text-center">
+        <span class="material-symbols-outlined text-7xl text-slate-200 mb-6">description</span>
+        <p class="text-slate-500 font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
+        <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-[#0F172A] text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-all">
+          <span class="material-symbols-outlined">download</span> Download do Arquivo
+        </a>
+      </div>
+    `;
+  }
+
+  document.getElementById("previewPanel").classList.add("open");
+  document.getElementById("previewBackdrop").classList.add("open");
+}
+
+function wirePreview() {
+  document.getElementById("closePreviewBtn")?.addEventListener("click", () => {
+    document.getElementById("previewPanel").classList.remove("open");
+    document.getElementById("previewBackdrop").classList.remove("open");
+  });
+
+  document.getElementById("previewBackdrop")?.addEventListener("click", () => {
+    document.getElementById("previewPanel").classList.remove("open");
+    document.getElementById("previewBackdrop").classList.remove("open");
+  });
+
+  document.addEventListener("click", (e) => {
+    const card = e.target.closest("[data-preview-file]");
+    if (card && !e.target.closest("button") && !e.target.closest("a")) {
+      const id = card.getAttribute("data-preview-file");
+      openPreview(id);
+    }
+  });
+}
 
 function wireEvents() {
   // Filters
@@ -1670,6 +1733,7 @@ function init() {
   }
 
   wireEvents();
+  wirePreview();
   loadDashboardData();
 }
 
