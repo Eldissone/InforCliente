@@ -58,5 +58,11 @@ export function wireUsersNav() {
     if (el.tagName === "A") el.href = target;
   });
 
+  // Dynamic Brand Text
+  const brandText = document.getElementById("navBrandText");
+  if (brandText) {
+    brandText.textContent = role === "cliente" ? "Cliente" : "Gestor";
+  }
+
   applyRoleVisibility(role);
 }
