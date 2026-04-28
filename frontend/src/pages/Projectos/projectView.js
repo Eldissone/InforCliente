@@ -207,7 +207,7 @@ async function loadProject() {
 
   el("budgetConsumed").textContent = formatCurrency(consumed, primaryCurrency);
   el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), primaryCurrency);
-  el("budgetAvailable").textContent = formatCurrency(available, primaryCurrency);
+  // el("budgetAvailable") is now dynamically updated by loadBudgetExecution with matrix costs
 
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
@@ -756,9 +756,13 @@ async function loadBudgetExecution() {
 
   if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
   if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
+  if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(gTotalC, projectState?.currency);
+
   if (el("totalExecutionPct")) {
     const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
     el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
+    if (el("budgetDelta")) el("budgetDelta").textContent = `Execução: ${totalPct}%`;
+    if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, totalPct))}%`;
   }
 
   // Renderiza Curva S com dados reais (todas as transaÃ§Ãµes + linhas de orÃ§amento)
