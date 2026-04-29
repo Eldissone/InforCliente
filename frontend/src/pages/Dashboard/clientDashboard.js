@@ -761,7 +761,7 @@ function renderProgressBreakdownRows() {
     <tr class="bg-slate-50/80 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
       <td class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
         <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon>expand_more</span>
+          <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-lg" data-icon style="transform: rotate(-90deg);">expand_more</span>
           <span class="w-1.5 h-3 bg-blue-600 rounded-full"></span>
           <span class="text-[10px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
         </div>
@@ -816,11 +816,11 @@ function renderProgressBreakdownRows() {
       const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${task.id}"` : "";
 
       return `
-      <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
+      <tr class="hover:bg-slate-50 transition-colors text-sm ${parentClass} hidden" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
           <td class="py-3 ${descClass} ${indentStyle}">
              <div class="flex items-center">
                 ${iconSub}
-                ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon>expand_more</span>` : ""}
+                ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg" data-sub-icon style="transform: rotate(-90deg);">expand_more</span>` : ""}
                 <div class="flex items-center gap-2">
                   ${task.itemCode ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-100 px-1 py-0.5 rounded border border-slate-200/50">${escapeHtml(task.itemCode)}</span>` : ""}
                   <span>${escapeHtml(task.description)}</span>
