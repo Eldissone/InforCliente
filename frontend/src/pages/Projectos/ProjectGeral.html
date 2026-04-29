@@ -76,7 +76,7 @@
 
   <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
     <!-- Header Section -->
-    <header class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+    <header class="flex flex-row items-center justify-between gap-4 mb-10">
       <div>
         <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
           <span>Obras</span>
@@ -89,8 +89,8 @@
       </div>
       <button id="addProjectBtn" data-role-visible="admin,operador"
         class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
-        <span class="material-symbols-outlined text-xl">add_circle</span>
         Nova Obra
+        <span class="material-symbols-outlined text-xl">add_circle</span>
       </button>
     </header>
 
@@ -103,25 +103,25 @@
         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+      <div class="flex flex-row items-center gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
+        <div class="h-11 min-w-[130px] border border-slate-100 bg-white rounded-2xl px-3 flex items-center shadow-sm shrink-0">
           <select id="projectsStatus"
-            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
-            <option value="">Todos Status</option>
+            class="w-full border-none bg-transparent text-xs font-bold text-slate-600 focus:ring-0">
+            <option value="">Status</option>
             <option value="ACTIVE">Ativo</option>
             <option value="ON_HOLD">Aguardando</option>
             <option value="COMPLETED">Concluído</option>
           </select>
         </div>
 
-        <div class="h-12 min-w-[140px] border border-slate-100 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+        <div class="h-11 min-w-[130px] border border-slate-100 bg-white rounded-2xl px-3 flex items-center shadow-sm shrink-0">
           <select id="projectsRegion"
-            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
-            <option value="">Todas Regiões</option>
+            class="w-full border-none bg-transparent text-xs font-bold text-slate-600 focus:ring-0">
+            <option value="">Regiões</option>
           </select>
         </div>
 
-        <div class="flex h-12 bg-white border border-slate-100 rounded-2xl p-1 shadow-sm">
+        <div class="flex h-11 bg-white border border-slate-100 rounded-2xl p-1 shadow-sm shrink-0 ml-auto">
           <button id="btnViewGrid"
             class="w-10 h-full rounded-xl text-slate-400 flex items-center justify-center hover:text-slate-900 transition-colors">
             <span class="material-symbols-outlined text-xl">grid_view</span>

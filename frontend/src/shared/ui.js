@@ -167,6 +167,10 @@ export function openModal({
 export function initMobileMenu() {
   const btn = document.getElementById("mobileMenuBtn");
   const menu = document.getElementById("navMenu");
+  
+  // Also handle button text length for mobile optimization
+  handleLongButtonText();
+
   if (!btn || !menu) return;
 
   btn.addEventListener("click", () => {
@@ -185,6 +189,52 @@ export function initMobileMenu() {
     }
   });
 }
+
+/**
+ * Automatically wraps button text in a span with class 'btn-text-long'
+ * if the text is longer than 5 characters and the button has an icon.
+ * Now uses a MutationObserver to handle dynamic content.
+ */
+export function handleLongButtonText() {
+  const processButton = (btn) => {
+    // Only target buttons that have an icon
+    const hasIcon = btn.querySelector(".material-symbols-outlined");
+    if (!hasIcon) return;
+
+    btn.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent.trim();
+        if (text.length >= 5) {
+          const span = document.createElement("span");
+          span.className = "btn-text-long";
+          span.textContent = node.textContent;
+          node.replaceWith(span);
+          btn.classList.add("btn-with-long-text");
+        }
+      }
+    });
+  };
+
+  // Run once for existing buttons
+  document.querySelectorAll("button").forEach(processButton);
+
+  // Set up observer for future buttons
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.tagName === "BUTTON") {
+            processButton(node);
+          }
+          node.querySelectorAll?.("button").forEach(processButton);
+        }
+      });
+    });
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
 
 export function escapeHtml(unsafe) {
   if (!unsafe) return "";

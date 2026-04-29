@@ -315,17 +315,17 @@
         <!-- Main -->
         <main class="admin-main">
             <!-- Breadcrumb -->
-            <div class="border-b mt-4 border-slate-100 bg-white px-6 py-3.5 flex items-center justify-between">
+            <div class="border-b mt-4 border-slate-100 bg-white px-6 py-3.5 flex flex-row items-center justify-between gap-4">
                 <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                     <a href="../Dashboard/index.html" class="hover:text-slate-600 transition-colors">Dashboard</a>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span style="color:#0d3fd1" id="breadcrumb-label">Visão Geral</span>
+                    <span class="text-[#0d3fd1]" id="breadcrumb-label">Visão Geral</span>
                 </div>
                 <!-- Mobile sidebar toggle -->
                 <button id="sidebarToggleBtn"
-                    class="lg:hidden flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-xs font-bold"
-                    style="color:#2afc8d">
-                    <span class="material-symbols-outlined text-base">menu</span>Menu
+                    class="lg:hidden flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-xs font-bold text-[#2afc8d] whitespace-nowrap">
+                    Menu
+                    <span class="material-symbols-outlined text-base">menu</span>
                 </button>
             </div>
 
@@ -333,16 +333,16 @@
 
                 <!-- ===== OVERVIEW ===== -->
                 <div id="section-overview" class="section-panel">
-                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                    <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Painel Administrativo</h1>
-                            <p class="text-slate-500 font-medium mt-1">Gerencie <span
-                                    class="text-[#0d3fd1] font-bold">utilizadores</span>, permissões e acessos da
-                                plataforma.</p>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Painel Administrativo</h1>
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Gerencie <span
+                                    class="text-[#0d3fd1] font-bold">utilizadores</span>, permissões e acessos.</p>
                         </div>
                         <button id="addUserBtn"
-                            class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-xl">person_add</span>Novo Utilizador
+                            class="h-11 md:h-12 bg-slate-900 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
+                            Novo Utilizador
+                            <span class="material-symbols-outlined text-xl">person_add</span>
                         </button>
                     </div>
 
@@ -411,15 +411,16 @@
 
                 <!-- ===== USERS ===== -->
                 <div id="section-users" class="section-panel hidden">
-                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                    <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores</h1>
-                            <p class="text-slate-500 font-medium mt-1">Administração de credenciais e níveis de acesso.
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores</h1>
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais e níveis de acesso.
                             </p>
                         </div>
                         <button id="addUserBtn2"
-                            class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all">
-                            <span class="material-symbols-outlined text-xl">person_add</span>Novo Utilizador
+                            class="h-11 md:h-12 bg-slate-900 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
+                            Novo Utilizador
+                            <span class="material-symbols-outlined text-xl">person_add</span>
                         </button>
                     </div>
 
@@ -455,8 +456,8 @@
                                         class="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/70 border-b border-slate-100">
                                         <th class="px-7 py-4">Utilizador</th>
                                         <th class="px-7 py-4">Perfil</th>
-                                        <th class="px-7 py-4">Entidade Vinculada</th>
-                                        <th class="px-7 py-4">Desde</th>
+                                        <th class="px-7 py-4 hidden md:table-cell">Entidade Vinculada</th>
+                                        <th class="px-7 py-4 hidden lg:table-cell">Desde</th>
                                         <th class="px-7 py-4 text-right">Ações</th>
                                     </tr>
                                 </thead>

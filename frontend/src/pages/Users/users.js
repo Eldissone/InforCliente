@@ -129,13 +129,13 @@ function renderRow(u) {
         </div>
       </td>
       <td class="px-7 py-4">${roleBadge(u.role)}</td>
-      <td class="px-7 py-4">
+      <td class="px-7 py-4 hidden md:table-cell">
         ${u.client
       ? `<div class="flex flex-col"><span class="text-sm font-semibold text-slate-700">${esc(u.client.name)}</span>
              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${esc(u.client.code)}</span></div>`
       : `<span class="text-slate-400 text-sm">—</span>`}
       </td>
-      <td class="px-7 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${formatDateBR(u.createdAt)}</td>
+      <td class="px-7 py-4 text-sm text-slate-500 font-medium whitespace-nowrap hidden lg:table-cell">${formatDateBR(u.createdAt)}</td>
       <td class="px-7 py-4 text-right">
         <div class="flex items-center justify-end gap-2">
           <button data-edit-user="${u.id}" class="h-8 px-3 rounded-lg border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-900 hover:text-[#2afc8d] hover:border-slate-900 transition-all">

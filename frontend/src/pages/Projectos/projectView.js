@@ -944,7 +944,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
       <td colspan="13" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
         <div class="flex items-center gap-3 w-full">
-          <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>expand_more</span>
+          <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>chevron_right</span>
           <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
           ${formattedProgress}
           ${formattedTotal}
@@ -1043,13 +1043,13 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
 
   return `
-    <tr class="hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
+    <tr class="hidden hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
       <td class="px-6 py-4 text-center font-black text-slate-400 text-[11px]">${index}</td>
       <td class="py-4 ${indentStyle}">
         <div class="${descClass} flex flex-col relative">
           <div class="flex items-start">
             ${iconSub}
-            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>expand_more</span>` : ""}
+            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
             <div class="flex flex-col">
               <div class="flex items-center gap-2">
                 ${t.itemCode ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.itemCode)}</span>` : ""}
@@ -1814,7 +1814,7 @@ function wireNewFolder() {
     const btn = document.createElement("button");
     btn.id = "createNewFolderBtn";
     btn.className = "bg-white text-primary px-6 py-3 rounded-xl text-sm font-bold flex items-end gap-3 hover:bg-primary/50 transition-all mr-4";
-    btn.innerHTML = `<span class="material-symbols-outlined">create_new_folder</span> Nova Pasta`;
+    btn.innerHTML = `Nova Pasta <span class="material-symbols-outlined">create_new_folder</span>`;
     el("uploadFileBtn").insertAdjacentElement("beforebegin", btn);
   }
 
@@ -2412,7 +2412,18 @@ function wirePayments() {
 }
 
 let uiState = {
-  collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.collapsedTables") || "{}")
+  collapsedTables: (function() {
+    const saved = localStorage.getItem("InfoCliente.collapsedTables");
+    if (saved) return JSON.parse(saved);
+    // Default: all tables collapsed
+    return {
+      matrix: true,
+      transactions: true,
+      payments: true,
+      progress: true,
+      stock: true
+    };
+  })()
 };
 
 function toggleTable(tableId, manual = true) {
@@ -2666,32 +2677,32 @@ function renderStockMovements(items) {
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
-        <td class="px-10 py-5">
+        <td class="px-3 md:px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
-          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÃ‰CNICO")}</div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
         </td>
-        <td class="px-10 py-5">
+        <td class="px-3 md:px-10 py-5">
           <div class="text-xs font-bold text-slate-900">${escapeHtml(m.material.name)}</div>
-          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code}à ${m.material.category}</div>
+          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} | ${m.material.category}</div>
         </td>
-        <td class="px-10 py-5">
+        <td class="px-3 md:px-10 py-5">
           <div class="flex flex-col gap-1">
             ${m.quantityGood > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityGood} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[8px] font-black">BOM</span></div>` : ""}
             ${m.quantityDamaged > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityDamaged} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-black">MAU</span></div>` : ""}
             ${!(Number(m.quantityGood) > 0) && !(Number(m.quantityDamaged) > 0) ? `<span class="text-xs font-black text-slate-900">${m.quantity} ${m.material.unit}</span>` : ""}
           </div>
         </td>
-        <td class="px-10 py-5 text-[10px] font-medium text-slate-500">
+        <td class="px-10 py-5 text-[10px] font-medium text-slate-500 hidden md:table-cell">
            ${escapeHtml(m.driverName || "-")} | ${escapeHtml(m.vehiclePlate || "S/M")} <br>
            <span class="text-slate-400 uppercase text-[9px] font-black">${m.entryType || "PROPRIO"}</span>
         </td>
-        <td class="px-10 py-5">
+        <td class="px-10 py-5 hidden lg:table-cell">
           <span class="px-3 py-1 rounded-lg text-[9px] font-black bg-slate-100 text-slate-600 uppercase tracking-widest">${m.movementStatus}</span>
         </td>
-        <td class="px-10 py-5">
+        <td class="px-10 py-5 hidden lg:table-cell">
           <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${auditCls}">${m.auditStatus}</span>
         </td>
-        <td class="px-10 py-5 text-right">
+        <td class="px-6 md:px-10 py-5 text-right">
            ${(m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") && m.type !== "AJUSTE" ? `
               <button data-approve-stock="${m.id}" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
                 <span class="material-symbols-outlined text-sm">done_all</span>
@@ -3099,19 +3110,19 @@ function renderStockInventory(movements, summary) {
     const planned = sItem ? Number(sItem.quantityPlanned || 0) : 0;
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
-        <td class="px-10 py-5">
+        <td class="px-3 md:px-10 py-5">
            <div class="text-xs font-bold text-slate-900">${escapeHtml(l.material.name)}</div>
-           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code}à ${l.material.category}</div>
+           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${l.material.code} | ${l.material.category}</div>
         </td>
-        <td class="px-10 py-5 text-center">
+        <td class="px-6 md:px-10 py-5 text-center">
            <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(l.warehouse)}</span>
         </td>
-        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500">${l.material.unit}</td>
-        <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30">${planned}</td>
-        <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600">${l.totalIn}</td>
-        <td class="px-10 py-5 text-center text-xs font-bold text-red-500">${l.totalOut}</td>
-        <td class="px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
-        <td class="px-10 py-5 text-right flex items-center justify-end gap-2">
+        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${l.material.unit}</td>
+        <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${l.totalIn}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${l.totalOut}</td>
+        <td class="px-6 md:px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
+        <td class="px-6 md:px-10 py-5 text-right flex items-center justify-end gap-2">
            <button onclick="openEditPlannedModal('${l.materialId}', '${escapeHtml(l.material.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
               <span class="material-symbols-outlined text-sm">edit_square</span>
            </button>
@@ -3520,13 +3531,13 @@ async function loadStockGallery() {
 
         html += `
                 <div data-preview-photo="${p.id}" class="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer">
-                  <div class="aspect-video relative overflow-hidden bg-slate-100">
+                  <div class="aspect-video relative overflow-hidden bg-slate-100 table-responsive">
                       <img src="${url}" alt="Thumbnail" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                       <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                          <span class="material-symbols-outlined text-white text-3xl">visibility</span>
                       </div>
                   </div>
-                  <div class="p-4">
+                  <div class="p-2">
                      <p class="text-xs font-bold text-slate-900 truncate mb-1" title="${escapeHtml(p.description) || equipName}">
                         ${equipName}
                      </p>
