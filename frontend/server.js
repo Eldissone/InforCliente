@@ -1,11 +1,21 @@
 const express = require("express");
 const path = require("path");
+require("dotenv").config();
 
 const app = express();
 
 const port = process.env.PORT || 5173;
 const pagesRoot = path.join(__dirname, "src", "pages");
 const srcRoot = path.join(__dirname, "src");
+
+// Serve environment variables as a JS module
+app.get("/services/config.js", (req, res) => {
+  res.type("application/javascript");
+  const config = {
+    API_BASE_URL: process.env.API_BASE_URL || "https://infoback-c2mt.onrender.com"
+  };
+  res.send(`export const config = ${JSON.stringify(config)};`);
+});
 
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)
 app.use(express.static(pagesRoot));
