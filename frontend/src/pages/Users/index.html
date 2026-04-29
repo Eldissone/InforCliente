@@ -209,19 +209,24 @@
                     Sair <span data-user-role class="text-[#2afc8d]"></span>
                 </button>
                 <button id="mobileMenuBtn" aria-expanded="false"
-                    class="lg:hidden p-2 text-slate-400 hover:text-white transition-colors">
+                    class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
                     <span class="material-symbols-outlined">menu</span>
                 </button>
             </div>
         </div>
-        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-2">
-            <a class="text-sm font-semibold text-slate-400 py-3 px-4" href="../Dashboard/index.html">Dashboard</a>
-            <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50"
-                href="../Clientes/clienteLista.html">Clientes</a>
-            <a class="text-sm font-semibold text-slate-400 py-3 px-4 border-t border-slate-800/50"
-                href="../Projectos/ProjectGeral.html">Obras</a>
-            <button data-logout
-                class="text-left text-sm font-semibold text-red-400 py-3 px-4 border-t border-slate-800/50">Sair</button>
+        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Dashboard/index.html">
+                <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Clientes/clienteLista.html">
+                <span class="material-symbols-outlined text-lg">group</span> Clientes
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/ProjectGeral.html">
+                <span class="material-symbols-outlined text-lg">construction</span> Obras
+            </a>
+            <button data-logout class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
+                <span class="material-symbols-outlined text-lg">logout</span> Sair
+            </button>
         </div>
     </nav>
 
@@ -248,17 +253,25 @@
             <div
                 style="font-size:.6rem;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:0 .75rem;margin-bottom:.5rem">
                 Principal</div>
-            <button data-section="overview" class="sidebar-link active" id="m-overview"><span
-                    class="material-symbols-outlined si">dashboard</span>Visão Geral</button>
-            <button data-section="users" class="sidebar-link" id="m-users"><span
-                    class="material-symbols-outlined si">group</span>Utilizadores</button>
-            <button data-section="permissions" class="sidebar-link" id="m-permissions"><span
-                    class="material-symbols-outlined si">security</span>Permissões</button>
+            <button data-section="overview" class="sidebar-link active" id="m-overview">
+                <span class="material-symbols-outlined si">dashboard</span>
+                <span>Visão Geral</span>
+            </button>
+            <button data-section="users" class="sidebar-link" id="m-users">
+                <span class="material-symbols-outlined si">group</span>
+                <span>Utilizadores</span>
+            </button>
+            <button data-section="permissions" class="sidebar-link" id="m-permissions">
+                <span class="material-symbols-outlined si">security</span>
+                <span>Permissões</span>
+            </button>
             <div
                 style="font-size:.6rem;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:0 .75rem;margin:.75rem 0 .5rem">
                 Acções</div>
-            <button class="sidebar-link" id="mSidebarAddUser"><span
-                    class="material-symbols-outlined si">person_add</span>Novo Utilizador</button>
+            <button class="sidebar-link" id="mSidebarAddUser">
+                <span class="material-symbols-outlined si">person_add</span>
+                <span>Novo Utilizador</span>
+            </button>
         </nav>
     </div>
 
@@ -323,9 +336,9 @@
                 </div>
                 <!-- Mobile sidebar toggle -->
                 <button id="sidebarToggleBtn"
-                    class="lg:hidden flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 text-xs font-bold text-[#2afc8d] whitespace-nowrap">
-                    Menu
-                    <span class="material-symbols-outlined text-base">menu</span>
+                    class="lg:hidden flex flex-row items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-[10px] font-black uppercase tracking-widest text-[#2afc8d] shadow-lg shadow-slate-900/20 active:scale-95 transition-all">
+                    <span>Menu</span>
+                    <span class="material-symbols-outlined text-sm">menu_open</span>
                 </button>
             </div>
 
@@ -340,8 +353,8 @@
                                     class="text-[#0d3fd1] font-bold">utilizadores</span>, permissões e acessos.</p>
                         </div>
                         <button id="addUserBtn"
-                            class="h-11 md:h-12 bg-slate-900 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
-                            Novo Utilizador
+                            class="h-11 md:h-12 bg-slate-900 text-white px-4 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
+                            <span class="hidden md:inline">Novo Utilizador</span>
                             <span class="material-symbols-outlined text-xl">person_add</span>
                         </button>
                     </div>
@@ -418,8 +431,8 @@
                             </p>
                         </div>
                         <button id="addUserBtn2"
-                            class="h-11 md:h-12 bg-slate-900 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
-                            Novo Utilizador
+                            class="h-11 md:h-12 bg-slate-900 text-white px-4 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-xs md:text-sm shrink-0">
+                            <span class="hidden md:inline">Novo Utilizador</span>
                             <span class="material-symbols-outlined text-xl">person_add</span>
                         </button>
                     </div>
@@ -449,7 +462,7 @@
                     </div>
 
                     <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div class="overflow-x-auto">
+                        <div class="table-responsive">
                             <table class="w-full text-left">
                                 <thead>
                                     <tr
@@ -496,7 +509,7 @@
                     </div>
 
                     <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div class="overflow-x-auto">
+                        <div class="table-responsive">
                             <table class="w-full text-left">
                                 <thead>
                                     <tr class="bg-slate-50/70 border-b border-slate-100">
