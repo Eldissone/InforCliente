@@ -206,7 +206,7 @@
 
     <main class="max-w-[1460px] mx-auto px-4 md:px-8 pt-24 pb-20 flex-1 w-full">
         <!-- Header & Breadcrumbs -->
-        <header class="mb-10 flex flex-row items-end justify-between gap-4">
+        <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
                 <nav
                     class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
@@ -225,11 +225,15 @@
             <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="dashboard"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
             <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="relatorio"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Avanço
-                Físico</button>
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
+                <span class="md:hidden">Avanço</span>
+                <span class="hidden md:inline">Avanço Físico</span>
+            </button>
             <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="files"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
-                de Arquivos</button>
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
+                <span class="md:hidden">Arquivos</span>
+                <span class="hidden md:inline">Gestão de Arquivos</span>
+            </button>
             <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="stock"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Stock</button>
@@ -687,14 +691,15 @@
             </div>
 
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
-                <div class="px-10 py-6 border-b border-slate-50 flex justify-between items-center">
+                <div
+                    class="px-6 md:px-10 py-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Tabela de Quantidades</h3>
                     <button data-toggle-table="progress"
                         class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
                         <span class="material-symbols-outlined transition-transform">expand_more</span>
                     </button>
                 </div>
-                <div data-table-body="progress" class="overflow-x-auto">
+                <div data-table-body="progress" class="table-responsive">
                     <table class="w-full text-left">
                         <thead>
                             <tr class="text-xs font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
@@ -733,8 +738,8 @@
                     <p class="text-sm text-slate-400 font-medium">Arquivos e evidências da obra.</p>
                 </div>
                 <button id="uploadFileBtn" data-role-visible="admin,operador"
-                    class="h-14 bg-blue-600 text-white px-8 rounded-[24px] font-bold flex items-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all">
-                    Anexar <span class="material-symbols-outlined text-2xl">cloud_upload</span>
+                    class="h-14 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                    <span class="hidden md:inline">Anexar</span> <span class="material-symbols-outlined text-2xl">cloud_upload</span>
                 </button>
             </div>
             <div id="projectFilesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"></div>
@@ -750,18 +755,17 @@
             <!-- Header Operacional -->
             <div class="flex flex-row justify-between items-center gap-4">
                 <div>
-                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Inventário e Operações</h2>
-                    <p class="text-slate-500 text-sm font-medium">Controle de entrada, saída e aplicação de materiais em
-                        tempo real.</p>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Inventário</h2>
+                    <p class="text-slate-500 text-sm font-medium">Controle em tempo real.</p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
                     <button id="manageMaterialsBtn" data-role-visible="admin"
-                        class="hidden h-11 bg-slate-100 text-slate-600 px-4 rounded-xl font-bold items-center gap-2 hover:bg-slate-200 transition-all">
-                        Gerir Catálogo <span class="material-symbols-outlined text-xl">category</span>
+                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-xl">category</span>
                     </button>
                     <button id="newStockMovementBtn" data-role-visible="admin,operador"
-                        class="h-11 bg-emerald-600 text-white px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all">
-                        Novo Lançamento <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                        class="h-11 bg-emerald-600 text-white px-3 md:px-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all">
+                        <span class="hidden md:inline">Novo Lançamento</span> <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
                     </button>
                 </div>
             </div>
@@ -828,16 +832,24 @@
 
             <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
             <div class="bg-white mt-8 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div class="flex justify-between items-center border-b border-slate-50 px-10">
-                    <div class="flex">
+                <div
+                    class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
+                    <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
                         <button data-stock-subtab="history"
-                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">Fluxo
-                            de Stock</button>
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
+                            <span class="md:hidden">Fluxo</span>
+                            <span class="hidden md:inline">Fluxo de Stock</span>
+                        </button>
                         <button data-stock-subtab="inventory"
-                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">Stock/Armazém</button>
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
+                            <span class="md:hidden">Armazém</span>
+                            <span class="hidden md:inline">Stock/Armazém</span>
+                        </button>
                         <button data-stock-subtab="gallery"
-                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">Galeria
-                            de Campo</button>
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
+                            <span class="md:hidden">Galeria</span>
+                            <span class="hidden md:inline">Galeria de Campo</span>
+                        </button>
                     </div>
                     <button data-toggle-table="stock"
                         class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
@@ -851,7 +863,7 @@
                             <table id="stockMovementsTable" class="w-full text-left">
                                 <thead class="bg-slate-50/50">
                                     <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                        <th class="px-6 md:px-10 py-5">Data/Técnico</th>
+                                        <th class="px-6 md:px-10 py-5 hidden md:table-cell">Data/Técnico</th>
                                         <th class="px-6 md:px-10 py-5">Material</th>
                                         <th class="px-6 md:px-10 py-5">Qtd/Condição</th>
                                         <th class="px-10 py-5 hidden md:table-cell">Logística</th>
@@ -868,7 +880,7 @@
                     </div>
 
                     <div id="stock_inventory_content" class="hidden p-0">
-                        <div class="overflow-x-auto">
+                        <div class="table-responsive">
                             <table class="w-full text-left">
                                 <thead class="bg-slate-50/50">
                                     <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -925,8 +937,8 @@
                     <p class="text-sm text-slate-400 font-medium">Fotos de progresso geral visíveis ao cliente.</p>
                 </div>
                 <button id="addPhotoBtn" data-role-visible="admin,operador"
-                    class="h-14 bg-[#2afc8d] text-slate-900 px-8 rounded-[24px] font-bold flex items-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all">
-                    Novo Registo <span class="material-symbols-outlined text-2xl">add_a_photo</span>
+                    class="h-14 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                    <span class="hidden md:inline">Novo Registo</span> <span class="material-symbols-outlined text-2xl">add_a_photo</span>
                 </button>
             </div>
 

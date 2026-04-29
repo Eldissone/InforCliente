@@ -2677,7 +2677,7 @@ function renderStockMovements(items) {
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
-        <td class="px-3 md:px-10 py-5">
+        <td class="px-3 md:px-10 py-5 hidden md:table-cell">
           <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
           <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
         </td>
