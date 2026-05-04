@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
@@ -2637,7 +2637,7 @@ function renderStockSummary(items) {
         <p class="text-2xl font-bold text-slate-900">${materialTypesCount}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock (BOM)</p>
+        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock (BOM Estado)</p>
         <p class="text-2xl font-bold text-emerald-600">${goodTotal}</p>
     </div>
     <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
