@@ -193,16 +193,21 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a data-nav-dashboard class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Dashboard/index.html">
+            <a data-nav-dashboard
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Clientes/clienteLista.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Clientes/clienteLista.html">
                 <span class="material-symbols-outlined text-lg">group</span> Clientes
             </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/ProjectGeral.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-            <button data-logout class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
+            <button data-logout
+                class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
             </button>
         </div>
@@ -711,16 +716,16 @@
                                 <th class="px-8 py-5 w-[250px]">Item</th>
                                 <th class="px-4 py-5 text-center">Previsto</th>
                                 <th class="px-4 py-5 text-center">Unid.</th>
-                                <th class="px-4 py-5 text-center">V. Serviço</th>
-                                <th class="px-4 py-5 text-center">V. Material</th>
-                                <th class="px-4 py-5 text-center bg-slate-50 border-x border-slate-100">V. da Faturação
+                                <th class="px-4 py-5 text-center">Serviço</th>
+                                <th class="px-4 py-5 text-center">Material</th>
+                                <th class="px-4 py-5 text-center bg-slate-50 border-x border-slate-100">Faturação
                                 </th>
                                 <th class="px-4 py-5 text-center">Executado</th>
-                                <th class="px-4 py-5 text-center text-emerald-600 bg-emerald-50/50">V. Faturado</th>
-                                <th class="px-4 py-5 text-center text-blue-600">% Exec</th>
-                                <th class="px-4 py-5 text-center ">Não Executado</th>
-                                <th class="px-4 py-5 text-center text-red-600">% Não Exec</th>
-                                <th class="px-8 py-5 text-right w-[100px]">Ação</th>
+                                <th class="px-4 py-5 text-center text-emerald-600 bg-emerald-50/50">Faturado</th>
+                                <th class="px-4 py-5 text-center text-blue-600">% Exec.</th>
+                                <th class="px-4 py-5 text-center ">Não Exec.</th>
+                                <th class="px-4 py-5 text-center text-red-600">% Não Exec.</th>
+                                <th class="px-8 py-5 text-right w-[100px]">Acção</th>
                             </tr>
                         </thead>
                         <tbody id="progressTasksTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
@@ -743,7 +748,8 @@
                 </div>
                 <button id="uploadFileBtn" data-role-visible="admin,operador"
                     class="h-14 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
-                    <span class="hidden md:inline">Anexar</span> <span class="material-symbols-outlined text-2xl">cloud_upload</span>
+                    <span class="hidden md:inline">Anexar</span> <span
+                        class="material-symbols-outlined text-2xl">cloud_upload</span>
                 </button>
             </div>
             <div id="projectFilesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"></div>
@@ -769,7 +775,8 @@
                     </button>
                     <button id="newStockMovementBtn" data-role-visible="admin,operador"
                         class="h-11 bg-emerald-600 text-white px-3 md:px-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all">
-                        <span class="hidden md:inline">Novo Lançamento</span> <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                        <span class="hidden md:inline">Novo Lançamento</span> <span
+                            class="material-symbols-outlined text-xl">add_shopping_cart</span>
                     </button>
                 </div>
             </div>
@@ -942,7 +949,8 @@
                 </div>
                 <button id="addPhotoBtn" data-role-visible="admin,operador"
                     class="h-14 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
-                    <span class="hidden md:inline">Novo Registo</span> <span class="material-symbols-outlined text-2xl">add_a_photo</span>
+                    <span class="hidden md:inline">Novo Registo</span> <span
+                        class="material-symbols-outlined text-2xl">add_a_photo</span>
                 </button>
             </div>
 
