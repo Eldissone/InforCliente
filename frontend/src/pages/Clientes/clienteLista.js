@@ -31,14 +31,14 @@ function renderRow(c) {
     <tr class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          ${c.profilePic 
-            ? `<div class="h-11 w-11 rounded-2xl overflow-hidden border border-slate-100 shadow-sm group-hover:scale-105 transition-transform duration-300">
+          ${c.profilePic
+      ? `<div class="h-11 w-11 rounded-2xl overflow-hidden border border-slate-100 shadow-sm group-hover:scale-105 transition-transform duration-300">
                  <img src="${getAssetUrl(c.profilePic)}" alt="Perfil" class="w-full h-full object-cover" />
                </div>`
-            : `<div class="h-11 w-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
+      : `<div class="h-11 w-11 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform duration-300">
                  ${String(c.code || "ID").slice(0, 2)}
                </div>`
-          }
+    }
           <div>
             <p class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${c.name}</p>
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${c.code}</p>
@@ -53,7 +53,7 @@ function renderRow(c) {
       <td class="px-8 py-5 text-sm font-semibold text-slate-600">${c.region || "-"}</td>
       <td class="px-8 py-5">${renderStatusPill(c.status)}</td>
       <td class="px-8 py-5 text-right">
-        <div class="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div class="flex items-center justify-end gap-1 transition-opacity duration-200">
           <button data-view="${c.id}" class="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] transition-all">ABRIR</button>
           <button data-edit="${c.id}" class="h-9 w-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-900 hover:border-slate-400 transition-all">
             <span class="material-symbols-outlined text-xl">edit</span>
@@ -240,14 +240,14 @@ async function openCreate() {
             password: v("f_password"),
           },
         });
-        
+
         const fileInput = panel.querySelector("#f_profilePicFile");
         if (fileInput && fileInput.files.length > 0) {
           await apiUpload(`/clients/${created.id}/avatar`, {
             file: fileInput.files[0]
           });
         }
-        
+
         toast("Cliente criado", { type: "success" });
         close();
         state.page = 1;
