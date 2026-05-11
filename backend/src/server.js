@@ -13,9 +13,17 @@ const { initialize } = require("./utils/startup");
 
 const app = express();
 
+const allowedOrigins = config.frontendOrigin.split(",").map((o) => o.trim());
+
 app.use(
   cors({
-    origin: config.frontendOrigin === "*" ? true : config.frontendOrigin,
+    origin: (origin, callback) => {
+      if (!origin || config.frontendOrigin === "*" || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: false,
   })
 );
