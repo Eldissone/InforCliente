@@ -18,10 +18,12 @@ const allowedOrigins = config.frontendOrigin.split(",").map((o) => o.trim());
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log(`CORS check - Origin: ${origin}, Allowed: ${config.frontendOrigin}`);
       if (!origin || config.frontendOrigin === "*" || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        console.warn(`CORS blocked request from: ${origin}`);
+        callback(null, false); // Retorna falso em vez de erro para evitar quebras no Express
       }
     },
     credentials: false,
