@@ -1,59 +1,58 @@
-const { exec, spawn } = require("child_process");
 const { prisma } = require("../db");
 const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
 /**
- * Tests the database connection.
+ * Testa conexão com banco
  */
 async function testConnection() {
   try {
-    console.log("🔍 Testing database connection...");
+    console.log("🔍 Testando conexão com banco...");
     await prisma.$queryRaw`SELECT 1`;
-    console.log("✅ Database connection successful.");
+    console.log("✅ Conexão com banco OK");
   } catch (error) {
-    console.error("❌ Database connection failed!");
+    console.error("❌ Falha na conexão com banco:", error);
     throw error;
   }
 }
 
 /**
- * Checks if tables exist in the database.
+ * Verifica tabelas existentes
  */
 async function checkTables() {
   try {
     const tables = await prisma.$queryRaw`
       SELECT table_name 
       FROM information_schema.tables 
-      WHERE table_schema = 'public' 
+      WHERE table_schema = 'public'
       AND table_type = 'BASE TABLE'
     `;
-    const tableNames = tables.map(t => t.table_name);
-    if (tableNames.length > 0) {
-      console.log(`📊 Database tables found: ${tableNames.join(", ")}`);
+
+    if (tables.length > 0) {
+      console.log("📊 Tabelas encontradas:", tables.map(t => t.table_name).join(", "));
     } else {
-      console.log("⚠️ No tables found in the database.");
+      console.log("⚠️ Nenhuma tabela encontrada");
     }
   } catch (error) {
-    console.error("❌ Failed to list tables:", error.message);
+    console.error("❌ Erro ao verificar tabelas:", error);
   }
 }
 
-
 /**
- * Ensures an admin user exists in the database.
+ * Cria admin padrão se não existir
  */
 async function ensureAdminUser() {
   const adminEmail = "admin@infocliente.com";
   const adminPassword = "admin123";
 
   try {
-    const existingAdmin = await prisma.user.findUnique({
+    const existing = await prisma.user.findUnique({
       where: { email: adminEmail },
     });
 
-    if (!existingAdmin) {
-      console.log("🌱 Seeding default admin user...");
+    if (!existing) {
+      console.log("🌱 Criando admin padrão...");
+
       const passwordHash = await bcrypt.hash(adminPassword, 10);
 
       await prisma.user.create({
@@ -65,41 +64,42 @@ async function ensureAdminUser() {
         },
       });
 
-      console.log(`✅ Admin user created: ${adminEmail}`);
-      console.log(`🔑 Password: ${adminPassword}`);
+      console.log("✅ Admin criado:", adminEmail);
     } else {
-      console.log("ℹ️ Admin user already exists.");
+      console.log("ℹ️ Admin já existe");
     }
   } catch (error) {
-    console.error("❌ Error seeding admin user:", error);
-    throw error;
+    console.error("❌ Erro ao criar admin:", error);
   }
 }
 
 /**
- * Main initialization function to be called on server start.
+ * Função principal de inicialização
  */
 async function initialize() {
-  console.log("--------------------------------------------------");
-  console.log("🚀 Iniciando inicialização do sistema...");
+  console.log("\n====================================");
+  console.log("🚀 INICIALIZAÇÃO DO SISTEMA");
+  console.log("====================================");
 
   try {
-    console.log("Step 1: Testando conexão...");
     await testConnection();
-    
-    console.log("Step 2: Verificando tabelas...");
     await checkTables();
-    
-    console.log("Step 3: Verificando/Criando Admin...");
     await ensureAdminUser();
-    
-    console.log("✅ Sistema inicializado com sucesso.");
+
+    console.log("====================================");
+    console.log("✅ SISTEMA INICIALIZADO COM SUCESSO");
+    console.log("====================================\n");
   } catch (error) {
-    console.error("❌ A inicialização falhou criticamente!");
-    console.error("Erro detalhado:", error);
+    console.error("❌ FALHA CRÍTICA NA INICIALIZAÇÃO:", error);
+    process.exit(1);
   }
-  
-  console.log("--------------------------------------------------");
+}
+
+/**
+ * 🔥 EXECUÇÃO AUTOMÁTICA (IMPORTANTE)
+ */
+if (require.main === module) {
+  initialize();
 }
 
 module.exports = { initialize };
