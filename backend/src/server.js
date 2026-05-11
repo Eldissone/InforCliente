@@ -13,17 +13,22 @@ const { initialize } = require("./utils/startup");
 
 const app = express();
 
-const allowedOrigins = config.frontendOrigin.split(",").map((o) => o.trim());
+const allowedOrigins = config.frontendOrigin
+  .replace(/['"]/g, "") // Remove aspas extras
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, "")); // Remove barra no final
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log(`CORS check - Origin: ${origin}, Allowed: ${config.frontendOrigin}`);
-      if (!origin || config.frontendOrigin === "*" || allowedOrigins.includes(origin)) {
+      const sanitizedOrigin = origin ? origin.replace(/\/$/, "") : null;
+      console.log(`CORS check - Origin: ${sanitizedOrigin}, Allowed: ${allowedOrigins}`);
+      
+      if (!sanitizedOrigin || config.frontendOrigin === "*" || allowedOrigins.includes(sanitizedOrigin)) {
         callback(null, true);
       } else {
-        console.warn(`CORS blocked request from: ${origin}`);
-        callback(null, false); // Retorna falso em vez de erro para evitar quebras no Express
+        console.warn(`CORS blocked request from: ${sanitizedOrigin}`);
+        callback(null, false);
       }
     },
     credentials: false,
