@@ -12,7 +12,7 @@ const srcRoot = path.join(__dirname, "src");
 app.get("/services/config.js", (req, res) => {
   res.type("application/javascript");
   const config = {
-    API_BASE_URL: process.env.API_BASE_URL || "https://infoback-c2mt.onrender.com"
+    API_BASE_URL: process.env.API_BASE_URL || "http://localhost:5000"
   };
   res.send(`export const config = ${JSON.stringify(config)};`);
 });
