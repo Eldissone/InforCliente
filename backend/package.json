@@ -9,7 +9,7 @@
     "build": "prisma generate && prisma migrate deploy",
     "postinstall": "prisma generate && prisma migrate deploy",
     "migrate:deploy": "prisma migrate deploy",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/startup.js"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
