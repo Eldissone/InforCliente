@@ -93,6 +93,7 @@ authRoutes.post(
 
 authRoutes.post(
   "/select-account",
+  authRequired,
   asyncHandler(async (req, res) => {
     const { userId, clientId } = z.object({
       userId: z.string(),
@@ -141,6 +142,7 @@ authRoutes.post(
 
 authRoutes.get(
   "/available-projects",
+  authRequired,
   asyncHandler(async (req, res) => {
     const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: "USER_ID_REQUIRED" });

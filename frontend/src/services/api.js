@@ -53,7 +53,11 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    const err = new Error(data?.error || `HTTP_${res.status}`);
+    let errorMsg = data?.error || `HTTP_${res.status}`;
+    if (res.status === 403 || errorMsg.includes("FORBIDDEN")) {
+      errorMsg = "Acesso negado: você não tem permissão para realizar esta ação.";
+    }
+    const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
     throw err;
@@ -90,7 +94,11 @@ export async function apiUpload(path, { file, fieldName = "file", extraFields } 
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    const err = new Error(data?.error || `HTTP_${res.status}`);
+    let errorMsg = data?.error || `HTTP_${res.status}`;
+    if (res.status === 403 || errorMsg.includes("FORBIDDEN")) {
+      errorMsg = "Acesso negado: você não tem permissão para realizar esta ação.";
+    }
+    const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
     throw err;

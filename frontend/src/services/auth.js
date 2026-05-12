@@ -51,9 +51,10 @@ export function checkAuth({ allowedRoles = [] } = {}) {
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     // If client tries to access admin pages, or vice versa
-    window.location.href = user.role === "cliente" 
+    const target = user.role === "cliente" 
       ? "/Dashboard/clientDashboard.html" 
       : "/Dashboard/index.html";
+    window.location.href = `${target}?msg=access_denied`;
     return null;
   }
 

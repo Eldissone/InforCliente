@@ -1,6 +1,6 @@
 const express = require("express");
 const { prisma } = require("../db");
-const { authRequired } = require("../middlewares/auth");
+const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 
 const dashboardRoutes = express.Router();
@@ -19,6 +19,7 @@ function getScopedClientId(req) {
 
 dashboardRoutes.get(
   "/metrics",
+  requirePermission("dashboard", "view"),
   asyncHandler(async (req, res) => {
     const scopedClientId = getScopedClientId(req);
 
@@ -51,6 +52,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   "/clients",
+  requirePermission("clientes", "view"),
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || "").trim();
     const page = Math.max(1, Number(req.query.page || 1));
@@ -107,6 +109,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   "/alerts",
+  requirePermission("dashboard", "view"),
   asyncHandler(async (req, res) => {
     const scopedClientId = getScopedClientId(req);
     const where = scopedClientId

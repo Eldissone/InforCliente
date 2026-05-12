@@ -2,7 +2,7 @@ import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, initMobileMenu, setButtonLoading } from "../../shared/ui.js";
 
-checkAuth({ allowedRoles: ["admin", "operador"] });
+checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
 import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -337,4 +337,4 @@ async function init() {
   await load();
 }
 
-init().catch(() => toast("Falha ao carregar clientes. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar clientes. Verifique login/API.", { type: "error" }));

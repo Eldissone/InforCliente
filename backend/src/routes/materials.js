@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 
 const prisma = new PrismaClient();
 const materialRoutes = express.Router();
@@ -12,7 +12,7 @@ materialRoutes.use(authRequired);
 // GET - Listar catálogo completo
 materialRoutes.get(
   "/",
-  requireRole(["admin", "operador"]),
+  requirePermission("materiais", "view"),
   asyncHandler(async (req, res) => {
     const materials = await prisma.material.findMany({
       orderBy: { name: "asc" },
@@ -24,7 +24,7 @@ materialRoutes.get(
 // POST - Criar novo material no catálogo
 materialRoutes.post(
   "/",
-  requireRole(["admin"]),
+  requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const body = z.object({
       code: z.string().min(2),
@@ -44,7 +44,7 @@ materialRoutes.post(
 // PATCH - Editar material
 materialRoutes.patch(
   "/:id",
-  requireRole(["admin"]),
+  requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const body = z.object({
@@ -66,7 +66,7 @@ materialRoutes.patch(
 // DELETE - Remover material do catálogo
 materialRoutes.delete(
   "/:id",
-  requireRole(["admin"]),
+  requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 

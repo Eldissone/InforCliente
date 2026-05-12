@@ -5,7 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 
@@ -43,6 +43,7 @@ function assertClientAccess(req, clientId) {
 
 clientRoutes.get(
   "/",
+  requirePermission("clientes", "view"),
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || "").trim();
     const status = req.query.status ? String(req.query.status) : "";
@@ -123,7 +124,7 @@ clientRoutes.get(
 
 clientRoutes.post(
   "/",
-  requireRole(["admin", "operador"]),
+  requirePermission("clientes", "create"),
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -213,6 +214,7 @@ clientRoutes.post(
 
 clientRoutes.get(
   "/:id",
+  requirePermission("clientes", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     assertClientAccess(req, id);
@@ -266,7 +268,7 @@ clientRoutes.get(
 
 clientRoutes.patch(
   "/:id",
-  requireRole(["admin", "operador"]),
+  requirePermission("clientes", "edit"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = z
@@ -360,7 +362,7 @@ clientRoutes.patch(
 
 clientRoutes.delete(
   "/:id",
-  requireRole(["admin", "operador"]),
+  requirePermission("clientes", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await prisma.client.delete({ where: { id } });
@@ -370,6 +372,7 @@ clientRoutes.delete(
 
 clientRoutes.get(
   "/:id/interactions",
+  requirePermission("interacoes", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     assertClientAccess(req, id);
@@ -384,6 +387,7 @@ clientRoutes.get(
 
 clientRoutes.post(
   "/:id/interactions",
+  requirePermission("interacoes", "create"),
   asyncHandler(async (req, res) => {
     const clientId = String(req.params.id);
     assertClientAccess(req, clientId);

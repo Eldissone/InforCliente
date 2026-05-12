@@ -89,6 +89,22 @@
             font-size: 1.2rem;
         }
 
+        .perm-cell {
+            background: none;
+            border: none;
+            padding: 0;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .perm-cell:hover:not(:disabled) {
+            background: #f8fafc;
+            border-radius: 0.75rem;
+        }
+
+        .perm-cell:active:not(:disabled) {
+            transform: scale(0.9);
+        }
+
         #searchInput:focus {
             outline: none;
             border-color: #0F172A;
@@ -483,9 +499,22 @@
                 <!-- ===== PERMISSIONS ===== -->
                 <div id="section-permissions" class="section-panel hidden">
                     <div class="mb-8">
-                        <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Mapa de Permissões</h1>
-                        <p class="text-slate-500 font-medium mt-1">Visão completa do que cada perfil pode aceder e
-                            executar no sistema.</p>
+                        <div class="flex flex-row items-start justify-between gap-4">
+                            <div>
+                                <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Mapa de Permissões</h1>
+                                <p class="text-slate-500 font-medium mt-1">Visão completa do que cada perfil pode aceder e
+                                    executar no sistema.</p>
+                                <p class="text-[11px] font-semibold text-[#0d3fd1] mt-2 flex items-center gap-1.5">
+                                    <span class="material-symbols-outlined text-sm">touch_app</span>
+                                    Clique em qualquer célula para alterar a permissão em tempo real.
+                                </p>
+                            </div>
+                            <button id="resetPermsBtn"
+                                class="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all">
+                                <span class="material-symbols-outlined text-base">restart_alt</span>
+                                Repor Padrões
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Role badges -->

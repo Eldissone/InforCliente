@@ -400,6 +400,18 @@ enum AuditStatus {
   REJEITADO
 }
 
+model RolePermission {
+  id      String @id @default(cuid())
+  role    String // "admin" | "operador" | "leitura" | "cliente"
+  module  String // "dashboard" | "clientes" | "obras" | "interacoes" | "sistema" | "portal"
+  action  String // "view" | "create" | "edit" | "delete" | "financeiro"
+  allowed String // "true" | "false" | "own" | "view"
+
+  @@unique([role, module, action])
+  @@index([role])
+  @@map("role_permissions")
+}
+
 enum Role {
   admin
   operador

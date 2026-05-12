@@ -2,7 +2,7 @@ import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../service
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
-checkAuth({ allowedRoles: ["admin", "operador"] });
+checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -248,22 +248,22 @@ function wireFilters() {
     state.search = e.target.value.trim();
     state.page = 1;
     if (t) window.clearTimeout(t);
-    t = window.setTimeout(() => load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" })), 250);
+    t = window.setTimeout(() => load().catch((err) => toast(err.message || "Erro ao carregar Gestão de Obras", { type: "error" })), 250);
   });
   el("projectsStatus")?.addEventListener("change", (e) => {
     state.status = e.target.value;
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
+    load().catch((err) => toast(err.message || "Erro ao carregar Gestão de Obras", { type: "error" }));
   });
   el("projectsRegion")?.addEventListener("change", (e) => {
     state.region = e.target.value;
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
+    load().catch((err) => toast(err.message || "Erro ao carregar Gestão de Obras", { type: "error" }));
   });
   el("projectsDateFrom")?.addEventListener("change", (e) => {
     state.dateFrom = e.target.value.trim();
     state.page = 1;
-    load().catch(() => toast("Erro ao carregar Gestão de Obras", { type: "error" }));
+    load().catch((err) => toast(err.message || "Erro ao carregar Gestão de Obras", { type: "error" }));
   });
 
   // View Toggles
@@ -821,4 +821,4 @@ async function init() {
   await load();
 }
 
-init().catch(() => toast("Falha ao carregar Gestão de Obras. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar Gestão de Obras. Verifique login/API.", { type: "error" }));

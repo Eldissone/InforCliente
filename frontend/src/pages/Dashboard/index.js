@@ -2,7 +2,7 @@ import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
-checkAuth({ allowedRoles: ["admin", "operador"] });
+checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
 import { formatCompactNumber, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -208,5 +208,5 @@ async function init() {
   wireAddClient();
 }
 
-init().catch(() => toast("Falha ao carregar Dashboard. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar Dashboard. Verifique login/API.", { type: "error" }));
 

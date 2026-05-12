@@ -2,7 +2,7 @@ import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
-checkAuth({ allowedRoles: ["admin", "operador"] });
+checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
 import { formatCurrency, formatPercent, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -269,4 +269,4 @@ async function init() {
   wireFab();
 }
 
-init().catch(() => toast("Falha ao carregar cliente. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar cliente. Verifique login/API.", { type: "error" }));

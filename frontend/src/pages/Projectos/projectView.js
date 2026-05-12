@@ -1,11 +1,11 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "cliente"] });
+checkAuth({ allowedRoles: ["admin", "operador", "leitura", "cliente"] });
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return "0 Bytes";
@@ -1279,17 +1279,17 @@ function wireProgressTasks() {
               <select id="rt_uni" class="w-full rounded-lg border-slate-300">
                 <option value="un">un (unidade)</option>
                 <option value="mts">mts (metros)</option>
-                <option value="km">km (quilÃ³metros)</option>
+                <option value="km">km (quilômetros)</option>
                 <option value="m">m (metros lineares)</option>
-                <option value="m2">mÂ² (metros quadrados)</option>
-                <option value="m3">mÂ³ (metros cÃºbicos)</option>
+                <option value="m2">m² (metros quadrados)</option>
+                <option value="m3">m³ (metros cúbicos)</option>
                 <option value="kg">kg (quilogramas)</option>
                 <option value="ton">ton (toneladas)</option>
                 <option value="par">par</option>
                 <option value="litros">litros</option>
                 <option value="horas">horas</option>
                 <option value="dias">dias</option>
-                <option value="mes">mÃªs</option>
+                <option value="mes">mês</option>
                 <option value="global">global</option>
               </select>
             </div>
@@ -2412,7 +2412,7 @@ function wirePayments() {
 }
 
 let uiState = {
-  collapsedTables: (function() {
+  collapsedTables: (function () {
     const saved = localStorage.getItem("InfoCliente.collapsedTables");
     if (saved) return JSON.parse(saved);
     // Default: all tables collapsed
@@ -2606,7 +2606,7 @@ function wirePreview() {
   });
 }
 
-init().catch(() => toast("Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
 async function loadStock() {
   const id = getProjectId();
   renderLoadingRow(el("stockMovementsTbody"), 7);

@@ -2,12 +2,13 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 
 const userRoutes = express.Router();
 userRoutes.use(authRequired);
-userRoutes.use(requireRole(["admin"]));
+// Remoção da restrição global admin - agora é granulada por rota
+// userRoutes.use(requireRole(["admin"]));
 
 async function ensureClientExists(clientId) {
   if (!clientId) return;
@@ -24,6 +25,7 @@ async function ensureClientExists(clientId) {
 
 userRoutes.get(
   "/",
+  requirePermission("sistema", "view"),
   asyncHandler(async (_req, res) => {
     const items = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -43,6 +45,7 @@ userRoutes.get(
 
 userRoutes.post(
   "/",
+  requirePermission("sistema", "create"),
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -86,6 +89,7 @@ userRoutes.post(
 
 userRoutes.patch(
   "/:id",
+  requirePermission("sistema", "edit"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = z
@@ -159,6 +163,7 @@ userRoutes.patch(
 
 userRoutes.post(
   "/:id/reset-password",
+  requirePermission("sistema", "edit"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = z.object({ password: z.string().min(6) }).parse(req.body);
@@ -170,6 +175,7 @@ userRoutes.post(
 
 userRoutes.delete(
   "/:id",
+  requirePermission("sistema", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await prisma.user.delete({ where: { id } });

@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { PrismaClient } = require("@prisma/client");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 
 const prisma = new PrismaClient();
 const stockRoutes = express.Router();
@@ -20,7 +20,7 @@ async function ensureProject(projectId) {
 // GET — Saldo consolidado de stock da obra
 stockRoutes.get(
   "/:id/summary",
-  requireRole(["admin", "operador", "leitura", "cliente"]),
+  requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProject(projectId);
@@ -37,7 +37,7 @@ stockRoutes.get(
 // GET — Histórico de movimentações (com filtros)
 stockRoutes.get(
   "/:id/movements",
-  requireRole(["admin", "operador", "leitura", "cliente"]),
+  requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     const { auditStatus, type, category } = req.query;
@@ -64,7 +64,7 @@ stockRoutes.get(
 // PATCH — Atualizar quantidade prevista de um material na obra
 stockRoutes.patch(
   "/:id/planned",
-  requireRole(["admin", "operador"]),
+  requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     const { materialId, quantityPlanned } = z.object({
@@ -86,7 +86,7 @@ stockRoutes.patch(
 // POST — Criar lançamento de stock (Técnico/Operador)
 stockRoutes.post(
   "/:id/movements",
-  requireRole(["admin", "operador"]),
+  requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     const body = z.object({
@@ -173,7 +173,7 @@ stockRoutes.post(
 // PATCH — Aprovar/Rejeitar lançamento (Apenas ADMIN)
 stockRoutes.patch(
   "/:id/movements/:moveId/audit",
-  requireRole(["admin"]),
+  requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { moveId } = req.params;
     const { status, notes } = z.object({
@@ -247,7 +247,7 @@ stockRoutes.patch(
 // DELETE — Eliminar movimento e REVERTER SALDO (Apenas ADMIN)
 stockRoutes.delete(
   "/:id/movements/:moveId",
-  requireRole(["admin"]),
+  requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { moveId } = req.params;
 
@@ -287,7 +287,7 @@ stockRoutes.delete(
 // GET — Catálogo de Materiais
 stockRoutes.get(
   "/materials",
-  requireRole(["admin", "operador"]),
+  requirePermission("materiais", "view"),
   asyncHandler(async (req, res) => {
     const materials = await prisma.material.findMany({
       orderBy: { name: "asc" },
@@ -299,7 +299,7 @@ stockRoutes.get(
 // POST — Inicializar catálogo básico (Apenas para setup)
 stockRoutes.post(
   "/init-catalog",
-  requireRole(["admin"]),
+  requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const materials = [
       { code: "POSTE-MT-12M", name: "Poste de Betão 12M (MT)", category: "MT", unit: "un" },
@@ -344,7 +344,7 @@ const upload = multer({ storage });
 // POST — Upload de Foto Georreferenciada
 stockRoutes.post(
   "/:id/photos",
-  requireRole(["admin", "operador"]),
+  requirePermission("stock", "manage"),
   upload.single("file"), // apiUpload envia as "file"
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);

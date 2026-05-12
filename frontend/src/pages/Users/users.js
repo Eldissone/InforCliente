@@ -158,81 +158,183 @@ function renderTable(users) {
     : `<tr><td colspan="5" class="px-7 py-10 text-sm text-slate-400 text-center">Nenhum utilizador encontrado.</td></tr>`;
 }
 
-// ─── Permissions Map ──────────────────────────────────────────
-const PERMISSIONS = [
+// ─── Permissions — dynamic from API ───────────────────────────
+
+// How the DB rows map to display groups/rows
+const PERM_DISPLAY_MAP = [
   {
-    group: "Dashboard & Analytics", rows: [
-      { label: "Dashboard Global", admin: true, op: true, read: true, cli: false },
-      { label: "Métricas e KPIs", admin: true, op: true, read: true, cli: false },
-    ]
+    group: "Dashboard & Analytics",
+    rows: [
+      { label: "Dashboard Global",   module: "dashboard",  action: "view"      },
+      { label: "Métricas e KPIs",    module: "analytics",  action: "view"      },
+    ],
   },
   {
-    group: "Gestão de Clientes", rows: [
-      { label: "Ver lista de clientes", admin: true, op: true, read: true, cli: "own" },
-      { label: "Ver detalhe de cliente", admin: true, op: true, read: true, cli: "own" },
-      { label: "Criar cliente", admin: true, op: true, read: false, cli: false },
-      { label: "Editar cliente", admin: true, op: true, read: false, cli: false },
-      { label: "Excluir cliente", admin: true, op: false, read: false, cli: false },
-    ]
+    group: "Gestão de Clientes",
+    rows: [
+      { label: "Ver clientes",        module: "clientes",   action: "view"      },
+      { label: "Criar cliente",        module: "clientes",   action: "create"    },
+      { label: "Editar cliente",       module: "clientes",   action: "edit"      },
+      { label: "Excluir cliente",      module: "clientes",   action: "delete"    },
+    ],
   },
   {
-    group: "Gestão de Obras", rows: [
-      { label: "Ver lista de obras", admin: true, op: true, read: true, cli: "own" },
-      { label: "Criar / Editar obra", admin: true, op: true, read: false, cli: false },
-      { label: "Progresso físico", admin: true, op: true, read: true, cli: "own" },
-      { label: "Financeiro da obra", admin: true, op: true, read: "view", cli: "own" },
-      { label: "Ficheiros da obra", admin: true, op: true, read: true, cli: "own" },
-      { label: "Excluir obra", admin: true, op: false, read: false, cli: false },
-    ]
+    group: "Gestão de Obras",
+    rows: [
+      { label: "Ver obras",            module: "obras",      action: "view"      },
+      { label: "Criar obra",           module: "obras",      action: "create"    },
+      { label: "Editar obra",          module: "obras",      action: "edit"      },
+      { label: "Financeiro da obra",   module: "obras",      action: "financeiro" },
+      { label: "Excluir obra",         module: "obras",      action: "delete"    },
+    ],
   },
   {
-    group: "Interações", rows: [
-      { label: "Ver interações", admin: true, op: true, read: true, cli: "own" },
-      { label: "Adicionar interação", admin: true, op: true, read: false, cli: false },
-    ]
+    group: "Interações",
+    rows: [
+      { label: "Ver interações",        module: "interacoes", action: "view"      },
+      { label: "Adicionar interação",   module: "interacoes", action: "create"    },
+    ],
   },
   {
-    group: "Administração do Sistema", rows: [
-      { label: "Gerir utilizadores", admin: true, op: false, read: false, cli: false },
-      { label: "Criar utilizador", admin: true, op: false, read: false, cli: false },
-      { label: "Resetar senha", admin: true, op: false, read: false, cli: false },
-      { label: "Excluir utilizador", admin: true, op: false, read: false, cli: false },
-    ]
+    group: "Administração do Sistema",
+    rows: [
+      { label: "Ver utilizadores",      module: "sistema",    action: "view"      },
+      { label: "Criar utilizador",      module: "sistema",    action: "create"    },
+      { label: "Editar utilizador",     module: "sistema",    action: "edit"      },
+      { label: "Excluir utilizador",    module: "sistema",    action: "delete"    },
+    ],
   },
   {
-    group: "Portal do Cliente", rows: [
-      { label: "Dashboard do cliente", admin: false, op: false, read: false, cli: true },
-      { label: "Ver obras vinculadas", admin: false, op: false, read: false, cli: true },
-      { label: "Ver interações próprias", admin: false, op: false, read: false, cli: true },
-    ]
+    group: "Portal do Cliente",
+    rows: [
+      { label: "Acesso ao portal",      module: "portal",     action: "view"      },
+    ],
   },
 ];
 
-function permIcon(val) {
-  if (val === true) return `<span class="material-symbols-outlined perm-yes">check_circle</span>`;
-  if (val === false) return `<span class="material-symbols-outlined perm-no">cancel</span>`;
-  return `<span class="material-symbols-outlined perm-part" title="${esc(String(val))}">check_circle</span>`;
+// Cycle order for clicking: true → own → view → false → true
+const ALLOWED_CYCLE = ["true", "own", "view", "false"];
+
+// Build lookup key
+function permKey(role, module, action) { return `${role}|${module}|${action}`; }
+
+// In-memory map populated from API: key → allowed string
+let permMap = {};
+// Track which cells are currently saving
+const savingCells = new Set();
+
+function permIcon(allowed, { role, module: mod, action, clickable } = {}) {
+  const val = allowed;
+  let icon, cls, title;
+  if (val === "true")  { icon = "check_circle"; cls = "perm-yes";  title = "Acesso total"; }
+  else if (val === "own")  { icon = "check_circle"; cls = "perm-part"; title = "Apenas próprios"; }
+  else if (val === "view") { icon = "check_circle"; cls = "perm-part"; title = "Apenas leitura"; }
+  else                     { icon = "cancel";       cls = "perm-no";  title = "Sem acesso"; }
+
+  const key = permKey(role, mod, action);
+  const isSaving = savingCells.has(key);
+
+  if (clickable) {
+    const cursor = isSaving ? "cursor-wait" : "cursor-pointer";
+    const pulse  = isSaving ? "animate-pulse" : "";
+    return `<button
+      class="perm-cell ${cursor} ${pulse} w-9 h-9 rounded-xl flex items-center justify-center mx-auto transition-all hover:scale-110 hover:shadow-md"
+      data-role="${esc(role)}" data-module="${esc(mod)}" data-action="${esc(action)}"
+      title="${title} — clique para alterar"
+      ${isSaving ? "disabled" : ""}>
+      <span class="material-symbols-outlined ${cls}">${icon}</span>
+    </button>`;
+  }
+  return `<span class="material-symbols-outlined ${cls}" title="${title}">${icon}</span>`;
 }
 
-function renderPermissions() {
+async function savePermission(role, mod, action, newAllowed) {
+  const key = permKey(role, mod, action);
+  savingCells.add(key);
+  refreshPermCell(role, mod, action);
+  try {
+    await apiRequest(`/permissions/${encodeURIComponent(role)}/${encodeURIComponent(mod)}/${encodeURIComponent(action)}`,
+      { method: "PUT", body: { allowed: newAllowed } });
+    permMap[key] = newAllowed;
+    toast(`Permissão actualizada: ${role} / ${mod} / ${action}`, { type: "success" });
+  } catch (err) {
+    toast(err.message || "Erro ao guardar permissão.", { type: "error" });
+  } finally {
+    savingCells.delete(key);
+    refreshPermCell(role, mod, action);
+  }
+}
+
+function refreshPermCell(role, mod, action) {
+  const cell = document.querySelector(
+    `button.perm-cell[data-role="${role}"][data-module="${mod}"][data-action="${action}"]`
+  );
+  if (!cell) return;
+  const key = permKey(role, mod, action);
+  const allowed = permMap[key] || "false";
+  cell.outerHTML = permIcon(allowed, { role, module: mod, action, clickable: true });
+}
+
+async function loadPermissions() {
   const tbody = el("permTableBody");
   if (!tbody) return;
+  // Loading state
+  tbody.innerHTML = `<tr><td colspan="5" class="px-7 py-10 text-center">
+    <div class="inline-flex items-center gap-3 text-sm text-slate-400 font-medium">
+      <span class="material-symbols-outlined animate-spin text-lg">progress_activity</span>A carregar permissões…
+    </div></td></tr>`;
+  try {
+    const data = await apiRequest("/permissions");
+    // Build lookup map
+    permMap = {};
+    (data.items || []).forEach(r => { permMap[permKey(r.role, r.module, r.action)] = r.allowed; });
+  } catch {
+    tbody.innerHTML = `<tr><td colspan="5" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar permissões.</td></tr>`;
+    return;
+  }
+  renderPermissionsTable();
+}
+
+function renderPermissionsTable() {
+  const tbody = el("permTableBody");
+  if (!tbody) return;
+  const ROLES = ["admin", "operador", "leitura", "cliente"];
   let html = "";
-  PERMISSIONS.forEach(group => {
+  PERM_DISPLAY_MAP.forEach(group => {
     html += `<tr class="bg-slate-50/40 border-b border-slate-100">
       <td colspan="5" class="px-7 py-2.5 text-[9px] font-black uppercase tracking-widest text-slate-400">${group.group}</td>
     </tr>`;
-    group.rows.forEach(row => {
+    group.rows.forEach(({ label, module: mod, action }) => {
       html += `<tr class="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0">
-        <td class="px-7 py-3.5 text-sm font-medium text-slate-700">${row.label}</td>
-        <td class="px-4 py-3.5 text-center">${permIcon(row.admin)}</td>
-        <td class="px-4 py-3.5 text-center">${permIcon(row.op)}</td>
-        <td class="px-4 py-3.5 text-center">${permIcon(row.read)}</td>
-        <td class="px-4 py-3.5 text-center">${permIcon(row.cli)}</td>
-      </tr>`;
+        <td class="px-7 py-3.5 text-sm font-medium text-slate-700">${label}</td>`;
+      ROLES.forEach(role => {
+        const key = permKey(role, mod, action);
+        const val = permMap[key] ?? "false";
+        // admin system cells are locked
+        const locked = role === "admin" && mod === "sistema";
+        html += `<td class="px-4 py-3.5 text-center">${permIcon(val, { role, module: mod, action, clickable: !locked })}</td>`;
+      });
+      html += "</tr>";
     });
   });
   tbody.innerHTML = html;
+}
+
+// Expose so switchSection can call it
+function renderPermissions() { loadPermissions(); }
+
+// Wire click delegation for permission cells
+function wirePermissionClicks() {
+  document.addEventListener("click", async e => {
+    const btn = e.target?.closest?.("button.perm-cell");
+    if (!btn) return;
+    const { role, module: mod, action } = btn.dataset;
+    const key = permKey(role, mod, action);
+    if (savingCells.has(key)) return; // ignore while saving
+    const current = permMap[key] ?? "false";
+    const nextIdx = (ALLOWED_CYCLE.indexOf(current) + 1) % ALLOWED_CYCLE.length;
+    await savePermission(role, mod, action, ALLOWED_CYCLE[nextIdx]);
+  });
 }
 
 // ─── Load data ────────────────────────────────────────────────
@@ -460,14 +562,29 @@ function wireEvents() {
   el("roleFilter")?.addEventListener("change", () => renderTable(filterUsers()));
 }
 
+// ─── Reset permissions button ──────────────────────────────────
+function wireResetPerms() {
+  el("resetPermsBtn")?.addEventListener("click", async () => {
+    if (!window.confirm("Repor todas as permissões para os valores por defeito? Esta acção é irreversível.")) return;
+    try {
+      await apiRequest("/permissions/reset", { method: "POST" });
+      toast("Permissões repostas com sucesso.", { type: "success" });
+      await loadPermissions();
+    } catch (err) {
+      toast(err.message || "Erro ao repor permissões.", { type: "error" });
+    }
+  });
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 async function init() {
   initMobileMenu();
   wireLogout();
   wireUsersNav();
   wireEvents();
+  wirePermissionClicks();
+  wireResetPerms();
   await loadUsers();
-  renderPermissions();
 }
 
-init().catch(() => toast("Falha ao carregar. Verifique login/API.", { type: "error" }));
+init().catch((err) => toast(err.message || "Falha ao carregar. Verifique login/API.", { type: "error" }));

@@ -1,4 +1,5 @@
 import { getSessionUser, logout as clearSession } from "../services/auth.js";
+import { toast } from "./ui.js";
 
 export function wireLogout() {
   document.addEventListener("click", (e) => {
@@ -65,4 +66,16 @@ export function wireUsersNav() {
   }
 
   applyRoleVisibility(role);
+  processUrlMessages();
+}
+
+function processUrlMessages() {
+  const params = new URLSearchParams(window.location.search);
+  const msg = params.get("msg");
+  if (msg === "access_denied") {
+    toast("Acesso negado: não tem permissão para aceder a esta página.", { type: "error" });
+    // Clean URL without refresh
+    const newUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+  }
 }

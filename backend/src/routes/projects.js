@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
@@ -90,6 +90,7 @@ async function generateProjectCode() {
 
 projectRoutes.get(
   "/",
+  requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || "").trim();
     const status = req.query.status ? String(req.query.status) : "";
@@ -177,7 +178,7 @@ projectRoutes.get(
 
 projectRoutes.post(
   "/",
-  requireRole(["admin", "operador"]),
+  requirePermission("obras", "create"),
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -295,6 +296,7 @@ projectRoutes.post(
 
 projectRoutes.get(
   "/:id",
+  requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const project = await ensureProjectReadable(req, id);
@@ -376,7 +378,7 @@ projectRoutes.get(
 
 projectRoutes.patch(
   "/:id",
-  requireRole(["admin", "operador"]),
+  requirePermission("obras", "edit"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = z
@@ -551,7 +553,7 @@ projectRoutes.post(
 
 projectRoutes.delete(
   "/:id",
-  requireRole(["admin", "operador"]),
+  requirePermission("obras", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await prisma.project.delete({ where: { id } });
