@@ -35,8 +35,9 @@ authRoutes.post(
       }
     });
 
-    // Buscar se existem obras no sistema
-    const isAdmin = user.role === 'admin' || user.role === 'operador';
+    // Verificar se é administrador ou operador (normalizado para maiúsculas)
+    const userRole = (user.role || "").toUpperCase();
+    const isAdmin = userRole === 'ADMIN' || userRole === 'OPERADOR';
     
     let projectsCount = 0;
     if (isAdmin) {
@@ -54,7 +55,7 @@ authRoutes.post(
     const primaryClient = user.clientId ? await prisma.client.findUnique({ where: { id: user.clientId }, select: { name: true } }) : null;
 
     // Se o utilizador não for admin/operador, enviamos para a seleção de obras
-    if (user.role !== 'admin' && user.role !== 'operador') {
+    if (!isAdmin) {
       return res.json({
         status: "MULTI_ACCOUNT",
         user: { 
@@ -63,13 +64,13 @@ authRoutes.post(
           name: user.name, 
           profilePic: user.profilePic,
           clientName: primaryClient?.name || null,
-          role: user.role 
+          role: userRole 
         },
         accounts: accounts.map(a => ({
           id: a.client.id,
           name: a.client.name,
           code: a.client.code,
-          role: a.role,
+          role: (a.role || "").toUpperCase(),
           profilePic: a.client.profilePic
         }))
       });
@@ -77,7 +78,7 @@ authRoutes.post(
 
     // Se tiver apenas uma ou nenhuma (caso de admin sem client)
     const activeClientId = accounts.length === 1 ? accounts[0].clientId : (user.clientId || null);
-    const activeRole = accounts.length === 1 ? accounts[0].role : user.role;
+    const activeRole = accounts.length === 1 ? (accounts[0].role || "").toUpperCase() : userRole;
 
     const token = jwt.sign(
       { sub: user.id, email: user.email, role: activeRole, clientId: activeClientId },
@@ -94,7 +95,6 @@ authRoutes.post(
 
 authRoutes.post(
   "/select-account",
-  authRequired,
   asyncHandler(async (req, res) => {
     const { userId, clientId } = z.object({
       userId: z.string(),
@@ -104,10 +104,11 @@ authRoutes.post(
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
 
-    let activeRole = user.role;
+    const userRole = (user.role || "").toUpperCase();
+    let activeRole = userRole;
 
     // Se não for admin, validar se tem acesso a este cliente
-    if (user.role !== 'admin' && user.role !== 'operador') {
+    if (userRole !== 'ADMIN' && userRole !== 'OPERADOR') {
         const link = await prisma.userClient.findUnique({
           where: {
             userId_clientId: { userId, clientId }
@@ -119,7 +120,7 @@ authRoutes.post(
           return res.status(403).json({ error: "UNAUTHORIZED_ACCESS" });
         }
         
-        activeRole = link ? link.role : user.role;
+        activeRole = link ? (link.role || "").toUpperCase() : userRole;
     }
 
     // Atualizar o clientId padrão
@@ -143,7 +144,6 @@ authRoutes.post(
 
 authRoutes.get(
   "/available-projects",
-  authRequired,
   asyncHandler(async (req, res) => {
     const userId = req.query.userId;
     if (!userId) return res.status(400).json({ error: "USER_ID_REQUIRED" });

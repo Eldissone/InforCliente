@@ -11,13 +11,15 @@ export function wireLogout() {
 }
 
 function applyRoleVisibility(role) {
+  const normalizedUserRole = (role || "").toLowerCase();
+
   document.querySelectorAll("[data-role-visible]").forEach((el) => {
     const allowedRoles = String(el.getAttribute("data-role-visible") || "")
       .split(",")
-      .map((value) => value.trim())
+      .map((value) => value.trim().toLowerCase())
       .filter(Boolean);
 
-    if (!allowedRoles.length || allowedRoles.includes(role)) {
+    if (!allowedRoles.length || allowedRoles.includes(normalizedUserRole)) {
       el.classList.remove("hidden");
       return;
     }
@@ -28,10 +30,10 @@ function applyRoleVisibility(role) {
   document.querySelectorAll("[data-role-hidden]").forEach((el) => {
     const hiddenRoles = String(el.getAttribute("data-role-hidden") || "")
       .split(",")
-      .map((value) => value.trim())
+      .map((value) => value.trim().toLowerCase())
       .filter(Boolean);
 
-    if (hiddenRoles.includes(role)) {
+    if (hiddenRoles.includes(normalizedUserRole)) {
       el.classList.add("hidden");
     } else {
       el.classList.remove("hidden");
@@ -41,7 +43,8 @@ function applyRoleVisibility(role) {
 
 export function wireUsersNav() {
   const user = getSessionUser();
-  const role = user?.role;
+  const role = (user?.role || "").toLowerCase();
+  
   document.querySelectorAll("[data-nav-users]").forEach((el) => {
     if (role === "admin") {
       el.classList.remove("hidden");
@@ -49,6 +52,7 @@ export function wireUsersNav() {
       el.classList.add("hidden");
     }
   });
+
   document.querySelectorAll("[data-user-role]").forEach((el) => {
     // Show name if available, fallback to role label
     el.textContent = user?.name || (role ? String(role).toUpperCase() : "");

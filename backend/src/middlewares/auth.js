@@ -20,9 +20,11 @@ function authRequired(req, res, next) {
 }
 
 function requireRole(allowed) {
-  const allowedSet = new Set(Array.isArray(allowed) ? allowed : [allowed]);
+  const allowedArray = Array.isArray(allowed) ? allowed : [allowed];
+  const allowedSet = new Set(allowedArray.map(r => r.toUpperCase()));
+  
   return (req, res, next) => {
-    const role = req.user?.role;
+    const role = (req.user?.role || "").toUpperCase();
     if (!role || !allowedSet.has(role)) {
       return res.status(403).json({ error: "FORBIDDEN" });
     }
@@ -32,15 +34,15 @@ function requireRole(allowed) {
 
 function requirePermission(moduleName, action) {
   return async (req, res, next) => {
-    const role = req.user?.role;
-    if (!role) return res.status(401).json({ error: "UNAUTHORIZED" });
+    const userRole = (req.user?.role || "").toLowerCase();
+    if (!userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
 
-    // Superadmin bypass
-    if (role === "admin") return next();
+    // Superadmin bypass (normalized to check both cases if needed, but here lowercase is safer for DB)
+    if (userRole === "admin") return next();
 
     try {
       const perm = await prisma.rolePermission.findFirst({
-        where: { role, module: moduleName, action },
+        where: { role: userRole, module: moduleName, action },
       });
 
       const allowed = perm ? perm.allowed : "false";

@@ -107,9 +107,11 @@ userRoutes.post(
       })
       .parse(req.body);
 
-    const clientId = body.role === "cliente" ? body.clientId || null : null;
-    if (body.role === "cliente" && !clientId) {
-      return res.status(400).json({ error: "CLIENT_REQUIRED" });
+    const normalizedRole = (body.role || "").toUpperCase();
+    const clientId = normalizedRole === "CLIENT" || normalizedRole === "CLIENTE" ? body.clientId || null : null;
+    
+    if ((normalizedRole === "CLIENT" || normalizedRole === "CLIENTE") && !clientId) {
+      return res.status(400).json({ error: "CLIENT_ID_REQUIRED" });
     }
 
     await ensureClientExists(clientId);
@@ -155,22 +157,18 @@ userRoutes.patch(
       })
       .parse(req.body);
 
-    const current = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id },
       select: { role: true, clientId: true },
     });
-    if (!current) return res.status(404).json({ error: "NOT_FOUND" });
+    if (!user) return res.status(404).json({ error: "NOT_FOUND" });
 
-    const nextRole = body.role || current.role;
-    const nextClientId =
-      nextRole === "cliente"
-        ? body.clientId !== undefined
-          ? body.clientId || null
-          : current.clientId || null
-        : null;
+    const nextRole = (body.role || user.role).toUpperCase();
+    const nextClientId = body.clientId !== undefined ? body.clientId || null : user.clientId;
+    const isClientRole = nextRole === "CLIENT" || nextRole === "CLIENTE";
 
-    if (nextRole === "cliente" && !nextClientId) {
-      return res.status(400).json({ error: "CLIENT_REQUIRED" });
+    if (isClientRole && !nextClientId) {
+      return res.status(400).json({ error: "CLIENT_ID_REQUIRED" });
     }
 
     await ensureClientExists(nextClientId);

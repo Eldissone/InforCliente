@@ -1,8 +1,8 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { wireLogout } from "../../shared/session.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
-checkAuth({ allowedRoles: ["cliente", "admin", "operador"] });
+checkAuth({ allowedRoles: ["cliente", "admin", "operador", "user"] });
 import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml } from "../../shared/ui.js";
 
@@ -1732,6 +1732,8 @@ function init() {
     if (headerName) headerName.textContent = user.client.name;
   }
 
+  wireLogout();
+  wireUsersNav();
   wireEvents();
   wirePreview();
   loadDashboardData();

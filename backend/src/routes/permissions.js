@@ -167,7 +167,8 @@ permissionsRoutes.put(
       .parse(req.body);
 
     // Prevent locking out admins from system management
-    if (role === "admin" && mod === "sistema" && allowed === "false") {
+    const userRole = (req.user?.role || "").toUpperCase();
+    if (userRole === "ADMIN" && mod === "sistema" && allowed === "false") {
       return res.status(400).json({ error: "CANNOT_REVOKE_ADMIN_SYSTEM_ACCESS" });
     }
 

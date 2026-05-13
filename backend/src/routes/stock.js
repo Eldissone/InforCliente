@@ -1,371 +1,211 @@
 const express = require("express");
 const { z } = require("zod");
-const { PrismaClient } = require("@prisma/client");
+const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermission } = require("../middlewares/auth");
 
-const prisma = new PrismaClient();
 const stockRoutes = express.Router();
-
-// Todas as rotas de stock exigem autenticação
 stockRoutes.use(authRequired);
 
-// Helper para verificar se o projeto existe e é acessível
-async function ensureProject(projectId) {
-  const p = await prisma.project.findUnique({ where: { id: projectId } });
-  if (!p) throw new Error("PROJECT_NOT_FOUND");
-  return p;
-}
-
-// GET — Saldo consolidado de stock da obra
+// GET - Saldo de stock (Global ou por Armazém)
 stockRoutes.get(
-  "/:id/summary",
+  "/balance",
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
-    const projectId = String(req.params.id);
-    await ensureProject(projectId);
-
-    const stock = await prisma.projectStock.findMany({
-      where: { projectId },
-      include: { material: true },
-    });
-
-    return res.json({ items: stock });
-  })
-);
-
-// GET — Histórico de movimentações (com filtros)
-stockRoutes.get(
-  "/:id/movements",
-  requirePermission("stock", "view"),
-  asyncHandler(async (req, res) => {
-    const projectId = String(req.params.id);
-    const { auditStatus, type, category } = req.query;
-
-    const movements = await prisma.stockMovement.findMany({
+    const { warehouseId, productId, ownerId } = req.query;
+    
+    const items = await prisma.warehouseStock.findMany({
       where: {
-        projectId,
-        ...(auditStatus && { auditStatus }),
-        ...(type && { type }),
-        ...(category && { material: { category } }),
+        ...(warehouseId && { warehouseId }),
+        ...(productId && { productId }),
+        ...(ownerId !== undefined && { ownerId: ownerId === "null" ? null : ownerId }),
       },
       include: {
-        material: true,
-        auditLogs: { orderBy: { createdAt: "desc" } },
-        photos: true,
+        product: true,
+        warehouse: true,
       },
-      orderBy: { dateEntry: "desc" },
+      orderBy: { product: { name: "asc" } },
     });
-
-    return res.json({ items: movements });
+    
+    return res.json({ items });
   })
 );
 
-// PATCH — Atualizar quantidade prevista de um material na obra
-stockRoutes.patch(
-  "/:id/planned",
-  requirePermission("stock", "manage"),
-  asyncHandler(async (req, res) => {
-    const projectId = String(req.params.id);
-    const { materialId, quantityPlanned } = z.object({
-      materialId: z.string(),
-      quantityPlanned: z.number().min(0),
-    }).parse(req.body);
-
-    const updated = await prisma.projectStock.upsert({
-      where: { projectId_materialId: { projectId, materialId } },
-      update: { quantityPlanned },
-      create: { projectId, materialId, quantityPlanned, quantityGood: 0, quantityDamaged: 0 },
-      include: { material: true }
-    });
-
-    return res.json(updated);
-  })
-);
-
-// POST — Criar lançamento de stock (Técnico/Operador)
+// POST - Movimentação de Stock (Entrada, Saída, Ajuste, Perda)
 stockRoutes.post(
-  "/:id/movements",
+  "/move",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
-    const projectId = String(req.params.id);
     const body = z.object({
-      materialId: z.string(),
-      type: z.enum(["ENTRADA", "SAIDA", "TRANSFERENCIA", "AJUSTE"]),
-      quantity: z.number().optional(), // Legado
-      quantityGood: z.number().default(0),
-      quantityDamaged: z.number().default(0),
-      condition: z.enum(["BOA", "DANIFICADA"]).default("BOA"), // Legado
-      entryType: z.string().optional(),
-      driverName: z.string().optional(),
-      vehiclePlate: z.string().optional(),
-      vehicleBrand: z.string().optional(),
-      dateEntry: z.string().datetime().optional(),
-      movementStatus: z.enum(["EM_TRANSITO", "RECEBIDO", "APLICADO"]).default("RECEBIDO"),
-      technicianName: z.string().optional(),
-      batch: z.string().optional(),
-      notes: z.string().optional(),
+      productId: z.string(),
+      warehouseId: z.string(),
+      type: z.enum(["ENTRY", "EXIT", "ADJUSTMENT", "LOSS"]),
+      quantity: z.number().positive(),
+      ownerId: z.string().optional().nullable(), // Nulo = Empresa
+      reference: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      evidenceUrl: z.string().optional().nullable(),
     }).parse(req.body);
 
-    const { movement, projectStock } = await prisma.$transaction(async (tx) => {
-      const move = await tx.stockMovement.create({
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Criar o movimento
+      const movement = await tx.stockMovement.create({
         data: {
-          ...body,
-          quantityGood: body.quantityGood,
-          quantityDamaged: body.quantityDamaged,
-          quantity: body.quantityGood + body.quantityDamaged, 
-          projectId,
-          auditStatus: body.type === "AJUSTE" ? "APROVADO" : "PENDENTE",
-          dateEntry: body.dateEntry ? new Date(body.dateEntry) : new Date(),
-        },
-        include: { material: true },
-      });
-
-      // AJUSTE: Atualiza ambos os saldos imediatamente
-      if (body.type === "AJUSTE") {
-        await tx.projectStock.upsert({
-          where: { projectId_materialId: { projectId, materialId: body.materialId } },
-          update: { 
-            quantityGood: { increment: body.quantityGood },
-            quantityDamaged: { increment: body.quantityDamaged }
-          },
-          create: { 
-            projectId, 
-            materialId: body.materialId, 
-            quantityGood: body.quantityGood,
-            quantityDamaged: body.quantityDamaged
-          },
-        });
-      } else {
-        // ENTRADA/SAIDA/TRANSF: Se houver danificadas, atualizar imediatamente (boa espera aprovação)
-        if (body.quantityDamaged > 0) {
-          const sign = body.type === "ENTRADA" ? 1 : -1;
-          await tx.projectStock.upsert({
-            where: { projectId_materialId: { projectId, materialId: body.materialId } },
-            update: { quantityDamaged: { increment: body.quantityDamaged * sign } },
-            create: { 
-              projectId, 
-              materialId: body.materialId, 
-              quantityGood: 0,
-              quantityDamaged: body.quantityDamaged * sign
-            },
-          });
-        }
-      }
-
-      await tx.stockAuditLog.create({
-        data: {
-          movementId: move.id,
-          fromStatus: "PENDENTE",
-          toStatus: body.type === "AJUSTE" ? "APROVADO" : "PENDENTE",
-          changedBy: req.user.email,
-          notes: body.type === "AJUSTE" ? "Ajuste manual de stock realizado pelo administrador." : "Lançamento inicial registrado pelo técnico.",
+          productId: body.productId,
+          warehouseId: body.warehouseId,
+          userId: req.user.sub,
+          type: body.type,
+          quantity: body.quantity,
+          ownerId: body.ownerId,
+          reference: body.reference,
+          notes: body.notes,
+          evidenceUrl: body.evidenceUrl,
         },
       });
 
-      return { movement: move };
-    });
+      // 2. Calcular impacto no saldo
+      // ENTRY/ADJUSTMENT (positivo), EXIT/LOSS/ADJUSTMENT (negativo?)
+      // Simplificando: ENTRY = +, EXIT = -, LOSS = -, ADJUSTMENT = corpo decide (vamos assumir positivo para simplificar ou exigir sinal)
+      let change = body.quantity;
+      if (body.type === "EXIT" || body.type === "LOSS") {
+        change = -body.quantity;
+      }
 
-    return res.status(201).json(movement);
-  })
-);
-
-// PATCH — Aprovar/Rejeitar lançamento (Apenas ADMIN)
-stockRoutes.patch(
-  "/:id/movements/:moveId/audit",
-  requirePermission("stock", "manage"),
-  asyncHandler(async (req, res) => {
-    const { moveId } = req.params;
-    const { status, notes } = z.object({
-      status: z.enum(["VALIDACAO", "APROVADO", "REJEITADO"]),
-      notes: z.string().optional(),
-    }).parse(req.body);
-
-    const oldMove = await prisma.stockMovement.findUnique({
-      where: { id: moveId },
-      include: { material: true },
-    });
-
-    if (!oldMove) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
-    if (oldMove.auditStatus === "APROVADO") return res.status(400).json({ error: "ALREADY_APPROVED" });
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const move = await tx.stockMovement.update({
-        where: { id: moveId },
-        data: { auditStatus: status },
-      });
-
-      await tx.stockAuditLog.create({
-        data: {
-          movementId: moveId,
-          fromStatus: oldMove.auditStatus,
-          toStatus: status,
-          changedBy: req.user.email,
-          notes,
+      // 3. Atualizar WarehouseStock
+      await tx.warehouseStock.upsert({
+        where: {
+          warehouseId_productId_ownerId: {
+            warehouseId: body.warehouseId,
+            productId: body.productId,
+            ownerId: body.ownerId || null,
+          },
+        },
+        update: { quantity: { increment: change } },
+        create: {
+          warehouseId: body.warehouseId,
+          productId: body.productId,
+          ownerId: body.ownerId || null,
+          quantity: change,
         },
       });
 
-      // Se APROVADO: Atualizar apenas QUANTIDADE BOA (Danificada já foi feita no POST)
-      if (status === "APROVADO") {
-        const sign = move.type === "ENTRADA" ? 1 : -1;
-        await tx.projectStock.upsert({
-          where: {
-            projectId_materialId: { projectId: move.projectId, materialId: move.materialId },
-          },
-          update: {
-            quantityGood: { increment: Number(move.quantityGood || 0) * sign },
-          },
-          create: {
-            projectId: move.projectId,
-            materialId: move.materialId,
-            quantityGood: Number(move.quantityGood || 0) * sign,
-            quantityDamaged: 0,
-          },
-        });
-      }
-
-      // Se REJEITADO: Reverter QUANTIDADE DANIFICADA (que foi feita no POST)
-      if (status === "REJEITADO" && Number(move.quantityDamaged) > 0) {
-        const sign = move.type === "ENTRADA" ? -1 : 1; // Reversão: inverte o sinal original
-        await tx.projectStock.update({
-          where: {
-            projectId_materialId: { projectId: move.projectId, materialId: move.materialId },
-          },
-          data: {
-            quantityDamaged: { increment: Number(move.quantityDamaged) * sign },
-          },
-        });
-      }
-
-      return move;
+      return movement;
     });
 
-    return res.json(updated);
+    return res.status(201).json(result);
   })
 );
 
-// DELETE — Eliminar movimento e REVERTER SALDO (Apenas ADMIN)
-stockRoutes.delete(
-  "/:id/movements/:moveId",
-  requirePermission("stock", "manage"),
-  asyncHandler(async (req, res) => {
-    const { moveId } = req.params;
-
-    const move = await prisma.stockMovement.findUnique({
-      where: { id: moveId }
-    });
-
-    if (!move) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
-
-    await prisma.$transaction(async (tx) => {
-      // Reverter impacto no saldo se estivesse aprovado ou se fosse ajuste/danificado
-      // Regra: Revertemos tudo o que já "entrou" no saldo.
-      const sign = (move.type === "ENTRADA" || move.type === "AJUSTE") ? -1 : 1;
-
-      // Reverter Quantidade Boa (apenas se aprovada ou se for ajuste)
-      if (move.auditStatus === "APROVADO" || move.type === "AJUSTE") {
-        await tx.projectStock.update({
-          where: { projectId_materialId: { projectId: move.projectId, materialId: move.materialId } },
-          data: { quantityGood: { increment: Number(move.quantityGood || 0) * sign } }
-        });
-      }
-
-      // Reverter Quantidade Danificada (sempre revertida pois entra no saldo no POST)
-      await tx.projectStock.update({
-        where: { projectId_materialId: { projectId: move.projectId, materialId: move.materialId } },
-        data: { quantityDamaged: { increment: Number(move.quantityDamaged || 0) * sign } }
-      });
-
-      // Apagar o movimento (e fotos/logs por cascade se configurado, ou manualmente)
-      await tx.stockMovement.delete({ where: { id: moveId } });
-    });
-
-    return res.json({ ok: true });
-  })
-);
-
-// GET — Catálogo de Materiais
-stockRoutes.get(
-  "/materials",
-  requirePermission("materiais", "view"),
-  asyncHandler(async (req, res) => {
-    const materials = await prisma.material.findMany({
-      orderBy: { name: "asc" },
-    });
-    return res.json({ items: materials });
-  })
-);
-
-// POST — Inicializar catálogo básico (Apenas para setup)
+// POST - Transferência entre Armazéns
 stockRoutes.post(
-  "/init-catalog",
-  requirePermission("materiais", "manage"),
+  "/transfer",
+  requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
-    const materials = [
-      { code: "POSTE-MT-12M", name: "Poste de Betão 12M (MT)", category: "MT", unit: "un" },
-      { code: "CABO-MT-50MM", name: "Cabo Alumínio 50mm2 (MT)", category: "MT", unit: "mts" },
-      { code: "TRANSF-250KVA", name: "Transformador 250kVA", category: "MT", unit: "un" },
-      { code: "CONEX-BT-ABC", name: "Conetor de Perfuração ABC", category: "BT", unit: "un" },
-      { code: "LAMP-LED-150W", name: "Luminária LED 150W (IP)", category: "IP", unit: "un" },
-      { code: "BRACO-IP-2M", name: "Braço Galvanizado 2M (IP)", category: "IP", unit: "un" },
-    ];
+    const body = z.object({
+      productId: z.string(),
+      fromWarehouseId: z.string(),
+      toWarehouseId: z.string(),
+      quantity: z.number().positive(),
+      ownerId: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    }).parse(req.body);
 
-    for (const m of materials) {
-      await prisma.material.upsert({
-        where: { code: m.code },
-        update: {},
-        create: m,
-      });
+    if (body.fromWarehouseId === body.toWarehouseId) {
+      return res.status(400).json({ error: "SAME_WAREHOUSE" });
     }
 
-    return res.json({ ok: true, message: "Catálogo inicializado" });
+    const result = await prisma.$transaction(async (tx) => {
+      // Validar stock disponível na origem
+      const sourceStock = await tx.warehouseStock.findUnique({
+        where: {
+          warehouseId_productId_ownerId: {
+            warehouseId: body.fromWarehouseId,
+            productId: body.productId,
+            ownerId: body.ownerId || null,
+          },
+        },
+      });
+
+      if (!sourceStock || sourceStock.quantity.lt(body.quantity)) {
+        throw new Error("INSUFFICIENT_STOCK");
+      }
+
+      // 1. Movimento de Saída (Origem)
+      await tx.stockMovement.create({
+        data: {
+          productId: body.productId,
+          warehouseId: body.fromWarehouseId,
+          userId: req.user.sub,
+          type: "TRANSFER_OUT",
+          quantity: body.quantity,
+          ownerId: body.ownerId,
+          notes: `Transferência para ${body.toWarehouseId}. ${body.notes || ""}`,
+        },
+      });
+
+      // 2. Movimento de Entrada (Destino)
+      await tx.stockMovement.create({
+        data: {
+          productId: body.productId,
+          warehouseId: body.toWarehouseId,
+          userId: req.user.sub,
+          type: "TRANSFER_IN",
+          quantity: body.quantity,
+          ownerId: body.ownerId,
+          notes: `Transferência de ${body.fromWarehouseId}. ${body.notes || ""}`,
+        },
+      });
+
+      // 3. Atualizar Saldos
+      await tx.warehouseStock.update({
+        where: { id: sourceStock.id },
+        data: { quantity: { decrement: body.quantity } },
+      });
+
+      await tx.warehouseStock.upsert({
+        where: {
+          warehouseId_productId_ownerId: {
+            warehouseId: body.toWarehouseId,
+            productId: body.productId,
+            ownerId: body.ownerId || null,
+          },
+        },
+        update: { quantity: { increment: body.quantity } },
+        create: {
+          warehouseId: body.toWarehouseId,
+          productId: body.productId,
+          ownerId: body.ownerId || null,
+          quantity: body.quantity,
+        },
+      });
+
+      return { ok: true };
+    });
+
+    return res.json(result);
   })
 );
 
-// Configuração Multer para fotos de campo
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const { id } = req.params;
-    const dir = `uploads/projects/${id}/stock`;
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-const upload = multer({ storage });
-
-// POST — Upload de Foto Georreferenciada
-stockRoutes.post(
-  "/:id/photos",
-  requirePermission("stock", "manage"),
-  upload.single("file"), // apiUpload envia as "file"
+// GET - Histórico de Movimentações
+stockRoutes.get(
+  "/movements",
+  requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
-    const projectId = String(req.params.id);
-    const { movementId, materialId, lat, lng } = req.body;
-
-    if (!req.file) throw new Error("FILE_REQUIRED");
-
-    const photo = await prisma.projectPhoto.create({
-      data: {
-        projectId,
-        movementId: movementId || null,
-        materialId: materialId || null,
-        path: req.file.path.replace(/\\/g, "/"),
-        lat: lat ? parseFloat(lat) : null,
-        lng: lng ? parseFloat(lng) : null,
-        condition: req.body.condition || null,
-        takenAt: new Date(),
+    const { warehouseId, productId, type } = req.query;
+    const items = await prisma.stockMovement.findMany({
+      where: {
+        ...(warehouseId && { warehouseId }),
+        ...(productId && { productId }),
+        ...(type && { type }),
       },
+      include: {
+        product: true,
+        warehouse: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
     });
-
-    return res.status(201).json(photo);
+    return res.json({ items });
   })
 );
 

@@ -172,6 +172,8 @@
                         href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
                         href="../Projectos/ProjectGeral.html">Obras</a>
+                    <a data-nav-logistics class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        href="../Stock/index.html">Logística</a>
                 </div>
             </div>
 
@@ -211,6 +213,10 @@
                 href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
+            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Stock/index.html">
+                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+            </a>
             <button data-logout
                 class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
@@ -236,22 +242,22 @@
 
         <!-- Tab Navigation -->
         <div class="flex flex-row flex-nowrap border-b border-slate-100 mb-8 overflow-x-auto no-scrollbar">
-            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="dashboard"
+            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="dashboard"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="relatorio"
+            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="relatorio"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 <span class="md:hidden">Avanço</span>
                 <span class="hidden md:inline">Avanço Físico</span>
             </button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="files"
+            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="files"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 <span class="md:hidden">Arquivos</span>
                 <span class="hidden md:inline">Gestão de Arquivos</span>
             </button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura" data-tab-trigger="stock"
+            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="stock"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Stock</button>
-            <button id="tabTriggerGaleria" data-tab-trigger="galeria_obra"
+            <button id="tabTriggerGaleria" data-role-visible="admin,supervisor,tecnico,leitura,operador,cliente" data-tab-trigger="galeria_obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra</button>
         </div>

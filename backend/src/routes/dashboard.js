@@ -8,7 +8,9 @@ const dashboardRoutes = express.Router();
 dashboardRoutes.use(authRequired);
 
 function getScopedClientId(req) {
-  if (req.user?.role !== "cliente") return null;
+  const role = (req.user?.role || "").toLowerCase();
+  if (role !== "cliente") return null;
+  
   if (!req.user?.clientId) {
     const err = new Error("FORBIDDEN");
     err.status = 403;
@@ -205,43 +207,40 @@ dashboardRoutes.get(
     const overallProgress = projects.length > 0 ? Math.round(totalProgressSum / projects.length) : 0;
 
     // 3. Resumo de Armazém do Cliente (Agregação via Movements)
-    // Buscamos movimentos onde o batch seja "Armazém do Cliente" ou similar
     const movements = await prisma.stockMovement.findMany({
       where: {
         projectId: { in: projects.map((p) => p.id) },
-        batch: "Armazém do Cliente",
-        auditStatus: "APROVADO",
       },
-      include: { material: true },
+      include: { product: true },
     });
 
     const stockMap = {};
     movements.forEach((m) => {
-      const mId = m.materialId;
-      if (!stockMap[mId]) {
-        stockMap[mId] = {
-          id: mId,
-          name: m.material.name,
-          unit: m.material.unit,
+      const pId = m.productId;
+      if (!stockMap[pId]) {
+        stockMap[pId] = {
+          id: pId,
+          name: m.product.name,
+          unit: m.product.unit,
           qty: 0,
           totalIn: 0,
           totalOut: 0,
-          lastActivity: m.dataMovimento,
-          state: m.auditStatus === "APROVADO" ? "Bom Estado" : "Pendente",
+          lastActivity: m.createdAt,
+          state: "Bom Estado",
         };
       }
       
-      const val = Number(m.quantityGood || 0);
-      if (m.type === "SAIDA") {
-        stockMap[mId].totalOut += val;
-        stockMap[mId].qty -= val;
-      } else if (m.type === "ENTRADA") {
-        stockMap[mId].totalIn += val;
-        stockMap[mId].qty += val;
+      const val = Number(m.quantity || 0);
+      if (m.type === "SAIDA" || m.type === "TRANSFER_OUT") {
+        stockMap[pId].totalOut += val;
+        stockMap[pId].qty -= val;
+      } else if (m.type === "ENTRADA" || m.type === "TRANSFER_IN") {
+        stockMap[pId].totalIn += val;
+        stockMap[pId].qty += val;
       }
       
-      if (new Date(m.dataMovimento) > new Date(stockMap[mId].lastActivity)) {
-        stockMap[mId].lastActivity = m.dataMovimento;
+      if (new Date(m.createdAt) > new Date(stockMap[pId].lastActivity)) {
+        stockMap[pId].lastActivity = m.createdAt;
       }
     });
 

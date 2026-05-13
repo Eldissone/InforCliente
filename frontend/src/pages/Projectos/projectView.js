@@ -27,9 +27,9 @@ function getProjectId() {
 
 function applyRoleVisibility() {
   const user = getSessionUser();
-  const role = user?.role || "leitura";
+  const role = (user?.role || "leitura").toLowerCase();
   document.querySelectorAll("[data-role-visible]").forEach(el => {
-    const roles = el.getAttribute("data-role-visible").split(",");
+    const roles = el.getAttribute("data-role-visible").toLowerCase().split(",");
     if (roles.includes(role)) {
       el.classList.remove("hidden");
       if (el.tagName === "BUTTON") el.style.display = "flex";
@@ -2556,7 +2556,7 @@ function openPhotoPreview(photoId) {
   if (!photo) return;
 
   const url = getAssetUrl(photo.path);
-  const title = photo.description || (photo.movement?.material?.name ? `Registo: ${photo.movement.material.name}` : "Foto de Obra");
+  const title = photo.description || (photo.movement?.product?.name ? `Registo: ${photo.movement.product.name}` : "Foto de Obra");
   const date = formatDateBR(photo.createdAt);
 
   openLightbox(url, title, date);

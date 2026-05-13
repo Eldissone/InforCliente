@@ -44,6 +44,7 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
   });
 
   if (res.status === 401) {
+    console.error("apiRequest: 401 Unauthorized em", path, { hasToken: !!token });
     logout();
     const here = window.location.pathname.split("/").slice(-2).join("/");
     const loginUrl = `/Auth/login.html?next=${encodeURIComponent(here)}`;
@@ -65,19 +66,29 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
   return data;
 }
 
-export async function apiUpload(path, { file, fieldName = "file", extraFields } = {}) {
+export async function apiUpload(path, dataOrOptions, method = "POST") {
   const token = getToken();
   const baseUrl = getApiBaseUrl();
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
-  const form = new FormData();
-  form.append(fieldName, file);
-  if (extraFields) {
-    Object.entries(extraFields).forEach(([k, v]) => form.append(k, String(v)));
+  let form;
+  let finalMethod = method;
+
+  if (dataOrOptions instanceof FormData) {
+    form = dataOrOptions;
+  } else {
+    const { file, fieldName = "file", extraFields, method: optionsMethod } = dataOrOptions || {};
+    if (optionsMethod) finalMethod = optionsMethod;
+    
+    form = new FormData();
+    if (file) form.append(fieldName, file);
+    if (extraFields) {
+      Object.entries(extraFields).forEach(([k, v]) => form.append(k, String(v)));
+    }
   }
 
   const res = await fetch(url, {
-    method: "POST",
+    method: finalMethod,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },

@@ -8,7 +8,9 @@ const { clientRoutes } = require("./routes/clients");
 const { projectRoutes } = require("./routes/projects");
 const { userRoutes } = require("./routes/users");
 const { stockRoutes } = require("./routes/stock");
-const { materialRoutes } = require("./routes/materials");
+const { productRoutes } = require("./routes/products");
+const { warehouseRoutes } = require("./routes/warehouses");
+const { itemRoutes } = require("./routes/items");
 const { permissionsRoutes } = require("./routes/permissions");
 const { initialize } = require("./utils/startup");
 
@@ -46,7 +48,9 @@ app.use("/clients", clientRoutes);
 app.use("/projects", projectRoutes);
 app.use("/users", userRoutes);
 app.use("/stock", stockRoutes);
-app.use("/materials", materialRoutes);
+app.use("/products", productRoutes);
+app.use("/warehouses", warehouseRoutes);
+app.use("/items", itemRoutes);
 app.use("/permissions", permissionsRoutes);
 
 // eslint-disable-next-line no-unused-vars

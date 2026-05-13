@@ -249,54 +249,67 @@ projectRoutes.post(
       code = await generateProjectCode();
     }
 
-    const created = await prisma.project.create({
-      data: {
-        code,
-        name: body.name,
-        contact: body.contact || null,
-        location: body.location || null,
-        region: body.region || null,
-        status: body.status || "ACTIVE",
-        startDate: body.startDate ? new Date(body.startDate) : null,
-        dueDate: body.dueDate ? new Date(body.dueDate) : null,
-        budgetTotal,
-        budgetAllocated,
-        budgetConsumed,
-        budgetCommitted,
-        budgetAvailable,
-        physicalProgressPct: body.physicalProgressPct ?? 0,
-        currency: body.currency || "AOA",
-        phaseLabel: body.phaseLabel || null,
-        clientId: body.clientId || null,
-        projectType: body.projectType || null,
-        empreiteiro: body.empreiteiro || null,
-        subempreiteiro: body.subempreiteiro || null,
-        directorObra: body.directorObra || null,
-        directorPhoto: body.directorPhoto || null,
-        directorPhone: body.directorPhone || null,
-        directorEmail: body.directorEmail || null,
-        referencia: body.referencia || null,
-        lastAccidentDate: body.lastAccidentDate ? new Date(body.lastAccidentDate) : null,
-        activeStaffCount: body.activeStaffCount ?? 0,
-        technicians: body.technicians || [],
-        safetyHistory: body.safetyHistory || null,
-        maoDeObraIndireta: body.maoDeObraIndireta || null,
-        maoDeObraDireta: body.maoDeObraDireta || null,
-        equipamentos: body.equipamentos || null,
-        progressTasks: body.projectType
-          ? {
-            create: getTemplateForProjectType(body.projectType).map((t) => ({
-              itemGroup: body.projectType,
-              order: t.order,
-              description: t.description,
-              expectedQty: t.expectedQty,
-              unit: t.unit,
-              executedQty: 0
-            }))
-          }
-          : undefined,
-      },
-      select: { id: true },
+    const created = await prisma.$transaction(async (tx) => {
+      const p = await tx.project.create({
+        data: {
+          code,
+          name: body.name,
+          contact: body.contact || null,
+          location: body.location || null,
+          region: body.region || null,
+          status: body.status || "ACTIVE",
+          startDate: body.startDate ? new Date(body.startDate) : null,
+          dueDate: body.dueDate ? new Date(body.dueDate) : null,
+          budgetTotal,
+          budgetAllocated,
+          budgetConsumed,
+          budgetCommitted,
+          budgetAvailable,
+          physicalProgressPct: body.physicalProgressPct ?? 0,
+          currency: body.currency || "AOA",
+          phaseLabel: body.phaseLabel || null,
+          clientId: body.clientId || null,
+          projectType: body.projectType || null,
+          empreiteiro: body.empreiteiro || null,
+          subempreiteiro: body.subempreiteiro || null,
+          directorObra: body.directorObra || null,
+          directorPhoto: body.directorPhoto || null,
+          directorPhone: body.directorPhone || null,
+          directorEmail: body.directorEmail || null,
+          referencia: body.referencia || null,
+          lastAccidentDate: body.lastAccidentDate ? new Date(body.lastAccidentDate) : null,
+          activeStaffCount: body.activeStaffCount ?? 0,
+          technicians: body.technicians || [],
+          safetyHistory: body.safetyHistory || null,
+          maoDeObraIndireta: body.maoDeObraIndireta || null,
+          maoDeObraDireta: body.maoDeObraDireta || null,
+          equipamentos: body.equipamentos || null,
+          progressTasks: body.projectType
+            ? {
+              create: getTemplateForProjectType(body.projectType).map((t) => ({
+                itemGroup: body.projectType,
+                order: t.order,
+                description: t.description,
+                expectedQty: t.expectedQty,
+                unit: t.unit,
+                executedQty: 0
+              }))
+            }
+            : undefined,
+        },
+        select: { id: true, name: true },
+      });
+
+      // Automação Logística: Criar Armazém de Obra (Estaleiro)
+      await tx.warehouse.create({
+        data: {
+          name: `Estaleiro: ${p.name}`,
+          type: "SITE",
+          projectId: p.id,
+        },
+      });
+
+      return p;
     });
 
     return res.status(201).json({ id: created.id });
@@ -1215,7 +1228,7 @@ projectRoutes.get(
       orderBy: { createdAt: "desc" },
       include: {
         movement: {
-          include: { material: true }
+          include: { product: true }
         }
       }
     });
