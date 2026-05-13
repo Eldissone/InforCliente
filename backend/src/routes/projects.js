@@ -56,6 +56,7 @@ async function ensureProjectReadable(req, projectId) {
     where: {
       id: projectId,
       ...(scopedClientId ? { clientId: scopedClientId } : {}),
+      ...(req.permissionScope === "own" ? { assignedUsers: { some: { id: req.user.id } } } : {}),
     },
     include: {
       client: { select: { id: true, name: true, code: true } },
@@ -137,6 +138,14 @@ projectRoutes.get(
             },
           },
         ],
+      });
+    }
+
+    if (req.permissionScope === "own") {
+      whereClauses.push({
+        assignedUsers: {
+          some: { id: req.user.id }
+        }
       });
     }
 

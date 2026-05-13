@@ -123,7 +123,8 @@ function renderRow(u) {
         <div class="flex items-center gap-3">
           ${avatarEl(u.email, u.profilePic || u.client?.profilePic)}
           <div>
-            <div class="text-sm font-bold text-slate-900">${esc(u.email)}</div>
+            <div class="text-sm font-bold text-slate-900">${esc(u.name || u.email)}</div>
+            ${u.name ? `<div class="text-[10px] text-slate-400 font-medium">${esc(u.email)}</div>` : ''}
             <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${u.id.slice(0, 8)}</div>
           </div>
         </div>
@@ -349,6 +350,44 @@ async function loadUsers() {
   if (activeSection === "users") renderTable(filterUsers());
 }
 
+// ─── Project helpers ──────────────────────────────────────────
+async function loadAllProjects() {
+  const data = await apiRequest("/projects?page=1&pageSize=1000");
+  return data.items || [];
+}
+
+function renderProjectCheckboxes(projects, selectedIds = []) {
+  if (!projects.length) return `<p class="text-xs text-slate-400 italic">Nenhuma obra cadastrada.</p>`;
+  return `
+    <div class="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-3 bg-white border border-slate-200 rounded-xl">
+      ${projects.map(p => {
+    const checked = selectedIds.includes(p.id) ? "checked" : "";
+    return `
+          <label class="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors group">
+            <input type="checkbox" name="assignedProjects" value="${p.id}" ${checked} class="w-4 h-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900" />
+            <div class="flex flex-col">
+              <span class="text-xs font-bold text-slate-700 group-hover:text-slate-900">${esc(p.name)}</span>
+              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${esc(p.code)}</span>
+            </div>
+          </label>
+        `;
+  }).join("")}
+    </div>
+  `;
+}
+
+function wireProjectSelector(panel, roleId, wrapId) {
+  const roleEl = panel.querySelector(`#${roleId}`);
+  const wrapEl = panel.querySelector(`#${wrapId}`);
+  const sync = () => {
+    const role = roleEl?.value;
+    const isAllowedRole = role === "operador" || role === "leitura" || role === "cliente";
+    wrapEl?.classList.toggle("hidden", !isAllowedRole);
+  };
+  roleEl?.addEventListener("change", sync);
+  sync();
+}
+
 async function loadClients() {
   const data = await apiRequest("/clients?page=1&pageSize=200");
   return data.items || [];
@@ -370,12 +409,16 @@ function wireClientSelector(panel, roleId, wrapId) {
 
 // ─── Create modal ─────────────────────────────────────────────
 async function openCreate() {
-  const clients = await loadClients();
+  const [clients, projects] = await Promise.all([loadClients(), loadAllProjects()]);
   const modal = openModal({
     title: "Novo Utilizador",
     primaryLabel: "Criar Conta",
     contentHtml: `
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome Completo</label>
+          <input id="u_name" type="text" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" placeholder="Nome do utilizador..." />
+        </div>
         <div class="md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
           <input id="u_email" type="email" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" placeholder="utilizador@empresa.com" />
@@ -397,6 +440,11 @@ async function openCreate() {
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente Vinculado</label>
           <select id="u_client" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50">${renderClientOptions(clients)}</select>
         </div>
+        <div id="u_proj_wrap" class="md:col-span-2 hidden">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Obras Atribuídas</label>
+          <p class="text-[10px] text-slate-400 mb-2 font-medium">Selecione as obras que este utilizador poderá gerir/visualizar.</p>
+          ${renderProjectCheckboxes(projects)}
+        </div>
       </div>`,
     onPrimary: async ({ close, panel }) => {
       const v = id => panel.querySelector(`#${id}`)?.value?.trim?.();
@@ -404,20 +452,34 @@ async function openCreate() {
       const role = v("u_role");
       const clientId = v("u_client") || null;
       if (role === "cliente" && !clientId) { toast("Selecione o cliente vinculado.", { type: "error" }); return; }
+
+      const assignedProjectIds = Array.from(panel.querySelectorAll('input[name="assignedProjects"]:checked')).map(i => i.value);
+
       try {
         setButtonLoading(btn, true);
-        await apiRequest("/users", { method: "POST", body: { email: v("u_email"), password: v("u_pass"), role, clientId } });
+        await apiRequest("/users", {
+          method: "POST",
+          body: {
+            email: v("u_email"),
+            name: v("u_name") || null,
+            password: v("u_pass"),
+            role,
+            clientId,
+            assignedProjectIds: (role === "operador" || role === "leitura" || role === "cliente") ? assignedProjectIds : []
+          }
+        });
         toast("Utilizador criado com sucesso.", { type: "success" });
         close(); await loadUsers();
       } catch (err) { setButtonLoading(btn, false); toast(err.message || "Erro ao criar utilizador.", { type: "error" }); }
     },
   });
   wireClientSelector(modal.panel, "u_role", "u_cli_wrap");
+  wireProjectSelector(modal.panel, "u_role", "u_proj_wrap");
 }
 
 // ─── Edit modal ───────────────────────────────────────────────
 async function openEdit(id) {
-  const [data, clients] = await Promise.all([apiRequest("/users"), loadClients()]);
+  const [data, clients, projects] = await Promise.all([apiRequest("/users"), loadClients(), loadAllProjects()]);
   const u = (data.items || []).find(x => x.id === id);
   if (!u) return;
 
@@ -436,6 +498,10 @@ async function openEdit(id) {
           ${roleBadge(u.role)}
         </div>
         <div class="md:col-span-2">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome Completo</label>
+          <input id="e_name" type="text" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" value="${esc(u.name || '')}" placeholder="Nome do utilizador..." />
+        </div>
+        <div class="md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email</label>
           <input id="e_email" type="email" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" value="${esc(u.email)}" />
         </div>
@@ -452,6 +518,11 @@ async function openEdit(id) {
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente Vinculado</label>
           <select id="e_client" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50">${renderClientOptions(clients, u.clientId || "")}</select>
         </div>
+        <div id="e_proj_wrap" class="${(u.role === "operador" || u.role === "leitura" || u.role === "cliente") ? "" : "hidden"} md:col-span-2">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Obras Atribuídas</label>
+          <p class="text-[10px] text-slate-400 mb-2 font-medium">Selecione as obras que este utilizador poderá gerir/visualizar.</p>
+          ${renderProjectCheckboxes(projects, (u.assignedProjects || []).map(p => p.id))}
+        </div>
         <div class="md:col-span-2 border-t border-slate-100 pt-4">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Redefinir Senha</label>
           <div class="flex gap-2">
@@ -466,9 +537,21 @@ async function openEdit(id) {
       const role = v("e_role");
       const clientId = v("e_client") || null;
       if (role === "cliente" && !clientId) { toast("Selecione o cliente vinculado.", { type: "error" }); return; }
+
+      const assignedProjectIds = Array.from(panel.querySelectorAll('input[name="assignedProjects"]:checked')).map(i => i.value);
+
       try {
         setButtonLoading(btn, true);
-        await apiRequest(`/users/${encodeURIComponent(id)}`, { method: "PATCH", body: { email: v("e_email"), role, clientId } });
+        await apiRequest(`/users/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: {
+            email: v("e_email"),
+            name: v("e_name") || null,
+            role,
+            clientId,
+            assignedProjectIds: (role === "operador" || role === "leitura" || role === "cliente") ? assignedProjectIds : []
+          }
+        });
         toast("Utilizador atualizado.", { type: "success" });
         close(); await loadUsers();
       } catch (err) { setButtonLoading(btn, false); toast(err.message || "Erro ao atualizar.", { type: "error" }); }
@@ -486,6 +569,7 @@ async function openEdit(id) {
   });
 
   wireClientSelector(modal.panel, "e_role", "e_cli_wrap");
+  wireProjectSelector(modal.panel, "e_role", "e_proj_wrap");
 
   setTimeout(() => {
     document.getElementById("resetBtn")?.addEventListener("click", async () => {

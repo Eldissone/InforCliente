@@ -61,6 +61,7 @@ authRoutes.post(
           id: user.id, 
           email: user.email, 
           name: user.name, 
+          profilePic: user.profilePic,
           clientName: primaryClient?.name || null,
           role: user.role 
         },
@@ -86,7 +87,7 @@ authRoutes.post(
 
     return res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: activeRole, clientId: activeClientId },
+      user: { id: user.id, email: user.email, name: user.name, profilePic: user.profilePic, role: activeRole, clientId: activeClientId },
     });
   })
 );
@@ -135,7 +136,7 @@ authRoutes.post(
 
     return res.json({
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: activeRole, clientId: clientId },
+      user: { id: user.id, email: user.email, name: user.name, profilePic: user.profilePic, role: activeRole, clientId: clientId },
     });
   })
 );
@@ -239,6 +240,8 @@ authRoutes.get(
       select: {
         id: true,
         email: true,
+        name: true,
+        profilePic: true,
         role: true,
         clientId: true,
         createdAt: true,

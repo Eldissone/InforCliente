@@ -50,7 +50,13 @@ export function wireUsersNav() {
     }
   });
   document.querySelectorAll("[data-user-role]").forEach((el) => {
-    el.textContent = role ? String(role).toUpperCase() : "";
+    // Show name if available, fallback to role label
+    el.textContent = user?.name || (role ? String(role).toUpperCase() : "");
+  });
+
+  // Also support data-user-name explicitly if needed
+  document.querySelectorAll("[data-user-name]").forEach((el) => {
+    el.textContent = user?.name || user?.email || "";
   });
 
   // Dynamic Dashboard Link
@@ -66,6 +72,7 @@ export function wireUsersNav() {
   }
 
   applyRoleVisibility(role);
+  wireUserProfile();
   processUrlMessages();
 }
 
@@ -78,4 +85,74 @@ function processUrlMessages() {
     const newUrl = window.location.pathname;
     window.history.replaceState({}, document.title, newUrl);
   }
+}
+
+export function wireUserProfile() {
+  document.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-user-profile], [data-user-role]");
+    if (!btn) return;
+    openProfileModal();
+  });
+}
+
+async function openProfileModal() {
+  const { openModal, toast, setButtonLoading, escapeHtml } = await import("./ui.js");
+  const { apiRequest } = await import("../services/api.js");
+
+  // Fetch fresh data
+  const user = await apiRequest("/users/me");
+
+  openModal({
+    title: "O Meu Perfil",
+    primaryLabel: "Guardar Alterações",
+    contentHtml: `
+      <div class="space-y-4">
+        <div>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nome Completo</label>
+          <input id="p_name" type="text" value="${escapeHtml(user.name || '')}" class="w-full h-12 bg-slate-50 border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="O seu nome..." />
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Email (Apenas Leitura)</label>
+          <input type="text" value="${escapeHtml(user.email)}" class="w-full h-12 bg-slate-100 border-none rounded-xl px-4 text-sm font-bold text-slate-400 cursor-not-allowed" readonly />
+        </div>
+        <div>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nova Senha (Deixe em branco para manter)</label>
+          <input id="p_pass" type="password" class="w-full h-12 bg-slate-50 border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="••••••••" />
+        </div>
+      </div>
+    `,
+    onPrimary: async ({ close, btn, panel }) => {
+      const name = panel.querySelector("#p_name").value.trim();
+      const password = panel.querySelector("#p_pass").value.trim();
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest("/users/me", {
+          method: "PATCH",
+          body: {
+            name: name || null,
+            ...(password ? { password } : {})
+          }
+        });
+
+        // Update session info locally to persist after refresh
+        const USER_KEY = "InfoCliente.user";
+        const storedUser = JSON.parse(localStorage.getItem(USER_KEY) || "{}");
+        storedUser.name = name;
+        localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
+
+        toast("Perfil atualizado com sucesso!", { type: "success" });
+        
+        // Update the header name instantly
+        document.querySelectorAll("[data-user-role], [data-user-name]").forEach(el => {
+            el.textContent = name || storedUser.email;
+        });
+
+        close();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro ao atualizar perfil", { type: "error" });
+      }
+    }
+  });
 }

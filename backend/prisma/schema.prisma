@@ -19,6 +19,7 @@ model User {
   
   profilePic   String?
   accounts     UserClient[]
+  assignedProjects Project[] @relation("AssignedUsers")
 
   @@index([clientId])
 }
@@ -122,6 +123,7 @@ model Project {
   stock               ProjectStock[]
   stockMovements      StockMovement[]
   photos              ProjectPhoto[]
+  assignedUsers       User[]               @relation("AssignedUsers")
 
   @@index([name])
   @@index([status])
