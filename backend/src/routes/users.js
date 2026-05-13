@@ -40,6 +40,24 @@ userRoutes.get(
   })
 );
 
+// Rota pública para listar destinatários (usada em transferências de stock/ativos)
+userRoutes.get(
+  "/receivers",
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.user.findMany({
+      where: {
+        role: { in: ["admin", "operador"] }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+    return res.json({ items });
+  })
+);
+
 userRoutes.patch(
   "/me",
   asyncHandler(async (req, res) => {

@@ -264,8 +264,8 @@ async function renderCatalog(container) {
         </div>
 
         <div id="catalogContent">
-            ${renderTable(materials, "Materiais & Consumíveis", "bg-emerald-50 text-emerald-600")}
-            ${renderTable(tools, "Ativos & Ferramentas", "bg-indigo-50 text-indigo-600")}
+            ${renderTable(materials, "Material de Consumo", "bg-emerald-50 text-emerald-600")}
+            ${renderTable(tools, "Ferramentas", "bg-indigo-50 text-indigo-600")}
         </div>
     `;
 
@@ -356,13 +356,14 @@ async function openProductModal(product = null) {
 }
 
 async function renderTools(container) {
+    const currentUser = await apiRequest("/users/me");
     const { items: allItems } = await apiRequest("/items");
     // FILTRO: Apenas produtos que sejam ferramentas ou equipamentos
     const items = allItems.filter(i => i.product.category === 'TOOL' || i.product.category === 'EQUIPMENT');
 
     const available = items.filter(i => i.status === 'AVAILABLE').length;
-    const assigned = items.filter(i => i.status === 'ASSIGNED').length;
-    const maintenance = items.filter(i => i.status === 'MAINTENANCE').length;
+    const assignedCount = items.filter(i => i.status === 'ASSIGNED' || i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN').length;
+    const maintenanceCount = items.filter(i => i.status === 'MAINTENANCE').length;
 
     // Agrupar ferramentas por produto para o resumo de quantidades
     const toolGroups = {};
@@ -377,82 +378,14 @@ async function renderTools(container) {
             };
         }
         toolGroups[i.productId].total++;
-        if (i.status === 'AVAILABLE') toolGroups[i.productId].available++;
-        else if (i.status === 'ASSIGNED') toolGroups[i.productId].assigned++;
-        else if (i.status === 'MAINTENANCE') toolGroups[i.productId].maintenance++;
+        if (i.status === 'AVAILABLE') {
+            toolGroups[i.productId].available++;
+        } else if (i.status === 'ASSIGNED' || i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN') {
+            toolGroups[i.productId].assigned++;
+        } else if (i.status === 'MAINTENANCE') {
+            toolGroups[i.productId].maintenance++;
+        }
     });
-
-    window.openBulkAssign = async (productId) => {
-        const product = items.find(i => i.productId === productId)?.product;
-        const availableItems = items.filter(i => i.productId === productId && i.status === 'AVAILABLE');
-        const usersRes = await apiRequest("/users");
-        const warehousesRes = await apiRequest("/warehouses");
-
-        const contentHtml = `
-            <div class="space-y-6 pt-4">
-                <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex items-center gap-4">
-                    <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                        <span class="material-symbols-outlined text-slate-400">construction</span>
-                    </div>
-                    <div>
-                        <h4 class="font-bold text-slate-900">${esc(product?.name)}</h4>
-                        <p class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">${availableItems.length} Unidades Disponíveis</p>
-                    </div>
-                </div>
-
-                <form id="formBulkAssign" class="space-y-4">
-                    <div class="space-y-2">
-                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade a Entregar</label>
-                        <input type="number" name="qty" min="1" max="${availableItems.length}" value="1" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Entregar a (Responsável)</label>
-                        <select name="responsibleId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                            <option value="">Selecionar funcionário...</option>
-                            ${usersRes.items.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Local de Destino (Obra/Estaleiro)</label>
-                        <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                            <option value="">Selecionar local...</option>
-                            ${warehousesRes.items.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
-                        </select>
-                    </div>
-                </form>
-            </div>
-        `;
-
-        const { close } = openModal({
-            title: "Entrega em Lote de Ferramentas",
-            contentHtml,
-            primaryLabel: "Confirmar Entrega",
-            onPrimary: async ({ body }) => {
-                const formData = new FormData(body.querySelector("#formBulkAssign"));
-                const qty = parseInt(formData.get("qty"));
-                const responsibleId = formData.get("responsibleId");
-                const warehouseId = formData.get("warehouseId");
-
-                const toAssign = availableItems.slice(0, qty);
-
-                try {
-                    for (const item of toAssign) {
-                        await apiRequest(`/items/${item.id}/assign`, {
-                            method: "PATCH",
-                            body: {
-                                status: "ASSIGNED",
-                                responsibleId,
-                                warehouseId,
-                                projectId: warehousesRes.items.find(w => w.id === warehouseId)?.projectId || null
-                            }
-                        });
-                    }
-                    close();
-                    loadTabContent("tools");
-                } catch (error) { alert("Erro ao atribuir: " + error.message); }
-            }
-        });
-    };
 
     let html = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
@@ -484,7 +417,7 @@ async function renderTools(container) {
                                 <span class="text-[10px] font-black text-slate-400 uppercase">${g.assigned} Em Obra</span>
                             </div>
                         </div>
-                        <button onclick="window.openBulkAssign('${g.product.id}')" class="h-10 px-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all ${g.available === 0 ? 'opacity-30 pointer-events-none' : ''}">
+                        <button onclick="window.openDeliveryModal({ productId: '${g.product.id}' })" class="h-10 px-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all ${g.available === 0 ? 'opacity-30 pointer-events-none' : ''}">
                             Entregar
                         </button>
                     </div>
@@ -492,14 +425,14 @@ async function renderTools(container) {
             </div>
         </div>
 
-        <div class="flex flex-wrap gap-2 mb-10">
-            <button data-status="ALL" class="tool-filter-btn px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white transition-all">Individual (Todos)</button>
-            <button data-status="AVAILABLE" class="tool-filter-btn px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Disponíveis (${available})</button>
-            <button data-status="ASSIGNED" class="tool-filter-btn px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Em Obra (${assigned})</button>
-            <button data-status="MAINTENANCE" class="tool-filter-btn px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Manutenção (${maintenance})</button>
+        <div class="flex overflow-x-auto no-scrollbar gap-2 mb-10 pb-2">
+            <button data-status="ALL" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white transition-all">Todos</button>
+            <button data-status="AVAILABLE" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Disponíveis (${available})</button>
+            <button data-status="ASSIGNED" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Em Obra / Trânsito (${assignedCount})</button>
+            <button data-status="MAINTENANCE" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Manutenção (${maintenanceCount})</button>
         </div>
 
-        <div id="toolsGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+        <div id="toolsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
     `;
 
     if (items.length === 0) {
@@ -507,48 +440,105 @@ async function renderTools(container) {
         return;
     }
 
+    // Agrupar itens para exibição na grelha principal
+    const displayGroups = {};
     items.forEach(item => {
-        const statusMap = {
-            'AVAILABLE': { label: 'Disponível', color: 'bg-emerald-500' },
-            'ASSIGNED': { label: 'Em Obra', color: 'bg-yellow-500' },
-            'MAINTENANCE': { label: 'Manutenção', color: 'bg-red-500' }
-        };
-        const status = statusMap[item.status] || { label: item.status, color: 'bg-slate-500' };
+        const key = `${item.productId}-${item.warehouseId}-${item.targetWarehouseId || 'none'}-${item.responsibleId || 'none'}-${item.status}`;
+        if (!displayGroups[key]) {
+            displayGroups[key] = {
+                ...item,
+                quantity: 0,
+                itemIds: []
+            };
+        }
+        displayGroups[key].quantity++;
+        displayGroups[key].itemIds.push(item.id);
+    });
 
-        const imgUrl = getAssetUrl(item.imageUrl || item.product.image) || 'https://placehold.co/400x300/f8fafc/cbd5e1?text=Ferramenta';
+    Object.values(displayGroups).forEach(group => {
+        const statusMap = {
+            'AVAILABLE': { label: 'Livre', color: 'bg-emerald-500', icon: 'check_circle' },
+            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-amber-500', icon: 'hourglass_empty' },
+            'ASSIGNED': { label: 'Em Obra', color: 'bg-blue-600', icon: 'construction' },
+            'PENDING_RETURN': { label: 'Aguardando Validação', color: 'bg-indigo-500', icon: 'assignment_return' },
+            'MAINTENANCE': { label: 'Manutenção', color: 'bg-red-500', icon: 'build' }
+        };
+        const status = statusMap[group.status] || { label: group.status, color: 'bg-slate-500', icon: 'help' };
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+        const isResponsible = group.responsibleId === currentUser.id;
+
+        const imgUrl = getAssetUrl(group.imageUrl || group.product.image) || 'https://placehold.co/400x300/f8fafc/cbd5e1?text=Ferramenta';
 
         html += `
-            <div class="tool-card bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all group flex flex-col h-full" 
-                 data-status="${item.status}" 
-                 data-search="${esc(item.product.name.toLowerCase())} ${esc((item.serialNumber || '').toLowerCase())}">
-                <div class="h-32 overflow-hidden bg-slate-50 relative border-b border-slate-100">
-                    <img src="${imgUrl}" alt="${esc(item.product.name)}" class="w-full h-full object-cover group-hover:scale-110 transition-all duration-500">
-                    <div class="absolute top-2 right-2 px-2 py-1 ${status.color} text-white rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg">
+            <div class="tool-card bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col h-full" 
+                 data-status="${group.status}" 
+                 data-search="${esc(group.product.name.toLowerCase())}">
+                
+                <div class="h-32 sm:h-40 overflow-hidden bg-slate-50 relative border-b border-slate-100 p-4 shrink-0">
+                    <img src="${imgUrl}" alt="${esc(group.product.name)}" class="w-full h-full object-contain group-hover:scale-110 transition-all duration-700 mix-blend-multiply">
+                    <div class="absolute top-3 right-3 sm:top-4 sm:right-4 px-2.5 py-1 sm:px-3 sm:py-1.5 ${status.color} text-white rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1 sm:gap-1.5 animate-pulse-slow">
+                        <span class="material-symbols-outlined text-[10px] sm:text-xs">${status.icon}</span>
                         ${status.label}
                     </div>
                 </div>
-                <div class="p-4 flex flex-col flex-grow">
-                    <h3 class="font-bold text-slate-900 text-xs mb-0.5 line-clamp-1">${esc(item.product.name)}</h3>
-                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-3">S/N: ${esc(item.serialNumber || '---')}</p>
+
+                <div class="p-4 sm:p-6 flex flex-col flex-grow">
+                    <div class="mb-4">
+                        <h3 class="font-black text-slate-900 text-sm mb-1 group-hover:text-emerald-600 transition-colors line-clamp-2">${esc(group.product.name)}</h3>
+                        <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Modelo: ${esc(group.product.sku || '---')}</p>
+                    </div>
                     
-                    <div class="space-y-1.5 mb-4 flex-grow">
-                        <div class="flex items-center gap-2 text-slate-500">
-                            <span class="material-symbols-outlined text-[14px]">location_on</span>
-                            <span class="text-[10px] font-bold truncate">${esc(item.warehouse?.name || '---')}</span>
+                    <div class="space-y-2 sm:space-y-3 mb-5 sm:mb-6 flex-grow">
+                        <div class="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100/50">
+                            <div class="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
+                                <span class="material-symbols-outlined text-base sm:text-lg">${group.status === 'PENDING_RECEIPT' ? 'local_shipping' : 'location_on'}</span>
+                            </div>
+                            <div class="min-w-0 flex-grow">
+                                <p class="text-[9px] sm:text-[10px] font-bold text-slate-700 truncate w-full">
+                                    ${group.status === 'PENDING_RECEIPT' ? esc(group.targetWarehouse?.name || '---') : esc(group.warehouse?.name || '---')}
+                                </p>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-2 text-slate-500">
-                            <span class="material-symbols-outlined text-[14px]">person</span>
-                            <span class="text-[10px] font-bold truncate">${esc(item.responsible?.name || 'Livre')}</span>
+
+                        <div class="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 ${group.responsibleId ? 'bg-amber-50 border-amber-100/50' : 'bg-emerald-50 border-emerald-100/50'} rounded-2xl border transition-colors">
+                            <div class="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'}">
+                                <span class="material-symbols-outlined text-base sm:text-lg">${group.responsibleId ? 'person_check' : 'check_circle'}</span>
+                            </div>
+                            <div class="flex-grow min-w-0">
+                                <div class="flex justify-between items-baseline gap-1">
+                                    <p class="text-[9px] sm:text-[10px] font-bold ${group.responsibleId ? 'text-amber-900' : 'text-emerald-900'} truncate">
+                                        ${group.responsibleId ? esc(group.responsible?.name) : 'Livre em Stock'}
+                                    </p>
+                                    <span class="text-[10px] sm:text-xs font-black ${group.responsibleId ? 'text-amber-600' : 'text-emerald-600'} shrink-0">x${group.quantity}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="flex gap-2">
-                        <button onclick="window.openAssignModal('${item.id}')" class="flex-1 h-8 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all">
-                            Entregar
-                        </button>
-                        <button onclick="window.editTool('${item.id}')" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:text-slate-900 transition-all flex items-center justify-center">
-                            <span class="material-symbols-outlined text-base">edit</span>
-                        </button>
+                    <div class="flex flex-wrap gap-2 mt-auto">
+                        ${group.status === 'PENDING_RECEIPT' && isResponsible ? `
+                            <button onclick="window.confirmReceiptGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-[#2afc8d] text-slate-900 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-[#2afc8d]/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm sm:text-base">check</span> Receber
+                            </button>
+                        ` : ''}
+
+                        ${group.status === 'ASSIGNED' && isResponsible ? `
+                            <button onclick="window.requestReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm sm:text-base">assignment_return</span> Devolver
+                            </button>
+                        ` : ''}
+
+                        ${group.status === 'PENDING_RETURN' && isResponsible ? `
+                            <button onclick="window.confirmReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-indigo-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm sm:text-base">verified</span> Validar
+                            </button>
+                        ` : ''}
+
+                        ${group.status === 'AVAILABLE' ? `
+                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20 mt-4">
+                                Entregar
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -570,7 +560,9 @@ async function renderTools(container) {
 
     const applyFilters = () => {
         toolCards.forEach(card => {
-            const matchesStatus = currentFilter === 'ALL' || card.dataset.status === currentFilter;
+            const matchesStatus = currentFilter === 'ALL'
+                || (currentFilter === 'ASSIGNED' && (card.dataset.status === 'ASSIGNED' || card.dataset.status === 'PENDING_RECEIPT' || card.dataset.status === 'PENDING_RETURN'))
+                || card.dataset.status === currentFilter;
             const matchesSearch = card.dataset.search.includes(currentSearch);
             if (matchesStatus && matchesSearch) {
                 card.classList.remove("hidden");
@@ -629,12 +621,16 @@ async function openToolModal(tool = null) {
                     <input type="text" name="serialNumber" value="${esc(tool?.serialNumber || '')}" placeholder="Ex: SN-9928..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Estado</label>
-                    <select name="status" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                        <option value="AVAILABLE" ${tool?.status === 'AVAILABLE' ? 'selected' : ''}>Disponível</option>
-                        <option value="ASSIGNED" ${tool?.status === 'ASSIGNED' ? 'selected' : ''}>Em Obra</option>
-                        <option value="MAINTENANCE" ${tool?.status === 'MAINTENANCE' ? 'selected' : ''}>Manutenção</option>
-                    </select>
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">${tool ? 'Estado' : 'Quantidade'}</label>
+                    ${tool ? `
+                        <select name="status" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                            <option value="AVAILABLE" ${tool?.status === 'AVAILABLE' ? 'selected' : ''}>Disponível</option>
+                            <option value="ASSIGNED" ${tool?.status === 'ASSIGNED' ? 'selected' : ''}>Em Obra</option>
+                            <option value="MAINTENANCE" ${tool?.status === 'MAINTENANCE' ? 'selected' : ''}>Manutenção</option>
+                        </select>
+                    ` : `
+                        <input type="number" name="quantity" value="1" min="1" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    `}
                 </div>
             </div>
             <div class="space-y-2">
@@ -680,66 +676,118 @@ window.deleteTool = async (id) => {
     } catch (error) { alert("Erro ao eliminar: " + error.message); }
 };
 
-window.openAssignModal = async (toolOrId) => {
-    let tool = toolOrId;
-    if (typeof toolOrId === 'string') {
+window.openDeliveryModal = async ({ toolId, productId }) => {
+    const usersRes = await apiRequest("/users");
+    const warehousesRes = await apiRequest("/warehouses");
+    const projectsRes = await apiRequest("/projects");
+
+    let tool = null;
+    let availableItems = [];
+    let product = null;
+
+    if (toolId) {
         const { items } = await apiRequest("/items");
-        tool = items.find(i => i.id === toolOrId);
+        tool = items.find(i => i.id === toolId);
+        if (!tool) return alert("Erro: Ativo não encontrado.");
+        product = tool.product;
+    } else if (productId) {
+        const { items } = await apiRequest("/items");
+        availableItems = items.filter(i => i.productId === productId && i.status === 'AVAILABLE');
+        product = items.find(i => i.productId === productId)?.product;
+        if (!product) return alert("Erro: Produto não encontrado.");
     }
 
-    if (!tool) return alert("Erro: Ativo não encontrado.");
-
-    const resRes = await apiRequest("/users");
-    const projectsRes = await apiRequest("/projects");
-    const warehousesRes = await apiRequest("/warehouses");
+    const isBulk = !!productId && !toolId;
 
     const contentHtml = `
-        <form id="formAssign" class="space-y-6 pt-4">
-            <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 mb-6">
-                <p class="text-[10px] font-black text-blue-400 uppercase mb-1">A Alocar</p>
-                <p class="font-bold text-blue-900">${esc(tool.product.name)} <span class="text-xs opacity-50">(${esc(tool.serialNumber || 'SN/N')})</span></p>
-            </div>
-            
-            <div class="space-y-2">
-                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Responsável (Técnico)</label>
-                <select name="responsibleId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
-                    <option value="">Selecionar...</option>
-                    ${resRes.items.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
-                </select>
+        <div class="space-y-6 pt-4">
+            <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                    <span class="material-symbols-outlined text-slate-400">construction</span>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-900">${esc(product?.name)}</h4>
+                    ${isBulk
+            ? `<p class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">${availableItems.length} Unidades Disponíveis</p>`
+            : `<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">S/N: ${esc(tool.serialNumber || '---')}</p>`
+        }
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form id="formDelivery" class="space-y-4">
+                ${isBulk ? `
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Projeto / Obra</label>
-                    <select name="projectId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
-                        <option value="">Selecionar...</option>
-                        ${projectsRes.items.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+                    <div class="flex justify-between items-end">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade a Entregar</label>
+                        <span class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Disponível: ${availableItems.length}</span>
+                    </div>
+                    <input type="number" name="qty" min="1" max="${availableItems.length}" value="1" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                </div>
+                ` : ''}
+                
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Entregar a (Responsável)</label>
+                    <select name="responsibleId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                        <option value="">Selecionar funcionário...</option>
+                        ${usersRes.items.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
                     </select>
                 </div>
-                <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém Destino</label>
-                    <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
-                        ${warehousesRes.items.filter(w => w.type === 'SITE').map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
-                    </select>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Projeto / Obra</label>
+                        <select name="projectId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                            <option value="">Selecionar...</option>
+                            ${projectsRes.items.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Destino (Estaleiro)</label>
+                        <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                            <option value="">Selecionar...</option>
+                            ${warehousesRes.items.filter(w => w.type === 'SITE').map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
-            </div>
-        </form>
+            </form>
+        </div>
     `;
 
     const { close } = openModal({
-        title: "Alocar Ferramenta",
+        title: isBulk ? "Entrega em Lote" : "Entrega de Ferramenta",
         contentHtml,
         primaryLabel: "Confirmar Entrega",
         onPrimary: async ({ body }) => {
-            const data = Object.fromEntries(new FormData(body.querySelector("#formAssign")).entries());
+            const formData = new FormData(body.querySelector("#formDelivery"));
+            const data = Object.fromEntries(formData.entries());
+
             try {
-                await apiRequest(`/items/${tool.id}/assign`, {
-                    method: "PATCH",
-                    body: { ...data, status: "ASSIGNED" }
-                });
+                if (isBulk) {
+                    const qty = parseInt(data.qty);
+                    if (qty > availableItems.length) {
+                        return alert(`Erro: Quantidade excede o stock disponível (${availableItems.length} unidades).`);
+                    }
+                    const toAssign = availableItems.slice(0, qty);
+                    for (const item of toAssign) {
+                        await apiRequest(`/items/${item.id}/assign`, {
+                            method: "PATCH",
+                            body: {
+                                responsibleId: data.responsibleId,
+                                warehouseId: data.warehouseId,
+                                projectId: data.projectId,
+                                status: "PENDING_RECEIPT"
+                            }
+                        });
+                    }
+                } else {
+                    await apiRequest(`/items/${tool.id}/assign`, {
+                        method: "PATCH",
+                        body: { ...data, status: "PENDING_RECEIPT" }
+                    });
+                }
                 close();
                 loadTabContent("tools");
-            } catch (error) { alert("Erro: " + error.message); }
+            } catch (error) { alert("Erro ao entregar: " + error.message); }
         }
     });
 };
@@ -767,6 +815,7 @@ async function renderWarehouses(container) {
 
         // Quantidade de Ativos (Contagem individual de ferramentas/equipamentos)
         const toolCount = allItems.filter(i => i.warehouseId === w.id && (i.product.category === 'TOOL' || i.product.category === 'EQUIPMENT')).length;
+        const pendingCount = allItems.filter(i => i.targetWarehouseId === w.id && (i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN')).length;
 
         const isCentral = w.type === 'CENTRAL';
 
@@ -779,6 +828,12 @@ async function renderWarehouses(container) {
                             <span class="material-symbols-outlined text-3xl">${isCentral ? 'warehouse' : 'construction'}</span>
                         </div>
                         <div class="flex gap-1">
+                            ${pendingCount > 0 ? `
+                            <div onclick="event.stopPropagation(); window.viewPendingReceipts('${w.id}')" class="h-8 px-3 bg-amber-100 text-amber-600 rounded-lg flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest animate-pulse hover:bg-amber-200 transition-colors cursor-pointer border border-amber-200">
+                                <span class="material-symbols-outlined text-xs">local_shipping</span>
+                                ${pendingCount} a caminho
+                            </div>
+                            ` : ''}
                             <button onclick="event.stopPropagation(); window.editWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
                                 <span class="material-symbols-outlined text-base">edit</span>
                             </button>
@@ -789,20 +844,7 @@ async function renderWarehouses(container) {
                     </div>
 
                     <h3 class="text-xl font-bold text-slate-900 mb-1 group-hover:text-emerald-700 transition-colors">${esc(w.name)}</h3>
-                    <p class="text-xs text-slate-400 font-medium mb-8 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : 'Gestão Central de Inventário'}</p>
-
-                    <div class="grid grid-cols-2 gap-4 mb-8">
-                        <div class="bg-slate-50 rounded-2xl p-4 group-hover:bg-white group-hover:ring-1 group-hover:ring-slate-100 transition-all">
-                            <p class="text-[9px] font-black text-slate-400 uppercase mb-1">Stock</p>
-                            <p class="text-2xl font-black text-slate-900">${totalStockQty}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase">Unidades</p>
-                        </div>
-                        <div class="bg-slate-50 rounded-2xl p-4 group-hover:bg-white group-hover:ring-1 group-hover:ring-slate-100 transition-all">
-                            <p class="text-[9px] font-black text-slate-400 uppercase mb-1">Ativos</p>
-                            <p class="text-2xl font-black text-slate-900">${toolCount}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase">Ferramentas</p>
-                        </div>
-                    </div>
+                    <p class="text-xs text-slate-400 font-medium mb-6 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : 'Gestão Central de Inventário'}</p>
 
                     <div class="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
                         <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Detalhes do Local</span>
@@ -886,110 +928,205 @@ window.deleteWarehouse = async (id) => {
 async function renderMovements(container) {
     const { items } = await apiRequest("/stock/movements");
 
+    const totalEntries = items.filter(m => m.type === 'ENTRY').length;
+    const totalExits = items.filter(m => m.type === 'EXIT').length;
+    const totalTransfer = items.filter(m => m.type.startsWith('TRANSFER')).length;
+    const totalQty = items.reduce((acc, m) => acc + parseFloat(m.quantity || 0), 0);
+
+    const typeConfig = {
+        'ENTRY': { icon: 'download', color: '#10b981', bg: '#d1fae5', label: 'Entrada de Stock', tag: 'ENTRADA' },
+        'EXIT': { icon: 'upload', color: '#f59e0b', bg: '#fef3c7', label: 'Saída de Stock', tag: 'SAÍDA' },
+        'TRANSFER_OUT': { icon: 'swap_horiz', color: '#3b82f6', bg: '#dbeafe', label: 'Transferência (Saída)', tag: 'TRANSF. SAÍDA' },
+        'TRANSFER_IN': { icon: 'swap_horiz', color: '#6366f1', bg: '#e0e7ff', label: 'Transferência (Entrada)', tag: 'TRANSF. ENTRADA' },
+        'ADJUSTMENT': { icon: 'tune', color: '#8b5cf6', bg: '#ede9fe', label: 'Ajuste de Stock', tag: 'AJUSTE' },
+        'LOSS': { icon: 'remove_circle', color: '#ef4444', bg: '#fee2e2', label: 'Perda Registada', tag: 'PERDA' },
+        'ASSIGNED': { icon: 'person_add', color: '#0891b2', bg: '#cffafe', label: 'Alocação de Ativo', tag: 'ALOCAÇÃO' },
+        'RETURNED': { icon: 'assignment_return', color: '#7c3aed', bg: '#f5f3ff', label: 'Devolução de Ativo', tag: 'DEVOLUÇÃO' },
+    };
+
     let html = `
-        <div class="mb-10 flex justify-between items-end">
+        <!-- Header -->
+        <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Rastreabilidade Total</h3>
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Rastreabilidade Total</p>
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Histórico de Atividade</h2>
             </div>
-            <div class="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex gap-1">
-                <button data-type="ALL" class="timeline-filter px-4 py-2 rounded-xl text-[10px] font-black uppercase bg-slate-900 text-white">Todos</button>
-                <button data-type="ENTRY" class="timeline-filter px-4 py-2 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all">Entradas</button>
-                <button data-type="TRANSFER" class="timeline-filter px-4 py-2 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all">Transferências</button>
+            <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-1.5 flex gap-1 flex-wrap">
+                <button data-type="ALL" class="timeline-filter px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white transition-all">
+                    Todos <span class="badge ml-1 bg-white/20 px-1.5 py-0.5 rounded-full">${items.length}</span>
+                </button>
+                <button data-type="ENTRY" class="timeline-filter px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-transparent text-slate-400 hover:bg-slate-50 transition-all">
+                    Entradas <span class="badge ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${totalEntries}</span>
+                </button>
+                <button data-type="EXIT" class="timeline-filter px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-transparent text-slate-400 hover:bg-slate-50 transition-all">
+                    Saídas <span class="badge ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${totalExits}</span>
+                </button>
+                <button data-type="TRANSFER" class="timeline-filter px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-transparent text-slate-400 hover:bg-slate-50 transition-all">
+                    Transferências <span class="badge ml-1 bg-slate-100 px-1.5 py-0.5 rounded-full">${totalTransfer}</span>
+                </button>
             </div>
         </div>
 
-        <div class="relative">
-            <!-- Linha da Timeline -->
-            <div class="absolute left-8 top-0 bottom-0 w-px bg-slate-100"></div>
+        <!-- KPI Strip -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                <div class="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-emerald-500">download</span>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Entradas</p>
+                    <p class="text-2xl font-black text-slate-900">${totalEntries}</p>
+                </div>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-amber-500">upload</span>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Saídas</p>
+                    <p class="text-2xl font-black text-slate-900">${totalExits}</p>
+                </div>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-blue-500">swap_horiz</span>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Transferências</p>
+                    <p class="text-2xl font-black text-slate-900">${totalTransfer}</p>
+                </div>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                <div class="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-slate-500">inventory_2</span>
+                </div>
+                <div>
+                    <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Unidades Total</p>
+                    <p class="text-2xl font-black text-slate-900">${totalQty}</p>
+                </div>
+            </div>
+        </div>
 
-            <div class="space-y-8 relative">
+        <!-- Table -->
+        <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-slate-50/70 border-b border-slate-100">
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 w-28">Data / Hora</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Produto</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Armazém</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Utilizador</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Qtd.</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50" id="movementsTableBody">
     `;
 
     if (items.length === 0) {
-        html += `<div class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-20 text-center ml-16"><p class="text-slate-400 font-bold">Sem movimentos registados.</p></div>`;
+        html += `<tr><td colspan="6" class="p-20 text-center text-slate-400 font-bold">Sem movimentos registados.</td></tr>`;
     } else {
         items.forEach(m => {
             const date = new Date(m.createdAt);
-            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const dateStr = date.toLocaleDateString();
-
-            const typeConfig = {
-                'ENTRY': { icon: 'download', color: 'text-emerald-500', bg: 'bg-emerald-50', label: 'Entrada de Stock' },
-                'EXIT': { icon: 'upload', color: 'text-amber-500', bg: 'bg-amber-50', label: 'Saída de Stock' },
-                'TRANSFER_OUT': { icon: 'swap_horiz', color: 'text-blue-500', bg: 'bg-blue-50', label: 'Transferência (Saída)' },
-                'TRANSFER_IN': { icon: 'swap_horiz', color: 'text-blue-500', bg: 'bg-blue-50', label: 'Transferência (Entrada)' },
-                'ASSIGNED': { icon: 'person_add', color: 'text-indigo-500', bg: 'bg-indigo-50', label: 'Alocação de Ativo' },
-                'RETURNED': { icon: 'assignment_return', color: 'text-purple-500', bg: 'bg-purple-50', label: 'Devolução de Ativo' }
-            };
-
-            const config = typeConfig[m.type] || { icon: 'history', color: 'text-slate-400', bg: 'bg-slate-50', label: m.type };
+            const timeStr = date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' });
+            const config = typeConfig[m.type] || { icon: 'history', color: '#94a3b8', bg: '#f1f5f9', label: m.type, tag: m.type };
+            const isPositive = m.type === 'ENTRY' || m.type === 'TRANSFER_IN';
+            const isNegative = m.type === 'EXIT' || m.type === 'TRANSFER_OUT' || m.type === 'LOSS';
+            const qtyColor = isPositive ? '#10b981' : isNegative ? '#ef4444' : '#64748b';
+            const qtySign = isPositive ? '+' : isNegative ? '−' : '';
+            const catIsAsset = m.product.category === 'TOOL' || m.product.category === 'EQUIPMENT';
+            const initials = (m.user?.name || 'S').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
             html += `
-                <div class="timeline-item flex gap-8 group" data-type="${m.type}">
-                    <!-- Icone da Timeline -->
-                    <div class="w-16 flex-shrink-0 flex flex-col items-center">
-                        <div class="w-10 h-10 rounded-2xl ${config.bg} ${config.color} flex items-center justify-center shadow-sm relative z-10 group-hover:scale-110 transition-transform">
-                            <span class="material-symbols-outlined text-xl">${config.icon}</span>
-                        </div>
-                        <span class="text-[9px] font-black text-slate-400 mt-2 uppercase">${timeStr}</span>
-                    </div>
-
-                    <!-- Card da Timeline -->
-                    <div class="flex-grow bg-white p-6 rounded-3xl border border-slate-100 shadow-sm group-hover:border-slate-200 group-hover:shadow-md transition-all">
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <span class="text-[9px] font-black uppercase tracking-widest ${config.color} mb-1 block">${config.label}</span>
-                                <h4 class="text-base font-bold text-slate-900">${esc(m.product.name)}</h4>
+                <tr class="timeline-item hover:bg-slate-50/60 transition-colors cursor-default" data-type="${m.type}">
+                    <td class="px-6 py-5 whitespace-nowrap">
+                        <p class="text-xs font-black text-slate-700">${timeStr}</p>
+                        <p class="text-[10px] text-slate-400 font-medium mt-0.5">${dateStr}</p>
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style="background:${config.bg}">
+                                <span class="material-symbols-outlined text-base" style="color:${config.color}">${config.icon}</span>
                             </div>
-                            <div class="text-right">
-                                <span class="text-xl font-black text-slate-900">${m.quantity > 0 ? '+' : ''}${m.quantity}</span>
-                                <span class="text-[9px] font-black text-slate-400 uppercase block">${esc(m.product.unit)}</span>
-                            </div>
+                            <span class="text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg whitespace-nowrap" style="background:${config.bg};color:${config.color}">${config.tag}</span>
                         </div>
-
-                        <div class="flex flex-wrap items-center gap-6 pt-4 border-t border-slate-50">
-                            <div class="flex items-center gap-2">
-                                <span class="material-symbols-outlined text-sm text-slate-300">location_on</span>
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">${esc(m.warehouse.name)}</span>
-                            </div>
-                            ${m.reference ? `
-                            <div class="flex items-center gap-2">
-                                <span class="material-symbols-outlined text-sm text-slate-300">description</span>
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">${esc(m.reference)}</span>
-                            </div>` : ''}
-                            <div class="ml-auto text-[9px] font-black text-slate-300 uppercase tracking-widest">${dateStr}</div>
+                    </td>
+                    <td class="px-6 py-5">
+                        <p class="text-sm font-bold text-slate-900">${esc(m.product.name)}</p>
+                        <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${catIsAsset ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-600'}">${catIsAsset ? 'Ativo' : 'Material'}</span>
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm text-slate-300">warehouse</span>
+                            <span class="text-xs font-bold text-slate-600">${esc(m.warehouse?.name || '—')}</span>
                         </div>
-                    </div>
-                </div>
+                        ${m.notes ? `<p class="text-[10px] text-slate-400 mt-1 italic truncate max-w-[180px]">${esc(m.notes)}</p>` : ''}
+                    </td>
+                    <td class="px-6 py-5">
+                        <div class="flex items-center gap-2">
+                            <div class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[9px] font-black">${initials}</div>
+                            <span class="text-xs font-bold text-slate-600 max-w-[100px] truncate">${esc(m.user?.name || 'Sistema')}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-5 text-right whitespace-nowrap">
+                        <span class="text-lg font-black" style="color:${qtyColor}">${qtySign}${parseFloat(m.quantity)}</span>
+                        <span class="text-[9px] font-black text-slate-400 uppercase block">${esc(m.product.unit)}</span>
+                    </td>
+                </tr>
             `;
         });
     }
 
-    html += `</div></div>`;
+    html += `</tbody></table></div></div>`;
     container.innerHTML = html;
 
-    // Lógica de Filtros da Timeline
+    // Lógica de Filtros
     const filterBtns = container.querySelectorAll(".timeline-filter");
     filterBtns.forEach(btn => {
         btn.onclick = () => {
             const type = btn.dataset.type;
-            filterBtns.forEach(b => b.classList.remove("bg-slate-900", "text-white"));
-            filterBtns.forEach(b => b.classList.add("text-slate-400"));
-            btn.classList.add("bg-slate-900", "text-white");
-            btn.classList.remove("text-slate-400");
 
-            const cards = container.querySelectorAll(".timeline-item");
-            cards.forEach(card => {
-                if (type === 'ALL' || card.dataset.type === type || (type === 'TRANSFER' && card.dataset.type.startsWith('TRANSFER'))) {
-                    card.classList.remove("hidden");
-                } else {
-                    card.classList.add("hidden");
+            // Atualiza botões
+            filterBtns.forEach(b => {
+                b.classList.remove("bg-slate-900", "text-white");
+                b.classList.add("bg-transparent", "text-slate-400", "hover:bg-slate-50");
+
+                // Atualiza badge
+                const badge = b.querySelector(".badge");
+                if (badge) {
+                    badge.classList.remove("bg-white/20");
+                    badge.classList.add("bg-slate-100");
                 }
+            });
+
+            // Botão Ativo
+            btn.classList.remove("bg-transparent", "text-slate-400", "hover:bg-slate-50");
+            btn.classList.add("bg-slate-900", "text-white");
+
+            // Badge Ativo
+            const badge = btn.querySelector(".badge");
+            if (badge) {
+                badge.classList.remove("bg-slate-100");
+                badge.classList.add("bg-white/20");
+            }
+
+            // Filtragem
+            const rows = container.querySelectorAll(".timeline-item");
+            rows.forEach(row => {
+                const match = type === 'ALL'
+                    || row.dataset.type === type
+                    || (type === 'TRANSFER' && row.dataset.type.startsWith('TRANSFER'));
+                row.style.display = match ? '' : 'none';
             });
         };
     });
 }
+
+
+
+
 
 async function renderWarehouseDetail(container, warehouseId) {
     const warehouses = (await apiRequest("/warehouses")).items;
@@ -1049,12 +1186,12 @@ async function renderWarehouseDetail(container, warehouseId) {
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-1 gap-8">
             <div class="lg:col-span-3 space-y-8">
                 <!-- Materiais -->
                 <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
                     <div class="px-10 py-8 border-b border-slate-50 flex justify-between items-center">
-                        <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Materiais & Consumíveis</h3>
+                        <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Material de Consumo</h3>
                         <div class="flex gap-2">
                             <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                             <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Stock Ativo</span>
@@ -1093,38 +1230,53 @@ async function renderWarehouseDetail(container, warehouseId) {
                 <!-- Ferramentas -->
                 <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden w-full shadow-sm mt-4">
                     <div class="px-10 py-8 border-b border-slate-50 flex justify-between items-center">
-                        <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Controle de Ativos</h3>
+                        <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Controle de Ferramentas</h3>
                     </div>
                     <div class="overflow-hidden w-full">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
                                     <th class="px-10 py-5">Ativo / Foto</th>
+                                    <th class="px-10 py-5 text-center">Quantidade</th>
                                     <th class="px-10 py-5">Estado</th>
                                     <th class="px-10 py-5">Responsável Atual</th>
                                     <th class="px-10 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-50">
-                                ${assignedTools.map(t => {
-        const imgUrl = getAssetUrl(t.imageUrl || t.product.image) || 'https://placehold.co/100x100/f8fafc/cbd5e1?text=Tool';
-        const statusMap = {
-            'AVAILABLE': { label: 'Em Stock', color: 'text-emerald-600 bg-emerald-50' },
-            'ASSIGNED': { label: 'Em Obra', color: 'text-emerald-600 bg-emerald-50' },
-            'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
-        };
-        const status = statusMap[t.status] || { label: t.status, color: 'text-slate-600 bg-slate-50' };
+                                ${(() => {
+            const groups = {};
+            assignedTools.forEach(t => {
+                const key = `${t.productId}-${t.responsibleId || 'none'}-${t.status}`;
+                if (!groups[key]) groups[key] = { ...t, quantity: 0, itemIds: [] };
+                groups[key].quantity++;
+                groups[key].itemIds.push(t.id);
+            });
 
-        return `
+            return Object.values(groups).map(t => {
+                const imgUrl = getAssetUrl(t.imageUrl || t.product.image) || 'https://placehold.co/100x100/f8fafc/cbd5e1?text=Tool';
+                const statusMap = {
+                    'AVAILABLE': { label: 'Em Stock', color: 'text-emerald-600 bg-emerald-50' },
+                    'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'text-amber-600 bg-amber-50' },
+                    'ASSIGNED': { label: 'Em Obra', color: 'text-emerald-600 bg-emerald-50' },
+                    'PENDING_RETURN': { label: 'Aguardando Validação', color: 'text-indigo-600 bg-indigo-50' },
+                    'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
+                };
+                const status = statusMap[t.status] || { label: t.status, color: 'text-slate-600 bg-slate-50' };
+
+                return `
                                     <tr class="group hover:bg-slate-50/50 transition-colors">
-                                        <td class="px-10 py-6 flex items-center gap-5">
+                                         <td class="px-10 py-6 flex items-center gap-5">
                                             <div class="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100 shadow-sm transition-transform group-hover:scale-105">
                                                 <img src="${imgUrl}" class="w-full h-full object-cover">
                                             </div>
                                             <div>
                                                 <div class="font-bold text-slate-900 text-base">${esc(t.product.name)}</div>
-                                                <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest">SN: ${esc(t.serialNumber || '---')}</div>
+                                                <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Modelo: ${esc(t.product.sku || '---')}</div>
                                             </div>
+                                        </td>
+                                        <td class="px-10 py-6 text-center">
+                                            <span class="text-xl font-black text-slate-900">x${t.quantity}</span>
                                         </td>
                                         <td class="px-10 py-6">
                                             <span class="px-3 py-1 ${status.color} rounded-lg text-[9px] font-black uppercase tracking-widest">
@@ -1143,13 +1295,14 @@ async function renderWarehouseDetail(container, warehouseId) {
                                             </div>
                                         </td>
                                         <td class="px-10 py-6 text-right">
-                                            <button onclick="window.returnTool('${t.id}')" class="h-10 px-6 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
-                                                Retorno Sede
+                                            <button onclick="window.requestReturnGroup('${t.itemIds.join(',')}')" class="h-10 px-6 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
+                                                Devolver
                                             </button>
                                         </td>
                                     </tr>
                                     `;
-    }).join('') || '<tr><td colspan="4" class="p-20 text-center text-slate-400 font-medium italic">Nenhum ativo alocado a este local.</td></tr>'}
+            }).join('') || '<tr><td colspan="4" class="p-20 text-center text-slate-400 font-medium italic">Nenhum ativo alocado a este local.</td></tr>';
+        })()}
                             </tbody>
                         </table>
                     </div>
@@ -1178,7 +1331,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                             </div>
                         </div>
                         ` : ''}
-                        <div class="flex items-start gap-4">
+                        <div class="flex items-start gap-4 pb-10">
                             <span class="material-symbols-outlined text-amber-400 mt-1">calendar_today</span>
                             <div>
                                 <p class="text-[10px] font-black text-slate-500 uppercase mb-1">Última Atividade</p>
@@ -1187,7 +1340,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                         </div>
                     </div>
                     
-                    <div class="mt-16 p-6 bg-white/5 rounded-3xl border border-white/10">
+                    <div class="mt-16 p-3 bg-white/5 rounded-3xl border border-white/10">
                         <p class="text-[10px] font-black text-slate-400 uppercase mb-4 text-center">Status da Operação</p>
                         <div class="flex justify-center items-center gap-3">
                             <div class="w-3 h-3 bg-emerald-500 rounded-full animate-ping"></div>
@@ -1232,15 +1385,16 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
 
     const contentHtml = `
         <form id="formMovement" class="space-y-6 pt-4">
+            <input type="hidden" name="type" value="${type}">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Produto / Material</label>
                     <select name="productId" id="movementProductId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                         <option value="">Selecionar...</option>
-                        <optgroup label="Materiais & Consumíveis">
+                        <optgroup label="Materiais de Consumo">
                             ${materials.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('')}
                         </optgroup>
-                        <optgroup label="Ativos & Ferramentas">
+                        <optgroup label="Ferramentas">
                             ${tools.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('')}
                         </optgroup>
                     </select>
@@ -1273,22 +1427,28 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
                     </select>
                 </div>
             </div>
+
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto de Evidência / Ativo</label>
+                <input type="file" name="photo" accept="image/*" capture="environment" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-bold text-slate-400">
+            </div>
         </form>
     `;
 
     const { close } = openModal({
         title: type === "ENTRY" ? "Entrada de Material" : "Saída de Material",
         contentHtml,
-        primaryLabel: "Registar Movimento",
+        primaryLabel: "Registar",
         onPrimary: async ({ body }) => {
-            const data = Object.fromEntries(new FormData(body.querySelector("#formMovement")).entries());
-            data.quantity = parseFloat(data.quantity);
-            data.type = type;
+            const formData = new FormData(body.querySelector("#formMovement"));
             try {
-                await apiRequest("/stock/movements", { method: "POST", body: data });
+                await apiUpload("/stock/move", formData, "POST");
                 close();
                 loadTabContent(currentTab);
-            } catch (error) { alert("Erro: " + error.message); }
+            } catch (error) {
+                const msg = error.data?.message || error.message;
+                alert("Erro ao registar movimento: " + msg);
+            }
         }
     });
 
@@ -1344,7 +1504,7 @@ async function openTransferModal(fromWarehouseId = null) {
     const { close } = openModal({
         title: "Transferência entre Armazéns",
         contentHtml,
-        primaryLabel: "Confirmar Transferência",
+        primaryLabel: "Confirmar",
         onPrimary: async ({ body }) => {
             const data = Object.fromEntries(new FormData(body.querySelector("#formTransfer")).entries());
             data.quantity = parseFloat(data.quantity);
@@ -1389,3 +1549,408 @@ async function openTransferModal(fromWarehouseId = null) {
     // Se já vier com armazém de origem, carregar logo
     if (fromWarehouseId) updateProducts(fromWarehouseId);
 }
+
+window.confirmReceipt = async (id) => {
+    if (!confirm("Confirmar que recebeu esta ferramenta em boas condições?")) return;
+    try {
+        await apiRequest(`/items/${id}/confirm-receipt`, { method: "PATCH" });
+        loadTabContent("tools");
+    } catch (error) { alert("Erro ao confirmar: " + error.message); }
+};
+
+window.requestReturn = async (id) => {
+    const notes = prompt("Observações sobre o estado da ferramenta (opcional):");
+    if (notes === null) return;
+    try {
+        await apiRequest(`/items/${id}/request-return`, {
+            method: "PATCH",
+            body: { notes }
+        });
+        loadTabContent("tools");
+    } catch (error) { alert("Erro ao solicitar devolução: " + error.message); }
+};
+
+window.confirmReturn = async (id) => {
+    const warehousesRes = await apiRequest("/warehouses");
+    const centralWarehouses = warehousesRes.items.filter(w => w.type === 'CENTRAL');
+
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <p class="text-[10px] font-black text-indigo-400 uppercase mb-1">Validação de Devolução</p>
+                <p class="text-xs text-indigo-900 leading-relaxed">Confirme que a ferramenta foi entregue no armazém e está em condições de voltar ao stock disponível.</p>
+            </div>
+
+            <form id="formConfirmReturn" class="space-y-4">
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém de Destino</label>
+                    <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
+                        ${centralWarehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+                    </select>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Validar Regresso ao Stock",
+        contentHtml,
+        primaryLabel: "Confirmar e Finalizar",
+        onPrimary: async ({ body }) => {
+            const data = Object.fromEntries(new FormData(body.querySelector("#formConfirmReturn")).entries());
+            try {
+                await apiRequest(`/items/${id}/confirm-return`, {
+                    method: "PATCH",
+                    body: data
+                });
+                close();
+                loadTabContent("tools");
+            } catch (error) { alert("Erro ao validar: " + error.message); }
+        }
+    });
+};
+
+window.confirmReceiptGroup = async (idsStr) => {
+    const ids = idsStr.split(',');
+    const warehousesRes = await apiRequest("/warehouses");
+    const centralWarehouses = warehousesRes.items.filter(w => w.type === 'CENTRAL');
+
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                <p class="text-[10px] font-black text-amber-500 uppercase mb-1">Inspeção de Receção</p>
+                <p class="text-xs text-amber-900 leading-relaxed">Indique quantas unidades estão em boas condições. As unidades rejeitadas voltarão ao armazém para manutenção.</p>
+            </div>
+
+            <form id="formConfirmReceiptGroup" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade OK</label>
+                        <input type="number" name="qtyOk" min="0" max="${ids.length}" value="${ids.length}" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d]">
+                    </div>
+                    <div class="space-y-2 text-right">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Total Pendente</label>
+                        <p class="text-2xl font-black text-slate-900 p-2">${ids.length}</p>
+                    </div>
+                </div>
+
+                <div id="rejectSection" class="hidden space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Motivo da Rejeição</label>
+                        <textarea name="rejectNote" placeholder="Ex: Cabo partido, sem bateria..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-400 min-h-[100px]"></textarea>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Devolver para</label>
+                        <select name="returnWarehouseId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
+                            ${centralWarehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Confirmar Receção de Ativos",
+        contentHtml,
+        primaryLabel: "Finalizar Receção",
+        onPrimary: async ({ body }) => {
+            const data = Object.fromEntries(new FormData(body.querySelector("#formConfirmReceiptGroup")).entries());
+            const qtyOk = parseInt(data.qtyOk);
+            const qtyReject = ids.length - qtyOk;
+
+            try {
+                // 1. Confirmar os que estão OK
+                const idsOk = ids.slice(0, qtyOk);
+                for (const id of idsOk) {
+                    await apiRequest(`/items/${id}/confirm-receipt`, { method: "PATCH" });
+                }
+
+                // 2. Rejeitar os que estão mal
+                if (qtyReject > 0) {
+                    const idsReject = ids.slice(qtyOk);
+                    for (const id of idsReject) {
+                        // Forçar regresso ao armazém central com estado MAINTENANCE
+                        await apiRequest(`/items/${id}/confirm-return`, {
+                            method: "PATCH",
+                            body: {
+                                warehouseId: data.returnWarehouseId,
+                                status: "MAINTENANCE",
+                                notes: data.rejectNote || "Rejeitado na receção: Sem condição de uso"
+                            }
+                        });
+                    }
+                }
+
+                close();
+                loadTabContent("tools");
+            } catch (error) { alert("Erro na receção: " + error.message); }
+        }
+    });
+
+    // Lógica para mostrar secção de rejeição se a quantidade for menor
+    const form = document.getElementById("formConfirmReceiptGroup");
+    const qtyInput = form.querySelector('input[name="qtyOk"]');
+    const rejectSection = document.getElementById("rejectSection");
+
+    qtyInput.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value) || 0;
+        if (val < ids.length) {
+            rejectSection.classList.remove("hidden");
+        } else {
+            rejectSection.classList.add("hidden");
+        }
+    });
+};
+
+window.requestReturnGroup = async (idsStr) => {
+    const ids = idsStr.split(',');
+    const { items: receivers } = await apiRequest("/users/receivers");
+    const { items: warehouses } = await apiRequest("/warehouses");
+    const centralWarehouses = warehouses.filter(w => w.type === 'CENTRAL');
+
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-slate-900 shadow-sm">
+                    <span class="material-symbols-outlined text-2xl">assignment_return</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Solicitar Devolução</p>
+                    <p class="text-xs text-slate-900 leading-relaxed">Indique o armazém de destino e o responsável pela receção.</p>
+                </div>
+            </div>
+
+            <form id="formRequestReturnGroup" class="space-y-4">
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém de Destino</label>
+                    <select name="targetWarehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                        ${centralWarehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Responsável pela Receção</label>
+                    <select name="responsibleId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500">
+                        <option value="">Selecionar destinatário...</option>
+                        ${receivers.map(u => `<option value="${u.id}">${esc(u.name)} (${u.email})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Observações (Opcional)</label>
+                    <textarea name="notes" placeholder="Ex: Equipamento com desgaste no cabo..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 min-h-[80px]"></textarea>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Devolver para Sede",
+        contentHtml,
+        primaryLabel: "Enviar para Validação",
+        onPrimary: async ({ body }) => {
+            const data = Object.fromEntries(new FormData(body.querySelector("#formRequestReturnGroup")).entries());
+            try {
+                for (const id of ids) {
+                    await apiRequest(`/items/${id}`, {
+                        method: "PATCH",
+                        body: {
+                            status: "PENDING_RETURN",
+                            responsibleId: data.responsibleId,
+                            targetWarehouseId: data.targetWarehouseId,
+                            lastStatusNote: data.notes
+                        }
+                    });
+                }
+                close();
+                loadTabContent("tools");
+                if (currentTab.startsWith("warehouse_detail_")) {
+                    const wid = currentTab.replace("warehouse_detail_", "");
+                    enterWarehouse(wid);
+                }
+            } catch (error) { alert("Erro ao solicitar devolução: " + error.message); }
+        }
+    });
+};
+
+window.confirmReturnGroup = async (idsStr) => {
+    const ids = idsStr.split(',');
+    const warehousesRes = await apiRequest("/warehouses");
+    const centralWarehouses = warehousesRes.items.filter(w => w.type === 'CENTRAL');
+
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-indigo-500 shadow-sm">
+                    <span class="material-symbols-outlined text-2xl">assignment_return</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-indigo-400 uppercase mb-1">Validação de Regresso</p>
+                    <p class="text-xs text-indigo-900 leading-relaxed">Confira o estado das ${ids.length} unidades que estão a regressar.</p>
+                </div>
+            </div>
+
+            <form id="formConfirmReturnGroup" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade em Bom Estado</label>
+                        <input type="number" name="qtyOk" min="0" max="${ids.length}" value="${ids.length}" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d]">
+                    </div>
+                    <div class="space-y-2 text-right">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Total a Devolver</label>
+                        <p class="text-2xl font-black text-slate-900 p-2">${ids.length}</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém de Destino</label>
+                    <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
+                        ${centralWarehouses.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div id="returnRejectSection" class="hidden space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div class="space-y-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Notas de Manutenção (para as unidades danificadas)</label>
+                        <textarea name="rejectNote" placeholder="Ex: Desgaste excessivo, precisa de reparação..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-400 min-h-[80px]"></textarea>
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Validar Regresso de Ativos",
+        contentHtml,
+        primaryLabel: "Finalizar Devolução",
+        onPrimary: async ({ body }) => {
+            const data = Object.fromEntries(new FormData(body.querySelector("#formConfirmReturnGroup")).entries());
+            const qtyOk = parseInt(data.qtyOk);
+            const qtyReject = ids.length - qtyOk;
+
+            try {
+                // 1. Unidades que voltam como AVAILABLE
+                const idsOk = ids.slice(0, qtyOk);
+                for (const id of idsOk) {
+                    await apiRequest(`/items/${id}/confirm-return`, {
+                        method: "PATCH",
+                        body: {
+                            warehouseId: data.warehouseId,
+                            status: "AVAILABLE",
+                            notes: "Devolução confirmada: Bom estado"
+                        }
+                    });
+                }
+
+                // 2. Unidades que voltam como MAINTENANCE
+                if (qtyReject > 0) {
+                    const idsReject = ids.slice(qtyOk);
+                    for (const id of idsReject) {
+                        await apiRequest(`/items/${id}/confirm-return`, {
+                            method: "PATCH",
+                            body: {
+                                warehouseId: data.warehouseId,
+                                status: "MAINTENANCE",
+                                notes: data.rejectNote || "Devolução confirmada: Necessita manutenção"
+                            }
+                        });
+                    }
+                }
+
+                close();
+                loadTabContent("tools");
+                if (currentTab.startsWith("warehouse_detail_")) {
+                    const wid = currentTab.replace("warehouse_detail_", "");
+                    enterWarehouse(wid);
+                }
+            } catch (error) { alert("Erro ao validar regresso: " + error.message); }
+        }
+    });
+
+    const form = document.getElementById("formConfirmReturnGroup");
+    const qtyInput = form.querySelector('input[name="qtyOk"]');
+    const rejectSection = document.getElementById("returnRejectSection");
+
+    qtyInput.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value) || 0;
+        if (val < ids.length) {
+            rejectSection.classList.remove("hidden");
+        } else {
+            rejectSection.classList.add("hidden");
+        }
+    });
+};
+
+window.viewPendingReceipts = async (warehouseId) => {
+    const { items: allItems } = await apiRequest("/items");
+    const pending = allItems.filter(i => i.targetWarehouseId === warehouseId && (i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN'));
+    const { items: warehouses } = await apiRequest("/warehouses");
+    const w = warehouses.find(wh => wh.id === warehouseId);
+
+    // Agrupar por produto e tipo (Receção vs Regresso)
+    const groups = {};
+    pending.forEach(item => {
+        const key = `${item.productId}-${item.status}`;
+        if (!groups[key]) groups[key] = { ...item, quantity: 0, itemIds: [] };
+        groups[key].quantity++;
+        groups[key].itemIds.push(item.id);
+    });
+
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm">
+                    <span class="material-symbols-outlined text-2xl">local_shipping</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-amber-500 uppercase tracking-widest">A Caminho de</p>
+                    <p class="text-sm font-black text-amber-900">${esc(w?.name || 'Armazém')}</p>
+                </div>
+            </div>
+
+            <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                ${Object.values(groups).map(g => {
+        const isReturn = g.status === 'PENDING_RETURN';
+        const actionFn = isReturn ? 'window.confirmReturnGroup' : 'window.confirmReceiptGroup';
+        const actionLabel = isReturn ? 'Validar Regresso' : 'Receber';
+        const icon = isReturn ? 'assignment_return' : 'check';
+        const btnStyle = isReturn
+            ? 'background:#4f46e5;color:#fff;'
+            : 'background:#0f172a;color:#fff;';
+        const badgeStyle = isReturn
+            ? 'background:#eef2ff;color:#6366f1;'
+            : 'background:#fffbeb;color:#d97706;';
+
+        return `
+                    <div class="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between group hover:border-[#2afc8d] transition-all">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-slate-50 rounded-xl overflow-hidden">
+                                <img src="${getAssetUrl(g.product.image) || 'https://placehold.co/100x100?text=Tool'}" class="w-full h-full object-contain">
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h4 class="text-xs font-black text-slate-900 uppercase tracking-tight">${esc(g.product.name)}</h4>
+                                    <span style="${badgeStyle}" class="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest">
+                                        ${isReturn ? 'Devolução' : 'Entrega'}
+                                    </span>
+                                </div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Qtd: ${g.quantity}</p>
+                            </div>
+                        </div>
+                        <button onclick="${actionFn}('${g.itemIds.join(',')}')" style="${btnStyle}" class="h-9 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 hover:opacity-80">
+                            <span class="material-symbols-outlined text-sm">${icon}</span> ${actionLabel}
+                        </button>
+                    </div>
+                `;
+    }).join('')}
+                ${pending.length === 0 ? '<p class="text-center py-10 text-slate-400 font-bold text-sm">Não há ferramentas pendentes para este local.</p>' : ''}
+            </div>
+        </div>
+    `;
+
+    openModal({
+        title: "Ferramentas a Caminho",
+        contentHtml,
+        showPrimary: false,
+        secondaryLabel: "Fechar"
+    });
+};

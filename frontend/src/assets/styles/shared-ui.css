@@ -92,3 +92,14 @@
     min-width: 500px;
   }
 }
+
+/* Nome do utilizador no header: visível em desktop, oculto em mobile */
+[data-user-role] {
+  display: inline;
+}
+
+@media (max-width: 767px) {
+  [data-user-role] {
+    display: none;
+  }
+}

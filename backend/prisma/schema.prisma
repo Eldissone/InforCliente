@@ -284,10 +284,11 @@ model Warehouse {
   projectId String?          @unique
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
-  items     Item[]
-  movements StockMovement[]
-  project   Project?         @relation(fields: [projectId], references: [id])
-  stock     WarehouseStock[]
+  items       Item[]
+  targetItems Item[]           @relation("ItemTargetWarehouse")
+  movements   StockMovement[]
+  project     Project?         @relation(fields: [projectId], references: [id])
+  stock       WarehouseStock[]
 }
 
 model Product {
@@ -325,20 +326,23 @@ model Item {
   serialNumber  String?    @unique
   internalTag   String?    @unique
   productId     String
-  warehouseId   String?
-  projectId     String?
-  responsibleId String?
-  status        ItemStatus @default(AVAILABLE)
-  condition     String?    @default("GOOD")
-  notes         String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  assignedAt    DateTime?
-  imageUrl      String?
-  returnedAt    DateTime?
-  product       Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  responsible   User?      @relation(fields: [responsibleId], references: [id])
-  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
+  warehouseId      String?
+  targetWarehouseId String?
+  projectId        String?
+  responsibleId    String?
+  status           ItemStatus @default(AVAILABLE)
+  condition        String?    @default("GOOD")
+  notes            String?
+  lastStatusNote   String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  assignedAt       DateTime?
+  imageUrl         String?
+  returnedAt       DateTime?
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  responsible      User?      @relation(fields: [responsibleId], references: [id])
+  warehouse        Warehouse? @relation(fields: [warehouseId], references: [id])
+  targetWarehouse  Warehouse? @relation("ItemTargetWarehouse", fields: [targetWarehouseId], references: [id])
 
   @@index([productId])
   @@index([status])
@@ -416,7 +420,9 @@ enum ProductUnit {
 
 enum ItemStatus {
   AVAILABLE
+  PENDING_RECEIPT
   ASSIGNED
+  PENDING_RETURN
   MAINTENANCE
   BROKEN
   LOST

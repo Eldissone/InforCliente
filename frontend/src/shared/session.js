@@ -44,7 +44,7 @@ function applyRoleVisibility(role) {
 export function wireUsersNav() {
   const user = getSessionUser();
   const role = (user?.role || "").toLowerCase();
-  
+
   document.querySelectorAll("[data-nav-users]").forEach((el) => {
     if (role === "admin") {
       el.classList.remove("hidden");
@@ -108,7 +108,7 @@ async function openProfileModal() {
 
   openModal({
     title: "O Meu Perfil",
-    primaryLabel: "Guardar Alterações",
+    primaryLabel: "Guardar",
     contentHtml: `
       <div class="space-y-4">
         <div>
@@ -146,10 +146,10 @@ async function openProfileModal() {
         localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
 
         toast("Perfil atualizado com sucesso!", { type: "success" });
-        
+
         // Update the header name instantly
         document.querySelectorAll("[data-user-role], [data-user-name]").forEach(el => {
-            el.textContent = name || storedUser.email;
+          el.textContent = name || storedUser.email;
         });
 
         close();
