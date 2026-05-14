@@ -293,7 +293,7 @@
                 da Obra</button>
 
             <button data-tab-trigger="stock"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Stock
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Armazém
             </button>
 
             <button data-tab-trigger="galeria-obra"
@@ -480,285 +480,320 @@
                 </div>
             </div>
 
-            <!-- Card de acesso rápido ao Stock -->
-            <!-- <div
-                class="glass-card mb-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 flex items-center justify-between">
+        </div> <!-- end tab-dashboard -->
+
+        <!-- Stock Tab -->
+        <div id="tab-stock" class="tab-content hidden space-y-10">
+            <!-- Header Operacional -->
+            <div class="flex flex-row justify-between items-center gap-4">
                 <div>
-                    <div class="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Armazém</div>
-                    <h3 class="font-bold text-xl text-slate-900">Acompanhamento do Stock</h3>
-                    <p class="text-xs text-slate-500 mt-1">Controlo de materiais e equipamentos em estaleiro.</p>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Logística da Obra</h2>
+                    <p class="text-slate-500 text-sm font-medium">Controlo do armazém / estaleiro do projeto.
+                    </p>
                 </div>
-                <button type="button" data-tab-trigger="stock"
-                    class="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-[#2afc8d] rounded-xl text-sm font-bold shadow-md hover:scale-105 transition-transform">
-                    Ver Stock <span class="material-symbols-outlined text-sm">arrow_forward</span>
-                </button>
-            </div> -->
-
-
-        </div> <!-- End tab-dashboard -->
-
-        <div id="tab-stock" class="tab-content hidden">
-
-            <!-- Tabela 1: Resumo por Material -->
-            <div
-                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
-                <div
-                    class="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
-                    <div>
-                        <h3 class="font-bold text-3xl text-slate-900">Resumo de Stock por Material</h3>
-                        <p class="text-xs text-slate-400 mt-1">Quantidades previstas, entregues, aplicadas e saldo
-                            actual</p>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <div class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center h-9">
-                            <span class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
-                            <input type="text" id="stockSummaryFilter" placeholder="Filtrar..."
-                                class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-28" />
-                        </div>
-                        <button data-toggle-table="stock_summary"
-                            class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
-                            <span class="material-symbols-outlined transition-transform">expand_more</span>
-                        </button>
-                    </div>
-                </div>
-                <div data-table-body="stock_summary" class="table-responsive">
-                    <table class="w-full text-left">
-                        <thead class="bg-slate-50/90 whitespace-nowrap">
-                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-6 py-4">Material</th>
-                                <th class="px-4 py-4 text-center">Previsto</th>
-                                <th class="px-4 py-4 text-center text-emerald-600">Recebido</th>
-                                <th class="px-4 py-4 text-center text-blue-600">Aplicado</th>
-                                <th class="px-4 py-4 text-center text-slate-900">Saldo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="stockSummaryTbody" class="divide-y divide-slate-50 text-slate-600">
-                            <tr>
-                                <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma
-                                    obra para ver o stock</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="flex flex-row items-center justify-end gap-2 shrink-0">
+                    <button id="manageMaterialsBtn" data-role-visible="admin"
+                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-xl">category</span>
+                    </button>
+                    <button id="newStockMovementBtn" data-role-visible="admin,operador"
+                        class="h-11 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
+                        <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                        <span class="hidden md:inline">Nova Operação</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- Tabela 2: Diário de Movimentos -->
-            <div
-                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
-                <div class="p-6 border-b border-slate-100">
-                    <div class="flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
-                        <div>
-                            <h3 class="font-bold text-2xl text-slate-900">Diário do Armazém</h3>
-                            <p class="text-xs text-slate-400 mt-1">Registo diário de entradas e saídas de materiais</p>
-                        </div>
-                        <div
-                            class="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar w-full md:w-auto">
-                            <div
-                                class="relative bg-slate-50 border border-slate-200 rounded-xl px-2 flex items-center h-9">
-                                <span
-                                    class="material-symbols-outlined text-slate-400 text-sm absolute left-2">search</span>
-                                <input type="text" id="stockDailyFilterMaterial" placeholder="Material..."
-                                    class="pl-7 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-28" />
-                            </div>
-                            <div
-                                class="bg-slate-50 border border-slate-200 rounded-xl px-3 h-9 flex items-center gap-1">
-                                <span class="material-symbols-outlined text-slate-400 text-sm">calendar_today</span>
-                                <input type="date" id="stockDailyFilterDate"
-                                    class="bg-transparent border-none text-[10px] font-bold text-slate-500 focus:ring-0" />
-                            </div>
-                            <select id="stockDailyFilterType"
-                                class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 h-9">
-                                <option value="all">Todos os tipos</option>
-                                <option value="ENTRADA">Entradas</option>
-                                <option value="SAIDA">Saídas</option>
-                                <option value="AJUSTE">Ajustes</option>
-                            </select>
-                            <button data-toggle-table="stock_daily"
-                                class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
-                                <span class="material-symbols-outlined transition-transform">expand_more</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div data-table-body="stock_daily" class="table-responsive">
-                    <table class="w-full text-left">
-                        <thead class="bg-slate-50/90 whitespace-nowrap">
-                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-6 py-4">Data</th>
-                                <th class="px-4 py-4">Material</th>
-                                <th class="px-4 py-4 text-center">Quantidade</th>
-                                <th class="px-4 py-4 text-center">Tipo</th>
-                                <th class="px-4 py-4 text-center">Entrega</th>
-                                <th class="px-6 py-4 text-right">Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="stockDailyTbody" class="divide-y divide-slate-50 text-slate-600">
-                            <tr>
-                                <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma
-                                    obra para ver o diário</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Dashboard de Stock -->
+            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <!-- Rendered JS -->
             </div>
 
-        </div> <!-- End tab-stock -->
-
-        <div id="tab-obra" class="tab-content hidden">
-            <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
-            <style>
-                .bt {
-                    border-top: 1px solid #0b0b0b91;
-                    border-bottom: 1px solid #0b0b0b91;
-                }
-            </style>
+            <!-- Filtros de Stock -->
             <div
-                class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
-                <div
-                    class="p-6 border-b border-slate-100 flex-shrink-0 flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
-                    <div>
-                        <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual Detalhado</h3>
-                        <p class="text-[11px] font-medium text-slate-400 mt-1">Visão detalhada do avanço da obra
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-4 w-full md:w-auto">
-                        <select id="progressGroupFilter"
-                            class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 w-full md:w-auto md:max-w-[200px]">
-                            <option value="all">Todos os Separadores</option>
+                class="bg-white p-4 sm:p-6 mt-10 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center gap-4">
+                <!-- Busca -->
+                <div class="w-full lg:flex-1 relative">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input id="stockFilterSearch" type="text" placeholder="Buscar material, viatura, motorista..."
+                        class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
+                </div>
+
+                <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
+                    <!-- Tipo -->
+                    <div class="w-full sm:flex-1 lg:w-44">
+                        <select id="stockFilterType"
+                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Todas Operações</option>
+                            <option value="ENTRADA">Entradas</option>
+                            <option value="SAIDA">Saídas / Aplicação</option>
+                            <option value="TRANSFERENCIA">Transferências</option>
                         </select>
-                        <button data-toggle-table="contractual_summary"
-                            class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
-                            <span class="material-symbols-outlined transition-transform">expand_more</span>
-                        </button>
                     </div>
-                </div>
-                <div data-table-body="contractual_summary" class="table-responsive">
-                    <table class="w-full text-left">
-                        <thead class="bg-slate-50/90 backdrop-blur-sm shadow-sm">
-                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-6 py-4">Item</th>
-                                <th class="px-4 py-4 text-center">Previsto</th>
-                                <th class="px-4 py-4 text-center">Executado</th>
-                                <th class="px-6 py-4 text-right">% Total</th>
-                            </tr>
-                        </thead>
-                        <tbody id="progressBreakdownTbody" class="divide-y divide-slate-50 text-slate-600">
-                        </tbody>
-                    </table>
                 </div>
             </div>
 
-            <!-- Diário de Execução -->
-            <div
-                class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
-                <div class="p-6 border-b border-slate-100">
-                    <div class="flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
+            <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
+            <div class="bg-white mt-8 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div
+                    class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
+                    <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
+                        <button data-stock-subtab="history"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
+                            <span class="md:hidden">Fluxo</span>
+                            <span class="hidden md:inline">Fluxo de Stock</span>
+                        </button>
+                        <button data-stock-subtab="inventory"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
+                            <span class="md:hidden">Armazém</span>
+                            <span class="hidden md:inline">Stock/Armazém</span>
+                        </button>
+                        <button data-stock-subtab="gallery"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
+                            <span class="md:hidden">Galeria</span>
+                            <span class="hidden md:inline">Galeria de Campo</span>
+                        </button>
+                    </div>
+                    <button data-toggle-table="stock"
+                        class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                        <span class="material-symbols-outlined transition-transform">expand_more</span>
+                    </button>
+                </div>
+                <div data-table-body="stock">
+
+                    <div id="stock_history_content" data-table-body="stock_history" class="p-0">
+                        <div class="table-responsive">
+                            <table id="stockMovementsTable" class="w-full text-left">
+                                <thead class="bg-slate-50/50">
+                                    <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        <th class="px-6 md:px-10 py-5 hidden md:table-cell">Data/Técnico</th>
+                                        <th class="px-6 md:px-10 py-5">Material</th>
+                                        <th class="px-6 md:px-10 py-5">Quantidade</th>
+                                        <th class="px-10 py-5 hidden md:table-cell">Logística</th>
+                                        <th class="px-6 md:px-10 py-5 text-right font-black uppercase tracking-widest">
+                                            Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockMovementsTbody" class="divide-y divide-slate-50 text-slate-600">
+                                    <!-- Rendered JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="stock_inventory_content" class="hidden p-0">
+                        <div class="table-responsive">
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50/50">
+                                    <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        <th class="px-6 md:px-10 py-5">Material</th>
+                                        <th class="px-6 md:px-10 py-5 text-center">Armazém/Lote</th>
+                                        <th class="px-10 py-5 text-center hidden sm:table-cell">Unidade</th>
+                                        <th class="px-10 py-5 text-center text-blue-500 hidden md:table-cell">
+                                            Previsto
+                                        </th>
+                                        <th class="px-10 py-5 text-center text-emerald-600 hidden md:table-cell">
+                                            Entradas</th>
+                                        <th class="px-10 py-5 text-center text-red-600 hidden md:table-cell">
+                                            Saídas</th>
+                                        <th class="px-6 md:px-10 py-5 text-right font-black">Saldo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockInventoryTbody" class="divide-y divide-slate-50 text-slate-600">
+                                    <!-- Rendered JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="stock_gallery_content" class="hidden p-10">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Galeria de Campo</h3>
+                                <p class="text-xs text-slate-500 mt-1">Registos visuais das intervenções e
+                                    recebimento
+                                    de
+                                    material.</p>
+                            </div>
+                        </div>
+                        <div id="stockGalleryContainer" class="flex flex-col gap-4">
+                            <!-- Rendered JS -->
+                        </div>
+                    </div>
+                </div> <!-- End card wrapper -->
+            </div> <!-- End tab-stock -->
+
+            <div id="tab-obra" class="tab-content hidden">
+                <!-- Avanço Físico Breakdown Table (Moved from Dashboard) -->
+                <style>
+                    .bt {
+                        border-top: 1px solid #0b0b0b91;
+                        border-bottom: 1px solid #0b0b0b91;
+                    }
+                </style>
+                <div
+                    class="glass-card bt bg-white mt-10 b rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col mb-10 overflow-hidden">
+                    <div
+                        class="p-6 border-b border-slate-100 flex-shrink-0 flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
                         <div>
-                            <h3 class="font-bold text-lg text-slate-900">Diário de Execução</h3>
-                            <p class="text-[11px] font-medium text-slate-400">Histórico diário de execução das tarefas
+                            <h3 class="font-bold text-3xl text-slate-900">Resumo Contratual Detalhado</h3>
+                            <p class="text-[11px] font-medium text-slate-400 mt-1">Visão detalhada do avanço
+                                da obra
                             </p>
                         </div>
-                        <div
-                            class="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar w-full md:w-auto">
-                            <div
-                                class="relative flex items-center bg-slate-50 border border-slate-100 rounded-xl px-3 py-1">
-                                <span class="material-symbols-outlined text-slate-400 text-sm">search</span>
-                                <input type="text" id="progressDailyFilterTask" placeholder="Pesquisar tarefa..."
-                                    class="pl-2 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-32" />
-                            </div>
-                            <input type="date" id="progressDailyFilterDate"
-                                class="rounded-xl border-slate-100 text-[11px] font-bold text-slate-600 bg-slate-50 focus:ring-0 shadow-sm" />
-                            <button data-toggle-table="execution_daily"
-                                class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                        <div class="flex items-center gap-4 w-full md:w-auto">
+                            <select id="progressGroupFilter"
+                                class="rounded-xl border-slate-200 text-[11px] font-bold text-slate-600 bg-slate-50 shadow-sm focus:ring-0 w-full md:w-auto md:max-w-[200px]">
+                                <option value="all">Todos os Separadores</option>
+                            </select>
+                            <button data-toggle-table="contractual_summary"
+                                class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
                                 <span class="material-symbols-outlined transition-transform">expand_more</span>
                             </button>
                         </div>
                     </div>
-                </div>
-                <div data-table-body="execution_daily" class="table-responsive">
-                    <table class="w-full text-left">
-                        <thead class="bg-slate-50/90 whitespace-nowrap">
-                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <th class="px-6 py-4">Data</th>
-                                <th class="px-4 py-4">Tarefa</th>
-                                <th class="px-4 py-4 text-center text-blue-600">Executado (Diário)</th>
-                                <th class="px-4 py-4 text-center text-emerald-600">Total Acumulado</th>
-                                <th class="px-6 py-4 text-right">Responsável</th>
-                            </tr>
-                        </thead>
-                        <tbody id="progressDailyTbody" class="divide-y divide-slate-50 text-slate-600">
-                            <tr>
-                                <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma
-                                    obra para ver o diário</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </div> <!-- End tab-obra -->
-
-        <div id="tab-equipa" class="tab-content hidden">
-            <!-- Director Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
-                <div class="lg:col-span-4 h-full">
-                    <div class="glass-card p-8 rounded-[2.5rem] bg-white h-full flex flex-col items-center text-center">
-                        <div
-                            class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-6 w-full text-left">
-                            Direcção Técnica</div>
-                        <div
-                            class="w-24 h-24 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
-                            <img id="directorPhoto" src="/assets/images/placeholder-user.png" alt="Director"
-                                class="w-full h-full object-cover" />
-                        </div>
-                        <h3 id="directorName" class="text-xl font-bold text-slate-900">Eng. —</h3>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Director de Obra</p>
-
-                        <div class="w-full space-y-3 pt-6 border-t border-slate-50 mt-auto">
-                            <div
-                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                                <span class="material-symbols-outlined text-blue-600 text-lg">call</span>
-                                <div>
-                                    <div class="text-[9px] font-black text-slate-400 uppercase">Contacto</div>
-                                    <div id="directorPhone" class="text-xs font-bold text-slate-700">—</div>
-                                </div>
-                            </div>
-                            <div
-                                class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                                <span class="material-symbols-outlined text-emerald-600 text-lg">mail</span>
-                                <div>
-                                    <div class="text-[9px] font-black text-slate-400 uppercase">Email</div>
-                                    <div id="directorEmail" class="text-xs font-bold text-slate-700 truncate">—</div>
-                                </div>
-                            </div>
-                        </div>
+                    <div data-table-body="contractual_summary" class="table-responsive">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/90 backdrop-blur-sm shadow-sm">
+                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <th class="px-6 py-4">Item</th>
+                                    <th class="px-4 py-4 text-center">Previsto</th>
+                                    <th class="px-4 py-4 text-center">Executado</th>
+                                    <th class="px-6 py-4 text-right">% Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="progressBreakdownTbody" class="divide-y divide-slate-50 text-slate-600">
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <!-- Equipa Técnica Adicional -->
-                <div id="techTeamSection" class="lg:col-span-8">
-                    <div class="h-full">
-                        <h3 class="font-bold text-slate-900 mb-6 text-xl">Equipa Técnica Auxiliar</h3>
-                        <div id="techTeamContainer"
-                            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                            <!-- Cards inseridos via JS com o mesmo estilo do card do director -->
+                <!-- Diário de Execução -->
+                <div
+                    class="glass-card bg-white rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col overflow-hidden mb-10">
+                    <div class="p-6 border-b border-slate-100">
+                        <div class="flex flex-col md:flex-row md:items-center items-start justify-between gap-4">
+                            <div>
+                                <h3 class="font-bold text-lg text-slate-900">Diário de Execução</h3>
+                                <p class="text-[11px] font-medium text-slate-400">Histórico diário de
+                                    execução das tarefas
+                                </p>
+                            </div>
                             <div
-                                class="glass-card p-2 rounded-2xl bg-white flex flex-col items-center text-center border border-slate-100">
+                                class="flex flex-row flex-nowrap items-center gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar w-full md:w-auto">
                                 <div
-                                    class="w-20 h-20 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
-                                    <img src="/assets/images/placeholder-user.png" alt="Team Member"
-                                        class="w-full h-full object-cover" />
+                                    class="relative flex items-center bg-slate-50 border border-slate-100 rounded-xl px-3 py-1">
+                                    <span class="material-symbols-outlined text-slate-400 text-sm">search</span>
+                                    <input type="text" id="progressDailyFilterTask" placeholder="Pesquisar tarefa..."
+                                        class="pl-2 bg-transparent border-none text-[11px] font-bold text-slate-600 focus:ring-0 w-32" />
                                 </div>
-                                <h4 class="text-lg font-bold text-slate-900">Nome do Membro</h4>
-                                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Cargo</p>
-                                <div class="w-full space-y-2 pt-4 border-t border-slate-50">
-                                    <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
-                                        <span class="material-symbols-outlined text-blue-600 text-base">call</span>
-                                        <div class="text-xs font-medium text-slate-700">+244 900 000 000</div>
+                                <input type="date" id="progressDailyFilterDate"
+                                    class="rounded-xl border-slate-100 text-[11px] font-bold text-slate-600 bg-slate-50 focus:ring-0 shadow-sm" />
+                                <button data-toggle-table="execution_daily"
+                                    class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                                    <span class="material-symbols-outlined transition-transform">expand_more</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div data-table-body="execution_daily" class="table-responsive">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/90 whitespace-nowrap">
+                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                    <th class="px-6 py-4">Data</th>
+                                    <th class="px-4 py-4">Tarefa</th>
+                                    <th class="px-4 py-4 text-center text-blue-600">Executado (Diário)</th>
+                                    <th class="px-4 py-4 text-center text-emerald-600">Total Acumulado</th>
+                                    <th class="px-6 py-4 text-right">Responsável</th>
+                                </tr>
+                            </thead>
+                            <tbody id="progressDailyTbody" class="divide-y divide-slate-50 text-slate-600">
+                                <tr>
+                                    <td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">
+                                        Selecione
+                                        uma
+                                        obra para ver o diário</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div> <!-- end tab-obra -->
+
+            <div id="tab-equipa" class="tab-content hidden">
+                <!-- Director Section -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
+                    <div class="lg:col-span-4 h-full">
+                        <div
+                            class="glass-card p-8 rounded-[2.5rem] bg-white h-full flex flex-col items-center text-center">
+                            <div
+                                class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-6 w-full text-left">
+                                Direcção Técnica</div>
+                            <div
+                                class="w-24 h-24 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
+                                <img id="directorPhoto" src="/assets/images/placeholder-user.png" alt="Director"
+                                    class="w-full h-full object-cover" />
+                            </div>
+                            <h3 id="directorName" class="text-xl font-bold text-slate-900">Eng. —</h3>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">
+                                Director de Obra</p>
+
+                            <div class="w-full space-y-3 pt-6 border-t border-slate-50 mt-auto">
+                                <div
+                                    class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <span class="material-symbols-outlined text-blue-600 text-lg">call</span>
+                                    <div>
+                                        <div class="text-[9px] font-black text-slate-400 uppercase">Contacto
+                                        </div>
+                                        <div id="directorPhone" class="text-xs font-bold text-slate-700">—
+                                        </div>
                                     </div>
-                                    <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
-                                        <span class="material-symbols-outlined text-emerald-600 text-base">mail</span>
-                                        <div class="text-xs font-medium text-slate-700 truncate">email@exemplo.com</div>
+                                </div>
+                                <div
+                                    class="flex items-center gap-3 text-left p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <span class="material-symbols-outlined text-emerald-600 text-lg">mail</span>
+                                    <div>
+                                        <div class="text-[9px] font-black text-slate-400 uppercase">Email
+                                        </div>
+                                        <div id="directorEmail" class="text-xs font-bold text-slate-700 truncate">—
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Equipa Técnica Adicional -->
+                    <div id="techTeamSection" class="lg:col-span-8">
+                        <div class="h-full">
+                            <h3 class="font-bold text-slate-900 mb-6 text-xl">Equipa Técnica Auxiliar</h3>
+                            <div id="techTeamContainer"
+                                class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                                <!-- Cards inseridos via JS com o mesmo estilo do card do director -->
+                                <div
+                                    class="glass-card p-2 rounded-2xl bg-white flex flex-col items-center text-center border border-slate-100">
+                                    <div
+                                        class="w-20 h-20 rounded-full bg-slate-100 mb-4 overflow-hidden border-4 border-white shadow-lg">
+                                        <img src="/assets/images/placeholder-user.png" alt="Team Member"
+                                            class="w-full h-full object-cover" />
+                                    </div>
+                                    <h4 class="text-lg font-bold text-slate-900">Nome do Membro</h4>
+                                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+                                        Cargo</p>
+                                    <div class="w-full space-y-2 pt-4 border-t border-slate-50">
+                                        <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
+                                            <span class="material-symbols-outlined text-blue-600 text-base">call</span>
+                                            <div class="text-xs font-medium text-slate-700">+244 900 000 000
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2 text-left p-2 rounded-xl bg-slate-50">
+                                            <span
+                                                class="material-symbols-outlined text-emerald-600 text-base">mail</span>
+                                            <div class="text-xs font-medium text-slate-700 truncate">
+                                                email@exemplo.com</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -766,21 +801,17 @@
                     </div>
                 </div>
             </div>
-        </div>
-
+        </div> <!-- end tab-equipa -->
 
         <div id="tab-arquivos" class="tab-content hidden">
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-10 rounded-3xl border border-slate-100 shadow-sm mb-6">
                 <div>
                     <h3 class="font-bold text-3xl text-slate-900">Documentação</h3>
-                    <p class="text-xs text-slate-500">Acesso completo aos arquivos relacionados ao projecto atual.</p>
+                    <p class="text-xs text-slate-500">Acesso completo aos arquivos relacionados ao
+                        projecto atual.</p>
                 </div>
-                <!-- Escondido caso 'Todos os Projectos' esteja selecionado. É preciso um projeto específico para upload -->
-                <!-- <button id="btnUploadFile"
-                    class="hidden items-center gap-2 px-4 py-2 bg-slate-900 text-[#2afc8d] rounded-xl text-sm font-bold shadow-md hover:scale-105 transition-transform">
-                    <span class="material-symbols-outlined text-sm">upload</span> Enviar Arquivo
-                </button> -->
+
             </div>
 
             <div id="fileBreadcrumbs"
@@ -804,14 +835,15 @@
                     </tbody>
                 </table>
             </div>
-        </div> <!--end tab-arquivos-->
+        </div> <!-- end tab-arquivos -->
 
         <div id="tab-galeria-obra" class="tab-content hidden">
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
                 <div>
                     <h3 class="font-bold text-2xl text-slate-900">Galeria da Obra</h3>
-                    <p class="text-xs mt-4 text-slate-500">Imagens gerais do progresso e evolução física da obra.</p>
+                    <p class="text-xs mt-4 text-slate-500">Imagens gerais do progresso e evolução física
+                        da obra.</p>
                 </div>
                 <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">
                     <input type="date" id="galleryObraFilterStart"
@@ -832,14 +864,15 @@
             <div id="galleryObraContainer" class="flex flex-col gap-4 mb-10">
                 <!-- Grupos inseridos dinamicamente -->
             </div>
-        </div> <!--end tab-galeria-obra-->
+        </div> <!-- end tab-galeria-obra -->
 
         <div id="tab-galeria-campo" class="tab-content hidden">
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
                 <div>
                     <h3 class="font-bold text-slate-900">Galeria de Campo</h3>
-                    <p class="text-xs mt-4 text-slate-500">Registos visuais das intervenções técnicas e recebimento de
+                    <p class="text-xs mt-4 text-slate-500">Registos visuais das intervenções técnicas e
+                        recebimento de
                         material.</p>
                 </div>
                 <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 shadow-sm h-11">

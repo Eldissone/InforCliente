@@ -172,7 +172,8 @@
                         href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
                         href="../Projectos/ProjectGeral.html">Obras</a>
-                    <a data-nav-logistics class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                    <a data-nav-logistics
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Stock/index.html">Logística</a>
                 </div>
             </div>
@@ -213,7 +214,8 @@
                 href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
@@ -246,7 +248,7 @@
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
             <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="relatorio"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Avanço</span>
+                <span class="md:hidden">Avanço Físico</span>
                 <span class="hidden md:inline">Avanço Físico</span>
             </button>
             <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="files"
@@ -256,8 +258,9 @@
             </button>
             <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="stock"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
-                de Stock</button>
-            <button id="tabTriggerGaleria" data-role-visible="admin,supervisor,tecnico,leitura,operador,cliente" data-tab-trigger="galeria_obra"
+                de Armazém</button>
+            <button id="tabTriggerGaleria" data-role-visible="admin,supervisor,tecnico,leitura,operador,cliente"
+                data-tab-trigger="galeria_obra"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra</button>
         </div>
@@ -780,10 +783,12 @@
                     <p class="text-slate-500 text-sm font-medium">Controlo do armazém / estaleiro do projeto.</p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
-                    <button id="manageMaterialsBtn" data-role-visible="admin" class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
+                    <button id="manageMaterialsBtn" data-role-visible="admin"
+                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
                         <span class="material-symbols-outlined text-xl">category</span>
                     </button>
-                    <button id="newStockMovementBtn" data-role-visible="admin,operador" class="h-11 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
+                    <button id="newStockMovementBtn" data-role-visible="admin,operador"
+                        class="h-11 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
                         <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
                         <span class="hidden md:inline">Nova Operação</span>
                     </button>
@@ -796,17 +801,21 @@
             </div>
 
             <!-- Filtros de Stock -->
-            <div class="bg-white p-4 sm:p-6 mt-10 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center gap-4">
+            <div
+                class="bg-white p-4 sm:p-6 mt-10 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center gap-4">
                 <!-- Busca -->
                 <div class="w-full lg:flex-1 relative">
-                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                    <input id="stockFilterSearch" type="text" placeholder="Buscar material, viatura, motorista..." class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input id="stockFilterSearch" type="text" placeholder="Buscar material, viatura, motorista..."
+                        class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
                 </div>
-                
+
                 <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
                     <!-- Tipo -->
                     <div class="w-full sm:flex-1 lg:w-44">
-                        <select id="stockFilterType" class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                        <select id="stockFilterType"
+                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
                             <option value="">Todas Operações</option>
                             <option value="ENTRADA">Entradas</option>
                             <option value="SAIDA">Saídas / Aplicação</option>

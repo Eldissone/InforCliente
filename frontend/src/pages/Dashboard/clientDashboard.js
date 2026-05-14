@@ -30,6 +30,11 @@ let state = {
   galleryCampoStartDate: "",
   galleryCampoEndDate: "",
   galleryCampoMaterial: "all",
+  stockSubTab: "history",
+  stockFilters: {
+    search: "",
+    type: ""
+  },
   collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.clientCollapsedTables") || "{}")
 };
 
@@ -155,10 +160,11 @@ function updateTabUI() {
   }
 
   if (state.activeTab === "stock" && dashboardData) {
-    loadStockData();
+    loadStock();
   }
 
   if (state.activeTab === "obra" && dashboardData) {
+    loadProgressBreakdown(state.projectId);
     loadProgressHistoryData();
   }
 }
@@ -293,146 +299,190 @@ function renderStockChart(stock) {
   // Não é mais usada para render — os dados do stock são carregados via API direta
 }
 
-async function loadStockData() {
-  if (!state.projectId || state.projectId === "all") return;
+async function loadStock() {
+    if (!state.projectId || state.projectId === "all") return;
 
-  const summaryTbody = document.getElementById("stockSummaryTbody");
-  const dailyTbody = document.getElementById("stockDailyTbody");
-  if (!summaryTbody || !dailyTbody) return;
+    const historyTbody = document.getElementById("stockMovementsTbody");
+    const inventoryTbody = document.getElementById("stockInventoryTbody");
+    const galleryContainer = document.getElementById("stockGalleryContainer");
 
-  summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar...</td></tr>`;
-  dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-slate-400">A carregar...</td></tr>`;
+    if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar fluxo...</td></tr>`;
+    if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
 
-  try {
-    const [summaryRes, movementsRes] = await Promise.all([
-      apiRequest(`/stock/${state.projectId}/summary`),
-      apiRequest(`/stock/${state.projectId}/movements`)
-    ]);
+    try {
+        const [summaryRes, movementsRes, photosRes] = await Promise.all([
+            apiRequest(`/stock/${state.projectId}/summary`),
+            apiRequest(`/stock/${state.projectId}/movements`),
+            apiRequest(`/projects/${state.projectId}/photos`)
+        ]);
 
-    const summaryItems = summaryRes.items || [];
-    const movements = movementsRes.items || [];
+        const summaryItems = summaryRes.items || [];
+        const movements = movementsRes.items || [];
+        const photos = photosRes.items || [];
 
-    // --- Tabela 1: Resumo por Material ---
-    // Calcular Entregue e Aplicado a partir dos movimentos aprovados
-    const materialMap = {};
-    movements.forEach(m => {
-      const mId = m.materialId;
-      if (!materialMap[mId]) {
-        materialMap[mId] = {
-          name: m.material?.name || "—",
-          unit: m.material?.unit || "",
-          previsto: 0, entregue: 0, aplicado: 0
-        };
-      }
-      const qty = Number(m.quantityGood || 0) + Number(m.quantityDamaged || 0);
-      if (m.auditStatus === "APROVADO") {
-        if (m.type === "ENTRADA") materialMap[mId].entregue += qty;
-        if (m.type === "SAIDA") materialMap[mId].aplicado += qty;
-      }
-    });
+        renderStockSummaryCards(summaryItems, movements);
+        renderStockMovements(movements);
+        renderStockInventory(summaryItems, movements);
+        renderStockGallery(photos);
 
-    // Integrar com o summary (saldo actual e previsto)
-    summaryItems.forEach(s => {
-      const mId = s.materialId;
-      if (!materialMap[mId]) {
-        materialMap[mId] = {
-          name: s.material?.name || "—",
-          unit: s.material?.unit || "",
-          previsto: Number(s.quantityPlanned || 0),
-          entregue: 0, 
-          aplicado: 0
-        };
-      } else {
-        materialMap[mId].previsto = Number(s.quantityPlanned || 0);
-      }
-    });
-
-    const fSummary = document.getElementById("stockSummaryFilter")?.value?.toLowerCase() || "";
-    const summaryRows = Object.values(materialMap).filter(m => m.name.toLowerCase().includes(fSummary));
-
-    if (summaryRows.length === 0) {
-      summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem material registado</td></tr>`;
-    } else {
-      summaryTbody.innerHTML = summaryRows.map(m => {
-        const saldo = m.entregue - m.aplicado;
-        const saldoColor = saldo < 0 ? "text-red-600" : saldo === 0 ? "text-slate-400" : "text-emerald-600";
-        return `
-          <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-6 py-4 font-bold text-slate-900">${escapeHtml(m.name)}</td>
-            <td class="px-4 py-4 text-center text-xs text-slate-900 font-bold">${m.previsto.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
-            <td class="px-4 py-4 text-center font-bold text-emerald-600">${m.entregue.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
-            <td class="px-4 py-4 text-center font-bold text-blue-600">${m.aplicado.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.unit)}</span></td>
-            <td class="px-4 py-4 text-center font-black ${saldoColor}">${saldo.toLocaleString("pt-AO")} <span class="text-[9px]">${escapeHtml(m.unit)}</span></td>
-          </tr>`;
-      }).join("");
+    } catch (err) {
+        console.error("Erro ao carregar stock", err);
+        toast("Erro ao carregar dados de stock", { type: "error" });
     }
+}
 
-    // --- Tabela 2: Diário de Movimentos ---
-    const fMat = document.getElementById("stockDailyFilterMaterial")?.value?.toLowerCase() || "";
-    const fDate = document.getElementById("stockDailyFilterDate")?.value || "";
-    const fType = document.getElementById("stockDailyFilterType")?.value || "all";
+function renderStockSummaryCards(summary, movements) {
+    const container = document.getElementById("stockSummary");
+    if (!container) return;
 
-    const filtered = movements.filter(m => {
-      const matName = m.material?.name?.toLowerCase() || "";
-      const matchMat = matName.includes(fMat);
-      const matchType = fType === "all" || m.type === fType;
-      const matchDate = !fDate || (m.dateEntry && m.dateEntry.startsWith(fDate));
-      return matchMat && matchType && matchDate;
+    const uniqueProducts = summary.length;
+    const totalEntries = movements.filter(m => m.type === "ENTRADA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    const totalExits = movements.filter(m => m.type === "SAIDA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    const currentBalance = totalEntries - totalExits;
+
+    container.innerHTML = `
+        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Artigos no Catálogo</p>
+            <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
+        </div>
+        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total Recebido</p>
+            <p class="text-2xl font-bold text-emerald-600">${totalEntries.toLocaleString("pt-AO")}</p>
+        </div>
+        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Total Aplicado</p>
+            <p class="text-2xl font-bold text-blue-500">${totalExits.toLocaleString("pt-AO")}</p>
+        </div>
+        <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Saldo em Estaleiro</p>
+            <p class="text-2xl font-bold text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
+        </div>
+    `;
+}
+
+function renderStockMovements(items) {
+    const tbody = document.getElementById("stockMovementsTbody");
+    if (!tbody) return;
+
+    const search = state.stockFilters.search.toLowerCase();
+    const typeFilter = state.stockFilters.type;
+
+    const filtered = items.filter(m => {
+        const matchesSearch = !search || 
+            (m.product?.name || "").toLowerCase().includes(search) ||
+            (m.notes || "").toLowerCase().includes(search);
+        const matchesType = !typeFilter || m.type === typeFilter;
+        return matchesSearch && matchesType;
     });
 
     if (filtered.length === 0) {
-      dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem registos correspondentes</td></tr>`;
-    } else {
-      const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transferência" };
-      const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-red-50 text-red-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-blue-50 text-blue-700" };
-      const statusLabel = { "PENDENTE": "Pendente", "VALIDACAO": "Em Validação", "APROVADO": "Aprovado", "REJEITADO": "Rejeitado" };
-      const statusColor = { "PENDENTE": "bg-orange-50 text-orange-600", "VALIDACAO": "bg-blue-50 text-blue-600", "APROVADO": "bg-emerald-50 text-emerald-600", "REJEITADO": "bg-red-50 text-red-600" };
+        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem movimentações registadas</td></tr>`;
+        return;
+    }
 
-      dailyTbody.innerHTML = filtered.map(m => {
-        const date = m.dateEntry ? new Date(m.dateEntry).toLocaleDateString("pt-PT") : "—";
-        const qty = Number(m.quantityGood || 0) + Number(m.quantityDamaged || 0);
+    const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transf.", "TRANSFER_IN": "Entrada (T)", "TRANSFER_OUT": "Saída (T)" };
+    const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-blue-50 text-blue-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-slate-50 text-slate-700" };
+
+    tbody.innerHTML = filtered.map(m => {
+        const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("pt-PT") : "—";
+        const qty = Number(m.quantity || 0);
         const tc = typeColor[m.type] || "bg-slate-50 text-slate-600";
-        const sc = statusColor[m.auditStatus] || "bg-slate-50 text-slate-600";
-
-        // Tooltip de logística
-        const hasLogistics = m.driverName || m.vehicleBrand || m.vehiclePlate;
-        const tooltipHtml = hasLogistics ? `
-          <div class="logistics-tooltip">
-            <span class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors text-base cursor-help">local_shipping</span>
-            <div class="tooltip-box">
-              <div class="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-2">Dados de Transporte</div>
-              <div class="tooltip-row">
-                <span class="tooltip-label">Motorista</span>
-                <span>${escapeHtml(m.driverName || "—")}</span>
-              </div>
-              <div class="tooltip-row">
-                <span class="tooltip-label">Viatura</span>
-                <span>${escapeHtml(m.vehicleBrand || "—")}</span>
-              </div>
-              <div class="tooltip-row">
-                <span class="tooltip-label">Matrícula</span>
-                <span class="font-mono">${escapeHtml(m.vehiclePlate || "—")}</span>
-              </div>
-            </div>
-          </div>` : `<span class="text-slate-300 text-sm material-symbols-outlined">local_shipping</span>`;
+        
+        // Logística Parse
+        let driver = "—";
+        let vehicle = "—";
+        if (m.notes && m.notes.includes("|")) {
+            const parts = m.notes.split("|");
+            driver = parts[0].replace("Motorista:", "").trim();
+            vehicle = parts[1].replace("Matrícula:", "").trim();
+        }
 
         return `
           <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-6 py-4 text-xs font-bold text-slate-500">${date}</td>
-            <td class="px-4 py-4 font-bold text-slate-900">${escapeHtml(m.material?.name || "—")}</td>
-            <td class="px-4 py-4 text-center font-black text-slate-700">${qty.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.material?.unit || "")}</span></td>
-            <td class="px-4 py-4 text-center"><span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${tc}">${typeLabel[m.type] || m.type}</span></td>
-            <td class="px-4 py-4 text-center">${tooltipHtml}</td>
-            <td class="px-6 py-4 text-right"><span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${sc}">${statusLabel[m.auditStatus] || m.auditStatus}</span></td>
+            <td class="px-6 md:px-10 py-5 hidden md:table-cell">
+                <div class="text-xs font-bold text-slate-900">${date}</div>
+                <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${m.user?.name || 'Sistema'}</div>
+            </td>
+            <td class="px-6 md:px-10 py-5">
+                <div class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "—")}</div>
+                <div class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase inline-block mt-1 ${tc}">${typeLabel[m.type] || m.type}</div>
+            </td>
+            <td class="px-6 md:px-10 py-5">
+                <div class="text-xs font-black text-slate-900">${qty.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.product?.unit || "")}</span></div>
+            </td>
+            <td class="px-10 py-5 hidden md:table-cell">
+                <div class="text-[10px] font-bold text-slate-700">${escapeHtml(driver)}</div>
+                <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${escapeHtml(vehicle)}</div>
+            </td>
+            <td class="px-6 md:px-10 py-5 text-right">
+                <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-50 text-emerald-600">Aprovado</span>
+            </td>
           </tr>`;
-      }).join("");
+    }).join("");
+}
+
+function renderStockInventory(summary, movements) {
+    const tbody = document.getElementById("stockInventoryTbody");
+    if (!tbody) return;
+
+    if (summary.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
+        return;
     }
 
-  } catch (err) {
-    console.error("Erro ao carregar stock", err);
-    summaryTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados</td></tr>`;
-    dailyTbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-sm font-bold text-red-500">Erro ao carregar dados</td></tr>`;
-  }
+    tbody.innerHTML = summary.map(s => {
+        const saldo = Number(s.qty || 0);
+        const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-6 md:px-10 py-5 font-bold text-slate-900">${escapeHtml(s.name)}</td>
+            <td class="px-6 md:px-10 py-5 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[9px] font-black">GERAL</span></td>
+            <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(s.unit || "un")}</td>
+            <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">${Number(s.totalExpected || 0).toLocaleString("pt-AO")}</td>
+            <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${Number(s.totalIn || 0).toLocaleString("pt-AO")}</td>
+            <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${Number(s.totalOut || 0).toLocaleString("pt-AO")}</td>
+            <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
+          </tr>`;
+    }).join("");
+}
+
+function renderStockGallery(photos) {
+    const container = document.getElementById("stockGalleryContainer");
+    if (!container) return;
+
+    // Apenas fotos que tenham relação com stock ou sejam da categoria obra mas enviadas via stock
+    // Na verdade, projectPhotos podem ter movementId.
+    const stockPhotos = photos.filter(p => p.movementId || (p.description && p.description.toLowerCase().includes("stock")));
+
+    if (stockPhotos.length === 0) {
+        container.innerHTML = `<div class="p-10 text-center text-sm font-bold text-slate-400 uppercase tracking-widest bg-slate-50 rounded-2xl border border-dashed border-slate-200">Nenhuma evidência fotográfica registada.</div>`;
+        return;
+    }
+
+    // Agrupar por data
+    const groups = {};
+    stockPhotos.forEach(p => {
+        const d = p.createdAt ? new Date(p.createdAt).toLocaleDateString("pt-PT") : "Sem Data";
+        if (!groups[d]) groups[d] = [];
+        groups[d].push(p);
+    });
+
+    container.innerHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => `
+        <div class="space-y-4">
+            <div class="flex items-center gap-3">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200"></span>
+                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">${date}</h4>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                ${groups[date].map(p => `
+                    <div data-preview-photo="${p.id}" class="aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-100 hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-sm">
+                        <img src="${getAssetUrl(p.path)}" class="w-full h-full object-cover" loading="lazy" />
+                    </div>
+                `).join("")}
+            </div>
+        </div>
+    `).join("");
 }
 
 async function loadProgressHistoryData() {
@@ -1500,21 +1550,7 @@ function wireEvents() {
   wireFileNavigation();
 }
 
-function openLightbox(url, title, date) {
-  const lightbox = document.getElementById("imageLightbox");
-  const img = document.getElementById("lightboxImage");
-  const titleEl = document.getElementById("lightboxTitle");
-  const dateEl = document.getElementById("lightboxDate");
 
-  if (!lightbox || !img) return;
-
-  img.src = url;
-  titleEl.textContent = title;
-  dateEl.textContent = date;
-
-  lightbox.classList.add("active");
-  document.body.style.overflow = "hidden"; // Prevent scrolling
-}
 
 async function loadInteractions() {
   if (!dashboardData || !dashboardData.clientId) {
@@ -1677,29 +1713,126 @@ async function checkInteractionsBadge() {
   }
 }
 
-function closeLightbox() {
-  const lightbox = document.getElementById("imageLightbox");
-  if (!lightbox) return;
+// --- Wire Events ---
+function wireStockEvents() {
+    // Sub-tabs
+    document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            state.stockSubTab = btn.getAttribute("data-stock-subtab");
+            
+            // Update buttons UI
+            document.querySelectorAll("[data-stock-subtab]").forEach(b => {
+                b.classList.remove("text-slate-900", "border-slate-900");
+                b.classList.add("text-slate-400", "border-transparent");
+            });
+            btn.classList.add("text-slate-900", "border-slate-900");
+            btn.classList.remove("text-slate-400", "border-transparent");
 
-  lightbox.classList.remove("active");
-  document.body.style.overflow = ""; // Restore scrolling
+            // Update content visibility
+            const historyContent = document.getElementById("stock_history_content");
+            const inventoryContent = document.getElementById("stock_inventory_content");
+            const galleryContent = document.getElementById("stock_gallery_content");
+
+            if (historyContent) historyContent.classList.add("hidden");
+            if (inventoryContent) inventoryContent.classList.add("hidden");
+            if (galleryContent) galleryContent.classList.add("hidden");
+
+            const targetContent = document.getElementById(`stock_${state.stockSubTab}_content`);
+            if (targetContent) targetContent.classList.remove("hidden");
+        });
+    });
+
+    // Filters
+    const searchInput = document.getElementById("stockFilterSearch");
+    const typeSelect = document.getElementById("stockFilterType");
+
+    if (searchInput) {
+        searchInput.addEventListener("input", () => {
+            state.stockFilters.search = searchInput.value;
+            loadStock();
+        });
+    }
+
+    if (typeSelect) {
+        typeSelect.addEventListener("change", () => {
+            state.stockFilters.type = typeSelect.value;
+            loadStock();
+        });
+    }
+}
+
+function openLightbox(url, title, date) {
+    const lightbox = document.getElementById("imageLightbox");
+    const img = document.getElementById("lightboxImage");
+    const titleEl = document.getElementById("lightboxTitle");
+    const dateEl = document.getElementById("lightboxDate");
+
+    if (!lightbox || !img) return;
+
+    img.src = url;
+    titleEl.textContent = title;
+    dateEl.textContent = date;
+
+    lightbox.classList.add("active");
+    document.body.style.overflow = "hidden";
+}
+
+function closeLightbox() {
+    const lightbox = document.getElementById("imageLightbox");
+    if (!lightbox) return;
+    lightbox.classList.remove("active");
+    document.body.style.overflow = "";
+}
+
+function hoistTabs() {
+    // Ensure all .tab-content divs are direct children of <main>
+    // This corrects any HTML nesting errors without touching the HTML source
+    const main = document.querySelector("main");
+    if (!main) return;
+    document.querySelectorAll(".tab-content").forEach(tab => {
+        if (tab.parentElement !== main) {
+            main.appendChild(tab);
+        }
+    });
 }
 
 function init() {
-  initMobileMenu();
-  wireLogout();
+    hoistTabs(); // Fix any tab nesting issues first
+    initMobileMenu();
+    wireLogout();
 
-  const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
-  if (user && user.client) {
-    const headerName = document.getElementById("clientNameHeader");
-    if (headerName) headerName.textContent = user.client.name;
-  }
+    const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
+    if (user && user.client) {
+        const headerName = document.getElementById("clientNameHeader");
+        if (headerName) headerName.textContent = user.client.name;
+    }
 
-  wireLogout();
-  wireUsersNav();
-  wireEvents();
-  wirePreview();
-  loadDashboardData();
+    wireUsersNav();
+    wireEvents();
+    wirePreview();
+    wireStockEvents();
+    loadDashboardData();
+
+    // Global click for photos and lightbox
+    document.addEventListener("click", e => {
+        const photoItem = e.target.closest("[data-preview-photo]");
+        if (photoItem) {
+            const img = photoItem.querySelector("img");
+            if (img) {
+                openLightbox(img.src, "Evidência de Obra", "");
+            }
+            return;
+        }
+        
+        if (e.target.id === "imageLightbox" || e.target.closest("#closeLightbox")) {
+            closeLightbox();
+        }
+    });
+
+    // ESC key for Lightbox
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeLightbox();
+    });
 }
 
 document.addEventListener("DOMContentLoaded", init);

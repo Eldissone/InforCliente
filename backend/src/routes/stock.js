@@ -367,8 +367,7 @@ stockRoutes.get(
       where: { projectId },
       include: { 
         product: true,
-        warehouse: true,
-        user: { select: { name: true } }
+        warehouse: true
       },
       orderBy: { createdAt: "desc" },
       take: 100
