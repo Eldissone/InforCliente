@@ -143,18 +143,32 @@ userRoutes.post(
     }
 
     const passwordHash = await bcrypt.hash(body.password, 10);
-    const created = await prisma.user.create({
-      data: {
-        email: body.email,
-        name: body.name || null,
-        role: body.role,
-        passwordHash,
-        clientId,
-        profilePic: body.profilePic || null,
-        assignedProjects: body.assignedProjectIds ? { connect: body.assignedProjectIds.map(id => ({ id })) } : undefined,
-      },
-      select: { id: true },
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: body.email,
+          name: body.name || null,
+          role: body.role,
+          passwordHash,
+          clientId,
+          profilePic: body.profilePic || null,
+          assignedProjects: body.assignedProjectIds ? { connect: body.assignedProjectIds.map(id => ({ id })) } : undefined,
+        },
+        select: { id: true },
+      });
+
+      if (clientId) {
+        await tx.userClient.create({
+          data: {
+            userId: user.id,
+            clientId: clientId,
+            role: body.role,
+          }
+        });
+      }
+      return user;
     });
+
     return res.status(201).json({ id: created.id });
   })
 );
