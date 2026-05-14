@@ -60,13 +60,14 @@ app.use(
     allowedHeaders: [
       "Content-Type",
       "Authorization",
+      "X-Requested-With",
     ],
 
     credentials: true,
   })
 );
 
-app.options("", cors());
+app.options(/(.*)/, cors()); // Handle ALL preflight requests
 
 app.use(express.json({ limit: "1mb" }));
 app.use("/uploads", express.static("uploads"));
