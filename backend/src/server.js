@@ -69,7 +69,7 @@ app.use(
 
 app.options(/(.*)/, cors()); // Handle ALL preflight requests
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static("uploads"));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
