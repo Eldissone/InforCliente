@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html class="light" lang="pt-BR">
 
 <head>
@@ -776,79 +776,43 @@
             <!-- Header Operacional -->
             <div class="flex flex-row justify-between items-center gap-4">
                 <div>
-                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Inventário</h2>
-                    <p class="text-slate-500 text-sm font-medium">Controle em tempo real.</p>
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Logística da Obra</h2>
+                    <p class="text-slate-500 text-sm font-medium">Controlo do armazém / estaleiro do projeto.</p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
-                    <button id="manageMaterialsBtn" data-role-visible="admin"
-                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
+                    <button id="manageMaterialsBtn" data-role-visible="admin" class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
                         <span class="material-symbols-outlined text-xl">category</span>
                     </button>
-                    <button id="newStockMovementBtn" data-role-visible="admin,operador"
-                        class="h-11 bg-emerald-600 text-white px-3 md:px-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all">
-                        <span class="hidden md:inline">Novo Lançamento</span> <span
-                            class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                    <button id="newStockMovementBtn" data-role-visible="admin,operador" class="h-11 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
+                        <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
+                        <span class="hidden md:inline">Nova Operação</span>
                     </button>
                 </div>
             </div>
 
             <!-- Dashboard de Stock -->
-            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 <!-- Rendered JS -->
             </div>
 
             <!-- Filtros de Stock -->
-            <div
-                class="bg-white p-6 mt-10 rounded-[32px] border border-slate-100 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-4 md:gap-6">
+            <div class="bg-white p-4 sm:p-6 mt-10 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row items-center gap-4">
                 <!-- Busca -->
-                <div class="col-span-1 sm:col-span-2 lg:flex-1 lg:min-w-[280px] relative">
-                    <span
-                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                    <input id="stockFilterSearch" type="text"
-                        placeholder="Buscar por material, motorista ou matrícula..."
-                        class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
+                <div class="w-full lg:flex-1 relative">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input id="stockFilterSearch" type="text" placeholder="Buscar material, viatura, motorista..." class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
                 </div>
-                <!-- Categoria -->
-                <div class="w-full lg:w-44">
-                    <select id="stockFilterCategory"
-                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
-                        <option value="">Todas Categorias</option>
-                        <option value="MT">Média Tensão (MT)</option>
-                        <option value="BT">Baixa Tensão (BT)</option>
-                        <option value="IP">Iluminação Pública (IP)</option>
-                    </select>
-                </div>
-                <!-- Condição -->
-                <div class="w-full lg:w-40">
-                    <select id="stockFilterCondition"
-                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
-                        <option value="">Todas Condições</option>
-                        <option value="BOA">Boa</option>
-                        <option value="DANIFICADA">Danificada</option>
-                    </select>
-                </div>
-                <!-- Status -->
-                <div class="w-full lg:w-40">
-                    <select id="stockFilterStatus"
-                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
-                        <option value="">Todos Status</option>
-                        <option value="PENDENTE">Pendente</option>
-                        <option value="VALIDACAO">Em Validação</option>
-                        <option value="APROVADO">Aprovado</option>
-                        <option value="REJEITADO">Rejeitado</option>
-                    </select>
-                </div>
-                <!-- Armazém -->
-                <div class="w-full lg:w-48">
-                    <select id="stockFilterWarehouse"
-                        class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
-                        <option value="">Todos Armazéns</option>
-                        <option value="Armazém Principal">Armazém Principal</option>
-                        <option value="Armazém do Cliente">Armazém do Cliente</option>
-                        <option value="Contentor Obra">Contentor Obra</option>
-                        <option value="Viatura Técnica">Viatura Técnica</option>
-                        <option value="Estaleiro">Estaleiro</option>
-                    </select>
+                
+                <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
+                    <!-- Tipo -->
+                    <div class="w-full sm:flex-1 lg:w-44">
+                        <select id="stockFilterType" class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                            <option value="">Todas Operações</option>
+                            <option value="ENTRADA">Entradas</option>
+                            <option value="SAIDA">Saídas / Aplicação</option>
+                            <option value="TRANSFERENCIA">Transferências</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -887,10 +851,8 @@
                                     <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
                                         <th class="px-6 md:px-10 py-5 hidden md:table-cell">Data/Técnico</th>
                                         <th class="px-6 md:px-10 py-5">Material</th>
-                                        <th class="px-6 md:px-10 py-5">Qtd/Condição</th>
+                                        <th class="px-6 md:px-10 py-5">Quantidade</th>
                                         <th class="px-10 py-5 hidden md:table-cell">Logística</th>
-                                        <th class="px-10 py-5 hidden lg:table-cell">Status Op.</th>
-                                        <th class="px-10 py-5 hidden lg:table-cell">Workflow</th>
                                         <th class="px-6 md:px-10 py-5 text-right">Ações</th>
                                     </tr>
                                 </thead>

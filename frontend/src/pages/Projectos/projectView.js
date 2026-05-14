@@ -2612,41 +2612,55 @@ async function loadStock() {
   renderLoadingRow(el("stockMovementsTbody"), 7);
 
   try {
-    const [summaryRes, movementsRes] = await Promise.all([
-      apiRequest(`/stock/${encodeURIComponent(id)}/summary`),
-      apiRequest(`/stock/${encodeURIComponent(id)}/movements`),
+    const { items: warehouses } = await apiRequest("/warehouses");
+    const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
+
+    if (!projectWarehouse) {
+      el("stockMovementsTbody").innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum armazém associado a esta obra.</td></tr>`;
+      el("stockSummary").innerHTML = "";
+      return;
+    }
+
+    const [balanceRes, movementsRes] = await Promise.all([
+      apiRequest(`/stock/balance?warehouseId=${projectWarehouse.id}`),
+      apiRequest(`/stock/movements?warehouseId=${projectWarehouse.id}`),
     ]);
 
+    stockState.warehouseId = projectWarehouse.id;
     stockState.items = movementsRes.items;
-    stockState.summary = summaryRes.items; // Guardar o resumo consolidado
-    renderStockSummary(summaryRes.items);
-    applyStockFilters();
+    stockState.summary = balanceRes.items; // Guardar o saldo
+
+    renderStockSummary(balanceRes.items);
+    renderStockMovements(movementsRes.items);
   } catch (err) {
     toast("Erro ao carregar dados de stock", { type: "error" });
   }
 }
 
 function renderStockSummary(items) {
-  const materialTypesCount = items.length;
-  const goodTotal = items.reduce((acc, curr) => acc + Number(curr.quantityGood || 0), 0);
-  const damagedTotal = items.reduce((acc, curr) => acc + Number(curr.quantityDamaged || 0), 0);
+  const uniqueProducts = items.length;
+  const totalStock = items.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
+  
+  // Categorias de materiais
+  const btCount = items.filter(i => i.product?.category === 'BT').length;
+  const mtCount = items.filter(i => i.product?.category === 'MT').length;
 
   el("stockSummary").innerHTML = `
-    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipos de Materiais</p>
-        <p class="text-2xl font-bold text-slate-900">${materialTypesCount}</p>
+        <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
     </div>
-    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Stock (BOM Estado)</p>
-        <p class="text-2xl font-bold text-emerald-600">${goodTotal}</p>
+    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total no Estaleiro</p>
+        <p class="text-2xl font-bold text-emerald-600">${totalStock}</p>
     </div>
-    <div class="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Perca / Danificado</p>
-        <p class="text-2xl font-bold text-red-500">${damagedTotal}</p>
+    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+        <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Material BT</p>
+        <p class="text-2xl font-bold text-blue-500">${btCount}</p>
     </div>
-    <div class="bg-[#0F172A] p-6 rounded-[32px] border border-slate-800 shadow-xl">
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Aguardando Auditoria</p>
-        <p id="stockPendingCount" class="text-2xl font-bold text-[#2afc8d]">---</p>
+    <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl">
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Material MT</p>
+        <p class="text-2xl font-bold text-[#2afc8d]">${mtCount}</p>
     </div>
   `;
 }
@@ -2655,73 +2669,56 @@ function renderStockMovements(items) {
   const tbody = el("stockMovementsTbody");
   if (!tbody) return;
 
-  // Guardar os dados no prÃ³prio elemento para o modal de detalhes
   el("stockMovementsTable")._movementsData = items;
   if (!items || items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
-    if (el("stockPendingCount")) el("stockPendingCount").textContent = "0";
+    tbody.innerHTML = `<tr><td colspan="5" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum movimento registrado nesta obra.</td></tr>`;
     return;
   }
 
-  const pendingChanges = items.filter(i => i.auditStatus === "PENDENTE" || i.auditStatus === "VALIDACAO").length;
-  const countEl = el("stockPendingCount");
-  if (countEl) countEl.textContent = pendingChanges;
-
   tbody.innerHTML = items.map(m => {
-    const auditCls = {
-      PENDENTE: "bg-amber-50 text-amber-600",
-      VALIDACAO: "bg-blue-50 text-blue-600",
-      APROVADO: "bg-emerald-50 text-emerald-600",
-      REJEITADO: "bg-red-50 text-red-600",
-    }[m.auditStatus];
+    const isEntry = m.type === "IN" || m.type === "ENTRY" || m.type === "TRANSFER_IN";
+    const typeLabel = isEntry ? "ENTRADA" : "SAÍDA";
+    const typeColor = isEntry ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50";
+
+    // Extrair dados logísticos das notas (se existirem)
+    let driverInfo = "-";
+    let vehicleInfo = "-";
+    if (m.reference || m.notes) {
+       const text = m.reference || m.notes || "";
+       const parts = text.split('|');
+       if (parts.length > 1) {
+          driverInfo = parts[0].replace('Motorista:', '').trim() || "-";
+          vehicleInfo = parts[1].replace('Viatura:', '').replace('Matrícula:', '').trim() || "-";
+       } else {
+          driverInfo = text;
+       }
+    }
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
         <td class="px-3 md:px-10 py-5 hidden md:table-cell">
-          <div class="text-xs font-bold text-slate-900">${formatDateBR(m.dateEntry)}</div>
-          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(m.technicianName || "TÉCNICO")}</div>
+          <div class="text-xs font-bold text-slate-900">${formatDateBR(m.createdAt)}</div>
+          <div class="text-[10px] font-black uppercase tracking-widest ${typeColor} inline-block px-2 py-0.5 rounded mt-1">${typeLabel}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="text-xs font-bold text-slate-900">${escapeHtml(m.material.name)}</div>
-          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.material.code} | ${m.material.category}</div>
+          <div class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || 'Material')}</div>
+          <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.product?.reference || '-'}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="flex flex-col gap-1">
-            ${m.quantityGood > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityGood} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[8px] font-black">BOM</span></div>` : ""}
-            ${m.quantityDamaged > 0 ? `<div class="flex items-center gap-2"><span class="text-xs font-black text-slate-900">${m.quantityDamaged} ${m.material.unit}</span> <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[8px] font-black">MAU</span></div>` : ""}
-            ${!(Number(m.quantityGood) > 0) && !(Number(m.quantityDamaged) > 0) ? `<span class="text-xs font-black text-slate-900">${m.quantity} ${m.material.unit}</span>` : ""}
-          </div>
+          <div class="text-xs font-black text-slate-900">${m.quantity} ${m.product?.unit || 'un'}</div>
         </td>
         <td class="px-10 py-5 text-[10px] font-medium text-slate-500 hidden md:table-cell">
-           ${escapeHtml(m.driverName || "-")} | ${escapeHtml(m.vehiclePlate || "S/M")} <br>
-           <span class="text-slate-400 uppercase text-[9px] font-black">${m.entryType || "PROPRIO"}</span>
-        </td>
-        <td class="px-10 py-5 hidden lg:table-cell">
-          <span class="px-3 py-1 rounded-lg text-[9px] font-black bg-slate-100 text-slate-600 uppercase tracking-widest">${m.movementStatus}</span>
-        </td>
-        <td class="px-10 py-5 hidden lg:table-cell">
-          <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${auditCls}">${m.auditStatus}</span>
+           <div class="font-bold text-slate-700">${escapeHtml(driverInfo)}</div>
+           <div class="uppercase text-[9px] font-black text-slate-400">${escapeHtml(vehicleInfo)}</div>
         </td>
         <td class="px-6 md:px-10 py-5 text-right">
-           ${(m.auditStatus === "PENDENTE" || m.auditStatus === "VALIDACAO") && m.type !== "AJUSTE" ? `
-              <button data-approve-stock="${m.id}" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
-                <span class="material-symbols-outlined text-sm">done_all</span>
-              </button>
-              <button data-reject-stock="${m.id}" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
-                <span class="material-symbols-outlined text-sm">close</span>
-              </button>
-           ` : `
-              <span class="text-slate-300 material-symbols-outlined text-sm">lock</span>
-           `}
-           <button data-delete-stock-move="${m.id}" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-red-600 hover:text-white transition-all ml-1">
-             <span class="material-symbols-outlined text-sm">delete</span>
+           <button class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+             <span class="material-symbols-outlined text-sm">visibility</span>
            </button>
         </td>
       </tr>
     `;
   }).join("");
-
-  wireStockWorkflow();
 }
 
 function wireStockWorkflow() {
@@ -2762,30 +2759,28 @@ async function openStockMovementDetailModal(moveId) {
     </div>`;
   };
 
-  const isClosed = (m.auditStatus === "APROVADO" || m.auditStatus === "REJEITADO");
-
   openModal({
-    title: "Detalhes do lançamento",
+    title: "Detalhes da Operação",
     contentHtml: `
       <div class="space-y-6">
         <div class="grid grid-cols-2 gap-8">
           <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">InformaÃ§Ã£o Base</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Informação Base</p>
             <div class="space-y-1">
-              <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.material.name)}</h4>
-              <p class="text-xs text-slate-500 font-medium">${m.material.code}à ${m.material.category}</p>
+              <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.product?.name || 'Material')}</h4>
+              <p class="text-xs text-slate-500 font-medium">${m.product?.reference || '-'} | ${m.product?.category || '-'}</p>
               <div class="mt-4 flex flex-col gap-2">
                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
                     <span class="text-[10px] font-bold text-slate-500">TIPO</span>
                     <span class="text-[10px] font-black text-slate-900">${m.type}</span>
                  </div>
                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-[10px] font-bold text-slate-500">QUANT. BOA</span>
-                    <span class="text-[10px] font-black text-emerald-600">${m.quantityGood || 0} ${m.material.unit}</span>
+                    <span class="text-[10px] font-bold text-slate-500">QUANTIDADE</span>
+                    <span class="text-[10px] font-black text-emerald-600">${m.quantity || 0} ${m.product?.unit || 'un'}</span>
                  </div>
                  <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-[10px] font-bold text-slate-500">QUANT. DANIFICADA</span>
-                    <span class="text-[10px] font-black text-red-600">${m.quantityDamaged || 0} ${m.material.unit}</span>
+                    <span class="text-[10px] font-bold text-slate-500">DATA</span>
+                    <span class="text-[10px] font-black text-slate-900">${formatDateBR(m.createdAt)}</span>
                  </div>
               </div>
             </div>
@@ -2795,236 +2790,100 @@ async function openStockMovementDetailModal(moveId) {
             <div class="bg-slate-50 rounded-2xl p-4 space-y-3">
                <div>
                   <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.driverName || "Não informado")}</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(driverInfo)}</span>
                </div>
                <div>
                   <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(m.vehicleBrand || "")} ${escapeHtml(m.vehiclePlate || "N/D")}</span>
-               </div>
-               <div>
-                  <span class="text-[9px] font-black text-slate-400 block uppercase">Origem</span>
-                  <span class="text-xs font-bold text-slate-900 uppercase">${m.entryType || "PROPRIO"}</span>
+                  <span class="text-xs font-bold text-slate-900">${escapeHtml(vehicleInfo)}</span>
                </div>
             </div>
           </div>
         </div>
-
-        <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Evidências Fotográficas</p>
-          <div class="space-y-4">
-             <div>
-                <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 block">Material em Bom Estado</span>
-                ${renderPhotos("BOA")}
-             </div>
-             <div>
-                <span class="text-[9px] font-black text-red-600 uppercase tracking-widest mb-2 block">Cargas com Danos / Defeitos</span>
-                ${renderPhotos("DANIFICADA")}
-             </div>
-          </div>
-        </div>
-
-        ${m.notes ? `
-          <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Observações</p>
-            <p class="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border-l-4 border-slate-200 font-medium">${escapeHtml(m.notes)}</p>
-          </div>
-        ` : ""}
-
-        ${(!isClosed && m.type !== "AJUSTE") ? `
-          <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex gap-3">
-             <span class="material-symbols-outlined text-emerald-600">info</span>
-             <p class="text-[11px] text-emerald-800 font-medium leading-relaxed">
-                Ao <strong>Aprovar</strong> este lançamento, apenas a <span class="font-bold">Quantidade BOA</span> (${m.quantityGood}) será integrada no inventário útil do armazém. O material <span class="text-red-600 font-bold">Danificado</span> (${m.quantityDamaged}) será mantido apenas como registo de evidência e não constará no saldo disponível para uso.
-             </p>
-          </div>
-        ` : ""}
       </div>
     `,
-    primaryLabel: isClosed ? "Fechar" : "Aprovar lançamento",
-    onPrimary: async ({ close, btn }) => {
-      if (isClosed) {
-        close();
-        return;
-      }
-
-      setButtonLoading(btn, true);
-      try {
-        await approveStockMovement(m.id);
-        close();
-      } catch (err) {
-        setButtonLoading(btn, false);
-      }
-    },
-    secondaryLabel: isClosed ? null : "Rejeitar",
-    onSecondary: async ({ close }) => {
-      if (confirm("Tem certeza que deseja REJEITAR este lançamento?")) {
-        await rejectStockMovement(m.id);
-        close();
-      }
+    primaryLabel: "Fechar",
+    onPrimary: async ({ close }) => {
+       close();
     }
   });
 }
-async function approveStockMovement(id) {
-  const moveId = id;
-  const projectId = getProjectId();
-  try {
-    await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements/${encodeURIComponent(moveId)}/audit`, {
-      method: "PATCH",
-      body: { status: "APROVADO", notes: "Aprovado via dashboard administrativo." }
-    });
-    toast("lançamento aprovado com sucesso", { type: "success" });
-    loadStock();
-  } catch (err) {
-    toast(err.message || "Erro ao aprovar lançamento", { type: "error" });
-  }
-}
 
-async function rejectStockMovement(id) {
-  const moveId = id;
-  const projectId = getProjectId();
-  try {
-    await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements/${encodeURIComponent(moveId)}/audit`, {
-      method: "PATCH",
-      body: { status: "REJEITADO", notes: "Rejeitado pelo administrador." }
-    });
-    toast("lançamento rejeitado", { type: "warning" });
-  } catch (err) {
-    toast(err.message || "Erro ao rejeitar lançamento", { type: "error" });
-  }
-}
 async function openStockMovementModal() {
-  const projectId = getProjectId();
+  if (!stockState.warehouseId) {
+     return toast("Nenhum armazém configurado para esta obra.", { type: "error" });
+  }
 
   try {
-    const materialsRes = await apiRequest("/stock/materials");
-    const materials = materialsRes.items || [];
+    const productsRes = await apiRequest("/items"); // global items
+    const products = productsRes.items || [];
 
-    if (materials.length === 0) {
-      toast("Inicializando catálogo básico...", { type: "info" });
-      await apiRequest("/stock/init-catalog", { method: "POST" });
-      return openStockMovementModal();
-    }
-
-    const materialOptions = materials.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.unit})</option>`).join("");
+    const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
 
     openModal({
-      title: "Novo lançamento de Stock",
+      title: "Nova Operação Logística",
       contentHtml: `
         <div class="space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Material</label>
               <select id="st_mId" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-                ${materialOptions}
+                ${productOptions}
               </select>
             </div>
             <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Tipo de Movimento</label>
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Operação</label>
               <select id="st_type" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-                <option value="ENTRADA">Entrada / Recebimento</option>
-                <option value="SAIDA">Saída / Aplicação</option>
-                <option value="TRANSFERENCIA">Transferência</option>
+                <option value="IN">Entrada (Receber Material)</option>
+                <option value="OUT">Saída (Aplicar na Obra)</option>
               </select>
-            </div>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Quantidade BOA</label>
-              <input type="number" id="st_qtyGood" placeholder="0.00" class="w-full h-12 bg-emerald-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-            </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Quantidade DANIFICADA</label>
-              <input type="number" id="st_qtyDamaged" placeholder="0.00" class="w-full h-12 bg-red-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-red-500 transition-all">
             </div>
           </div>
           
-          <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Logística e Dados de Transporte</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-               <input id="st_plate" placeholder="Matrícula" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
-               <input id="st_brand" placeholder="Marca Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <select id="st_entryType" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="proprio">Material Próprio (InfoCliente)</option>
-                  <option value="cliente">Fornecido pelo Cliente</option>
-                  <option value="fornecedor">Compra Direta Fornecedor</option>
-               </select>
-                <select id="st_warehouse" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-                  <option value="Armazém Principal">Armazém Principal</option>
-                  <option value="Armazém do Cliente">Armazém do Cliente</option>
-                  <option value="Contentor Obra">Contentor Obra</option>
-                  <option value="Viatura Técnica">Viatura Técnica</option>
-                  <option value="Estaleiro">Estaleiro</option>
-               </select>
-            </div>
+          <div class="space-y-1.5">
+             <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Quantidade</label>
+             <input type="number" step="0.01" id="st_qty" placeholder="0.00" class="w-full h-12 bg-emerald-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Evidência: Bom Estado</label>
-              <input type="file" id="st_photos_good" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
-            </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Evidência: Danificado</label>
-              <input type="file" id="st_photos_bad" multiple accept="image/*" class="w-full text-[10px] text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+          
+          <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Dados de Transporte (Opcional)</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
+               <input id="st_plate" placeholder="Matrícula Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
             </div>
           </div>
         </div>
       `,
-      primaryText: "Registrar lançamento",
+      primaryText: "Registrar",
       onPrimary: async ({ btn, close, panel }) => {
         const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
         const mId = v("st_mId");
+        const qty = Number(v("st_qty") || 0);
+
         if (!mId) return toast("Selecione um material", { type: "error" });
+        if (qty <= 0) return toast("Quantidade deve ser maior que 0", { type: "error" });
 
         setButtonLoading(btn, true);
         try {
-          const qtyGood = Number(v("st_qtyGood") || 0);
-          const qtyBad = Number(v("st_qtyDamaged") || 0);
+          // Codificando os dados logísticos em Notes
+          const driver = v("st_driver");
+          const plate = v("st_plate");
+          let notes = "";
+          if (driver || plate) {
+             notes = `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`;
+          }
 
-          const move = await apiRequest(`/stock/${encodeURIComponent(projectId)}/movements`, {
+          await apiRequest(`/stock/movements`, {
             method: "POST",
             body: {
-              materialId: mId,
+              productId: mId,
+              warehouseId: stockState.warehouseId,
               type: v("st_type"),
-              quantityGood: qtyGood,
-              quantityDamaged: qtyBad,
-              entryType: v("st_entryType"),
-              driverName: v("st_driver"),
-              vehiclePlate: v("st_plate"),
-              vehicleBrand: v("st_brand"),
-              batch: v("st_warehouse"),
-              technicianName: getSessionUser()?.email?.split("@")[0] || "TÃ©cnico"
+              quantity: qty,
+              notes: notes
             }
           });
 
-          // Upload Photos with condition tags
-          const uploadFiles = async (input, cond) => {
-            if (!input || input.files.length === 0) return;
-
-            let lat = "", lng = "";
-            try {
-              const pos = await new Promise((res, rej) => {
-                navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 });
-              });
-              lat = pos.coords.latitude.toString();
-              lng = pos.coords.longitude.toString();
-            } catch (e) { }
-
-            for (const file of input.files) {
-              await apiUpload(`/stock/${encodeURIComponent(projectId)}/photos`, {
-                file,
-                extraFields: { movementId: move.id, materialId: mId, lat: lat, lng: lng, condition: cond }
-              });
-            }
-          };
-
-          await uploadFiles(el("st_photos_good"), "BOA");
-          await uploadFiles(el("st_photos_bad"), "DANIFICADA");
-
-          toast("lançamento registrado e aguardando validação", { type: "success" });
+          toast("Operação registada com sucesso", { type: "success" });
           close();
           loadStock();
         } catch (err) {
@@ -3376,7 +3235,7 @@ function wireStock() {
     }
   });
 
-  const filters = ["Search", "Category", "Condition", "Status", "Warehouse"];
+  const filters = ["Search", "Type"];
   filters.forEach(f => {
     const input = el(`stockFilter${f}`);
     if (input) {

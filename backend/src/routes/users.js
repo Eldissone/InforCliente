@@ -181,7 +181,8 @@ userRoutes.patch(
     });
     if (!user) return res.status(404).json({ error: "NOT_FOUND" });
 
-    const nextRole = (body.role || user.role).toUpperCase();
+    const rawRole = body.role || user.role;
+    const nextRole = rawRole.toUpperCase();
     const nextClientId = body.clientId !== undefined ? body.clientId || null : user.clientId;
     const isClientRole = nextRole === "CLIENT" || nextRole === "CLIENTE";
 
@@ -219,8 +220,8 @@ userRoutes.patch(
       if (nextClientId) {
         await tx.userClient.upsert({
           where: { userId_clientId: { userId: user.id, clientId: nextClientId } },
-          create: { userId: user.id, clientId: nextClientId, role: nextRole },
-          update: { role: nextRole },
+          create: { userId: user.id, clientId: nextClientId, role: rawRole },
+          update: { role: rawRole },
         });
       } else {
         // Remove any existing UserClient entries for this user (unlinking)
