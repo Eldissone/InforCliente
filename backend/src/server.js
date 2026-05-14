@@ -21,22 +21,53 @@ const allowedOrigins = config.frontendOrigin
   .split(",")
   .map((o) => o.trim().replace(/\/$/, "")); // Remove barra no final
 
+console.log("Allowed origins:", allowedOrigins);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      const sanitizedOrigin = origin ? origin.replace(/\/$/, "") : null;
-      console.log(`CORS check - Origin: ${sanitizedOrigin}, Allowed: ${allowedOrigins}`);
-      
-      if (!sanitizedOrigin || config.frontendOrigin === "*" || allowedOrigins.includes(sanitizedOrigin)) {
-        callback(null, true);
-      } else {
-        console.warn(`CORS blocked request from: ${sanitizedOrigin}`);
-        callback(null, false);
+      const sanitizedOrigin = origin
+        ? origin.replace(/\/$/, "")
+        : null;
+
+      console.log(
+        `CORS check - Origin: ${sanitizedOrigin}`
+      );
+
+      // Permitir requests sem origin
+      // (Postman, curl, mobile apps)
+      if (!sanitizedOrigin) {
+        return callback(null, true);
       }
+
+      // Permitir tudo se configurado com *
+      if (config.frontendOrigin === "*") {
+        return callback(null, true);
+      }
+
+      // Validar origins permitidas
+      if (allowedOrigins.includes(sanitizedOrigin)) {
+        return callback(null, true);
+      }
+
+      console.warn(`CORS blocked: ${sanitizedOrigin}`);
+
+      return callback(new Error("Not allowed by CORS"));
     },
-    credentials: false,
+
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
+
+    credentials: true,
   })
 );
+
+app.options("", cors());
+
 app.use(express.json({ limit: "1mb" }));
 app.use("/uploads", express.static("uploads"));
 
@@ -70,19 +101,17 @@ app.use((err, _req, res, _next) => {
   const message = status >= 500 ? "INTERNAL_SERVER_ERROR" : err.message;
 
   if (status >= 500) {
-    // Keep server logs for debugging
-    // eslint-disable-next-line no-console
+
     console.error(err);
   }
 
   return res.status(status).json({ error: message });
 });
 
-// Start listening
+
 app.listen(config.port, async () => {
   console.log(`API listening on port ${config.port}`);
-  
-  // Run database migrations and initialization in the background
+
   await initialize();
 });
 
