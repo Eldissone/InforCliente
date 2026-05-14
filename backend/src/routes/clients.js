@@ -22,13 +22,9 @@ const clientRoutes = express.Router();
 clientRoutes.use(authRequired);
 
 function getScopedClientId(req) {
-  if (req.user?.role !== "cliente") return null;
-  if (!req.user?.clientId) {
-    const err = new Error("FORBIDDEN");
-    err.status = 403;
-    throw err;
-  }
-  return req.user.clientId;
+  const role = (req.user?.role || "").toLowerCase();
+  if (role !== "cliente") return null;
+  return req.user.clientId || null;
 }
 
 function assertClientAccess(req, clientId) {

@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
@@ -2640,7 +2640,7 @@ async function loadStock() {
 function renderStockSummary(items) {
   const uniqueProducts = items.length;
   const totalStock = items.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
-  
+
   // Categorias de materiais
   const btCount = items.filter(i => i.product?.category === 'BT').length;
   const mtCount = items.filter(i => i.product?.category === 'MT').length;
@@ -2684,14 +2684,14 @@ function renderStockMovements(items) {
     let driverInfo = "-";
     let vehicleInfo = "-";
     if (m.reference || m.notes) {
-       const text = m.reference || m.notes || "";
-       const parts = text.split('|');
-       if (parts.length > 1) {
-          driverInfo = parts[0].replace('Motorista:', '').trim() || "-";
-          vehicleInfo = parts[1].replace('Viatura:', '').replace('Matrícula:', '').trim() || "-";
-       } else {
-          driverInfo = text;
-       }
+      const text = m.reference || m.notes || "";
+      const parts = text.split('|');
+      if (parts.length > 1) {
+        driverInfo = parts[0].replace('Motorista:', '').trim() || "-";
+        vehicleInfo = parts[1].replace('Viatura:', '').replace('Matrícula:', '').trim() || "-";
+      } else {
+        driverInfo = text;
+      }
     }
 
     return `
@@ -2803,14 +2803,14 @@ async function openStockMovementDetailModal(moveId) {
     `,
     primaryLabel: "Fechar",
     onPrimary: async ({ close }) => {
-       close();
+      close();
     }
   });
 }
 
 async function openStockMovementModal() {
   if (!stockState.warehouseId) {
-     return toast("Nenhum armazém configurado para esta obra.", { type: "error" });
+    return toast("Nenhum armazém configurado para esta obra.", { type: "error" });
   }
 
   try {
@@ -2869,7 +2869,7 @@ async function openStockMovementModal() {
           const plate = v("st_plate");
           let notes = "";
           if (driver || plate) {
-             notes = `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`;
+            notes = `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`;
           }
 
           await apiRequest(`/stock/movements`, {

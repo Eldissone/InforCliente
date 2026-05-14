@@ -15,7 +15,7 @@ let charts = {
 };
 
 let state = {
-  projectId: "all",
+  projectId: null,
   startDate: "",
   endDate: "",
   activeTab: "dashboard",
@@ -48,7 +48,7 @@ async function loadDashboardData() {
     if (savedProjectId && dashboardData.projects.find(p => p.id === savedProjectId)) {
       state.projectId = savedProjectId;
       localStorage.removeItem("selected_project_id"); // Limpar após uso
-    } else if (state.projectId === "all" && dashboardData.projects && dashboardData.projects.length > 0) {
+    } else if ((!state.projectId || state.projectId === "all") && dashboardData.projects && dashboardData.projects.length > 0) {
       state.projectId = dashboardData.projects[0].id;
     }
 
@@ -57,7 +57,7 @@ async function loadDashboardData() {
     // Update select filter if it still exists (fallback)
     const select = document.getElementById("projectFilter");
     if (select) {
-      if (select.options.length === 1) {
+      if (select.options.length === 0) {
         dashboardData.projects.forEach(p => {
           const opt = document.createElement("option");
           opt.value = p.id;
@@ -86,17 +86,16 @@ async function loadDashboardData() {
 }
 
 async function renderDashboard(projectId) {
-  const data = projectId === "all"
+  const data = !projectId
     ? dashboardData
     : filterDataByProject(projectId);
 
   if (!data) return;
 
   await updateMetrics(data);
-  renderFinancialChart(data.projects);
   renderStockChart(data.stock);
 
-  if (projectId !== "all") {
+  if (projectId) {
     loadProgressBreakdown(projectId);
   } else {
     document.getElementById("progressBreakdownTbody").innerHTML = `<tr><td colspan="4" class="p-8 text-center text-sm font-bold text-slate-400">Selecione uma obra no filtro acima para ver os detalhes</td></tr>`;
@@ -288,43 +287,7 @@ function renderDirectorInfo(project) {
   }
 }
 
-function renderFinancialChart(projects) {
-  if (!projects) return;
-  const options = {
-    series: [
-      { name: 'Orçamento', data: projects.map(p => p.budget) },
-      { name: 'Pago', data: projects.map(p => p.paid) }
-    ],
-    chart: { type: 'bar', height: 350, toolbar: { show: false }, fontFamily: 'Inter, sans-serif' },
-    colors: ['#0F172A', '#2afc8d'],
-    plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 8 } },
-    dataLabels: { enabled: false },
-    stroke: { show: true, width: 2, colors: ['transparent'] },
-    xaxis: { categories: projects.map(p => p.name) },
-    yaxis: { title: { text: '' }, labels: { formatter: (val) => val.toLocaleString() } },
-    fill: { opacity: 1 },
-    tooltip: { y: { formatter: (val) => formatCurrencyKZ(val) } },
-    legend: { position: 'top', fontWeight: 700 }
-  };
 
-  const container = document.querySelector("#financialChart");
-  if (!container) {
-    console.warn("Container #financialChart not found. Skipping financial chart render.");
-    return;
-  }
-
-  if (charts.finances) {
-    try {
-      charts.finances.destroy();
-    } catch (e) {
-      console.warn("Error destroying previous financial chart:", e);
-    }
-    charts.finances = null;
-  }
-
-  charts.finances = new ApexCharts(container, options);
-  charts.finances.render().catch(err => console.error("Error rendering financial chart:", err));
-}
 
 function renderStockChart(stock) {
   // Não é mais usada para render — os dados do stock são carregados via API direta

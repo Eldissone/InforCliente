@@ -10,13 +10,7 @@ dashboardRoutes.use(authRequired);
 function getScopedClientId(req) {
   const role = (req.user?.role || "").toLowerCase();
   if (role !== "cliente") return null;
-  
-  if (!req.user?.clientId) {
-    const err = new Error("FORBIDDEN");
-    err.status = 403;
-    throw err;
-  }
-  return req.user.clientId;
+  return req.user.clientId || null;
 }
 
 dashboardRoutes.get(
@@ -24,18 +18,28 @@ dashboardRoutes.get(
   requirePermission("dashboard", "view"),
   asyncHandler(async (req, res) => {
     const scopedClientId = getScopedClientId(req);
+    const userRole = (req.user?.role || "").toLowerCase();
 
-    if (scopedClientId) {
-      const client = await prisma.client.findUnique({
-        where: { id: scopedClientId },
-        select: { healthScore: true, ltvTotal: true },
-      });
+    if (userRole === "cliente") {
+      if (scopedClientId) {
+        const client = await prisma.client.findUnique({
+          where: { id: scopedClientId },
+          select: { healthScore: true, ltvTotal: true },
+        });
 
-      return res.json({
-        totalClients: client ? 1 : 0,
-        portfolioValue: client?.ltvTotal ? String(client.ltvTotal) : "0",
-        avgHealth: client?.healthScore ?? 0,
-      });
+        return res.json({
+          totalClients: client ? 1 : 0,
+          portfolioValue: client?.ltvTotal ? String(client.ltvTotal) : "0",
+          avgHealth: client?.healthScore ?? 0,
+        });
+      } else {
+        // Cliente sem clientId vinculado (ex: apenas atribuído a obras)
+        return res.json({
+          totalClients: 0,
+          portfolioValue: "0",
+          avgHealth: 0,
+        });
+      }
     }
 
     const [totalClients, avgHealthAgg, portfolioValueAgg] = await Promise.all([
@@ -60,10 +64,16 @@ dashboardRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 10)));
     const scopedClientId = getScopedClientId(req);
+    const userRole = (req.user?.role || "").toLowerCase();
     const whereClauses = [];
 
-    if (scopedClientId) {
-      whereClauses.push({ id: scopedClientId });
+    if (userRole === "cliente") {
+      if (scopedClientId) {
+        whereClauses.push({ id: scopedClientId });
+      } else {
+        // Se é cliente mas não tem clientId, não deve ver nenhum cliente na lista
+        whereClauses.push({ id: "none" }); 
+      }
     }
     if (search) {
       whereClauses.push({
@@ -114,12 +124,15 @@ dashboardRoutes.get(
   requirePermission("dashboard", "view"),
   asyncHandler(async (req, res) => {
     const scopedClientId = getScopedClientId(req);
-    const where = scopedClientId
-      ? {
-          status: "OPEN",
-          OR: [{ clientId: scopedClientId }, { project: { is: { clientId: scopedClientId } } }],
-        }
-      : { status: "OPEN" };
+    const userRole = (req.user?.role || "").toLowerCase();
+    let where = { status: "OPEN" };
+    if (userRole === "cliente") {
+      where.OR = [
+        ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
+        ...(scopedClientId ? [{ project: { is: { clientId: scopedClientId } } }] : []),
+        { project: { is: { assignedUsers: { some: { id: req.user.sub } } } } }
+      ];
+    }
 
     const alerts = await prisma.alert.findMany({
       where,
@@ -142,8 +155,11 @@ dashboardRoutes.get(
 dashboardRoutes.get(
   "/client-summary",
   asyncHandler(async (req, res) => {
-    const clientId = getScopedClientId(req);
-    if (!clientId) return res.status(403).json({ error: "CLIENT_SCOPE_REQUIRED" });
+    // Obter o clientId do token. Pode ser null se a obra não tiver cliente vinculado.
+    const userRole = (req.user?.role || "").toLowerCase();
+    if (userRole !== "cliente") return res.status(403).json({ error: "CLIENT_ROLE_REQUIRED" });
+
+    const clientId = req.user.clientId; // Pode ser null
 
     const { start, end } = req.query;
     const dateStart = start ? new Date(start) : null;
@@ -163,7 +179,12 @@ dashboardRoutes.get(
 
     // 1. Buscar todos os projetos do cliente
     const projects = await prisma.project.findMany({
-      where: { clientId },
+      where: {
+        OR: [
+          ...(clientId ? [{ clientId }] : []),
+          { assignedUsers: { some: { id: req.user.sub } } }
+        ]
+      },
       include: {
         payments: { where: paymentFilter },
       },

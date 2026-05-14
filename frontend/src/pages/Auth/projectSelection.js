@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             method: "POST",
             body: {
               userId: user.id,
-              clientId: p.client?.id || ""
+              clientId: p.client?.id || null
             }
           });
 

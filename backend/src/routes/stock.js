@@ -270,4 +270,112 @@ stockRoutes.post(
   })
 );
 
+function getScopedClientId(req) {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role !== "cliente") return null;
+  return req.user.clientId || null;
+}
+
+// GET - Resumo de stock para um projecto específico
+stockRoutes.get(
+  "/:id/summary",
+  requirePermission("stock", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const role = (req.user?.role || "").toLowerCase();
+
+    // Permitir acesso total para admin/operador
+    if (role !== "cliente") {
+      const projectExists = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!projectExists) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+    } else {
+      const scopedClientId = getScopedClientId(req);
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          OR: [
+            ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
+            { assignedUsers: { some: { id: req.user.sub } } }
+          ]
+        }
+      });
+      if (!project) return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    // Buscar movimentos para este projecto
+    const movements = await prisma.stockMovement.findMany({
+      where: { projectId },
+      include: { product: true }
+    });
+
+    const stockMap = {};
+    movements.forEach((m) => {
+      const pId = m.productId;
+      if (!stockMap[pId]) {
+        stockMap[pId] = {
+          id: pId,
+          name: m.product.name,
+          unit: m.product.unit,
+          qty: 0,
+          totalIn: 0,
+          totalOut: 0,
+          totalExpected: 0, // Poderíamos buscar no orçamento, mas por agora 0
+        };
+      }
+      
+      const val = Number(m.quantity || 0);
+      if (m.type === "SAIDA" || m.type === "TRANSFER_OUT" || m.type === "LOSS") {
+        stockMap[pId].totalOut += val;
+        stockMap[pId].qty -= val;
+      } else if (m.type === "ENTRADA" || m.type === "TRANSFER_IN") {
+        stockMap[pId].totalIn += val;
+        stockMap[pId].qty += val;
+      }
+    });
+
+    return res.json({ items: Object.values(stockMap) });
+  })
+);
+
+// GET - Movimentações de stock para um projecto específico
+stockRoutes.get(
+  "/:id/movements",
+  requirePermission("stock", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const role = (req.user?.role || "").toLowerCase();
+
+    // Verificar acesso
+    if (role !== "cliente") {
+      const projectExists = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!projectExists) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+    } else {
+      const scopedClientId = getScopedClientId(req);
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          OR: [
+            ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
+            { assignedUsers: { some: { id: req.user.sub } } }
+          ]
+        }
+      });
+      if (!project) return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    const items = await prisma.stockMovement.findMany({
+      where: { projectId },
+      include: { 
+        product: true,
+        warehouse: true,
+        user: { select: { name: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100
+    });
+
+    return res.json({ items });
+  })
+);
+
 module.exports = { stockRoutes };

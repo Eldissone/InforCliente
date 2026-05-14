@@ -47,7 +47,12 @@ authRoutes.post(
       if (user.clientId) clientIds.push(user.clientId);
       const uniqueClientIds = [...new Set(clientIds)];
       projectsCount = await prisma.project.count({
-        where: { clientId: { in: uniqueClientIds } }
+        where: {
+          OR: [
+            { clientId: { in: uniqueClientIds } },
+            { assignedUsers: { some: { id: user.id } } }
+          ]
+        }
       });
     }
 
@@ -98,7 +103,7 @@ authRoutes.post(
   asyncHandler(async (req, res) => {
     const { userId, clientId } = z.object({
       userId: z.string(),
-      clientId: z.string()
+      clientId: z.string().nullable().optional()
     }).parse(req.body);
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -109,24 +114,40 @@ authRoutes.post(
 
     // Se não for admin, validar se tem acesso a este cliente
     if (userRole !== 'ADMIN' && userRole !== 'OPERADOR') {
-        const link = await prisma.userClient.findUnique({
-          where: {
-            userId_clientId: { userId, clientId }
-          }
-        });
-        
-        // Se não tem link na UserClient, verificamos se é o clientId principal do utilizador
-        if (!link && user.clientId !== clientId) {
-          return res.status(403).json({ error: "UNAUTHORIZED_ACCESS" });
+        if (clientId) {
+            const link = await prisma.userClient.findUnique({
+              where: {
+                userId_clientId: { userId, clientId }
+              }
+            });
+            
+            // Se não tem link na UserClient, verificamos se é o clientId principal do utilizador
+            if (!link && user.clientId !== clientId) {
+              return res.status(403).json({ error: "UNAUTHORIZED_ACCESS" });
+            }
+            
+            activeRole = link ? (link.role || "").toUpperCase() : userRole;
+        } else {
+            // Se o clientId é nulo/vazio, permitimos se o utilizador estiver atribuído a alguma obra sem cliente
+            const assignedCount = await prisma.project.count({
+                where: {
+                    clientId: null,
+                    assignedUsers: { some: { id: userId } }
+                }
+            });
+
+            if (assignedCount === 0 && user.clientId) {
+                // Se o utilizador tem um clientId definido, mas está a tentar aceder a um contexto sem cliente ao qual não está atribuído
+                return res.status(403).json({ error: "UNAUTHORIZED_ACCESS_NO_CLIENT" });
+            }
+            // Caso contrário, mantemos o papel original (cliente)
         }
-        
-        activeRole = link ? (link.role || "").toUpperCase() : userRole;
     }
 
-    // Atualizar o clientId padrão
+    // Atualizar o clientId padrão (pode ser null se a obra não tiver cliente)
     await prisma.user.update({
       where: { id: userId },
-      data: { clientId }
+      data: { clientId: clientId || null }
     });
 
     const token = jwt.sign(
@@ -161,7 +182,12 @@ authRoutes.get(
         const clientIds = links.map(l => l.clientId);
         if (user.clientId) clientIds.push(user.clientId);
         const uniqueClientIds = [...new Set(clientIds)];
-        where = { clientId: { in: uniqueClientIds } };
+        where = {
+            OR: [
+                { clientId: { in: uniqueClientIds } },
+                { assignedUsers: { some: { id: userId } } }
+            ]
+        };
     }
 
     const projects = await prisma.project.findMany({

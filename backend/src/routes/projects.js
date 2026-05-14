@@ -28,13 +28,9 @@ const fileUpload = multer({
 });
 
 function getScopedClientId(req) {
-  if (req.user?.role !== "cliente") return null;
-  if (!req.user?.clientId) {
-    const err = new Error("FORBIDDEN");
-    err.status = 403;
-    throw err;
-  }
-  return req.user.clientId;
+  const role = (req.user?.role || "").toLowerCase();
+  if (role !== "cliente") return null;
+  return req.user.clientId || null;
 }
 
 async function ensureClientExists(clientId) {
@@ -51,13 +47,21 @@ async function ensureClientExists(clientId) {
 }
 
 async function ensureProjectReadable(req, projectId) {
+  const role = (req.user?.role || "").toLowerCase();
   const scopedClientId = getScopedClientId(req);
+
+  const where = { id: projectId };
+  
+  // Scoping only applies to clients
+  if (role === "cliente") {
+    where.OR = [
+      ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
+      { assignedUsers: { some: { id: req.user.sub } } }
+    ];
+  }
+
   const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      ...(scopedClientId ? { clientId: scopedClientId } : {}),
-      ...(req.permissionScope === "own" ? { assignedUsers: { some: { id: req.user.id } } } : {}),
-    },
+    where,
     include: {
       client: { select: { id: true, name: true, code: true } },
     },
@@ -103,10 +107,16 @@ projectRoutes.get(
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 10)));
 
     const whereClauses = [];
+    const role = (req.user?.role || "").toLowerCase();
     const scopedClientId = getScopedClientId(req);
 
-    if (scopedClientId) {
-      whereClauses.push({ clientId: scopedClientId });
+    if (role === "cliente") {
+      whereClauses.push({
+        OR: [
+          ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
+          { assignedUsers: { some: { id: req.user.sub } } }
+        ]
+      });
     }
     if (search) {
       whereClauses.push({
@@ -144,7 +154,7 @@ projectRoutes.get(
     if (req.permissionScope === "own") {
       whereClauses.push({
         assignedUsers: {
-          some: { id: req.user.id }
+          some: { id: req.user.sub }
         }
       });
     }
