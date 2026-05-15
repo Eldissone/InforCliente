@@ -57,27 +57,53 @@ async function renderInventory(container) {
     const { items: balances } = await apiRequest("/stock/balance");
     const { items: allItems } = await apiRequest("/items");
 
-    // Agrupar ativos por produto e armazém para contar quantidades
-    const assetCounts = {};
+    // Agrupar tudo por produto, armazém e proprietário para evitar duplicados no inventário geral
+    const groups = {};
+    const getGroupKey = (item) => `${item.productId || item.product?.id}-${item.warehouseId || item.warehouse?.id}-${item.ownerId || 'proprio'}`;
+
+    // 1. Processar Saldos (Stock Consumível / Geral)
+    balances.forEach(b => {
+        const key = getGroupKey(b);
+        if (!groups[key]) {
+            groups[key] = {
+                product: b.product,
+                warehouse: b.warehouse,
+                ownerId: b.ownerId,
+                quantity: 0,
+                hasStock: true,
+                hasAsset: false
+            };
+        }
+        groups[key].quantity += Number(b.quantity);
+        groups[key].hasStock = true;
+    });
+
+    // 2. Processar Itivos (Items Individuais) e somar se no mesmo local
     allItems.forEach(item => {
-        const key = `${item.productId}-${item.warehouseId}-${item.ownerId || 'proprio'}`;
-        if (!assetCounts[key]) {
-            assetCounts[key] = {
+        if (!item.warehouseId) return; // Ignorar se não estiver num armazém (ex: em trânsito sem destino ou com técnico mas sem warehouseId)
+        const key = getGroupKey(item);
+        if (!groups[key]) {
+            groups[key] = {
                 product: item.product,
                 warehouse: item.warehouse,
                 ownerId: item.ownerId,
                 quantity: 0,
-                isAsset: true
+                hasStock: false,
+                hasAsset: true
             };
         }
-        assetCounts[key].quantity++;
+        // Se já temos este produto registado no stock deste armazém (via balances),
+        // não somamos novamente para evitar duplicação, apenas marcamos que tem ativos.
+        if (groups[key].hasStock) {
+            groups[key].hasAsset = true;
+        } else {
+            // Só somamos se for um item que NÃO apareceu no saldo de stock (ex: itens sem categoria de material)
+            groups[key].quantity += 1;
+            groups[key].hasAsset = true;
+        }
     });
 
-    // Combinar balances com contagens de ativos
-    const consolidated = [
-        ...balances.map(b => ({ ...b, isAsset: false })),
-        ...Object.values(assetCounts)
-    ];
+    const consolidated = Object.values(groups);
 
     let html = `
         <div class="mb-10 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
@@ -115,7 +141,9 @@ async function renderInventory(container) {
         html += `<tr><td colspan="4" class="p-20 text-center text-slate-400 font-medium italic">Nenhum registo de stock ou ativos.</td></tr>`;
     } else {
         consolidated.forEach(item => {
-            const isLow = !item.isAsset && item.quantity < 5;
+            const isAsset = item.hasAsset;
+            const isStock = item.hasStock;
+            const isLow = isStock && !isAsset && item.quantity < 5;
             const isTool = item.product.category === 'TOOL' || item.product.category === 'EQUIPMENT';
 
             html += `
@@ -132,9 +160,10 @@ async function renderInventory(container) {
                     </td>
                     <td class="px-10 py-6">
                         <div class="flex flex-col gap-1">
-                            <span class="px-2 py-0.5 w-fit rounded-md ${item.isAsset ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'} text-[9px] font-black uppercase tracking-widest">
-                                ${item.isAsset ? 'Ativo' : 'Stock'}
-                            </span>
+                            <div class="flex flex-wrap gap-1">
+                                ${isStock ? `<span class="px-2 py-0.5 w-fit rounded-md bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest">Stock</span>` : ''}
+                                ${isAsset ? `<span class="px-2 py-0.5 w-fit rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest">Ativo</span>` : ''}
+                            </div>
                             <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                                 ${item.ownerId ? 'Cliente' : 'Próprio'}
                             </span>
