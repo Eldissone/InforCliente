@@ -79,8 +79,8 @@ stockRoutes.get(
       return res.json({ items: [] });
     }
     
-    // 2. Buscar o saldo deste armazém
-    const items = await prisma.warehouseStock.findMany({
+    // 2. Buscar o saldo deste armazém e agrupar por produto
+    const rawItems = await prisma.warehouseStock.findMany({
       where: { warehouseId: warehouse.id },
       include: {
         product: true,
@@ -89,7 +89,20 @@ stockRoutes.get(
       orderBy: { product: { name: "asc" } },
     });
     
-    return res.json({ items });
+    // Agrupar para evitar duplicados por ownerId na visualização do projecto
+    const grouped = {};
+    for (const item of rawItems) {
+      const key = `${item.productId}_${item.warehouseId}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          ...item,
+          quantity: 0
+        };
+      }
+      grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
+    }
+    
+    return res.json({ items: Object.values(grouped) });
   })
 );
 

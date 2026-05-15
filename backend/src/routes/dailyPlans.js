@@ -211,11 +211,11 @@ dailyPlansRoutes.post(
             }
           });
 
+          // Procurar qualquer stock deste produto no estaleiro (independente de owner para simplificar em obra)
           const existingStock = await tx.warehouseStock.findFirst({
             where: {
               warehouseId: estaleiro.id,
-              productId: mat.productId,
-              ownerId: null
+              productId: mat.productId
             }
           });
 
