@@ -12,7 +12,11 @@ warehouseRoutes.get(
   "/",
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
+    const { includeDeleted } = req.query;
     const items = await prisma.warehouse.findMany({
+      where: {
+        ...(includeDeleted !== "true" && { active: true })
+      },
       orderBy: { name: "asc" },
       include: { project: { select: { name: true } } },
     });
@@ -56,6 +60,60 @@ warehouseRoutes.patch(
       data: body,
     });
     return res.json(updated);
+  })
+);
+
+// DELETE - Remover armazém
+warehouseRoutes.delete(
+  "/:id",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    // 1. Verificar se existem saldos de stock
+    const stockCount = await prisma.warehouseStock.count({
+      where: { warehouseId: id, quantity: { gt: 0 } }
+    });
+
+    if (stockCount > 0) {
+      return res.status(400).json({ error: "WAREHOUSE_HAS_STOCK" });
+    }
+
+    // 2. Verificar se existem ativos (Items) vinculados
+    const itemCount = await prisma.item.count({
+      where: { 
+        OR: [
+          { warehouseId: id },
+          { targetWarehouseId: id }
+        ]
+      }
+    });
+
+    if (itemCount > 0) {
+      return res.status(400).json({ error: "WAREHOUSE_HAS_ITEMS" });
+    }
+
+    // 3. Em vez de eliminar permanentemente, movemos para a "Reciclagem" (active: false)
+    await prisma.warehouse.update({
+      where: { id },
+      data: { active: false }
+    });
+
+    return res.status(204).send();
+  })
+);
+
+// POST - Restaurar armazém da reciclagem
+warehouseRoutes.post(
+  "/:id/restore",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await prisma.warehouse.update({
+      where: { id },
+      data: { active: true }
+    });
+    return res.json({ message: "Armazém restaurado com sucesso." });
   })
 );
 

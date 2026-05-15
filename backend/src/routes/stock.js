@@ -377,4 +377,64 @@ stockRoutes.get(
   })
 );
 
+// PATCH - Atualizar saldo diretamente (Ajuste Rápido)
+stockRoutes.patch(
+  "/balance/:id",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { quantity, notes } = z.object({
+      quantity: z.number(),
+      notes: z.string().optional().nullable(),
+    }).parse(req.body);
+
+    const oldStock = await prisma.warehouseStock.findUnique({
+      where: { id },
+      include: { product: true }
+    });
+
+    if (!oldStock) return res.status(404).json({ error: "STOCK_NOT_FOUND" });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Atualizar o saldo
+      const stock = await tx.warehouseStock.update({
+        where: { id },
+        data: { quantity },
+      });
+
+      // 2. Registar como um movimento de AJUSTE para histórico
+      await tx.stockMovement.create({
+        data: {
+          productId: oldStock.productId,
+          warehouseId: oldStock.warehouseId,
+          userId: req.user.sub,
+          type: "ADJUSTMENT",
+          quantity: Math.abs(quantity - Number(oldStock.quantity)),
+          ownerId: oldStock.ownerId,
+          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}`,
+        },
+      });
+
+      return stock;
+    });
+
+    return res.json(updated);
+  })
+);
+
+// DELETE - Remover registo de saldo
+stockRoutes.delete(
+  "/balance/:id",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    // Opcional: Impedir eliminar se tiver quantidade? 
+    // Por agora permitimos para ser um CRUD completo.
+    
+    await prisma.warehouseStock.delete({ where: { id } });
+    return res.status(204).send();
+  })
+);
+
 module.exports = { stockRoutes };

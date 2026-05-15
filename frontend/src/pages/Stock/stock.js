@@ -78,10 +78,13 @@ async function renderInventory(container) {
         groups[key].hasStock = true;
     });
 
-    // 2. Processar Itivos (Items Individuais) e somar se no mesmo local
+    // 2. Processar Ativos (Items Individuais)
+    // Para Ferramentas/Equipamentos, a contagem de itens é o "mestre" da verdade
     allItems.forEach(item => {
         if (!item.warehouseId) return; // Ignorar se não estiver num armazém (ex: em trânsito sem destino ou com técnico mas sem warehouseId)
         const key = getGroupKey(item);
+        const isTool = item.product?.category === 'TOOL' || item.product?.category === 'EQUIPMENT';
+
         if (!groups[key]) {
             groups[key] = {
                 product: item.product,
@@ -92,13 +95,20 @@ async function renderInventory(container) {
                 hasAsset: true
             };
         }
-        // Se já temos este produto registado no stock deste armazém (via balances),
-        // não somamos novamente para evitar duplicação, apenas marcamos que tem ativos.
-        if (groups[key].hasStock) {
-            groups[key].hasAsset = true;
+
+        if (isTool) {
+            // Se for ferramenta, ignoramos o saldo anterior e contamos os itens reais presentes
+            if (!groups[key].hasAsset) {
+                groups[key].quantity = 1; // Inicia a contagem baseada em itens
+                groups[key].hasAsset = true;
+            } else {
+                groups[key].quantity += 1;
+            }
         } else {
-            // Só somamos se for um item que NÃO apareceu no saldo de stock (ex: itens sem categoria de material)
-            groups[key].quantity += 1;
+            // Se for material mas tiver um item individual por erro, só somamos se não houver stock base
+            if (!groups[key].hasStock) {
+                groups[key].quantity += 1;
+            }
             groups[key].hasAsset = true;
         }
     });
@@ -487,7 +497,7 @@ async function renderTools(container) {
     Object.values(displayGroups).forEach(group => {
         const statusMap = {
             'AVAILABLE': { label: 'Livre', color: 'bg-emerald-500', icon: 'check_circle' },
-            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-amber-500', icon: 'hourglass_empty' },
+            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-yellow-500', icon: 'hourglass_empty' },
             'ASSIGNED': { label: 'Em Obra', color: 'bg-blue-600', icon: 'construction' },
             'PENDING_RETURN': { label: 'Aguardando Validação', color: 'bg-indigo-500', icon: 'assignment_return' },
             'MAINTENANCE': { label: 'Manutenção', color: 'bg-red-500', icon: 'build' }
@@ -822,7 +832,10 @@ window.openDeliveryModal = async ({ toolId, productId }) => {
 };
 
 async function renderWarehouses(container) {
-    const { items: warehouses } = await apiRequest("/warehouses");
+    const { items: allWarehouses } = await apiRequest("/warehouses?includeDeleted=true");
+    const warehouses = allWarehouses.filter(w => w.active);
+    const deletedWarehouses = allWarehouses.filter(w => !w.active);
+
     const { items: allStock } = await apiRequest("/stock/balance");
     const { items: allItems } = await apiRequest("/items");
 
@@ -836,16 +849,12 @@ async function renderWarehouses(container) {
                 <span class="material-symbols-outlined text-lg">add</span> Novo Armazém
             </button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
             ${warehouses.map(w => {
-        // Quantidade REAL de Materiais (Soma das quantidades)
         const warehouseStock = allStock.filter(s => s.warehouseId === w.id && (s.product.category === 'MATERIAL' || s.product.category === 'CONSUMABLE'));
-        const totalStockQty = warehouseStock.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
-
-        // Quantidade de Ativos (Contagem individual de ferramentas/equipamentos)
         const toolCount = allItems.filter(i => i.warehouseId === w.id && (i.product.category === 'TOOL' || i.product.category === 'EQUIPMENT')).length;
         const pendingCount = allItems.filter(i => i.targetWarehouseId === w.id && (i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN')).length;
-
         const isCentral = w.type === 'CENTRAL';
 
         return `
@@ -883,6 +892,34 @@ async function renderWarehouses(container) {
                 `;
     }).join('')}
         </div>
+
+        ${deletedWarehouses.length > 0 ? `
+        <div class="mt-12 p-10 bg-slate-50 rounded-[2.5rem] border border-slate-100 border-dashed">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-10 h-10 bg-slate-200 text-slate-500 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-xl">delete_sweep</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Reciclagem de Locais</h3>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazéns desativados que podem ser restaurados</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                ${deletedWarehouses.map(w => `
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
+                    <div>
+                        <p class="font-bold text-slate-900 text-sm">${esc(w.name)}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${esc(w.type)}</p>
+                    </div>
+                    <button onclick="window.restoreWarehouse('${w.id}')" class="h-8 px-4 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">restore</span> Restaurar
+                    </button>
+                </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
     `;
 
     document.getElementById("btnCreateWarehouse")?.addEventListener("click", () => openWarehouseModal());
@@ -890,7 +927,16 @@ async function renderWarehouses(container) {
         currentTab = `warehouse_detail_${id}`;
         loadTabContent(currentTab);
     };
+
+    window.restoreWarehouse = async (id) => {
+        if (!confirm("Deseja restaurar este armazém para a rede ativa?")) return;
+        try {
+            await apiRequest(`/warehouses/${id}/restore`, { method: "POST" });
+            renderWarehouses(container);
+        } catch (error) { alert("Erro ao restaurar: " + error.message); }
+    };
 }
+
 
 async function openWarehouseModal(warehouseId = null) {
     let warehouse = null;
@@ -1231,7 +1277,8 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <thead>
                                 <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
                                     <th class="px-10 py-5">Material</th>
-                                    <th class="px-10 py-5 text-right">Quantidade Disponível</th>
+                                    <th class="px-10 py-5 text-center">Quantidade Disponível</th>
+                                    <th class="px-10 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-50">
@@ -1243,14 +1290,24 @@ async function renderWarehouseDetail(container, warehouseId) {
                                         <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
                                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
                                     </td>
-                                    <td class="px-10 py-6 text-right">
-                                        <div class="flex flex-col items-end">
+                                    <td class="px-10 py-6 text-center">
+                                        <div class="flex flex-col items-center">
                                             <span class="text-2xl font-black ${isLow ? 'text-amber-500' : 'text-slate-900'}">${s.quantity}</span>
                                             <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest">${esc(s.product.unit)}</span>
                                         </div>
                                     </td>
+                                    <td class="px-10 py-6 text-right">
+                                        <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button onclick="window.editStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
+                                                <span class="material-symbols-outlined text-lg">edit</span>
+                                            </button>
+                                            <button onclick="window.deleteStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
+                                                <span class="material-symbols-outlined text-lg">delete</span>
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>`;
-    }).join('') || '<tr><td colspan="2" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>'}
+    }).join('') || '<tr><td colspan="3" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -1286,7 +1343,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                 const imgUrl = getAssetUrl(t.imageUrl || t.product.image) || 'https://placehold.co/100x100/f8fafc/cbd5e1?text=Tool';
                 const statusMap = {
                     'AVAILABLE': { label: 'Em Stock', color: 'text-emerald-600 bg-emerald-50' },
-                    'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'text-amber-600 bg-amber-50' },
+                    'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'text-yellow-600 bg-yellow-50' },
                     'ASSIGNED': { label: 'Em Obra', color: 'text-emerald-600 bg-emerald-50' },
                     'PENDING_RETURN': { label: 'Aguardando Validação', color: 'text-indigo-600 bg-indigo-50' },
                     'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
@@ -1982,4 +2039,60 @@ window.viewPendingReceipts = async (warehouseId) => {
         showPrimary: false,
         secondaryLabel: "Fechar"
     });
+};
+
+window.editStockBalance = async (id) => {
+    const { items: allStock } = await apiRequest("/stock/balance");
+    const stock = allStock.find(s => s.id === id);
+    if (!stock) return;
+
+    const contentHtml = `
+        <form id="formEditStock" class="space-y-6 pt-4">
+            <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4 mb-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm">
+                    <span class="material-symbols-outlined text-2xl">edit_note</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-blue-400 uppercase mb-1">Ajuste de Saldo</p>
+                    <p class="text-xs text-blue-900 leading-relaxed font-bold">${esc(stock.product.name)}</p>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nova Quantidade (${stock.product.unit})</label>
+                <input type="number" name="quantity" value="${stock.quantity}" step="0.01" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Motivo do Ajuste</label>
+                <textarea name="notes" placeholder="Ex: Correção de inventário físico..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 min-h-[80px]"></textarea>
+            </div>
+        </form>
+    `;
+
+    const { close } = openModal({
+        title: "Editar Saldo de Stock",
+        contentHtml,
+        primaryLabel: "Salvar Alterações",
+        onPrimary: async ({ body }) => {
+            const data = Object.fromEntries(new FormData(body.querySelector("#formEditStock")).entries());
+            data.quantity = parseFloat(data.quantity);
+            try {
+                await apiRequest(`/stock/balance/${id}`, {
+                    method: "PATCH",
+                    body: data
+                });
+                close();
+                loadTabContent(currentTab);
+            } catch (error) { alert("Erro ao atualizar stock: " + error.message); }
+        }
+    });
+};
+
+window.deleteStockBalance = async (id) => {
+    if (!confirm("Tem a certeza que deseja remover este produto deste armazém? Esta ação não pode ser desfeita e o saldo será zerado sem registo de saída.")) return;
+    try {
+        await apiRequest(`/stock/balance/${id}`, { method: "DELETE" });
+        loadTabContent(currentTab);
+    } catch (error) { alert("Erro ao remover: " + error.message); }
 };
