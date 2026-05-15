@@ -910,6 +910,7 @@ function wireTabs() {
       if (tabId === "relatorio") loadProgressTasks();
       if (tabId === "stock") loadStock();
       if (tabId === "galeria_obra") loadGallery();
+      if (tabId === "planos_diarios") loadDailyPlans();
     });
   });
 
@@ -3638,3 +3639,500 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
   });
 }
 window.openEditPlannedModal = openEditPlannedModal;
+
+// ==========================================
+// PLANOS DIÁRIOS (DAILY PLANS)
+// ==========================================
+
+async function loadDailyPlans() {
+  const id = getProjectId();
+  const container = el("dailyPlansList");
+  if (!container) return;
+
+  try {
+    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">Carregando planos...</div>`;
+
+    const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
+
+    if (!plans || plans.length === 0) {
+      container.innerHTML = `
+        <div class="p-10 flex flex-col items-center text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">
+          <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">fact_check</span>
+          Nenhum plano diário registado.
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = plans.map(p => {
+      let statusBadge = "";
+      if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
+      if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
+      if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
+      if (p.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
+
+      return `
+        <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group">
+          <div>
+            <div class="flex items-center gap-3 mb-2">
+              <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
+              ${statusBadge}
+            </div>
+            <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
+            <div class="mt-2 text-xs font-semibold text-slate-500 flex gap-4">
+              <span>${p.tasks.length} Tarefa(s)</span>
+              <span>${p.materials.length} Material(ais)</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
+            ${p.status === "PENDING_MATERIAL" ? `
+              <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
+                <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
+              </button>
+            ` : ""}
+            ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
+              <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
+                <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
+              </button>
+            ` : ""}
+            <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
+              <span class="material-symbols-outlined text-sm">visibility</span>
+            </button>
+            ${(p.status !== "IN_PROGRESS" && p.status !== "COMPLETED") ? `
+              <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
+                <span class="material-symbols-outlined text-sm">delete</span>
+              </button>
+            ` : ""}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    applyRoleVisibility();
+
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl">Erro ao carregar planos.</div>`;
+  }
+}
+window.loadDailyPlans = loadDailyPlans;
+
+async function providePlanMaterials(planId) {
+  if (!confirm("Confirmar a disponibilização dos materiais do armazém para este plano? Isso deduzirá o stock imediatamente.")) return;
+  try {
+    await apiRequest(`/daily-plans/${encodeURIComponent(planId)}/provide-materials`, { method: "POST" });
+    toast("Materiais disponibilizados com sucesso!", { type: "success" });
+    loadDailyPlans();
+  } catch (err) {
+    toast(err.message || "Erro ao disponibilizar materiais.", { type: "error" });
+  }
+}
+window.providePlanMaterials = providePlanMaterials;
+
+async function deletePlan(planId) {
+  if (!confirm("Tem a certeza que deseja apagar este plano?")) return;
+  try {
+    await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`, { method: "DELETE" });
+    toast("Plano apagado com sucesso!", { type: "success" });
+    loadDailyPlans();
+  } catch (err) {
+    toast(err.message || "Erro ao apagar plano.", { type: "error" });
+  }
+}
+window.deletePlan = deletePlan;
+
+// O complete e create (addDailyPlanBtn) dependem do form detalhado.
+
+async function wireDailyPlans() {
+  const addBtn = el("addDailyPlanBtn");
+  if (!addBtn) return;
+
+  addBtn.addEventListener("click", async () => {
+    const id = getProjectId();
+
+    // Fetch available tasks (from avanço físico) and materials (from stock)
+    let progressTasks = [];
+    let products = [];
+    let technicians = [];
+    try {
+      const pData = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`);
+      progressTasks = pData.tasks || [];
+
+      const { items: warehouses } = await apiRequest("/warehouses");
+      const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
+
+      if (projectWarehouse) {
+        const sData = await apiRequest(`/stock/balance?warehouseId=${projectWarehouse.id}`);
+        products = sData.items || [];
+      }
+
+      const tData = await apiRequest("/users/technicians");
+      technicians = tData.items || [];
+    } catch (err) {
+      console.error(err);
+      toast("Erro ao carregar dependências para o plano.", { type: "error" });
+      return;
+    }
+
+    let selectedTasks = [];
+    let selectedMaterials = [];
+
+    const updateTasksUI = (panel) => {
+      const container = panel.querySelector("#selectedTasksContainer");
+      if (selectedTasks.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma tarefa selecionada</p>`;
+        return;
+      }
+      container.innerHTML = selectedTasks.map((t, idx) => `
+        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2 border-l-4 ${t.technicianId ? 'border-blue-400' : 'border-slate-300'}">
+          <div class="text-xs flex flex-col">
+            <span class="font-bold text-slate-900">${escapeHtml(t.name)}</span>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-slate-500 font-medium">Qtd: ${t.plannedQty}</span>
+              ${t.technicianName ? `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold text-[10px]"><span class="material-symbols-outlined text-[10px] align-middle mr-1">person</span>${escapeHtml(t.technicianName)}</span>` : ''}
+            </div>
+          </div>
+          <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedTask(${idx})">
+            <span class="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      `).join('');
+    };
+
+    const updateMaterialsUI = (panel) => {
+      const container = panel.querySelector("#selectedMaterialsContainer");
+      if (selectedMaterials.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhum material selecionado</p>`;
+        return;
+      }
+      container.innerHTML = selectedMaterials.map((m, idx) => `
+        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
+          <div class="text-xs flex flex-col">
+            <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
+            <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
+          </div>
+          <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedMaterial(${idx})">
+            <span class="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      `).join('');
+    };
+
+    openModal({
+      title: "Criar Plano Diário",
+      primaryLabel: "Gravar Plano",
+      contentHtml: `
+        <div class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
+              <input type="date" id="dp_date" value="${new Date().toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
+              <input type="text" id="dp_desc" placeholder="Ex: Betonagem dos pilares" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+          </div>
+
+          <!-- Tarefas -->
+          <div class="border border-slate-100 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-blue-600">task</span> Tarefas a Executar</h4>
+            <div class="flex flex-col gap-2 mb-4">
+              <select id="dp_task_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecione a tarefa do Avanço Físico...</option>
+                ${progressTasks.map(pt => `<option value="${pt.id}">${escapeHtml(pt.description)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`).join('')}
+              </select>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <select id="dp_task_tech" class="sm:w-1/3 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                  <option value="">Técnico Resp. (Opcional)</option>
+                  ${technicians.map(t => `<option value="${t.id}">${escapeHtml(t.name || t.email)}</option>`).join('')}
+                </select>
+                <input type="number" id="dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <button type="button" id="dp_add_task_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+              </div>
+            </div>
+            <div id="selectedTasksContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+          </div>
+
+          <!-- Materiais -->
+          <div class="border border-slate-100 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-amber-600">inventory_2</span> Materiais a Requisitar</h4>
+            <div class="flex flex-col gap-2 mb-4">
+              <select id="dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecione o material do Stock...</option>
+                ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+              </select>
+              <div class="flex gap-2">
+                <input type="number" id="dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <button type="button" id="dp_add_mat_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+              </div>
+            </div>
+            <div id="selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+          </div>
+        </div>
+      `,
+      onRender: ({ panel }) => {
+        window.removeSelectedTask = (idx) => {
+          selectedTasks.splice(idx, 1);
+          updateTasksUI(panel);
+        };
+        window.removeSelectedMaterial = (idx) => {
+          selectedMaterials.splice(idx, 1);
+          updateMaterialsUI(panel);
+        };
+
+        panel.querySelector("#dp_add_task_btn").addEventListener("click", () => {
+          const sel = panel.querySelector("#dp_task_select");
+          const techSel = panel.querySelector("#dp_task_tech");
+          const qty = panel.querySelector("#dp_task_qty").value;
+          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione tarefa e quantidade válida.");
+
+          const opt = sel.options[sel.selectedIndex];
+          const techOpt = techSel.selectedIndex > 0 ? techSel.options[techSel.selectedIndex] : null;
+
+          selectedTasks.push({
+            progressTaskId: sel.value,
+            name: opt.text.split('(')[0].trim(),
+            plannedQty: Number(qty),
+            technicianId: techSel.value || null,
+            technicianName: techOpt ? techOpt.text : null
+          });
+          updateTasksUI(panel);
+
+          sel.value = "";
+          panel.querySelector("#dp_task_qty").value = "";
+          techSel.value = "";
+        });
+
+        panel.querySelector("#dp_add_mat_btn").addEventListener("click", () => {
+          const sel = panel.querySelector("#dp_mat_select");
+          const qty = panel.querySelector("#dp_mat_qty").value;
+          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione material e quantidade válida.");
+
+          const opt = sel.options[sel.selectedIndex];
+          selectedMaterials.push({ productId: sel.value, name: opt.text.split('(')[0].trim(), requestedQty: Number(qty) });
+          updateMaterialsUI(panel);
+
+          sel.value = "";
+          panel.querySelector("#dp_mat_qty").value = "";
+        });
+
+        updateTasksUI(panel);
+        updateMaterialsUI(panel);
+      },
+      onPrimary: async ({ close, btn, panel }) => {
+        const date = panel.querySelector("#dp_date").value;
+        const description = panel.querySelector("#dp_desc").value;
+
+        if (selectedTasks.length === 0) {
+          return toast("Adicione pelo menos uma tarefa ao plano.", { type: "error" });
+        }
+
+        setButtonLoading(btn, true);
+        try {
+          await apiRequest(`/daily-plans`, {
+            method: "POST",
+            body: {
+              projectId: id,
+              date,
+              description,
+              tasks: selectedTasks,
+              materials: selectedMaterials
+            }
+          });
+          toast("Plano Diário criado com sucesso!", { type: "success" });
+          close();
+          loadDailyPlans();
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast(err.message || "Erro ao criar plano", { type: "error" });
+        }
+      }
+    });
+  });
+}
+document.addEventListener("DOMContentLoaded", wireDailyPlans);
+
+async function completePlan(planId) {
+  const id = getProjectId();
+  try {
+    const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
+    const plan = plans.find(p => p.id === planId);
+    if (!plan) return toast("Plano não encontrado.");
+
+    let tasksHtml = plan.tasks.map(t => `
+      <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
+        <div class="flex-1">
+          <p class="text-xs font-bold text-slate-900">${escapeHtml(t.progressTask?.description || "Tarefa")}</p>
+          <p class="text-[10px] text-slate-500">Planeado: ${t.plannedQty}</p>
+        </div>
+        <div class="w-32">
+          <label class="text-[9px] font-black uppercase text-slate-400">Executado</label>
+          <input type="number" step="0.01" data-task-id="${t.id}" value="${t.plannedQty}" class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
+        </div>
+      </div>
+    `).join('');
+
+    let matsHtml = plan.materials.map(m => `
+      <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
+        <div class="flex-1">
+          <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
+          <p class="text-[10px] text-slate-500">Disponibilizado: ${m.providedQty}</p>
+        </div>
+        <div class="w-32">
+          <label class="text-[9px] font-black uppercase text-slate-400">Consumido</label>
+          <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.providedQty}" max="${m.providedQty}" class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
+        </div>
+      </div>
+    `).join('');
+
+    if (!tasksHtml) tasksHtml = '<p class="text-xs text-slate-400 italic">Sem tarefas.</p>';
+    if (!matsHtml) matsHtml = '<p class="text-xs text-slate-400 italic">Sem materiais.</p>';
+
+    openModal({
+      title: "Concluir Plano Diário",
+      primaryLabel: "Confirmar Conclusão",
+      contentHtml: `
+        <div class="space-y-6">
+          <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+            <p class="text-xs text-emerald-700">Ao concluir este plano, o avanço físico será atualizado com as quantidades executadas. Os materiais não consumidos retornarão ao armazém.</p>
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 mb-3"><span class="material-symbols-outlined text-blue-600 align-middle text-sm">task</span> Validação de Tarefas</h4>
+            ${tasksHtml}
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 mb-3"><span class="material-symbols-outlined text-amber-600 align-middle text-sm">inventory_2</span> Validação de Materiais</h4>
+            ${matsHtml}
+          </div>
+        </div>
+      `,
+      onPrimary: async ({ close, btn, panel }) => {
+        const executedTasks = Array.from(panel.querySelectorAll("input[data-task-id]")).map(el => ({
+          dailyPlanTaskId: el.getAttribute("data-task-id"),
+          executedQty: el.value
+        }));
+
+        const consumedMaterials = Array.from(panel.querySelectorAll("input[data-mat-id]")).map(el => ({
+          dailyPlanMaterialId: el.getAttribute("data-mat-id"),
+          consumedQty: el.value
+        }));
+
+        setButtonLoading(btn, true);
+        try {
+          await apiRequest(`/daily-plans/${encodeURIComponent(planId)}/complete`, {
+            method: "POST",
+            body: { executedTasks, consumedMaterials }
+          });
+          toast("Plano concluído com sucesso!", { type: "success" });
+          close();
+          loadDailyPlans();
+        } catch (err) {
+          setButtonLoading(btn, false);
+          toast(err.message || "Erro ao concluir plano", { type: "error" });
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao carregar dados do plano.", { type: "error" });
+  }
+}
+window.completePlan = completePlan;
+
+window.viewPlanDetails = async function (planId) {
+  try {
+    const plan = await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`);
+
+    let statusBadge = "";
+    if (plan.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
+    if (plan.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>`;
+    if (plan.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
+    if (plan.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
+
+    const contentHtml = `
+      <div class="space-y-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(plan.date)}</span>
+            ${statusBadge}
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Descrição / Resumo</h4>
+          <p class="text-sm font-bold text-slate-900">${escapeHtml(plan.description || "Sem descrição")}</p>
+        </div>
+
+        <!-- Tarefas -->
+        <div>
+          <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">task</span> Tarefas Planeadas
+          </h4>
+          <div class="space-y-2">
+            ${plan.tasks.map(t => `
+              <div class="p-4 bg-white border border-slate-100 rounded-xl flex items-center justify-between shadow-sm">
+                <div>
+                  <p class="text-sm font-bold text-slate-900">${escapeHtml(t.progressTask?.description || "Tarefa")}</p>
+                  <div class="flex items-center gap-3 mt-1">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Qtd: ${t.plannedQty}</span>
+                    ${t.technician ? `
+                      <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold text-[10px] flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[10px]">person</span>
+                        ${escapeHtml(t.technician.name || t.technician.email)}
+                      </span>
+                    ` : '<span class="text-[10px] text-slate-300 font-bold italic">Sem técnico atribuído</span>'}
+                  </div>
+                </div>
+                ${t.executedQty > 0 ? `<span class="text-emerald-500 font-black text-xs">Exec: ${t.executedQty}</span>` : ""}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Materiais -->
+        ${plan.materials && plan.materials.length > 0 ? `
+          <div>
+            <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+            </h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${plan.materials.map(m => {
+      const returned = Number(m.providedQty) - Number(m.consumedQty);
+      return `
+                <div class="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between shadow-sm">
+                  <div class="flex-1">
+                    <span class="text-xs font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Material")}</span>
+                    <div class="flex gap-2 mt-1">
+                       <span class="text-[9px] font-bold text-slate-400">Ped: ${m.requestedQty}</span>
+                       ${m.providedQty > 0 ? `<span class="text-[9px] font-bold text-blue-500">Entreg: ${m.providedQty}</span>` : ""}
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-end shrink-0">
+                    ${plan.status === "COMPLETED" ? `
+                      <span class="text-[10px] font-black text-emerald-600">Usado: ${m.consumedQty}</span>
+                      ${returned > 0 ? `<span class="text-[9px] font-bold text-amber-500">Devolv: ${returned.toFixed(2)}</span>` : ""}
+                    ` : `
+                      <span class="text-xs font-black text-amber-600">${m.requestedQty}</span>
+                    `}
+                  </div>
+                </div>
+                `;
+    }).join('')}
+            </div>
+          </div>
+        ` : ""}
+      </div>
+    `;
+
+    openModal({
+      title: "Detalhes do Plano Diário",
+      contentHtml,
+      primaryLabel: "Fechar",
+      onPrimary: ({ close }) => close()
+    });
+
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao carregar detalhes do plano.", { type: "error" });
+  }
+};

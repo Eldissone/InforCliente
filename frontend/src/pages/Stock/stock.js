@@ -15,6 +15,7 @@ function init() {
     setupTabs();
     loadTabContent(currentTab);
     setupGlobalEvents();
+    updateRequestsBadge();
 }
 
 function setupTabs() {
@@ -44,6 +45,7 @@ async function loadTabContent(tab) {
         else if (tab === "tools") await renderTools(container);
         else if (tab === "warehouses") await renderWarehouses(container);
         else if (tab === "movements") await renderMovements(container);
+        else if (tab === "requests") await renderRequests(container);
         else if (tab.startsWith("warehouse_detail_")) {
             const warehouseId = tab.replace("warehouse_detail_", "");
             await renderWarehouseDetail(container, warehouseId);
@@ -2109,3 +2111,133 @@ window.deleteStockBalance = async (id) => {
         loadTabContent(currentTab);
     } catch (error) { alert("Erro ao remover: " + error.message); }
 };
+
+async function updateRequestsBadge() {
+    try {
+        const plans = await apiRequest("/daily-plans/all-pending");
+        const badge = document.getElementById("requests_badge");
+        if (badge) {
+            if (plans && plans.length > 0) badge.classList.remove("hidden");
+            else badge.classList.add("hidden");
+        }
+    } catch (err) { console.error("Erro ao atualizar badge:", err); }
+}
+
+async function renderRequests(container) {
+    container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
+    
+    try {
+        const plans = await apiRequest("/daily-plans/all-pending");
+        
+        // Update badge count
+        const badge = document.getElementById("requests_badge");
+        if (plans && plans.length > 0) {
+            badge.classList.remove("hidden");
+        } else {
+            badge.classList.add("hidden");
+        }
+
+        if (!plans || plans.length === 0) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20 text-center">
+                    <span class="material-symbols-outlined text-6xl text-slate-200 mb-4">check_circle</span>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Tudo em Dia!</h3>
+                    <p class="text-slate-500 font-medium max-w-md">Não há pedidos de material pendentes para nenhuma obra neste momento.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const formatDt = d => {
+            const dt = new Date(d);
+            return `${dt.getDate().toString().padStart(2, '0')}/${(dt.getMonth() + 1).toString().padStart(2, '0')}/${dt.getFullYear()}`;
+        };
+
+        const plansHtml = plans.map(p => `
+            <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-lg transition-all flex flex-col lg:flex-row justify-between gap-6 mb-4 relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-amber-400"></div>
+                <div class="flex-1 space-y-4 ml-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-3">
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl text-xs font-black tracking-widest uppercase flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">construction</span>
+                                ${esc(p.project?.name || "Obra Desconhecida")}
+                            </span>
+                            <span class="text-slate-400 text-xs font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">calendar_today</span>
+                                ${formatDt(p.date)}
+                            </span>
+                        </div>
+                        <span class="px-3 py-1 bg-amber-50 text-amber-600 rounded-xl text-[10px] font-black tracking-widest uppercase animate-pulse border border-amber-200">
+                            Aguardando Material
+                        </span>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-lg font-bold text-slate-900 mb-1">${esc(p.description || "Sem Descrição")}</h4>
+                        <p class="text-sm font-semibold text-slate-500">${p.tasks?.length || 0} Tarefas associadas</p>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+                        </h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${p.materials.map(m => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
+                                    <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-end shrink-0">
+                    <button onclick="window.providePlanMaterialsGlobal('${p.id}', event)" 
+                        style="background-color: #ea580c !important;"
+                        class="w-full lg:w-auto h-12 text-white px-8 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-600/20 active:scale-95 hover:brightness-110">
+                        <span class="material-symbols-outlined text-lg">check_circle</span>
+                        Disponibilizar Stock
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                    <span class="material-symbols-outlined text-3xl text-amber-500">fact_check</span>
+                    Pedidos de Obra Pendentes
+                </h2>
+                <p class="text-slate-500 font-medium mt-1">Autorize a saída de materiais do armazém para os Planos Diários em aguardo.</p>
+            </div>
+            <div class="space-y-2">
+                ${plansHtml}
+            </div>
+        `;
+    } catch (err) {
+        container.innerHTML = `<div class="bg-red-50 text-red-600 p-8 rounded-2xl font-bold text-center">Erro ao carregar pedidos: ${err.message}</div>`;
+    }
+}
+
+window.providePlanMaterialsGlobal = async (id, event) => {
+    if (!confirm("Confirmar a disponibilização imediata de todos os materiais solicitados neste plano? O stock será debitado dos respetivos estaleiros de obra.")) return;
+    
+    // Mostra indicador global
+    const btn = event.currentTarget;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>`;
+    btn.disabled = true;
+
+    try {
+        await apiRequest(`/daily-plans/${id}/provide-materials`, { method: "POST" });
+        alert("Materiais disponibilizados com sucesso! O plano está agora Em Progresso.");
+        loadTabContent("requests"); // Recarrega a aba
+    } catch (err) {
+        alert("Erro ao disponibilizar materiais: " + err.message);
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+    }
+};
+

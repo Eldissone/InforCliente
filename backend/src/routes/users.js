@@ -58,6 +58,24 @@ userRoutes.get(
   })
 );
 
+userRoutes.get(
+  "/technicians",
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.user.findMany({
+      where: {
+        role: { in: ["tecnico", "supervisor", "admin", "operador"] } // Permitimos que admins/operadores/supervisores também sejam marcados
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+      },
+    });
+    return res.json({ items });
+  })
+);
+
 userRoutes.patch(
   "/me",
   asyncHandler(async (req, res) => {
@@ -118,7 +136,7 @@ userRoutes.post(
         email: z.string().email(),
         name: z.string().optional().nullable(),
         password: z.string().min(6),
-        role: z.enum(["admin", "operador", "leitura", "cliente"]).default("leitura"),
+        role: z.enum(["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"]).default("leitura"),
         clientId: z.string().optional().nullable(),
         profilePic: z.string().optional().nullable(),
         assignedProjectIds: z.array(z.string()).optional(),
@@ -180,7 +198,7 @@ userRoutes.patch(
     const id = String(req.params.id);
     const body = z
       .object({
-        role: z.enum(["admin", "operador", "leitura", "cliente"]).optional(),
+        role: z.enum(["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"]).optional(),
         name: z.string().optional().nullable(),
         email: z.string().email().optional(),
         clientId: z.string().optional().nullable(),

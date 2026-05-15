@@ -20,6 +20,7 @@ model User {
   client           Client?      @relation("PrimaryClient", fields: [clientId], references: [id])
   accounts         UserClient[]
   assignedProjects Project[]    @relation("AssignedUsers")
+  dailyPlanTasks   DailyPlanTask[]
 
   @@index([clientId])
 }
@@ -123,6 +124,7 @@ model Project {
   stockMovements      StockMovement[]
   warehouse           Warehouse?
   assignedUsers       User[]                   @relation("AssignedUsers")
+  dailyPlans          DailyPlan[]
 
   @@index([name])
   @@index([status])
@@ -241,6 +243,7 @@ model ProjectProgressTask {
   parent            ProjectProgressTask?     @relation("SubTasks", fields: [parentId], references: [id], onDelete: Cascade)
   subTasks          ProjectProgressTask[]    @relation("SubTasks")
   project           Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dailyPlanTasks    DailyPlanTask[]
 
   @@index([projectId, itemGroup, order])
 }
@@ -278,13 +281,13 @@ model ProjectPayment {
 }
 
 model Warehouse {
-  id        String           @id @default(cuid())
-  name      String
-  type      WarehouseType    @default(CENTRAL)
-  active    Boolean          @default(true)
-  projectId String?          @unique
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String           @id @default(cuid())
+  name        String
+  type        WarehouseType    @default(CENTRAL)
+  active      Boolean          @default(true)
+  projectId   String?          @unique
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   items       Item[]
   targetItems Item[]           @relation("ItemTargetWarehouse")
   movements   StockMovement[]
@@ -293,20 +296,21 @@ model Warehouse {
 }
 
 model Product {
-  id          String           @id @default(cuid())
-  sku         String?          @unique
-  barcode     String?          @unique
-  name        String
-  description String?
-  image       String?
-  category    ProductCategory  @default(MATERIAL)
-  unit        ProductUnit      @default(UN)
-  minStock    Decimal          @default(0) @db.Decimal(16, 4)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  items       Item[]
-  movements   StockMovement[]
-  stock       WarehouseStock[]
+  id                 String              @id @default(cuid())
+  sku                String?             @unique
+  barcode            String?             @unique
+  name               String
+  description        String?
+  image              String?
+  category           ProductCategory     @default(MATERIAL)
+  unit               ProductUnit         @default(UN)
+  minStock           Decimal             @default(0) @db.Decimal(16, 4)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  items              Item[]
+  movements          StockMovement[]
+  stock              WarehouseStock[]
+  dailyPlanMaterials DailyPlanMaterial[]
 }
 
 model WarehouseStock {
@@ -323,27 +327,27 @@ model WarehouseStock {
 }
 
 model Item {
-  id            String     @id @default(cuid())
-  serialNumber  String?    @unique
-  internalTag   String?    @unique
-  productId     String
-  warehouseId      String?
+  id                String     @id @default(cuid())
+  serialNumber      String?    @unique
+  internalTag       String?    @unique
+  productId         String
+  warehouseId       String?
   targetWarehouseId String?
-  projectId        String?
-  responsibleId    String?
-  status           ItemStatus @default(AVAILABLE)
-  condition        String?    @default("GOOD")
-  notes            String?
-  lastStatusNote   String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  assignedAt       DateTime?
-  imageUrl         String?
-  returnedAt       DateTime?
-  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  responsible      User?      @relation(fields: [responsibleId], references: [id])
-  warehouse        Warehouse? @relation(fields: [warehouseId], references: [id])
-  targetWarehouse  Warehouse? @relation("ItemTargetWarehouse", fields: [targetWarehouseId], references: [id])
+  projectId         String?
+  responsibleId     String?
+  status            ItemStatus @default(AVAILABLE)
+  condition         String?    @default("GOOD")
+  notes             String?
+  lastStatusNote    String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  assignedAt        DateTime?
+  imageUrl          String?
+  returnedAt        DateTime?
+  product           Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  responsible       User?      @relation(fields: [responsibleId], references: [id])
+  warehouse         Warehouse? @relation(fields: [warehouseId], references: [id])
+  targetWarehouse   Warehouse? @relation("ItemTargetWarehouse", fields: [targetWarehouseId], references: [id])
 
   @@index([productId])
   @@index([status])
@@ -442,6 +446,8 @@ enum MovementType {
 enum Role {
   admin
   operador
+  tecnico
+  supervisor
   leitura
   cliente
 }
@@ -494,4 +500,51 @@ enum AlertStatus {
 enum PaymentStatus {
   CONFIRMADO
   PENDENTE
+}
+
+enum DailyPlanStatus {
+  DRAFT
+  PENDING_MATERIAL
+  IN_PROGRESS
+  COMPLETED
+}
+
+model DailyPlan {
+  id          String          @id @default(cuid())
+  projectId   String
+  date        DateTime
+  status      DailyPlanStatus @default(DRAFT)
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     DailyPlanTask[]
+  materials DailyPlanMaterial[]
+}
+
+model DailyPlanTask {
+  id             String  @id @default(cuid())
+  dailyPlanId    String
+  progressTaskId String
+  plannedQty     Decimal @db.Decimal(18, 10)
+  executedQty    Decimal @default(0) @db.Decimal(18, 10)
+  notes          String?
+  technicianId   String?
+
+  dailyPlan    DailyPlan           @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
+  progressTask ProjectProgressTask @relation(fields: [progressTaskId], references: [id], onDelete: Cascade)
+  technician   User?               @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+}
+
+model DailyPlanMaterial {
+  id           String  @id @default(cuid())
+  dailyPlanId  String
+  productId    String
+  requestedQty Decimal @db.Decimal(16, 4)
+  providedQty  Decimal @default(0) @db.Decimal(16, 4)
+  consumedQty  Decimal @default(0) @db.Decimal(16, 4)
+
+  dailyPlan DailyPlan @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
 }

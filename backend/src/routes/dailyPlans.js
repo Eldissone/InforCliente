@@ -1,0 +1,370 @@
+const express = require("express");
+const { prisma } = require("../db");
+const { asyncHandler } = require("../utils/http");
+const { requirePermission, authRequired } = require("../middlewares/auth");
+const dailyPlansRoutes = express.Router();
+
+dailyPlansRoutes.use(authRequired);
+
+// GET /daily-plans/all-pending
+// Retorna planos pendentes de material globalmente (para o painel do armazém)
+dailyPlansRoutes.get(
+  "/all-pending",
+  requirePermission("stock", "view"), // O armazém precisa ter acesso ao stock para ver
+  asyncHandler(async (req, res) => {
+    const plans = await prisma.dailyPlan.findMany({
+      where: { status: "PENDING_MATERIAL" },
+      include: {
+        project: true,
+        tasks: {
+          include: {
+            progressTask: true,
+            technician: true
+          }
+        },
+        materials: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { date: "desc" }
+    });
+
+    res.json(plans);
+  })
+);
+
+// GET /daily-plans?projectId=...
+dailyPlansRoutes.get(
+  "/",
+  requirePermission("obras", "read"),
+  asyncHandler(async (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).json({ error: "projectId is required" });
+
+    const plans = await prisma.dailyPlan.findMany({
+      where: { projectId },
+      include: {
+        tasks: {
+          include: {
+            progressTask: true,
+            technician: true
+          }
+        },
+        materials: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { date: "desc" }
+    });
+
+    res.json(plans);
+  })
+);
+
+// GET /daily-plans/:id
+dailyPlansRoutes.get(
+  "/:id",
+  requirePermission("obras", "read"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: {
+        project: true,
+        tasks: {
+          include: {
+            progressTask: true,
+            technician: true
+          }
+        },
+        materials: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    res.json(plan);
+  })
+);
+
+// POST /daily-plans
+dailyPlansRoutes.post(
+  "/",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { projectId, date, description, tasks, materials } = req.body;
+    
+    if (!projectId || !date || !tasks || tasks.length === 0) {
+      return res.status(400).json({ error: "projectId, date e tasks são obrigatórios." });
+    }
+
+    const plan = await prisma.dailyPlan.create({
+      data: {
+        projectId,
+        date: new Date(date),
+        description,
+        status: "DRAFT", // ou PENDING_MATERIAL se tiver materiais
+        tasks: {
+          create: tasks.map(t => ({
+            progressTaskId: t.progressTaskId,
+            plannedQty: t.plannedQty,
+            notes: t.notes,
+            technicianId: t.technicianId || null
+          }))
+        },
+        materials: materials && materials.length > 0 ? {
+          create: materials.map(m => ({
+            productId: m.productId,
+            requestedQty: m.requestedQty
+          }))
+        } : undefined
+      },
+      include: { tasks: true, materials: true }
+    });
+
+    // Se tiver materiais, passa logo a PENDING_MATERIAL
+    if (materials && materials.length > 0) {
+      await prisma.dailyPlan.update({
+        where: { id: plan.id },
+        data: { status: "PENDING_MATERIAL" }
+      });
+    }
+
+    res.status(201).json(plan);
+  })
+);
+
+// DELETE /daily-plans/:id
+dailyPlansRoutes.delete(
+  "/:id",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const plan = await prisma.dailyPlan.findUnique({ where: { id } });
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+
+    if (plan.status === "IN_PROGRESS" || plan.status === "COMPLETED") {
+      return res.status(400).json({ error: "Não pode apagar um plano já disponibilizado ou concluído." });
+    }
+
+    await prisma.dailyPlan.delete({ where: { id } });
+    res.status(204).send();
+  })
+);
+
+// POST /daily-plans/:id/provide-materials
+// Action: Warehouse provides requested materials. Deducts from project's warehouse.
+dailyPlansRoutes.post(
+  "/:id/provide-materials",
+  requirePermission("stock", "manage"), // Quem tem stock access
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { userId } = req.user; // O user logado (opcional, req.user.sub)
+    const activeUserId = req.user?.sub || "sistema";
+
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { materials: true, project: true }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    if (plan.status !== "PENDING_MATERIAL") return res.status(400).json({ error: "Estado do plano não permite esta ação." });
+
+    // Descobrir qual é o armazém da Obra (Estaleiro)
+    const estaleiro = await prisma.warehouse.findFirst({
+      where: { projectId: plan.projectId }
+    });
+
+    if (!estaleiro) {
+      return res.status(400).json({ error: "A obra não tem um estaleiro (armazém) associado." });
+    }
+
+    // Para cada material, deduzir do armazém e marcar como provided
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const mat of plan.materials) {
+          await tx.dailyPlanMaterial.update({
+            where: { id: mat.id },
+            data: { providedQty: mat.requestedQty }
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              warehouseId: estaleiro.id,
+              productId: mat.productId,
+              projectId: plan.projectId,
+              type: "EXIT",
+              quantity: mat.requestedQty,
+              notes: `Disponibilizado para Plano Diario (ID: ${plan.id})`,
+              userId: activeUserId
+            }
+          });
+
+          const existingStock = await tx.warehouseStock.findFirst({
+            where: {
+              warehouseId: estaleiro.id,
+              productId: mat.productId,
+              ownerId: null
+            }
+          });
+
+          if (existingStock) {
+            await tx.warehouseStock.update({
+              where: { id: existingStock.id },
+              data: { quantity: { decrement: mat.requestedQty } }
+            });
+          } else {
+            await tx.warehouseStock.create({
+              data: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId,
+                quantity: -mat.requestedQty,
+                ownerId: null
+              }
+            });
+          }
+        }
+
+        await tx.dailyPlan.update({
+          where: { id },
+          data: { status: "IN_PROGRESS" }
+        });
+      });
+      res.json({ success: true, message: "Materiais disponibilizados com sucesso." });
+    } catch (error) {
+      console.error("ERRO NO TRANSACTION provide-materials:", error);
+      return res.status(500).json({ error: "Erro ao processar stock: " + error.message });
+    }
+  })
+);
+
+// POST /daily-plans/:id/complete
+// Action: Technician marks plan as done, providing actual executed quantities and consumed materials.
+dailyPlansRoutes.post(
+  "/:id/complete",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { executedTasks, consumedMaterials } = req.body;
+    // executedTasks: [{ dailyPlanTaskId, executedQty }]
+    // consumedMaterials: [{ dailyPlanMaterialId, consumedQty }]
+
+    const activeUserId = req.user?.sub || "sistema";
+
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { tasks: true, materials: true }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    if (plan.status !== "IN_PROGRESS" && plan.status !== "DRAFT") {
+      return res.status(400).json({ error: "O plano não está em execução." });
+    }
+
+    const estaleiro = await prisma.warehouse.findFirst({
+      where: { projectId: plan.projectId }
+    });
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Atualizar Tasks e Avanço Físico
+        if (executedTasks && executedTasks.length > 0) {
+          for (const t of executedTasks) {
+            const planTask = plan.tasks.find(pt => pt.id === t.dailyPlanTaskId);
+            if (!planTask) continue;
+
+            const qty = Number(t.executedQty || 0);
+
+            await tx.dailyPlanTask.update({
+              where: { id: planTask.id },
+              data: { executedQty: qty }
+            });
+
+            if (qty > 0) {
+              await tx.projectProgressTask.update({
+                where: { id: planTask.progressTaskId },
+                data: { executedQty: { increment: qty } }
+              });
+            }
+          }
+        }
+
+        // 2. Atualizar Materiais Consumidos e Devoluções
+        if (consumedMaterials && consumedMaterials.length > 0 && estaleiro) {
+          for (const cm of consumedMaterials) {
+            const planMat = plan.materials.find(pm => pm.id === cm.dailyPlanMaterialId);
+            if (!planMat) continue;
+
+            const consQty = Number(cm.consumedQty || 0);
+            const provided = Number(planMat.providedQty);
+            
+            await tx.dailyPlanMaterial.update({
+              where: { id: planMat.id },
+              data: { consumedQty: consQty }
+            });
+
+            if (consQty < provided) {
+              const retorno = provided - consQty;
+              
+              await tx.stockMovement.create({
+                data: {
+                  warehouseId: estaleiro.id,
+                  productId: planMat.productId,
+                  projectId: plan.projectId,
+                  type: "ENTRY",
+                  quantity: retorno,
+                  notes: `Devolução de material não consumido do Plano Diário (ID: ${plan.id})`,
+                  userId: activeUserId
+                }
+              });
+
+              const existingStock = await tx.warehouseStock.findFirst({
+                where: {
+                  warehouseId: estaleiro.id,
+                  productId: planMat.productId,
+                  ownerId: null
+                }
+              });
+
+              if (existingStock) {
+                await tx.warehouseStock.update({
+                  where: { id: existingStock.id },
+                  data: { quantity: { increment: retorno } }
+                });
+              } else {
+                await tx.warehouseStock.create({
+                  data: {
+                    warehouseId: estaleiro.id,
+                    productId: planMat.productId,
+                    quantity: retorno,
+                    ownerId: null
+                  }
+                });
+              }
+            }
+          }
+        }
+
+        // 3. Mudar estado
+        await tx.dailyPlan.update({
+          where: { id },
+          data: { status: "COMPLETED" }
+        });
+      });
+
+      res.json({ success: true, message: "Plano concluído com sucesso." });
+    } catch (error) {
+      console.error("ERRO NO TRANSACTION complete-plan:", error);
+      res.status(500).json({ error: "Erro ao concluir plano: " + error.message });
+    }
+  })
+);
+
+module.exports = { dailyPlansRoutes };

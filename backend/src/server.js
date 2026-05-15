@@ -12,6 +12,7 @@ const { productRoutes } = require("./routes/products");
 const { warehouseRoutes } = require("./routes/warehouses");
 const { itemRoutes } = require("./routes/items");
 const { permissionsRoutes } = require("./routes/permissions");
+const { dailyPlansRoutes } = require("./routes/dailyPlans");
 const { initialize } = require("./utils/startup");
 
 const app = express();
@@ -84,6 +85,7 @@ app.use("/products", productRoutes);
 app.use("/warehouses", warehouseRoutes);
 app.use("/items", itemRoutes);
 app.use("/permissions", permissionsRoutes);
+app.use("/daily-plans", dailyPlansRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
