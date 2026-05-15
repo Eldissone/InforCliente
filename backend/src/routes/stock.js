@@ -63,6 +63,36 @@ stockRoutes.get(
   })
 );
 
+// GET - Saldo de stock por Projecto (encontra o armazém SITE do projecto)
+stockRoutes.get(
+  "/project/:projectId/balance",
+  requirePermission("stock", "view"),
+  asyncHandler(async (req, res) => {
+    const { projectId } = req.params;
+    
+    // 1. Encontrar o armazém SITE do projecto
+    const warehouse = await prisma.warehouse.findFirst({
+      where: { projectId, type: "SITE" }
+    });
+    
+    if (!warehouse) {
+      return res.json({ items: [] });
+    }
+    
+    // 2. Buscar o saldo deste armazém
+    const items = await prisma.warehouseStock.findMany({
+      where: { warehouseId: warehouse.id },
+      include: {
+        product: true,
+        warehouse: true,
+      },
+      orderBy: { product: { name: "asc" } },
+    });
+    
+    return res.json({ items });
+  })
+);
+
 // POST - Movimentação de Stock (Entrada, Saída, Ajuste, Perda)
 stockRoutes.post(
   "/move",

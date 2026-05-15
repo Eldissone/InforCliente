@@ -167,6 +167,7 @@ function updateTabUI() {
     loadProgressBreakdown(state.projectId);
     loadProgressHistoryData();
   }
+  updateStockRequestsBadge();
 }
 
 function filterDataByProject(pid) {
@@ -198,8 +199,8 @@ async function updateMetrics(data) {
   }
 
   const projectCurrency = currentProject ? (currentProject.currency || "AOA") : "AOA";
-  const exchangeRate = await getExchangeRate(); 
-  
+  const exchangeRate = await getExchangeRate();
+
   const setMetric = (id, value, primaryCurrency) => {
     const el = document.getElementById(id);
     const secEl = document.getElementById(id + "Secondary");
@@ -300,47 +301,47 @@ function renderStockChart(stock) {
 }
 
 async function loadStock() {
-    if (!state.projectId || state.projectId === "all") return;
+  if (!state.projectId || state.projectId === "all") return;
 
-    const historyTbody = document.getElementById("stockMovementsTbody");
-    const inventoryTbody = document.getElementById("stockInventoryTbody");
-    const galleryContainer = document.getElementById("stockGalleryContainer");
+  const historyTbody = document.getElementById("stockMovementsTbody");
+  const inventoryTbody = document.getElementById("stockInventoryTbody");
+  const galleryContainer = document.getElementById("stockGalleryContainer");
 
-    if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar fluxo...</td></tr>`;
-    if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
+  if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar fluxo...</td></tr>`;
+  if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
 
-    try {
-        const [summaryRes, movementsRes, photosRes] = await Promise.all([
-            apiRequest(`/stock/${state.projectId}/summary`),
-            apiRequest(`/stock/${state.projectId}/movements`),
-            apiRequest(`/projects/${state.projectId}/photos`)
-        ]);
+  try {
+    const [balanceRes, movementsRes, photosRes] = await Promise.all([
+      apiRequest(`/stock/project/${state.projectId}/balance`),
+      apiRequest(`/stock/movements?projectId=${state.projectId}`),
+      apiRequest(`/projects/${state.projectId}/photos`)
+    ]);
 
-        const summaryItems = summaryRes.items || [];
-        const movements = movementsRes.items || [];
-        const photos = photosRes.items || [];
+    const summaryItems = balanceRes.items || [];
+    const movements = movementsRes.items || [];
+    const photos = photosRes.items || [];
 
-        renderStockSummaryCards(summaryItems, movements);
-        renderStockMovements(movements);
-        renderStockInventory(summaryItems, movements);
-        renderStockGallery(photos);
+    renderStockSummaryCards(summaryItems, movements);
+    renderStockMovements(movements);
+    renderStockInventory(summaryItems, movements);
+    renderStockGallery(photos);
 
-    } catch (err) {
-        console.error("Erro ao carregar stock", err);
-        toast("Erro ao carregar dados de stock", { type: "error" });
-    }
+  } catch (err) {
+    console.error("Erro ao carregar stock", err);
+    toast("Erro ao carregar dados de stock", { type: "error" });
+  }
 }
 
 function renderStockSummaryCards(summary, movements) {
-    const container = document.getElementById("stockSummary");
-    if (!container) return;
+  const container = document.getElementById("stockSummary");
+  if (!container) return;
 
-    const uniqueProducts = summary.length;
-    const totalEntries = movements.filter(m => m.type === "ENTRADA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    const totalExits = movements.filter(m => m.type === "SAIDA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    const currentBalance = totalEntries - totalExits;
+  const uniqueProducts = summary.length;
+  const totalEntries = movements.filter(m => m.type === "ENTRADA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const totalExits = movements.filter(m => m.type === "SAIDA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const currentBalance = totalEntries - totalExits;
 
-    container.innerHTML = `
+  container.innerHTML = `
         <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Artigos no Catálogo</p>
             <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
@@ -361,43 +362,43 @@ function renderStockSummaryCards(summary, movements) {
 }
 
 function renderStockMovements(items) {
-    const tbody = document.getElementById("stockMovementsTbody");
-    if (!tbody) return;
+  const tbody = document.getElementById("stockMovementsTbody");
+  if (!tbody) return;
 
-    const search = state.stockFilters.search.toLowerCase();
-    const typeFilter = state.stockFilters.type;
+  const search = state.stockFilters.search.toLowerCase();
+  const typeFilter = state.stockFilters.type;
 
-    const filtered = items.filter(m => {
-        const matchesSearch = !search || 
-            (m.product?.name || "").toLowerCase().includes(search) ||
-            (m.notes || "").toLowerCase().includes(search);
-        const matchesType = !typeFilter || m.type === typeFilter;
-        return matchesSearch && matchesType;
-    });
+  const filtered = items.filter(m => {
+    const matchesSearch = !search ||
+      (m.product?.name || "").toLowerCase().includes(search) ||
+      (m.notes || "").toLowerCase().includes(search);
+    const matchesType = !typeFilter || m.type === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
-    if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem movimentações registadas</td></tr>`;
-        return;
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem movimentações registadas</td></tr>`;
+    return;
+  }
+
+  const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transf.", "TRANSFER_IN": "Entrada (T)", "TRANSFER_OUT": "Saída (T)" };
+  const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-blue-50 text-blue-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-slate-50 text-slate-700" };
+
+  tbody.innerHTML = filtered.map(m => {
+    const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("pt-PT") : "—";
+    const qty = Number(m.quantity || 0);
+    const tc = typeColor[m.type] || "bg-slate-50 text-slate-600";
+
+    // Logística Parse
+    let driver = "—";
+    let vehicle = "—";
+    if (m.notes && m.notes.includes("|")) {
+      const parts = m.notes.split("|");
+      driver = parts[0].replace("Motorista:", "").trim();
+      vehicle = parts[1].replace("Matrícula:", "").trim();
     }
 
-    const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transf.", "TRANSFER_IN": "Entrada (T)", "TRANSFER_OUT": "Saída (T)" };
-    const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-blue-50 text-blue-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-slate-50 text-slate-700" };
-
-    tbody.innerHTML = filtered.map(m => {
-        const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("pt-PT") : "—";
-        const qty = Number(m.quantity || 0);
-        const tc = typeColor[m.type] || "bg-slate-50 text-slate-600";
-        
-        // Logística Parse
-        let driver = "—";
-        let vehicle = "—";
-        if (m.notes && m.notes.includes("|")) {
-            const parts = m.notes.split("|");
-            driver = parts[0].replace("Motorista:", "").trim();
-            vehicle = parts[1].replace("Matrícula:", "").trim();
-        }
-
-        return `
+    return `
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 md:px-10 py-5 hidden md:table-cell">
                 <div class="text-xs font-bold text-slate-900">${date}</div>
@@ -418,57 +419,67 @@ function renderStockMovements(items) {
                 <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-50 text-emerald-600">Aprovado</span>
             </td>
           </tr>`;
-    }).join("");
+  }).join("");
 }
 
 function renderStockInventory(summary, movements) {
     const tbody = document.getElementById("stockInventoryTbody");
     if (!tbody) return;
 
-    if (summary.length === 0) {
+    if (!summary || summary.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = summary.map(s => {
-        const saldo = Number(s.qty || 0);
+    tbody.innerHTML = summary.map(item => {
+        const saldo = Number(item.quantity || 0);
+        const product = item.product || {};
+        const warehouseName = item.warehouse?.name || "Geral";
         const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
+
+        // Calcular totais dos movimentos para este produto
+        const pMovements = movements.filter(m => m.productId === item.productId);
+        const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+        const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
 
         return `
           <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-6 md:px-10 py-5 font-bold text-slate-900">${escapeHtml(s.name)}</td>
-            <td class="px-6 md:px-10 py-5 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[9px] font-black">GERAL</span></td>
-            <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(s.unit || "un")}</td>
-            <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">${Number(s.totalExpected || 0).toLocaleString("pt-AO")}</td>
-            <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${Number(s.totalIn || 0).toLocaleString("pt-AO")}</td>
-            <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${Number(s.totalOut || 0).toLocaleString("pt-AO")}</td>
+            <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
+                <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
+                <div class="text-[9px] text-slate-400 font-black uppercase tracking-widest">${product.sku || ""}</div>
+            </td>
+            <td class="px-6 md:px-10 py-5 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">${escapeHtml(warehouseName)}</span></td>
+            <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(product.unit || "un")}</td>
+            <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">0</td>
+            <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn.toLocaleString("pt-AO")}</td>
+            <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut.toLocaleString("pt-AO")}</td>
             <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
           </tr>`;
     }).join("");
 }
 
 function renderStockGallery(photos) {
-    const container = document.getElementById("stockGalleryContainer");
-    if (!container) return;
+  const container = document.getElementById("stockGalleryContainer");
+  if (!container) return;
 
-    // Apenas fotos que tenham relação com stock ou sejam da categoria obra mas enviadas via stock
-    // Na verdade, projectPhotos podem ter movementId.
-    const stockPhotos = photos.filter(p => p.movementId || (p.description && p.description.toLowerCase().includes("stock")));
+  // Apenas fotos que tenham relação com stock ou sejam da categoria obra mas enviadas via stock
+  // Na verdade, projectPhotos podem ter movementId.
+  const stockPhotos = photos.filter(p => p.movementId || (p.description && p.description.toLowerCase().includes("stock")));
 
-    if (stockPhotos.length === 0) {
-        container.innerHTML = `<div class="p-10 text-center text-sm font-bold text-slate-400 uppercase tracking-widest bg-slate-50 rounded-2xl border border-dashed border-slate-200">Nenhuma evidência fotográfica registada.</div>`;
-        return;
-    }
+  if (stockPhotos.length === 0) {
+    container.innerHTML = `<div class="p-10 text-center text-sm font-bold text-slate-400 uppercase tracking-widest bg-slate-50 rounded-2xl border border-dashed border-slate-200">Nenhuma evidência fotográfica registada.</div>`;
+    return;
+  }
 
-    // Agrupar por data
-    const groups = {};
-    stockPhotos.forEach(p => {
-        const d = p.createdAt ? new Date(p.createdAt).toLocaleDateString("pt-PT") : "Sem Data";
-        if (!groups[d]) groups[d] = [];
-        groups[d].push(p);
-    });
+  // Agrupar por data
+  const groups = {};
+  stockPhotos.forEach(p => {
+    const d = p.createdAt ? new Date(p.createdAt).toLocaleDateString("pt-PT") : "Sem Data";
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(p);
+  });
 
-    container.innerHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => `
+  container.innerHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(date => `
         <div class="space-y-4">
             <div class="flex items-center gap-3">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200"></span>
@@ -793,7 +804,7 @@ function renderProgressBreakdownRows() {
     const renderRow = (task, prefixStr, isSub = false, hasChildren = false) => {
       let exp = Number(task.expectedQty || 0);
       let exe = Number(task.executedQty || 0);
-      
+
       const uvS = Number(task.unitValueService || 0);
       const uvM = Number(task.unitValueMaterial || 0);
       const uv = Number(task.unitValue || (uvS + uvM));
@@ -807,7 +818,7 @@ function renderProgressBreakdownRows() {
         const sExd = subs.reduce((acc, s) => acc + (Number(s.unitValue || 0) * Number(s.executedQty || 0)), 0);
         const sExp = subs.reduce((acc, s) => acc + Number(s.expectedQty || 0), 0);
         const sExe = subs.reduce((acc, s) => acc + Number(s.executedQty || 0), 0);
-        
+
         invoicingVal = sInv;
         invoicedVal = sExd;
         exp = sExp;
@@ -1291,7 +1302,7 @@ function toggleTable(tableId, manual = true) {
   }
 
   const isCollapsed = state.collapsedTables[tableId];
-  
+
   if (isCollapsed) {
     body.classList.add("hidden");
   } else {
@@ -1614,47 +1625,47 @@ async function loadInteractions() {
   const fetchAndRenderInteractions = async () => {
     try {
       const res = await apiRequest(`/clients/${dashboardData.clientId}/interactions`);
-    const interactions = res.items || [];
+      const interactions = res.items || [];
 
-    // Marcar como lidas
-    if (interactions.length > 0) {
-      const latest = new Date(interactions[0].occurredAt).getTime();
-      localStorage.setItem(`lastSeenInteractions_${dashboardData.clientId}`, latest);
-      document.getElementById("interactionBadge")?.classList.add("hidden");
-    }
+      // Marcar como lidas
+      if (interactions.length > 0) {
+        const latest = new Date(interactions[0].occurredAt).getTime();
+        localStorage.setItem(`lastSeenInteractions_${dashboardData.clientId}`, latest);
+        document.getElementById("interactionBadge")?.classList.add("hidden");
+      }
 
-    const container = document.getElementById("interactionsContainer");
-    if (!container) return;
+      const container = document.getElementById("interactionsContainer");
+      if (!container) return;
 
-    if (interactions.length === 0) {
-      container.innerHTML = `
+      if (interactions.length === 0) {
+        container.innerHTML = `
               <div class="flex flex-col items-center justify-center p-12 text-center">
                   <span class="material-symbols-outlined text-5xl text-slate-200 mb-4">forum</span>
                   <p class="text-slate-400 font-medium">Sem interações registadas até ao momento.</p>
               </div>
           `;
-      return;
-    }
+        return;
+      }
 
-    // Inverter para mostrar a mais recente em baixo ou manter a ordem? 
-    // Geralmente chat é de cima para baixo (antiga -> nova). 
-    // Mas interações de log costumam ser nova -> antiga.
-    // Vamos manter Nova -> Antiga (descendente) como está na API, mas inverter para o visual de "mensagens" se quisermos fluxo de chat.
-    // O pedido diz "como mensagens", então vamos inverter para fluxo cronológico.
-    const chronological = [...interactions].reverse();
+      // Inverter para mostrar a mais recente em baixo ou manter a ordem? 
+      // Geralmente chat é de cima para baixo (antiga -> nova). 
+      // Mas interações de log costumam ser nova -> antiga.
+      // Vamos manter Nova -> Antiga (descendente) como está na API, mas inverter para o visual de "mensagens" se quisermos fluxo de chat.
+      // O pedido diz "como mensagens", então vamos inverter para fluxo cronológico.
+      const chronological = [...interactions].reverse();
 
-    container.innerHTML = chronological.map(i => {
-      const date = new Date(i.occurredAt).toLocaleString("pt-PT", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
+      container.innerHTML = chronological.map(i => {
+        const date = new Date(i.occurredAt).toLocaleString("pt-PT", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
 
-      const typeLabel = i.type || "Mensagem";
+        const typeLabel = i.type || "Mensagem";
 
-      return `
+        return `
               <div class="flex flex-col gap-1 mb-2">
                   <div class="flex items-center gap-2 mb-1">
                       <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${date}</span>
@@ -1672,12 +1683,12 @@ async function loadInteractions() {
                   </div>
               </div>
           `;
-    }).join("");
+      }).join("");
 
-    // Scroll to bottom to see latest
-    setTimeout(() => {
-      container.scrollTop = container.scrollHeight;
-    }, 100);
+      // Scroll to bottom to see latest
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 100);
 
     } catch (err) {
       console.error("Erro ao carregar interações", err);
@@ -1715,124 +1726,219 @@ async function checkInteractionsBadge() {
 
 // --- Wire Events ---
 function wireStockEvents() {
-    // Sub-tabs
-    document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
-        btn.addEventListener("click", () => {
-            state.stockSubTab = btn.getAttribute("data-stock-subtab");
-            
-            // Update buttons UI
-            document.querySelectorAll("[data-stock-subtab]").forEach(b => {
-                b.classList.remove("text-slate-900", "border-slate-900");
-                b.classList.add("text-slate-400", "border-transparent");
-            });
-            btn.classList.add("text-slate-900", "border-slate-900");
-            btn.classList.remove("text-slate-400", "border-transparent");
+  // Sub-tabs
+  document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.stockSubTab = btn.getAttribute("data-stock-subtab");
 
-            // Update content visibility
-            const historyContent = document.getElementById("stock_history_content");
-            const inventoryContent = document.getElementById("stock_inventory_content");
-            const galleryContent = document.getElementById("stock_gallery_content");
+      // Update buttons UI
+      document.querySelectorAll("[data-stock-subtab]").forEach(b => {
+        b.classList.remove("text-slate-900", "border-slate-900");
+        b.classList.add("text-slate-400", "border-transparent");
+      });
+      btn.classList.add("text-slate-900", "border-slate-900");
+      btn.classList.remove("text-slate-400", "border-transparent");
 
-            if (historyContent) historyContent.classList.add("hidden");
-            if (inventoryContent) inventoryContent.classList.add("hidden");
-            if (galleryContent) galleryContent.classList.add("hidden");
+      // Update content visibility
+      const historyContent = document.getElementById("stock_history_content");
+      const inventoryContent = document.getElementById("stock_inventory_content");
+      const galleryContent = document.getElementById("stock_gallery_content");
+      const requestsContent = document.getElementById("stock_requests_content");
 
-            const targetContent = document.getElementById(`stock_${state.stockSubTab}_content`);
-            if (targetContent) targetContent.classList.remove("hidden");
-        });
+      if (historyContent) historyContent.classList.add("hidden");
+      if (inventoryContent) inventoryContent.classList.add("hidden");
+      if (galleryContent) galleryContent.classList.add("hidden");
+      if (requestsContent) requestsContent.classList.add("hidden");
+
+      const targetContent = document.getElementById(`stock_${state.stockSubTab}_content`);
+      if (targetContent) targetContent.classList.remove("hidden");
+
+      if (state.stockSubTab === "requests") {
+        loadStockRequests();
+      }
     });
+  });
 
-    // Filters
-    const searchInput = document.getElementById("stockFilterSearch");
-    const typeSelect = document.getElementById("stockFilterType");
-
-    if (searchInput) {
-        searchInput.addEventListener("input", () => {
-            state.stockFilters.search = searchInput.value;
-            loadStock();
-        });
-    }
-
-    if (typeSelect) {
-        typeSelect.addEventListener("change", () => {
-            state.stockFilters.type = typeSelect.value;
-            loadStock();
-        });
-    }
+  // Initial badge update
+  updateStockRequestsBadge();
 }
 
+async function updateStockRequestsBadge() {
+  try {
+    if (!state.projectId || state.projectId === "all") return;
+    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`);
+    const badge = document.getElementById("stock_requests_badge");
+    if (badge) {
+      if (plans.length > 0) {
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao atualizar stock badge:", err);
+  }
+}
+
+async function loadStockRequests() {
+  const container = document.getElementById("stockRequestsContainer");
+  if (!container) return;
+
+  if (!state.projectId || state.projectId === "all") {
+    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold">Selecione uma obra para ver os pedidos.</div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="p-10 text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto"></div></div>`;
+
+  try {
+    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`);
+
+    if (!plans || plans.length === 0) {
+      container.innerHTML = `
+                <div class="p-10 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100">
+                    <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">fact_check</span>
+                    <p class="text-slate-500 font-bold">Sem pedidos pendentes para esta obra.</p>
+                </div>
+            `;
+      return;
+    }
+
+    const esc = (t) => (t || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    container.innerHTML = plans.map(p => `
+            <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col lg:flex-row">
+                <div class="p-6 flex-1">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>
+                        <span class="text-xs font-bold text-slate-400">${new Date(p.date).toLocaleDateString('pt-PT')}</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900 mb-1">${esc(p.description || "Sem descrição")}</h3>
+                    <p class="text-xs text-slate-500 mb-4">${p.tasks.length} Tarefas associadas</p>
+
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+                        </h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            ${p.materials.map(m => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
+                                    <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                </div>
+            </div>
+        `).join('');
+
+  } catch (err) {
+    container.innerHTML = `<div class="p-8 text-center text-red-600 bg-red-50 rounded-2xl font-bold">Erro: ${err.message}</div>`;
+  }
+}
+
+// O cliente apenas visualiza, por isso removemos a função providePlanMaterialsGlobal deste ficheiro
+
+// Filters
+const searchInput = document.getElementById("stockFilterSearch");
+const typeSelect = document.getElementById("stockFilterType");
+
+if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    state.stockFilters.search = searchInput.value;
+    loadStock();
+  });
+}
+
+if (typeSelect) {
+  typeSelect.addEventListener("change", () => {
+    state.stockFilters.type = typeSelect.value;
+    loadStock();
+  });
+}
+
+
 function openLightbox(url, title, date) {
-    const lightbox = document.getElementById("imageLightbox");
-    const img = document.getElementById("lightboxImage");
-    const titleEl = document.getElementById("lightboxTitle");
-    const dateEl = document.getElementById("lightboxDate");
+  const lightbox = document.getElementById("imageLightbox");
+  const img = document.getElementById("lightboxImage");
+  const titleEl = document.getElementById("lightboxTitle");
+  const dateEl = document.getElementById("lightboxDate");
 
-    if (!lightbox || !img) return;
+  if (!lightbox || !img) return;
 
-    img.src = url;
-    titleEl.textContent = title;
-    dateEl.textContent = date;
+  img.src = url;
+  titleEl.textContent = title;
+  dateEl.textContent = date;
 
-    lightbox.classList.add("active");
-    document.body.style.overflow = "hidden";
+  lightbox.classList.add("active");
+  document.body.style.overflow = "hidden";
 }
 
 function closeLightbox() {
-    const lightbox = document.getElementById("imageLightbox");
-    if (!lightbox) return;
-    lightbox.classList.remove("active");
-    document.body.style.overflow = "";
+  const lightbox = document.getElementById("imageLightbox");
+  if (!lightbox) return;
+  lightbox.classList.remove("active");
+  document.body.style.overflow = "";
 }
 
 function hoistTabs() {
-    // Ensure all .tab-content divs are direct children of <main>
-    // This corrects any HTML nesting errors without touching the HTML source
-    const main = document.querySelector("main");
-    if (!main) return;
-    document.querySelectorAll(".tab-content").forEach(tab => {
-        if (tab.parentElement !== main) {
-            main.appendChild(tab);
-        }
-    });
+  // Ensure all .tab-content divs are direct children of <main>
+  // This corrects any HTML nesting errors without touching the HTML source
+  const main = document.querySelector("main");
+  if (!main) return;
+  document.querySelectorAll(".tab-content").forEach(tab => {
+    if (tab.parentElement !== main) {
+      main.appendChild(tab);
+    }
+  });
 }
 
 function init() {
-    hoistTabs(); // Fix any tab nesting issues first
-    initMobileMenu();
-    wireLogout();
+  hoistTabs(); // Fix any tab nesting issues first
+  initMobileMenu();
+  wireLogout();
 
-    const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
-    if (user && user.client) {
-        const headerName = document.getElementById("clientNameHeader");
-        if (headerName) headerName.textContent = user.client.name;
+  const user = JSON.parse(localStorage.getItem("InfoCliente.user") || "{}");
+  if (user) {
+    const userDisplay = document.getElementById("userName");
+    if (userDisplay) userDisplay.textContent = user.name || user.email || "Cliente";
+    
+    // Se for um cliente, podemos mostrar também o nome da empresa se houver um local para isso
+    const clientHeader = document.getElementById("clientNameHeader");
+    if (clientHeader && user.client) {
+      clientHeader.textContent = user.client.name;
+    }
+  }
+
+  wireUsersNav();
+  wireEvents();
+  wirePreview();
+  wireStockEvents();
+  loadDashboardData();
+
+  // Global click for photos and lightbox
+  document.addEventListener("click", e => {
+    const photoItem = e.target.closest("[data-preview-photo]");
+    if (photoItem) {
+      const img = photoItem.querySelector("img");
+      if (img) {
+        openLightbox(img.src, "Evidência de Obra", "");
+      }
+      return;
     }
 
-    wireUsersNav();
-    wireEvents();
-    wirePreview();
-    wireStockEvents();
-    loadDashboardData();
+    if (e.target.id === "imageLightbox" || e.target.closest("#closeLightbox")) {
+      closeLightbox();
+    }
+  });
 
-    // Global click for photos and lightbox
-    document.addEventListener("click", e => {
-        const photoItem = e.target.closest("[data-preview-photo]");
-        if (photoItem) {
-            const img = photoItem.querySelector("img");
-            if (img) {
-                openLightbox(img.src, "Evidência de Obra", "");
-            }
-            return;
-        }
-        
-        if (e.target.id === "imageLightbox" || e.target.closest("#closeLightbox")) {
-            closeLightbox();
-        }
-    });
-
-    // ESC key for Lightbox
-    document.addEventListener("keydown", e => {
-        if (e.key === "Escape") closeLightbox();
-    });
+  // ESC key for Lightbox
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeLightbox();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

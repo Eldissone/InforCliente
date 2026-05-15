@@ -12,8 +12,12 @@ dailyPlansRoutes.get(
   "/all-pending",
   requirePermission("stock", "view"), // O armazém precisa ter acesso ao stock para ver
   asyncHandler(async (req, res) => {
+    const { projectId } = req.query;
     const plans = await prisma.dailyPlan.findMany({
-      where: { status: "PENDING_MATERIAL" },
+      where: { 
+        status: "PENDING_MATERIAL",
+        projectId: projectId || undefined
+      },
       include: {
         project: true,
         tasks: {

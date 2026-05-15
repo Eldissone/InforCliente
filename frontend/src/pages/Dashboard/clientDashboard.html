@@ -259,8 +259,8 @@
     <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
             <div>
-                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-                <!-- <p class="text-slate-500 font-medium">Resumo do portfólio de obras e recursos.</p> -->
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Olá, <span id="userName" class="text-blue-600">...</span></h1>
+                <p class="text-slate-500 font-medium">Bem-vindo ao seu painel de controlo.</p>
             </div>
 
             <div class="flex flex-col md:flex-row items-center gap-3">
@@ -549,6 +549,12 @@
                             <span class="md:hidden">Armazém</span>
                             <span class="hidden md:inline">Stock/Armazém</span>
                         </button>
+                        <button data-stock-subtab="requests"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all relative">
+                            <span class="md:hidden">Pedidos</span>
+                            <span class="hidden md:inline">Pedidos de Obra</span>
+                            <span id="stock_requests_badge" class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        </button>
                         <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
@@ -604,6 +610,12 @@
                                     <!-- Rendered JS -->
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <div id="stock_requests_content" class="hidden p-6 md:p-10">
+                        <div id="stockRequestsContainer" class="space-y-4">
+                            <!-- Rendered JS: List of pending requests for this project -->
                         </div>
                     </div>
 
