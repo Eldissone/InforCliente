@@ -117,4 +117,23 @@ warehouseRoutes.post(
   })
 );
 
+// DELETE - Eliminar permanentemente armazém da reciclagem
+warehouseRoutes.delete(
+  "/:id/permanent",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    // Deletar registros relacionados primeiro
+    await prisma.$transaction([
+      prisma.warehouseStock.deleteMany({ where: { warehouseId: id } }),
+      prisma.stockMovement.deleteMany({ where: { warehouseId: id } }),
+      prisma.item.updateMany({ where: { targetWarehouseId: id }, data: { targetWarehouseId: null } }),
+      prisma.warehouse.delete({ where: { id } })
+    ]);
+    
+    return res.status(204).send();
+  })
+);
+
 module.exports = { warehouseRoutes };

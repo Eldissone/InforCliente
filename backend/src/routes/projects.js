@@ -159,6 +159,11 @@ projectRoutes.get(
       });
     }
 
+    const { includeDeleted } = req.query;
+    if (includeDeleted !== "true") {
+      whereClauses.push({ active: true });
+    }
+
     const where = whereClauses.length ? { AND: whereClauses } : {};
 
     const orderBy =
@@ -588,7 +593,64 @@ projectRoutes.delete(
   requirePermission("obras", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    await prisma.project.delete({ where: { id } });
+    
+    // Soft delete
+    await prisma.project.update({
+      where: { id },
+      data: { active: false }
+    });
+
+    return res.json({ ok: true });
+  })
+);
+
+// POST - Restaurar obra da reciclagem
+projectRoutes.post(
+  "/:id/restore",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await prisma.project.update({
+      where: { id },
+      data: { active: true }
+    });
+    return res.json({ ok: true });
+  })
+);
+
+// DELETE - Eliminar permanentemente obra da reciclagem
+projectRoutes.delete(
+  "/:id/permanent",
+  requirePermission("obras", "delete"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+
+    // Encontrar armazéns ligados a esta obra
+    const projectWarehouses = await prisma.warehouse.findMany({
+      where: { projectId: id },
+      select: { id: true }
+    });
+    const warehouseIds = projectWarehouses.map(w => w.id);
+
+    const txOps = [];
+
+    // Limpar armazéns ligados à obra
+    if (warehouseIds.length > 0) {
+      txOps.push(prisma.warehouseStock.deleteMany({ where: { warehouseId: { in: warehouseIds } } }));
+      txOps.push(prisma.stockMovement.deleteMany({ where: { warehouseId: { in: warehouseIds } } }));
+      txOps.push(prisma.item.updateMany({ where: { targetWarehouseId: { in: warehouseIds } }, data: { targetWarehouseId: null } }));
+      txOps.push(prisma.warehouse.deleteMany({ where: { projectId: id } }));
+    }
+
+    // Limpar movimentos de stock e outros ligados diretamente à obra
+    txOps.push(prisma.stockMovement.deleteMany({ where: { projectId: id } }));
+    txOps.push(prisma.alert.deleteMany({ where: { projectId: id } }));
+
+    // Finalmente, apagar a obra
+    txOps.push(prisma.project.delete({ where: { id } }));
+
+    await prisma.$transaction(txOps);
+
     return res.json({ ok: true });
   })
 );

@@ -912,9 +912,14 @@ async function renderWarehouses(container) {
                         <p class="font-bold text-slate-900 text-sm">${esc(w.name)}</p>
                         <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${esc(w.type)}</p>
                     </div>
-                    <button onclick="window.restoreWarehouse('${w.id}')" class="h-8 px-4 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1">
-                        <span class="material-symbols-outlined text-xs">restore</span> Restaurar
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button onclick="window.restoreWarehouse('${w.id}')" class="h-8 px-4 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs">restore</span> Restaurar
+                        </button>
+                        <button onclick="window.permanentDeleteWarehouse('${w.id}', '${esc(w.name)}')" class="h-8 w-8 bg-red-50 text-red-500 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
+                            <span class="material-symbols-outlined text-xs">delete_forever</span>
+                        </button>
+                    </div>
                 </div>
                 `).join('')}
             </div>
@@ -934,6 +939,14 @@ async function renderWarehouses(container) {
             await apiRequest(`/warehouses/${id}/restore`, { method: "POST" });
             renderWarehouses(container);
         } catch (error) { alert("Erro ao restaurar: " + error.message); }
+    };
+
+    window.permanentDeleteWarehouse = async (id, name) => {
+        if (!confirm(`ATENÇÃO: Deseja eliminar DEFINITIVAMENTE o armazém "${name}"? Esta ação não pode ser desfeita.`)) return;
+        try {
+            await apiRequest(`/warehouses/${id}/permanent`, { method: "DELETE" });
+            renderWarehouses(container);
+        } catch (error) { alert("Erro ao eliminar permanentemente: " + error.message); }
     };
 }
 
@@ -993,11 +1006,11 @@ async function openWarehouseModal(warehouseId = null) {
 
 window.editWarehouse = (id) => openWarehouseModal(id);
 window.deleteWarehouse = async (id) => {
-    if (!confirm("Confirmar remoção desta localização?")) return;
+    if (!confirm("Deseja enviar esta localização para a reciclagem?")) return;
     try {
         await apiRequest(`/warehouses/${id}`, { method: "DELETE" });
         loadTabContent("warehouses");
-    } catch (error) { alert("Erro: Não é possível remover locais com stock ou ativos."); }
+    } catch (error) { alert("Erro: Não é possível remover locais com stock ou ativos. Esvazie-o primeiro."); }
 };
 
 async function renderMovements(container) {

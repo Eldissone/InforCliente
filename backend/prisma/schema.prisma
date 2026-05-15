@@ -80,6 +80,7 @@ model Project {
   location            String?
   region              String?
   status              ProjectStatus            @default(ACTIVE)
+  active              Boolean                  @default(true)
   startDate           DateTime?
   dueDate             DateTime?
   budgetTotal         Decimal                  @db.Decimal(16, 2)

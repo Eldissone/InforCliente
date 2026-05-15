@@ -240,7 +240,81 @@ async function load() {
   } else {
     tbody.innerHTML = data.items.map(renderRow).join("");
   }
+
+  // --- Recycle Bin ---
+  const recycleContainerId = "projectsRecycleBin";
+  let recycleContainer = el(recycleContainerId);
+  if (!recycleContainer) {
+    recycleContainer = document.createElement("div");
+    recycleContainer.id = recycleContainerId;
+    tableContainer.parentNode.insertBefore(recycleContainer, tableContainer.nextSibling);
+  }
+
+  try {
+    const deletedData = await apiRequest(`/projects?includeDeleted=true&page=1&pageSize=100`);
+    const deletedProjects = deletedData.items ? deletedData.items.filter(p => !p.active) : [];
+
+    if (deletedProjects.length > 0) {
+      recycleContainer.innerHTML = `
+        <div class="mt-12 p-10 bg-slate-50 rounded-[2.5rem] border border-slate-100 border-dashed">
+            <div class="flex items-center gap-4 mb-8">
+                <div class="w-10 h-10 bg-slate-200 text-slate-500 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-xl">delete_sweep</span>
+                </div>
+                <div>
+                    <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Reciclagem de Obras</h3>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Obras eliminadas que podem ser restauradas</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                ${deletedProjects.map(p => `
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
+                    <div class="truncate mr-2">
+                        <p class="font-bold text-slate-900 text-sm truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</p>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${escapeHtml(p.code)}</p>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button onclick="window.restoreProject('${p.id}')" class="h-8 px-3 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs">restore</span> Restaurar
+                        </button>
+                        <button onclick="window.permanentDeleteProject('${p.id}', '${escapeHtml(p.name)}')" class="h-8 w-8 bg-red-50 text-red-500 rounded-lg flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">
+                            <span class="material-symbols-outlined text-xs">delete_forever</span>
+                        </button>
+                    </div>
+                </div>
+                `).join('')}
+            </div>
+        </div>
+      `;
+    } else {
+      recycleContainer.innerHTML = "";
+    }
+  } catch(e) {
+    console.error("Failed to load deleted projects", e);
+  }
 }
+
+window.restoreProject = async (id) => {
+  if (!confirm("Deseja restaurar esta obra?")) return;
+  try {
+    await apiRequest(`/projects/${encodeURIComponent(id)}/restore`, { method: "POST" });
+    toast("Obra restaurada com sucesso", { type: "success" });
+    load();
+  } catch (error) {
+    toast(error.message || "Erro ao restaurar", { type: "error" });
+  }
+};
+
+window.permanentDeleteProject = async (id, name) => {
+  if (!confirm(`ATENÇÃO: Deseja eliminar DEFINITIVAMENTE a obra "${name}"? Esta ação não pode ser desfeita e todos os dados financeiros e de stock associados serão perdidos.`)) return;
+  try {
+    await apiRequest(`/projects/${encodeURIComponent(id)}/permanent`, { method: "DELETE" });
+    toast("Obra eliminada permanentemente", { type: "info" });
+    load();
+  } catch (error) {
+    toast(error.message || "Erro ao eliminar", { type: "error" });
+  }
+};
 
 function wireFilters() {
   let t = null;
@@ -293,11 +367,11 @@ function wireActions() {
     if (deleteBtn) {
       const id = deleteBtn.getAttribute("data-delete-project");
       const name = deleteBtn.getAttribute("data-name");
-      if (confirm(`Deseja mesmo eliminar permanentemente a obra "${name}"?`)) {
+      if (confirm(`Deseja enviar a obra "${name}" para a reciclagem?`)) {
         setButtonLoading(deleteBtn, true);
         apiRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" })
           .then(() => {
-            toast("Obra eliminada");
+            toast("Obra movida para a reciclagem");
             load();
           })
           .catch((err) => {
@@ -354,9 +428,9 @@ async function openEdit(id) {
     primaryLabel: "Salvar Alterações",
     dangerLabel: "Excluir Obra",
     onDanger: async ({ close }) => {
-      if (!confirm(`Tem certeza que deseja excluir a obra "${p.name}"? Esta ação não pode ser desfeita.`)) return;
+      if (!confirm(`Tem certeza que deseja enviar a obra "${p.name}" para a reciclagem?`)) return;
       await apiRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
-      toast("Obra excluída", { type: "info" });
+      toast("Obra movida para a reciclagem", { type: "info" });
       close();
       await load();
     },
