@@ -246,6 +246,71 @@ async function renderCatalog(container) {
     const PAGE_SIZE = 15;
     let filteredMaterials = [...materials];
     let filteredTools = [...tools];
+    let selectedProducts = new Set();
+    let isSelectionMode = false;
+
+    window.toggleSelectionMode = () => {
+        isSelectionMode = !isSelectionMode;
+        if (!isSelectionMode) {
+            selectedProducts.clear();
+            updateBulkDeleteBtn();
+        }
+        
+        const btn = document.getElementById('btnToggleSelection');
+        if (btn) {
+            if (isSelectionMode) {
+                btn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-100');
+                btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-200');
+                btn.innerHTML = `<span class="material-symbols-outlined text-xl">close</span> Cancelar`;
+            } else {
+                btn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-100');
+                btn.classList.add('bg-white', 'text-slate-700', 'border-slate-200');
+                btn.innerHTML = `<span class="material-symbols-outlined text-xl">checklist</span> Selecionar`;
+            }
+        }
+        updateTables();
+    };
+
+    const updateBulkDeleteBtn = () => {
+        const btn = document.getElementById('btnDeleteSelected');
+        const countSpan = document.getElementById('selectedCount');
+        if (btn && countSpan) {
+            if (selectedProducts.size > 0) {
+                btn.classList.remove('hidden');
+                btn.classList.add('flex');
+                countSpan.innerText = selectedProducts.size;
+            } else {
+                btn.classList.add('hidden');
+                btn.classList.remove('flex');
+            }
+        }
+    };
+
+    window.toggleProductSelection = (id, event) => {
+        if (event) event.stopPropagation();
+        if (selectedProducts.has(id)) {
+            selectedProducts.delete(id);
+        } else {
+            selectedProducts.add(id);
+        }
+        updateBulkDeleteBtn();
+    };
+
+    window.toggleSelectAllProducts = (type, checkbox) => {
+        const isChecked = checkbox.checked;
+        const tableBody = checkbox.closest('table').querySelector('tbody');
+        const checkboxes = tableBody.querySelectorAll('.product-checkbox');
+        
+        checkboxes.forEach(cb => {
+            cb.checked = isChecked;
+            if (isChecked) {
+                selectedProducts.add(cb.value);
+            } else {
+                selectedProducts.delete(cb.value);
+            }
+        });
+        updateBulkDeleteBtn();
+    };
 
     const renderTableHtml = (products, title, colorClass, page, type, isExpanded) => {
         const totalPages = Math.ceil(products.length / PAGE_SIZE) || 1;
@@ -273,14 +338,24 @@ async function renderCatalog(container) {
                     <table class="w-full text-left">
                         <thead>
                             <tr class="bg-slate-50/50 border-b border-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                <th class="px-8 py-5 w-12 ${isSelectionMode ? '' : 'hidden'}">
+                                    <input type="checkbox" class="w-4 h-4 cursor-pointer accent-[#2afc8d]" onclick="window.toggleSelectAllProducts('${type}', this)">
+                                </th>
+                                <th class="px-8 py-5 w-12 text-center">Nº</th>
                                 <th class="px-8 py-5">Nome do Produto</th>
                                 <th class="px-8 py-5">SKU / Referência</th>
                                 <th class="px-8 py-5 text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-50">
-                            ${paginatedItems.map(p => `
+                            ${paginatedItems.map((p, index) => `
                                 <tr class="hover:bg-slate-50/50 transition-colors group">
+                                    <td class="px-8 py-4 w-12 ${isSelectionMode ? '' : 'hidden'}">
+                                        <input type="checkbox" value="${p.id}" class="product-checkbox w-4 h-4 cursor-pointer accent-[#2afc8d]" ${selectedProducts.has(p.id) ? 'checked' : ''} onclick="window.toggleProductSelection('${p.id}', event)">
+                                    </td>
+                                    <td class="px-8 py-4 w-12 text-center">
+                                        <span class="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">${start + index + 1}</span>
+                                    </td>
                                     <td class="px-8 py-4">
                                         <div class="font-bold text-slate-900 text-sm">${esc(p.name)}</div>
                                         <div class="text-[9px] font-black text-slate-300 uppercase tracking-widest">${esc(p.category)}</div>
@@ -297,7 +372,7 @@ async function renderCatalog(container) {
                                         </div>
                                     </td>
                                 </tr>
-                            `).join('') || `<tr><td colspan="4" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
+                            `).join('') || `<tr><td colspan="${isSelectionMode ? 5 : 4}" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
                         </tbody>
                     </table>
                     
@@ -326,6 +401,12 @@ async function renderCatalog(container) {
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Gestão de Referências</h2>
             </div>
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <button id="btnToggleSelection" class="h-12 bg-white border border-slate-200 text-slate-700 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm items-center gap-2 flex" onclick="window.toggleSelectionMode()">
+                    <span class="material-symbols-outlined text-xl">checklist</span> Selecionar
+                </button>
+                <button id="btnDeleteSelected" class="hidden h-12 bg-red-50 border border-red-100 text-red-600 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">delete</span> Eliminar (<span id="selectedCount">0</span>)
+                </button>
                 <div class="relative flex-grow md:flex-grow-0 min-w-[300px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input type="text" id="searchCatalog" placeholder="Procurar no catálogo (Nome, SKU...)" class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
@@ -397,6 +478,34 @@ async function renderCatalog(container) {
             loadTabContent("catalog");
         } catch (error) { alert("Erro ao eliminar: " + (error.data?.error || error.message || "Não pode eliminar produtos com stock ou ativos vinculados.")); }
     };
+
+    window.deleteSelectedProducts = async () => {
+        if (!confirm(`Confirmar eliminação de ${selectedProducts.size} referências?`)) return;
+        
+        let successCount = 0;
+        let errorCount = 0;
+        const btn = document.getElementById('btnDeleteSelected');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = `<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>`;
+        btn.disabled = true;
+
+        for (const id of selectedProducts) {
+            try {
+                await apiRequest(`/products/${id}`, { method: "DELETE" });
+                successCount++;
+            } catch (error) { 
+                console.error("Erro ao eliminar:", id, error);
+                errorCount++; 
+            }
+        }
+
+        alert(`Operação concluída!\nSucesso: ${successCount}\nErros: ${errorCount} (podem ter stock ou ativos vinculados)`);
+        selectedProducts.clear();
+        updateBulkDeleteBtn();
+        loadTabContent("catalog");
+    };
+
+    document.getElementById("btnDeleteSelected")?.addEventListener("click", window.deleteSelectedProducts);
 }
 
 async function openExcelImportModal() {
