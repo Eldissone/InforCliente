@@ -239,53 +239,85 @@ async function renderCatalog(container) {
     const materials = items.filter(p => p.category === 'MATERIAL' || p.category === 'CONSUMABLE');
     const tools = items.filter(p => p.category === 'TOOL' || p.category === 'EQUIPMENT');
 
-    const renderTable = (products, title, colorClass) => `
-        <div class="mb-12">
-            <div class="flex justify-between items-center mb-6 px-2">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-2xl ${colorClass} flex items-center justify-center shadow-sm">
-                        <span class="material-symbols-outlined text-xl">${title.includes('Materiais') ? 'inventory_2' : 'construction'}</span>
+    let currentPageMaterials = 1;
+    let currentPageTools = 1;
+    let isExpandedMaterials = true;
+    let isExpandedTools = true;
+    const PAGE_SIZE = 15;
+    let filteredMaterials = [...materials];
+    let filteredTools = [...tools];
+
+    const renderTableHtml = (products, title, colorClass, page, type, isExpanded) => {
+        const totalPages = Math.ceil(products.length / PAGE_SIZE) || 1;
+        if (page > totalPages) page = totalPages;
+        const start = (page - 1) * PAGE_SIZE;
+        const paginatedItems = products.slice(start, start + PAGE_SIZE);
+
+        return `
+            <div class="mb-12">
+                <div class="flex justify-between items-center mb-6 px-2 cursor-pointer group hover:bg-slate-50 rounded-2xl p-2 transition-colors" onclick="window.toggleTable('${type}')">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-2xl ${colorClass} flex items-center justify-center shadow-sm">
+                            <span class="material-symbols-outlined text-xl">${title.includes('Materiais') ? 'inventory_2' : 'construction'}</span>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-black text-slate-900 tracking-tighter uppercase">${title}</h3>
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${products.length} Referências no Filtro</p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="text-lg font-black text-slate-900 tracking-tighter uppercase">${title}</h3>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${products.length} Referências no Sistema</p>
+                    <div class="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
+                        <span class="material-symbols-outlined text-xl transition-transform ${isExpanded ? 'rotate-180' : ''}">expand_more</span>
                     </div>
                 </div>
-            </div>
-            <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
-                <table class="w-full text-left">
-                    <thead>
-                        <tr class="bg-slate-50/50 border-b border-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                            <th class="px-8 py-5">Nome do Produto</th>
-                            <th class="px-8 py-5">SKU / Referência</th>
-                            <th class="px-8 py-5 text-right">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-50">
-                        ${products.map(p => `
-                            <tr class="hover:bg-slate-50/50 transition-colors group">
-                                <td class="px-8 py-4">
-                                    <div class="font-bold text-slate-900 text-sm">${esc(p.name)}</div>
-                                    <div class="text-[9px] font-black text-slate-300 uppercase tracking-widest">${esc(p.category)}</div>
-                                </td>
-                                <td class="px-8 py-4 text-xs font-bold text-slate-500">${esc(p.sku || '---')}</td>
-                                <td class="px-8 py-4 text-right">
-                                    <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onclick="window.editProduct('${p.id}')" class="w-8 h-8 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center">
-                                            <span class="material-symbols-outlined text-lg">edit</span>
-                                        </button>
-                                        <button onclick="window.deleteProduct('${p.id}')" class="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center">
-                                            <span class="material-symbols-outlined text-lg">delete</span>
-                                        </button>
-                                    </div>
-                                </td>
+                <div class="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm transition-all duration-300 ${isExpanded ? 'opacity-100 mt-2' : 'hidden opacity-0 h-0'} overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-slate-50/50 border-b border-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                <th class="px-8 py-5">Nome do Produto</th>
+                                <th class="px-8 py-5">SKU / Referência</th>
+                                <th class="px-8 py-5 text-right">Ações</th>
                             </tr>
-                        `).join('') || `<tr><td colspan="4" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody class="divide-y divide-slate-50">
+                            ${paginatedItems.map(p => `
+                                <tr class="hover:bg-slate-50/50 transition-colors group">
+                                    <td class="px-8 py-4">
+                                        <div class="font-bold text-slate-900 text-sm">${esc(p.name)}</div>
+                                        <div class="text-[9px] font-black text-slate-300 uppercase tracking-widest">${esc(p.category)}</div>
+                                    </td>
+                                    <td class="px-8 py-4 text-xs font-bold text-slate-500">${esc(p.sku || '---')}</td>
+                                    <td class="px-8 py-4 text-right">
+                                        <div class="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onclick="window.editProduct('${p.id}')" class="w-8 h-8 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center">
+                                                <span class="material-symbols-outlined text-lg">edit</span>
+                                            </button>
+                                            <button onclick="window.deleteProduct('${p.id}')" class="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center">
+                                                <span class="material-symbols-outlined text-lg">delete</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('') || `<tr><td colspan="4" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
+                        </tbody>
+                    </table>
+                    
+                    ${totalPages > 1 ? `
+                    <div class="px-8 py-4 border-t border-slate-50 bg-slate-50/30 flex items-center justify-between">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página ${page} de ${totalPages}</span>
+                        <div class="flex gap-2">
+                            <button onclick="window.changePage('${type}', -1)" class="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-50 disabled:opacity-50" ${page === 1 ? 'disabled' : ''}>
+                                <span class="material-symbols-outlined text-sm">chevron_left</span>
+                            </button>
+                            <button onclick="window.changePage('${type}', 1)" class="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-50 disabled:opacity-50" ${page === totalPages ? 'disabled' : ''}>
+                                <span class="material-symbols-outlined text-sm">chevron_right</span>
+                            </button>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    };
 
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
@@ -298,6 +330,9 @@ async function renderCatalog(container) {
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input type="text" id="searchCatalog" placeholder="Procurar no catálogo (Nome, SKU...)" class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
+                <button id="btnUploadExcel" class="h-12 bg-white border border-slate-200 text-slate-700 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm flex items-center gap-2">
+                    <span class="material-symbols-outlined text-xl">upload_file</span> Importar Excel
+                </button>
                 <button id="btnCreateProduct" class="h-12 bg-slate-900 text-white px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-slate-900/20 flex items-center gap-2">
                     <span class="material-symbols-outlined text-xl">add</span> Novo Produto
                 </button>
@@ -305,33 +340,54 @@ async function renderCatalog(container) {
         </div>
 
         <div id="catalogContent">
-            ${renderTable(materials, "Material de Consumo", "bg-emerald-50 text-emerald-600")}
-            ${renderTable(tools, "Ferramentas", "bg-indigo-50 text-indigo-600")}
+            <!-- Paginated content will be injected here -->
         </div>
     `;
+
+    const updateTables = () => {
+        document.getElementById("catalogContent").innerHTML = `
+            ${renderTableHtml(filteredMaterials, "Material de Consumo", "bg-emerald-50 text-emerald-600", currentPageMaterials, "materials", isExpandedMaterials)}
+            ${renderTableHtml(filteredTools, "Ferramentas", "bg-indigo-50 text-indigo-600", currentPageTools, "tools", isExpandedTools)}
+        `;
+    };
+
+    // Initial render
+    updateTables();
+
+    window.toggleTable = (type) => {
+        if (type === 'materials') {
+            isExpandedMaterials = !isExpandedMaterials;
+        } else {
+            isExpandedTools = !isExpandedTools;
+        }
+        updateTables();
+    };
+
+    // Initial render
+    updateTables();
+
+    // Global pagination handler
+    window.changePage = (type, delta) => {
+        if (type === 'materials') {
+            currentPageMaterials += delta;
+        } else {
+            currentPageTools += delta;
+        }
+        updateTables();
+    };
 
     // Lógica de Pesquisa no Catálogo
     const searchCatalog = document.getElementById("searchCatalog");
     searchCatalog?.addEventListener("input", (e) => {
         const term = e.target.value.toLowerCase();
-        const rows = container.querySelectorAll("tbody tr");
-        rows.forEach(row => {
-            const text = row.innerText.toLowerCase();
-            if (text.includes(term)) {
-                row.classList.remove("hidden");
-            } else {
-                row.classList.add("hidden");
-            }
-        });
-
-        // Esconder tabelas vazias
-        container.querySelectorAll(".mb-12").forEach(section => {
-            const visibleRows = section.querySelectorAll("tbody tr:not(.hidden)").length;
-            if (visibleRows === 0) section.classList.add("hidden");
-            else section.classList.remove("hidden");
-        });
+        filteredMaterials = materials.filter(p => p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term)));
+        filteredTools = tools.filter(p => p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term)));
+        currentPageMaterials = 1;
+        currentPageTools = 1;
+        updateTables();
     });
 
+    document.getElementById("btnUploadExcel")?.addEventListener("click", () => openExcelImportModal());
     document.getElementById("btnCreateProduct")?.addEventListener("click", () => openProductModal());
     window.editProduct = (id) => openProductModal(items.find(p => p.id === id));
     window.deleteProduct = async (id) => {
@@ -341,6 +397,261 @@ async function renderCatalog(container) {
             loadTabContent("catalog");
         } catch (error) { alert("Erro: Não pode eliminar produtos com stock ou ativos vinculados."); }
     };
+}
+
+async function openExcelImportModal() {
+    const contentHtml = `
+        <div class="space-y-6 pt-4">
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tipo de Importação</label>
+                <select id="importCategory" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <option value="MATERIAL">Materiais / Consumíveis</option>
+                    <option value="TOOL">Ferramentas / Equipamentos</option>
+                </select>
+            </div>
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Ficheiro Excel</label>
+                <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <p class="text-[9px] font-bold text-slate-400 mt-2">O ficheiro deve conter as colunas: "Descrição" ou "Nome", "SKU" ou "Ref" (Opcional), "Un" ou "Unidade" (Opcional).</p>
+            </div>
+            
+            <div id="importStatus" class="hidden flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d] mb-2"></div>
+                <p class="text-sm font-bold text-slate-700" id="importStatusText">A ler ficheiro...</p>
+            </div>
+
+            <div id="previewContainer" class="hidden flex-col space-y-2">
+                <div class="flex justify-between items-end">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Pré-visualização</label>
+                    <span id="previewSummary" class="text-[10px] font-black text-slate-500"></span>
+                </div>
+                <div class="max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-2xl shadow-inner">
+                    <table class="w-full text-left text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <tr>
+                                <th class="px-4 py-2">Nome</th>
+                                <th class="px-4 py-2">SKU</th>
+                                <th class="px-4 py-2">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Global variable within the modal closure to hold valid items to import
+    let validItemsToImport = [];
+
+    const { close, panel } = openModal({
+        title: "Importar Catálogo via Excel",
+        contentHtml,
+        primaryLabel: "Selecione um ficheiro",
+        onPrimary: async ({ body, btn }) => {
+            if (validItemsToImport.length === 0) {
+                alert("Não há itens válidos para importar.");
+                return;
+            }
+
+            const category = body.querySelector("#importCategory").value;
+            const statusDiv = body.querySelector("#importStatus");
+            const statusText = body.querySelector("#importStatusText");
+            const previewContainer = body.querySelector("#previewContainer");
+            
+            previewContainer.classList.add("hidden");
+            statusDiv.classList.remove("hidden");
+            statusDiv.classList.add("flex");
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "A importar...";
+            }
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (let i = 0; i < validItemsToImport.length; i++) {
+                const item = validItemsToImport[i];
+                statusText.innerText = `A importar ${i + 1} de ${validItemsToImport.length}...`;
+
+                try {
+                    await apiRequest("/products", {
+                        method: "POST",
+                        body: {
+                            name: item.name,
+                            sku: item.sku,
+                            category: category,
+                            unit: item.unitStr
+                        }
+                    });
+                    successCount++;
+                } catch (err) {
+                    console.error(`Erro ao importar ${item.name}:`, err);
+                    errorCount++;
+                }
+            }
+
+            alert(`Importação concluída!\n\nSucesso: ${successCount}\nErros: ${errorCount}`);
+            close();
+            loadTabContent("catalog");
+        }
+    });
+
+    // Disable the button initially
+    const primaryBtn = panel.querySelector("[data-primary]");
+    if(primaryBtn) primaryBtn.disabled = true;
+
+    // Attach logic to file input change
+    setTimeout(() => {
+        const fileInput = document.getElementById("excelFile");
+        const categorySelect = document.getElementById("importCategory");
+        const statusDiv = document.getElementById("importStatus");
+        const previewContainer = document.getElementById("previewContainer");
+        const previewTableBody = document.getElementById("previewTableBody");
+        const previewSummary = document.getElementById("previewSummary");
+        
+        fileInput.addEventListener("change", async (e) => {
+            if (!fileInput.files || fileInput.files.length === 0) return;
+            
+            validItemsToImport = [];
+            if(primaryBtn) {
+                primaryBtn.disabled = true;
+                primaryBtn.innerText = "A ler ficheiro...";
+            }
+            previewContainer.classList.add("hidden");
+            statusDiv.classList.remove("hidden");
+            statusDiv.classList.add("flex");
+
+            try {
+                // Fetch existing products to check for duplicates
+                const existingReq = await apiRequest("/products");
+                const existingProducts = existingReq.items || [];
+                const existingNames = existingProducts.map(p => p.name.toLowerCase().trim());
+                const existingSkus = existingProducts.filter(p => p.sku).map(p => p.sku.toLowerCase().trim());
+
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                reader.onload = async (event) => {
+                    try {
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = window.XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        let rawData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        rawData = rawData.filter(row => row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== ''));
+                        
+                        if (rawData.length < 2) throw new Error("Ficheiro vazio ou sem dados suficientes.");
+
+                        let headerRowIndex = 0;
+                        for (let i = 0; i < Math.min(10, rawData.length); i++) {
+                            const rowStr = rawData[i].map(c => String(c || '').toLowerCase()).join(' ');
+                            if (rowStr.includes('descrição') || rowStr.includes('nome') || rowStr.includes('produto')) {
+                                headerRowIndex = i;
+                                break;
+                            }
+                        }
+
+                        const headers = rawData[headerRowIndex].map(h => String(h || '').toLowerCase().trim());
+                        const rows = rawData.slice(headerRowIndex + 1);
+
+                        const getColIndex = (keywords) => headers.findIndex(h => keywords.some(k => h === k || h.includes(k)));
+
+                        const nameIdx = getColIndex(['descrição', 'descricao', 'nome', 'produto']);
+                        const skuIdx = getColIndex(['sku', 'ref', 'código', 'codigo', 'referência', 'referencia']);
+                        const unitIdx = getColIndex(['un', 'unid', 'unidade', 'medida']);
+
+                        if (nameIdx === -1) throw new Error("Não foi possível encontrar a coluna de Nome/Descrição no ficheiro.");
+
+                        let tableHtml = "";
+                        let validCount = 0;
+                        let dupCount = 0;
+
+                        for (let i = 0; i < rows.length; i++) {
+                            const row = rows[i];
+                            if (!row || !row[nameIdx] || String(row[nameIdx]).trim() === '') continue;
+
+                            const name = String(row[nameIdx]).trim();
+                            const sku = skuIdx !== -1 && row[skuIdx] ? String(row[skuIdx]).trim() : null;
+                            
+                            let unitStr = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).toUpperCase().trim() : 'UN';
+                            const allowedUnits = ['UN', 'KG', 'M', 'L', 'CX', 'PAR', 'MT2', 'MT3'];
+                            if (!allowedUnits.includes(unitStr)) unitStr = 'UN';
+
+                            const isDupName = existingNames.includes(name.toLowerCase());
+                            const isDupSku = sku ? existingSkus.includes(sku.toLowerCase()) : false;
+                            
+                            if (isDupName || isDupSku) {
+                                dupCount++;
+                                tableHtml += `
+                                    <tr class="bg-red-50/50">
+                                        <td class="px-4 py-2 font-medium text-red-900">${esc(name)}</td>
+                                        <td class="px-4 py-2 text-red-600">${esc(sku || '---')}</td>
+                                        <td class="px-4 py-2 text-[9px] font-black text-red-500 uppercase tracking-widest">Duplicado</td>
+                                    </tr>
+                                `;
+                            } else {
+                                validCount++;
+                                validItemsToImport.push({ name, sku, unitStr });
+                                tableHtml += `
+                                    <tr>
+                                        <td class="px-4 py-2 font-medium text-slate-700">${esc(name)}</td>
+                                        <td class="px-4 py-2 text-slate-500">${esc(sku || '---')}</td>
+                                        <td class="px-4 py-2 text-[9px] font-black text-emerald-500 uppercase tracking-widest">Pronto</td>
+                                    </tr>
+                                `;
+                            }
+                        }
+
+                        previewTableBody.innerHTML = tableHtml;
+                        previewSummary.innerText = `${validCount} Válidos / ${dupCount} Ignorados`;
+                        
+                        statusDiv.classList.add("hidden");
+                        statusDiv.classList.remove("flex");
+                        previewContainer.classList.remove("hidden");
+                        previewContainer.classList.add("flex");
+
+                        if (validCount > 0) {
+                            if(primaryBtn) {
+                                primaryBtn.disabled = false;
+                                primaryBtn.innerText = `Confirmar Importação (${validCount})`;
+                            }
+                        } else {
+                            if(primaryBtn) {
+                                primaryBtn.disabled = true;
+                                primaryBtn.innerText = "Sem itens válidos";
+                            }
+                            alert("Não foram encontrados novos itens para importar (todos já existem ou o ficheiro está vazio).");
+                        }
+
+                    } catch (error) {
+                        alert("Erro ao ler ficheiro: " + error.message);
+                        statusDiv.classList.add("hidden");
+                        statusDiv.classList.remove("flex");
+                        if(primaryBtn) {
+                            primaryBtn.disabled = true;
+                            primaryBtn.innerText = "Selecione um ficheiro";
+                        }
+                    }
+                };
+                
+                reader.onerror = () => {
+                    alert("Erro ao ler o ficheiro.");
+                    statusDiv.classList.add("hidden");
+                    statusDiv.classList.remove("flex");
+                };
+
+                reader.readAsArrayBuffer(file);
+
+            } catch (err) {
+                alert("Erro ao carregar lista atual de produtos para validação.");
+                statusDiv.classList.add("hidden");
+                statusDiv.classList.remove("flex");
+            }
+        });
+    }, 100);
 }
 
 async function openProductModal(product = null) {
@@ -1489,23 +1800,25 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
             <input type="hidden" name="type" value="${type}">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Produto / Material</label>
-                    <select name="productId" id="movementProductId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                        <option value="">Selecionar...</option>
-                        <optgroup label="Materiais de Consumo">
-                            ${materials.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Ferramentas">
-                            ${tools.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('')}
-                        </optgroup>
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tipo de Entrada</label>
+                    <select id="movementCategoryFilter" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                        <option value="MATERIAL">Material de Consumo</option>
+                        <option value="TOOL">Ferramentas / Equipamentos</option>
                     </select>
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém Destino</label>
-                    <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                        ${warehousesRes.items.map(w => `<option value="${w.id}" ${w.id === defaultWarehouseId ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Produto / Material</label>
+                    <select name="productId" id="movementProductId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                        <option value="">Selecionar...</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém Destino</label>
+                <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    ${warehousesRes.items.map(w => `<option value="${w.id}" ${w.id === defaultWarehouseId ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+                </select>
             </div>
             
             <div id="assetNotice" class="hidden p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
@@ -1553,17 +1866,36 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
         }
     });
 
-    // Lógica para mostrar aviso se for Ativo
-    document.getElementById("movementProductId")?.addEventListener("change", (e) => {
-        const option = e.target.selectedOptions[0];
-        const category = option.dataset.category;
+    // Lógica para popular select dinamicamente e mostrar aviso se for Ativo
+    setTimeout(() => {
+        const categoryFilter = document.getElementById("movementCategoryFilter");
+        const productSelect = document.getElementById("movementProductId");
         const notice = document.getElementById("assetNotice");
-        if (category === 'TOOL' || category === 'EQUIPMENT') {
-            notice.classList.remove("hidden");
-        } else {
-            notice.classList.add("hidden");
+        
+        const materialsHtml = materials.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('');
+        const toolsHtml = tools.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('');
+
+        const updateProducts = () => {
+            const cat = categoryFilter.value;
+            productSelect.innerHTML = '<option value="">Selecionar...</option>' + (cat === 'MATERIAL' ? materialsHtml : toolsHtml);
+            if(notice) notice.classList.add("hidden");
+        };
+
+        if(categoryFilter && productSelect) {
+            categoryFilter.addEventListener("change", updateProducts);
+            updateProducts();
+
+            productSelect.addEventListener("change", (e) => {
+                const option = e.target.selectedOptions[0];
+                const category = option?.dataset.category;
+                if (category === 'TOOL' || category === 'EQUIPMENT') {
+                    notice.classList.remove("hidden");
+                } else {
+                    notice.classList.add("hidden");
+                }
+            });
         }
-    });
+    }, 50);
 }
 
 async function openTransferModal(fromWarehouseId = null) {
