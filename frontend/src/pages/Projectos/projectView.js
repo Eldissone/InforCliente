@@ -234,7 +234,13 @@ async function loadProject() {
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
-let stockState = { items: [], filters: { search: "", category: "", condition: "", status: "", warehouse: "" } };
+let stockState = {
+  items: [],
+  summary: [],
+  filters: { search: "", category: "", condition: "", status: "", warehouse: "" },
+  isSelectionModeStock: false,
+  selectedStockItems: new Set()
+};
 let galleryState = { items: [] }; // Cache para fotos da galeria
 
 function updateOperationStatus(summary) {
@@ -2662,7 +2668,7 @@ function renderStockMovements(items) {
     return;
   }
 
-  tbody.innerHTML = items.map(m => {
+  tbody.innerHTML = (items || []).map((m, idx) => {
     const isEntry = m.type === "IN" || m.type === "ENTRY" || m.type === "TRANSFER_IN";
     const typeLabel = isEntry ? "ENTRADA" : "SAÍDA";
     const typeColor = isEntry ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50";
@@ -2683,6 +2689,7 @@ function renderStockMovements(items) {
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
+        <td class="px-6 py-5 text-center text-xs font-bold text-slate-400 w-12">${idx + 1}</td>
         <td class="px-3 md:px-10 py-5 hidden md:table-cell">
           <div class="text-xs font-bold text-slate-900">${formatDateBR(m.createdAt)}</div>
           <div class="text-[10px] font-black uppercase tracking-widest ${typeColor} inline-block px-2 py-0.5 rounded mt-1">${typeLabel}</div>
@@ -2801,74 +2808,99 @@ async function openStockMovementModal() {
   }
 
   try {
-    const productsRes = await apiRequest("/items"); // global items
+    const [productsRes, clientsRes] = await Promise.all([
+      apiRequest("/products"),
+      apiRequest("/clients")
+    ]);
+    
     const products = productsRes.items || [];
+    const clients = clientsRes.items || [];
 
     const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
+    const clientOptions = clients.map(c => `<option value="${c.id}">Cliente: ${escapeHtml(c.name)}</option>`).join("");
 
     openModal({
       title: "Nova Operação Logística",
       contentHtml: `
-        <div class="space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Material</label>
-              <select id="st_mId" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
+        <form id="formStockMove" class="space-y-6 pt-4">
+          <input type="hidden" name="warehouseId" value="${stockState.warehouseId}">
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Material / Referência</label>
+              <select name="productId" id="st_mId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <option value="">Selecionar...</option>
                 ${productOptions}
               </select>
             </div>
-            <div class="space-y-1.5">
-              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Operação</label>
-              <select id="st_type" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-                <option value="IN">Entrada (Receber Material)</option>
-                <option value="OUT">Saída (Aplicar na Obra)</option>
+            <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Tipo de Operação</label>
+              <select name="type" id="st_type" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <option value="ENTRY">Entrada (Receber Material)</option>
+                <option value="EXIT">Saída (Aplicar na Obra)</option>
               </select>
             </div>
           </div>
           
-          <div class="space-y-1.5">
-             <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Quantidade</label>
-             <input type="number" step="0.01" id="st_qty" placeholder="0.00" class="w-full h-12 bg-emerald-50/50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500 transition-all">
-          </div>
-          
-          <div class="p-4 bg-slate-50 rounded-2xl space-y-4">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Dados de Transporte (Opcional)</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <input id="st_driver" placeholder="Nome do Motorista" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100">
-               <input id="st_plate" placeholder="Matrícula Viatura" class="h-10 bg-white rounded-lg px-3 text-[11px] font-bold border border-slate-100 uppercase">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+               <label class="text-[11px] font-black uppercase tracking-widest text-emerald-600">Quantidade</label>
+               <input type="number" step="0.01" name="quantity" id="st_qty" placeholder="0.00" required class="w-full bg-emerald-50/50 border-none rounded-2xl p-4 text-sm font-bold text-emerald-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+            </div>
+            <div class="space-y-2">
+               <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Proprietário</label>
+               <select name="ownerId" id="st_ownerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                  <option value="">Empresa (Próprio)</option>
+                  ${clientOptions}
+               </select>
             </div>
           </div>
-        </div>
+
+          <div class="space-y-2">
+              <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Foto de Evidência / Guia</label>
+              <input type="file" name="photo" accept="image/*" capture="environment" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-bold text-slate-400">
+          </div>
+          
+          <div class="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-6">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm">
+                    <span class="material-symbols-outlined text-lg">local_shipping</span>
+                </div>
+                <p class="text-[11px] font-black uppercase tracking-widest text-slate-400">Controlo de Transporte (Opcional)</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div class="space-y-2">
+                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Motorista</label>
+                  <input id="st_driver" name="driver" placeholder="Nome completo" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+               </div>
+               <div class="space-y-2">
+                  <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Viatura / Matrícula</label>
+                  <input id="st_plate" name="plate" placeholder="Ex: LD-00-00-AA" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all uppercase">
+               </div>
+            </div>
+          </div>
+        </form>
       `,
       primaryText: "Registrar",
       onPrimary: async ({ btn, close, panel }) => {
-        const v = (id) => panel.querySelector(`#${id}`)?.value?.trim() || "";
-        const mId = v("st_mId");
-        const qty = Number(v("st_qty") || 0);
+        const form = panel.querySelector("#formStockMove");
+        const formData = new FormData(form);
+        
+        const mId = formData.get("productId");
+        const qty = Number(formData.get("quantity") || 0);
 
         if (!mId) return toast("Selecione um material", { type: "error" });
         if (qty <= 0) return toast("Quantidade deve ser maior que 0", { type: "error" });
 
         setButtonLoading(btn, true);
         try {
-          // Codificando os dados logísticos em Notes
-          const driver = v("st_driver");
-          const plate = v("st_plate");
-          let notes = "";
+          const driver = formData.get("driver");
+          const plate = formData.get("plate");
           if (driver || plate) {
-            notes = `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`;
+            formData.append("notes", `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`);
           }
 
-          await apiRequest(`/stock/movements`, {
-            method: "POST",
-            body: {
-              productId: mId,
-              warehouseId: stockState.warehouseId,
-              type: v("st_type"),
-              quantity: qty,
-              notes: notes
-            }
-          });
+          await apiUpload("/stock/move", formData, "POST");
 
           toast("Operação registada com sucesso", { type: "success" });
           close();
@@ -2924,7 +2956,7 @@ function renderStockInventory(movements, summary) {
     return;
   }
 
-  tbody.innerHTML = summary.map(item => {
+  tbody.innerHTML = (summary || []).map((item, idx) => {
     const balance = Number(item.quantity || 0);
     const product = item.product || {};
     const planned = Number(item.quantityPlanned || 0);
@@ -2939,6 +2971,12 @@ function renderStockInventory(movements, summary) {
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
+        <td class="px-6 py-5 text-center text-xs font-bold text-slate-400 w-12">${idx + 1}</td>
+        <td class="selection-cell-stock ${stockState.isSelectionModeStock ? "" : "hidden"} px-6 py-5">
+          <input type="checkbox" class="stock-item-checkbox rounded border-slate-300" 
+            data-product-id="${item.productId}" 
+            ${stockState.selectedStockItems.has(item.productId) ? "checked" : ""}>
+        </td>
         <td class="px-3 md:px-10 py-5">
            <div class="text-xs font-bold text-slate-900">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
@@ -2968,36 +3006,53 @@ async function openMaterialManagerModal() {
   openModal({
     title: "Gestão do Catálogo de Materiais",
     contentHtml: `
-      <div class="space-y-6">
-        <div id="materialForm" class="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
-           <h4 class="text-[10px] font-black uppercase tracking-widest text-slate-400">Novo Material / Editar</h4>
+      <div class="space-y-8 pt-4">
+        <div id="materialForm" class="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 space-y-6 shadow-inner">
+           <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-2xl bg-[#2afc8d]/10 text-[#2afc8d] flex items-center justify-center shadow-sm">
+                    <span class="material-symbols-outlined text-xl">edit_note</span>
+                </div>
+                <h4 class="text-xs font-black uppercase tracking-widest text-slate-600">Configuração de Referência</h4>
+           </div>
            <input type="hidden" id="mt_id">
-           <div class="grid grid-cols-2 gap-4">
-              <input id="mt_code" placeholder="Código (ex: CABO-MT-50)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
-              <input id="mt_name" placeholder="Nome do Material" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-2">
+                  <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Código / SKU</label>
+                  <input id="mt_code" placeholder="Ex: CABO-MT-50" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
+              </div>
+              <div class="space-y-2">
+                  <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Nome do Material</label>
+                  <input id="mt_name" placeholder="Descrição completa" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
+              </div>
            </div>
-           <div class="grid grid-cols-2 gap-4">
-              <select id="mt_cat" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
-                 <option value="MT">Média Tensão (MT)</option>
-                 <option value="BT">Baixa Tensão (BT)</option>
-                 <option value="IP">Iluminação Pública (IP)</option>
-                 <option value="OUTROS">Outros</option>
-              </select>
-              <input id="mt_unit" placeholder="Unidade (ex: un, mts, kg)" class="h-10 bg-white rounded-lg px-3 text-xs font-bold border border-slate-200">
+           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-2">
+                  <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Categoria</label>
+                  <select id="mt_cat" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
+                     <option value="MT">Média Tensão (MT)</option>
+                     <option value="BT">Baixa Tensão (BT)</option>
+                     <option value="IP">Iluminação Pública (IP)</option>
+                     <option value="OUTROS">Outros</option>
+                  </select>
+              </div>
+              <div class="space-y-2">
+                  <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Unidade</label>
+                  <input id="mt_unit" placeholder="Ex: un, mts, kg" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
+              </div>
            </div>
-           <div class="flex gap-2">
-              <button id="saveMaterialBtn" class="flex-1 h-10 bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:brightness-110">Gravar Material</button>
-              <button id="resetMaterialBtn" class="px-4 h-10 bg-white text-slate-400 rounded-lg text-[10px] font-black uppercase border border-slate-200">Limpar</button>
+           <div class="flex gap-4 pt-2">
+              <button id="saveMaterialBtn" class="flex-1 h-14 bg-slate-900 text-[#2afc8d] rounded-2xl text-[11px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-slate-900/10">Gravar Material</button>
+              <button id="resetMaterialBtn" class="px-8 h-14 bg-white text-slate-400 rounded-2xl text-[11px] font-black uppercase border border-slate-200 hover:bg-slate-50 transition-all">Limpar</button>
            </div>
         </div>
 
-        <div class="max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+        <div class="max-h-[400px] overflow-y-auto custom-scroll pr-4">
            <table class="w-full text-left">
-              <thead class="sticky top-0 bg-white z-10 border-b border-slate-100">
-                 <tr>
-                    <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Material</th>
-                    <th class="py-3 text-[9px] font-black text-slate-400 uppercase">Cat / Un</th>
-                    <th class="py-3 text-right text-[9px] font-black text-slate-400 uppercase">Ações</th>
+              <thead class="sticky top-0 bg-white z-10 border-b border-slate-100 pb-4">
+                 <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <th class="py-5 px-4">Material / Referência</th>
+                    <th class="py-5 px-4">Cat / Unid.</th>
+                    <th class="py-5 px-4 text-right">Ações</th>
                  </tr>
               </thead>
               <tbody id="materialListTbody">
@@ -3015,20 +3070,28 @@ async function openMaterialManagerModal() {
     const tbody = el("materialListTbody");
     tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catÃ¡logo...</td></tr>`;
     try {
-      const { items } = await apiRequest("/materials");
+      const { items } = await apiRequest("/products");
       tbody.innerHTML = items.map(m => `
-        <tr class="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-          <td class="py-3 pr-4">
-             <div class="text-xs font-bold text-slate-900">${escapeHtml(m.name)}</div>
-             <div class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${m.code}</div>
+        <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all group">
+          <td class="py-5 px-4">
+             <div class="text-sm font-bold text-slate-900 mb-0.5">${escapeHtml(m.name)}</div>
+             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${m.code}</div>
           </td>
-          <td class="py-3">
-             <span class="text-[9px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500">${m.category}</span>
-             <span class="text-[9px] font-bold text-slate-400 ml-1">${m.unit}</span>
+          <td class="py-5 px-4">
+             <div class="flex items-center gap-2">
+                <span class="text-[10px] font-black px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 uppercase tracking-tighter">${m.category}</span>
+                <span class="text-[10px] font-bold text-slate-400 uppercase">${m.unit}</span>
+             </div>
           </td>
-          <td class="py-3 text-right">
-             <button data-edit-mat='${JSON.stringify(m)}' class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all"><span class="material-symbols-outlined text-sm">edit</span></button>
-             <button data-delete-mat="${m.id}" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all"><span class="material-symbols-outlined text-sm">delete</span></button>
+          <td class="py-5 px-4 text-right">
+             <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button data-edit-mat='${JSON.stringify(m)}' class="w-9 h-9 rounded-xl text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center" title="Editar">
+                   <span class="material-symbols-outlined text-xl">edit</span>
+                </button>
+                <button data-delete-mat="${m.id}" class="w-9 h-9 rounded-xl text-red-500 hover:bg-red-50 transition-all flex items-center justify-center" title="Eliminar">
+                   <span class="material-symbols-outlined text-xl">delete</span>
+                </button>
+             </div>
           </td>
         </tr>
       `).join("");
@@ -3051,7 +3114,7 @@ async function openMaterialManagerModal() {
         btn.addEventListener("click", async () => {
           if (!confirm("Tem certeza? Esta ação removerá o material do catálogo global.")) return;
           try {
-            await apiRequest(`/materials/${btn.dataset.deleteMat}`, { method: "DELETE" });
+            await apiRequest(`/products/${btn.dataset.deleteMat}`, { method: "DELETE" });
             toast("Material removido", { type: "success" });
             loadMaterials();
           } catch (err) {
@@ -3087,7 +3150,7 @@ async function openMaterialManagerModal() {
 
     setButtonLoading(btn, true);
     try {
-      await apiRequest(mId ? `/materials/${mId}` : "/materials", {
+      await apiRequest(mId ? `/products/${mId}` : "/products", {
         method: mId ? "PATCH" : "POST",
         body
       });
@@ -3105,7 +3168,7 @@ async function openMaterialManagerModal() {
 }
 
 async function openStockAdjustmentModal(materialId, warehouse) {
-  const materialsRes = await apiRequest("/materials");
+  const materialsRes = await apiRequest("/products");
   const mat = materialsRes.items.find(i => i.id === materialId);
   if (!mat) return;
 
@@ -3169,6 +3232,54 @@ async function openStockAdjustmentModal(materialId, warehouse) {
   });
 }
 
+
+function updateBulkDeleteBtnStock() {
+  const btn = el("btnDeleteSelectedStock");
+  const countEl = el("selectedStockCount");
+  const count = stockState.selectedStockItems.size;
+
+  if (count > 0) {
+    btn.classList.remove("hidden");
+    btn.classList.add("flex");
+    if (countEl) countEl.textContent = count;
+  } else {
+    btn.classList.add("hidden");
+    btn.classList.remove("flex");
+  }
+}
+
+async function deleteSelectedStockItems() {
+  const count = stockState.selectedStockItems.size;
+  if (!confirm(`Confirmar eliminação de ${count} referências do catálogo global?`)) return;
+
+  const btn = el("btnDeleteSelectedStock");
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = `<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>`;
+  btn.disabled = true;
+
+  let success = 0;
+  let errors = 0;
+
+  for (const id of stockState.selectedStockItems) {
+    try {
+      await apiRequest(`/products/${id}`, { method: "DELETE" });
+      success++;
+    } catch (err) {
+      console.error(`Erro ao apagar material ${id}:`, err);
+      errors++;
+    }
+  }
+
+  toast(`Operação concluída. Sucesso: ${success}, Erros: ${errors}`, { type: success > 0 ? "success" : "error" });
+
+  stockState.selectedStockItems.clear();
+  stockState.isSelectionModeStock = false;
+  loadStock(); // Refresh data
+
+  btn.disabled = false;
+  btn.innerHTML = originalHtml;
+}
+
 async function deleteStockMovement(moveId) {
   if (!confirm("Tem certeza que deseja ELIMINAR este movimento? O saldo no armazém será revertido automaticamente.")) return;
 
@@ -3194,6 +3305,8 @@ function wireStock() {
       setButtonLoading(btn, false);
     }
   });
+
+  el("btnDeleteSelectedStock")?.addEventListener("click", deleteSelectedStockItems);
 
   el("manageMaterialsBtn")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
@@ -3658,15 +3771,25 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
   openModal({
     title: "Definir Quantidade Prevista",
     contentHtml: `
-      <div class="space-y-4">
-        <div>
-          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Material</p>
-          <p class="text-sm font-bold text-slate-900">${materialName}</p>
+      <div class="space-y-6 pt-4">
+        <div class="p-6 bg-blue-50/50 border border-blue-100 rounded-[2rem] flex items-center gap-4 shadow-sm">
+            <div class="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-blue-500 shadow-sm">
+                <span class="material-symbols-outlined text-2xl">inventory_2</span>
+            </div>
+            <div>
+              <p class="text-[11px] font-black uppercase tracking-widest text-blue-600/60 mb-0.5">Referência do Material</p>
+              <p class="text-sm font-bold text-slate-900">${materialName}</p>
+            </div>
         </div>
-        <div class="space-y-1.5">
-          <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Quantidade Prevista Total (BoQ)</label>
-          <input type="number" id="edit_planned_qty" value="${currentPlanned}" step="0.01" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-          <p class="text-[9px] text-slate-400 font-medium">Esta quantidade representa o total planeado para este projeto independente do armazÃ©m.</p>
+        <div class="space-y-3">
+          <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Quantidade Prevista Total (BoQ)</label>
+          <div class="relative">
+              <input type="number" id="edit_planned_qty" value="${currentPlanned}" step="0.01" class="w-full bg-slate-50 border-none rounded-2xl p-5 text-lg font-black text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:bg-white transition-all">
+              <div class="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidades</div>
+          </div>
+          <p class="text-[10px] text-slate-400 font-bold leading-relaxed pl-1">
+            <span class="text-amber-500">Atenção:</span> Esta quantidade representa o total planeado para este projeto, independente do armazém físico.
+          </p>
         </div>
       </div>
     `,
