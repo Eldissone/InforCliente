@@ -75,4 +75,43 @@ productRoutes.patch(
   })
 );
 
+// DELETE - Eliminar produto
+productRoutes.delete(
+  "/:id",
+  requirePermission("materiais", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    // Check if product has linked stock, items, movements or daily plans
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            items: true,
+            movements: true,
+            stock: true,
+            dailyPlanMaterials: true
+          }
+        }
+      }
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: "Produto não encontrado." });
+    }
+
+    const { items, movements, stock, dailyPlanMaterials } = product._count;
+    if (items > 0 || movements > 0 || stock > 0 || dailyPlanMaterials > 0) {
+      return res.status(400).json({ error: "Não pode eliminar produtos com stock, movimentos ou ativos vinculados." });
+    }
+
+    await prisma.product.delete({
+      where: { id }
+    });
+
+    return res.json({ success: true });
+  })
+);
+
 module.exports = { productRoutes };

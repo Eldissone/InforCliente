@@ -395,7 +395,7 @@ async function renderCatalog(container) {
         try {
             await apiRequest(`/products/${id}`, { method: "DELETE" });
             loadTabContent("catalog");
-        } catch (error) { alert("Erro: Não pode eliminar produtos com stock ou ativos vinculados."); }
+        } catch (error) { alert("Erro ao eliminar: " + (error.data?.error || error.message || "Não pode eliminar produtos com stock ou ativos vinculados.")); }
     };
 }
 

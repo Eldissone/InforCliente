@@ -758,10 +758,12 @@
 
         <!-- Planos Diários Tab -->
         <div id="tab_planos_diarios" class="tab-content hidden">
-            <div class="flex flex-row justify-between items-center gap-4 mb-10 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+            <div
+                class="flex flex-row justify-between items-center gap-4 mb-10 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Planos Diários</h2>
-                    <p class="text-sm text-slate-500 font-medium">Gestão da execução diária e requisição de materiais.</p>
+                    <p class="text-sm text-slate-500 font-medium">Gestão da execução diária e requisição de materiais.
+                    </p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
                     <button id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
@@ -774,7 +776,9 @@
             <!-- Lista de Planos -->
             <div class="grid grid-cols-1 gap-6" id="dailyPlansList">
                 <!-- Populado via JS -->
-                <div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">Carregando planos...</div>
+                <div
+                    class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">
+                    Carregando planos...</div>
             </div>
         </div>
 
@@ -856,11 +860,7 @@
                 <div
                     class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
                     <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
-                        <button data-stock-subtab="history"
-                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
-                            <span class="md:hidden">Fluxo</span>
-                            <span class="hidden md:inline">Fluxo de Stock</span>
-                        </button>
+
                         <button data-stock-subtab="inventory"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Armazém</span>
@@ -870,12 +870,18 @@
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all relative">
                             <span class="md:hidden">Pedidos</span>
                             <span class="hidden md:inline">Pedidos de Obra</span>
-                            <span id="stock_requests_badge" class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            <span id="stock_requests_badge"
+                                class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         </button>
                         <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
                             <span class="hidden md:inline">Galeria de Campo</span>
+                        </button>
+                        <button data-stock-subtab="history"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
+                            <span class="md:hidden">Fluxo</span>
+                            <span class="hidden md:inline">Fluxo de Stock</span>
                         </button>
                     </div>
                     <button data-toggle-table="stock"

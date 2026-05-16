@@ -259,7 +259,8 @@
     <main class="max-w-[1440px] mx-auto px-4 md:px-8 pt-24 pb-20">
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
             <div>
-                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Olá, <span id="userName" class="text-blue-600">...</span></h1>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Olá, <span id="userName"
+                        class="text-blue-600">...</span></h1>
                 <p class="text-slate-500 font-medium">Bem-vindo ao seu painel de controlo.</p>
             </div>
 
@@ -539,11 +540,7 @@
                 <div
                     class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
                     <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
-                        <button data-stock-subtab="history"
-                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
-                            <span class="md:hidden">Fluxo</span>
-                            <span class="hidden md:inline">Fluxo de Stock</span>
-                        </button>
+
                         <button data-stock-subtab="inventory"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Armazém</span>
@@ -553,12 +550,18 @@
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all relative">
                             <span class="md:hidden">Pedidos</span>
                             <span class="hidden md:inline">Pedidos de Obra</span>
-                            <span id="stock_requests_badge" class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                            <span id="stock_requests_badge"
+                                class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         </button>
                         <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
                             <span class="hidden md:inline">Galeria de Campo</span>
+                        </button>
+                        <button data-stock-subtab="history"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
+                            <span class="md:hidden">Fluxo</span>
+                            <span class="hidden md:inline">Fluxo de Stock</span>
                         </button>
                     </div>
                     <button data-toggle-table="stock"
