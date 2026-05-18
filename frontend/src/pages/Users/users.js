@@ -72,11 +72,15 @@ function switchSection(name) {
 function renderStats(users) {
   const total = users.length;
   const admins = users.filter(u => u.role === "admin").length;
-  const team = users.filter(u => ["operador", "leitura", "tecnico", "supervisor"].includes(u.role)).length;
+  const supervisors = users.filter(u => u.role === "supervisor").length;
+  const technicians = users.filter(u => u.role === "tecnico").length;
+  const team = users.filter(u => ["operador", "leitura"].includes(u.role)).length;
   const clients = users.filter(u => u.role === "cliente").length;
 
   el("stat-total")?.textContent !== undefined && (el("stat-total").textContent = total);
   el("stat-admin")?.textContent !== undefined && (el("stat-admin").textContent = admins);
+  el("stat-supervisor")?.textContent !== undefined && (el("stat-supervisor").textContent = supervisors);
+  el("stat-technician")?.textContent !== undefined && (el("stat-technician").textContent = technicians);
   el("stat-team")?.textContent !== undefined && (el("stat-team").textContent = team);
   el("stat-clients")?.textContent !== undefined && (el("stat-clients").textContent = clients);
   el("sidebar-count") && (el("sidebar-count").textContent = total);

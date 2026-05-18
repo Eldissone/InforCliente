@@ -5,7 +5,7 @@ import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "..
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "leitura", "cliente"] });
+checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "cliente"] });
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return "0 Bytes";

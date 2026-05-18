@@ -2,7 +2,7 @@ import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../service
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
+checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura"] });
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 

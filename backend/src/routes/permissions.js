@@ -13,17 +13,20 @@ permissionsRoutes.use(requireRole(["admin"]));
 const DEFAULT_PERMISSIONS = [
   // Dashboard & Analytics
   { role: "admin",    module: "dashboard",    action: "view",   allowed: "true"  },
+  { role: "supervisor",module: "dashboard",   action: "view",   allowed: "true"  },
   { role: "operador", module: "dashboard",    action: "view",   allowed: "true"  },
   { role: "leitura",  module: "dashboard",    action: "view",   allowed: "true"  },
   { role: "cliente",  module: "dashboard",    action: "view",   allowed: "false" },
 
   { role: "admin",    module: "analytics",    action: "view",   allowed: "true"  },
+  { role: "supervisor",module: "analytics",   action: "view",   allowed: "true"  },
   { role: "operador", module: "analytics",    action: "view",   allowed: "true"  },
   { role: "leitura",  module: "analytics",    action: "view",   allowed: "true"  },
   { role: "cliente",  module: "analytics",    action: "view",   allowed: "false" },
 
   // Clientes
   { role: "admin",    module: "clientes",     action: "view",   allowed: "true"  },
+  { role: "supervisor",module: "clientes",    action: "view",   allowed: "true"  },
   { role: "operador", module: "clientes",     action: "view",   allowed: "true"  },
   { role: "leitura",  module: "clientes",     action: "view",   allowed: "true"  },
   { role: "cliente",  module: "clientes",     action: "view",   allowed: "own"   },
