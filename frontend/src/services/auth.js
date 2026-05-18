@@ -63,6 +63,8 @@ export function checkAuth({ allowedRoles = [] } = {}) {
     
     if (currentRole === "CLIENT" || currentRole === "CLIENTE") {
       target = "/Dashboard/clientDashboard.html";
+    } else if (currentRole === "TECNICO") {
+      target = "/Projectos/tecnicoPlanos.html";
     } else if (currentRole === "USER") {
       target = "/Dashboard/index.html";
     }

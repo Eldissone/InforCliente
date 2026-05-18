@@ -35,12 +35,12 @@ authRoutes.post(
       }
     });
 
-    // Verificar se é administrador ou operador (normalizado para maiúsculas)
+    // Verificar se é um perfil interno com login directo (admin, operador, técnico ou supervisor)
     const userRole = (user.role || "").toUpperCase();
-    const isAdmin = userRole === 'ADMIN' || userRole === 'OPERADOR';
+    const isDirectLoginRole = ['ADMIN', 'OPERADOR', 'TECNICO', 'SUPERVISOR'].includes(userRole);
     
     let projectsCount = 0;
-    if (isAdmin) {
+    if (isDirectLoginRole) {
       projectsCount = await prisma.project.count();
     } else {
       const clientIds = accounts.map(a => a.clientId);
@@ -59,8 +59,8 @@ authRoutes.post(
     // Buscar informações do cliente para o nome da empresa
     const primaryClient = user.clientId ? await prisma.client.findUnique({ where: { id: user.clientId }, select: { name: true } }) : null;
 
-    // Se o utilizador não for admin/operador, enviamos para a seleção de obras
-    if (!isAdmin) {
+    // Se o utilizador não for um perfil interno, enviamos para a seleção de obras de cliente
+    if (!isDirectLoginRole) {
       return res.json({
         status: "MULTI_ACCOUNT",
         user: { 

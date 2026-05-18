@@ -65,7 +65,7 @@ export function wireUsersNav() {
 
   // Dynamic Dashboard Link
   document.querySelectorAll("[data-nav-dashboard]").forEach((el) => {
-    const target = role === "cliente" ? "../Dashboard/clientDashboard.html" : "../Dashboard/index.html";
+    const target = role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
     if (el.tagName === "A") el.href = target;
   });
 

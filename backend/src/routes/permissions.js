@@ -46,26 +46,50 @@ const DEFAULT_PERMISSIONS = [
   // Obras
   { role: "admin",    module: "obras",        action: "view",   allowed: "true"  },
   { role: "operador", module: "obras",        action: "view",   allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "view",   allowed: "true"  },
+  { role: "supervisor",module: "obras",        action: "view",   allowed: "true"  },
   { role: "leitura",  module: "obras",        action: "view",   allowed: "true"  },
   { role: "cliente",  module: "obras",        action: "view",   allowed: "own"   },
 
+  { role: "admin",    module: "obras",        action: "read",   allowed: "true"  },
+  { role: "operador", module: "obras",        action: "read",   allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "read",   allowed: "true"  },
+  { role: "supervisor",module: "obras",        action: "read",   allowed: "true"  },
+  { role: "leitura",  module: "obras",        action: "read",   allowed: "true"  },
+  { role: "cliente",  module: "obras",        action: "read",   allowed: "own"   },
+
   { role: "admin",    module: "obras",        action: "create", allowed: "true"  },
   { role: "operador", module: "obras",        action: "create", allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "create", allowed: "false" },
+  { role: "supervisor",module: "obras",        action: "create", allowed: "true"  },
   { role: "leitura",  module: "obras",        action: "create", allowed: "false" },
   { role: "cliente",  module: "obras",        action: "create", allowed: "false" },
 
   { role: "admin",    module: "obras",        action: "edit",   allowed: "true"  },
   { role: "operador", module: "obras",        action: "edit",   allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "edit",   allowed: "true"  },
+  { role: "supervisor",module: "obras",        action: "edit",   allowed: "true"  },
   { role: "leitura",  module: "obras",        action: "edit",   allowed: "false" },
   { role: "cliente",  module: "obras",        action: "edit",   allowed: "false" },
 
   { role: "admin",    module: "obras",        action: "delete", allowed: "true"  },
   { role: "operador", module: "obras",        action: "delete", allowed: "false" },
+  { role: "tecnico",  module: "obras",        action: "delete", allowed: "false" },
+  { role: "supervisor",module: "obras",        action: "delete", allowed: "false" },
   { role: "leitura",  module: "obras",        action: "delete", allowed: "false" },
   { role: "cliente",  module: "obras",        action: "delete", allowed: "false" },
 
+  { role: "admin",    module: "obras",        action: "manage", allowed: "true"  },
+  { role: "operador", module: "obras",        action: "manage", allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "manage", allowed: "true"  },
+  { role: "supervisor",module: "obras",        action: "manage", allowed: "true"  },
+  { role: "leitura",  module: "obras",        action: "manage", allowed: "false" },
+  { role: "cliente",  module: "obras",        action: "manage", allowed: "false" },
+
   { role: "admin",    module: "obras",        action: "financeiro", allowed: "true"  },
   { role: "operador", module: "obras",        action: "financeiro", allowed: "true"  },
+  { role: "tecnico",  module: "obras",        action: "financeiro", allowed: "false" },
+  { role: "supervisor",module: "obras",        action: "financeiro", allowed: "false" },
   { role: "leitura",  module: "obras",        action: "financeiro", allowed: "view"  },
   { role: "cliente",  module: "obras",        action: "financeiro", allowed: "own"   },
 
@@ -156,7 +180,7 @@ permissionsRoutes.put(
   asyncHandler(async (req, res) => {
     const { role, module: mod, action } = z
       .object({
-        role:   z.enum(["admin", "operador", "leitura", "cliente"]),
+        role:   z.enum(["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"]),
         module: z.string().min(1),
         action: z.string().min(1),
       })

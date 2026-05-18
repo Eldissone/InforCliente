@@ -215,8 +215,8 @@ userRoutes.patch(
 
     const rawRole = body.role || user.role;
     const nextRole = rawRole.toUpperCase();
-    const nextClientId = body.clientId !== undefined ? body.clientId || null : user.clientId;
     const isClientRole = nextRole === "CLIENT" || nextRole === "CLIENTE";
+    const nextClientId = isClientRole ? (body.clientId !== undefined ? body.clientId || null : user.clientId) : null;
 
     if (isClientRole && !nextClientId) {
       return res.status(400).json({ error: "CLIENT_ID_REQUIRED" });

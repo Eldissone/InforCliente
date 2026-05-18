@@ -70,8 +70,9 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
       if (next) {
         window.location.href = `/${next}`;
       } else {
+        const role = (res?.user?.role || "").toLowerCase();
         window.location.href =
-          res?.user?.role === "cliente" ? "../Dashboard/clientDashboard.html" : "../Dashboard/index.html";
+          role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
       }
     }, 800);
   } catch (err) {

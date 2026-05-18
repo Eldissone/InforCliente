@@ -39,6 +39,75 @@ dailyPlansRoutes.get(
   })
 );
 
+// GET /daily-plans/my-plans
+// Action: Get all daily plans where the authenticated technician has at least one task assigned.
+dailyPlansRoutes.get(
+  "/my-plans",
+  requirePermission("obras", "read"),
+  asyncHandler(async (req, res) => {
+    const technicianId = req.user.sub;
+
+    const plans = await prisma.dailyPlan.findMany({
+      where: {
+        tasks: {
+          some: {
+            technicianId: technicianId
+          }
+        }
+      },
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+            code: true
+          }
+        },
+        tasks: {
+          include: {
+            progressTask: true,
+            technician: true
+          }
+        },
+        materials: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { date: "desc" }
+    });
+
+    res.json(plans);
+  })
+);
+
+// POST /daily-plans/:id/start
+// Action: Start the daily plan, changing status from DRAFT to IN_PROGRESS.
+dailyPlansRoutes.post(
+  "/:id/start",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano Diário não encontrado." });
+
+    if (plan.status !== "DRAFT") {
+      return res.status(400).json({ error: `O plano diário não pode ser iniciado porque está no estado ${plan.status}.` });
+    }
+
+    const updated = await prisma.dailyPlan.update({
+      where: { id },
+      data: { status: "IN_PROGRESS" }
+    });
+
+    res.json({ success: true, plan: updated });
+  })
+);
+
 // GET /daily-plans?projectId=...
 dailyPlansRoutes.get(
   "/",
@@ -251,6 +320,7 @@ dailyPlansRoutes.post(
 
 // POST /daily-plans/:id/complete
 // Action: Technician marks plan as done, providing actual executed quantities and consumed materials.
+// Note: This now sets status to PENDING_VALIDATION. Stock/Progress is only committed upon approval.
 dailyPlansRoutes.post(
   "/:id/complete",
   requirePermission("obras", "manage"),
@@ -259,8 +329,6 @@ dailyPlansRoutes.post(
     const { executedTasks, consumedMaterials } = req.body;
     // executedTasks: [{ dailyPlanTaskId, executedQty }]
     // consumedMaterials: [{ dailyPlanMaterialId, consumedQty }]
-
-    const activeUserId = req.user?.sub || "sistema";
 
     const plan = await prisma.dailyPlan.findUnique({
       where: { id },
@@ -272,37 +340,101 @@ dailyPlansRoutes.post(
       return res.status(400).json({ error: "O plano não está em execução." });
     }
 
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Salvar Quantidades Reportadas nas Tasks (sem avançar o progresso geral ainda)
+        if (executedTasks && executedTasks.length > 0) {
+          for (const t of executedTasks) {
+            const planTask = plan.tasks.find(pt => pt.id === t.dailyPlanTaskId);
+            if (!planTask) continue;
+            await tx.dailyPlanTask.update({
+              where: { id: planTask.id },
+              data: { executedQty: Number(t.executedQty || 0) }
+            });
+          }
+        }
+
+        // 2. Salvar Quantidades Reportadas de Materiais Consumidos (sem debitar stock ainda)
+        if (consumedMaterials && consumedMaterials.length > 0) {
+          for (const cm of consumedMaterials) {
+            const planMat = plan.materials.find(pm => pm.id === cm.dailyPlanMaterialId);
+            if (!planMat) continue;
+            await tx.dailyPlanMaterial.update({
+              where: { id: planMat.id },
+              data: { consumedQty: Number(cm.consumedQty || 0) }
+            });
+          }
+        }
+
+        // 3. Mudar estado para PENDING_VALIDATION (Aguardando Validação)
+        await tx.dailyPlan.update({
+          where: { id },
+          data: { status: "PENDING_VALIDATION" }
+        });
+      });
+
+      res.json({ success: true, message: "Relatório diário enviado com sucesso para validação do operador/gestor." });
+    } catch (error) {
+      console.error("ERRO NO TRANSACTION complete-plan:", error);
+      res.status(500).json({ error: "Erro ao submeter plano: " + error.message });
+    }
+  })
+);
+
+// POST /daily-plans/:id/approve
+// Action: Operator/Admin validates and approves the daily plan report, committing stock and progress changes.
+dailyPlansRoutes.post(
+  "/:id/approve",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { validatedTasks, validatedMaterials } = req.body;
+    // validatedTasks: [{ dailyPlanTaskId, executedQty }]
+    // validatedMaterials: [{ dailyPlanMaterialId, consumedQty }]
+
+    const activeUserId = req.user?.sub || "sistema";
+
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { tasks: true, materials: true }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    if (plan.status !== "PENDING_VALIDATION" && plan.status !== "IN_PROGRESS" && plan.status !== "DRAFT") {
+      return res.status(400).json({ error: "Este plano não está pendente de validação." });
+    }
+
     const estaleiro = await prisma.warehouse.findFirst({
       where: { projectId: plan.projectId }
     });
 
     try {
       await prisma.$transaction(async (tx) => {
-        // 1. Atualizar Tasks e Avanço Físico
-        if (executedTasks && executedTasks.length > 0) {
-          for (const t of executedTasks) {
-            const planTask = plan.tasks.find(pt => pt.id === t.dailyPlanTaskId);
-            if (!planTask) continue;
+        // 1. Confirmar e Processar Tasks e Avanço Físico
+        const tasksToProcess = validatedTasks || plan.tasks.map(t => ({ dailyPlanTaskId: t.id, executedQty: t.executedQty }));
+        for (const t of tasksToProcess) {
+          const planTask = plan.tasks.find(pt => pt.id === t.dailyPlanTaskId);
+          if (!planTask) continue;
 
-            const qty = Number(t.executedQty || 0);
+          const qty = Number(t.executedQty || 0);
 
-            await tx.dailyPlanTask.update({
-              where: { id: planTask.id },
-              data: { executedQty: qty }
+          await tx.dailyPlanTask.update({
+            where: { id: planTask.id },
+            data: { executedQty: qty }
+          });
+
+          if (qty > 0) {
+            await tx.projectProgressTask.update({
+              where: { id: planTask.progressTaskId },
+              data: { executedQty: { increment: qty } }
             });
-
-            if (qty > 0) {
-              await tx.projectProgressTask.update({
-                where: { id: planTask.progressTaskId },
-                data: { executedQty: { increment: qty } }
-              });
-            }
           }
         }
 
-        // 2. Atualizar Materiais Consumidos e Devoluções
-        if (consumedMaterials && consumedMaterials.length > 0 && estaleiro) {
-          for (const cm of consumedMaterials) {
+        // 2. Confirmar e Processar Materiais Consumidos e Devoluções de Stock
+        const materialsToProcess = validatedMaterials || plan.materials.map(m => ({ dailyPlanMaterialId: m.id, consumedQty: m.consumedQty }));
+        if (estaleiro) {
+          for (const cm of materialsToProcess) {
             const planMat = plan.materials.find(pm => pm.id === cm.dailyPlanMaterialId);
             if (!planMat) continue;
 
@@ -314,6 +446,7 @@ dailyPlansRoutes.post(
               data: { consumedQty: consQty }
             });
 
+            // Se o consumo real foi inferior ao provido, devolvemos a diferença para o stock do estaleiro
             if (consQty < provided) {
               const retorno = provided - consQty;
               
@@ -324,7 +457,7 @@ dailyPlansRoutes.post(
                   projectId: plan.projectId,
                   type: "ENTRY",
                   quantity: retorno,
-                  notes: `Devolução de material não consumido do Plano Diário (ID: ${plan.id})`,
+                  notes: `Devolução de material não consumido do Plano Diário validado (ID: ${plan.id})`,
                   userId: activeUserId
                 }
               });
@@ -356,17 +489,17 @@ dailyPlansRoutes.post(
           }
         }
 
-        // 3. Mudar estado
+        // 3. Mudar estado para COMPLETED
         await tx.dailyPlan.update({
           where: { id },
           data: { status: "COMPLETED" }
         });
       });
 
-      res.json({ success: true, message: "Plano concluído com sucesso." });
+      res.json({ success: true, message: "Plano Diário validado e concluído com sucesso!" });
     } catch (error) {
-      console.error("ERRO NO TRANSACTION complete-plan:", error);
-      res.status(500).json({ error: "Erro ao concluir plano: " + error.message });
+      console.error("ERRO NO TRANSACTION approve-plan:", error);
+      res.status(500).json({ error: "Erro ao aprovar plano: " + error.message });
     }
   })
 );

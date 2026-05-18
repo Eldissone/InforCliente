@@ -86,11 +86,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           localStorage.setItem("selected_project_id", p.id);
 
           const next = getNext();
+          const role = (authRes?.user?.role || "").toLowerCase();
           setTimeout(() => {
             if (next) {
               window.location.href = `/${next}`;
             } else {
-              window.location.href = "../Dashboard/clientDashboard.html";
+              window.location.href =
+                role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
             }
           }, 1000);
 

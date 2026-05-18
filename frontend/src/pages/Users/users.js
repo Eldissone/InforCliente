@@ -19,6 +19,8 @@ let activeSection = "overview";
 const ROLE_STYLES = {
   admin: { cls: "bg-slate-900 text-[#2afc8d] border-slate-800", icon: "verified_user" },
   operador: { cls: "bg-blue-50 text-blue-700 border-blue-100", icon: "engineering" },
+  tecnico: { cls: "bg-indigo-50 text-indigo-700 border-indigo-100", icon: "construction" },
+  supervisor: { cls: "bg-purple-50 text-purple-700 border-purple-100", icon: "manage_accounts" },
   leitura: { cls: "bg-slate-50 text-slate-500 border-slate-200", icon: "visibility" },
   cliente: { cls: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: "business" },
 };
@@ -70,7 +72,7 @@ function switchSection(name) {
 function renderStats(users) {
   const total = users.length;
   const admins = users.filter(u => u.role === "admin").length;
-  const team = users.filter(u => u.role === "operador" || u.role === "leitura").length;
+  const team = users.filter(u => ["operador", "leitura", "tecnico", "supervisor"].includes(u.role)).length;
   const clients = users.filter(u => u.role === "cliente").length;
 
   el("stat-total")?.textContent !== undefined && (el("stat-total").textContent = total);
@@ -280,7 +282,7 @@ async function loadPermissions() {
   const tbody = el("permTableBody");
   if (!tbody) return;
   // Loading state
-  tbody.innerHTML = `<tr><td colspan="5" class="px-7 py-10 text-center">
+  tbody.innerHTML = `<tr><td colspan="7" class="px-7 py-10 text-center">
     <div class="inline-flex items-center gap-3 text-sm text-slate-400 font-medium">
       <span class="material-symbols-outlined animate-spin text-lg">progress_activity</span>A carregar permissões…
     </div></td></tr>`;
@@ -290,7 +292,7 @@ async function loadPermissions() {
     permMap = {};
     (data.items || []).forEach(r => { permMap[permKey(r.role, r.module, r.action)] = r.allowed; });
   } catch {
-    tbody.innerHTML = `<tr><td colspan="5" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar permissões.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar permissões.</td></tr>`;
     return;
   }
   renderPermissionsTable();
@@ -299,11 +301,11 @@ async function loadPermissions() {
 function renderPermissionsTable() {
   const tbody = el("permTableBody");
   if (!tbody) return;
-  const ROLES = ["admin", "operador", "leitura", "cliente"];
+  const ROLES = ["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"];
   let html = "";
   PERM_DISPLAY_MAP.forEach(group => {
     html += `<tr class="bg-slate-50/40 border-b border-slate-100">
-      <td colspan="5" class="px-7 py-2.5 text-[9px] font-black uppercase tracking-widest text-slate-400">${group.group}</td>
+      <td colspan="7" class="px-7 py-2.5 text-[9px] font-black uppercase tracking-widest text-slate-400">${group.group}</td>
     </tr>`;
     group.rows.forEach(({ label, module: mod, action }) => {
       html += `<tr class="hover:bg-slate-50/50 transition-colors border-b border-slate-50 last:border-0">
@@ -381,7 +383,7 @@ function wireProjectSelector(panel, roleId, wrapId) {
   const wrapEl = panel.querySelector(`#${wrapId}`);
   const sync = () => {
     const role = roleEl?.value;
-    const isAllowedRole = role === "operador" || role === "leitura" || role === "cliente";
+    const isAllowedRole = ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role);
     wrapEl?.classList.toggle("hidden", !isAllowedRole);
   };
   roleEl?.addEventListener("change", sync);
@@ -432,6 +434,8 @@ async function openCreate() {
           <select id="u_role" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 font-semibold">
             <option value="leitura">Leitura</option>
             <option value="operador">Operador</option>
+            <option value="tecnico">Técnico de Obra</option>
+            <option value="supervisor">Supervisor de Obra</option>
             <option value="admin">Administrador</option>
             <option value="cliente">Cliente</option>
           </select>
@@ -465,7 +469,7 @@ async function openCreate() {
             password: v("u_pass"),
             role,
             clientId,
-            assignedProjectIds: (role === "operador" || role === "leitura" || role === "cliente") ? assignedProjectIds : []
+            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : []
           }
         });
         toast("Utilizador criado com sucesso.", { type: "success" });
@@ -510,6 +514,8 @@ async function openEdit(id) {
           <select id="e_role" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 font-semibold">
             <option value="leitura" ${u.role === "leitura" ? "selected" : ""}>Leitura</option>
             <option value="operador" ${u.role === "operador" ? "selected" : ""}>Operador</option>
+            <option value="tecnico" ${u.role === "tecnico" ? "selected" : ""}>Técnico de Obra</option>
+            <option value="supervisor" ${u.role === "supervisor" ? "selected" : ""}>Supervisor de Obra</option>
             <option value="admin" ${u.role === "admin" ? "selected" : ""}>Administrador</option>
             <option value="cliente" ${u.role === "cliente" ? "selected" : ""}>Cliente</option>
           </select>
@@ -518,7 +524,7 @@ async function openEdit(id) {
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente Vinculado</label>
           <select id="e_client" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50">${renderClientOptions(clients, u.clientId || "")}</select>
         </div>
-        <div id="e_proj_wrap" class="${(u.role === "operador" || u.role === "leitura" || u.role === "cliente") ? "" : "hidden"} md:col-span-2">
+        <div id="e_proj_wrap" class="${["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(u.role) ? "" : "hidden"} md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Obras Atribuídas</label>
           <p class="text-[10px] text-slate-400 mb-2 font-medium">Selecione as obras que este utilizador poderá gerir/visualizar.</p>
           ${renderProjectCheckboxes(projects, (u.assignedProjects || []).map(p => p.id))}
@@ -549,7 +555,7 @@ async function openEdit(id) {
             name: v("e_name") || null,
             role,
             clientId,
-            assignedProjectIds: (role === "operador" || role === "leitura" || role === "cliente") ? assignedProjectIds : []
+            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : []
           }
         });
         toast("Utilizador atualizado.", { type: "success" });
