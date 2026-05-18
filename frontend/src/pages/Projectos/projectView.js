@@ -578,11 +578,11 @@ async function loadBudgetExecution() {
 
   if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
   if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
-  
+
   // Dashboard Cards
   if (el("budgetConsumed")) el("budgetConsumed").textContent = formatCurrency(gTotalC, projectState?.currency);
   if (el("budgetConsumedText")) el("budgetConsumedText").textContent = formatCurrency(gTotalC, projectState?.currency);
-  
+
   const committed = gTotalP - gTotalC;
   if (el("budgetCommitted")) el("budgetCommitted").textContent = formatCurrency(committed, projectState?.currency);
   if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(committed, projectState?.currency);
@@ -2011,15 +2011,15 @@ function metodoPagtoLabel(m) {
 function renderPaymentRow(p, roleRaw) {
   // Extract role name if it's an object, otherwise use string
   const role = (typeof roleRaw === 'object' ? (roleRaw.name || roleRaw.slug || "") : (roleRaw || "")).toLowerCase();
-  
+
   const isConf = p.status === "CONFIRMADO";
   const statusCls = isConf ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-amber-600 bg-amber-50 border border-amber-100";
   const statusDot = isConf ? "bg-emerald-500" : "bg-amber-400";
   const statusText = isConf ? "Confirmado" : "Pendente";
-  
+
   // Authorized roles: admin, administrador, operador, supervisor
   const isAuthorized = ["admin", "administrador", "operador", "supervisor"].includes(role);
-  
+
   const canConfirm = !isConf && isAuthorized;
   const canDelete = isAuthorized;
 
@@ -2642,7 +2642,7 @@ async function openStockMovementModal() {
       apiRequest("/products"),
       apiRequest("/clients")
     ]);
-    
+
     const products = productsRes.items || [];
     const clients = clientsRes.items || [];
 
@@ -2715,7 +2715,7 @@ async function openStockMovementModal() {
       onPrimary: async ({ btn, close, panel }) => {
         const form = panel.querySelector("#formStockMove");
         const formData = new FormData(form);
-        
+
         const mId = formData.get("productId");
         const qty = Number(formData.get("quantity") || 0);
 
@@ -2899,7 +2899,7 @@ async function openMaterialManagerModal() {
 
   const loadMaterials = async () => {
     const tbody = el("materialListTbody");
-    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catÃ¡logo...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catálogo...</td></tr>`;
     try {
       const { items } = await apiRequest("/products");
       tbody.innerHTML = items.map(m => `
@@ -3516,14 +3516,20 @@ function wireGallery() {
                 <span class="material-symbols-outlined text-3xl">add_a_photo</span>
               </div>
               <p class="text-sm font-bold text-slate-600">Clique para selecionar foto</p>
-              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">JPG, PNG atÃ© 10MB</p>
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">JPG, PNG até 10MB</p>
             </div>
           </div>
 
           <div class="space-y-4">
             <div>
                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Descrição do Momento</label>
-               <textarea id="gal_desc" class="w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4" rows="3" placeholder="Descreva o que está a acontecer na obra..."></textarea>
+               <div class="relative">
+                 <select id="gal_desc_plan" class="w-full rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700 focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all px-4 h-14 appearance-none pr-10">
+                   <option value="">A carregar planos diários...</option>
+                 </select>
+                 <span class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 text-xl">expand_more</span>
+               </div>
+               <textarea id="gal_desc_custom" class="hidden w-full rounded-2xl border-slate-200 bg-slate-50 text-sm font-medium focus:ring-4 focus:ring-[#2afc8d]/10 focus:border-[#2afc8d] transition-all p-4 mt-3" rows="2" placeholder="Descreva manualmente o momento da obra..."></textarea>
             </div>
             <div>
                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Data do Registo</label>
@@ -3564,6 +3570,46 @@ function wireGallery() {
           previewContainer.classList.add("hidden");
           dropzone.classList.remove("hidden");
         });
+
+        // ── Carregar planos diários e popular o select ──
+        const descSelect = panel.querySelector("#gal_desc_plan");
+        const descCustom = panel.querySelector("#gal_desc_custom");
+
+        const dpStatusLabel = (s) => {
+          if (s === "DRAFT") return "Rascunho";
+          if (s === "PENDING_MATERIAL") return "Ag. Material";
+          if (s === "IN_PROGRESS") return "Em Execução";
+          if (s === "COMPLETED") return "Concluído";
+          return s;
+        };
+
+        (async () => {
+          try {
+            const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
+            if (!plans || plans.length === 0) {
+              descSelect.innerHTML = `<option value="__outro__">✏️ Outro (texto livre)</option>`;
+              descCustom.classList.remove("hidden");
+            } else {
+              descSelect.innerHTML = `
+                <option value="">Selecione um Plano Diário...</option>
+                ${plans.map(p => `<option value="${escapeHtml(p.description || '')}">${formatDateBR(p.date)} — ${escapeHtml(p.description || 'Sem descrição')} [${dpStatusLabel(p.status)}]</option>`).join("")}
+                <option value="__outro__">✏️ Outro (texto livre)</option>
+              `;
+            }
+          } catch {
+            descSelect.innerHTML = `<option value="__outro__">✏️ Outro (texto livre)</option>`;
+            descCustom.classList.remove("hidden");
+          }
+        })();
+
+        descSelect.addEventListener("change", () => {
+          if (descSelect.value === "__outro__") {
+            descCustom.classList.remove("hidden");
+            descCustom.focus();
+          } else {
+            descCustom.classList.add("hidden");
+          }
+        });
       },
       onPrimary: async ({ close, panel }) => {
         const fileInput = panel.querySelector("#gal_input");
@@ -3574,7 +3620,10 @@ function wireGallery() {
           return;
         }
 
-        const description = panel.querySelector("#gal_desc")?.value;
+        const descSel = panel.querySelector("#gal_desc_plan");
+        const description = (!descSel?.value || descSel?.value === "__outro__")
+          ? panel.querySelector("#gal_desc_custom")?.value
+          : descSel?.value;
         const date = panel.querySelector("#gal_date")?.value;
         const btn = panel.querySelector("[data-primary]");
 
