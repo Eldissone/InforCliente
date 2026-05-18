@@ -1243,9 +1243,9 @@ projectRoutes.patch(
       referencia: z.string().optional().nullable(),
       status: z.enum(["CONFIRMADO", "PENDENTE"]).optional(),
     }).parse(req.body);
-
     // Apenas admin pode confirmar pagamento
-    if (body.status === "CONFIRMADO" && req.user?.role !== "admin") {
+    const userRole = (req.user?.role || "").toLowerCase();
+    if (body.status === "CONFIRMADO" && userRole !== "admin") {
       return res.status(403).json({ error: "APENAS_ADMIN_PODE_CONFIRMAR" });
     }
 

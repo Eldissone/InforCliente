@@ -219,8 +219,8 @@ async function loadProject() {
     el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #f1f5f9 ${progress}%, #f1f5f9 100%)`;
   }
 
-  el("projectStartDate").textContent = formatDateBR(p.startDate);
-  el("projectDueDate").textContent = formatDateBR(p.dueDate);
+  el("projectStartDate").textContent = p.startDate ? formatDateBR(p.startDate) : "---";
+  el("projectDueDate").textContent = p.dueDate ? formatDateBR(p.dueDate) : "---";
   updateDateAnalysis(p);
 
   // New: Update Operation Status (CBS)
@@ -332,190 +332,6 @@ async function loadTransactions() {
  * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
  * @param {Array}  budgetLines - linhas de orçamento
  */
-function renderScurve(allTxs, project, budgetLines) {
-  const container = el("scurve_container");
-  if (!container) return;
-
-  const totalBudget = Number(project.budgetTotal || 0);
-  const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-  // --- Intervalo real do projeto ---
-  const startDate = project.startDate ? new Date(project.startDate) : new Date();
-  const dueDate = project.dueDate ? new Date(project.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
-  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const rangeEnd = new Date(dueDate.getFullYear(), dueDate.getMonth(), 1);
-  if (rangeEnd <= rangeStart) rangeEnd.setMonth(rangeStart.getMonth() + 2);
-
-  // Construir lista de meses
-  const projectMonths = [];
-  const cur = new Date(rangeStart);
-  while (cur <= rangeEnd) {
-    projectMonths.push({
-      year: cur.getFullYear(),
-      month: cur.getMonth(),
-      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`
-    });
-    cur.setMonth(cur.getMonth() + 1);
-  }
-  const numMonths = projectMonths.length;
-
-  const getColIdx = (d) => {
-    const fd = new Date(d.getFullYear(), d.getMonth(), 1);
-    if (fd < rangeStart) return 0;
-    if (fd > rangeEnd) return numMonths - 1;
-    return (fd.getFullYear() - rangeStart.getFullYear()) * 12 + (fd.getMonth() - rangeStart.getMonth());
-  };
-
-  // --- Planejado: idÃªntico Ã  coluna "Previsto (P.)" da tabela ---
-  // 1) Budget lines distribuÃ­das linearmente (excluindo capital)
-  const plannedByMonth = Array(numMonths).fill(0);
-  const opLines = (budgetLines || []).filter(l => !["INVESTIMENTOS", "DEPRECIACAO"].includes(l.category));
-  if (opLines.length > 0) {
-    opLines.forEach(l => {
-      const perMonth = Number(l.total || 0) / numMonths;
-      for (let i = 0; i < numMonths; i++) plannedByMonth[i] += perMonth;
-    });
-  } else if (totalBudget > 0) {
-    const perMonth = totalBudget / numMonths;
-    for (let i = 0; i < numMonths; i++) plannedByMonth[i] = perMonth;
-  }
-
-  // 2) TransaÃ§Ãµes PENDING/LATE adicionadas ao mÃªs especÃ­fico da data (tal como a tabela)
-  (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").forEach(t => {
-    const idx = getColIdx(new Date(t.date));
-    const cat = t.category || "";
-    if (!["INVESTIMENTOS", "DEPRECIACAO"].includes(cat)) {
-      plannedByMonth[idx] += Number(t.amount || 0);
-    }
-  });
-
-  // --- Realizado: PAID â†’ realizedAmount ou amount (excluindo capital) ---
-  const realizedByMonth = Array(numMonths).fill(0);
-  (allTxs || []).filter(t => t.status === "PAID").forEach(t => {
-    const cat = t.category || "";
-    if (!["INVESTIMENTOS", "DEPRECIACAO"].includes(cat)) {
-      const idx = getColIdx(new Date(t.date));
-      realizedByMonth[idx] += Number(t.realizedAmount != null ? t.realizedAmount : t.amount || 0);
-    }
-  });
-
-  // --- Acumulados (Curva S) ---
-  const today = new Date();
-  const todayIdx = getColIdx(today);
-  const planCum = [];
-  const realCum = [];
-  let sumP = 0, sumR = 0;
-  for (let i = 0; i < numMonths; i++) {
-    sumP += plannedByMonth[i];
-    planCum.push(sumP);
-    if (i <= todayIdx) {
-      sumR += realizedByMonth[i];
-      realCum.push(sumR);
-    } else {
-      realCum.push(null);
-    }
-  }
-
-  const maxVal = Math.max(...planCum, ...realCum.filter(v => v !== null), 1);
-
-  // --- DEBUG (remover depois) ---
-  console.group("Curva S Diagnóstico");
-  console.log("totalBudget:", totalBudget);
-  console.log("opLines:", opLines.length, opLines.map(l => `${l.description}=${l.total}`));
-  console.log("allTxs:", (allTxs || []).length, "| PENDING/LATE:", (allTxs || []).filter(t => t.status === "PENDING" || t.status === "LATE").length, "| PAID:", (allTxs || []).filter(t => t.status === "PAID").length);
-  console.log("plannedByMonth:", plannedByMonth.map((v, i) => `${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
-  console.log("realizedByMonth:", realizedByMonth.map((v, i) => `${projectMonths[i].label}:${Math.round(v)}`).join(" | "));
-  console.log("planCum[-1]:", Math.round(planCum.at(-1)), "| realCum last:", Math.round(realCum.filter(v => v !== null).at(-1) ?? 0), "| maxVal:", Math.round(maxVal));
-  console.groupEnd();
-
-  const formatKZ = (v) => {
-    if (v == null || v === 0) return "0";
-    if (v >= 1e9) return (v / 1e9).toFixed(1) + "B";
-    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
-    if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
-    return String(Math.round(v));
-  };
-
-  // --- Renderizar barras via DOM API (evita bloqueio CSP de inline styles) ---
-  container.innerHTML = "";
-  container.style.overflowX = "auto";
-
-  const wrap = document.createElement("div");
-  wrap.style.cssText = `display:flex;align-items:flex-end;gap:6px;height:220px;padding:0 4px 28px;min-width:${numMonths * 48}px;`;
-  container.appendChild(wrap);
-
-  const isCurrent = (i) => i === Math.min(todayIdx, numMonths - 1);
-
-  projectMonths.forEach((m, i) => {
-    const pH = planCum[i] != null ? Math.max(2, Math.round((planCum[i] / maxVal) * 100)) : 0;
-    const rH = realCum[i] != null ? Math.max(2, Math.round((realCum[i] / maxVal) * 100)) : 0;
-    const isNow = isCurrent(i);
-    const hasPaid = realCum[i] != null && realCum[i] > 0;
-    const over = hasPaid && realCum[i] > planCum[i];
-
-    // Coluna do mÃªs
-    const col = document.createElement("div");
-    col.style.cssText = "flex:1;min-width:36px;position:relative;height:100%;";
-
-    // Barra Planejado (fundo, azul claro)
-    const barPlan = document.createElement("div");
-    barPlan.title = `Planejado: ${formatKZ(planCum[i])} kz`;
-    barPlan.style.position = "absolute";
-    barPlan.style.bottom = "0";
-    barPlan.style.left = "0";
-    barPlan.style.width = "100%";
-    barPlan.style.height = pH + "%";
-    barPlan.style.backgroundColor = isNow ? "#93c5fd" : "#bfdbfe";
-    barPlan.style.borderRadius = "4px 4px 0 0";
-    barPlan.style.transition = "height 0.6s ease";
-    col.appendChild(barPlan);
-
-    // Barra Realizado (frente, verde ou vermelho se acima do planejado)
-    if (realCum[i] != null) {
-      const barReal = document.createElement("div");
-      barReal.title = `Realizado: ${formatKZ(realCum[i])} kz`;
-      barReal.style.position = "absolute";
-      barReal.style.bottom = "0";
-      barReal.style.left = "20%";
-      barReal.style.width = "60%";
-      barReal.style.height = rH + "%";
-      barReal.style.backgroundColor = over ? "#f87171" : "#2afc8d";
-      barReal.style.borderRadius = "4px 4px 0 0";
-      barReal.style.transition = "height 0.7s ease 0.1s";
-      if (hasPaid) barReal.style.boxShadow = "0 0 10px rgba(42,252,141,0.6)";
-      col.appendChild(barReal);
-    }
-
-    // Label do mÃªs
-    const label = document.createElement("span");
-    label.textContent = m.label;
-    label.style.position = "absolute";
-    label.style.bottom = "-20px";
-    label.style.left = "50%";
-    label.style.transform = "translateX(-50%)";
-    label.style.fontSize = "9px";
-    label.style.fontWeight = isNow ? "800" : "600";
-    label.style.color = isNow ? "#0d3fd1" : "#94a3b8";
-    label.style.whiteSpace = "nowrap";
-    col.appendChild(label);
-
-    // Ponto marcador do mÃªs atual
-    if (isNow) {
-      const dot = document.createElement("span");
-      dot.style.position = "absolute";
-      dot.style.bottom = "-5px";
-      dot.style.left = "50%";
-      dot.style.transform = "translateX(-50%)";
-      dot.style.width = "4px";
-      dot.style.height = "4px";
-      dot.style.borderRadius = "50%";
-      dot.style.backgroundColor = "#0d3fd1";
-      col.appendChild(dot);
-    }
-
-    wrap.appendChild(col);
-  });
-}
 
 async function loadBudgetExecution() {
   const id = getProjectId();
@@ -762,7 +578,14 @@ async function loadBudgetExecution() {
 
   if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
   if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
-  if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(gTotalC, projectState?.currency);
+  
+  // Dashboard Cards
+  if (el("budgetConsumed")) el("budgetConsumed").textContent = formatCurrency(gTotalC, projectState?.currency);
+  if (el("budgetConsumedText")) el("budgetConsumedText").textContent = formatCurrency(gTotalC, projectState?.currency);
+  
+  const committed = gTotalP - gTotalC;
+  if (el("budgetCommitted")) el("budgetCommitted").textContent = formatCurrency(committed, projectState?.currency);
+  if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(committed, projectState?.currency);
 
   if (el("totalExecutionPct")) {
     const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
@@ -772,26 +595,26 @@ async function loadBudgetExecution() {
   }
 
   // Renderiza Curva S com dados reais (todas as transaÃ§Ãµes + linhas de orÃ§amento)
-  renderScurve(txs, p, lines);
 
   renderOperationStatus(lines);
 }
 
 async function renderOperationStatus(lines) {
   const id = getProjectId();
-  // Busca todos os lançamentos para nÃ£o depender apenas dos vinculados
   const txData = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`);
 
   const cats = {
     MATERIALS: { total: 0, consumed: 0, pctId: "stat_materials_pct", subId: "stat_materials_sub" },
     LABOR: { total: 0, consumed: 0, pctId: "stat_labor_pct", subId: "stat_labor_sub" },
-    EQUIPMENT: { total: 0, consumed: 0, pctId: "stat_machinery_pct", subId: "stat_machinery_sub" }
+    PESSOAL: { total: 0, consumed: 0, pctId: "stat_pessoal_pct", subId: "stat_pessoal_sub" },
+    OPERACIONAL: { total: 0, consumed: 0, pctId: "stat_operacional_pct", subId: "stat_operacional_sub" }
   };
 
   const getGroup = (c) => {
     if (c === "MATERIALS" || c === "MATERIAIS_INSUMOS") return "MATERIALS";
-    if (c === "LABOR" || c === "SERVICOS_MAO_DE_OBRA" || c === "GASTOS_PESSOAL") return "LABOR";
-    if (c === "EQUIPMENT" || c === "INVESTIMENTOS" || c === "DEPRECIACAO") return "EQUIPMENT";
+    if (c === "LABOR" || c === "SERVICOS_MAO_DE_OBRA") return "LABOR";
+    if (c === "GASTOS_PESSOAL" || c === "PESSOAL") return "PESSOAL";
+    if (c === "DESPESAS_OPERACIONAIS" || c === "OPERACIONAL") return "OPERACIONAL";
     return null;
   };
 
@@ -2182,23 +2005,30 @@ function metodoPagtoLabel(m) {
     mbway: "MBWay",
     outro: "Outro",
   };
-  return m ? (map[m.toLowerCase()] || m) : "â€”";
+  return m ? (map[m.toLowerCase()] || m) : "-";
 }
 
-function renderPaymentRow(p, role) {
+function renderPaymentRow(p, roleRaw) {
+  // Extract role name if it's an object, otherwise use string
+  const role = (typeof roleRaw === 'object' ? (roleRaw.name || roleRaw.slug || "") : (roleRaw || "")).toLowerCase();
+  
   const isConf = p.status === "CONFIRMADO";
   const statusCls = isConf ? "text-emerald-700 bg-emerald-50 border border-emerald-100" : "text-amber-600 bg-amber-50 border border-amber-100";
   const statusDot = isConf ? "bg-emerald-500" : "bg-amber-400";
   const statusText = isConf ? "Confirmado" : "Pendente";
-  const canConfirm = !isConf && role === "admin";
-  const canDelete = role === "admin";
+  
+  // Authorized roles: admin, administrador, operador, supervisor
+  const isAuthorized = ["admin", "administrador", "operador", "supervisor"].includes(role);
+  
+  const canConfirm = !isConf && isAuthorized;
+  const canDelete = isAuthorized;
 
   return `
     <tr class="hover:bg-slate-50/70 transition-colors">
-      <td class="px-10 py-4 text-xs font-semibold text-slate-500 whitespace-nowrap">${formatDateBR(p.dataPagamento)}</td>
+      <td class="px-10 py-4 text-xs font-semibold text-slate-500 whitespace-nowrap">${p.dataPagamento ? formatDateBR(p.dataPagamento) : "-"}</td>
       <td class="px-10 py-4 font-bold text-slate-700 whitespace-nowrap">${p.metodo ? escapeHtml(p.metodo).toUpperCase() : "-"}</td>
-      <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "â€”")}</td>
-      <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "â€”")}</td>
+      <td class="px-10 py-4 text-xs text-slate-500 hidden lg:table-cell">${escapeHtml(p.referencia || "-")}</td>
+      <td class="px-10 py-4 text-xs text-slate-400 hidden xl:table-cell">${escapeHtml(p.criadoPor || "-")}</td>
       <td class="px-10 py-4 text-right font-black text-slate-900 whitespace-nowrap">${formatCurrency(p.valor, projectState?.currency)}</td>
       <td class="px-10 py-4 text-center">
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${statusCls}">
@@ -2210,7 +2040,7 @@ function renderPaymentRow(p, role) {
           ${p.comprovativoPath ? `<a href="${getAssetUrl(p.comprovativoPath)}" target="_blank" title="Ver Comprovativo" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">picture_as_pdf</span></a>` : ""}
           ${canConfirm ? `<button data-confirm-payment="${p.id}" title="Confirmar pagamento" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">check_circle</span></button>` : ""}
           ${canDelete ? `<button data-delete-payment="${p.id}" title="Apagar pagamento" class="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-base">delete</span></button>` : ""}
-          ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">â€”</span>` : ""}
+          ${!canConfirm && !canDelete && !p.comprovativoPath ? `<span class="text-slate-300 text-xs">-</span>` : ""}
         </div>
       </td>
     </tr>
@@ -2905,6 +2735,7 @@ async function openStockMovementModal() {
           toast("Operação registada com sucesso", { type: "success" });
           close();
           loadStock();
+          loadBudgetExecution();
         } catch (err) {
           setButtonLoading(btn, false);
           toast(err.message || "Erro ao salvar", { type: "error" });

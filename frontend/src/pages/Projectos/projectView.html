@@ -304,10 +304,10 @@
             </section>
 
             <!-- Bento Grid: Main Stats -->
-            <div class="grid grid-cols-12 gap-8 mb-10">
+            <div class="flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
                 <!-- Budget Card -->
                 <div
-                    class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-2xl p-6 md:p-10 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20">
+                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 h-full w-full min-w-0 min-h-[420px] flex flex-col justify-between">
                     <div
                         class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all">
                     </div>
@@ -343,7 +343,7 @@
 
                 <!-- Detailed Costs Card -->
                 <div
-                    class="col-span-12 lg:col-span-4 bg-white rounded-2xl p-6 md:p-10 border border-slate-100 shadow-sm flex flex-col justify-between">
+                    class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0 min-h-[420px]">
                     <div>
                         <div class="flex justify-between items-center mb-6 md:mb-10">
                             <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
@@ -395,7 +395,7 @@
 
                 <!-- Progress & Timeline Card -->
                 <div
-                    class="col-span-12 lg:col-span-4 bg-[#F8FAFC] rounded-2xl p-10 border border-slate-100 flex flex-col justify-between">
+                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-between h-full w-full min-w-0 min-h-[420px]">
                     <div>
                         <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
                         </h3>
@@ -426,31 +426,9 @@
                     </div>
                 </div>
 
-                <!-- Charts Section -->
-                <div class="col-span-12 lg:col-span-8 bg-white rounded-2xl p-10 border border-slate-100 shadow-sm">
-                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
-                        <div>
-                            <h3 class="text-2xl font-bold text-slate-900">Curva S de Médias</h3>
-                            <p class="text-sm text-slate-500 font-medium">Histórico acumulado planejado vs. realizado
-                            </p>
-                        </div>
-                        <div class="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
-                            <div class="flex items-center gap-2 text-slate-400">
-                                <span class="w-3 h-3 rounded bg-slate-200"></span> Planejado
-                            </div>
-                            <div class="flex items-center gap-2 text-blue-600">
-                                <span class="w-3 h-3 rounded bg-blue-500"></span> Realizado
-                            </div>
-                        </div>
-                    </div>
-                    <div id="scurve_container" class="w-full h-64 flex items-end gap-1.5 custom-scroll pb-10">
-                        <!-- Bars via JS -->
-                    </div>
-                </div>
-
                 <!-- CBS Status -->
                 <div
-                    class="col-span-12 lg:col-span-4 bg-[#0F172A] rounded-2xl p-10 text-white shadow-2xl shadow-slate-900/10">
+                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 h-full w-full min-w-0 min-h-[420px] flex flex-col justify-between">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-500 mb-8">Operação</h3>
                     <div id="cbsList" class="space-y-5 overflow-y-auto max-h-[350px] custom-scroll pr-2">
                         <!-- Stat items with standard IDs for JS updateOperationStatus -->
@@ -519,9 +497,10 @@
                                 id="stat_outras_sub"></span></div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Budget Execution Matrix -->
-                <div class="col-span-12 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+            <!-- Budget Execution Matrix -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
                     <div
                         class="px-10 py-8 border-b border-slate-50 bg-[#0F172A] flex justify-between items-center text-white">
                         <div>
@@ -541,8 +520,8 @@
                     </div>
                 </div>
 
-                <!-- Recent Transactions -->
-                <div class="col-span-12 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <!-- Recent Transactions -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
                     <div
                         class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4">
                         <h3 class="text-2xl font-bold text-slate-900">Lançamentos Recentes</h3>
@@ -578,8 +557,8 @@
                     </div>
                 </div>
 
-                <!-- ====== PAGAMENTOS DO CLIENTE ====== -->
-                <div class="col-span-12 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <!-- ====== PAGAMENTOS DO CLIENTE ====== -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden w-full">
                     <!-- Header -->
                     <div
                         class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4 bg-gradient-to-r from-emerald-50/60 to-white">
