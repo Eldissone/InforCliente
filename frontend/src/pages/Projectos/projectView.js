@@ -3698,9 +3698,119 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
 }
 window.openEditPlannedModal = openEditPlannedModal;
 
-// ==========================================
-// PLANOS DIÁRIOS (DAILY PLANS)
-// ==========================================
+function renderDailyPlansList() {
+  const container = el("dailyPlansList");
+  if (!container || !window.dailyPlansState) return;
+
+  const searchQuery = (el("dpFilterSearch")?.value || "").toLowerCase().trim();
+  const filterStatus = el("dpFilterStatus")?.value || "all";
+  const sortBy = el("dpFilterSort")?.value || "date_desc";
+
+  let filtered = [...window.dailyPlansState];
+
+  // 1. Apply search filter (by description or technician name)
+  if (searchQuery) {
+    filtered = filtered.filter(p => {
+      const descMatch = (p.description || "").toLowerCase().includes(searchQuery);
+      
+      // Check if any technician matches
+      const techMatch = p.tasks.some(t => {
+        const name = (t.technician?.name || "").toLowerCase();
+        const email = (t.technician?.email || "").toLowerCase();
+        return name.includes(searchQuery) || email.includes(searchQuery);
+      });
+
+      return descMatch || techMatch;
+    });
+  }
+
+  // 2. Apply status filter
+  if (filterStatus !== "all") {
+    filtered = filtered.filter(p => p.status === filterStatus);
+  }
+
+  // 3. Apply sort
+  filtered.sort((a, b) => {
+    if (sortBy === "date_desc") {
+      return new Date(b.date) - new Date(a.date);
+    } else if (sortBy === "date_asc") {
+      return new Date(a.date) - new Date(b.date);
+    } else if (sortBy === "created_desc") {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    } else if (sortBy === "created_asc") {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    }
+    return 0;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="p-10 flex flex-col items-center text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">
+        <span class="material-symbols-outlined text-4xl mb-2 text-slate-350">event_busy</span>
+        Nenhum plano diário corresponde aos filtros aplicados.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(p => {
+    let statusBadge = "";
+    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
+    if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
+    if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
+    if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
+    if (p.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
+
+    // Fetch technicians assigned
+    const uniqueTechs = [...new Set(p.tasks.map(t => t.technician?.name || t.technician?.email || "Sem Técnico").filter(Boolean))];
+    const techDisplay = uniqueTechs.length > 0 ? uniqueTechs.join(', ') : "Sem Técnico";
+
+    return `
+      <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group w-full">
+        <div>
+          <div class="flex items-center gap-3 mb-2">
+            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
+            ${statusBadge}
+          </div>
+          <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
+          <div class="mt-2 text-xs font-semibold text-slate-500 flex flex-wrap gap-4 items-center">
+            <span>${p.tasks.length} Tarefa(s)</span>
+            <span>${p.materials.length} Material(ais)</span>
+            <span class="flex items-center gap-1 text-slate-400 font-medium">
+              <span class="material-symbols-outlined text-xs">person</span> ${escapeHtml(techDisplay)}
+            </span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
+          ${p.status === "PENDING_MATERIAL" ? `
+            <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
+              <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
+            </button>
+          ` : ""}
+          ${p.status === "PENDING_VALIDATION" ? `
+            <button data-role-visible="admin,supervisor,operador" onclick="window.validatePlan('${p.id}')" class="h-10 bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
+              <span class="material-symbols-outlined text-sm">fact_check</span> Validar Relatório
+            </button>
+          ` : ""}
+          ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
+            <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
+              <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
+            </button>
+          ` : ""}
+          <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
+            <span class="material-symbols-outlined text-sm">visibility</span>
+          </button>
+          ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
+            <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
+              <span class="material-symbols-outlined text-sm">delete</span>
+            </button>
+          ` : ""}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  applyRoleVisibility();
+}
 
 async function loadDailyPlans() {
   const id = getProjectId();
@@ -3708,74 +3818,24 @@ async function loadDailyPlans() {
   if (!container) return;
 
   try {
-    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">Carregando planos...</div>`;
+    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">Carregando planos...</div>`;
 
     const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
+    window.dailyPlansState = plans || [];
 
-    if (!plans || plans.length === 0) {
-      container.innerHTML = `
-        <div class="p-10 flex flex-col items-center text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">
-          <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">fact_check</span>
-          Nenhum plano diário registado.
-        </div>`;
-      return;
+    // Wire up event listeners if they haven't been wired yet
+    if (!window.dailyPlansListenersWired) {
+      el("dpFilterSearch")?.addEventListener("input", renderDailyPlansList);
+      el("dpFilterStatus")?.addEventListener("change", renderDailyPlansList);
+      el("dpFilterSort")?.addEventListener("change", renderDailyPlansList);
+      window.dailyPlansListenersWired = true;
     }
 
-    container.innerHTML = plans.map(p => {
-      let statusBadge = "";
-      if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
-      if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
-      if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
-      if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
-      if (p.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
-
-      return `
-        <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group">
-          <div>
-            <div class="flex items-center gap-3 mb-2">
-              <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
-              ${statusBadge}
-            </div>
-            <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
-            <div class="mt-2 text-xs font-semibold text-slate-500 flex gap-4">
-              <span>${p.tasks.length} Tarefa(s)</span>
-              <span>${p.materials.length} Material(ais)</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
-            ${p.status === "PENDING_MATERIAL" ? `
-              <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-                <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
-              </button>
-            ` : ""}
-            ${p.status === "PENDING_VALIDATION" ? `
-              <button data-role-visible="admin,supervisor,operador" onclick="window.validatePlan('${p.id}')" class="h-10 bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-                <span class="material-symbols-outlined text-sm">fact_check</span> Validar Relatório
-              </button>
-            ` : ""}
-            ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
-              <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-                <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
-              </button>
-            ` : ""}
-            <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
-              <span class="material-symbols-outlined text-sm">visibility</span>
-            </button>
-            ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
-              <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
-                <span class="material-symbols-outlined text-sm">delete</span>
-              </button>
-            ` : ""}
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    applyRoleVisibility();
+    renderDailyPlansList();
 
   } catch (err) {
     console.error(err);
-    container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl">Erro ao carregar planos.</div>`;
+    container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl w-full">Erro ao carregar planos.</div>`;
   }
 }
 window.loadDailyPlans = loadDailyPlans;
@@ -3862,13 +3922,10 @@ async function wireDailyPlans() {
         return;
       }
       container.innerHTML = selectedTasks.map((t, idx) => `
-        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2 border-l-4 ${t.technicianId ? 'border-blue-400' : 'border-slate-300'}">
+        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2 border-l-4 border-blue-400">
           <div class="text-xs flex flex-col">
             <span class="font-bold text-slate-900">${escapeHtml(t.name)}</span>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-slate-500 font-medium">Qtd: ${t.plannedQty}</span>
-              ${t.technicianName ? `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold text-[10px]"><span class="material-symbols-outlined text-[10px] align-middle mr-1">person</span>${escapeHtml(t.technicianName)}</span>` : ''}
-            </div>
+            <span class="text-slate-500 font-medium mt-1">Qtd: ${t.plannedQty}</span>
           </div>
           <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedTask(${idx})">
             <span class="material-symbols-outlined text-sm">close</span>
@@ -3911,9 +3968,9 @@ async function wireDailyPlans() {
               <input type="text" id="dp_desc" placeholder="Ex: Betonagem dos pilares" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
             </div>
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Técnico Geral Responsável</label>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Técnico Responsável</label>
               <select id="dp_plan_tech" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
-                <option value="">Selecione o Técnico Responsável...</option>
+                <option value="">Selecione o Técnico ...</option>
                 ${technicians.map(t => `<option value="${t.id}">${escapeHtml(t.name || t.email)}</option>`).join('')}
               </select>
             </div>
@@ -3927,11 +3984,7 @@ async function wireDailyPlans() {
                 <option value="">Selecione a tarefa do Avanço Físico...</option>
                 ${progressTasks.map(pt => `<option value="${pt.id}">${escapeHtml(pt.description)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`).join('')}
               </select>
-              <div class="flex flex-col sm:flex-row gap-2">
-                <select id="dp_task_tech" class="sm:w-1/3 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
-                  <option value="">Técnico Específico (Opcional)</option>
-                  ${technicians.map(t => `<option value="${t.id}">${escapeHtml(t.name || t.email)}</option>`).join('')}
-                </select>
+              <div class="flex gap-2">
                 <input type="number" id="dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <button type="button" id="dp_add_task_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
               </div>
@@ -3968,25 +4021,20 @@ async function wireDailyPlans() {
 
         panel.querySelector("#dp_add_task_btn").addEventListener("click", () => {
           const sel = panel.querySelector("#dp_task_select");
-          const techSel = panel.querySelector("#dp_task_tech");
           const qty = panel.querySelector("#dp_task_qty").value;
           if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione tarefa e quantidade válida.");
 
           const opt = sel.options[sel.selectedIndex];
-          const techOpt = techSel.selectedIndex > 0 ? techSel.options[techSel.selectedIndex] : null;
 
           selectedTasks.push({
             progressTaskId: sel.value,
             name: opt.text.split('(')[0].trim(),
-            plannedQty: Number(qty),
-            technicianId: techSel.value || null,
-            technicianName: techOpt ? techOpt.text : null
+            plannedQty: Number(qty)
           });
           updateTasksUI(panel);
 
           sel.value = "";
           panel.querySelector("#dp_task_qty").value = "";
-          techSel.value = "";
         });
 
         panel.querySelector("#dp_add_mat_btn").addEventListener("click", () => {
@@ -4008,16 +4056,20 @@ async function wireDailyPlans() {
       onPrimary: async ({ close, btn, panel }) => {
         const date = panel.querySelector("#dp_date").value;
         const description = panel.querySelector("#dp_desc").value;
-        const planTechId = panel.querySelector("#dp_plan_tech").value || null;
+        const planTechId = panel.querySelector("#dp_plan_tech").value;
+
+        if (!planTechId) {
+          return toast("Por favor, selecione o Técnico Responsável.", { type: "error" });
+        }
 
         if (selectedTasks.length === 0) {
           return toast("Adicione pelo menos uma tarefa ao plano.", { type: "error" });
         }
 
-        // Apply plan-level technician to all tasks that do not have a specific technician set
+        // All tasks are assigned to the main selected technician
         const finalTasks = selectedTasks.map(t => ({
           ...t,
-          technicianId: t.technicianId || planTechId
+          technicianId: planTechId
         }));
 
         setButtonLoading(btn, true);

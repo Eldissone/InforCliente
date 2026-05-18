@@ -307,7 +307,7 @@
             <div class="flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
                 <!-- Budget Card -->
                 <div
-                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 h-full w-full min-w-0 min-h-[420px] flex flex-col justify-between">
+                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 h-full w-full min-w-0 flex flex-col justify-between">
                     <div
                         class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all">
                     </div>
@@ -343,7 +343,7 @@
 
                 <!-- Detailed Costs Card -->
                 <div
-                    class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0 min-h-[420px]">
+                    class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0">
                     <div>
                         <div class="flex justify-between items-center mb-6 md:mb-10">
                             <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
@@ -395,7 +395,7 @@
 
                 <!-- Progress & Timeline Card -->
                 <div
-                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-between h-full w-full min-w-0 min-h-[420px]">
+                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-between h-full w-full min-w-0">
                     <div>
                         <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
                         </h3>
@@ -428,7 +428,7 @@
 
                 <!-- CBS Status -->
                 <div
-                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 h-full w-full min-w-0 min-h-[420px] flex flex-col justify-between">
+                    class="flex-1 bg-[#0F172A] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 h-full w-full min-w-0 flex flex-col justify-between">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-500 mb-8">Operação</h3>
                     <div id="cbsList" class="space-y-5 overflow-y-auto max-h-[350px] custom-scroll pr-2">
                         <!-- Stat items with standard IDs for JS updateOperationStatus -->
@@ -501,175 +501,171 @@
 
             <!-- Budget Execution Matrix -->
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
-                    <div
-                        class="px-10 py-8 border-b border-slate-50 bg-[#0F172A] flex justify-between items-center text-white">
-                        <div>
-                            <h3 class="text-2xl font-bold">Matriz de Execução</h3>
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo
-                                granular mensal</p>
-                        </div>
-                        <button data-toggle-table="matrix"
-                            class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all text-white/50 hover:text-white">
-                            <span class="material-symbols-outlined transition-transform">expand_more</span>
-                        </button>
+                <div
+                    class="px-10 py-8 border-b border-slate-50 bg-[#0F172A] flex justify-between items-center text-white">
+                    <div>
+                        <h3 class="text-2xl font-bold">Matriz de Execução</h3>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo
+                            granular mensal</p>
                     </div>
-                    <div data-table-body="matrix" class="overflow-x-auto w-full custom-scroll">
-                        <div id="budgetExecutionMatrixContainer" class="p-4">
-                            <!-- Matrix table via JS -->
-                        </div>
+                    <button data-toggle-table="matrix"
+                        class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all text-white/50 hover:text-white">
+                        <span class="material-symbols-outlined transition-transform">expand_more</span>
+                    </button>
+                </div>
+                <div data-table-body="matrix" class="overflow-x-auto w-full custom-scroll">
+                    <div id="budgetExecutionMatrixContainer" class="p-4">
+                        <!-- Matrix table via JS -->
                     </div>
                 </div>
+            </div>
 
             <!-- Recent Transactions -->
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
+                <div
+                    class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4">
+                    <h3 class="text-2xl font-bold text-slate-900">Lançamentos Recentes</h3>
+                    <div class="flex items-center gap-4 w-full md:w-auto">
+                        <div class="relative flex-1 md:w-64">
+                            <span
+                                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input id="transactionsSearch"
+                                class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                placeholder="Buscar lançamentos..." type="text" />
+                        </div>
+                        <button data-toggle-table="transactions"
+                            class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                            <span class="material-symbols-outlined transition-transform">expand_more</span>
+                        </button>
+                    </div>
+                </div>
+                <div data-table-body="transactions" class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
+                                <th class="px-10 py-5">Data</th>
+                                <th class="px-10 py-5">Descrição</th>
+                                <th class="px-10 py-5">Categoria</th>
+                                <th class="px-10 py-5">Status</th>
+                                <th class="px-10 py-5 text-right">Valor</th>
+                                <th class="px-10 py-5 text-right">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ====== PAGAMENTOS DO CLIENTE ====== -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden w-full">
+                <!-- Header -->
+                <div
+                    class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4 bg-gradient-to-r from-emerald-50/60 to-white">
+                    <div>
+                        <h3 class="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
+                            Pagamentos do Cliente
+                            <span
+                                class="material-symbols-outlined text-2xl text-emerald-600">account_balance_wallet</span>
+                        </h3>
+                        <p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1">Entradas financeiras
+                            recebidas da
+                            entidade contratante</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button id="addPaymentBtn" data-role-visible="admin,operador"
+                            class="h-11 md:h-12 bg-emerald-600 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap text-xs md:text-sm">
+                            Registar Pagamento
+                            <span class="material-symbols-outlined text-lg">add</span>
+                        </button>
+                        <button data-toggle-table="payments"
+                            class="w-10 h-10 rounded-xl bg-emerald-100/50 flex items-center justify-center hover:bg-emerald-100 transition-all text-emerald-600">
+                            <span class="material-symbols-outlined transition-transform">expand_more</span>
+                        </button>
+                    </div>
+                </div>
+                <div data-table-body="payments">
+                    <!-- KPI Cards -->
                     <div
-                        class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4">
-                        <h3 class="text-2xl font-bold text-slate-900">Lançamentos Recentes</h3>
-                        <div class="flex items-center gap-4 w-full md:w-auto">
-                            <div class="relative flex-1 md:w-64">
-                                <span
-                                    class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                                <input id="transactionsSearch"
-                                    class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
-                                    placeholder="Buscar lançamentos..." type="text" />
+                        class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 px-6 py-6 md:px-10 md:py-8 border-b border-slate-50">
+                        <div
+                            class="p-4 md:p-5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-4">
+                            <div
+                                class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-emerald-600 flex items-center justify-center text-white">
+                                <span class="material-symbols-outlined text-xl">payments</span>
                             </div>
-                            <button data-toggle-table="transactions"
-                                class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
-                                <span class="material-symbols-outlined transition-transform">expand_more</span>
-                            </button>
+                            <div>
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">
+                                    Total Recebido</p>
+                                <p id="paymentTotalPago"
+                                    class="text-lg md:text-xl font-bold text-emerald-700 tracking-tight">---
+                                </p>
+                            </div>
+                        </div>
+                        <div class="p-4 md:p-5 rounded-2xl bg-red-50 border border-red-100 flex items-center gap-4">
+                            <div
+                                class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-red-500 flex items-center justify-center text-white">
+                                <span class="material-symbols-outlined text-xl">money_off</span>
+                            </div>
+                            <div>
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-red-500 mb-0.5">
+                                    Saldo em
+                                    Dívida</p>
+                                <p id="paymentDivida" class="text-lg md:text-xl font-bold text-red-600 tracking-tight">
+                                    ---</p>
+                            </div>
+                        </div>
+                        <div class="p-4 md:p-5 rounded-2xl bg-blue-50 border border-blue-100 flex items-center gap-4">
+                            <div
+                                class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white">
+                                <span class="material-symbols-outlined text-xl">percent</span>
+                            </div>
+                            <div>
+                                <p
+                                    class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">
+                                    Percentual Pago</p>
+                                <p id="paymentPct" class="text-lg md:text-xl font-bold text-blue-700 tracking-tight">0%
+                                </p>
+                            </div>
                         </div>
                     </div>
-                    <div data-table-body="transactions" class="overflow-x-auto">
+                    <!-- Progress Bar -->
+                    <div class="px-6 py-4 md:px-10 border-b border-slate-50">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Progresso
+                                de
+                                Recebimento</span>
+                            <span id="paymentPctLabel" class="text-[10px] font-black text-emerald-600">0%</span>
+                        </div>
+                        <div class="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div id="paymentProgressBar"
+                                class="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+                                style="width:0%"></div>
+                        </div>
+                    </div>
+                    <!-- Tabela -->
+                    <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
                                 <tr
                                     class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
-                                    <th class="px-10 py-5">Data</th>
-                                    <th class="px-10 py-5">Descrição</th>
-                                    <th class="px-10 py-5">Categoria</th>
-                                    <th class="px-10 py-5">Status</th>
-                                    <th class="px-10 py-5 text-right">Valor</th>
-                                    <th class="px-10 py-5 text-right">Ação</th>
+                                    <th class="px-6 md:px-10 py-5">Data</th>
+                                    <th class="px-6 md:px-10 py-5">Método</th>
+                                    <th class="px-10 py-5 hidden lg:table-cell">Referência</th>
+                                    <th class="px-10 py-5 hidden xl:table-cell">Registado Por</th>
+                                    <th class="px-6 md:px-10 py-5 text-right">Valor</th>
+                                    <th class="px-6 md:px-10 py-5 text-center">Status</th>
+                                    <th class="px-6 md:px-10 py-5 text-center">Ação</th>
                                 </tr>
                             </thead>
-                            <tbody id="transactionsTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
+                            <tbody id="paymentsTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
                         </table>
                     </div>
                 </div>
-
-            <!-- ====== PAGAMENTOS DO CLIENTE ====== -->
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden w-full">
-                    <!-- Header -->
-                    <div
-                        class="px-6 py-6 md:px-10 md:py-8 border-b border-slate-50 flex flex-row justify-between items-center gap-4 bg-gradient-to-r from-emerald-50/60 to-white">
-                        <div>
-                            <h3 class="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-3">
-                                Pagamentos do Cliente
-                                <span
-                                    class="material-symbols-outlined text-2xl text-emerald-600">account_balance_wallet</span>
-                            </h3>
-                            <p class="text-[10px] md:text-xs text-slate-400 font-medium mt-1">Entradas financeiras
-                                recebidas da
-                                entidade contratante</p>
-                        </div>
-                        <div class="flex items-center gap-4">
-                            <button id="addPaymentBtn" data-role-visible="admin,operador"
-                                class="h-11 md:h-12 bg-emerald-600 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap text-xs md:text-sm">
-                                Registar Pagamento
-                                <span class="material-symbols-outlined text-lg">add</span>
-                            </button>
-                            <button data-toggle-table="payments"
-                                class="w-10 h-10 rounded-xl bg-emerald-100/50 flex items-center justify-center hover:bg-emerald-100 transition-all text-emerald-600">
-                                <span class="material-symbols-outlined transition-transform">expand_more</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div data-table-body="payments">
-                        <!-- KPI Cards -->
-                        <div
-                            class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 px-6 py-6 md:px-10 md:py-8 border-b border-slate-50">
-                            <div
-                                class="p-4 md:p-5 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-4">
-                                <div
-                                    class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-emerald-600 flex items-center justify-center text-white">
-                                    <span class="material-symbols-outlined text-xl">payments</span>
-                                </div>
-                                <div>
-                                    <p
-                                        class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">
-                                        Total Recebido</p>
-                                    <p id="paymentTotalPago"
-                                        class="text-lg md:text-xl font-bold text-emerald-700 tracking-tight">---
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="p-4 md:p-5 rounded-2xl bg-red-50 border border-red-100 flex items-center gap-4">
-                                <div
-                                    class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-red-500 flex items-center justify-center text-white">
-                                    <span class="material-symbols-outlined text-xl">money_off</span>
-                                </div>
-                                <div>
-                                    <p
-                                        class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-red-500 mb-0.5">
-                                        Saldo em
-                                        Dívida</p>
-                                    <p id="paymentDivida"
-                                        class="text-lg md:text-xl font-bold text-red-600 tracking-tight">
-                                        ---</p>
-                                </div>
-                            </div>
-                            <div
-                                class="p-4 md:p-5 rounded-2xl bg-blue-50 border border-blue-100 flex items-center gap-4">
-                                <div
-                                    class="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white">
-                                    <span class="material-symbols-outlined text-xl">percent</span>
-                                </div>
-                                <div>
-                                    <p
-                                        class="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">
-                                        Percentual Pago</p>
-                                    <p id="paymentPct"
-                                        class="text-lg md:text-xl font-bold text-blue-700 tracking-tight">0%
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Progress Bar -->
-                        <div class="px-6 py-4 md:px-10 border-b border-slate-50">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Progresso
-                                    de
-                                    Recebimento</span>
-                                <span id="paymentPctLabel" class="text-[10px] font-black text-emerald-600">0%</span>
-                            </div>
-                            <div class="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div id="paymentProgressBar"
-                                    class="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.4)]"
-                                    style="width:0%"></div>
-                            </div>
-                        </div>
-                        <!-- Tabela -->
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left">
-                                <thead>
-                                    <tr
-                                        class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50">
-                                        <th class="px-6 md:px-10 py-5">Data</th>
-                                        <th class="px-6 md:px-10 py-5">Método</th>
-                                        <th class="px-10 py-5 hidden lg:table-cell">Referência</th>
-                                        <th class="px-10 py-5 hidden xl:table-cell">Registado Por</th>
-                                        <th class="px-6 md:px-10 py-5 text-right">Valor</th>
-                                        <th class="px-6 md:px-10 py-5 text-center">Status</th>
-                                        <th class="px-6 md:px-10 py-5 text-center">Ação</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="paymentsTbody" class="divide-y divide-slate-50 text-slate-600"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
             </div>
+
+        </div>
         </div>
 
         <!-- Relatorio Tab -->
@@ -738,7 +734,7 @@
         <!-- Planos Diários Tab -->
         <div id="tab_planos_diarios" class="tab-content hidden">
             <div
-                class="flex flex-row justify-between items-center gap-4 mb-10 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Planos Diários</h2>
                     <p class="text-sm text-slate-500 font-medium">Gestão da execução diária e requisição de materiais.
@@ -749,6 +745,39 @@
                         class="h-11 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
                         Novo Plano <span class="material-symbols-outlined text-xl">post_add</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- Filtros de Planos Diários -->
+            <div
+                class="bg-white p-4 sm:p-6 mb-8 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
+                <div class="w-full md:flex-1 relative">
+                    <span
+                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                    <input id="dpFilterSearch" type="text" placeholder="Buscar por descrição ou técnico..."
+                        class="w-full pl-11 pr-4 h-11 bg-slate-50 border-none rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+                <div class="flex flex-wrap sm:flex-nowrap gap-4 w-full md:w-auto shrink-0">
+                    <div class="w-full sm:w-44">
+                        <select id="dpFilterStatus"
+                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
+                            <option value="all">Todos os Estados</option>
+                            <option value="DRAFT">Rascunho</option>
+                            <option value="PENDING_MATERIAL">Aguardando Material</option>
+                            <option value="IN_PROGRESS">Em Execução</option>
+                            <option value="PENDING_VALIDATION">Pendente Validação</option>
+                            <option value="COMPLETED">Concluído</option>
+                        </select>
+                    </div>
+                    <div class="w-full sm:w-56">
+                        <select id="dpFilterSort"
+                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
+                            <option value="date_desc">Data do Plano (Mais Recente)</option>
+                            <option value="date_asc">Data do Plano (Mais Antigo)</option>
+                            <option value="created_desc">Criação (Mais Recente)</option>
+                            <option value="created_asc">Criação (Mais Antigo)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
