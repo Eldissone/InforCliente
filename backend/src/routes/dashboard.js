@@ -13,6 +13,26 @@ function getScopedClientId(req) {
   return req.user.clientId || null;
 }
 
+async function getExchangeRates() {
+  const rates = { USD: 918, EUR: 990 }; // Robust fallbacks, matching format.js 918
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: controller.signal });
+    clearTimeout(timeout);
+    const data = await res.json();
+    if (data?.rates) {
+      if (data.rates.AOA) rates.USD = Number(data.rates.AOA);
+      if (data.rates.EUR) {
+        rates.EUR = rates.USD / Number(data.rates.EUR);
+      }
+    }
+  } catch (e) {
+    // Keep fallbacks
+  }
+  return rates;
+}
+
 dashboardRoutes.get(
   "/metrics",
   requirePermission("dashboard", "view"),
@@ -20,38 +40,187 @@ dashboardRoutes.get(
     const scopedClientId = getScopedClientId(req);
     const userRole = (req.user?.role || "").toLowerCase();
 
+    const exchangeRates = await getExchangeRates();
+    const rateUSD = exchangeRates.USD;
+    const rateEUR = exchangeRates.EUR;
+
+    const getMultiplier = (currency) => {
+      const cur = String(currency || "AOA").toUpperCase();
+      if (cur === "USD") return rateUSD;
+      if (cur === "EUR") return rateEUR;
+      return 1;
+    };
+
     if (userRole === "cliente") {
       if (scopedClientId) {
         const client = await prisma.client.findUnique({
           where: { id: scopedClientId },
-          select: { healthScore: true, ltvTotal: true },
+          select: { healthScore: true, status: true },
         });
+
+        const projects = await prisma.project.findMany({
+          where: {
+            clientId: scopedClientId
+          },
+          select: {
+            id: true,
+            status: true,
+            budgetTotal: true,
+            currency: true,
+            payments: {
+              where: { status: "CONFIRMADO" },
+              select: { valor: true }
+            }
+          }
+        });
+
+        const projectIds = projects.map(p => p.id);
+        const dailyPlans = await prisma.dailyPlan.findMany({
+          where: { projectId: { in: projectIds } },
+          select: { status: true }
+        });
+
+        const obras = { total: projects.length, ativas: 0, concluidas: 0, pausadas: 0 };
+        let portfolioValue = 0;
+        let faturacaoEstimada = 0;
+
+        projects.forEach(p => {
+          if (p.status === "ACTIVE") obras.ativas++;
+          if (p.status === "COMPLETED") obras.concluidas++;
+          if (p.status === "ON_HOLD") obras.pausadas++;
+
+          const mul = getMultiplier(p.currency);
+          faturacaoEstimada += (Number(p.budgetTotal) || 0) * mul;
+          if (p.payments) {
+            p.payments.forEach(pay => {
+              portfolioValue += (Number(pay.valor) || 0) * mul;
+            });
+          }
+        });
+
+        const tarefas = { total: dailyPlans.length, pendentes: 0, em_curso: 0, executadas: 0 };
+        dailyPlans.forEach(dp => {
+          if (dp.status === "DRAFT" || dp.status === "PENDING_MATERIAL") {
+            tarefas.pendentes++;
+          } else if (dp.status === "IN_PROGRESS") {
+            tarefas.em_curso++;
+          } else if (dp.status === "COMPLETED" || dp.status === "PENDING_VALIDATION") {
+            tarefas.executadas++;
+          }
+        });
+
+        const clientesStatus = { ativas: 0, em_risco: 0, inativas: 0 };
+        if (client) {
+          if (client.status === "ACTIVE") clientesStatus.ativas = 1;
+          if (client.status === "AT_RISK") clientesStatus.em_risco = 1;
+          if (client.status === "INACTIVE") clientesStatus.inativas = 1;
+        }
 
         return res.json({
           totalClients: client ? 1 : 0,
-          portfolioValue: client?.ltvTotal ? String(client.ltvTotal) : "0",
+          portfolioValue: String(portfolioValue),
+          faturacaoEstimada: String(faturacaoEstimada),
           avgHealth: client?.healthScore ?? 0,
+          obras,
+          tarefas,
+          clientesStatus
         });
       } else {
-        // Cliente sem clientId vinculado (ex: apenas atribuído a obras)
+        // Cliente sem clientId vinculado
         return res.json({
           totalClients: 0,
           portfolioValue: "0",
+          faturacaoEstimada: "0",
           avgHealth: 0,
+          obras: { total: 0, ativas: 0, concluidas: 0, pausadas: 0 },
+          tarefas: { total: 0, pendentes: 0, em_curso: 0, executadas: 0 },
+          clientesStatus: { ativas: 0, em_risco: 0, inativas: 0 }
         });
       }
     }
 
-    const [totalClients, avgHealthAgg, portfolioValueAgg] = await Promise.all([
+    const [
+      totalClients,
+      avgHealthAgg,
+      paymentsList,
+      projectsList,
+      obrasStatusCounts,
+      tarefasCounts,
+      clientesStatusCounts
+    ] = await Promise.all([
       prisma.client.count(),
       prisma.client.aggregate({ _avg: { healthScore: true } }),
-      prisma.client.aggregate({ _sum: { ltvTotal: true } }),
+      prisma.projectPayment.findMany({
+        where: { status: "CONFIRMADO" },
+        select: { valor: true, project: { select: { currency: true } } }
+      }),
+      prisma.project.findMany({
+        select: { budgetTotal: true, currency: true }
+      }),
+      prisma.project.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      prisma.dailyPlan.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      prisma.client.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
     ]);
+
+    const obras = { total: 0, ativas: 0, concluidas: 0, pausadas: 0 };
+    obrasStatusCounts.forEach(item => {
+      const cnt = item._count._all || 0;
+      obras.total += cnt;
+      if (item.status === "ACTIVE") obras.ativas = cnt;
+      if (item.status === "COMPLETED") obras.concluidas = cnt;
+      if (item.status === "ON_HOLD") obras.pausadas = cnt;
+    });
+
+    const tarefas = { total: 0, pendentes: 0, em_curso: 0, executadas: 0 };
+    tarefasCounts.forEach(item => {
+      const cnt = item._count._all || 0;
+      tarefas.total += cnt;
+      if (item.status === "DRAFT" || item.status === "PENDING_MATERIAL") {
+        tarefas.pendentes += cnt;
+      } else if (item.status === "IN_PROGRESS") {
+        tarefas.em_curso += cnt;
+      } else if (item.status === "COMPLETED" || item.status === "PENDING_VALIDATION") {
+        tarefas.executadas += cnt;
+      }
+    });
+
+    const clientesStatus = { ativas: 0, em_risco: 0, inativas: 0 };
+    clientesStatusCounts.forEach(item => {
+      const cnt = item._count._all || 0;
+      if (item.status === "ACTIVE") clientesStatus.ativas = cnt;
+      if (item.status === "AT_RISK") clientesStatus.em_risco = cnt;
+      if (item.status === "INACTIVE") clientesStatus.inativas = cnt;
+    });
+
+    let portfolioValue = 0;
+    paymentsList.forEach(pay => {
+      const mul = getMultiplier(pay.project?.currency);
+      portfolioValue += (Number(pay.valor) || 0) * mul;
+    });
+
+    let faturacaoEstimada = 0;
+    projectsList.forEach(p => {
+      const mul = getMultiplier(p.currency);
+      faturacaoEstimada += (Number(p.budgetTotal) || 0) * mul;
+    });
 
     return res.json({
       totalClients,
-      portfolioValue: portfolioValueAgg._sum.ltvTotal ? String(portfolioValueAgg._sum.ltvTotal) : "0",
+      portfolioValue: String(portfolioValue),
+      faturacaoEstimada: String(faturacaoEstimada),
       avgHealth: avgHealthAgg._avg.healthScore ? Math.round(avgHealthAgg._avg.healthScore) : 0,
+      obras,
+      tarefas,
+      clientesStatus
     });
   })
 );
@@ -102,19 +271,59 @@ dashboardRoutes.get(
           region: true,
           profilePic: true,
           healthScore: true,
-          ltvTotal: true,
+          projects: {
+            select: {
+              budgetTotal: true,
+              currency: true,
+              payments: {
+                where: { status: "CONFIRMADO" },
+                select: { valor: true }
+              }
+            }
+          }
         },
       }),
     ]);
+
+    const exchangeRates = await getExchangeRates();
+    const rateUSD = exchangeRates.USD;
+    const rateEUR = exchangeRates.EUR;
+
+    const getMultiplier = (currency) => {
+      const cur = String(currency || "AOA").toUpperCase();
+      if (cur === "USD") return rateUSD;
+      if (cur === "EUR") return rateEUR;
+      return 1;
+    };
 
     return res.json({
       page,
       pageSize,
       total,
-      items: items.map((c) => ({
-        ...c,
-        ltvTotal: String(c.ltvTotal),
-      })),
+      items: items.map((c) => {
+        let ltvTotal = 0;
+        if (c.projects) {
+          c.projects.forEach((p) => {
+            const mul = getMultiplier(p.currency);
+            if (p.payments) {
+              p.payments.forEach((pay) => {
+                ltvTotal += (Number(pay.valor) || 0) * mul;
+              });
+            }
+          });
+        }
+        return {
+          id: c.id,
+          code: c.code,
+          name: c.name,
+          industry: c.industry,
+          status: c.status,
+          region: c.region,
+          profilePic: c.profilePic,
+          healthScore: c.healthScore,
+          ltvTotal: String(ltvTotal),
+        };
+      }),
     });
   })
 );
