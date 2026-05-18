@@ -77,7 +77,7 @@ function renderClientRow(c) {
   `;
 }
 
-async function loadKpis() {
+async function loadKpis({ search = "" } = {}) {
   const kpiTotal = byId("kpiTotalClients");
   const kpiValue = byId("kpiPortfolioValue");
   const kpiEstimated = byId("kpiEstimatedBilling");
@@ -86,7 +86,12 @@ async function loadKpis() {
   const kpiHealth = byId("kpiAvgHealth");
   const kpiHealthBar = byId("kpiAvgHealthBar");
 
-  const data = await apiRequest("/dashboard/metrics");
+  let url = `/dashboard/metrics?search=${encodeURIComponent(search)}`;
+  if (currentStatusFilter) url += `&status=${encodeURIComponent(currentStatusFilter)}`;
+  if (currentProjectStatusFilter) url += `&projectStatus=${encodeURIComponent(currentProjectStatusFilter)}`;
+  if (currentTaskStatusFilter) url += `&taskStatus=${encodeURIComponent(currentTaskStatusFilter)}`;
+
+  const data = await apiRequest(url);
   
   setText(kpiTotal, formatCompactNumber(data.totalClients));
   setText(kpiValue, formatCurrency(data.portfolioValue, "AOA"));
@@ -116,7 +121,16 @@ function renderClientsStatusChart(statusData) {
       type: 'donut',
       height: 180,
       sparkline: { enabled: true },
-      animations: { enabled: true, easing: 'easeinout', speed: 800 }
+      animations: { enabled: true, easing: 'easeinout', speed: 800 },
+      events: {
+        dataPointSelection: (event, chartContext, config) => {
+          const statuses = ["ACTIVE", "AT_RISK", "INACTIVE"];
+          const status = statuses[config.dataPointIndex];
+          if (status) {
+            toggleStatusFilter(status);
+          }
+        }
+      }
     },
     colors: ["#10B981", "#F59E0B", "#94A3B8"],
     stroke: { show: false },
@@ -246,7 +260,16 @@ function renderTasksConcentricChart(tarefas) {
       type: 'radialBar',
       height: 180,
       sparkline: { enabled: true },
-      animations: { enabled: true, easing: 'easeinout', speed: 800 }
+      animations: { enabled: true, easing: 'easeinout', speed: 800 },
+      events: {
+        dataPointSelection: (event, chartContext, config) => {
+          const taskStatuses = ["COMPLETED", "IN_PROGRESS", "PENDING"];
+          const taskStatus = taskStatuses[config.dataPointIndex];
+          if (taskStatus) {
+            toggleTaskStatusFilter(taskStatus);
+          }
+        }
+      }
     },
     plotOptions: {
       radialBar: {
@@ -299,7 +322,16 @@ function renderProjectsBarChart(obras) {
       height: 160,
       toolbar: { show: false },
       sparkline: { enabled: true },
-      animations: { enabled: true, easing: 'easeinout', speed: 800 }
+      animations: { enabled: true, easing: 'easeinout', speed: 800 },
+      events: {
+        dataPointSelection: (event, chartContext, config) => {
+          const projectStatuses = ["ACTIVE", "ON_HOLD", "COMPLETED"];
+          const projectStatus = projectStatuses[config.dataPointIndex];
+          if (projectStatus) {
+            toggleProjectStatusFilter(projectStatus);
+          }
+        }
+      }
     },
     colors: ["#10B981"],
     plotOptions: {
@@ -348,12 +380,126 @@ function renderProjectsBarChart(obras) {
 let lastSearch = "";
 let searchTimer = null;
 
+let currentStatusFilter = null;
+let currentProjectStatusFilter = null;
+let currentTaskStatusFilter = null;
+
+function toggleStatusFilter(status) {
+  if (currentStatusFilter === status) {
+    currentStatusFilter = null;
+  } else {
+    currentStatusFilter = status;
+  }
+  refreshClientsGrid();
+}
+
+function toggleProjectStatusFilter(projStatus) {
+  if (currentProjectStatusFilter === projStatus) {
+    currentProjectStatusFilter = null;
+  } else {
+    currentProjectStatusFilter = projStatus;
+  }
+  refreshClientsGrid();
+}
+
+function toggleTaskStatusFilter(taskStatus) {
+  if (currentTaskStatusFilter === taskStatus) {
+    currentTaskStatusFilter = null;
+  } else {
+    currentTaskStatusFilter = taskStatus;
+  }
+  refreshClientsGrid();
+}
+
+async function refreshClientsGrid() {
+  const search = byId("clientMatrixFilter")?.value?.trim() || "";
+  try {
+    await Promise.all([
+      loadKpis({ search }),
+      loadClientMatrix({ search })
+    ]);
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao filtrar dados", { type: "error" });
+  }
+}
+
+function updateFiltersUI() {
+  const container = byId("activeFiltersContainer");
+  if (!container) return;
+
+  container.innerHTML = "";
+  let hasFilters = false;
+
+  const createBadge = (label, colorClass, onRemove) => {
+    hasFilters = true;
+    const badge = document.createElement("div");
+    badge.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold border shadow-sm ${colorClass}`;
+    badge.innerHTML = `
+      <span>${label}</span>
+      <button class="hover:text-red-600 transition-colors flex items-center justify-center pointer-events-auto ml-1.5">
+        <span class="material-symbols-outlined text-xs font-black">close</span>
+      </button>
+    `;
+    badge.querySelector("button").addEventListener("click", onRemove);
+    container.appendChild(badge);
+  };
+
+  if (currentStatusFilter) {
+    const labels = { ACTIVE: "Clientes Ativos", AT_RISK: "Clientes Em Risco", INACTIVE: "Clientes Inativos" };
+    const classes = { ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", AT_RISK: "bg-amber-50 text-amber-700 border-amber-100", INACTIVE: "bg-slate-50 text-slate-700 border-slate-200" };
+    createBadge(labels[currentStatusFilter], classes[currentStatusFilter], () => {
+      currentStatusFilter = null;
+      refreshClientsGrid();
+    });
+  }
+
+  if (currentProjectStatusFilter) {
+    const labels = { ACTIVE: "Obras Ativas", ON_HOLD: "Obras Pausadas", COMPLETED: "Obras Concluídas" };
+    createBadge(labels[currentProjectStatusFilter], "bg-cyan-50 text-cyan-700 border-cyan-100", () => {
+      currentProjectStatusFilter = null;
+      refreshClientsGrid();
+    });
+  }
+
+  if (currentTaskStatusFilter) {
+    const labels = { PENDING: "Tarefas Pendentes", IN_PROGRESS: "Tarefas Em Curso", COMPLETED: "Tarefas Executadas" };
+    createBadge(labels[currentTaskStatusFilter], "bg-purple-50 text-purple-700 border-purple-100", () => {
+      currentTaskStatusFilter = null;
+      refreshClientsGrid();
+    });
+  }
+
+  if (hasFilters) {
+    container.classList.remove("hidden");
+    const clearAllBtn = document.createElement("button");
+    clearAllBtn.className = "text-[9px] font-black text-red-500 hover:text-red-700 transition-colors ml-3 uppercase tracking-widest";
+    clearAllBtn.textContent = "Limpar Filtros";
+    clearAllBtn.addEventListener("click", () => {
+      currentStatusFilter = null;
+      currentProjectStatusFilter = null;
+      currentTaskStatusFilter = null;
+      refreshClientsGrid();
+    });
+    container.appendChild(clearAllBtn);
+  } else {
+    container.classList.add("hidden");
+  }
+}
+
 async function loadClientMatrix({ search = "" } = {}) {
   const body = byId("clientMatrixBody");
   if (!body) return;
   body.innerHTML = renderLoadingRow(5);
 
-  const data = await apiRequest(`/dashboard/clients?search=${encodeURIComponent(search)}&page=1&pageSize=10`);
+  let url = `/dashboard/clients?search=${encodeURIComponent(search)}&page=1&pageSize=10`;
+  if (currentStatusFilter) url += `&status=${encodeURIComponent(currentStatusFilter)}`;
+  if (currentProjectStatusFilter) url += `&projectStatus=${encodeURIComponent(currentProjectStatusFilter)}`;
+  if (currentTaskStatusFilter) url += `&taskStatus=${encodeURIComponent(currentTaskStatusFilter)}`;
+
+  const data = await apiRequest(url);
+  updateFiltersUI();
+
   if (!data.items?.length) {
     body.innerHTML = `<tr><td class="px-8 py-8 text-center text-sm font-bold text-slate-400" colspan="5">Nenhum cliente encontrado.</td></tr>`;
     return;
@@ -380,7 +526,7 @@ function wireFilter() {
     lastSearch = search;
     if (searchTimer) window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
-      loadClientMatrix({ search }).catch(() => toast("Erro ao carregar clientes", { type: "error" }));
+      refreshClientsGrid().catch(() => toast("Erro ao carregar clientes", { type: "error" }));
     }, 250);
   });
 }
@@ -397,10 +543,7 @@ function wireSync() {
       }
       syncBtn.disabled = true;
       
-      await Promise.all([
-        loadKpis(),
-        loadClientMatrix({ search: byId("clientMatrixFilter")?.value?.trim?.() || "" })
-      ]);
+      await refreshClientsGrid();
       
       toast("Dados sincronizados com sucesso", { type: "success" });
     } catch (err) {
@@ -439,8 +582,7 @@ async function init() {
   wireLogout();
   wireUsersNav();
   loadSessionGreeting();
-  await loadKpis();
-  await loadClientMatrix({ search: "" });
+  await refreshClientsGrid();
   wireClientMatrixActions();
   wireFilter();
   wireSync();

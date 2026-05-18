@@ -60,7 +60,8 @@ dashboardRoutes.get(
 
         const projects = await prisma.project.findMany({
           where: {
-            clientId: scopedClientId
+            clientId: scopedClientId,
+            active: true
           },
           select: {
             id: true,
@@ -139,6 +140,77 @@ dashboardRoutes.get(
       }
     }
 
+    const search = String(req.query.search || "").trim();
+    const status = String(req.query.status || "").trim();
+    const projectStatus = String(req.query.projectStatus || "").trim();
+    const taskStatus = String(req.query.taskStatus || "").trim();
+
+    const clientWhereClauses = [];
+    const projectWhereClauses = [{ active: true }];
+
+    if (search) {
+      clientWhereClauses.push({
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { code: { contains: search, mode: "insensitive" } },
+        ],
+      });
+      projectWhereClauses.push({
+        client: {
+          OR: [
+            { name: { contains: search, mode: "insensitive" } },
+            { code: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      });
+    }
+
+    if (status) {
+      clientWhereClauses.push({ status });
+      projectWhereClauses.push({ client: { status } });
+    }
+
+    if (projectStatus) {
+      clientWhereClauses.push({
+        projects: {
+          some: { status: projectStatus, active: true }
+        }
+      });
+      projectWhereClauses.push({ status: projectStatus });
+    }
+
+    if (taskStatus) {
+      let dailyPlanStatusFilter = [];
+      if (taskStatus === "PENDING") {
+        dailyPlanStatusFilter = ["DRAFT", "PENDING_MATERIAL"];
+      } else if (taskStatus === "IN_PROGRESS") {
+        dailyPlanStatusFilter = ["IN_PROGRESS"];
+      } else if (taskStatus === "COMPLETED") {
+        dailyPlanStatusFilter = ["COMPLETED", "PENDING_VALIDATION"];
+      }
+
+      if (dailyPlanStatusFilter.length > 0) {
+        clientWhereClauses.push({
+          projects: {
+            some: {
+              active: true,
+              dailyPlans: {
+                some: { status: { in: dailyPlanStatusFilter } }
+              }
+            }
+          }
+        });
+        projectWhereClauses.push({
+          dailyPlans: {
+            some: { status: { in: dailyPlanStatusFilter } }
+          }
+        });
+      }
+    }
+
+    const clientWhere = clientWhereClauses.length ? { AND: clientWhereClauses } : {};
+    const projectWhere = { AND: projectWhereClauses };
+
     const [
       totalClients,
       avgHealthAgg,
@@ -148,24 +220,28 @@ dashboardRoutes.get(
       tarefasCounts,
       clientesStatusCounts
     ] = await Promise.all([
-      prisma.client.count(),
-      prisma.client.aggregate({ _avg: { healthScore: true } }),
+      prisma.client.count({ where: clientWhere }),
+      prisma.client.aggregate({ where: clientWhere, _avg: { healthScore: true } }),
       prisma.projectPayment.findMany({
-        where: { status: "CONFIRMADO" },
+        where: { status: "CONFIRMADO", project: projectWhere },
         select: { valor: true, project: { select: { currency: true } } }
       }),
       prisma.project.findMany({
+        where: projectWhere,
         select: { budgetTotal: true, currency: true }
       }),
       prisma.project.groupBy({
+        where: projectWhere,
         by: ["status"],
         _count: { _all: true },
       }),
       prisma.dailyPlan.groupBy({
+        where: { project: projectWhere },
         by: ["status"],
         _count: { _all: true },
       }),
       prisma.client.groupBy({
+        where: clientWhere,
         by: ["status"],
         _count: { _all: true },
       }),
@@ -230,6 +306,9 @@ dashboardRoutes.get(
   requirePermission("clientes", "view"),
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || "").trim();
+    const status = String(req.query.status || "").trim();
+    const projectStatus = String(req.query.projectStatus || "").trim();
+    const taskStatus = String(req.query.taskStatus || "").trim();
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize || 10)));
     const scopedClientId = getScopedClientId(req);
@@ -253,6 +332,42 @@ dashboardRoutes.get(
       });
     }
 
+    if (status) {
+      whereClauses.push({ status });
+    }
+
+    if (projectStatus) {
+      whereClauses.push({
+        projects: {
+          some: { status: projectStatus, active: true }
+        }
+      });
+    }
+
+    if (taskStatus) {
+      let dailyPlanStatusFilter = [];
+      if (taskStatus === "PENDING") {
+        dailyPlanStatusFilter = ["DRAFT", "PENDING_MATERIAL"];
+      } else if (taskStatus === "IN_PROGRESS") {
+        dailyPlanStatusFilter = ["IN_PROGRESS"];
+      } else if (taskStatus === "COMPLETED") {
+        dailyPlanStatusFilter = ["COMPLETED", "PENDING_VALIDATION"];
+      }
+
+      if (dailyPlanStatusFilter.length > 0) {
+        whereClauses.push({
+          projects: {
+            some: {
+              active: true,
+              dailyPlans: {
+                some: { status: { in: dailyPlanStatusFilter } }
+              }
+            }
+          }
+        });
+      }
+    }
+
     const where = whereClauses.length ? { AND: whereClauses } : {};
 
     const [total, items] = await Promise.all([
@@ -272,6 +387,7 @@ dashboardRoutes.get(
           profilePic: true,
           healthScore: true,
           projects: {
+            where: { active: true },
             select: {
               budgetTotal: true,
               currency: true,
