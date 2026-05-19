@@ -539,9 +539,35 @@ dailyPlansRoutes.post(
           });
 
           if (qty > 0) {
+            // Find current accumulated qty
+            const currentProgress = await tx.projectProgressTask.findUnique({
+              where: { id: planTask.progressTaskId }
+            });
+            const accumulatedQty = Number(currentProgress.executedQty) + qty;
+
             await tx.projectProgressTask.update({
               where: { id: planTask.progressTaskId },
-              data: { executedQty: { increment: qty } }
+              data: { executedQty: accumulatedQty }
+            });
+
+            // Get technician name if any
+            let techName = null;
+            if (planTask.technicianId) {
+               const techUser = await tx.user.findUnique({ where: { id: planTask.technicianId } });
+               if (techUser) techName = techUser.name || techUser.email;
+            }
+
+            // Create History Record
+            await tx.projectProgressHistory.create({
+              data: {
+                projectId: plan.projectId,
+                taskId: planTask.progressTaskId,
+                date: plan.date,
+                executedQty: qty,
+                accumulatedQty: accumulatedQty,
+                technicianName: techName,
+                notes: planTask.notes || plan.description
+              }
             });
           }
         }
