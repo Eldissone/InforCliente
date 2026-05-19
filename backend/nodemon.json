@@ -1,4 +1,11 @@
 {
-  "ignore": ["scratch/*", "uploads/*", "prisma/*", "*.test.js"],
-  "watch": ["src/"]
+  "ignore": [
+    "scratch/*",
+    "uploads/*",
+    "prisma/*",
+    "*.test.js"
+  ],
+  "watch": [
+    "src/"
+  ]
 }

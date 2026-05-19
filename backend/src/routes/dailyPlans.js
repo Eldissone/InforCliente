@@ -214,6 +214,121 @@ dailyPlansRoutes.post(
   })
 );
 
+// PATCH /daily-plans/:id
+dailyPlansRoutes.patch(
+  "/:id",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { date, description, tasks, materials } = req.body;
+    
+    const existing = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { tasks: true, materials: true }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "Plano Diário não encontrado." });
+    }
+
+    if (existing.status === "PENDING_VALIDATION" || existing.status === "COMPLETED") {
+      return res.status(400).json({ error: "Não é possível editar um plano já concluído ou pendente de validação." });
+    }
+
+    // Determine what we can edit based on status
+    const canEditMaterials = existing.status === "DRAFT" || existing.status === "PENDING_MATERIAL" || existing.status === "IN_PROGRESS";
+    
+    await prisma.$transaction(async (tx) => {
+      // 1. Update basic info
+      let newStatus = existing.status;
+      
+      const updateData = {};
+      if (date) updateData.date = new Date(date);
+      if (description !== undefined) updateData.description = description;
+
+      // 2. Update Tasks
+      if (tasks && Array.isArray(tasks)) {
+        await tx.dailyPlanTask.deleteMany({ where: { dailyPlanId: id } });
+        if (tasks.length > 0) {
+          updateData.tasks = {
+            create: tasks.map(t => ({
+              progressTaskId: t.progressTaskId,
+              plannedQty: t.plannedQty,
+              notes: t.notes,
+              technicianId: t.technicianId || null
+            }))
+          };
+        }
+      }
+
+      // 3. Update Materials (Smart Update)
+      if (canEditMaterials && materials !== undefined && Array.isArray(materials)) {
+        const existingMats = existing.materials;
+        
+        // Find materials to delete (in existing, but not in payload)
+        const toDelete = existingMats.filter(em => !materials.some(m => m.productId === em.productId));
+        for (const delMat of toDelete) {
+          await tx.dailyPlanMaterial.delete({ where: { id: delMat.id } });
+          // Note: If providedQty > 0, stock is technically lost. In a full system, we'd refund stock here.
+        }
+
+        let needsMoreMaterial = false;
+
+        // Upsert materials from payload
+        for (const m of materials) {
+          const exMat = existingMats.find(em => em.productId === m.productId);
+          if (exMat) {
+            // Update requestedQty
+            await tx.dailyPlanMaterial.update({
+              where: { id: exMat.id },
+              data: { requestedQty: m.requestedQty }
+            });
+            if (m.requestedQty > exMat.providedQty) {
+              needsMoreMaterial = true;
+            }
+          } else {
+            // Create new
+            await tx.dailyPlanMaterial.create({
+              data: {
+                dailyPlanId: id,
+                productId: m.productId,
+                requestedQty: m.requestedQty
+              }
+            });
+            needsMoreMaterial = true;
+          }
+        }
+
+        if (materials.length > 0 && newStatus === "DRAFT") {
+          newStatus = "PENDING_MATERIAL";
+        } else if (materials.length === 0 && newStatus === "PENDING_MATERIAL") {
+          newStatus = "DRAFT";
+        } else if (needsMoreMaterial && newStatus === "IN_PROGRESS") {
+          // If we are in progress but need more materials, we must revert to pending_material
+          // so the warehouse can provide the rest.
+          newStatus = "PENDING_MATERIAL";
+        }
+      }
+
+      if (newStatus !== existing.status) {
+        updateData.status = newStatus;
+      }
+
+      await tx.dailyPlan.update({
+        where: { id },
+        data: updateData
+      });
+    });
+
+    const updated = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { tasks: true, materials: true }
+    });
+
+    res.json(updated);
+  })
+);
+
 // DELETE /daily-plans/:id
 dailyPlansRoutes.delete(
   "/:id",

@@ -3796,6 +3796,11 @@ function renderDailyPlansList() {
               <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
             </button>
           ` : ""}
+          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS") ? `
+            <button data-role-visible="admin,operador" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
+              <span class="material-symbols-outlined text-sm">edit</span>
+            </button>
+          ` : ""}
           <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
             <span class="material-symbols-outlined text-sm">visibility</span>
           </button>
@@ -3921,17 +3926,27 @@ async function wireDailyPlans() {
         container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma tarefa selecionada</p>`;
         return;
       }
-      container.innerHTML = selectedTasks.map((t, idx) => `
-        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2 border-l-4 border-blue-400">
-          <div class="text-xs flex flex-col">
-            <span class="font-bold text-slate-900">${escapeHtml(t.name)}</span>
-            <span class="text-slate-500 font-medium mt-1">Qtd: ${t.plannedQty}</span>
+      container.innerHTML = selectedTasks.map((t, idx) => {
+        const parts = t.name.split(' — ');
+        const mainName = parts.pop();
+        const parentName = parts.length > 0 ? parts.join(' — ') : t.groupName || "Geral";
+        return `
+        <div class="flex items-center justify-between p-3 mb-2 rounded-lg border border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}">
+          <div class="flex items-center gap-4">
+             <div class="font-black text-slate-400 text-[11px] w-4 text-center">${idx + 1}</div>
+             <div class="flex flex-col">
+               <span class="font-bold text-slate-900">${escapeHtml(mainName)}</span>
+               <span class="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-black">${escapeHtml(parentName)}</span>
+             </div>
           </div>
-          <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedTask(${idx})">
-            <span class="material-symbols-outlined text-sm">close</span>
-          </button>
+          <div class="flex items-center gap-4 shrink-0">
+            <span class="text-slate-500 font-medium text-[10px] uppercase tracking-widest">Qtd: ${t.plannedQty}</span>
+            <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="window.removeSelectedTask(${idx})">
+              <span class="material-symbols-outlined text-sm">close</span>
+            </button>
+          </div>
         </div>
-      `).join('');
+      `}).join('');
     };
 
     const updateMaterialsUI = (panel) => {
@@ -3982,7 +3997,29 @@ async function wireDailyPlans() {
             <div class="flex flex-col gap-2 mb-4">
               <select id="dp_task_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione a tarefa do Avanço Físico...</option>
-                ${progressTasks.map(pt => `<option value="${pt.id}">${escapeHtml(pt.description)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`).join('')}
+                ${(() => {
+                  const groups = {};
+                  progressTasks.forEach(pt => {
+                    const g = pt.itemGroup || "Geral";
+                    if (!groups[g]) groups[g] = [];
+                    groups[g].push(pt);
+                  });
+                  return Object.keys(groups).map(g => {
+                    const groupTitle = escapeHtml(g);
+                    const options = groups[g].map(pt => {
+                      const buildPath = (t, visited = new Set()) => {
+                        if (!t || visited.has(t.id)) return "";
+                        visited.add(t.id);
+                        if (!t.parentId) return t.description;
+                        const parent = progressTasks.find(p => p.id === t.parentId);
+                        return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
+                      };
+                      const fullDesc = buildPath(pt);
+                      return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+                    }).join('');
+                    return `<optgroup label="${groupTitle}">${options}</optgroup>`;
+                  }).join('');
+                })()}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -4026,9 +4063,12 @@ async function wireDailyPlans() {
 
           const opt = sel.options[sel.selectedIndex];
 
+          const optgroup = opt.parentElement;
+          const groupName = optgroup.tagName === "OPTGROUP" ? optgroup.label : "";
           selectedTasks.push({
             progressTaskId: sel.value,
-            name: opt.text.split('(')[0].trim(),
+            name: opt.text.split('(Falta:')[0].trim(),
+            groupName: groupName,
             plannedQty: Number(qty)
           });
           updateTasksUI(panel);
@@ -4399,3 +4439,293 @@ window.viewPlanDetails = async function (planId) {
     toast("Erro ao carregar detalhes do plano.", { type: "error" });
   }
 };
+
+window.openEditPlanModal = async (planId) => {
+  const id = getProjectId();
+  let plan;
+  let progressTasks = [];
+  let products = [];
+  let technicians = [];
+  
+  try {
+    plan = await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`);
+    const pData = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`);
+    progressTasks = pData.tasks || [];
+
+    const { items: warehouses } = await apiRequest("/warehouses");
+    const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
+
+    if (projectWarehouse) {
+      const sData = await apiRequest(`/stock/balance?warehouseId=${projectWarehouse.id}`);
+      products = sData.items || [];
+    }
+
+    const tData = await apiRequest("/users/technicians");
+    technicians = tData.items || [];
+  } catch (err) {
+    console.error(err);
+    toast("Erro ao carregar dependências para o plano.", { type: "error" });
+    return;
+  }
+
+  const canEditMaterials = plan.status === "DRAFT" || plan.status === "PENDING_MATERIAL" || plan.status === "IN_PROGRESS";
+
+  let selectedTasks = plan.tasks.map(t => {
+    const pt = progressTasks.find(p => p.id === t.progressTaskId);
+    const buildPath = (curr, visited = new Set()) => {
+      if (!curr || visited.has(curr.id)) return "";
+      visited.add(curr.id);
+      if (!curr.parentId) return curr.description;
+      const parent = progressTasks.find(p => p.id === curr.parentId);
+      return parent ? buildPath(parent, visited) + " — " + curr.description : curr.description;
+    };
+    return {
+      progressTaskId: t.progressTaskId,
+      name: pt ? buildPath(pt) : "Tarefa",
+      groupName: pt?.itemGroup || "",
+      plannedQty: Number(t.plannedQty),
+      technicianId: t.technicianId
+    };
+  });
+
+  let selectedMaterials = plan.materials.map(m => {
+    const pr = products.find(p => p.product.id === m.productId);
+    return {
+      productId: m.productId,
+      name: pr?.product?.name || m.product?.name || "Material",
+      requestedQty: Number(m.requestedQty)
+    };
+  });
+
+  const updateTasksUI = (panel) => {
+    const container = panel.querySelector("#edit_selectedTasksContainer");
+    if (selectedTasks.length === 0) {
+      container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma tarefa selecionada</p>`;
+      return;
+    }
+    container.innerHTML = selectedTasks.map((t, idx) => {
+      const parts = t.name.split(' — ');
+      const mainName = parts.pop();
+      const parentName = parts.length > 0 ? parts.join(' — ') : t.groupName || "Geral";
+      return `
+      <div class="flex items-center justify-between p-3 mb-2 rounded-lg border border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}">
+        <div class="flex items-center gap-4">
+           <div class="font-black text-slate-400 text-[11px] w-4 text-center">${idx + 1}</div>
+           <div class="flex flex-col">
+             <span class="font-bold text-slate-900">${escapeHtml(mainName)}</span>
+             <span class="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-black">${escapeHtml(parentName)}</span>
+           </div>
+        </div>
+        <div class="flex items-center gap-4 shrink-0">
+          <span class="text-slate-500 font-medium text-[10px] uppercase tracking-widest">Qtd: ${t.plannedQty}</span>
+          <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="window.removeEditSelectedTask(${idx})">
+            <span class="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      </div>
+    `}).join('');
+  };
+
+  const updateMaterialsUI = (panel) => {
+    const container = panel.querySelector("#edit_selectedMaterialsContainer");
+    if (!canEditMaterials) {
+      container.innerHTML = `<p class="text-xs text-amber-600 font-bold p-3 bg-amber-50 rounded-lg border border-amber-100">Os materiais não podem ser editados pois o plano já está em execução.</p>`;
+      return;
+    }
+    if (selectedMaterials.length === 0) {
+      container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhum material selecionado</p>`;
+      return;
+    }
+    container.innerHTML = selectedMaterials.map((m, idx) => `
+      <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
+        <div class="text-xs flex flex-col">
+          <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
+          <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
+        </div>
+        <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeEditSelectedMaterial(${idx})">
+          <span class="material-symbols-outlined text-sm">close</span>
+        </button>
+      </div>
+    `).join('');
+  };
+
+  const contentHtml = `
+    <div class="space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
+          <input type="date" id="edit_dp_date" value="${new Date(plan.date).toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
+          <input type="text" id="edit_dp_desc" value="${escapeHtml(plan.description || '')}" placeholder="Ex: Betonagem dos pilares" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Técnico Responsável</label>
+          <select id="edit_dp_plan_tech" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+            <option value="">Selecione o Técnico ...</option>
+            ${technicians.map(t => `<option value="${t.id}" ${plan.tasks.some(pt => pt.technicianId === t.id) ? 'selected' : ''}>${escapeHtml(t.name || t.email)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <!-- Tarefas -->
+      <div class="border border-slate-100 rounded-xl p-4">
+        <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-blue-600">task</span> Tarefas a Executar</h4>
+        <div class="flex flex-col gap-2 mb-4">
+          <select id="edit_dp_task_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <option value="">Selecione a tarefa do Avanço Físico...</option>
+            ${(() => {
+              const groups = {};
+              progressTasks.forEach(pt => {
+                const g = pt.itemGroup || "Geral";
+                if (!groups[g]) groups[g] = [];
+                groups[g].push(pt);
+              });
+              return Object.keys(groups).map(g => {
+                const groupTitle = escapeHtml(g);
+                const options = groups[g].map(pt => {
+                  const buildPath = (t, visited = new Set()) => {
+                    if (!t || visited.has(t.id)) return "";
+                    visited.add(t.id);
+                    if (!t.parentId) return t.description;
+                    const parent = progressTasks.find(p => p.id === t.parentId);
+                    return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
+                  };
+                  const fullDesc = buildPath(pt);
+                  return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+                }).join('');
+                return `<optgroup label="${groupTitle}">${options}</optgroup>`;
+              }).join('');
+            })()}
+          </select>
+          <div class="flex gap-2">
+            <input type="number" id="edit_dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <button type="button" id="edit_dp_add_task_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+          </div>
+        </div>
+        <div id="edit_selectedTasksContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+      </div>
+
+      <!-- Materiais -->
+      <div class="border border-slate-100 rounded-xl p-4 ${canEditMaterials ? '' : 'opacity-70'}">
+        <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-amber-600">inventory_2</span> Materiais a Requisitar</h4>
+        <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
+          <select id="edit_dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <option value="">Selecione o material do Stock...</option>
+            ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+          </select>
+          <div class="flex gap-2">
+            <input type="number" id="edit_dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <button type="button" id="edit_dp_add_mat_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+          </div>
+        </div>
+        <div id="edit_selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+      </div>
+    </div>
+  `;
+
+  openModal({
+    title: "Editar Plano Diário",
+    contentHtml,
+    primaryLabel: "Guardar Alterações",
+    onRender: ({ panel }) => {
+      window.removeEditSelectedTask = (idx) => {
+        selectedTasks.splice(idx, 1);
+        updateTasksUI(panel);
+      };
+      window.removeEditSelectedMaterial = (idx) => {
+        if (!canEditMaterials) return;
+        selectedMaterials.splice(idx, 1);
+        updateMaterialsUI(panel);
+      };
+
+      panel.querySelector("#edit_dp_add_task_btn").addEventListener("click", () => {
+        const sel = panel.querySelector("#edit_dp_task_select");
+        const qty = panel.querySelector("#edit_dp_task_qty").value;
+        if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione tarefa e quantidade válida.");
+
+        const opt = sel.options[sel.selectedIndex];
+        const optgroup = opt.parentElement;
+        const groupName = optgroup.tagName === "OPTGROUP" ? optgroup.label : "";
+
+        selectedTasks.push({
+          progressTaskId: sel.value,
+          name: opt.text.split('(Falta:')[0].trim(),
+          groupName: groupName,
+          plannedQty: Number(qty)
+        });
+        updateTasksUI(panel);
+
+        sel.value = "";
+        panel.querySelector("#edit_dp_task_qty").value = "";
+      });
+
+      if (canEditMaterials) {
+        panel.querySelector("#edit_dp_add_mat_btn").addEventListener("click", () => {
+          const sel = panel.querySelector("#edit_dp_mat_select");
+          const qty = panel.querySelector("#edit_dp_mat_qty").value;
+          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione material e quantidade válida.");
+
+          const opt = sel.options[sel.selectedIndex];
+
+          selectedMaterials.push({
+            productId: sel.value,
+            name: opt.text.split('(')[0].trim(),
+            requestedQty: Number(qty)
+          });
+          updateMaterialsUI(panel);
+
+          sel.value = "";
+          panel.querySelector("#edit_dp_mat_qty").value = "";
+        });
+      }
+
+      updateTasksUI(panel);
+      updateMaterialsUI(panel);
+    },
+    onPrimary: async ({ panel, close }) => {
+      const date = panel.querySelector("#edit_dp_date").value;
+      const desc = panel.querySelector("#edit_dp_desc").value;
+      const techId = panel.querySelector("#edit_dp_plan_tech").value;
+
+      if (!date || selectedTasks.length === 0) {
+        toast("Data e pelo menos uma tarefa são obrigatórios.", { type: "warning" });
+        return;
+      }
+
+      const payloadTasks = selectedTasks.map(t => ({
+        progressTaskId: t.progressTaskId,
+        plannedQty: t.plannedQty,
+        technicianId: techId || null
+      }));
+
+      const payload = {
+        date,
+        description: desc,
+        tasks: payloadTasks
+      };
+
+      if (canEditMaterials) {
+        payload.materials = selectedMaterials.map(m => ({
+          productId: m.productId,
+          requestedQty: m.requestedQty
+        }));
+      }
+
+      try {
+        await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`, {
+          method: "PATCH",
+          body: payload
+        });
+        toast("Plano Diário atualizado com sucesso!", { type: "success" });
+        close();
+        if (window.loadDailyPlans) window.loadDailyPlans();
+      } catch (err) {
+        console.error(err);
+        toast(err.message || "Erro ao atualizar plano diário", { type: "error" });
+      }
+    }
+  });
+};
+
