@@ -17,18 +17,18 @@ function byId(id) {
 }
 
 function statusPill(status) {
-  if (status === "AT_RISK") {
+  if (status === "AT_RISK" || status === "ON_HOLD") {
     return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-100 shadow-sm">
-      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> EM RISCO
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> PARADA
     </span>`;
   }
-  if (status === "INACTIVE") {
+  if (status === "INACTIVE" || status === "COMPLETED") {
     return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 shadow-sm">
-      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> INATIVO
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> CONCLUÍDA
     </span>`;
   }
   return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 shadow-sm">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVO
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVA
   </span>`;
 }
 
@@ -37,39 +37,41 @@ function initials(name) {
   return parts.map((p) => p[0]?.toUpperCase()).join("") || "—";
 }
 
-function renderClientRow(c) {
-  const health = Math.max(0, Math.min(100, Number(c.healthScore || 0)));
-  let healthBarColor = "bg-emerald-500";
-  if (health < 40) healthBarColor = "bg-red-500";
-  else if (health < 70) healthBarColor = "bg-amber-500";
-  
-  const picUrl = getAssetUrl(c.profilePic);
+function renderObraRow(p) {
+  const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
+  let progressColor = "bg-emerald-500";
+  if (progress < 30) progressColor = "bg-red-500";
+  else if (progress < 65) progressColor = "bg-amber-500";
+
+  const currency = String(p.currency || "AOA").toUpperCase();
+  const valor = formatCurrency(p.budgetTotal, currency);
+  const clientName = p.client?.name || "—";
 
   return `
     <tr class="hover:bg-slate-50/50 transition-all duration-200 group border-b border-slate-100 last:border-0">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-extrabold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform overflow-hidden">
-            ${picUrl ? `<img src="${picUrl}" alt="${c.name}" class="w-full h-full object-cover" />` : initials(c.name)}
+          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-extrabold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform text-sm">
+            ${initials(p.name)}
           </div>
           <div>
-            <div class="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">${c.name}</div>
-            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${c.industry || c.code}</div>
+            <div class="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">${p.name}</div>
+            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${p.code} &bull; ${clientName}</div>
           </div>
         </div>
       </td>
-      <td class="px-8 py-5">${statusPill(c.status)}</td>
-      <td class="px-8 py-5 text-sm font-bold text-slate-900 text-right">${formatCurrency(c.ltvTotal, "AOA")}</td>
+      <td class="px-8 py-5">${statusPill(p.status)}</td>
+      <td class="px-8 py-5 text-sm font-bold text-slate-900 text-right">${valor}</td>
       <td class="px-8 py-5">
         <div class="flex items-center justify-center gap-3">
           <div class="flex-1 h-2 bg-slate-100 rounded-full w-24 overflow-hidden shadow-inner border border-slate-200/50">
-            <div class="h-full ${healthBarColor} rounded-full transition-all duration-1000" style="width:${health}%"></div>
+            <div class="h-full ${progressColor} rounded-full transition-all duration-1000" style="width:${progress}%"></div>
           </div>
-          <span class="text-xs font-bold text-slate-700 w-8 text-right">${health}%</span>
+          <span class="text-xs font-bold text-slate-700 w-8 text-right">${progress}%</span>
         </div>
       </td>
       <td class="px-8 py-5 text-right">
-        <button data-open-client="${c.id}" class="ml-auto h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-900 hover:border-slate-300 hover:shadow-md transition-all active:scale-90">
+        <button data-open-obra="${p.id}" class="ml-auto h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-slate-900 hover:border-slate-300 hover:shadow-md transition-all active:scale-90">
           <span class="material-symbols-outlined text-xl">east</span>
         </button>
       </td>
@@ -87,7 +89,6 @@ async function loadKpis({ search = "" } = {}) {
   const kpiHealthBar = byId("kpiAvgHealthBar");
 
   let url = `/dashboard/metrics?search=${encodeURIComponent(search)}`;
-  if (currentStatusFilter) url += `&status=${encodeURIComponent(currentStatusFilter)}`;
   if (currentProjectStatusFilter) url += `&projectStatus=${encodeURIComponent(currentProjectStatusFilter)}`;
   if (currentTaskStatusFilter) url += `&taskStatus=${encodeURIComponent(currentTaskStatusFilter)}`;
 
@@ -122,15 +123,6 @@ function renderClientsStatusChart(statusData) {
       height: 180,
       sparkline: { enabled: true },
       animations: { enabled: true, easing: 'easeinout', speed: 800 },
-      events: {
-        dataPointSelection: (event, chartContext, config) => {
-          const statuses = ["ACTIVE", "AT_RISK", "INACTIVE"];
-          const status = statuses[config.dataPointIndex];
-          if (status) {
-            toggleStatusFilter(status);
-          }
-        }
-      }
     },
     colors: ["#10B981", "#F59E0B", "#94A3B8"],
     stroke: { show: false },
@@ -380,34 +372,17 @@ function renderProjectsBarChart(obras) {
 let lastSearch = "";
 let searchTimer = null;
 
-let currentStatusFilter = null;
+// Filtros de obras: por estado de obra e por estado de tarefa
 let currentProjectStatusFilter = null;
 let currentTaskStatusFilter = null;
 
-function toggleStatusFilter(status) {
-  if (currentStatusFilter === status) {
-    currentStatusFilter = null;
-  } else {
-    currentStatusFilter = status;
-  }
-  refreshClientsGrid();
-}
-
 function toggleProjectStatusFilter(projStatus) {
-  if (currentProjectStatusFilter === projStatus) {
-    currentProjectStatusFilter = null;
-  } else {
-    currentProjectStatusFilter = projStatus;
-  }
+  currentProjectStatusFilter = currentProjectStatusFilter === projStatus ? null : projStatus;
   refreshClientsGrid();
 }
 
 function toggleTaskStatusFilter(taskStatus) {
-  if (currentTaskStatusFilter === taskStatus) {
-    currentTaskStatusFilter = null;
-  } else {
-    currentTaskStatusFilter = taskStatus;
-  }
+  currentTaskStatusFilter = currentTaskStatusFilter === taskStatus ? null : taskStatus;
   refreshClientsGrid();
 }
 
@@ -416,7 +391,7 @@ async function refreshClientsGrid() {
   try {
     await Promise.all([
       loadKpis({ search }),
-      loadClientMatrix({ search })
+      loadObrasMatrix({ search })
     ]);
   } catch (err) {
     console.error(err);
@@ -445,26 +420,20 @@ function updateFiltersUI() {
     container.appendChild(badge);
   };
 
-  if (currentStatusFilter) {
-    const labels = { ACTIVE: "Clientes Ativos", AT_RISK: "Clientes Em Risco", INACTIVE: "Clientes Inativos" };
-    const classes = { ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", AT_RISK: "bg-amber-50 text-amber-700 border-amber-100", INACTIVE: "bg-slate-50 text-slate-700 border-slate-200" };
-    createBadge(labels[currentStatusFilter], classes[currentStatusFilter], () => {
-      currentStatusFilter = null;
-      refreshClientsGrid();
-    });
-  }
-
+  // Filtro: Estado da Obra (clique no gráfico de barras)
   if (currentProjectStatusFilter) {
-    const labels = { ACTIVE: "Obras Ativas", ON_HOLD: "Obras Pausadas", COMPLETED: "Obras Concluídas" };
-    createBadge(labels[currentProjectStatusFilter], "bg-cyan-50 text-cyan-700 border-cyan-100", () => {
+    const labels = { ACTIVE: "Obras Ativas", ON_HOLD: "Obras Paradas", COMPLETED: "Obras Concluídas" };
+    const classes = { ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", ON_HOLD: "bg-amber-50 text-amber-700 border-amber-100", COMPLETED: "bg-slate-50 text-slate-600 border-slate-200" };
+    createBadge(labels[currentProjectStatusFilter], classes[currentProjectStatusFilter] || "bg-cyan-50 text-cyan-700 border-cyan-100", () => {
       currentProjectStatusFilter = null;
       refreshClientsGrid();
     });
   }
 
+  // Filtro: Estado de Tarefas (clique no gráfico radial)
   if (currentTaskStatusFilter) {
     const labels = { PENDING: "Tarefas Pendentes", IN_PROGRESS: "Tarefas Em Curso", COMPLETED: "Tarefas Executadas" };
-    createBadge(labels[currentTaskStatusFilter], "bg-purple-50 text-purple-700 border-purple-100", () => {
+    createBadge(labels[currentTaskStatusFilter], "bg-indigo-50 text-indigo-700 border-indigo-100", () => {
       currentTaskStatusFilter = null;
       refreshClientsGrid();
     });
@@ -476,7 +445,6 @@ function updateFiltersUI() {
     clearAllBtn.className = "text-[9px] font-black text-red-500 hover:text-red-700 transition-colors ml-3 uppercase tracking-widest";
     clearAllBtn.textContent = "Limpar Filtros";
     clearAllBtn.addEventListener("click", () => {
-      currentStatusFilter = null;
       currentProjectStatusFilter = null;
       currentTaskStatusFilter = null;
       refreshClientsGrid();
@@ -487,33 +455,31 @@ function updateFiltersUI() {
   }
 }
 
-async function loadClientMatrix({ search = "" } = {}) {
+async function loadObrasMatrix({ search = "" } = {}) {
   const body = byId("clientMatrixBody");
   if (!body) return;
   body.innerHTML = renderLoadingRow(5);
 
-  let url = `/dashboard/clients?search=${encodeURIComponent(search)}&page=1&pageSize=10`;
-  if (currentStatusFilter) url += `&status=${encodeURIComponent(currentStatusFilter)}`;
-  if (currentProjectStatusFilter) url += `&projectStatus=${encodeURIComponent(currentProjectStatusFilter)}`;
-  if (currentTaskStatusFilter) url += `&taskStatus=${encodeURIComponent(currentTaskStatusFilter)}`;
+  let url = `/projects?search=${encodeURIComponent(search)}&page=1&pageSize=15&sort=updatedAt_desc`;
+  if (currentProjectStatusFilter) url += `&status=${encodeURIComponent(currentProjectStatusFilter)}`;
 
   const data = await apiRequest(url);
   updateFiltersUI();
 
   if (!data.items?.length) {
-    body.innerHTML = `<tr><td class="px-8 py-8 text-center text-sm font-bold text-slate-400" colspan="5">Nenhum cliente encontrado.</td></tr>`;
+    body.innerHTML = `<tr><td class="px-8 py-8 text-center text-sm font-bold text-slate-400" colspan="5">Nenhuma obra encontrada.</td></tr>`;
     return;
   }
 
-  body.innerHTML = data.items.map(renderClientRow).join("");
+  body.innerHTML = data.items.map(renderObraRow).join("");
 }
 
 function wireClientMatrixActions() {
   document.addEventListener("click", (e) => {
-    const btn = e.target?.closest?.("[data-open-client]");
-    const id = btn?.getAttribute?.("data-open-client");
+    const btn = e.target?.closest?.("[data-open-obra]");
+    const id = btn?.getAttribute?.("data-open-obra");
     if (!id) return;
-    window.location.href = `../ClienteDetalhe/client.html?id=${encodeURIComponent(id)}`;
+    window.location.href = `../Projectos/ProjectGeral.html?id=${encodeURIComponent(id)}`;
   });
 }
 
@@ -588,5 +554,6 @@ async function init() {
   wireSync();
   wireAddClient();
 }
+
 
 init().catch((err) => toast(err.message || "Falha ao carregar Dashboard. Verifique login/API.", { type: "error" }));

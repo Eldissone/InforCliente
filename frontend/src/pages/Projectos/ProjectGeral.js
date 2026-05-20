@@ -43,7 +43,7 @@ let state = {
 function renderStatusPill(status) {
   if (status === "ON_HOLD") {
     return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-100">
-      <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> ANDAMENTO
+      <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> PAUSADA
     </span>`;
   }
   if (status === "COMPLETED") {
@@ -289,7 +289,7 @@ async function load() {
     } else {
       recycleContainer.innerHTML = "";
     }
-  } catch(e) {
+  } catch (e) {
     console.error("Failed to load deleted projects", e);
   }
 }
@@ -571,7 +571,7 @@ async function openEdit(id) {
             <div class="flex items-start gap-3">
               <div class="flex-shrink-0 flex flex-col items-center gap-2">
                 <div class="w-10 h-10 rounded-full bg-slate-200 border border-white shadow-sm overflow-hidden flex-shrink-0">
-                  <img src="${t.photo ? getApiBaseUrl()+'/'+t.photo : '/assets/images/placeholder-user.png'}" class="w-full h-full object-cover">
+                  <img src="${t.photo ? getApiBaseUrl() + '/' + t.photo : '/assets/images/placeholder-user.png'}" class="w-full h-full object-cover">
                 </div>
                 <input type="file" class="hidden" data-tech-photo-file="${i}" accept="image/*">
                 <button type="button" data-tech-photo-btn="${i}" class="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500 hover:bg-slate-100">Foto</button>

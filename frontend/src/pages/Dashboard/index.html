@@ -233,8 +233,8 @@
             <div class="glass-card p-6 rounded-[2rem] flex flex-col justify-between h-[340px]">
                 <div>
                     <div class="flex justify-between items-start mb-2">
-                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Caixa e
-                            Faturação</span>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Valor Total
+                        </span>
                         <div class="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-600">
                             <span class="material-symbols-outlined text-lg">payments</span>
                         </div>
@@ -324,15 +324,15 @@
         <section class="glass-panel rounded-[2.5rem] overflow-hidden shadow-2xl">
             <div class="p-6 md:p-8 border-b border-slate-100 md:flex items-center justify-between gap-6">
                 <div>
-                    <h3 class="font-extrabold text-slate-900 text-xl font-outfit">Resumo Geral de Clientes</h3>
-                    <p class="text-xs text-slate-500 mt-1">Pesquise, filtre e aceda ao detalhe individual de cada conta.
+                    <h3 class="font-extrabold text-slate-900 text-xl font-outfit">Resumo Geral de Obras</h3>
+                    <p class="text-xs text-slate-500 mt-1">Pesquise, filtre e aceda ao detalhe individual de cada obra.
                     </p>
                     <div id="activeFiltersContainer" class="flex flex-wrap items-center gap-2 mt-2 hidden"></div>
                 </div>
                 <div class="mt-4 md:mt-0 relative w-full md:w-96">
                     <input id="clientMatrixFilter"
                         class="w-full bg-white border border-slate-200 rounded-2xl h-12 pl-12 pr-4 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all"
-                        placeholder="Buscar cliente por nome ou código..." />
+                        placeholder="Buscar obra por nome ou código..." />
                     <span
                         class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
                 </div>
@@ -342,10 +342,10 @@
                     <thead>
                         <tr
                             class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-wider border-b border-slate-100">
-                            <th class="px-8 py-5">Identificação do Cliente</th>
-                            <th class="px-8 py-5">Estado da Conta</th>
-                            <th class="px-8 py-5 text-right">Facturação (LTV)</th>
-                            <th class="px-8 py-5 text-center">Score de Saúde</th>
+                            <th class="px-8 py-5">Obra</th>
+                            <th class="px-8 py-5">Estado da Obra</th>
+                            <th class="px-8 py-5 text-right">Valor da Obra</th>
+                            <th class="px-8 py-5 text-center">Progresso</th>
                             <th class="px-8 py-5 text-right">Ações</th>
                         </tr>
                     </thead>
