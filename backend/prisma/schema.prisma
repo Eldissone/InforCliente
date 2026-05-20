@@ -507,6 +507,7 @@ enum DailyPlanStatus {
   PENDING_MATERIAL
   IN_PROGRESS
   PENDING_VALIDATION
+  PENDING_RETURN
   COMPLETED
 }
 
@@ -516,6 +517,9 @@ model DailyPlan {
   date        DateTime
   status      DailyPlanStatus @default(DRAFT)
   description String?
+  receivedBy  String?
+  returnedBy  String?
+  returnConfirmedAt DateTime?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 

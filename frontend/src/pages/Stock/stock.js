@@ -46,6 +46,7 @@ async function loadTabContent(tab) {
         else if (tab === "warehouses") await renderWarehouses(container);
         else if (tab === "movements") await renderMovements(container);
         else if (tab === "requests") await renderRequests(container);
+        else if (tab === "returns") await renderReturns(container);
         else if (tab.startsWith("warehouse_detail_")) {
             const warehouseId = tab.replace("warehouse_detail_", "");
             await renderWarehouseDetail(container, warehouseId);
@@ -2553,13 +2554,34 @@ window.deleteStockBalance = async (id) => {
     } catch (error) { alert("Erro ao remover: " + error.message); }
 };
 
+// Cache de planos pendentes para uso no modal de disponibilização
+let _pendingPlans = [];
+
 async function updateRequestsBadge() {
     try {
         const plans = await apiRequest("/daily-plans/all-pending");
-        const badge = document.getElementById("requests_badge");
-        if (badge) {
-            if (plans && plans.length > 0) badge.classList.remove("hidden");
-            else badge.classList.add("hidden");
+        
+        // Split plans by status
+        const requestPlans = plans ? plans.filter(p => p.status === "PENDING_MATERIAL") : [];
+        const returnPlans = plans ? plans.filter(p => {
+            if (p.returnConfirmedAt) return false;
+            if (p.status === "PENDING_RETURN") return true;
+            if (p.status === "PENDING_VALIDATION") {
+                return p.materials.some(m => Number(m.providedQty) > Number(m.consumedQty));
+            }
+            return false;
+        }) : [];
+
+        const reqBadge = document.getElementById("requests_badge");
+        if (reqBadge) {
+            if (requestPlans.length > 0) reqBadge.classList.remove("hidden");
+            else reqBadge.classList.add("hidden");
+        }
+
+        const retBadge = document.getElementById("returns_badge");
+        if (retBadge) {
+            if (returnPlans.length > 0) retBadge.classList.remove("hidden");
+            else retBadge.classList.add("hidden");
         }
     } catch (err) { console.error("Erro ao atualizar badge:", err); }
 }
@@ -2568,17 +2590,19 @@ async function renderRequests(container) {
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
     
     try {
-        const plans = await apiRequest("/daily-plans/all-pending");
+        const allPlans = await apiRequest("/daily-plans/all-pending");
+        const plans = allPlans ? allPlans.filter(p => p.status === "PENDING_MATERIAL") : [];
+        _pendingPlans = allPlans || [];
         
         // Update badge count
         const badge = document.getElementById("requests_badge");
-        if (plans && plans.length > 0) {
+        if (plans.length > 0) {
             badge.classList.remove("hidden");
         } else {
             badge.classList.add("hidden");
         }
 
-        if (!plans || plans.length === 0) {
+        if (plans.length === 0) {
             container.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-20 text-center">
                     <span class="material-symbols-outlined text-6xl text-slate-200 mb-4">check_circle</span>
@@ -2627,7 +2651,7 @@ async function renderRequests(container) {
                             ${p.materials.map(m => `
                                 <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
                                     <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
-                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty}</span>
+                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -2663,22 +2687,317 @@ async function renderRequests(container) {
 }
 
 window.providePlanMaterialsGlobal = async (id, event) => {
-    if (!confirm("Confirmar a disponibilização imediata de todos os materiais solicitados neste plano? O stock será debitado dos respetivos estaleiros de obra.")) return;
-    
-    // Mostra indicador global
-    const btn = event.currentTarget;
-    const oldHtml = btn.innerHTML;
-    btn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>`;
-    btn.disabled = true;
+    // Procura o plano no cache
+    const plan = _pendingPlans.find(p => p.id === id);
+    const materials = plan?.materials || [];
 
+    const materialsHtml = materials.length > 0
+        ? materials.map((m, i) => `
+            <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
+                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Solicitado: <span class="text-amber-600 font-black">${m.requestedQty} ${m.product?.unit || ''}</span></p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd. a Fornecer</label>
+                    <input type="number"
+                        name="qty_${i}"
+                        data-product-id="${m.productId || m.product?.id || ''}"
+                        value="${m.requestedQty}"
+                        min="0"
+                        step="0.01"
+                        class="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:ring-2 focus:ring-emerald-500 text-center transition-all">
+                </div>
+            </div>
+        `).join('')
+        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material associado a este pedido.</p>`;
+
+    const contentHtml = `
+        <div class="space-y-5 pt-2">
+            <div class="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm shrink-0">
+                    <span class="material-symbols-outlined text-2xl">inventory_2</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Confirmação de Saída de Stock</p>
+                    <p class="text-xs text-amber-900 leading-relaxed">Confirme as quantidades a fornecer e registe quem recebeu o material antes de autorizar a saída.</p>
+                </div>
+            </div>
+
+            <form id="formProvideMaterials" class="space-y-5">
+                <div class="space-y-2">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">format_list_bulleted</span>
+                        Materiais Solicitados
+                    </h5>
+                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        ${materialsHtml}
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                        <span class="text-red-500">*</span> Recebido por
+                    </label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">person</span>
+                        <input type="text" name="receivedBy" required
+                            placeholder="Nome completo de quem recebeu o material..."
+                            class="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder-slate-400">
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Disponibilizar Materiais para Obra",
+        contentHtml,
+        primaryLabel: "Confirmar e Disponibilizar",
+        onPrimary: async ({ body }) => {
+            const form = body.querySelector("#formProvideMaterials");
+            const receivedBy = form.querySelector('input[name="receivedBy"]').value.trim();
+
+            if (!receivedBy) {
+                // Highlight the field
+                const input = form.querySelector('input[name="receivedBy"]');
+                input.classList.add("ring-2", "ring-red-400", "border-red-300");
+                input.focus();
+                input.placeholder = "Campo obrigatório — quem recebeu o material?";
+                return;
+            }
+
+            // Recolher quantidades confirmadas
+            const confirmedMaterials = [];
+            form.querySelectorAll('input[type="number"]').forEach(input => {
+                const productId = input.dataset.productId;
+                const confirmedQty = parseFloat(input.value) || 0;
+                if (productId) {
+                    confirmedMaterials.push({ productId, confirmedQty });
+                }
+            });
+
+            try {
+                await apiRequest(`/daily-plans/${id}/provide-materials`, {
+                    method: "POST",
+                    body: { receivedBy, materials: confirmedMaterials }
+                });
+                close();
+                // Toast de sucesso
+                const toastEl = document.createElement("div");
+                toastEl.className = "fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-bold animate-in slide-in-from-bottom-4";
+                toastEl.innerHTML = `<span class="material-symbols-outlined text-[#2afc8d]">check_circle</span> Materiais disponibilizados! Recebido por: <span class="text-[#2afc8d]">${esc(receivedBy)}</span>`;
+                document.body.appendChild(toastEl);
+                setTimeout(() => toastEl.remove(), 4500);
+                const allPlans = await apiRequest("/daily-plans/all-pending");
+                _pendingPlans = allPlans || [];
+                loadTabContent("requests");
+            } catch (err) {
+                alert("Erro ao disponibilizar materiais: " + err.message);
+            }
+        }
+    });
+};
+
+async function renderReturns(container) {
+    container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
+    
     try {
-        await apiRequest(`/daily-plans/${id}/provide-materials`, { method: "POST" });
-        alert("Materiais disponibilizados com sucesso! O plano está agora Em Progresso.");
-        loadTabContent("requests"); // Recarrega a aba
+        const allPlans = await apiRequest("/daily-plans/all-pending");
+        _pendingPlans = allPlans || [];
+        const plans = _pendingPlans.filter(p => {
+            if (p.returnConfirmedAt) return false;
+            if (p.status === "PENDING_RETURN") return true;
+            if (p.status === "PENDING_VALIDATION") {
+                return p.materials.some(m => Number(m.providedQty) > Number(m.consumedQty));
+            }
+            return false;
+        });
+        
+        const badge = document.getElementById("returns_badge");
+        if (plans.length > 0) {
+            badge.classList.remove("hidden");
+        } else {
+            badge.classList.add("hidden");
+        }
+
+        if (plans.length === 0) {
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20 text-center">
+                    <span class="material-symbols-outlined text-6xl text-slate-200 mb-4">check_circle</span>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Sem devoluções pendentes!</h3>
+                    <p class="text-slate-500 font-medium max-w-md">Não há materiais para serem rececionados no armazém neste momento.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const formatDt = d => {
+            const dt = new Date(d);
+            return `${dt.getDate().toString().padStart(2, '0')}/${(dt.getMonth() + 1).toString().padStart(2, '0')}/${dt.getFullYear()}`;
+        };
+
+        const plansHtml = plans.map(p => `
+            <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm hover:shadow-lg transition-all flex flex-col lg:flex-row justify-between gap-6 mb-4 relative overflow-hidden group">
+                <div class="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                <div class="flex-1 space-y-4 ml-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center gap-3">
+                            <span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl text-xs font-black tracking-widest uppercase flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">construction</span>
+                                ${esc(p.project?.name || "Obra Desconhecida")}
+                            </span>
+                            <span class="text-slate-400 text-xs font-bold flex items-center gap-1">
+                                <span class="material-symbols-outlined text-xs">calendar_today</span>
+                                ${formatDt(p.date)}
+                            </span>
+                        </div>
+                        <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black tracking-widest uppercase animate-pulse border border-blue-200">
+                            Aguardando Devolução Logística
+                        </span>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-lg font-bold text-slate-900 mb-1">${esc(p.description || "Sem Descrição")}</h4>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais a Devolver
+                        </h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${p.materials.filter(m => Number(m.providedQty) > Number(m.consumedQty)).map(m => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
+                                    <div class="flex flex-col min-w-0 flex-1">
+                                      <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+                                      <span class="text-[9px] font-bold text-slate-400">Entreg: ${m.providedQty} / Usado: ${m.consumedQty}</span>
+                                    </div>
+                                    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg text-xs font-black shrink-0 ml-2">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-end shrink-0">
+                    <button onclick="window.confirmReturnGlobal('${p.id}', event)" 
+                        style="background-color: #3b82f6 !important;"
+                        class="w-full lg:w-auto h-12 text-white px-8 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 active:scale-95 hover:brightness-110">
+                        <span class="material-symbols-outlined text-lg">check_circle</span>
+                        Confirmar Receção
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = `
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                    <span class="material-symbols-outlined text-3xl text-blue-500">undo</span>
+                    Devoluções de Obra Pendentes
+                </h2>
+                <p class="text-slate-500 font-medium mt-1">Valide a receção dos materiais sobrantes dos Planos Diários de volta ao estaleiro.</p>
+            </div>
+            <div class="space-y-2">
+                ${plansHtml}
+            </div>
+        `;
     } catch (err) {
-        alert("Erro ao disponibilizar materiais: " + err.message);
-        btn.innerHTML = oldHtml;
-        btn.disabled = false;
+        container.innerHTML = `<div class="bg-red-50 text-red-600 p-8 rounded-2xl font-bold text-center">Erro ao carregar devoluções: ${err.message}</div>`;
     }
+}
+
+window.confirmReturnGlobal = async (id, event) => {
+    const plan = _pendingPlans.find(p => p.id === id);
+    const materials = plan?.materials?.filter(m => Number(m.providedQty) > Number(m.consumedQty)) || [];
+
+    const materialsHtml = materials.length > 0
+        ? materials.map((m) => `
+            <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd a Devolver:</span>
+                    <span class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 text-center">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
+                </div>
+            </div>
+        `).join('')
+        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material a devolver.</p>`;
+
+    const contentHtml = `
+        <div class="space-y-5 pt-2">
+            <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm shrink-0">
+                    <span class="material-symbols-outlined text-2xl">undo</span>
+                </div>
+                <div>
+                    <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Confirmação de Entrada de Stock</p>
+                    <p class="text-xs text-blue-900 leading-relaxed">Confirme a receção dos materiais e registe quem os devolveu.</p>
+                </div>
+            </div>
+
+            <form id="formConfirmReturn" class="space-y-5">
+                <div class="space-y-2">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">format_list_bulleted</span>
+                        Materiais a Receber
+                    </h5>
+                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        ${materialsHtml}
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                        <span class="text-red-500">*</span> Devolvido por
+                    </label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">person</span>
+                        <input type="text" name="returnedBy" required
+                            placeholder="Nome completo de quem efetuou a devolução..."
+                            value="${esc(plan.returnedBy || '')}"
+                            class="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder-slate-400">
+                    </div>
+                </div>
+            </form>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Confirmar Devolução de Obra",
+        contentHtml,
+        primaryLabel: "Confirmar Receção",
+        onPrimary: async ({ body }) => {
+            const form = body.querySelector("#formConfirmReturn");
+            const returnedBy = form.querySelector('input[name="returnedBy"]').value.trim();
+
+            if (!returnedBy) {
+                const input = form.querySelector('input[name="returnedBy"]');
+                input.classList.add("ring-2", "ring-red-400", "border-red-300");
+                input.focus();
+                input.placeholder = "Campo obrigatório — quem efetuou a devolução?";
+                return;
+            }
+
+            try {
+                await apiRequest(`/daily-plans/${id}/confirm-return`, {
+                    method: "POST",
+                    body: { returnedBy }
+                });
+                close();
+                // Toast de sucesso
+                const toastEl = document.createElement("div");
+                toastEl.className = "fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-bold animate-in slide-in-from-bottom-4";
+                toastEl.innerHTML = `<span class="material-symbols-outlined text-[#2afc8d]">check_circle</span> Devolução validada! Devolvido por: <span class="text-[#2afc8d]">${esc(returnedBy)}</span>`;
+                document.body.appendChild(toastEl);
+                setTimeout(() => toastEl.remove(), 4500);
+                loadTabContent("returns");
+                updateRequestsBadge();
+            } catch (err) {
+                alert("Erro ao confirmar devolução: " + err.message);
+            }
+        }
+    });
 };
 

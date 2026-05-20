@@ -53,6 +53,10 @@ function renderStatusBadge(status) {
       return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-100 animate-pulse">
         <span class="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></span> Pendente Validação
       </span>`;
+    case "PENDING_RETURN":
+      return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 animate-pulse">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Aguardando Devolução Logística
+      </span>`;
     case "COMPLETED":
       return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Concluído
@@ -96,7 +100,7 @@ async function loadPlans() {
 function updateKPIs() {
   const pending = state.plans.filter(p => p.status === "DRAFT" || p.status === "PENDING_MATERIAL").length;
   const active = state.plans.filter(p => p.status === "IN_PROGRESS").length;
-  const completed = state.plans.filter(p => p.status === "COMPLETED" || p.status === "PENDING_VALIDATION").length;
+  const completed = state.plans.filter(p => p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN").length;
 
   setText(el("kpiPendingCount"), pending);
   setText(el("kpiActiveCount"), active);
@@ -110,9 +114,9 @@ function renderPlansList() {
   // Filter plans based on selected tab
   const filteredPlans = state.plans.filter(p => {
     if (state.activeTab === "active") {
-      return p.status !== "COMPLETED" && p.status !== "PENDING_VALIDATION";
+      return p.status !== "COMPLETED" && p.status !== "PENDING_VALIDATION" && p.status !== "PENDING_RETURN";
     } else {
-      return p.status === "COMPLETED" || p.status === "PENDING_VALIDATION";
+      return p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN";
     }
   });
 
@@ -132,6 +136,7 @@ function renderPlansList() {
 
 function renderPlanCard(p) {
   const isDraft = p.status === "DRAFT";
+  const isMaterialReady = isDraft && !!p.receivedBy; // DRAFT + materiais já entregues pela logística
   const isInProgress = p.status === "IN_PROGRESS";
   const isPendingMaterial = p.status === "PENDING_MATERIAL";
   const isCompleted = p.status === "COMPLETED";
@@ -168,7 +173,20 @@ function renderPlanCard(p) {
     `;
   }).join("");
 
-  const materialsHtml = p.materials.length > 0 ? p.materials.map(m => `
+  const materialsHeaderHtml = p.materials.length > 0 ? `
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+      <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span> Materiais do Plano
+      </h4>
+      ${p.receivedBy ? `
+        <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600">
+          <span class="material-symbols-outlined text-[12px]">person</span> Recebido por: ${escapeHtml(p.receivedBy)}
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
+
+  const materialsHtml = p.materials.length > 0 ? materialsHeaderHtml + p.materials.map(m => `
     <div class="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50">
       <div>
         <p class="text-xs font-bold text-slate-800">${escapeHtml(m.product?.name || "Material")}</p>
@@ -177,18 +195,30 @@ function renderPlanCard(p) {
       <div class="flex gap-4 text-right shrink-0">
         <div>
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedida</p>
-          <p class="text-xs font-bold text-slate-600">${m.requestedQty}</p>
+          <p class="text-xs font-bold text-slate-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</p>
         </div>
         <div>
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
-          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0}</p>
+          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
         </div>
       </div>
     </div>
   `).join("") : `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
 
   let actionButtonHtml = "";
-  if (isDraft) {
+  if (isMaterialReady) {
+    // Material already allocated, waiting for technician to start
+    actionButtonHtml = `
+      <div class="flex flex-col items-end gap-2">
+        <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[10px] font-black text-emerald-700">
+          <span class="material-symbols-outlined text-sm">inventory_2</span> Material entregue por ${escapeHtml(p.receivedBy)}
+        </div>
+        <button onclick="window.startPlan('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 pulse-emerald transition-all active:scale-95">
+          <span class="material-symbols-outlined text-sm">play_arrow</span> Iniciar Execução
+        </button>
+      </div>
+    `;
+  } else if (isDraft) {
     actionButtonHtml = `
       <button onclick="window.startPlan('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
         <span class="material-symbols-outlined text-sm">play_arrow</span> Iniciar Execução
@@ -210,6 +240,12 @@ function renderPlanCard(p) {
     actionButtonHtml = `
       <div class="text-right text-xs font-bold text-orange-600 flex items-center gap-2 justify-end bg-orange-50 border border-orange-100 rounded-xl px-4 py-2.5">
         <span class="material-symbols-outlined text-lg">fact_check</span> Relatório Enviado. Aguardando Validação do Gestor
+      </div>
+    `;
+  } else if (p.status === "PENDING_RETURN") {
+    actionButtonHtml = `
+      <div class="text-right text-xs font-bold text-blue-600 flex items-center gap-2 justify-end bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
+        <span class="material-symbols-outlined text-lg">inventory_2</span> Aguardando Devolução na Logística
       </div>
     `;
   } else if (isCompleted) {
@@ -253,14 +289,11 @@ function renderPlanCard(p) {
           </div>
         </div>
 
-        <div>
-          <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span> Materiais Requisitados
-          </h4>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            ${materialsHtml}
-          </div>
+        <!-- Materiais do Plano -->
+        <div class="pt-2 border-t border-slate-100">
+          ${materialsHtml}
         </div>
+
       </div>
 
       <!-- Action Button Area -->
@@ -324,13 +357,39 @@ window.completePlan = async function(planId) {
       </div>
       <div class="w-full sm:w-32 shrink-0">
         <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Qtd Consumida</label>
-        <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.providedQty}" max="${m.providedQty}" class="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
+        <input type="number" step="0.01" data-mat-id="${m.id}" data-provided="${m.providedQty}" value="${m.providedQty}" max="${m.providedQty}" oninput="document.getElementById('dev-${m.id}').innerText = Math.max(0, this.dataset.provided - this.value).toFixed(2); if(window.checkReturnsNeeded) window.checkReturnsNeeded();" class="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
+      </div>
+      <div class="w-full sm:w-24 shrink-0 text-right">
+        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">A Devolver</label>
+        <p class="text-xs font-bold text-amber-600" id="dev-${m.id}">0.00</p>
       </div>
     </div>
   `).join('');
 
+  const returnedByHtml = plan.materials.length > 0 ? `
+    <div id="returnedByContainer" class="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200" style="display: none;">
+      <label class="text-[10px] font-black uppercase text-amber-800 block mb-1">Quem vai devolver o material remanescente ao armazém?</label>
+      <input type="text" id="returnedByInput" placeholder="Ex: João Silva (Técnico)" class="w-full h-10 bg-white border border-amber-300 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-amber-500 outline-none">
+      <p class="text-[9px] text-amber-600 mt-1">Obrigatório se as quantidades consumidas forem menores que as disponibilizadas.</p>
+    </div>
+  ` : '';
+
   const renderTasks = tasksHtml || '<p class="text-xs text-slate-400 italic">Sem tarefas para reportar.</p>';
   const renderMats = matsHtml || '<p class="text-xs text-slate-400 italic">Nenhum material fornecido para este plano.</p>';
+
+  window.checkReturnsNeeded = function() {
+    const inputs = document.querySelectorAll('input[data-mat-id]');
+    let needsReturn = false;
+    inputs.forEach(input => {
+      const provided = parseFloat(input.getAttribute('data-provided') || 0);
+      const consumed = parseFloat(input.value || 0);
+      if (consumed < provided) needsReturn = true;
+    });
+    const container = document.getElementById('returnedByContainer');
+    if (container) {
+      container.style.display = needsReturn ? 'block' : 'none';
+    }
+  };
 
   openModal({
     title: "Confirmar Conclusão do Plano",
@@ -360,6 +419,7 @@ window.completePlan = async function(planId) {
           <div class="max-h-[250px] overflow-y-auto pr-1">
             ${renderMats}
           </div>
+          ${returnedByHtml}
         </div>
       </div>
     `,
@@ -374,11 +434,25 @@ window.completePlan = async function(planId) {
         consumedQty: Number(el.value || 0)
       }));
 
+      const returnedByInput = panel.querySelector("#returnedByInput");
+      const returnedBy = returnedByInput ? returnedByInput.value.trim() : null;
+
+      // Simple validation if there are returns
+      const hasReturns = consumedMaterials.some(cm => {
+        const mat = plan.materials.find(m => m.id === cm.dailyPlanMaterialId);
+        return mat && cm.consumedQty < mat.providedQty;
+      });
+
+      if (hasReturns && !returnedBy) {
+        toast("Por favor, preencha quem vai devolver o material remanescente.", { type: "warning" });
+        return; // Assuming openModal handles return gracefully or the user will just have to try again. If it closes, they will reopen.
+      }
+
       setButtonLoading(btn, true);
       try {
         await apiRequest(`/daily-plans/${encodeURIComponent(planId)}/complete`, {
           method: "POST",
-          body: { executedTasks, consumedMaterials }
+          body: { executedTasks, consumedMaterials, returnedBy }
         });
         toast("Execução reportada e plano diário concluído com sucesso!", { type: "success" });
         close();

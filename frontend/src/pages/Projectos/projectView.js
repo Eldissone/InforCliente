@@ -4252,29 +4252,47 @@ async function validatePlan(planId) {
       </div>
     `).join('');
 
-    let matsHtml = plan.materials.map(m => `
+    const returnAlreadyDone = !!plan.returnConfirmedAt;
+
+    let matsHtml = plan.materials.map(m => {
+      const consumed = Number(m.consumedQty || 0);
+      const provided = Number(m.providedQty || 0);
+      const toReturn = provided - consumed;
+      return `
       <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
         <div class="flex-1">
           <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
-          <p class="text-[10px] text-slate-500">Disponibilizado: ${m.providedQty} | Consumido Reportado: <strong class="text-indigo-600">${m.consumedQty || 0}</strong></p>
+          <p class="text-[10px] text-slate-500">Disponibilizado: ${provided} | Consumido Reportado: <strong class="text-indigo-600">${consumed}</strong>${toReturn > 0 ? ` | <span class="text-amber-600 font-bold">Devolvido: ${toReturn.toFixed(2)} ${escapeHtml(m.product?.unit || '')}</span>` : ''}</p>
         </div>
         <div class="w-32">
-          <label class="text-[9px] font-black uppercase text-slate-400">Validado</label>
-          <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.consumedQty ?? m.providedQty}" max="${m.providedQty}" class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-orange-500">
+          <label class="text-[9px] font-black uppercase text-slate-400">${returnAlreadyDone ? 'Consumido' : 'Validado'}</label>
+          <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.consumedQty ?? m.providedQty}" max="${m.providedQty}" ${returnAlreadyDone ? 'readonly class="w-full h-8 bg-slate-100 border border-slate-200 rounded px-2 text-xs font-bold text-slate-500 cursor-not-allowed"' : 'class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-orange-500"'}>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     if (!tasksHtml) tasksHtml = '<p class="text-xs text-slate-400 italic">Sem tarefas.</p>';
     if (!matsHtml) matsHtml = '<p class="text-xs text-slate-400 italic">Sem materiais.</p>';
+
+    const returnNotice = returnAlreadyDone ? `
+      <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 flex items-start gap-3">
+        <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">check_circle</span>
+        <div>
+          <p class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-0.5">Devolução já Confirmada pela Logística</p>
+          <p class="text-xs text-emerald-700">Os materiais sobrantes foram rececionados no armazém por <strong>${escapeHtml(plan.returnedBy || 'Desconhecido')}</strong>. O consumo acima está bloqueado pois já foi validado pela logística.</p>
+        </div>
+      </div>
+    ` : '';
 
     openModal({
       title: "Validar e Aprovar Diário de Obra",
       primaryLabel: "Confirmar Validação",
       contentHtml: `
         <div class="space-y-6">
+          ${returnNotice}
           <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
-            <p class="text-xs text-orange-700">Verifique as quantidades reportadas pelo técnico. Ajuste se necessário. Ao confirmar, o avanço físico será incrementado no projeto e as devoluções de material serão processadas.</p>
+            <p class="text-xs text-orange-700">Verifique as quantidades reportadas pelo técnico. Ajuste se necessário. Ao confirmar, o avanço físico será incrementado no projeto.</p>
           </div>
           <div>
             <h4 class="text-sm font-bold text-slate-900 mb-3"><span class="material-symbols-outlined text-blue-600 align-middle text-sm">task</span> Tarefas Executadas</h4>
@@ -4328,6 +4346,7 @@ window.viewPlanDetails = async function (planId) {
     if (plan.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>`;
     if (plan.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
     if (plan.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
+    if (plan.status === "PENDING_RETURN") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Devolução Logística</span>`;
     if (plan.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
 
     const uniqueTechnicians = [];
@@ -4395,9 +4414,21 @@ window.viewPlanDetails = async function (planId) {
         <!-- Materiais -->
         ${plan.materials && plan.materials.length > 0 ? `
           <div>
-            <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
-            </h4>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+              <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+              </h4>
+              ${plan.receivedBy ? `
+                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600">
+                  <span class="material-symbols-outlined text-[12px]">person</span> Recebido por: ${escapeHtml(plan.receivedBy)}
+                </div>
+              ` : ''}
+              ${plan.returnedBy ? `
+                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600">
+                  <span class="material-symbols-outlined text-[12px]">person</span> Devolvido por: ${escapeHtml(plan.returnedBy)}
+                </div>
+              ` : ''}
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               ${plan.materials.map(m => {
       const returned = Number(m.providedQty) - Number(m.consumedQty);
@@ -4406,16 +4437,16 @@ window.viewPlanDetails = async function (planId) {
                   <div class="flex-1">
                     <span class="text-xs font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Material")}</span>
                     <div class="flex gap-2 mt-1">
-                       <span class="text-[9px] font-bold text-slate-400">Ped: ${m.requestedQty}</span>
-                       ${m.providedQty > 0 ? `<span class="text-[9px] font-bold text-blue-500">Entreg: ${m.providedQty}</span>` : ""}
+                       <span class="text-[9px] font-bold text-slate-400">Ped: ${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
+                       ${m.providedQty > 0 ? `<span class="text-[9px] font-bold text-blue-500">Entreg: ${m.providedQty} ${escapeHtml(m.product?.unit || "")}</span>` : ""}
                     </div>
                   </div>
                   <div class="flex flex-col items-end shrink-0">
                     ${plan.status === "COMPLETED" ? `
-                      <span class="text-[10px] font-black text-emerald-600">Usado: ${m.consumedQty}</span>
-                      ${returned > 0 ? `<span class="text-[9px] font-bold text-amber-500">Devolv: ${returned.toFixed(2)}</span>` : ""}
+                      <span class="text-[10px] font-black text-emerald-600">Usado: ${m.consumedQty} ${escapeHtml(m.product?.unit || "")}</span>
+                      ${returned > 0 ? `<span class="text-[9px] font-bold text-amber-500">Devolv: ${returned.toFixed(2)} ${escapeHtml(m.product?.unit || "")}</span>` : ""}
                     ` : `
-                      <span class="text-xs font-black text-amber-600">${m.requestedQty}</span>
+                      <span class="text-xs font-black text-amber-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
                     `}
                   </div>
                 </div>

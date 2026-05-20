@@ -15,7 +15,7 @@ dailyPlansRoutes.get(
     const { projectId } = req.query;
     const plans = await prisma.dailyPlan.findMany({
       where: { 
-        status: "PENDING_MATERIAL",
+        status: { in: ["PENDING_MATERIAL", "PENDING_RETURN", "PENDING_VALIDATION"] },
         projectId: projectId || undefined
       },
       include: {
@@ -329,6 +329,35 @@ dailyPlansRoutes.patch(
   })
 );
 
+// POST /daily-plans/:id/start
+// Action: Technician starts the daily plan.
+dailyPlansRoutes.post(
+  "/:id/start",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { materials: true }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    
+    let newStatus = "IN_PROGRESS";
+    if (plan.status === "DRAFT" && plan.materials.length > 0 && !plan.receivedBy) {
+       newStatus = "PENDING_MATERIAL";
+    }
+
+    const updated = await prisma.dailyPlan.update({
+      where: { id },
+      data: { status: newStatus }
+    });
+
+    res.json(updated);
+  })
+);
+
 // DELETE /daily-plans/:id
 dailyPlansRoutes.delete(
   "/:id",
@@ -354,7 +383,7 @@ dailyPlansRoutes.post(
   requirePermission("stock", "manage"), // Quem tem stock access
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { userId } = req.user; // O user logado (opcional, req.user.sub)
+    const { receivedBy, materials } = req.body;
     const activeUserId = req.user?.sub || "sistema";
 
     const plan = await prisma.dailyPlan.findUnique({
@@ -378,9 +407,12 @@ dailyPlansRoutes.post(
     try {
       await prisma.$transaction(async (tx) => {
         for (const mat of plan.materials) {
+          const confirmedMat = materials?.find(m => m.productId === mat.productId);
+          const qtyToProvide = confirmedMat ? Number(confirmedMat.confirmedQty) : mat.requestedQty;
+
           await tx.dailyPlanMaterial.update({
             where: { id: mat.id },
-            data: { providedQty: mat.requestedQty }
+            data: { providedQty: qtyToProvide }
           });
 
           await tx.stockMovement.create({
@@ -389,8 +421,8 @@ dailyPlansRoutes.post(
               productId: mat.productId,
               projectId: plan.projectId,
               type: "EXIT",
-              quantity: mat.requestedQty,
-              notes: `Disponibilizado para Plano Diario (ID: ${plan.id})`,
+              quantity: qtyToProvide,
+              notes: `Disponibilizado para Plano Diario (ID: ${plan.id})${receivedBy ? ` - Recebido por: ${receivedBy}` : ''}`,
               userId: activeUserId
             }
           });
@@ -406,14 +438,14 @@ dailyPlansRoutes.post(
           if (existingStock) {
             await tx.warehouseStock.update({
               where: { id: existingStock.id },
-              data: { quantity: { decrement: mat.requestedQty } }
+              data: { quantity: { decrement: qtyToProvide } }
             });
           } else {
             await tx.warehouseStock.create({
               data: {
                 warehouseId: estaleiro.id,
                 productId: mat.productId,
-                quantity: -mat.requestedQty,
+                quantity: -qtyToProvide,
                 ownerId: null
               }
             });
@@ -422,7 +454,10 @@ dailyPlansRoutes.post(
 
         await tx.dailyPlan.update({
           where: { id },
-          data: { status: "IN_PROGRESS" }
+          data: { 
+            status: "DRAFT", // Material alocado mas o técnico ainda tem de iniciar a execução
+            receivedBy: receivedBy || null
+          }
         });
       });
       res.json({ success: true, message: "Materiais disponibilizados com sucesso." });
@@ -441,7 +476,7 @@ dailyPlansRoutes.post(
   requirePermission("obras", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { executedTasks, consumedMaterials } = req.body;
+    const { executedTasks, consumedMaterials, returnedBy } = req.body;
     // executedTasks: [{ dailyPlanTaskId, executedQty }]
     // consumedMaterials: [{ dailyPlanMaterialId, consumedQty }]
 
@@ -484,7 +519,10 @@ dailyPlansRoutes.post(
         // 3. Mudar estado para PENDING_VALIDATION (Aguardando Validação)
         await tx.dailyPlan.update({
           where: { id },
-          data: { status: "PENDING_VALIDATION" }
+          data: { 
+            status: "PENDING_VALIDATION",
+            returnedBy: returnedBy || null 
+          }
         });
       });
 
@@ -572,8 +610,10 @@ dailyPlansRoutes.post(
           }
         }
 
-        // 2. Confirmar e Processar Materiais Consumidos e Devoluções de Stock
+        // 2. Confirmar e Processar Materiais Consumidos
         const materialsToProcess = validatedMaterials || plan.materials.map(m => ({ dailyPlanMaterialId: m.id, consumedQty: m.consumedQty }));
+        let hasReturns = false;
+
         if (estaleiro) {
           for (const cm of materialsToProcess) {
             const planMat = plan.materials.find(pm => pm.id === cm.dailyPlanMaterialId);
@@ -587,60 +627,124 @@ dailyPlansRoutes.post(
               data: { consumedQty: consQty }
             });
 
-            // Se o consumo real foi inferior ao provido, devolvemos a diferença para o stock do estaleiro
+            // Se o consumo real foi inferior ao provido, marcamos como tendo devoluções
             if (consQty < provided) {
-              const retorno = provided - consQty;
-              
-              await tx.stockMovement.create({
-                data: {
-                  warehouseId: estaleiro.id,
-                  productId: planMat.productId,
-                  projectId: plan.projectId,
-                  type: "ENTRY",
-                  quantity: retorno,
-                  notes: `Devolução de material não consumido do Plano Diário validado (ID: ${plan.id})`,
-                  userId: activeUserId
-                }
-              });
-
-              const existingStock = await tx.warehouseStock.findFirst({
-                where: {
-                  warehouseId: estaleiro.id,
-                  productId: planMat.productId,
-                  ownerId: null
-                }
-              });
-
-              if (existingStock) {
-                await tx.warehouseStock.update({
-                  where: { id: existingStock.id },
-                  data: { quantity: { increment: retorno } }
-                });
-              } else {
-                await tx.warehouseStock.create({
-                  data: {
-                    warehouseId: estaleiro.id,
-                    productId: planMat.productId,
-                    quantity: retorno,
-                    ownerId: null
-                  }
-                });
-              }
+              hasReturns = true;
             }
           }
         }
 
-        // 3. Mudar estado para COMPLETED
+        // 3. Mudar estado para COMPLETED ou PENDING_RETURN (apenas se a devolução ainda não tiver sido confirmada)
         await tx.dailyPlan.update({
           where: { id },
-          data: { status: "COMPLETED" }
+          data: { status: (hasReturns && !plan.returnConfirmedAt) ? "PENDING_RETURN" : "COMPLETED" }
         });
       });
 
-      res.json({ success: true, message: "Plano Diário validado e concluído com sucesso!" });
+      res.json({ success: true, message: "Plano Diário validado. " + (hasReturns ? "Aguardando devolução de materiais pela logística." : "Concluído com sucesso!") });
     } catch (error) {
       console.error("ERRO NO TRANSACTION approve-plan:", error);
       res.status(500).json({ error: "Erro ao aprovar plano: " + error.message });
+    }
+  })
+);
+
+// POST /daily-plans/:id/confirm-return
+// Action: Logistics confirms the receipt of returned materials.
+dailyPlansRoutes.post(
+  "/:id/confirm-return",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { returnedBy } = req.body;
+    const activeUserId = req.user?.sub || "sistema";
+
+    if (!returnedBy) {
+      return res.status(400).json({ error: "É obrigatório indicar quem fez a devolução." });
+    }
+
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { materials: true, project: true }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    if (plan.status !== "PENDING_RETURN" && plan.status !== "PENDING_VALIDATION") {
+      return res.status(400).json({ error: "Este plano não está pendente de validação ou devolução." });
+    }
+    if (plan.returnConfirmedAt) {
+      return res.status(400).json({ error: "A devolução deste plano já foi confirmada anteriormente." });
+    }
+
+    const estaleiro = await prisma.warehouse.findFirst({
+      where: { projectId: plan.projectId }
+    });
+
+    if (!estaleiro) {
+      return res.status(400).json({ error: "O estaleiro não foi encontrado." });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const mat of plan.materials) {
+          const consQty = Number(mat.consumedQty || 0);
+          const provided = Number(mat.providedQty || 0);
+
+          if (consQty < provided) {
+            const retorno = provided - consQty;
+
+            await tx.stockMovement.create({
+              data: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId,
+                projectId: plan.projectId,
+                type: "ENTRY",
+                quantity: retorno,
+                notes: `Devolução de material não consumido (Plano ${plan.id}) - Devolvido por: ${returnedBy}`,
+                userId: activeUserId
+              }
+            });
+
+            const existingStock = await tx.warehouseStock.findFirst({
+              where: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId,
+                ownerId: null
+              }
+            });
+
+            if (existingStock) {
+              await tx.warehouseStock.update({
+                where: { id: existingStock.id },
+                data: { quantity: { increment: retorno } }
+              });
+            } else {
+              await tx.warehouseStock.create({
+                data: {
+                  warehouseId: estaleiro.id,
+                  productId: mat.productId,
+                  quantity: retorno,
+                  ownerId: null
+                }
+              });
+            }
+          }
+        }
+
+        await tx.dailyPlan.update({
+          where: { id },
+          data: { 
+            status: plan.status === "PENDING_RETURN" ? "COMPLETED" : plan.status,
+            returnedBy: returnedBy,
+            returnConfirmedAt: new Date()
+          }
+        });
+      });
+
+      res.json({ success: true, message: "Devolução confirmada com sucesso!" });
+    } catch (error) {
+      console.error("ERRO NO TRANSACTION confirm-return:", error);
+      res.status(500).json({ error: "Erro ao confirmar devolução: " + error.message });
     }
   })
 );
