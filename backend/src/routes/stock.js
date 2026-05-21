@@ -89,19 +89,43 @@ stockRoutes.get(
       orderBy: { product: { name: "asc" } },
     });
     
+    // 3. Buscar os planos de material para este projeto
+    const materialPlans = await prisma.projectMaterialPlan.findMany({
+      where: { projectId },
+      include: { product: true }
+    });
+    
     // Agrupar para evitar duplicados por ownerId na visualização do projecto
     const grouped = {};
+    
+    // Primeiro, adicionar os materiais planeados
+    for (const plan of materialPlans) {
+      const key = `${plan.productId}_${warehouse.id}`;
+      grouped[key] = {
+        id: plan.id, // Ou mock do id
+        warehouseId: warehouse.id,
+        productId: plan.productId,
+        product: plan.product,
+        warehouse: warehouse,
+        quantity: 0,
+        quantityPlanned: Number(plan.plannedQty || 0)
+      };
+    }
+    
+    // Depois, adicionar os itens em stock
     for (const item of rawItems) {
       const key = `${item.productId}_${item.warehouseId}`;
       if (!grouped[key]) {
         grouped[key] = {
           ...item,
-          quantity: 0
+          quantity: 0,
+          quantityPlanned: 0
         };
       }
       grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
     }
     
+    console.log("=== DEBUG BALANCE ITEMS ===", Object.values(grouped));
     return res.json({ items: Object.values(grouped) });
   })
 );
@@ -351,7 +375,27 @@ stockRoutes.get(
       include: { product: true }
     });
 
+    // Buscar planos de materiais
+    const materialPlans = await prisma.projectMaterialPlan.findMany({
+      where: { projectId },
+      include: { product: true }
+    });
+
     const stockMap = {};
+    
+    // Inserir os planos primeiro no stockMap para garantir que todos os produtos planeados aparecem mesmo sem movimentos
+    materialPlans.forEach((plan) => {
+      stockMap[plan.productId] = {
+        id: plan.productId,
+        name: plan.product?.name || "Desconhecido", // name needs to be populated if product is included, wait, let's include product in the findMany
+        unit: plan.product?.unit || "UN",
+        qty: 0,
+        totalIn: 0,
+        totalOut: 0,
+        totalExpected: Number(plan.plannedQty || 0),
+      };
+    });
+
     movements.forEach((m) => {
       const pId = m.productId;
       if (!stockMap[pId]) {
@@ -362,7 +406,7 @@ stockRoutes.get(
           qty: 0,
           totalIn: 0,
           totalOut: 0,
-          totalExpected: 0, // Poderíamos buscar no orçamento, mas por agora 0
+          totalExpected: 0,
         };
       }
       
@@ -370,7 +414,7 @@ stockRoutes.get(
       if (m.type === "SAIDA" || m.type === "TRANSFER_OUT" || m.type === "LOSS") {
         stockMap[pId].totalOut += val;
         stockMap[pId].qty -= val;
-      } else if (m.type === "ENTRADA" || m.type === "TRANSFER_IN") {
+      } else if (m.type === "ENTRADA" || m.type === "TRANSFER_IN" || m.type === "ENTRY") {
         stockMap[pId].totalIn += val;
         stockMap[pId].qty += val;
       }
@@ -477,6 +521,41 @@ stockRoutes.delete(
     
     await prisma.warehouseStock.delete({ where: { id } });
     return res.status(204).send();
+  })
+);
+
+// PATCH - Atualizar quantidade planeada para um material do projeto
+stockRoutes.patch(
+  "/:id/planned",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const body = z.object({
+      materialId: z.string(),
+      quantityPlanned: z.number(),
+    }).parse(req.body);
+
+    const projectExists = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!projectExists) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+
+    const plan = await prisma.projectMaterialPlan.upsert({
+      where: {
+        projectId_productId: {
+          projectId,
+          productId: body.materialId,
+        }
+      },
+      update: {
+        plannedQty: body.quantityPlanned,
+      },
+      create: {
+        projectId,
+        productId: body.materialId,
+        plannedQty: body.quantityPlanned,
+      }
+    });
+
+    return res.json(plan);
   })
 );
 

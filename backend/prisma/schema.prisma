@@ -125,6 +125,7 @@ model Project {
   warehouse           Warehouse?
   assignedUsers       User[]                   @relation("AssignedUsers")
   dailyPlans          DailyPlan[]
+  materialPlans       ProjectMaterialPlan[]
 
   @@index([name])
   @@index([status])
@@ -311,6 +312,7 @@ model Product {
   movements          StockMovement[]
   stock              WarehouseStock[]
   dailyPlanMaterials DailyPlanMaterial[]
+  projectPlans       ProjectMaterialPlan[]
 }
 
 model WarehouseStock {
@@ -552,4 +554,16 @@ model DailyPlanMaterial {
 
   dailyPlan DailyPlan @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id])
+}
+
+model ProjectMaterialPlan {
+  id           String  @id @default(cuid())
+  projectId    String
+  productId    String
+  plannedQty   Decimal @default(0) @db.Decimal(16, 4)
+
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, productId])
 }

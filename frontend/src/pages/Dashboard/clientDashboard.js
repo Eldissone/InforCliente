@@ -442,6 +442,8 @@ function renderStockInventory(summary, movements) {
     const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
     const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
 
+    const planned = Number(item.quantityPlanned || 0);
+
     return `
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
@@ -450,7 +452,7 @@ function renderStockInventory(summary, movements) {
             </td>
             <td class="px-6 md:px-10 py-5 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">${escapeHtml(warehouseName)}</span></td>
             <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(product.unit || "un")}</td>
-            <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">0</td>
+            <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">${planned}</td>
             <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn.toLocaleString("pt-AO")}</td>
             <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut.toLocaleString("pt-AO")}</td>
             <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
@@ -940,7 +942,7 @@ function renderProgressBreakdownRows() {
  * ================================================================================= */
 
 async function loadFiles() {
-  if (state.projectId === "all") return;
+  if (!state.projectId || state.projectId === "all") return;
   const tbody = document.getElementById("filesTbody");
   if (!tbody) return;
 
