@@ -178,32 +178,54 @@ function renderPlanCard(p) {
       <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
         <span class="material-symbols-outlined text-sm text-amber-600">inventory_2</span> Materiais do Plano
       </h4>
-      ${p.receivedBy ? `
-        <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600">
-          <span class="material-symbols-outlined text-[12px]">person</span> Recebido por: ${escapeHtml(p.receivedBy)}
-        </div>
-      ` : ''}
+      <div class="flex flex-wrap items-center gap-2">
+        ${p.receivedBy ? `
+          <div class="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600">
+            <span class="material-symbols-outlined text-[12px]">person</span> Recebido por: ${escapeHtml(p.receivedBy)}
+          </div>
+        ` : ''}
+        ${p.returnedBy ? `
+          <div class="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-100 rounded-lg text-[10px] font-bold text-amber-700">
+            <span class="material-symbols-outlined text-[12px]">assignment_return</span> Devolvido por: ${escapeHtml(p.returnedBy)}
+          </div>
+        ` : ''}
+      </div>
     </div>
   ` : '';
 
-  const materialsHtml = p.materials.length > 0 ? materialsHeaderHtml + p.materials.map(m => `
-    <div class="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50">
+  const materialsHtml = p.materials.length > 0 ? materialsHeaderHtml + p.materials.map(m => {
+    const showConsumed = p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN";
+    const consumedHtml = showConsumed ? `
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Usado</p>
+          <p class="text-xs font-bold text-blue-600">${m.consumedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvido</p>
+          <p class="text-xs font-bold text-amber-600">${Math.max(0, m.providedQty - (m.consumedQty || 0)).toFixed(2)} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+    ` : '';
+
+    return `
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 gap-3">
       <div>
         <p class="text-xs font-bold text-slate-800">${escapeHtml(m.product?.name || "Material")}</p>
         <p class="text-[9px] text-slate-400">Unidade: ${escapeHtml(m.product?.unit || "un")}</p>
       </div>
-      <div class="flex gap-4 text-right shrink-0">
+      <div class="flex flex-wrap gap-4 text-right shrink-0">
         <div>
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedida</p>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido</p>
           <p class="text-xs font-bold text-slate-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</p>
         </div>
         <div>
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
           <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
         </div>
+        ${consumedHtml}
       </div>
     </div>
-  `).join("") : `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
+  `;
+  }).join("") : `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
 
   let actionButtonHtml = "";
   if (isMaterialReady) {

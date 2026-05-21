@@ -561,6 +561,8 @@ dailyPlansRoutes.post(
       where: { projectId: plan.projectId }
     });
 
+    let hasReturns = false;
+
     try {
       await prisma.$transaction(async (tx) => {
         // 1. Confirmar e Processar Tasks e Avanço Físico
@@ -612,7 +614,6 @@ dailyPlansRoutes.post(
 
         // 2. Confirmar e Processar Materiais Consumidos
         const materialsToProcess = validatedMaterials || plan.materials.map(m => ({ dailyPlanMaterialId: m.id, consumedQty: m.consumedQty }));
-        let hasReturns = false;
 
         if (estaleiro) {
           for (const cm of materialsToProcess) {
