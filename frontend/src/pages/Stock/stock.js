@@ -256,7 +256,7 @@ async function renderCatalog(container) {
             selectedProducts.clear();
             updateBulkDeleteBtn();
         }
-        
+
         const btn = document.getElementById('btnToggleSelection');
         if (btn) {
             if (isSelectionMode) {
@@ -301,7 +301,7 @@ async function renderCatalog(container) {
         const isChecked = checkbox.checked;
         const tableBody = checkbox.closest('table').querySelector('tbody');
         const checkboxes = tableBody.querySelectorAll('.product-checkbox');
-        
+
         checkboxes.forEach(cb => {
             cb.checked = isChecked;
             if (isChecked) {
@@ -482,7 +482,7 @@ async function renderCatalog(container) {
 
     window.deleteSelectedProducts = async () => {
         if (!confirm(`Confirmar eliminação de ${selectedProducts.size} referências?`)) return;
-        
+
         let successCount = 0;
         let errorCount = 0;
         const btn = document.getElementById('btnDeleteSelected');
@@ -494,9 +494,9 @@ async function renderCatalog(container) {
             try {
                 await apiRequest(`/products/${id}`, { method: "DELETE" });
                 successCount++;
-            } catch (error) { 
+            } catch (error) {
                 console.error("Erro ao eliminar:", id, error);
-                errorCount++; 
+                errorCount++;
             }
         }
 
@@ -569,7 +569,7 @@ async function openExcelImportModal() {
             const statusDiv = body.querySelector("#importStatus");
             const statusText = body.querySelector("#importStatusText");
             const previewContainer = body.querySelector("#previewContainer");
-            
+
             previewContainer.classList.add("hidden");
             statusDiv.classList.remove("hidden");
             statusDiv.classList.add("flex");
@@ -610,7 +610,7 @@ async function openExcelImportModal() {
 
     // Disable the button initially
     const primaryBtn = panel.querySelector("[data-primary]");
-    if(primaryBtn) primaryBtn.disabled = true;
+    if (primaryBtn) primaryBtn.disabled = true;
 
     // Attach logic to file input change
     setTimeout(() => {
@@ -620,12 +620,12 @@ async function openExcelImportModal() {
         const previewContainer = document.getElementById("previewContainer");
         const previewTableBody = document.getElementById("previewTableBody");
         const previewSummary = document.getElementById("previewSummary");
-        
+
         fileInput.addEventListener("change", async (e) => {
             if (!fileInput.files || fileInput.files.length === 0) return;
-            
+
             validItemsToImport = [];
-            if(primaryBtn) {
+            if (primaryBtn) {
                 primaryBtn.disabled = true;
                 primaryBtn.innerText = "A ler ficheiro...";
             }
@@ -649,10 +649,10 @@ async function openExcelImportModal() {
                         const workbook = window.XLSX.read(data, { type: 'array' });
                         const firstSheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[firstSheetName];
-                        
+
                         let rawData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                         rawData = rawData.filter(row => row && row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== ''));
-                        
+
                         if (rawData.length < 2) throw new Error("Ficheiro vazio ou sem dados suficientes.");
 
                         let headerRowIndex = 0;
@@ -685,14 +685,14 @@ async function openExcelImportModal() {
 
                             const name = String(row[nameIdx]).trim();
                             const sku = skuIdx !== -1 && row[skuIdx] ? String(row[skuIdx]).trim() : null;
-                            
+
                             let unitStr = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).toUpperCase().trim() : 'UN';
                             const allowedUnits = ['UN', 'KG', 'M', 'L', 'CX', 'PAR', 'MT2', 'MT3'];
                             if (!allowedUnits.includes(unitStr)) unitStr = 'UN';
 
                             const isDupName = existingNames.includes(name.toLowerCase());
                             const isDupSku = sku ? existingSkus.includes(sku.toLowerCase()) : false;
-                            
+
                             if (isDupName || isDupSku) {
                                 dupCount++;
                                 tableHtml += `
@@ -717,19 +717,19 @@ async function openExcelImportModal() {
 
                         previewTableBody.innerHTML = tableHtml;
                         previewSummary.innerText = `${validCount} Válidos / ${dupCount} Ignorados`;
-                        
+
                         statusDiv.classList.add("hidden");
                         statusDiv.classList.remove("flex");
                         previewContainer.classList.remove("hidden");
                         previewContainer.classList.add("flex");
 
                         if (validCount > 0) {
-                            if(primaryBtn) {
+                            if (primaryBtn) {
                                 primaryBtn.disabled = false;
                                 primaryBtn.innerText = `Confirmar Importação (${validCount})`;
                             }
                         } else {
-                            if(primaryBtn) {
+                            if (primaryBtn) {
                                 primaryBtn.disabled = true;
                                 primaryBtn.innerText = "Sem itens válidos";
                             }
@@ -740,13 +740,13 @@ async function openExcelImportModal() {
                         alert("Erro ao ler ficheiro: " + error.message);
                         statusDiv.classList.add("hidden");
                         statusDiv.classList.remove("flex");
-                        if(primaryBtn) {
+                        if (primaryBtn) {
                             primaryBtn.disabled = true;
                             primaryBtn.innerText = "Selecione um ficheiro";
                         }
                     }
                 };
-                
+
                 reader.onerror = () => {
                     alert("Erro ao ler o ficheiro.");
                     statusDiv.classList.add("hidden");
@@ -1386,8 +1386,8 @@ async function openWarehouseModal(warehouseId = null) {
     const contentHtml = `
         <form id="formWarehouse" class="space-y-6 pt-4">
             <div class="space-y-2">
-                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome da Localização</label>
-                <input type="text" name="name" value="${esc(warehouse?.name || '')}" required placeholder="Ex: Estaleiro de Coimbra" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Armazém</label>
+                <input type="text" name="name" value="${esc(warehouse?.name || '')}" required placeholder="Ex: Estaleiro MBT" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
@@ -1409,9 +1409,9 @@ async function openWarehouseModal(warehouseId = null) {
     `;
 
     const { close } = openModal({
-        title: warehouse ? "Editar Localização" : "Nova Localização",
+        title: warehouse ? "Editar Armazém" : "Novo Armazém",
         contentHtml,
-        primaryLabel: warehouse ? "Atualizar" : "Criar Local",
+        primaryLabel: warehouse ? "Atualizar" : "Criar Armazém",
         onPrimary: async ({ body }) => {
             const data = Object.fromEntries(new FormData(body.querySelector("#formWarehouse")).entries());
             if (!data.projectId) data.projectId = null;
@@ -1981,17 +1981,17 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
         const categoryFilter = document.getElementById("movementCategoryFilter");
         const productSelect = document.getElementById("movementProductId");
         const notice = document.getElementById("assetNotice");
-        
+
         const materialsHtml = materials.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('');
         const toolsHtml = tools.map(p => `<option value="${p.id}" data-category="${p.category}">${esc(p.name)} (${p.unit})</option>`).join('');
 
         const updateProducts = () => {
             const cat = categoryFilter.value;
             productSelect.innerHTML = '<option value="">Selecionar...</option>' + (cat === 'MATERIAL' ? materialsHtml : toolsHtml);
-            if(notice) notice.classList.add("hidden");
+            if (notice) notice.classList.add("hidden");
         };
 
-        if(categoryFilter && productSelect) {
+        if (categoryFilter && productSelect) {
             categoryFilter.addEventListener("change", updateProducts);
             updateProducts();
 
@@ -2560,7 +2560,7 @@ let _pendingPlans = [];
 async function updateRequestsBadge() {
     try {
         const plans = await apiRequest("/daily-plans/all-pending");
-        
+
         // Split plans by status
         const requestPlans = plans ? plans.filter(p => p.status === "PENDING_MATERIAL") : [];
         const returnPlans = plans ? plans.filter(p => {
@@ -2588,12 +2588,12 @@ async function updateRequestsBadge() {
 
 async function renderRequests(container) {
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
-    
+
     try {
         const allPlans = await apiRequest("/daily-plans/all-pending");
         const plans = allPlans ? allPlans.filter(p => p.status === "PENDING_MATERIAL") : [];
         _pendingPlans = allPlans || [];
-        
+
         // Update badge count
         const badge = document.getElementById("requests_badge");
         if (plans.length > 0) {
@@ -2801,7 +2801,7 @@ window.providePlanMaterialsGlobal = async (id, event) => {
 
 async function renderReturns(container) {
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
-    
+
     try {
         const allPlans = await apiRequest("/daily-plans/all-pending");
         _pendingPlans = allPlans || [];
@@ -2813,7 +2813,7 @@ async function renderReturns(container) {
             }
             return false;
         });
-        
+
         const badge = document.getElementById("returns_badge");
         if (plans.length > 0) {
             badge.classList.remove("hidden");

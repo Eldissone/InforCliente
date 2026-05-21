@@ -407,8 +407,8 @@ async function openEdit(id) {
   ].join("");
 
   const statusOptions = [
-    { v: "ACTIVE", l: "Ativo" },
-    { v: "ON_HOLD", l: "Suspender" },
+    { v: "ACTIVE", l: "Em Curso" },
+    { v: "ON_HOLD", l: "Paralisada" },
     { v: "COMPLETED", l: "Concluído" }
   ].map(s => `<option value="${s.v}" ${p.status === s.v ? 'selected' : ''}>${s.l}</option>`).join("");
 

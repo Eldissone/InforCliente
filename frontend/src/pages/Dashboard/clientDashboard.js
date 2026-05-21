@@ -343,7 +343,7 @@ function renderStockSummaryCards(summary, movements) {
 
   container.innerHTML = `
         <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Artigos no Catálogo</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total de Artigos</p>
             <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
         </div>
         <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
@@ -355,7 +355,7 @@ function renderStockSummaryCards(summary, movements) {
             <p class="text-2xl font-bold text-blue-500">${totalExits.toLocaleString("pt-AO")}</p>
         </div>
         <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Saldo em Estaleiro</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Saldo em Armazém</p>
             <p class="text-2xl font-bold text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
         </div>
     `;
@@ -423,26 +423,26 @@ function renderStockMovements(items) {
 }
 
 function renderStockInventory(summary, movements) {
-    const tbody = document.getElementById("stockInventoryTbody");
-    if (!tbody) return;
+  const tbody = document.getElementById("stockInventoryTbody");
+  if (!tbody) return;
 
-    if (!summary || summary.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
-        return;
-    }
+  if (!summary || summary.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
+    return;
+  }
 
-    tbody.innerHTML = summary.map(item => {
-        const saldo = Number(item.quantity || 0);
-        const product = item.product || {};
-        const warehouseName = item.warehouse?.name || "Geral";
-        const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
+  tbody.innerHTML = summary.map(item => {
+    const saldo = Number(item.quantity || 0);
+    const product = item.product || {};
+    const warehouseName = item.warehouse?.name || "Geral";
+    const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
 
-        // Calcular totais dos movimentos para este produto
-        const pMovements = movements.filter(m => m.productId === item.productId);
-        const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-        const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    // Calcular totais dos movimentos para este produto
+    const pMovements = movements.filter(m => m.productId === item.productId);
+    const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
 
-        return `
+    return `
           <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
                 <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
@@ -455,7 +455,7 @@ function renderStockInventory(summary, movements) {
             <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut.toLocaleString("pt-AO")}</td>
             <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
           </tr>`;
-    }).join("");
+  }).join("");
 }
 
 function renderStockGallery(photos) {
@@ -1905,7 +1905,7 @@ function init() {
   if (user) {
     const userDisplay = document.getElementById("userName");
     if (userDisplay) userDisplay.textContent = user.name || user.email || "Cliente";
-    
+
     // Se for um cliente, podemos mostrar também o nome da empresa se houver um local para isso
     const clientHeader = document.getElementById("clientNameHeader");
     if (clientHeader && user.client) {

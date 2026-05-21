@@ -466,13 +466,14 @@
                                 </div>
                                 <div class="w-px h-8 bg-slate-100 self-end mb-1"></div>
                                 <div>
-                                    <span class="text-[9px] font-black uppercase text-slate-400">Máximo</span>
+                                    <span class="text-[9px] font-black uppercase text-slate-400">Máximo de pessoal em
+                                        Obra</span>
                                     <div class="text-3xl font-black text-slate-300 tracking-tighter"
                                         id="dashboardMaxStaffCount">0</div>
                                 </div>
                             </div>
                             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Pessoas em
-                                Campo</p>
+                                Obra</p>
                         </div>
                     </div>
                     <div class="absolute right-2 -bottom-2 opacity-8 group-hover:opacity-30 transition-opacity">
@@ -546,22 +547,22 @@
                             <span class="md:hidden">Armazém</span>
                             <span class="hidden md:inline">Stock/Armazém</span>
                         </button>
-                        <button data-stock-subtab="requests"
+                        <!-- <button data-stock-subtab="requests"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all relative">
                             <span class="md:hidden">Pedidos</span>
                             <span class="hidden md:inline">Pedidos de Obra</span>
                             <span id="stock_requests_badge"
                                 class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        </button>
+                        </button> -->
                         <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
-                            <span class="hidden md:inline">Galeria de Campo</span>
+                            <span class="hidden md:inline">Galeria de Armazém</span>
                         </button>
                         <button data-stock-subtab="history"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
-                            <span class="md:hidden">Fluxo</span>
-                            <span class="hidden md:inline">Fluxo de Stock</span>
+                            <span class="md:hidden">Histórico</span>
+                            <span class="hidden md:inline">Histórico</span>
                         </button>
                     </div>
                     <button data-toggle-table="stock"
@@ -625,11 +626,8 @@
                     <div id="stock_gallery_content" class="hidden p-10">
                         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                             <div>
-                                <h3 class="font-bold text-slate-900">Galeria de Campo</h3>
-                                <p class="text-xs text-slate-500 mt-1">Registos visuais das intervenções e
-                                    recebimento
-                                    de
-                                    material.</p>
+                                <h3 class="font-bold text-slate-900">Galeria do Armazém</h3>
+                                <p class="text-xs text-slate-500 mt-1">Registos visuais do recebimento de material.</p>
                             </div>
                         </div>
                         <div id="stockGalleryContainer" class="flex flex-col gap-4">
@@ -885,7 +883,7 @@
             <div
                 class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 gap-4">
                 <div>
-                    <h3 class="font-bold text-slate-900">Galeria de Campo</h3>
+                    <h3 class="font-bold text-slate-900">Galeria do Armazém</h3>
                     <p class="text-xs mt-4 text-slate-500">Registos visuais das intervenções técnicas e
                         recebimento de
                         material.</p>
@@ -904,7 +902,7 @@
                     </select>
                 </div>
             </div>
-            <!-- Container de Grupos da Galeria de Campo -->
+            <!-- Container de Grupos da Galeria do armazem -->
             <div id="galleryCampoContainer" class="flex flex-col gap-4 mb-10">
                 <!-- Grupos inseridos dinamicamente -->
             </div>

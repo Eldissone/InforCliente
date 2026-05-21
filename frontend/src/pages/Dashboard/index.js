@@ -93,14 +93,14 @@ async function loadKpis({ search = "" } = {}) {
   if (currentTaskStatusFilter) url += `&taskStatus=${encodeURIComponent(currentTaskStatusFilter)}`;
 
   const data = await apiRequest(url);
-  
+
   setText(kpiTotal, formatCompactNumber(data.totalClients));
   setText(kpiValue, formatCurrency(data.portfolioValue, "AOA"));
   setText(kpiEstimated, formatCurrency(data.faturacaoEstimada, "AOA"));
   setText(kpiTasks, formatCompactNumber(data.tarefas?.total || 0));
   setText(kpiObras, formatCompactNumber(data.obras?.total || 0));
   setText(kpiHealth, `${data.avgHealth || 0}%`);
-  
+
   if (kpiHealthBar) kpiHealthBar.style.width = `${Math.max(0, Math.min(100, data.avgHealth || 0))}%`;
 
   // Draw or update dynamic ApexCharts
@@ -182,11 +182,11 @@ function renderBillingHistoryChart(valReal, valEst) {
   const options = {
     series: [
       {
-        name: "Realizada (LTV)",
+        name: "Realizada",
         data: [0, Math.round(valReal * 0.4), Math.round(valReal * 0.8), valReal]
       },
       {
-        name: "Estimada (Potencial)",
+        name: "Em Obras",
         data: [0, Math.round(valEst * 0.35), Math.round(valEst * 0.75), valEst]
       }
     ],
@@ -422,7 +422,7 @@ function updateFiltersUI() {
 
   // Filtro: Estado da Obra (clique no gráfico de barras)
   if (currentProjectStatusFilter) {
-    const labels = { ACTIVE: "Obras Ativas", ON_HOLD: "Obras Paradas", COMPLETED: "Obras Concluídas" };
+    const labels = { ACTIVE: "Obras em Curso", ON_HOLD: "Obras Paradas", COMPLETED: "Obras Concluídas" };
     const classes = { ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", ON_HOLD: "bg-amber-50 text-amber-700 border-amber-100", COMPLETED: "bg-slate-50 text-slate-600 border-slate-200" };
     createBadge(labels[currentProjectStatusFilter], classes[currentProjectStatusFilter] || "bg-cyan-50 text-cyan-700 border-cyan-100", () => {
       currentProjectStatusFilter = null;
@@ -508,9 +508,9 @@ function wireSync() {
         syncIcon.classList.add("animate-spin");
       }
       syncBtn.disabled = true;
-      
+
       await refreshClientsGrid();
-      
+
       toast("Dados sincronizados com sucesso", { type: "success" });
     } catch (err) {
       console.error(err);
