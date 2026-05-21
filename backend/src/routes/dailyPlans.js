@@ -709,8 +709,7 @@ dailyPlansRoutes.post(
             const existingStock = await tx.warehouseStock.findFirst({
               where: {
                 warehouseId: estaleiro.id,
-                productId: mat.productId,
-                ownerId: null
+                productId: mat.productId
               }
             });
 
