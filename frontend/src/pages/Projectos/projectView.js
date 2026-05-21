@@ -2743,7 +2743,7 @@ async function openStockMovementModal() {
       }
     });
 
-    // Auto-select ArmazÃ©m do Cliente if entry type is cliente
+    // Auto-select Armazém do Cliente if entry type is cliente
     const entryTypeEl = document.getElementById("st_entryType");
     const warehouseEl = document.getElementById("st_warehouse");
     entryTypeEl?.addEventListener("change", (e) => {
@@ -3712,7 +3712,7 @@ function renderDailyPlansList() {
   if (searchQuery) {
     filtered = filtered.filter(p => {
       const descMatch = (p.description || "").toLowerCase().includes(searchQuery);
-      
+
       // Check if any technician matches
       const techMatch = p.tasks.some(t => {
         const name = (t.technician?.name || "").toLowerCase();
@@ -3998,28 +3998,28 @@ async function wireDailyPlans() {
               <select id="dp_task_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione a tarefa do Avanço Físico...</option>
                 ${(() => {
-                  const groups = {};
-                  progressTasks.forEach(pt => {
-                    const g = pt.itemGroup || "Geral";
-                    if (!groups[g]) groups[g] = [];
-                    groups[g].push(pt);
-                  });
-                  return Object.keys(groups).map(g => {
-                    const groupTitle = escapeHtml(g);
-                    const options = groups[g].map(pt => {
-                      const buildPath = (t, visited = new Set()) => {
-                        if (!t || visited.has(t.id)) return "";
-                        visited.add(t.id);
-                        if (!t.parentId) return t.description;
-                        const parent = progressTasks.find(p => p.id === t.parentId);
-                        return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
-                      };
-                      const fullDesc = buildPath(pt);
-                      return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
-                    }).join('');
-                    return `<optgroup label="${groupTitle}">${options}</optgroup>`;
-                  }).join('');
-                })()}
+          const groups = {};
+          progressTasks.forEach(pt => {
+            const g = pt.itemGroup || "Geral";
+            if (!groups[g]) groups[g] = [];
+            groups[g].push(pt);
+          });
+          return Object.keys(groups).map(g => {
+            const groupTitle = escapeHtml(g);
+            const options = groups[g].map(pt => {
+              const buildPath = (t, visited = new Set()) => {
+                if (!t || visited.has(t.id)) return "";
+                visited.add(t.id);
+                if (!t.parentId) return t.description;
+                const parent = progressTasks.find(p => p.id === t.parentId);
+                return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
+              };
+              const fullDesc = buildPath(pt);
+              return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+            }).join('');
+            return `<optgroup label="${groupTitle}">${options}</optgroup>`;
+          }).join('');
+        })()}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -4477,7 +4477,7 @@ window.openEditPlanModal = async (planId) => {
   let progressTasks = [];
   let products = [];
   let technicians = [];
-  
+
   try {
     plan = await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`);
     const pData = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`);
@@ -4607,28 +4607,28 @@ window.openEditPlanModal = async (planId) => {
           <select id="edit_dp_task_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
             <option value="">Selecione a tarefa do Avanço Físico...</option>
             ${(() => {
-              const groups = {};
-              progressTasks.forEach(pt => {
-                const g = pt.itemGroup || "Geral";
-                if (!groups[g]) groups[g] = [];
-                groups[g].push(pt);
-              });
-              return Object.keys(groups).map(g => {
-                const groupTitle = escapeHtml(g);
-                const options = groups[g].map(pt => {
-                  const buildPath = (t, visited = new Set()) => {
-                    if (!t || visited.has(t.id)) return "";
-                    visited.add(t.id);
-                    if (!t.parentId) return t.description;
-                    const parent = progressTasks.find(p => p.id === t.parentId);
-                    return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
-                  };
-                  const fullDesc = buildPath(pt);
-                  return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
-                }).join('');
-                return `<optgroup label="${groupTitle}">${options}</optgroup>`;
-              }).join('');
-            })()}
+      const groups = {};
+      progressTasks.forEach(pt => {
+        const g = pt.itemGroup || "Geral";
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(pt);
+      });
+      return Object.keys(groups).map(g => {
+        const groupTitle = escapeHtml(g);
+        const options = groups[g].map(pt => {
+          const buildPath = (t, visited = new Set()) => {
+            if (!t || visited.has(t.id)) return "";
+            visited.add(t.id);
+            if (!t.parentId) return t.description;
+            const parent = progressTasks.find(p => p.id === t.parentId);
+            return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
+          };
+          const fullDesc = buildPath(pt);
+          return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+        }).join('');
+        return `<optgroup label="${groupTitle}">${options}</optgroup>`;
+      }).join('');
+    })()}
           </select>
           <div class="flex gap-2">
             <input type="number" id="edit_dp_task_qty" placeholder="Qtd. Planeada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">

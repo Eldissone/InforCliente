@@ -1212,7 +1212,7 @@ function populateMaterialFilters(photos) {
     const oldOptionsStr = currentOptions.join(",");
 
     if (newOptionsStr !== oldOptionsStr) {
-      select.innerHTML = '<option value="all">Todos os Materiais</option>';
+      select.innerHTML = '<option value="all">Todos as tarefas</option>';
       options.forEach(m => {
         const opt = document.createElement("option");
         opt.value = m;
