@@ -66,6 +66,7 @@ dashboardRoutes.get(
           select: {
             id: true,
             status: true,
+            physicalProgressPct: true,
             budgetTotal: true,
             currency: true,
             payments: {
@@ -81,14 +82,16 @@ dashboardRoutes.get(
           select: { status: true }
         });
 
-        const obras = { total: projects.length, ativas: 0, concluidas: 0, pausadas: 0 };
+        const obras = { total: projects.length, ativas: 0, concluidas: 0, pausadas: 0, avancoMedio: 0 };
         let portfolioValue = 0;
         let faturacaoEstimada = 0;
+        let progressSum = 0;
 
         projects.forEach(p => {
           if (p.status === "ACTIVE") obras.ativas++;
           if (p.status === "COMPLETED") obras.concluidas++;
           if (p.status === "ON_HOLD") obras.pausadas++;
+          progressSum += Number(p.physicalProgressPct || 0);
 
           const mul = getMultiplier(p.currency);
           faturacaoEstimada += (Number(p.budgetTotal) || 0) * mul;
@@ -98,6 +101,9 @@ dashboardRoutes.get(
             });
           }
         });
+        obras.avancoMedio = projects.length
+          ? Math.round(progressSum / projects.length)
+          : 0;
 
         const tarefas = { total: dailyPlans.length, pendentes: 0, em_curso: 0, executadas: 0 };
         dailyPlans.forEach(dp => {
@@ -133,7 +139,7 @@ dashboardRoutes.get(
           portfolioValue: "0",
           faturacaoEstimada: "0",
           avgHealth: 0,
-          obras: { total: 0, ativas: 0, concluidas: 0, pausadas: 0 },
+          obras: { total: 0, ativas: 0, concluidas: 0, pausadas: 0, avancoMedio: 0 },
           tarefas: { total: 0, pendentes: 0, em_curso: 0, executadas: 0 },
           clientesStatus: { ativas: 0, em_risco: 0, inativas: 0 }
         });
@@ -218,7 +224,8 @@ dashboardRoutes.get(
       projectsList,
       obrasStatusCounts,
       tarefasCounts,
-      clientesStatusCounts
+      clientesStatusCounts,
+      obrasProgressAgg,
     ] = await Promise.all([
       prisma.client.count({ where: clientWhere }),
       prisma.client.aggregate({ where: clientWhere, _avg: { healthScore: true } }),
@@ -245,9 +252,19 @@ dashboardRoutes.get(
         by: ["status"],
         _count: { _all: true },
       }),
+      prisma.project.aggregate({
+        where: projectWhere,
+        _avg: { physicalProgressPct: true },
+      }),
     ]);
 
-    const obras = { total: 0, ativas: 0, concluidas: 0, pausadas: 0 };
+    const obras = {
+      total: 0,
+      ativas: 0,
+      concluidas: 0,
+      pausadas: 0,
+      avancoMedio: Math.round(obrasProgressAgg._avg.physicalProgressPct || 0),
+    };
     obrasStatusCounts.forEach(item => {
       const cnt = item._count._all || 0;
       obras.total += cnt;

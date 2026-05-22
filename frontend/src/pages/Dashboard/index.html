@@ -257,34 +257,33 @@
                 </div>
             </div>
 
-            <!-- CARD 3: TAREFAS OPERACIONAIS (TASKLY CONCENTRIC STYLE) -->
+            <!-- CARD 3: AVANÇO GERAL DAS OBRAS -->
             <div class="glass-card p-6 rounded-[2rem] flex flex-col justify-between h-[340px]">
                 <div>
                     <div class="flex justify-between items-start mb-2">
-                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Plano de
-                            Tarefas</span>
+                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Avanço Geral das
+                            Obras</span>
                         <div
-                            class="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600">
-                            <span class="material-symbols-outlined text-lg">assignment_turned_in</span>
+                            class="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                            <span class="material-symbols-outlined text-lg">trending_up</span>
                         </div>
                     </div>
                     <div class="flex items-baseline gap-2">
-                        <span id="kpiTotalTasks"
+                        <span id="kpiObrasProgress"
                             class="text-4xl font-extrabold text-slate-900 tracking-tighter font-outfit">—</span>
-                        <span class="text-slate-500 text-[10px] font-bold">Planos</span>
+                        <span class="text-slate-500 text-[10px] font-bold">Média do portfólio</span>
                     </div>
                 </div>
-                <!-- Concentric Circle Chart (Tasklyn style) -->
-                <div class="flex-1 flex items-center justify-center">
-                    <div id="tasksConcentricChart" class="w-full h-full min-h-[180px]"></div>
+                <div class="flex-1 flex items-center justify-center relative">
+                    <div id="obrasProgressChart" class="w-full h-full min-h-[180px]"></div>
                 </div>
                 <div class="flex justify-around text-[10px] text-slate-500 font-bold border-t border-slate-100 pt-3">
                     <span class="flex items-center gap-1"><span
-                            class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Feito</span>
+                            class="w-1.5 h-1.5 rounded-full bg-red-500"></span>&lt; 30%</span>
                     <span class="flex items-center gap-1"><span
-                            class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>Curso</span>
+                            class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>30–65%</span>
                     <span class="flex items-center gap-1"><span
-                            class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Pendente</span>
+                            class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>&gt; 65%</span>
                 </div>
             </div>
 
@@ -311,11 +310,17 @@
                         </div> -->
                     </div>
                 </div>
-                <!-- Dynamic Columns Neon Chart (FitSpark Style) -->
                 <div class="flex-1 flex items-center justify-center mt-1">
                     <div id="projectsBarChart" class="w-full h-full min-h-[160px]"></div>
                 </div>
-                <!-- Hidden Average Health Bar to maintain backward compatibility with JS code -->
+                <div class="flex justify-around text-[10px] text-slate-500 font-bold border-t border-slate-100 pt-3">
+                    <span class="flex items-center gap-1"><span
+                            class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Ativas</span>
+                    <span class="flex items-center gap-1"><span
+                            class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Pausadas</span>
+                    <span class="flex items-center gap-1"><span
+                            class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>Concluídas</span>
+                </div>
                 <div class="hidden" id="kpiAvgHealthBar" style="width: 0%"></div>
             </div>
 

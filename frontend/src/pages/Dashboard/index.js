@@ -9,7 +9,7 @@ import { wireLogout, wireUsersNav } from "../../shared/session.js";
 // Chart instance holders for dynamic animated updates
 let clientsChart = null;
 let billingChart = null;
-let tasksChart = null;
+let obrasProgressChart = null;
 let projectsChart = null;
 
 function byId(id) {
@@ -83,7 +83,7 @@ async function loadKpis({ search = "" } = {}) {
   const kpiTotal = byId("kpiTotalClients");
   const kpiValue = byId("kpiPortfolioValue");
   const kpiEstimated = byId("kpiEstimatedBilling");
-  const kpiTasks = byId("kpiTotalTasks");
+  const kpiObrasProgress = byId("kpiObrasProgress");
   const kpiObras = byId("kpiTotalObras");
   const kpiHealth = byId("kpiAvgHealth");
   const kpiHealthBar = byId("kpiAvgHealthBar");
@@ -97,7 +97,8 @@ async function loadKpis({ search = "" } = {}) {
   setText(kpiTotal, formatCompactNumber(data.totalClients));
   setText(kpiValue, formatCurrency(data.portfolioValue, "AOA"));
   setText(kpiEstimated, formatCurrency(data.faturacaoEstimada, "AOA"));
-  setText(kpiTasks, formatCompactNumber(data.tarefas?.total || 0));
+  const avancoMedio = Number(data.obras?.avancoMedio ?? 0);
+  setText(kpiObrasProgress, `${avancoMedio}%`);
   setText(kpiObras, formatCompactNumber(data.obras?.total || 0));
   setText(kpiHealth, `${data.avgHealth || 0}%`);
 
@@ -106,7 +107,7 @@ async function loadKpis({ search = "" } = {}) {
   // Draw or update dynamic ApexCharts
   if (data.clientesStatus) renderClientsStatusChart(data.clientesStatus);
   renderBillingHistoryChart(Number(data.portfolioValue) || 0, Number(data.faturacaoEstimada) || 0);
-  if (data.tarefas) renderTasksConcentricChart(data.tarefas);
+  if (data.obras) renderObrasProgressChart(data.obras.avancoMedio ?? 0);
   if (data.obras) renderProjectsBarChart(data.obras);
 }
 
@@ -239,66 +240,89 @@ function renderBillingHistoryChart(valReal, valEst) {
   }
 }
 
-// Chart 3: Radial concentric progress of tasks
-function renderTasksConcentricChart(tarefas) {
-  const total = tarefas.total || 0;
-  const pctFeito = total ? Math.round((tarefas.executadas / total) * 100) : 0;
-  const pctCurso = total ? Math.round((tarefas.em_curso / total) * 100) : 0;
-  const pctPendente = total ? Math.round((tarefas.pendentes / total) * 100) : 0;
+// Chart 3: Avanço geral das obras (radial com % no centro)
+function progressChartColor(pct) {
+  if (pct < 30) return "#EF4444";
+  if (pct < 65) return "#F59E0B";
+  return "#10B981";
+}
+
+function renderObrasProgressChart(avancoMedio) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(avancoMedio) || 0)));
+  const color = progressChartColor(pct);
 
   const options = {
-    series: [pctFeito, pctCurso, pctPendente],
+    series: [pct],
     chart: {
-      type: 'radialBar',
-      height: 180,
+      type: "radialBar",
+      height: 200,
       sparkline: { enabled: true },
-      animations: { enabled: true, easing: 'easeinout', speed: 800 },
-      events: {
-        dataPointSelection: (event, chartContext, config) => {
-          const taskStatuses = ["COMPLETED", "IN_PROGRESS", "PENDING"];
-          const taskStatus = taskStatuses[config.dataPointIndex];
-          if (taskStatus) {
-            toggleTaskStatusFilter(taskStatus);
-          }
-        }
-      }
+      animations: { enabled: true, easing: "easeinout", speed: 800 },
     },
+    colors: [color],
     plotOptions: {
       radialBar: {
+        startAngle: -135,
+        endAngle: 135,
+        hollow: {
+          size: "62%",
+          background: "transparent",
+        },
         track: {
-          background: 'rgba(15, 23, 42, 0.05)',
-          strokeWidth: '97%'
+          background: "rgba(15, 23, 42, 0.06)",
+          strokeWidth: "100%",
         },
         dataLabels: {
-          name: { show: false },
+          name: {
+            show: true,
+            offsetY: -6,
+            fontSize: "10px",
+            fontFamily: "Outfit, sans-serif",
+            fontWeight: 700,
+            color: "#64748b",
+            formatter: () => "Avanço",
+          },
           value: {
-            fontSize: '18px',
-            fontFamily: 'Outfit, sans-serif',
+            show: true,
+            offsetY: 8,
+            fontSize: "26px",
+            fontFamily: "Outfit, sans-serif",
             fontWeight: 800,
-            color: '#0f172a',
-            offsetY: 6,
-            formatter: (val) => `${val}%`
-          }
-        }
-      }
+            color: "#0f172a",
+            formatter: (val) => `${Math.round(val)}%`,
+          },
+        },
+      },
     },
-    colors: ["#10B981", "#06B6D4", "#F59E0B"],
-    labels: ["Feito", "Em Curso", "Pendente"],
-    legend: { show: false }
+    stroke: { lineCap: "round" },
+    labels: ["Avanço geral"],
+    legend: { show: false },
+    tooltip: {
+      enabled: true,
+      y: {
+        formatter: () => `Média de progresso físico: ${pct}%`,
+      },
+    },
   };
 
-  const container = byId("tasksConcentricChart");
+  const container = byId("obrasProgressChart");
   if (!container) return;
 
-  if (tasksChart) {
-    tasksChart.updateSeries([pctFeito, pctCurso, pctPendente]);
+  if (obrasProgressChart) {
+    obrasProgressChart.updateOptions({
+      colors: [color],
+      plotOptions: options.plotOptions,
+    });
+    obrasProgressChart.updateSeries([pct]);
   } else {
-    tasksChart = new ApexCharts(container, options);
-    tasksChart.render();
+    obrasProgressChart = new ApexCharts(container, options);
+    obrasProgressChart.render();
   }
 }
 
 // Chart 4: Vertical column project count metrics
+const OBRAS_BAR_COLORS = ["#10B981", "#F59E0B", "#94A3B8"]; // Ativas, Pausadas, Concluídas
+
 function renderProjectsBarChart(obras) {
   const active = obras.ativas || 0;
   const paused = obras.pausadas || 0;
@@ -325,14 +349,14 @@ function renderProjectsBarChart(obras) {
         }
       }
     },
-    colors: ["#10B981"],
+    colors: OBRAS_BAR_COLORS,
     plotOptions: {
       bar: {
         columnWidth: '55%',
         borderRadius: 6,
         distributed: true,
-        dataLabels: { position: 'top' }
-      }
+        dataLabels: { position: 'top' },
+      },
     },
     dataLabels: {
       enabled: true,
@@ -359,9 +383,10 @@ function renderProjectsBarChart(obras) {
   if (!container) return;
 
   if (projectsChart) {
+    projectsChart.updateOptions({ colors: OBRAS_BAR_COLORS });
     projectsChart.updateSeries([{
       name: "Obras",
-      data: [active, paused, completed]
+      data: [active, paused, completed],
     }]);
   } else {
     projectsChart = new ApexCharts(container, options);
