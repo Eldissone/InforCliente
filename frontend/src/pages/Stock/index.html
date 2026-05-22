@@ -205,6 +205,18 @@
     <!-- Modals -->
     <div id="modalContainer"></div>
 
+    <div id="imageLightbox"
+        class="fixed inset-0 z-[9999] flex flex-col items-center justify-center p-8 bg-slate-900/90 backdrop-blur-md opacity-0 invisible transition-all pointer-events-none [&.active]:opacity-100 [&.active]:visible [&.active]:pointer-events-auto">
+        <button type="button" id="closeLightbox"
+            class="absolute top-8 right-8 w-12 h-12 rounded-2xl bg-white/10 border border-white/10 text-[#2afc8d] flex items-center justify-center hover:bg-white/20 transition-all"
+            aria-label="Fechar">
+            <span class="material-symbols-outlined text-3xl">close</span>
+        </button>
+        <div class="max-w-[90vw] max-h-[80vh]">
+            <img id="lightboxImage" src="" alt="" class="max-w-full max-h-[80vh] object-contain rounded-3xl border border-white/10 shadow-2xl" />
+        </div>
+        <p id="lightboxTitle" class="mt-6 text-lg font-black text-[#2afc8d] text-center"></p>
+    </div>
 
     <script src="../../shared/session.js" type="module"></script>
     <script src="./stock.js" type="module"></script>

@@ -1,12 +1,48 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { wireUsersNav, wireLogout } from "../../shared/session.js";
-import { openModal, initMobileMenu, escapeHtml as esc } from "../../shared/ui.js";
+import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb } from "../../shared/ui.js";
 import { resolveProductImageUrl } from "../../services/api.js";
+
+function openProductImageLightbox(url, title) {
+    const lightbox = document.getElementById("imageLightbox");
+    const img = document.getElementById("lightboxImage");
+    const titleEl = document.getElementById("lightboxTitle");
+    if (!lightbox || !img) return;
+    img.src = url;
+    if (titleEl) titleEl.textContent = title || "Produto";
+    lightbox.classList.add("active");
+    document.body.style.overflow = "hidden";
+}
+
+function closeProductImageLightbox() {
+    const lightbox = document.getElementById("imageLightbox");
+    if (!lightbox) return;
+    lightbox.classList.remove("active");
+    document.body.style.overflow = "";
+}
+
+function wireProductImagePreview() {
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-preview-url]");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openProductImageLightbox(
+            btn.getAttribute("data-preview-url"),
+            btn.getAttribute("data-preview-title") || "Produto"
+        );
+    });
+    document.getElementById("closeLightbox")?.addEventListener("click", closeProductImageLightbox);
+    document.getElementById("imageLightbox")?.addEventListener("click", (e) => {
+        if (e.target.id === "imageLightbox") closeProductImageLightbox();
+    });
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
     await wireUsersNav();
     wireLogout();
     initMobileMenu();
+    wireProductImagePreview();
     init();
 });
 
@@ -406,6 +442,7 @@ async function renderCatalog(container) {
                                     <input type="checkbox" class="w-4 h-4 cursor-pointer accent-[#2afc8d]" onclick="window.toggleSelectAllProducts('${type}', this)">
                                 </th>
                                 <th class="px-8 py-5 w-12 text-center">Nº</th>
+                                <th class="px-4 py-5 text-center w-16">Img</th>
                                 <th class="px-8 py-5">Nome do Produto</th>
                                 <th class="px-8 py-5">SKU / Referência</th>
                                 <th class="px-8 py-5 text-right">Ações</th>
@@ -420,6 +457,7 @@ async function renderCatalog(container) {
                                     <td class="px-8 py-4 w-12 text-center">
                                         <span class="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">${start + index + 1}</span>
                                     </td>
+                                    <td class="px-4 py-4 text-center">${renderProductImageThumb(p)}</td>
                                     <td class="px-8 py-4">
                                         <div class="font-bold text-slate-900 text-sm">${esc(p.name)}</div>
                                         <div class="text-[9px] font-black text-slate-300 uppercase tracking-widest">${esc(p.category)}</div>
@@ -436,7 +474,7 @@ async function renderCatalog(container) {
                                         </div>
                                     </td>
                                 </tr>
-                            `).join('') || `<tr><td colspan="${isSelectionMode ? 5 : 4}" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
+                            `).join('') || `<tr><td colspan="${isSelectionMode ? 6 : 5}" class="p-12 text-center text-slate-300 font-medium italic">Nenhuma referência registada neste grupo.</td></tr>`}
                         </tbody>
                     </table>
                     
@@ -1818,6 +1856,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
+                                    <th class="px-4 py-5 text-center w-16">Img</th>
                                     <th class="px-10 py-5">Material</th>
                                     <th class="px-10 py-5">Propriedade</th>
                                     <th class="px-10 py-5 text-center">Quantidade Disponível</th>
@@ -1829,6 +1868,7 @@ async function renderWarehouseDetail(container, warehouseId) {
         const isLow = s.quantity < 5; // Exemplo de regra simples
         return `
                                 <tr class="group hover:bg-slate-50/50 transition-colors">
+                                    <td class="px-4 py-6 text-center">${renderProductImageThumb(s.product)}</td>
                                     <td class="px-10 py-6">
                                         <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
                                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
@@ -1855,7 +1895,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                                         </div>
                                     </td>
                                 </tr>`;
-    }).join('') || '<tr><td colspan="3" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>'}
+    }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -2063,9 +2103,34 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
             </div>
 
             <div class="space-y-2">
-                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto de Evidência / Ativo</label>
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto de Evidência / Guia</label>
                 <input type="file" name="photo" accept="image/*" capture="environment" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-bold text-slate-400">
             </div>
+
+            ${type === "ENTRY" ? `
+            <div class="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm">
+                        <span class="material-symbols-outlined text-lg">local_shipping</span>
+                    </div>
+                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-400">Controlo de Transporte (Opcional)</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Motorista</label>
+                        <input name="driver" placeholder="Nome completo" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Viatura / Matrícula</label>
+                        <input name="plate" placeholder="Ex: LD-00-00-AA" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all uppercase">
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Foto da Viatura</label>
+                    <input type="file" name="vehiclePhoto" accept="image/*" capture="environment" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-500 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 file:font-bold file:text-slate-600">
+                </div>
+            </div>
+            ` : ""}
         </form>
     `;
 
@@ -2074,7 +2139,15 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
         contentHtml,
         primaryLabel: "Registar",
         onPrimary: async ({ body }) => {
-            const formData = new FormData(body.querySelector("#formMovement"));
+            const form = body.querySelector("#formMovement");
+            const formData = new FormData(form);
+            const driver = formData.get("driver");
+            const plate = formData.get("plate");
+            formData.delete("driver");
+            formData.delete("plate");
+            if (driver || plate) {
+                formData.set("notes", `Motorista: ${driver || "N/A"} | Matrícula: ${plate || "N/A"}`);
+            }
             try {
                 await apiUpload("/stock/move", formData, "POST");
                 close();
