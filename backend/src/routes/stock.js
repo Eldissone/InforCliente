@@ -35,7 +35,18 @@ stockRoutes.get(
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    return res.json({ items });
+
+    const userIds = [...new Set(items.map((m) => m.userId).filter(Boolean))];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const userById = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const enriched = items.map((m) => ({ ...m, user: userById[m.userId] || null }));
+    return res.json({ items: enriched });
   })
 );
 

@@ -11,6 +11,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 let currentTab = "inventory";
 
+/** Extrai quem entregou (utilizador do sistema) e quem recebeu (das notas do movimento). */
+function parseMovementParties(m) {
+    const deliveredBy = m.user?.name || m.user?.email || null;
+    const notes = m.notes || "";
+    const recvMatch = notes.match(/Recebido por:\s*(.+)$/i);
+    const retMatch = notes.match(/Devolvido por:\s*(.+)$/i);
+
+    if (recvMatch) {
+        return { deliveredBy, receivedBy: recvMatch[1].trim() };
+    }
+    if (retMatch) {
+        return { deliveredBy: retMatch[1].trim(), receivedBy: deliveredBy };
+    }
+    return { deliveredBy, receivedBy: null };
+}
+
 function init() {
     setupTabs();
     loadTabContent(currentTab);
@@ -1528,7 +1544,7 @@ async function renderMovements(container) {
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Tipo</th>
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Produto</th>
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Armazém</th>
-                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Utilizador</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Entregou → Recebeu</th>
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Qtd.</th>
                         </tr>
                     </thead>
@@ -1548,7 +1564,10 @@ async function renderMovements(container) {
             const qtyColor = isPositive ? '#10b981' : isNegative ? '#ef4444' : '#64748b';
             const qtySign = isPositive ? '+' : isNegative ? '−' : '';
             const catIsAsset = m.product.category === 'TOOL' || m.product.category === 'EQUIPMENT';
-            const initials = (m.user?.name || 'S').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            const { deliveredBy, receivedBy } = parseMovementParties(m);
+            const deliveredLabel = deliveredBy || "Sistema";
+            const receivedLabel = receivedBy || null;
+            const initials = deliveredLabel.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
             html += `
                 <tr class="timeline-item hover:bg-slate-50/60 transition-colors cursor-default" data-type="${m.type}">
@@ -1576,9 +1595,17 @@ async function renderMovements(container) {
                         ${m.notes ? `<p class="text-[10px] text-slate-400 mt-1 italic truncate max-w-[180px]">${esc(m.notes)}</p>` : ''}
                     </td>
                     <td class="px-6 py-5">
-                        <div class="flex items-center gap-2">
-                            <div class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[9px] font-black">${initials}</div>
-                            <span class="text-xs font-bold text-slate-600 max-w-[100px] truncate">${esc(m.user?.name || 'Sistema')}</span>
+                        <div class="flex items-center gap-2 min-w-[140px]">
+                            <div class="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-[9px] font-black shrink-0">${initials}</div>
+                            <div class="flex flex-col gap-0.5 min-w-0">
+                                <span class="text-xs font-bold text-slate-700 truncate" title="Entregou">${esc(deliveredLabel)}</span>
+                                ${receivedLabel ? `
+                                <div class="flex items-center gap-1 min-w-0">
+                                    <span class="material-symbols-outlined text-[14px] text-slate-300 shrink-0">arrow_forward</span>
+                                    <span class="text-xs font-bold text-emerald-700 truncate" title="Recebeu">${esc(receivedLabel)}</span>
+                                </div>
+                                ` : ""}
+                            </div>
                         </div>
                     </td>
                     <td class="px-6 py-5 text-right whitespace-nowrap">
