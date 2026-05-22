@@ -2637,7 +2637,9 @@ async function openStockMovementModal() {
       apiRequest("/clients")
     ]);
 
-    const products = productsRes.items || [];
+    const products = (productsRes.items || []).filter(
+      (p) => p.category === "MATERIAL" || p.category === "CONSUMABLE"
+    );
     const clients = clientsRes.items || [];
 
     const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
