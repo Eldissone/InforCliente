@@ -12,6 +12,45 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 let currentTab = "inventory";
 
+function stockOwnershipLabel(item, clientById = {}) {
+  if (item.ownershipLabel) return item.ownershipLabel;
+  if (item.transferFromWarehouse) return `Transf. de ${item.transferFromWarehouse}`;
+  if (item.owner?.name) return item.owner.name;
+  if (item.ownerId && clientById[item.ownerId]?.name) return clientById[item.ownerId].name;
+  return item.warehouse?.name || "—";
+}
+
+function stockOwnershipBadgeClass(item) {
+  if (item.transferFromWarehouse || (item.ownershipLabel || "").startsWith("Transf.")) {
+    return "bg-violet-50 text-violet-700";
+  }
+  if (item.ownerId) return "bg-indigo-50 text-indigo-700";
+  return "bg-emerald-50 text-emerald-700";
+}
+
+function renderWarehouseOwnerOptions(warehouse) {
+  if (!warehouse) {
+    return `<option value="">Empresa</option>`;
+  }
+  const client = warehouse.project?.client;
+  let html = `<option value="">${esc(warehouse.name)}</option>`;
+  if (client?.id && client?.name) {
+    html += `<option value="${esc(client.id)}">${esc(client.name)}</option>`;
+  }
+  return html;
+}
+
+function wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehouses) {
+  if (!warehouseSelect || !ownerSelect) return;
+  const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w]));
+  const refresh = () => {
+    const warehouse = warehouseById[warehouseSelect.value];
+    ownerSelect.innerHTML = renderWarehouseOwnerOptions(warehouse);
+  };
+  warehouseSelect.addEventListener("change", refresh);
+  refresh();
+}
+
 /** Extrai quem entregou (utilizador do sistema) e quem recebeu (das notas do movimento). */
 function parseMovementParties(m) {
     const deliveredBy = m.user?.name || m.user?.email || null;
@@ -74,8 +113,12 @@ async function loadTabContent(tab) {
 }
 
 async function renderInventory(container) {
-    const { items: balances } = await apiRequest("/stock/balance");
-    const { items: allItems } = await apiRequest("/items");
+    const [{ items: balances }, { items: allItems }, { items: clients }] = await Promise.all([
+        apiRequest("/stock/balance"),
+        apiRequest("/items"),
+        apiRequest("/clients"),
+    ]);
+    const clientById = Object.fromEntries((clients || []).map((c) => [c.id, c]));
 
     // Agrupar tudo por produto, armazém e proprietário para evitar duplicados no inventário geral
     const groups = {};
@@ -89,6 +132,9 @@ async function renderInventory(container) {
                 product: b.product,
                 warehouse: b.warehouse,
                 ownerId: b.ownerId,
+                owner: b.owner,
+                ownershipLabel: b.ownershipLabel,
+                transferFromWarehouse: b.transferFromWarehouse,
                 quantity: 0,
                 hasStock: true,
                 hasAsset: false
@@ -194,8 +240,8 @@ async function renderInventory(container) {
                                 ${isStock ? `<span class="px-2 py-0.5 w-fit rounded-md bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest">Stock</span>` : ''}
                                 ${isAsset ? `<span class="px-2 py-0.5 w-fit rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest">Ativo</span>` : ''}
                             </div>
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                ${item.ownerId ? 'Cliente' : 'Próprio'}
+                            <span class="text-[9px] font-bold text-slate-600 uppercase tracking-widest truncate max-w-[200px]" title="${esc(stockOwnershipLabel(item, clientById))}">
+                                ${esc(stockOwnershipLabel(item, clientById))}
                             </span>
                         </div>
                     </td>
@@ -1788,8 +1834,8 @@ async function renderWarehouseDetail(container, warehouseId) {
                                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
                                     </td>
                                     <td class="px-10 py-6">
-                                        <span class="px-2 py-0.5 rounded-md ${s.ownerId ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'} text-[9px] font-black uppercase tracking-widest">
-                                            ${s.ownerId ? 'Cliente' : 'Próprio'}
+                                        <span class="px-2 py-0.5 rounded-md ${stockOwnershipBadgeClass(s)} text-[9px] font-black uppercase tracking-widest max-w-[220px] truncate inline-block" title="${esc(stockOwnershipLabel(s))}">
+                                            ${esc(stockOwnershipLabel(s))}
                                         </span>
                                     </td>
                                     <td class="px-10 py-6 text-center">
@@ -1966,7 +2012,6 @@ async function renderWarehouseDetail(container, warehouseId) {
 async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
     const productsRes = await apiRequest("/products");
     const warehousesRes = await apiRequest("/warehouses");
-    const clientsRes = await apiRequest("/clients");
 
     const materials = productsRes.items.filter(p => p.category === 'MATERIAL' || p.category === 'CONSUMABLE');
     const tools = productsRes.items.filter(p => p.category === 'TOOL' || p.category === 'EQUIPMENT');
@@ -1992,7 +2037,7 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
 
             <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém Destino</label>
-                <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <select name="warehouseId" id="movementWarehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                     ${warehousesRes.items.map(w => `<option value="${w.id}" ${w.id === defaultWarehouseId ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
                 </select>
             </div>
@@ -2011,10 +2056,9 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
                 </div>
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Proprietário</label>
-                    <select name="ownerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                        <option value="">Empresa (Próprio)</option>
-                        ${clientsRes.items.map(c => `<option value="${c.id}">Cliente: ${esc(c.name)}</option>`).join('')}
+                    <select name="ownerId" id="movementOwnerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                     </select>
+                    <p class="text-[9px] font-bold text-slate-400 mt-1">Stock da empresa = nome do armazém; ou cliente da obra vinculada ao armazém.</p>
                 </div>
             </div>
 
@@ -2044,6 +2088,10 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
 
     // Lógica para popular select dinamicamente e mostrar aviso se for Ativo
     setTimeout(() => {
+        const warehouseSelect = document.getElementById("movementWarehouseId");
+        const ownerSelect = document.getElementById("movementOwnerId");
+        wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehousesRes.items || []);
+
         const categoryFilter = document.getElementById("movementCategoryFilter");
         const productSelect = document.getElementById("movementProductId");
         const notice = document.getElementById("assetNotice");

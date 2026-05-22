@@ -18,7 +18,15 @@ warehouseRoutes.get(
         ...(includeDeleted !== "true" && { active: true })
       },
       orderBy: { name: "asc" },
-      include: { project: { select: { name: true } } },
+      include: {
+        project: {
+          select: {
+            name: true,
+            clientId: true,
+            client: { select: { id: true, name: true } },
+          },
+        },
+      },
     });
     return res.json({ items });
   })

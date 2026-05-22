@@ -2632,18 +2632,22 @@ async function openStockMovementModal() {
   }
 
   try {
-    const [productsRes, clientsRes] = await Promise.all([
+    const [productsRes, warehousesRes] = await Promise.all([
       apiRequest("/products"),
-      apiRequest("/clients")
+      apiRequest("/warehouses"),
     ]);
 
     const products = (productsRes.items || []).filter(
       (p) => p.category === "MATERIAL" || p.category === "CONSUMABLE"
     );
-    const clients = clientsRes.items || [];
+    const warehouse = (warehousesRes.items || []).find((w) => w.id === stockState.warehouseId);
+    const linkedClient = warehouse?.project?.client || projectState?.client;
+    let ownerOptions = `<option value="">${escapeHtml(warehouse?.name || "Armazém")}</option>`;
+    if (linkedClient?.id && linkedClient?.name) {
+      ownerOptions += `<option value="${escapeHtml(linkedClient.id)}">${escapeHtml(linkedClient.name)}</option>`;
+    }
 
     const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
-    const clientOptions = clients.map(c => `<option value="${c.id}">Cliente: ${escapeHtml(c.name)}</option>`).join("");
 
     openModal({
       title: "Nova Operação Logística",
@@ -2677,8 +2681,7 @@ async function openStockMovementModal() {
             <div class="space-y-2">
                <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Proprietário</label>
                <select name="ownerId" id="st_ownerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                  <option value="">Empresa (Próprio)</option>
-                  ${clientOptions}
+                  ${ownerOptions}
                </select>
             </div>
           </div>

@@ -40,6 +40,85 @@ function mergeProductImage(item, evidenceMap) {
   return { ...item, product: { ...item.product, image } };
 }
 
+function stockBalanceKey(item) {
+  return `${item.productId}|${item.warehouseId}|${item.ownerId || ""}`;
+}
+
+/** Última transferência recebida (TRANSFER_IN) por produto/armazém/proprietário. */
+async function getLatestTransferSourceMap(items) {
+  const productIds = [...new Set(items.map((i) => i.productId).filter(Boolean))];
+  if (!productIds.length) return {};
+
+  const [latestMovements, warehouses] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where: { productId: { in: productIds } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        productId: true,
+        warehouseId: true,
+        ownerId: true,
+        type: true,
+        notes: true,
+        reference: true,
+      },
+    }),
+    prisma.warehouse.findMany({ select: { id: true, name: true } }),
+  ]);
+  const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w.name]));
+
+  const resolveTransferFromName = (m) => {
+    if (m.reference && warehouseById[m.reference]) return warehouseById[m.reference];
+    const notes = m.notes || "";
+    const byName = notes.match(/Transferência de\s+([^.]+?)(?:\.|\s|$)/i);
+    if (byName) {
+      const candidate = byName[1].trim();
+      return warehouseById[candidate] || candidate;
+    }
+    const byId = notes.match(/Transferência de\s+([a-z0-9]+)/i);
+    if (byId && warehouseById[byId[1]]) return warehouseById[byId[1]];
+    return null;
+  };
+
+  const map = {};
+  for (const m of latestMovements) {
+    const key = `${m.productId}|${m.warehouseId}|${m.ownerId || ""}`;
+    if (map[key] !== undefined) continue;
+    if (m.type !== "TRANSFER_IN") {
+      map[key] = null;
+      continue;
+    }
+    map[key] = resolveTransferFromName(m);
+  }
+  return map;
+}
+
+/** Nome do cliente, armazém ou armazém de origem (transferência). */
+async function enrichStockItemsWithOwners(items) {
+  const ownerIds = [...new Set(items.map((i) => i.ownerId).filter(Boolean))];
+  const [clients, transferFromMap] = await Promise.all([
+    ownerIds.length
+      ? prisma.client.findMany({
+          where: { id: { in: ownerIds } },
+          select: { id: true, name: true },
+        })
+      : [],
+    getLatestTransferSourceMap(items),
+  ]);
+  const clientById = Object.fromEntries(clients.map((c) => [c.id, c]));
+
+  return items.map((item) => {
+    const owner = item.ownerId ? clientById[item.ownerId] || null : null;
+    const transferFromWarehouse = transferFromMap[stockBalanceKey(item)] || null;
+    let ownershipLabel;
+    if (transferFromWarehouse) {
+      ownershipLabel = `Transf. de ${transferFromWarehouse}`;
+    } else {
+      ownershipLabel = owner?.name || item.warehouse?.name || "Empresa";
+    }
+    return { ...item, owner, transferFromWarehouse, ownershipLabel };
+  });
+}
+
 // GET - Histórico de Movimentações
 stockRoutes.get(
   "/movements",
@@ -98,7 +177,8 @@ stockRoutes.get(
 
     const productIds = [...new Set(items.map((i) => i.productId))];
     const evidenceMap = await getLatestEvidenceByProduct(productIds, warehouseId || null);
-    const enriched = items.map((item) => mergeProductImage(item, evidenceMap));
+    const withImages = items.map((item) => mergeProductImage(item, evidenceMap));
+    const enriched = await enrichStockItemsWithOwners(withImages);
 
     return res.json({ items: enriched });
   })
@@ -168,7 +248,8 @@ stockRoutes.get(
 
     const productIds = [...new Set(Object.values(grouped).map((g) => g.productId))];
     const evidenceMap = await getLatestEvidenceByProduct(productIds, warehouse.id);
-    const enriched = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
+    const withImages = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
+    const enriched = await enrichStockItemsWithOwners(withImages);
 
     return res.json({ items: enriched });
   })
@@ -329,6 +410,20 @@ stockRoutes.post(
       return res.status(400).json({ error: "SAME_WAREHOUSE" });
     }
 
+    const [fromWarehouse, toWarehouse] = await Promise.all([
+      prisma.warehouse.findUnique({
+        where: { id: body.fromWarehouseId },
+        select: { id: true, name: true, projectId: true },
+      }),
+      prisma.warehouse.findUnique({
+        where: { id: body.toWarehouseId },
+        select: { id: true, name: true, projectId: true },
+      }),
+    ]);
+    if (!fromWarehouse || !toWarehouse) {
+      return res.status(404).json({ error: "WAREHOUSE_NOT_FOUND" });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // Validar stock disponível na origem
       const sourceStock = await tx.warehouseStock.findFirst({
@@ -343,29 +438,35 @@ stockRoutes.post(
         throw new Error("INSUFFICIENT_STOCK");
       }
 
+      const ownerId = body.ownerId && body.ownerId.trim() !== "" ? body.ownerId : null;
+      const extraNotes = body.notes ? ` ${body.notes}` : "";
+
       // 1. Movimento de Saída (Origem)
       await tx.stockMovement.create({
         data: {
           productId: body.productId,
           warehouseId: body.fromWarehouseId,
+          projectId: fromWarehouse.projectId || null,
           userId: req.user.sub,
           type: "TRANSFER_OUT",
           quantity: body.quantity,
-          ownerId: body.ownerId,
-          notes: `Transferência para ${body.toWarehouseId}. ${body.notes || ""}`,
+          ownerId,
+          notes: `Transferência para ${toWarehouse.name}.${extraNotes}`.trim(),
         },
       });
 
-      // 2. Movimento de Entrada (Destino)
+      // 2. Movimento de Entrada (Destino) — reference = armazém de origem
       await tx.stockMovement.create({
         data: {
           productId: body.productId,
           warehouseId: body.toWarehouseId,
+          projectId: toWarehouse.projectId || null,
           userId: req.user.sub,
           type: "TRANSFER_IN",
           quantity: body.quantity,
-          ownerId: body.ownerId,
-          notes: `Transferência de ${body.fromWarehouseId}. ${body.notes || ""}`,
+          ownerId,
+          reference: body.fromWarehouseId,
+          notes: `Transferência de ${fromWarehouse.name}.${extraNotes}`.trim(),
         },
       });
 
@@ -374,8 +475,6 @@ stockRoutes.post(
         where: { id: sourceStock.id },
         data: { quantity: { decrement: body.quantity } },
       });
-
-      const ownerId = body.ownerId && body.ownerId.trim() !== "" ? body.ownerId : null;
 
       const targetStock = await tx.warehouseStock.findFirst({
         where: {
