@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const welcomeEl = document.getElementById("welcomeUser");
 
   if (welcomeEl) {
-    welcomeEl.textContent = user.email;
+    welcomeEl.textContent = user.name || user.email || "";
   }
 
   const listEl = document.getElementById("projectsList");
