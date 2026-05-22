@@ -15,6 +15,31 @@ const upload = multer({
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
 
+/** Última foto de evidência por produto (movimentos de stock). */
+async function getLatestEvidenceByProduct(productIds, warehouseId = null) {
+  if (!productIds?.length) return {};
+  const movements = await prisma.stockMovement.findMany({
+    where: {
+      productId: { in: productIds },
+      evidenceUrl: { not: null },
+      ...(warehouseId ? { warehouseId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { productId: true, evidenceUrl: true },
+  });
+  const map = {};
+  for (const m of movements) {
+    if (!map[m.productId]) map[m.productId] = m.evidenceUrl;
+  }
+  return map;
+}
+
+function mergeProductImage(item, evidenceMap) {
+  if (!item?.product) return item;
+  const image = item.product.image || evidenceMap[item.productId] || null;
+  return { ...item, product: { ...item.product, image } };
+}
+
 // GET - Histórico de Movimentações
 stockRoutes.get(
   "/movements",
@@ -69,8 +94,12 @@ stockRoutes.get(
       },
       orderBy: { product: { name: "asc" } },
     });
-    
-    return res.json({ items });
+
+    const productIds = [...new Set(items.map((i) => i.productId))];
+    const evidenceMap = await getLatestEvidenceByProduct(productIds, warehouseId || null);
+    const enriched = items.map((item) => mergeProductImage(item, evidenceMap));
+
+    return res.json({ items: enriched });
   })
 );
 
@@ -135,9 +164,12 @@ stockRoutes.get(
       }
       grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
     }
-    
-    console.log("=== DEBUG BALANCE ITEMS ===", Object.values(grouped));
-    return res.json({ items: Object.values(grouped) });
+
+    const productIds = [...new Set(Object.values(grouped).map((g) => g.productId))];
+    const evidenceMap = await getLatestEvidenceByProduct(productIds, warehouse.id);
+    const enriched = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
+
+    return res.json({ items: enriched });
   })
 );
 
@@ -182,6 +214,13 @@ stockRoutes.post(
             evidenceUrl: evidenceUrl,
           },
         });
+
+        if (evidenceUrl) {
+          await tx.product.update({
+            where: { id: body.productId },
+            data: { image: evidenceUrl },
+          });
+        }
 
         const product = await tx.product.findUnique({ where: { id: body.productId } });
         console.log(`DEBUG: Product category: ${product?.category}, body.type: ${body.type}, quantity: ${body.quantity}`);

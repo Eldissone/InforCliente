@@ -1,3 +1,5 @@
+import { resolveProductImageUrl } from "../services/api.js";
+
 export function setText(el, text) {
   if (!el) return;
   el.textContent = text ?? "";
@@ -244,4 +246,40 @@ export function escapeHtml(unsafe) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/** Miniatura de produto para tabelas de stock (com lightbox se tiver imagem). */
+export function renderProductImageThumb(product, { sizeClass = "w-11 h-11" } = {}) {
+  const name = product?.name || "Produto";
+  const url = resolveProductImageUrl(product);
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "?";
+
+  const fallback = `
+    <div data-img-fallback class="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-tighter">
+      ${escapeHtml(initials)}
+    </div>`;
+
+  const boxClass = `${sizeClass} mx-auto rounded-xl border border-slate-200 overflow-hidden shrink-0 bg-slate-50`;
+
+  if (!url) {
+    return `<div class="${boxClass}" title="Sem imagem">${fallback}</div>`;
+  }
+
+  return `
+    <button type="button"
+      data-preview-url="${escapeHtml(url)}"
+      data-preview-title="${escapeHtml(name)}"
+      class="${boxClass} cursor-pointer hover:ring-2 hover:ring-[#2afc8d] hover:scale-105 transition-all block"
+      title="Ver imagem do produto">
+      <img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="w-full h-full object-cover" loading="lazy"
+        onerror="this.classList.add('hidden');const f=this.parentElement?.querySelector('[data-img-fallback]');if(f){f.classList.remove('hidden');}this.parentElement?.removeAttribute('data-preview-url');" />
+      <div data-img-fallback class="hidden w-full h-full">${fallback}</div>
+    </button>`;
 }

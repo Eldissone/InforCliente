@@ -4,7 +4,7 @@ import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 checkAuth({ allowedRoles: ["cliente", "admin", "operador", "user"] });
 import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
-import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml } from "../../shared/ui.js";
+import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
 
 let dashboardData = null;
 let charts = {
@@ -308,7 +308,7 @@ async function loadStock() {
   const galleryContainer = document.getElementById("stockGalleryContainer");
 
   if (historyTbody) historyTbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400">A carregar fluxo...</td></tr>`;
-  if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
+  if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
 
   try {
     const [balanceRes, movementsRes, photosRes] = await Promise.all([
@@ -427,7 +427,7 @@ function renderStockInventory(summary, movements) {
   if (!tbody) return;
 
   if (!summary || summary.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
     return;
   }
 
@@ -446,6 +446,7 @@ function renderStockInventory(summary, movements) {
 
     return `
           <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
                 <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
                 <div class="text-[9px] text-slate-400 font-black uppercase tracking-widest">${product.sku || ""}</div>
@@ -1470,7 +1471,7 @@ function wireEvents() {
     if (galleryItem) {
       const url = galleryItem.getAttribute("data-preview-url");
       const title = galleryItem.getAttribute("data-preview-title");
-      const date = galleryItem.getAttribute("data-preview-date");
+      const date = galleryItem.getAttribute("data-preview-date") || "";
       openLightbox(url, title, date);
       return;
     }

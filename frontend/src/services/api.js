@@ -12,10 +12,35 @@ export function setApiBaseUrl(url) {
 }
 
 export function getAssetUrl(path) {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const baseUrl = getApiBaseUrl();
-  return `${baseUrl}/${path.startsWith("/") ? path.slice(1) : path}`;
+  if (path == null) return null;
+  const trimmed = String(path).trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  let rel = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
+  if (!rel.startsWith("uploads/")) rel = `uploads/${rel}`;
+  const baseUrl = getApiBaseUrl().replace(/\/$/, "");
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin.replace(/\/$/, "");
+    // Dev: frontend em :5173 com proxy /uploads → mesmo origin
+    if (origin === baseUrl || /localhost:5173|127\.0\.0\.1:5173/.test(origin)) {
+      return `/${rel}`;
+    }
+  }
+  return `${baseUrl}/${rel}`;
+}
+
+/** URL da imagem do produto (catálogo, evidência de movimento ou item). */
+export function resolveProductImageUrl(productOrPath) {
+  if (!productOrPath) return null;
+  const raw = (
+    typeof productOrPath === "string"
+      ? productOrPath
+      : productOrPath?.image || productOrPath?.imageUrl || productOrPath?.evidenceUrl || ""
+  )
+    .toString()
+    .trim();
+  if (!raw || raw === "null" || raw === "undefined") return null;
+  return getAssetUrl(raw);
 }
 
 async function parseJsonSafe(res) {

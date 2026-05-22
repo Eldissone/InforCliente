@@ -1,6 +1,7 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { wireUsersNav, wireLogout } from "../../shared/session.js";
 import { openModal, initMobileMenu, escapeHtml as esc } from "../../shared/ui.js";
+import { resolveProductImageUrl } from "../../services/api.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
     await wireUsersNav();
@@ -781,8 +782,21 @@ async function openExcelImportModal() {
 }
 
 async function openProductModal(product = null) {
+    const previewUrl = resolveProductImageUrl(product);
     const contentHtml = `
         <form id="formProduct" class="space-y-6 pt-4">
+            <div class="flex items-center gap-4">
+                <div id="productPhotoPreview" class="w-20 h-20 rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 shrink-0 flex items-center justify-center">
+                    ${previewUrl
+                        ? `<img src="${esc(previewUrl)}" class="w-full h-full object-cover" alt="Foto do produto" />`
+                        : `<span class="material-symbols-outlined text-slate-300 text-3xl">inventory_2</span>`}
+                </div>
+                <div class="flex-1 space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto do Produto</label>
+                    <input type="file" name="photo" accept="image/*" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-xs font-bold text-slate-500 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <p class="text-[10px] text-slate-400">JPG ou PNG, máx. 5 MB. Aparece no stock/armazém.</p>
+                </div>
+            </div>
             <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Produto</label>
                 <input type="text" name="name" value="${esc(product?.name || '')}" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
@@ -820,16 +834,35 @@ async function openProductModal(product = null) {
         contentHtml,
         primaryLabel: product ? "Atualizar" : "Criar Produto",
         onPrimary: async ({ body }) => {
-            const data = Object.fromEntries(new FormData(body.querySelector("#formProduct")).entries());
+            const form = body.querySelector("#formProduct");
+            const formData = new FormData(form);
+            const photoFile = formData.get("photo");
+            const data = Object.fromEntries(formData.entries());
+            delete data.photo;
             try {
-                await apiRequest(product ? `/products/${product.id}` : "/products", {
+                let saved = await apiRequest(product ? `/products/${product.id}` : "/products", {
                     method: product ? "PATCH" : "POST",
                     body: data
                 });
+                const productId = product?.id || saved?.id;
+                if (photoFile && photoFile.size > 0 && productId) {
+                    const uploadForm = new FormData();
+                    uploadForm.append("photo", photoFile);
+                    await apiUpload(`/products/${productId}/photo`, uploadForm);
+                }
                 close();
                 loadTabContent("catalog");
+                if (currentTab === "inventory") loadTabContent("inventory");
             } catch (error) { alert("Erro: " + error.message); }
         }
+    });
+
+    const photoInput = document.querySelector("#formProduct input[name='photo']");
+    photoInput?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        const preview = document.getElementById("productPhotoPreview");
+        if (!file || !preview) return;
+        preview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover" alt="Pré-visualização" />`;
     });
 }
 

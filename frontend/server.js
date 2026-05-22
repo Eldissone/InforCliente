@@ -1,10 +1,13 @@
 const express = require("express");
 const path = require("path");
+const http = require("http");
+const https = require("https");
 require("dotenv").config();
 
 const app = express();
 
 const port = process.env.PORT || 5173;
+const apiBase = (process.env.API_BASE_URL || "http://localhost:5000").replace(/\/$/, "");
 const pagesRoot = path.join(__dirname, "src", "pages");
 const srcRoot = path.join(__dirname, "src");
 
@@ -15,6 +18,18 @@ app.get("/services/config.js", (req, res) => {
     API_BASE_URL: process.env.API_BASE_URL || "http://localhost:5000"
   };
   res.send(`export const config = ${JSON.stringify(config)};`);
+});
+
+// Proxy de uploads para o backend (miniaturas de produtos/movimentos em dev)
+app.use("/uploads", (req, res) => {
+  const target = `${apiBase}${req.originalUrl}`;
+  const lib = target.startsWith("https") ? https : http;
+  lib
+    .get(target, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      proxyRes.pipe(res);
+    })
+    .on("error", () => res.status(502).send("Erro ao carregar ficheiro do servidor API."));
 });
 
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)

@@ -1,6 +1,6 @@
-import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
+import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
@@ -2310,6 +2310,16 @@ async function init() {
 
   // Photo Previews Lightbox
   document.addEventListener("click", e => {
+    const productImgBtn = e.target.closest("[data-preview-url]");
+    if (productImgBtn) {
+      openLightbox(
+        productImgBtn.getAttribute("data-preview-url"),
+        productImgBtn.getAttribute("data-preview-title") || "Produto",
+        ""
+      );
+      return;
+    }
+
     const photoItem = e.target.closest("[data-preview-photo]");
     if (photoItem) {
       const photoId = photoItem.getAttribute("data-preview-photo");
@@ -2783,7 +2793,7 @@ function renderStockInventory(movements, summary) {
   if (!tbody) return;
 
   if (!summary || summary.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock disponível no armazém desta obra.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock disponível no armazém desta obra.</td></tr>`;
     return;
   }
 
@@ -2808,6 +2818,7 @@ function renderStockInventory(movements, summary) {
             data-product-id="${item.productId}" 
             ${stockState.selectedStockItems.has(item.productId) ? "checked" : ""}>
         </td>
+        <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
         <td class="px-3 md:px-10 py-5">
            <div class="text-xs font-bold text-slate-900">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
@@ -2846,6 +2857,15 @@ async function openMaterialManagerModal() {
                 <h4 class="text-xs font-black uppercase tracking-widest text-slate-600">Configuração de Referência</h4>
            </div>
            <input type="hidden" id="mt_id">
+           <div class="flex items-center gap-4 mb-2">
+              <div id="mt_photo_preview" class="w-16 h-16 rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-slate-300 text-2xl">inventory_2</span>
+              </div>
+              <div class="flex-1 space-y-2">
+                <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Foto do Material</label>
+                <input type="file" id="mt_photo" accept="image/*" class="w-full bg-white border-none rounded-2xl p-3 text-xs font-bold text-slate-500 focus:ring-2 focus:ring-[#2afc8d] shadow-sm">
+              </div>
+           </div>
            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="space-y-2">
                   <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Código / SKU</label>
@@ -2881,6 +2901,7 @@ async function openMaterialManagerModal() {
            <table class="w-full text-left">
               <thead class="sticky top-0 bg-white z-10 border-b border-slate-100 pb-4">
                  <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <th class="py-5 px-4 text-center w-14">Img</th>
                     <th class="py-5 px-4">Material / Referência</th>
                     <th class="py-5 px-4">Cat / Unid.</th>
                     <th class="py-5 px-4 text-right">Ações</th>
@@ -2899,14 +2920,15 @@ async function openMaterialManagerModal() {
 
   const loadMaterials = async () => {
     const tbody = el("materialListTbody");
-    tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-slate-400">Carregando catálogo...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="py-10 text-center text-xs text-slate-400">Carregando catálogo...</td></tr>`;
     try {
       const { items } = await apiRequest("/products");
       tbody.innerHTML = items.map(m => `
         <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all group">
+          <td class="py-5 px-4 text-center">${renderProductImageThumb(m, { sizeClass: "w-10 h-10" })}</td>
           <td class="py-5 px-4">
              <div class="text-sm font-bold text-slate-900 mb-0.5">${escapeHtml(m.name)}</div>
-             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${m.code}</div>
+             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${m.sku || m.code || ""}</div>
           </td>
           <td class="py-5 px-4">
              <div class="flex items-center gap-2">
@@ -2937,6 +2959,14 @@ async function openMaterialManagerModal() {
           el("mt_cat").value = m.category;
           el("mt_unit").value = m.unit;
           el("saveMaterialBtn").textContent = "Atualizar Material";
+          const preview = el("mt_photo_preview");
+          const url = resolveProductImageUrl(m);
+          if (preview) {
+            preview.innerHTML = url
+              ? `<img src="${escapeHtml(url)}" class="w-full h-full object-cover" alt="" />`
+              : `<span class="material-symbols-outlined text-slate-300 text-2xl">inventory_2</span>`;
+          }
+          if (el("mt_photo")) el("mt_photo").value = "";
         });
       });
 
@@ -2955,7 +2985,7 @@ async function openMaterialManagerModal() {
       });
 
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-xs text-red-400">Erro ao carregar catálogo.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="py-10 text-center text-xs text-red-400">Erro ao carregar catálogo.</td></tr>`;
     }
   };
 
@@ -2965,6 +2995,16 @@ async function openMaterialManagerModal() {
     el("mt_name").value = "";
     el("mt_unit").value = "";
     el("saveMaterialBtn").textContent = "Gravar Material";
+    const preview = el("mt_photo_preview");
+    if (preview) preview.innerHTML = `<span class="material-symbols-outlined text-slate-300 text-2xl">inventory_2</span>`;
+    if (el("mt_photo")) el("mt_photo").value = "";
+  });
+
+  el("mt_photo")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    const preview = el("mt_photo_preview");
+    if (!file || !preview) return;
+    preview.innerHTML = `<img src="${URL.createObjectURL(file)}" class="w-full h-full object-cover" alt="" />`;
   });
 
   el("saveMaterialBtn").addEventListener("click", async () => {
@@ -2981,13 +3021,21 @@ async function openMaterialManagerModal() {
 
     setButtonLoading(btn, true);
     try {
-      await apiRequest(mId ? `/products/${mId}` : "/products", {
+      const photoFile = el("mt_photo")?.files?.[0];
+      const saved = await apiRequest(mId ? `/products/${mId}` : "/products", {
         method: mId ? "PATCH" : "POST",
         body
       });
+      const productId = mId || saved?.id;
+      if (photoFile && photoFile.size > 0 && productId) {
+        const fd = new FormData();
+        fd.append("photo", photoFile);
+        await apiUpload(`/products/${productId}/photo`, fd);
+      }
       toast(mId ? "Material atualizado" : "Material criado", { type: "success" });
       el("resetMaterialBtn").click();
       loadMaterials();
+      if (typeof loadStock === "function") loadStock();
     } catch (err) {
       toast(err.message || "Erro ao salvar material", { type: "error" });
     } finally {
