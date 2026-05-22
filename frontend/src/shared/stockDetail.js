@@ -147,12 +147,24 @@ export function buildStockMovementDetailHtml(m, options = {}) {
                 <span class="text-sm font-bold text-slate-900 uppercase">${escapeHtml(vehicleInfo)}</span>
               </div>
             </div>
-            ${m.vehicleImageUrl ? renderEvidenceBlock({ evidenceUrl: m.vehicleImageUrl }, "Foto da viatura") : ""}
+            ${(() => {
+              const vehicleImg = resolveProductImageUrl({ image: m.vehicleImageUrl });
+              if (!vehicleImg) return "";
+              return `
+            <div class="flex items-center gap-3 pt-2 border-t border-slate-100">
+              <span class="material-symbols-outlined text-slate-400 text-lg">photo_camera</span>
+              <div class="flex items-center gap-2">
+                <span class="text-[9px] font-black text-slate-400 uppercase">Foto da viatura</span>
+                <button type="button" data-preview-url="${escapeHtml(vehicleImg)}" data-preview-title="Foto da viatura"
+                  class="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 cursor-zoom-in hover:ring-2 hover:ring-[#2afc8d]">
+                  <img src="${escapeHtml(vehicleImg)}" alt="Viatura" class="w-full h-full object-cover" loading="lazy" />
+                </button>
+              </div>
+            </div>`;
+            })()}
           </div>
         </div>
       </div>
-
-      ${renderEvidenceBlock(m, "Foto de evidência / guia")}
 
       ${renderEntryTimeline(entryHistory, m.id)}
     </div>`;
