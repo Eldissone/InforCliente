@@ -28,7 +28,7 @@ function statusPill(status) {
     </span>`;
   }
   return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 shadow-sm">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVA
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> EM CURSO
   </span>`;
 }
 
@@ -226,11 +226,11 @@ function renderBillingHistoryChart(valReal, valEst) {
   if (billingChart) {
     billingChart.updateSeries([
       {
-        name: "Realizada (LTV)",
+        name: "",
         data: [0, Math.round(valReal * 0.4), Math.round(valReal * 0.8), valReal]
       },
       {
-        name: "Estimada (Potencial)",
+        name: "",
         data: [0, Math.round(valEst * 0.35), Math.round(valEst * 0.75), valEst]
       }
     ]);
@@ -321,7 +321,7 @@ function renderObrasProgressChart(avancoMedio) {
 }
 
 // Chart 4: Vertical column project count metrics
-const OBRAS_BAR_COLORS = ["#10B981", "#F59E0B", "#94A3B8"]; // Ativas, Pausadas, Concluídas
+const OBRAS_BAR_COLORS = ["#10B981", "#F59E0B", "#94A3B8"]; // Em curso, Pausadas, Concluídas
 
 function renderProjectsBarChart(obras) {
   const active = obras.ativas || 0;
@@ -371,7 +371,7 @@ function renderProjectsBarChart(obras) {
     },
     legend: { show: false },
     xaxis: {
-      categories: ["Ativas", "Pausadas", "Concluídas"],
+      categories: ["Em Curso", "Pausadas", "Concluídas"],
       labels: { show: false },
       axisBorder: { show: false },
       axisTicks: { show: false }

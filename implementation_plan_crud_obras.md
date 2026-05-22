@@ -10,7 +10,7 @@ Atualmente, o sistema permite listar e criar obras, mas não exporta as funciona
 - **Visualização**: Atualizar `renderRow` para exibir botões de "Visualizar" e "Editar", seguindo o padrão visual do módulo de Clientes.
 - **Edição**: Implementar a função `openEdit(id)` que:
   - Carrega os dados atuais da obra e a lista de clientes para o dropdown.
-  - Abre um modal com todos os campos editáveis (Nome, Cliente, Contato, Região, Orçamento, Datas, Progresso, Status).
+  - Abre um modal com todos os campos editáveis (Nome, Cliente, Contacto, Região, Orçamento, Datas, Progresso, Status).
   - Envia uma requisição `PATCH /projects/:id` ao salvar.
 - **Exclusão**: Adicionar um botão "Excluir" dentro do modal de edição que executa `DELETE /projects/:id` após confirmação do utilizador.
 

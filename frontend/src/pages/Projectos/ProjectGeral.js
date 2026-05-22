@@ -52,7 +52,7 @@ function renderStatusPill(status) {
     </span>`;
   }
   return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> ATIVO
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> EM CURSO
   </span>`;
 }
 
@@ -439,7 +439,7 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.name)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.contact)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contacto</label><input id="p_contact" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.contact)}" /></div>
         
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Direcção</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.empreiteiro)}" /></div>
@@ -669,7 +669,7 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contato</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contacto</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
         
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Direcção</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" /></div>
