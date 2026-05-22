@@ -14,24 +14,30 @@ export const STOCK_TYPE_LABELS = {
 };
 
 export function parseStockMovementLogistics(m) {
-  let driverInfo = m.user?.name || m.user?.email || "—";
-  let vehicleInfo = "—";
-  const refLooksLikeUrl = m.reference && /^(https?:\/\/|uploads\/|\/)/i.test(m.reference);
-  const text = [refLooksLikeUrl ? null : m.reference, m.notes].filter(Boolean).join(" | ");
-  if (!text) return { driverInfo, vehicleInfo };
-
-  const parts = text.split("|").map((p) => p.trim());
-  if (parts.length > 1) {
-    driverInfo = parts[0].replace(/^Motorista:\s*/i, "").trim() || driverInfo;
-    vehicleInfo = parts[1].replace(/^Viatura:\s*/i, "").replace(/^Matrícula:\s*/i, "").trim() || "—";
-  } else if (/motorista/i.test(text)) {
-    driverInfo = text.replace(/^Motorista:\s*/i, "").trim() || driverInfo;
-  } else if (/viatura|matrícula/i.test(text)) {
-    vehicleInfo = text.replace(/^Viatura:\s*/i, "").replace(/^Matrícula:\s*/i, "").trim() || "—";
-  } else {
-    driverInfo = text;
+  const notes = (m.notes || "").trim();
+  if (notes && /devolução|devolvido por/i.test(notes)) {
+    return { driverInfo: "—", vehicleInfo: "—", operationNote: notes };
   }
-  return { driverInfo, vehicleInfo };
+
+  const refLooksLikeUrl = m.reference && /^(https?:\/\/|uploads\/|\/)/i.test(m.reference);
+  const text = [refLooksLikeUrl ? null : m.reference, notes].filter(Boolean).join(" | ");
+  if (!text) return { driverInfo: "—", vehicleInfo: "—", operationNote: null };
+
+  const logisticsMatch = text.match(
+    /motorista:\s*([^|]+)(?:\|\s*(?:viatura|matr[íi]cula):\s*([^|]+))?/i
+  );
+  if (logisticsMatch) {
+    const driverInfo = logisticsMatch[1].trim() || "—";
+    const vehicleInfo = (logisticsMatch[2] || "").trim() || "—";
+    return { driverInfo, vehicleInfo, operationNote: null };
+  }
+
+  if (/viatura|matr[íi]cula/i.test(text)) {
+    const vehicleInfo = text.replace(/^(?:viatura|matr[íi]cula):\s*/i, "").trim() || "—";
+    return { driverInfo: "—", vehicleInfo, operationNote: null };
+  }
+
+  return { driverInfo: "—", vehicleInfo: "—", operationNote: text };
 }
 
 function renderEvidenceBlock(m, label = "Evidência / Guia / Viatura") {
@@ -56,12 +62,16 @@ function renderEvidenceBlock(m, label = "Evidência / Guia / Viatura") {
 
 function renderStockSummaryStrip(summary) {
   if (!summary) return "";
-  const { planned, totalIn, totalOut, balance, warehouseName } = summary;
+  const { planned, totalIn, totalOut, balance, warehouseName, entriesOnly } = summary;
+  const cols = entriesOnly ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4";
+  const exitsCell = entriesOnly
+    ? ""
+    : `<div><p class="text-[9px] font-black uppercase text-slate-400">Saídas</p><p class="text-lg font-black text-red-400">${totalOut}</p></div>`;
   return `
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-900 rounded-2xl text-white">
+    <div class="grid ${cols} gap-3 p-4 bg-slate-900 rounded-2xl text-white">
       <div><p class="text-[9px] font-black uppercase text-slate-400">Previsto</p><p class="text-lg font-black text-blue-300">${planned}</p></div>
       <div><p class="text-[9px] font-black uppercase text-slate-400">Entradas</p><p class="text-lg font-black text-emerald-400">${totalIn}</p></div>
-      <div><p class="text-[9px] font-black uppercase text-slate-400">Saídas</p><p class="text-lg font-black text-red-400">${totalOut}</p></div>
+      ${exitsCell}
       <div><p class="text-[9px] font-black uppercase text-slate-400">Saldo</p><p class="text-lg font-black text-[#2afc8d]">${balance}</p></div>
     </div>
     ${warehouseName ? `<p class="text-[10px] font-bold text-slate-500 text-center mt-2">Armazém: ${escapeHtml(warehouseName)}</p>` : ""}`;
@@ -94,8 +104,12 @@ function renderEntryTimeline(entries, activeId) {
 
 /** HTML completo para modal de detalhe de entrada/operação de stock. */
 export function buildStockMovementDetailHtml(m, options = {}) {
-  const { stockSummary, entryHistory } = options;
-  const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
+  const { stockSummary, entryHistory, entriesOnly } = options;
+  const summaryForStrip = stockSummary
+    ? { ...stockSummary, entriesOnly: entriesOnly ?? stockSummary.entriesOnly }
+    : null;
+  const { driverInfo, vehicleInfo, operationNote } = parseStockMovementLogistics(m);
+  const hasTransport = driverInfo !== "—" || vehicleInfo !== "—";
   const typeLabel = STOCK_TYPE_LABELS[m.type] || m.type;
   const product = m.product || {};
   const productImg = resolveProductImageUrl(product);
@@ -108,7 +122,7 @@ export function buildStockMovementDetailHtml(m, options = {}) {
 
   return `
     <div class="space-y-6">
-      ${renderStockSummaryStrip(stockSummary)}
+      ${renderStockSummaryStrip(summaryForStrip)}
 
       <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
         ${productImgHtml}
@@ -127,12 +141,22 @@ export function buildStockMovementDetailHtml(m, options = {}) {
             <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Data</span><span class="text-xs font-black text-slate-900">${formatDateBR(m.createdAt)}</span></div>
             <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Registado por</span><span class="text-xs font-bold text-slate-700">${escapeHtml(registeredBy)}</span></div>
             ${m.warehouse?.name ? `<div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Armazém</span><span class="text-xs font-bold text-slate-700">${escapeHtml(m.warehouse.name)}</span></div>` : ""}
-            ${m.notes && !m.notes.includes("Motorista:") ? `<div class="px-4 py-3"><span class="text-[10px] font-bold text-slate-500 block mb-1">Observações</span><span class="text-xs text-slate-600">${escapeHtml(m.notes)}</span></div>` : ""}
+            ${operationNote ? `<div class="px-4 py-3"><span class="text-[10px] font-bold text-slate-500 block mb-1">Observações</span><span class="text-xs text-slate-600 leading-relaxed">${escapeHtml(operationNote)}</span></div>` : ""}
+            ${m.notes && !operationNote && !m.notes.includes("Motorista:") ? `<div class="px-4 py-3"><span class="text-[10px] font-bold text-slate-500 block mb-1">Observações</span><span class="text-xs text-slate-600">${escapeHtml(m.notes)}</span></div>` : ""}
           </div>
         </div>
         <div class="space-y-3">
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Controlo de transporte</p>
           <div class="bg-slate-50 rounded-2xl p-4 space-y-4 border border-slate-100">
+            ${operationNote && !hasTransport ? `
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">info</span>
+              <div>
+                <span class="text-[9px] font-black text-slate-400 block uppercase">Registo</span>
+                <span class="text-xs font-medium text-slate-600 leading-relaxed">Sem dados de motorista/viatura (ver observações).</span>
+              </div>
+            </div>` : ""}
+            ${hasTransport ? `
             <div class="flex items-start gap-3">
               <span class="material-symbols-outlined text-blue-500 text-xl mt-0.5">person</span>
               <div>
@@ -146,7 +170,7 @@ export function buildStockMovementDetailHtml(m, options = {}) {
                 <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
                 <span class="text-sm font-bold text-slate-900 uppercase">${escapeHtml(vehicleInfo)}</span>
               </div>
-            </div>
+            </div>` : ""}
             ${(() => {
               const vehicleImg = resolveProductImageUrl({ image: m.vehicleImageUrl });
               if (!vehicleImg) return "";
@@ -196,7 +220,7 @@ export function pickPrimaryEntryMovement(pMovements) {
 }
 
 /** Modal quando há saldo mas ainda não há movimento de entrada registado. */
-export function buildStockInventoryOnlyHtml(item, totals) {
+export function buildStockInventoryOnlyHtml(item, totals, options = {}) {
   const product = item.product || {};
   const productImg = resolveProductImageUrl(product);
   const productImgHtml = productImg
@@ -211,6 +235,7 @@ export function buildStockInventoryOnlyHtml(item, totals) {
         totalOut: totals.totalOut,
         balance: totals.balance,
         warehouseName: totals.warehouseName,
+        entriesOnly: options.entriesOnly ?? totals.entriesOnly,
       })}
       <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
         ${productImgHtml}

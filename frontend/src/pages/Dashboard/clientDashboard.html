@@ -507,7 +507,7 @@
             </div>
 
             <!-- Dashboard de Stock -->
-            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div id="stockSummary" class="grid mt-10 grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
                 <!-- Rendered JS -->
             </div>
 
@@ -522,18 +522,6 @@
                         class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
                 </div>
 
-                <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
-                    <!-- Tipo -->
-                    <div class="w-full sm:flex-1 lg:w-44">
-                        <select id="stockFilterType"
-                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
-                            <option value="">Todas Operações</option>
-                            <option value="ENTRADA">Entradas</option>
-                            <option value="SAIDA">Saídas / Aplicação</option>
-                            <option value="TRANSFERENCIA">Transferências</option>
-                        </select>
-                    </div>
-                </div>
             </div>
 
             <!-- Tabs Internas de Stock (Movimentações vs Galeria) -->
@@ -606,8 +594,6 @@
                                         </th>
                                         <th class="px-10 py-5 text-center text-emerald-600 hidden md:table-cell">
                                             Entradas</th>
-                                        <th class="px-10 py-5 text-center text-red-600 hidden md:table-cell">
-                                            Saídas</th>
                                         <th class="px-6 md:px-10 py-5 text-right font-black">Saldo</th>
                                     </tr>
                                 </thead>

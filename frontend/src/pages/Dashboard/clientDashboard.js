@@ -11,7 +11,14 @@ import {
   buildStockInventoryOnlyHtml,
   computeStockTotals,
   pickPrimaryEntryMovement,
+  filterLogisticsEntries,
 } from "../../shared/stockDetail.js";
+
+const STOCK_ENTRY_TYPES = new Set(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
+
+function isStockEntryMovement(m) {
+  return STOCK_ENTRY_TYPES.has(m.type);
+}
 
 let stockPageData = { summary: [], movements: [] };
 
@@ -42,7 +49,6 @@ let state = {
   stockSubTab: "history",
   stockFilters: {
     search: "",
-    type: ""
   },
   collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.clientCollapsedTables") || "{}")
 };
@@ -336,7 +342,7 @@ async function loadStock() {
     ]);
 
     const summaryItems = balanceRes.items || [];
-    const movements = movementsRes.items || [];
+    const movements = (movementsRes.items || []).filter(isStockEntryMovement);
     const photos = photosRes.items || [];
 
     stockPageData = { summary: summaryItems, movements };
@@ -357,9 +363,8 @@ function renderStockSummaryCards(summary, movements) {
   if (!container) return;
 
   const uniqueProducts = summary.length;
-  const totalEntries = movements.filter(m => m.type === "ENTRADA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-  const totalExits = movements.filter(m => m.type === "SAIDA").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-  const currentBalance = totalEntries - totalExits;
+  const totalEntries = movements.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const currentBalance = summary.reduce((acc, s) => acc + Number(s.quantity || 0), 0);
 
   container.innerHTML = `
         <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
@@ -367,18 +372,29 @@ function renderStockSummaryCards(summary, movements) {
             <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
         </div>
         <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total Recebido</p>
+            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total Recebido (Entradas)</p>
             <p class="text-2xl font-bold text-emerald-600">${totalEntries.toLocaleString("pt-AO")}</p>
         </div>
-        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Total Aplicado</p>
-            <p class="text-2xl font-bold text-blue-500">${totalExits.toLocaleString("pt-AO")}</p>
-        </div>
-        <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl">
+        <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl md:col-span-1">
             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Saldo em Armazém</p>
             <p class="text-2xl font-bold text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
         </div>
     `;
+}
+
+function buildClientEntryStockSummary(productId, warehouseName) {
+  const item = stockPageData.summary?.find((s) => s.productId === productId);
+  const productEntries = filterLogisticsEntries(
+    (stockPageData.movements || []).filter((m) => m.productId === productId)
+  );
+  const totalIn = productEntries.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  return {
+    planned: Number(item?.quantityPlanned || 0),
+    totalIn,
+    balance: Number(item?.quantity || 0),
+    warehouseName: warehouseName || item?.warehouse?.name || "Geral",
+    entriesOnly: true,
+  };
 }
 
 function openStockMovementDetailModal(moveId) {
@@ -386,20 +402,13 @@ function openStockMovementDetailModal(moveId) {
   const m = movements.find((x) => x.id === moveId);
   if (!m) return;
 
-  const { totalIn, totalOut } = computeStockTotals(movements, m.productId);
   const { entries } = pickPrimaryEntryMovement(movements.filter((x) => x.productId === m.productId));
-  const balance = Number(stockPageData.summary?.find((s) => s.productId === m.productId)?.quantity ?? totalIn - totalOut);
 
   openModal({
-    title: "Detalhes da Entrada / Operação",
+    title: "Detalhes da Entrada em Armazém",
     contentHtml: buildStockMovementDetailHtml(m, {
-      stockSummary: {
-        planned: Number(stockPageData.summary?.find((s) => s.productId === m.productId)?.quantityPlanned || 0),
-        totalIn,
-        totalOut,
-        balance,
-        warehouseName: m.warehouse?.name,
-      },
+      entriesOnly: true,
+      stockSummary: buildClientEntryStockSummary(m.productId, m.warehouse?.name),
       entryHistory: entries,
     }),
     primaryLabel: "Fechar",
@@ -413,16 +422,15 @@ function openStockInventoryDetailModal(productId) {
   const item = summary.find((s) => s.productId === productId);
   if (!item) return;
 
-  const planned = Number(item.quantityPlanned || 0);
-  const balance = Number(item.quantity || 0);
-  const warehouseName = item.warehouse?.name || "Geral";
-  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId);
-  const { primary, entries } = pickPrimaryEntryMovement(pMovements);
+  const stockSummary = buildClientEntryStockSummary(productId);
+  const { primary, entries } = pickPrimaryEntryMovement(
+    filterLogisticsEntries(movements.filter((m) => m.productId === productId))
+  );
 
   if (!primary) {
     openModal({
       title: "Material em Armazém",
-      contentHtml: buildStockInventoryOnlyHtml(item, { planned, totalIn, totalOut, balance, warehouseName }),
+      contentHtml: buildStockInventoryOnlyHtml(item, stockSummary, { entriesOnly: true }),
       primaryLabel: "Fechar",
       onPrimary: async ({ close }) => close(),
     });
@@ -432,7 +440,8 @@ function openStockInventoryDetailModal(productId) {
   openModal({
     title: "Detalhes da Entrada em Armazém",
     contentHtml: buildStockMovementDetailHtml(primary, {
-      stockSummary: { planned, totalIn, totalOut, balance, warehouseName },
+      entriesOnly: true,
+      stockSummary,
       entryHistory: entries,
     }),
     primaryLabel: "Fechar",
@@ -447,23 +456,24 @@ function renderStockMovements(items) {
   if (table) table._movementsData = items;
 
   const search = state.stockFilters.search.toLowerCase();
-  const typeFilter = state.stockFilters.type;
 
-  const filtered = items.filter(m => {
-    const matchesSearch = !search ||
+  const filtered = items.filter((m) => {
+    if (!isStockEntryMovement(m)) return false;
+    const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
+    return !search ||
       (m.product?.name || "").toLowerCase().includes(search) ||
-      (m.notes || "").toLowerCase().includes(search);
-    const matchesType = !typeFilter || m.type === typeFilter;
-    return matchesSearch && matchesType;
+      (m.notes || "").toLowerCase().includes(search) ||
+      driverInfo.toLowerCase().includes(search) ||
+      vehicleInfo.toLowerCase().includes(search);
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem movimentações registadas</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem entradas registadas</td></tr>`;
     return;
   }
 
-  const typeLabel = { "ENTRADA": "Entrada", "SAIDA": "Saída", "AJUSTE": "Ajuste", "TRANSFERENCIA": "Transf.", "TRANSFER_IN": "Entrada (T)", "TRANSFER_OUT": "Saída (T)" };
-  const typeColor = { "ENTRADA": "bg-emerald-50 text-emerald-700", "SAIDA": "bg-blue-50 text-blue-700", "AJUSTE": "bg-orange-50 text-orange-700", "TRANSFERENCIA": "bg-slate-50 text-slate-700" };
+  const typeLabel = { ENTRY: "Entrada", ENTRADA: "Entrada", TRANSFER_IN: "Entrada (Transf.)" };
+  const typeColor = { ENTRY: "bg-emerald-50 text-emerald-700", ENTRADA: "bg-emerald-50 text-emerald-700", TRANSFER_IN: "bg-emerald-50 text-emerald-700" };
 
   tbody.innerHTML = filtered.map(m => {
     const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("pt-PT") : "—";
@@ -508,9 +518,11 @@ function renderStockInventory(summary, movements) {
   }
 
   if (!summary || summary.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
     return;
   }
+
+  const entryMovements = filterLogisticsEntries(movements);
 
   tbody.innerHTML = summary.map(item => {
     const saldo = Number(item.quantity || 0);
@@ -518,7 +530,9 @@ function renderStockInventory(summary, movements) {
     const warehouseName = item.warehouse?.name || "Geral";
     const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
 
-    const { totalIn, totalOut } = computeStockTotals(movements, item.productId);
+    const totalIn = entryMovements
+      .filter((m) => m.productId === item.productId)
+      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
     const planned = Number(item.quantityPlanned || 0);
 
     return `
@@ -532,7 +546,6 @@ function renderStockInventory(summary, movements) {
             <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(product.unit || "un")}</td>
             <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">${planned}</td>
             <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn.toLocaleString("pt-AO")}</td>
-            <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut.toLocaleString("pt-AO")}</td>
             <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
           </tr>`;
   }).join("");
@@ -1934,21 +1947,13 @@ async function loadStockRequests() {
 
 // O cliente apenas visualiza, por isso removemos a função providePlanMaterialsGlobal deste ficheiro
 
-// Filters
+// Filtro de pesquisa do diário (apenas entradas)
 const searchInput = document.getElementById("stockFilterSearch");
-const typeSelect = document.getElementById("stockFilterType");
 
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     state.stockFilters.search = searchInput.value;
-    loadStock();
-  });
-}
-
-if (typeSelect) {
-  typeSelect.addEventListener("change", () => {
-    state.stockFilters.type = typeSelect.value;
-    loadStock();
+    renderStockMovements(stockPageData.movements || []);
   });
 }
 
