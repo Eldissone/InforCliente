@@ -24,17 +24,23 @@ function closeProductImageLightbox() {
 function wireProductImagePreview() {
     document.addEventListener("click", (e) => {
         const btn = e.target.closest("[data-preview-url]");
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openProductImageLightbox(
-            btn.getAttribute("data-preview-url"),
-            btn.getAttribute("data-preview-title") || "Produto"
-        );
+        if (btn) {
+            const url = btn.getAttribute("data-preview-url");
+            if (!url) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openProductImageLightbox(
+                url,
+                btn.getAttribute("data-preview-title") || "Produto"
+            );
+            return;
+        }
+        if (e.target.id === "imageLightbox" || e.target.closest("#closeLightbox")) {
+            closeProductImageLightbox();
+        }
     });
-    document.getElementById("closeLightbox")?.addEventListener("click", closeProductImageLightbox);
-    document.getElementById("imageLightbox")?.addEventListener("click", (e) => {
-        if (e.target.id === "imageLightbox") closeProductImageLightbox();
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeProductImageLightbox();
     });
 }
 
