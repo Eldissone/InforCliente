@@ -5,6 +5,15 @@ import { wireLogout, wireUsersNav } from "../../shared/session.js";
 checkAuth({ allowedRoles: ["cliente", "admin", "operador", "user"] });
 import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { toast, initMobileMenu, setButtonLoading, openModal, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
+import {
+  parseStockMovementLogistics,
+  buildStockMovementDetailHtml,
+  buildStockInventoryOnlyHtml,
+  computeStockTotals,
+  pickPrimaryEntryMovement,
+} from "../../shared/stockDetail.js";
+
+let stockPageData = { summary: [], movements: [] };
 
 let dashboardData = null;
 let charts = {
@@ -311,15 +320,26 @@ async function loadStock() {
   if (inventoryTbody) inventoryTbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-sm font-bold text-slate-400">A carregar inventário...</td></tr>`;
 
   try {
+    const { items: warehouses } = await apiRequest("/warehouses");
+    const projectWarehouse = warehouses.find(
+      (w) => w.projectId === state.projectId && w.type === "SITE"
+    );
+
+    const movementsUrl = projectWarehouse
+      ? `/stock/movements?warehouseId=${encodeURIComponent(projectWarehouse.id)}`
+      : `/stock/movements?projectId=${state.projectId}`;
+
     const [balanceRes, movementsRes, photosRes] = await Promise.all([
       apiRequest(`/stock/project/${state.projectId}/balance`),
-      apiRequest(`/stock/movements?projectId=${state.projectId}`),
+      apiRequest(movementsUrl),
       apiRequest(`/projects/${state.projectId}/photos`)
     ]);
 
     const summaryItems = balanceRes.items || [];
     const movements = movementsRes.items || [];
     const photos = photosRes.items || [];
+
+    stockPageData = { summary: summaryItems, movements };
 
     renderStockSummaryCards(summaryItems, movements);
     renderStockMovements(movements);
@@ -361,9 +381,70 @@ function renderStockSummaryCards(summary, movements) {
     `;
 }
 
+function openStockMovementDetailModal(moveId) {
+  const movements = document.getElementById("stockMovementsTable")?._movementsData || stockPageData.movements || [];
+  const m = movements.find((x) => x.id === moveId);
+  if (!m) return;
+
+  const { totalIn, totalOut } = computeStockTotals(movements, m.productId);
+  const { entries } = pickPrimaryEntryMovement(movements.filter((x) => x.productId === m.productId));
+  const balance = Number(stockPageData.summary?.find((s) => s.productId === m.productId)?.quantity ?? totalIn - totalOut);
+
+  openModal({
+    title: "Detalhes da Entrada / Operação",
+    contentHtml: buildStockMovementDetailHtml(m, {
+      stockSummary: {
+        planned: Number(stockPageData.summary?.find((s) => s.productId === m.productId)?.quantityPlanned || 0),
+        totalIn,
+        totalOut,
+        balance,
+        warehouseName: m.warehouse?.name,
+      },
+      entryHistory: entries,
+    }),
+    primaryLabel: "Fechar",
+    onPrimary: async ({ close }) => close(),
+  });
+}
+
+function openStockInventoryDetailModal(productId) {
+  const summary = stockPageData.summary || [];
+  const movements = stockPageData.movements || [];
+  const item = summary.find((s) => s.productId === productId);
+  if (!item) return;
+
+  const planned = Number(item.quantityPlanned || 0);
+  const balance = Number(item.quantity || 0);
+  const warehouseName = item.warehouse?.name || "Geral";
+  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId);
+  const { primary, entries } = pickPrimaryEntryMovement(pMovements);
+
+  if (!primary) {
+    openModal({
+      title: "Material em Armazém",
+      contentHtml: buildStockInventoryOnlyHtml(item, { planned, totalIn, totalOut, balance, warehouseName }),
+      primaryLabel: "Fechar",
+      onPrimary: async ({ close }) => close(),
+    });
+    return;
+  }
+
+  openModal({
+    title: "Detalhes da Entrada em Armazém",
+    contentHtml: buildStockMovementDetailHtml(primary, {
+      stockSummary: { planned, totalIn, totalOut, balance, warehouseName },
+      entryHistory: entries,
+    }),
+    primaryLabel: "Fechar",
+    onPrimary: async ({ close }) => close(),
+  });
+}
+
 function renderStockMovements(items) {
   const tbody = document.getElementById("stockMovementsTbody");
+  const table = document.getElementById("stockMovementsTable");
   if (!tbody) return;
+  if (table) table._movementsData = items;
 
   const search = state.stockFilters.search.toLowerCase();
   const typeFilter = state.stockFilters.type;
@@ -389,17 +470,10 @@ function renderStockMovements(items) {
     const qty = Number(m.quantity || 0);
     const tc = typeColor[m.type] || "bg-slate-50 text-slate-600";
 
-    // Logística Parse
-    let driver = "—";
-    let vehicle = "—";
-    if (m.notes && m.notes.includes("|")) {
-      const parts = m.notes.split("|");
-      driver = parts[0].replace("Motorista:", "").trim();
-      vehicle = parts[1].replace("Matrícula:", "").trim();
-    }
+    const { driverInfo: driver, vehicleInfo: vehicle } = parseStockMovementLogistics(m);
 
     return `
-          <tr class="hover:bg-slate-50 transition-colors">
+          <tr class="hover:bg-slate-50 transition-colors cursor-pointer" data-view-stock="${m.id}">
             <td class="px-6 md:px-10 py-5 hidden md:table-cell">
                 <div class="text-xs font-bold text-slate-900">${date}</div>
                 <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${m.user?.name || 'Sistema'}</div>
@@ -424,7 +498,14 @@ function renderStockMovements(items) {
 
 function renderStockInventory(summary, movements) {
   const tbody = document.getElementById("stockInventoryTbody");
+  const root = document.getElementById("stock_inventory_content");
   if (!tbody) return;
+
+  stockPageData = { summary, movements };
+  if (root) {
+    root._summary = summary;
+    root._movements = movements;
+  }
 
   if (!summary || summary.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
@@ -437,15 +518,11 @@ function renderStockInventory(summary, movements) {
     const warehouseName = item.warehouse?.name || "Geral";
     const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
 
-    // Calcular totais dos movimentos para este produto
-    const pMovements = movements.filter(m => m.productId === item.productId);
-    const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-
+    const { totalIn, totalOut } = computeStockTotals(movements, item.productId);
     const planned = Number(item.quantityPlanned || 0);
 
     return `
-          <tr class="hover:bg-slate-50 transition-colors">
+          <tr class="hover:bg-slate-50 transition-colors cursor-pointer hover:bg-slate-50/80" data-view-inventory="${item.productId}" title="Clique para ver detalhes da entrada">
             <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
                 <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
@@ -1764,6 +1841,18 @@ function wireStockEvents() {
 
   // Initial badge update
   updateStockRequestsBadge();
+
+  document.addEventListener("click", (e) => {
+    const rowStock = e.target.closest("[data-view-stock]");
+    if (rowStock) {
+      openStockMovementDetailModal(rowStock.dataset.viewStock);
+      return;
+    }
+    const rowInv = e.target.closest("[data-view-inventory]");
+    if (rowInv) {
+      openStockInventoryDetailModal(rowInv.dataset.viewInventory);
+    }
+  });
 }
 
 async function updateStockRequestsBadge() {

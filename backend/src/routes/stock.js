@@ -46,12 +46,13 @@ stockRoutes.get(
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     console.log("DEBUG: GET /stock/movements reached");
-    const { warehouseId, productId, type } = req.query;
+    const { warehouseId, productId, type, projectId } = req.query;
     const items = await prisma.stockMovement.findMany({
       where: {
         ...(warehouseId && { warehouseId }),
         ...(productId && { productId }),
         ...(type && { type }),
+        ...(projectId && { projectId }),
       },
       include: {
         product: true,
@@ -177,7 +178,10 @@ stockRoutes.get(
 stockRoutes.post(
   "/move",
   requirePermission("stock", "manage"),
-  upload.single("photo"),
+  upload.fields([
+    { name: "photo", maxCount: 1 },
+    { name: "vehiclePhoto", maxCount: 1 },
+  ]),
   asyncHandler(async (req, res) => {
     const body = z.object({
       productId: z.string(),
@@ -189,15 +193,30 @@ stockRoutes.post(
       notes: z.string().optional().nullable(),
     }).parse(req.body);
 
-    // Upload de foto se existir
+    const uploadMovementImage = async (file, prefix) => {
+      const extension = path.extname(file.originalname).toLowerCase();
+      const storagePath = `movements/${prefix}_${Date.now()}${extension}`;
+      return uploadToSupabase(storagePath, file.buffer, file.mimetype);
+    };
+
+    const photoFile = req.files?.photo?.[0];
+    const vehicleFile = req.files?.vehiclePhoto?.[0];
+
     let evidenceUrl = null;
-    if (req.file) {
-      const extension = path.extname(req.file.originalname).toLowerCase();
-      const storagePath = `movements/${Date.now()}${extension}`;
-      evidenceUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    let vehicleImageUrl = null;
+    if (photoFile) {
+      evidenceUrl = await uploadMovementImage(photoFile, "evidence");
+    }
+    if (vehicleFile) {
+      vehicleImageUrl = await uploadMovementImage(vehicleFile, "vehicle");
     }
 
     try {
+      const warehouse = await prisma.warehouse.findUnique({
+        where: { id: body.warehouseId },
+        select: { projectId: true },
+      });
+
       const result = await prisma.$transaction(async (tx) => {
         console.log("DEBUG: Starting stock move transaction", body);
         // 1. Criar o movimento
@@ -205,6 +224,7 @@ stockRoutes.post(
           data: {
             productId: body.productId,
             warehouseId: body.warehouseId,
+            projectId: warehouse?.projectId || null,
             userId: req.user.sub,
             type: body.type,
             quantity: body.quantity,
@@ -212,6 +232,7 @@ stockRoutes.post(
             reference: body.reference,
             notes: body.notes,
             evidenceUrl: evidenceUrl,
+            vehicleImageUrl: vehicleImageUrl,
           },
         });
 

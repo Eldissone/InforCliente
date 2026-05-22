@@ -1,6 +1,13 @@
 import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
+import {
+  parseStockMovementLogistics,
+  buildStockMovementDetailHtml,
+  buildStockInventoryOnlyHtml,
+  computeStockTotals,
+  pickPrimaryEntryMovement,
+} from "../../shared/stockDetail.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
@@ -2456,7 +2463,7 @@ async function loadStock() {
 
     const [balanceRes, movementsRes] = await Promise.all([
       apiRequest(`/stock/project/${id}/balance`),
-      apiRequest(`/stock/movements?projectId=${id}`),
+      apiRequest(`/stock/movements?warehouseId=${encodeURIComponent(projectWarehouse.id)}`),
     ]);
 
     stockState.summary = balanceRes.items; // Guardar o saldo
@@ -2512,20 +2519,7 @@ function renderStockMovements(items) {
     const isEntry = m.type === "IN" || m.type === "ENTRY" || m.type === "TRANSFER_IN";
     const typeLabel = isEntry ? "ENTRADA" : "SAÍDA";
     const typeColor = isEntry ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50";
-
-    // Extrair dados logísticos das notas (se existirem)
-    let driverInfo = "-";
-    let vehicleInfo = "-";
-    if (m.reference || m.notes) {
-      const text = m.reference || m.notes || "";
-      const parts = text.split('|');
-      if (parts.length > 1) {
-        driverInfo = parts[0].replace('Motorista:', '').trim() || "-";
-        vehicleInfo = parts[1].replace('Viatura:', '').replace('Matrícula:', '').trim() || "-";
-      } else {
-        driverInfo = text;
-      }
-    }
+    const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-stock="${m.id}">
@@ -2571,74 +2565,64 @@ function wireStockWorkflow() {
   // Removido o event listener de [data-view-stock] aqui pois ele jÃ¡ Ã© delegado via document no wireStock!
 }
 
-async function openStockMovementDetailModal(moveId) {
-  const movements = el("stockMovementsTable")._movementsData || [];
-  const m = movements.find(x => x.id === moveId);
+function openStockMovementDetailModal(moveId) {
+  const movements = el("stockMovementsTable")._movementsData || stockState.items || [];
+  const m = movements.find((x) => x.id === moveId);
   if (!m) return;
 
-  const renderPhotos = (cond) => {
-    const pList = m.photos.filter(p => !cond || p.condition === cond);
-    if (pList.length === 0) return `<p class="text-[10px] text-slate-400 italic">Sem evidências.</p>`;
-    return `<div class="flex flex-wrap gap-3">
-      ${pList.map(p => {
-      const url = getAssetUrl(p.path);
-      return `
-          <div class="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-            <a href="${url}" target="_blank">
-               <img src="${url}" class="w-full h-full object-cover hover:scale-105 transition-all">
-            </a>
-          </div>
-        `;
-    }).join("")}
-    </div>`;
-  };
+  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, m.productId);
+  const { entries } = pickPrimaryEntryMovement(pMovements);
+  const balance = Number(stockState.summary?.find((s) => s.productId === m.productId)?.quantity ?? totalIn - totalOut);
 
   openModal({
-    title: "Detalhes da Operação",
-    contentHtml: `
-      <div class="space-y-6">
-        <div class="grid grid-cols-2 gap-8">
-          <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Informação Base</p>
-            <div class="space-y-1">
-              <h4 class="text-lg font-bold text-slate-900">${escapeHtml(m.product?.name || 'Material')}</h4>
-              <p class="text-xs text-slate-500 font-medium">${m.product?.reference || '-'} | ${m.product?.category || '-'}</p>
-              <div class="mt-4 flex flex-col gap-2">
-                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-[10px] font-bold text-slate-500">TIPO</span>
-                    <span class="text-[10px] font-black text-slate-900">${m.type}</span>
-                 </div>
-                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-[10px] font-bold text-slate-500">QUANTIDADE</span>
-                    <span class="text-[10px] font-black text-emerald-600">${m.quantity || 0} ${m.product?.unit || 'un'}</span>
-                 </div>
-                 <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-[10px] font-bold text-slate-500">DATA</span>
-                    <span class="text-[10px] font-black text-slate-900">${formatDateBR(m.createdAt)}</span>
-                 </div>
-              </div>
-            </div>
-          </div>
-          <div>
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Controlo Logístico</p>
-            <div class="bg-slate-50 rounded-2xl p-4 space-y-3">
-               <div>
-                  <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(driverInfo)}</span>
-               </div>
-               <div>
-                  <span class="text-[9px] font-black text-slate-400 block uppercase">Viatura / Matrícula</span>
-                  <span class="text-xs font-bold text-slate-900">${escapeHtml(vehicleInfo)}</span>
-               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `,
+    title: "Nova Operação Logística — Detalhes da Entrada",
+    contentHtml: buildStockMovementDetailHtml(m, {
+      stockSummary: {
+        planned: Number(stockState.summary?.find((s) => s.productId === m.productId)?.quantityPlanned || 0),
+        totalIn,
+        totalOut,
+        balance,
+        warehouseName: m.warehouse?.name,
+      },
+      entryHistory: entries,
+    }),
     primaryLabel: "Fechar",
-    onPrimary: async ({ close }) => {
-      close();
-    }
+    onPrimary: async ({ close }) => close(),
+  });
+}
+
+function openStockInventoryDetailModal(productId) {
+  const root = el("stock_inventory_content");
+  const summary = root?._summary || stockState.summary || [];
+  const movements = root?._movements || stockState.items || [];
+  const item = summary.find((s) => s.productId === productId);
+  if (!item) return;
+
+  const product = item.product || {};
+  const planned = Number(item.quantityPlanned || 0);
+  const balance = Number(item.quantity || 0);
+  const warehouseName = item.warehouse?.name || "Geral";
+  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId);
+  const { primary, entries } = pickPrimaryEntryMovement(pMovements);
+
+  if (!primary) {
+    openModal({
+      title: "Material em Armazém",
+      contentHtml: buildStockInventoryOnlyHtml(item, { planned, totalIn, totalOut, balance, warehouseName }),
+      primaryLabel: "Fechar",
+      onPrimary: async ({ close }) => close(),
+    });
+    return;
+  }
+
+  openModal({
+    title: "Nova Operação Logística — Detalhes da Entrada",
+    contentHtml: buildStockMovementDetailHtml(primary, {
+      stockSummary: { planned, totalIn, totalOut, balance, warehouseName },
+      entryHistory: entries,
+    }),
+    primaryLabel: "Fechar",
+    onPrimary: async ({ close }) => close(),
   });
 }
 
@@ -2664,6 +2648,7 @@ async function openStockMovementModal() {
       contentHtml: `
         <form id="formStockMove" class="space-y-6 pt-4">
           <input type="hidden" name="warehouseId" value="${stockState.warehouseId}">
+          <input type="hidden" name="projectId" value="${getProjectId() || ""}">
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-2">
@@ -2718,6 +2703,10 @@ async function openStockMovementModal() {
                   <input id="st_plate" name="plate" placeholder="Ex: LD-00-00-AA" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all uppercase">
                </div>
             </div>
+            <div class="space-y-2">
+              <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-1">Foto da Viatura</label>
+              <input type="file" name="vehiclePhoto" accept="image/*" capture="environment" class="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-500 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-slate-100 file:font-bold file:text-slate-600">
+            </div>
           </div>
         </form>
       `,
@@ -2768,29 +2757,36 @@ async function openStockMovementModal() {
 
 function applyStockFilters() {
   const { search, condition, status, category, warehouse } = stockState.filters;
-  const filtered = stockState.items.filter(m => {
+  const filtered = stockState.items.filter((m) => {
     const s = search.toLowerCase();
+    const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
     const matchesSearch = !s ||
-      m.material.name.toLowerCase().includes(s) ||
-      m.material.code.toLowerCase().includes(s) ||
-      (m.driverName || "").toLowerCase().includes(s) ||
-      (m.vehiclePlate || "").toLowerCase().includes(s);
+      (m.product?.name || "").toLowerCase().includes(s) ||
+      (m.product?.sku || m.product?.reference || "").toLowerCase().includes(s) ||
+      driverInfo.toLowerCase().includes(s) ||
+      vehicleInfo.toLowerCase().includes(s);
 
     const matchesCond = !condition || m.condition === condition;
     const matchesStatus = !status || m.auditStatus === status;
-    const matchesCat = !category || m.material.category === category;
-    const matchesWarehouse = !warehouse || m.batch === warehouse;
+    const matchesCat = !category || m.product?.category === category;
+    const matchesWarehouse = !warehouse || m.warehouse?.name === warehouse;
 
     return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse;
   });
 
   renderStockMovements(filtered);
-  renderStockInventory(filtered, stockState.summary || []);
+  renderStockInventory(stockState.items, stockState.summary || []);
 }
 
 function renderStockInventory(movements, summary) {
   const tbody = el("stockInventoryTbody");
+  const root = el("stock_inventory_content");
   if (!tbody) return;
+
+  if (root) {
+    root._summary = summary;
+    root._movements = movements;
+  }
 
   if (!summary || summary.length === 0) {
     tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock disponível no armazém desta obra.</td></tr>`;
@@ -2806,15 +2802,13 @@ function renderStockInventory(movements, summary) {
     // Calcular totalIn e totalOut a partir dos movimentos se necessário, 
     // ou simplesmente mostrar o saldo atual.
     // Para consistência com o backend, vamos filtrar os movimentos deste produto
-    const pMovements = movements.filter(m => m.productId === item.productId);
-    const totalIn = pMovements.filter(m => m.type === "ENTRY" || m.type === "TRANSFER_IN").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    const totalOut = pMovements.filter(m => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS").reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    const { totalIn, totalOut } = computeStockTotals(movements, item.productId);
 
     return `
-      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all">
+      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-inventory="${item.productId}" title="Clique para ver detalhes da entrada">
         <td class="px-6 py-5 text-center text-xs font-bold text-slate-400 w-12">${idx + 1}</td>
         <td class="selection-cell-stock ${stockState.isSelectionModeStock ? "" : "hidden"} px-6 py-5">
-          <input type="checkbox" class="stock-item-checkbox rounded border-slate-300" 
+          <input type="checkbox" class="stock-item-checkbox rounded border-slate-300" onclick="event.stopPropagation()"
             data-product-id="${item.productId}" 
             ${stockState.selectedStockItems.has(item.productId) ? "checked" : ""}>
         </td>
@@ -2832,10 +2826,10 @@ function renderStockInventory(movements, summary) {
         <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut}</td>
         <td class="px-6 md:px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
         <td class="px-6 md:px-10 py-5 text-right flex items-center justify-end gap-2">
-           <button onclick="openEditPlannedModal('${item.productId}', '${escapeHtml(product.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
+           <button onclick="event.stopPropagation(); openEditPlannedModal('${item.productId}', '${escapeHtml(product.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
               <span class="material-symbols-outlined text-sm">edit_square</span>
            </button>
-           <button data-adjust-stock="${item.productId}" data-warehouse="${escapeHtml(warehouseName)}" class="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">
+           <button onclick="event.stopPropagation()" data-adjust-stock="${item.productId}" data-warehouse="${escapeHtml(warehouseName)}" class="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">
              Ajustar
            </button>
         </td>
@@ -3228,6 +3222,12 @@ function wireStock() {
     if (rowView && !e.target.closest("button")) {
       const mid = rowView.dataset.viewStock;
       openStockMovementDetailModal(mid);
+      return;
+    }
+
+    const invRow = e.target.closest("[data-view-inventory]");
+    if (invRow && !e.target.closest("button")) {
+      openStockInventoryDetailModal(invRow.dataset.viewInventory);
     }
   });
 
