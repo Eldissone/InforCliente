@@ -520,6 +520,7 @@ model DailyPlan {
   status      DailyPlanStatus @default(DRAFT)
   description String?
   receivedBy  String?
+  technicianReceived Boolean @default(false)
   returnedBy  String?
   returnConfirmedAt DateTime?
   createdAt   DateTime        @default(now())

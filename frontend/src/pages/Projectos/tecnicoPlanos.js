@@ -148,6 +148,7 @@ function renderPlanCard(p) {
     const mineBadge = isMine 
       ? `<span class="bg-blue-50 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-blue-100 tracking-wider">Atribuído a Si</span>` 
       : `<span class="bg-slate-100 text-slate-500 text-[9px] font-medium px-2 py-0.5 rounded">${escapeHtml(t.technician?.name || "Técnico")}</span>`;
+    const taskUnit = escapeHtml(t.progressTask?.unit || "");
     
     return `
       <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -161,12 +162,12 @@ function renderPlanCard(p) {
         <div class="flex items-center gap-4 text-right shrink-0">
           <div>
             <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qtd Planeada</p>
-            <p class="text-xs font-bold text-slate-900">${t.plannedQty}</p>
+            <p class="text-xs font-bold text-slate-900">${t.plannedQty} <span class="text-[#2afc8d] font-black">${taskUnit}</span></p>
           </div>
-          ${t.executedQty !== null ? `
+          ${t.executedQty !== null && Number(t.executedQty) > 0 ? `
           <div>
             <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Qtd Executada</p>
-            <p class="text-xs font-bold text-emerald-600">${t.executedQty}</p>
+            <p class="text-xs font-bold text-emerald-600">${t.executedQty} <span class="text-emerald-400 font-black">${taskUnit}</span></p>
           </div>` : ""}
         </div>
       </div>
@@ -215,11 +216,11 @@ function renderPlanCard(p) {
       <div class="flex flex-wrap gap-4 text-right shrink-0">
         <div>
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido</p>
-          <p class="text-xs font-bold text-slate-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</p>
+          <p class="text-xs font-bold text-slate-600">${m.requestedQty} <span class="text-[#2afc8d] font-black">${escapeHtml(m.product?.unit || "")}</span></p>
         </div>
         <div>
           <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
-          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
+          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} <span class="font-black">${escapeHtml(m.product?.unit || "")}</span></p>
         </div>
         ${consumedHtml}
       </div>
@@ -227,20 +228,46 @@ function renderPlanCard(p) {
   `;
   }).join("") : `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
 
+  // Determine if materials were allocated by logistics (receivedBy set) but technician hasn't confirmed receipt yet
+  const hasMaterials = p.materials.length > 0;
+  const materialsAllocated = hasMaterials && !!p.receivedBy; // logistics already filled receivedBy when they provided materials
+  const technicianConfirmed = !!p.technicianReceived;
+
   let actionButtonHtml = "";
-  if (isMaterialReady) {
-    // Material already allocated, waiting for technician to start
+  if (isDraft && materialsAllocated && !technicianConfirmed) {
+    // Logistics have prepared the materials but technician must confirm physical receipt first
+    actionButtonHtml = `
+      <div class="flex flex-col items-end gap-2">
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[10px] font-black text-amber-700">
+          <span class="material-symbols-outlined text-sm">package_2</span>
+          Material preparado pela logística — confirme a recepção para continuar
+        </div>
+        <button onclick="window.receiveMaterials('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 transition-all active:scale-95">
+          <span class="material-symbols-outlined text-sm">inventory_2</span> Confirmar Recepção de Material
+        </button>
+      </div>
+    `;
+  } else if (isDraft && materialsAllocated && technicianConfirmed) {
+    // Technician confirmed receipt, now they can start
     actionButtonHtml = `
       <div class="flex flex-col items-end gap-2">
         <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[10px] font-black text-emerald-700">
-          <span class="material-symbols-outlined text-sm">inventory_2</span> Material entregue por ${escapeHtml(p.receivedBy)}
+          <span class="material-symbols-outlined text-sm">check_circle</span> Material recebido e confirmado por ${escapeHtml(p.receivedBy)}
         </div>
         <button onclick="window.startPlan('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 pulse-emerald transition-all active:scale-95">
           <span class="material-symbols-outlined text-sm">play_arrow</span> Iniciar Execução
         </button>
       </div>
     `;
+  } else if (isDraft && !hasMaterials) {
+    // No materials needed, can start directly
+    actionButtonHtml = `
+      <button onclick="window.startPlan('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
+        <span class="material-symbols-outlined text-sm">play_arrow</span> Iniciar Execução
+      </button>
+    `;
   } else if (isDraft) {
+    // Has materials but logistics haven't released them yet — shouldn't happen normally (would be PENDING_MATERIAL)
     actionButtonHtml = `
       <button onclick="window.startPlan('${p.id}')" class="w-full sm:w-auto h-11 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95">
         <span class="material-symbols-outlined text-sm">play_arrow</span> Iniciar Execução
@@ -340,6 +367,53 @@ window.startPlan = async function(planId) {
   }
 };
 
+window.receiveMaterials = async function(planId) {
+  const plan = state.plans.find(p => p.id === planId);
+  if (!plan) return;
+
+  // Show a small confirmation with list of materials being confirmed
+  const matList = plan.materials.map(m =>
+    `<li class="flex justify-between text-xs font-medium text-slate-700 py-1.5 border-b border-slate-100 last:border-0">
+      <span>${escapeHtml(m.product?.name || "Material")}</span>
+      <span class="font-bold text-slate-900">${m.providedQty} <span class="text-[#2afc8d]">${escapeHtml(m.product?.unit || "")}</span></span>
+    </li>`
+  ).join("");
+
+  const { close } = openModal({
+    title: "Confirmar Recepção de Material",
+    primaryLabel: "✓ Confirmar que Recebi o Material",
+    contentHtml: `
+      <div class="space-y-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+          <span class="material-symbols-outlined text-amber-600 text-xl shrink-0">warning</span>
+          <p class="text-xs text-amber-800 font-medium leading-relaxed">
+            Ao confirmar, está a declarar que recebeu fisicamente os materiais abaixo listados e assume a responsabilidade pelos mesmos durante a execução da obra.
+          </p>
+        </div>
+        <div>
+          <h4 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-2">Materiais a receber</h4>
+          <ul class="bg-slate-50 rounded-xl border border-slate-100 px-4 py-2">
+            ${matList || '<li class="text-xs text-slate-400 italic py-2">Sem materiais listados</li>'}
+          </ul>
+        </div>
+        <p class="text-[10px] text-slate-400 text-center">Esta ação ficará registada com o seu nome de utilizador.</p>
+      </div>
+    `,
+    onPrimary: async ({ btn }) => {
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/daily-plans/${encodeURIComponent(planId)}/receive`, { method: "POST" });
+        toast("Recepção de material confirmada! Pode iniciar a execução.", { type: "success" });
+        close();
+        await loadPlans();
+      } catch (err) {
+        setButtonLoading(btn, false);
+        toast(err.message || "Erro ao confirmar recepção.", { type: "error" });
+      }
+    }
+  });
+};
+
 window.completePlan = async function(planId) {
   const plan = state.plans.find(p => p.id === planId);
   if (!plan) return toast("Plano não encontrado.");
@@ -360,7 +434,7 @@ window.completePlan = async function(planId) {
             <p class="text-xs font-bold text-slate-900">${escapeHtml(t.progressTask?.description || "Tarefa")}</p>
             ${highlightBadge}
           </div>
-          <p class="text-[10px] text-slate-500">Qtd Planeada: <span class="font-bold text-slate-700">${t.plannedQty}</span></p>
+          <p class="text-[10px] text-slate-500">Qtd Planeada: <span class="font-bold text-slate-700">${t.plannedQty} ${escapeHtml(t.progressTask?.unit || "")}</span></p>
           <p class="text-[9px] text-slate-400">Técnico: ${escapeHtml(t.technician?.name || "Sem técnico")}</p>
         </div>
         <div class="w-full sm:w-32 shrink-0">
@@ -375,14 +449,14 @@ window.completePlan = async function(planId) {
     <div class="bg-slate-50 p-3 rounded-xl mb-3 flex flex-col sm:flex-row sm:items-center gap-3 border border-slate-100">
       <div class="flex-1">
         <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
-        <p class="text-[10px] text-slate-500">Qtd Disponibilizada: <span class="font-bold text-slate-700">${m.providedQty}</span></p>
+        <p class="text-[10px] text-slate-500">Disponibilizado: <span class="font-bold text-slate-700">${m.providedQty} <span class="text-[#2afc8d] font-black">${escapeHtml(m.product?.unit || "")}</span></span></p>
       </div>
-      <div class="w-full sm:w-32 shrink-0">
-        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Qtd Consumida</label>
+      <div class="w-full sm:w-36 shrink-0">
+        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Qtd Consumida (${escapeHtml(m.product?.unit || "un")})</label>
         <input type="number" step="0.01" data-mat-id="${m.id}" data-provided="${m.providedQty}" value="${m.providedQty}" max="${m.providedQty}" oninput="document.getElementById('dev-${m.id}').innerText = Math.max(0, this.dataset.provided - this.value).toFixed(2); if(window.checkReturnsNeeded) window.checkReturnsNeeded();" class="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
       </div>
       <div class="w-full sm:w-24 shrink-0 text-right">
-        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">A Devolver</label>
+        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">A Devolver (${escapeHtml(m.product?.unit || "un")})</label>
         <p class="text-xs font-bold text-amber-600" id="dev-${m.id}">0.00</p>
       </div>
     </div>

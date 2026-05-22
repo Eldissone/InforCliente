@@ -468,6 +468,34 @@ dailyPlansRoutes.post(
   })
 );
 
+// POST /daily-plans/:id/receive
+// Action: Technician confirms receipt of materials
+dailyPlansRoutes.post(
+  "/:id/receive",
+  requirePermission("obras", "view"), // Technician can view/act on plans
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const activeUserName = req.user?.name || "Técnico";
+
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id }
+    });
+
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    if (plan.status !== "DRAFT") return res.status(400).json({ error: "O plano não está pronto para recepção." });
+
+    const updated = await prisma.dailyPlan.update({
+      where: { id },
+      data: { 
+        technicianReceived: true,
+        receivedBy: activeUserName
+      }
+    });
+
+    res.json({ success: true, message: "Materiais recebidos com sucesso.", plan: updated });
+  })
+);
+
 // POST /daily-plans/:id/complete
 // Action: Technician marks plan as done, providing actual executed quantities and consumed materials.
 // Note: This now sets status to PENDING_VALIDATION. Stock/Progress is only committed upon approval.

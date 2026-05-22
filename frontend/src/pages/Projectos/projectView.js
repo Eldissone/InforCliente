@@ -3010,7 +3010,7 @@ async function openStockAdjustmentModal(materialId, warehouse) {
           <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
              <h4 class="text-[10px] font-black uppercase text-blue-600 mb-1">Material a Ajustar</h4>
              <p class="text-xs font-bold text-slate-800">${escapeHtml(mat.name)}</p>
-             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">ArmazÃ©m: <span class="text-slate-900">${warehouse}</span></p>
+             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">Armazém: <span class="text-slate-900">${warehouse}</span></p>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
@@ -4258,14 +4258,15 @@ async function validatePlan(planId) {
       const consumed = Number(m.consumedQty || 0);
       const provided = Number(m.providedQty || 0);
       const toReturn = provided - consumed;
+      const unit = escapeHtml(m.product?.unit || "un");
       return `
       <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
         <div class="flex-1">
           <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
-          <p class="text-[10px] text-slate-500">Disponibilizado: ${provided} | Consumido Reportado: <strong class="text-indigo-600">${consumed}</strong>${toReturn > 0 ? ` | <span class="text-amber-600 font-bold">Devolvido: ${toReturn.toFixed(2)} ${escapeHtml(m.product?.unit || '')}</span>` : ''}</p>
+          <p class="text-[10px] text-slate-500">Disponibilizado: <span class="font-bold text-slate-700">${provided} <span class="font-black text-slate-600">${unit}</span></span> | Consumido Reportado: <strong class="text-indigo-600">${consumed} ${unit}</strong>${toReturn > 0 ? ` | <span class="text-amber-600 font-bold">Devolvido: ${toReturn.toFixed(2)} ${unit}</span>` : ''}</p>
         </div>
-        <div class="w-32">
-          <label class="text-[9px] font-black uppercase text-slate-400">${returnAlreadyDone ? 'Consumido' : 'Validado'}</label>
+        <div class="w-36 shrink-0">
+          <label class="text-[9px] font-black uppercase text-slate-400 block mb-0.5">${returnAlreadyDone ? `Consumido (${unit})` : `Validado (${unit})`}</label>
           <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.consumedQty ?? m.providedQty}" max="${m.providedQty}" ${returnAlreadyDone ? 'readonly class="w-full h-8 bg-slate-100 border border-slate-200 rounded px-2 text-xs font-bold text-slate-500 cursor-not-allowed"' : 'class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-orange-500"'}>
         </div>
       </div>

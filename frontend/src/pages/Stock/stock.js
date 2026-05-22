@@ -1713,6 +1713,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <thead>
                                 <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
                                     <th class="px-10 py-5">Material</th>
+                                    <th class="px-10 py-5">Propriedade</th>
                                     <th class="px-10 py-5 text-center">Quantidade Disponível</th>
                                     <th class="px-10 py-5 text-right">Ações</th>
                                 </tr>
@@ -1725,6 +1726,11 @@ async function renderWarehouseDetail(container, warehouseId) {
                                     <td class="px-10 py-6">
                                         <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
                                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
+                                    </td>
+                                    <td class="px-10 py-6">
+                                        <span class="px-2 py-0.5 rounded-md ${s.ownerId ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'} text-[9px] font-black uppercase tracking-widest">
+                                            ${s.ownerId ? 'Cliente' : 'Próprio'}
+                                        </span>
                                     </td>
                                     <td class="px-10 py-6 text-center">
                                         <div class="flex flex-col items-center">
