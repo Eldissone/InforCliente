@@ -451,11 +451,11 @@ window.completePlan = async function(planId) {
         <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
         <p class="text-[10px] text-slate-500">Disponibilizado: <span class="font-bold text-slate-700">${m.providedQty} <span class="text-[#2afc8d] font-black">${escapeHtml(m.product?.unit || "")}</span></span></p>
       </div>
-      <div class="w-full sm:w-36 shrink-0">
+      <div class="flex-1 w-full sm:w-36 shrink-0">
         <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">Qtd Consumida (${escapeHtml(m.product?.unit || "un")})</label>
         <input type="number" step="0.01" data-mat-id="${m.id}" data-provided="${m.providedQty}" value="${m.providedQty}" max="${m.providedQty}" oninput="document.getElementById('dev-${m.id}').innerText = Math.max(0, this.dataset.provided - this.value).toFixed(2); if(window.checkReturnsNeeded) window.checkReturnsNeeded();" class="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
       </div>
-      <div class="w-full sm:w-24 shrink-0 text-right">
+      <div class="flex-1 w-full sm:w-24 shrink-0 text-right">
         <label class="text-[9px] font-black uppercase text-slate-400 block mb-1">A Devolver (${escapeHtml(m.product?.unit || "un")})</label>
         <p class="text-xs font-bold text-amber-600" id="dev-${m.id}">0.00</p>
       </div>

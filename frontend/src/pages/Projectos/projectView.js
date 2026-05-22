@@ -4231,12 +4231,14 @@ async function validatePlan(planId) {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return toast("Plano não encontrado.");
 
-    let tasksHtml = plan.tasks.map(t => `
+    let tasksHtml = plan.tasks.map(t => {
+      const unit = escapeHtml(t.progressTask?.unit || "");
+      return `
       <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
         <div class="flex-1">
           <p class="text-xs font-bold text-slate-900">${escapeHtml(t.progressTask?.description || "Tarefa")}</p>
           <div class="flex items-center gap-3 mt-1 flex-wrap">
-            <span class="text-[10px] text-slate-500">Planeado: ${t.plannedQty} | Reportado pelo Técnico: <strong class="text-indigo-600">${t.executedQty || 0}</strong></span>
+            <span class="text-[10px] text-slate-500">Planeado: <span class="font-bold text-slate-700">${t.plannedQty}${unit ? ` <span class="font-black text-slate-600">${unit}</span>` : ""}</span> | Reportado pelo Técnico: <strong class="text-indigo-600">${t.executedQty || 0}${unit ? ` ${unit}` : ""}</strong></span>
             ${t.technician ? `
               <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold text-[9px] flex items-center gap-0.5 border border-blue-100">
                 <span class="material-symbols-outlined text-[10px]">person</span>
@@ -4245,12 +4247,13 @@ async function validatePlan(planId) {
             ` : ""}
           </div>
         </div>
-        <div class="w-32 shrink-0">
-          <label class="text-[9px] font-black uppercase text-slate-400">Validado</label>
+        <div class="w-36 shrink-0">
+          <label class="text-[9px] font-black uppercase text-slate-400 block mb-0.5">Validado${unit ? ` (${unit})` : ""}</label>
           <input type="number" step="0.01" data-task-id="${t.id}" value="${t.executedQty ?? t.plannedQty}" class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-orange-500">
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     const returnAlreadyDone = !!plan.returnConfirmedAt;
 
