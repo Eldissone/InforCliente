@@ -18,6 +18,7 @@ const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 
 const app = express();
+app.set("trust proxy", 1); // Confiar no IP original através de Nginx/Load Balancers
 
 const allowedOrigins = config.frontendOrigin
   .replace(/['"]/g, "") // Remove aspas extras
