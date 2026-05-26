@@ -22,6 +22,7 @@ model User {
   assignedProjects Project[]    @relation("AssignedUsers")
   dailyPlanTasks   DailyPlanTask[]
   permissions      UserPermission[]
+  systemLogs       SystemLog[]
 
   @@index([clientId])
 }
@@ -583,4 +584,25 @@ model ProjectMaterialPlan {
   product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, productId])
+}
+
+model SystemLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  userName    String?
+  userEmail   String?
+  action      String
+  module      String
+  status      String
+  ipAddress   String?
+  userAgent   String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
 }

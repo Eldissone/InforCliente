@@ -13,7 +13,9 @@ const { warehouseRoutes } = require("./routes/warehouses");
 const { itemRoutes } = require("./routes/items");
 const { permissionsRoutes } = require("./routes/permissions");
 const { dailyPlansRoutes } = require("./routes/dailyPlans");
+const { logRoutes } = require("./routes/logs");
 const { initialize } = require("./utils/startup");
+const { auditMiddleware } = require("./middlewares/auditMiddleware");
 
 const app = express();
 
@@ -75,6 +77,8 @@ app.use("/uploads", express.static("uploads"));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+app.use(auditMiddleware());
+
 app.use("/auth", authRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/clients", clientRoutes);
@@ -86,6 +90,7 @@ app.use("/warehouses", warehouseRoutes);
 app.use("/items", itemRoutes);
 app.use("/permissions", permissionsRoutes);
 app.use("/daily-plans", dailyPlansRoutes);
+app.use("/logs", logRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

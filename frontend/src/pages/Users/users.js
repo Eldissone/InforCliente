@@ -56,7 +56,7 @@ const SECTION_LABELS = { overview: "Visão Geral", users: "Utilizadores", permis
 
 function switchSection(name) {
   activeSection = name;
-  ["overview", "users", "permissions"].forEach(s => {
+  ["overview", "users", "permissions", "history"].forEach(s => {
     el(`section-${s}`)?.classList.toggle("hidden", s !== name);
   });
   // Update all sidebar links (desktop + mobile)
@@ -70,6 +70,7 @@ function switchSection(name) {
   window.scrollTo({ top: 0, behavior: "instant" });
   if (name === "users") renderTable(filterUsers());
   if (name === "permissions") renderPermissions();
+  if (name === "history") loadLogs();
 }
 
 // ─── Stats ────────────────────────────────────────────────────
@@ -1050,6 +1051,9 @@ function wireEvents() {
   document.querySelectorAll(".sidebar-link[data-section]").forEach(btn => {
     btn.addEventListener("click", () => { closeMobileSidebar(); switchSection(btn.dataset.section); });
   });
+  
+  // History tab click from mobile
+  el("m-history")?.addEventListener("click", () => { closeMobileSidebar(); switchSection("history"); });
 
   // "Ver todos" link on overview
   document.querySelectorAll("[data-section-goto]").forEach(btn => {
@@ -1119,6 +1123,253 @@ function wireResetPerms() {
   });
 }
 
+// ─── History Logs ─────────────────────────────────────────────
+let logPagination = { skip: 0, take: 20, total: 0 };
+let currentLogs = [];
+
+function getLogStatusBadge(status) {
+  if (status === "SUCCESS") return `<span class="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold tracking-widest uppercase border border-emerald-100">Sucesso</span>`;
+  if (status === "ERROR") return `<span class="px-2 py-1 bg-red-50 text-red-600 rounded-lg text-[10px] font-bold tracking-widest uppercase border border-red-100">Erro</span>`;
+  return `<span class="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-bold tracking-widest uppercase border border-slate-200">${esc(status)}</span>`;
+}
+
+async function loadLogs() {
+  const tbody = el("logsTbody");
+  if (!tbody) return;
+  tbody.innerHTML = renderLoadingRow(6);
+  
+  const search = el("logSearchInput")?.value || "";
+  const module = el("logModuleFilter")?.value || "";
+  const startDate = el("logStartDate")?.value || "";
+  const endDate = el("logEndDate")?.value || "";
+  
+  const query = new URLSearchParams({
+    skip: logPagination.skip,
+    take: logPagination.take
+  });
+  
+  if (search) query.append("search", search);
+  if (module) query.append("module", module);
+  if (startDate) query.append("startDate", startDate);
+  if (endDate) query.append("endDate", endDate);
+  
+  try {
+    const res = await apiRequest(`/logs?${query.toString()}`);
+    logPagination.total = res.total || 0;
+    currentLogs = res.logs || [];
+    renderLogs();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar logs.</td></tr>`;
+    toast("Erro ao carregar histórico.", { type: "error" });
+  }
+}
+
+function renderLogs() {
+  const tbody = el("logsTbody");
+  if (!tbody) return;
+  
+  if (!currentLogs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="px-7 py-10 text-sm text-slate-400 text-center">Nenhum registo encontrado.</td></tr>`;
+  } else {
+    tbody.innerHTML = currentLogs.map(log => {
+      const email = log.userEmail || (log.user?.email) || "Sistema";
+      const name = log.userName || (log.user?.name) || email;
+      const date = new Date(log.createdAt);
+      
+      return `
+      <tr class="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group">
+        <td class="px-5 py-3">
+          <div class="flex items-center gap-3">
+            ${avatarEl(email, null)}
+            <div class="flex flex-col">
+              <span class="text-sm font-bold text-slate-900">${esc(name)}</span>
+              <span class="text-[9px] text-slate-400 font-medium">${esc(email)}</span>
+            </div>
+          </div>
+        </td>
+        <td class="px-5 py-3">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-xs font-bold text-slate-700">${esc(log.action)}</span>
+            <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${esc(log.module)}</span>
+          </div>
+        </td>
+        <td class="px-5 py-3 hidden md:table-cell">
+          <div class="text-[10px] text-slate-500 max-w-[200px] truncate" title="${esc(JSON.stringify(log.details))}">
+            ${log.details?.path ? esc(log.details.path) : "Sem detalhes"}
+          </div>
+        </td>
+        <td class="px-5 py-3">
+          <div class="text-xs font-medium text-slate-600">${formatDateBR(log.createdAt)}</div>
+          <div class="text-[9px] text-slate-400">${date.toLocaleTimeString("pt-BR")}</div>
+        </td>
+        <td class="px-5 py-3 hidden lg:table-cell">
+          <span class="text-[10px] font-mono text-slate-500">${esc(log.ipAddress || 'N/A')}</span>
+        </td>
+        <td class="px-5 py-3 text-center">
+          ${getLogStatusBadge(log.status)}
+        </td>
+      </tr>
+      `;
+    }).join("");
+  }
+  
+  // Pagination UI
+  const total = logPagination.total;
+  const start = total === 0 ? 0 : logPagination.skip + 1;
+  const end = Math.min(logPagination.skip + logPagination.take, total);
+  
+  if (el("logTotalCount")) el("logTotalCount").textContent = total;
+  if (el("logRangeStart")) el("logRangeStart").textContent = start;
+  if (el("logRangeEnd")) el("logRangeEnd").textContent = end;
+  
+  if (el("logPrevPage")) el("logPrevPage").disabled = logPagination.skip === 0;
+  if (el("logNextPage")) el("logNextPage").disabled = end >= total;
+}
+
+function wireLogEvents() {
+  let debounce;
+  const triggerSearch = () => {
+    logPagination.skip = 0;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => loadLogs(), 300);
+  };
+  
+  el("logSearchInput")?.addEventListener("input", triggerSearch);
+  el("logModuleFilter")?.addEventListener("change", triggerSearch);
+  el("logStartDate")?.addEventListener("change", triggerSearch);
+  el("logEndDate")?.addEventListener("change", triggerSearch);
+  
+  el("logPrevPage")?.addEventListener("click", () => {
+    if (logPagination.skip > 0) {
+      logPagination.skip = Math.max(0, logPagination.skip - logPagination.take);
+      loadLogs();
+    }
+  });
+  
+  el("logNextPage")?.addEventListener("click", () => {
+    if (logPagination.skip + logPagination.take < logPagination.total) {
+      logPagination.skip += logPagination.take;
+      loadLogs();
+    }
+  });
+  
+  // Exports
+  el("exportCsvBtn")?.addEventListener("click", () => exportLogs("csv"));
+  el("exportExcelBtn")?.addEventListener("click", () => exportLogs("excel"));
+  el("exportPdfBtn")?.addEventListener("click", () => exportLogs("pdf"));
+
+  // Clear Actions
+  el("clearLogsBtn")?.addEventListener("click", async () => {
+    if (!window.confirm("ATENÇÃO: Deseja apagar TODO o histórico de auditoria do sistema? Esta ação não pode ser desfeita.")) return;
+    try {
+      const btn = el("clearLogsBtn");
+      setButtonLoading(btn, true);
+      await apiRequest("/logs", { method: "DELETE" });
+      toast("Histórico apagado com sucesso.", { type: "success" });
+      logPagination.skip = 0;
+      await loadLogs();
+      setButtonLoading(btn, false);
+    } catch (error) {
+      toast("Erro ao apagar histórico: " + error.message, { type: "error" });
+      setButtonLoading(el("clearLogsBtn"), false);
+    }
+  });
+
+  el("clearCacheBtn")?.addEventListener("click", () => {
+    if (!window.confirm("Deseja limpar os dados locais e encerrar a sessão? Terá de fazer login novamente.")) return;
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear cookies
+    document.cookie.split(";").forEach(function(c) {
+      document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    
+    window.location.href = "/";
+  });
+}
+
+async function fetchAllLogsForExport() {
+  // Fetch a larger chunk for export, up to 1000 items
+  const search = el("logSearchInput")?.value || "";
+  const module = el("logModuleFilter")?.value || "";
+  const startDate = el("logStartDate")?.value || "";
+  const endDate = el("logEndDate")?.value || "";
+  
+  const query = new URLSearchParams({ skip: 0, take: 1000 });
+  if (search) query.append("search", search);
+  if (module) query.append("module", module);
+  if (startDate) query.append("startDate", startDate);
+  if (endDate) query.append("endDate", endDate);
+  
+  try {
+    const res = await apiRequest(`/logs?${query.toString()}`);
+    return res.logs || [];
+  } catch (e) {
+    toast("Erro ao obter dados para exportação.", { type: "error" });
+    return [];
+  }
+}
+
+async function exportLogs(type) {
+  const data = await fetchAllLogsForExport();
+  if (!data.length) {
+    toast("Sem dados para exportar.", { type: "warning" });
+    return;
+  }
+  
+  const exportData = data.map(log => ({
+    "Data/Hora": formatDateBR(log.createdAt) + " " + new Date(log.createdAt).toLocaleTimeString("pt-BR"),
+    "Utilizador": log.userName || (log.user?.name) || "Sistema",
+    "Email": log.userEmail || (log.user?.email) || "",
+    "Módulo": log.module,
+    "Ação": log.action,
+    "Status": log.status,
+    "IP": log.ipAddress || "N/A"
+  }));
+  
+  if (type === "csv") {
+    const headers = Object.keys(exportData[0]).join(",");
+    const rows = exportData.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers, ...rows].join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = `historico_logs_${new Date().getTime()}.csv`;
+    link.click();
+  } else if (type === "excel") {
+    if (typeof XLSX !== "undefined") {
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Logs");
+      XLSX.writeFile(wb, `historico_logs_${new Date().getTime()}.xlsx`);
+    } else {
+      toast("Biblioteca Excel não encontrada.", { type: "error" });
+    }
+  } else if (type === "pdf") {
+    if (typeof window.jspdf !== "undefined") {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF("landscape");
+      
+      doc.text("Histórico de Auditoria - Info Gestor", 14, 15);
+      
+      const columns = ["Data/Hora", "Utilizador", "Email", "Módulo", "Ação", "Status", "IP"];
+      const rows = exportData.map(obj => [obj["Data/Hora"], obj["Utilizador"], obj["Email"], obj["Módulo"], obj["Ação"], obj["Status"], obj["IP"]]);
+      
+      doc.autoTable({
+        head: [columns],
+        body: rows,
+        startY: 20,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [15, 23, 42] }
+      });
+      
+      doc.save(`historico_logs_${new Date().getTime()}.pdf`);
+    } else {
+      toast("Biblioteca PDF não encontrada.", { type: "error" });
+    }
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 async function init() {
   initMobileMenu();
@@ -1129,6 +1380,7 @@ async function init() {
   wireUserPermClicks();
   wirePermissionCollapse();
   wireResetPerms();
+  wireLogEvents();
   await loadUsers();
 }
 
