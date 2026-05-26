@@ -1552,7 +1552,7 @@ window.openDeliveryModal = async ({ toolId, productId }) => {
     const { close } = openModal({
         title: isBulk ? "Entrega em Lote" : "Entrega de Ferramenta",
         contentHtml,
-        primaryLabel: "Confirmar Entrega",
+        primaryLabel: "Confirmar",
         onPrimary: async ({ body }) => {
             const formData = new FormData(body.querySelector("#formDelivery"));
             const data = Object.fromEntries(formData.entries());
