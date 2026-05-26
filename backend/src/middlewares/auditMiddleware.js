@@ -50,7 +50,10 @@ const auditMiddleware = (moduleName) => {
           
           const forwarded = req.headers['x-forwarded-for'];
           const realIp = req.headers['x-real-ip'];
-          const clientIp = (forwarded ? forwarded.split(',')[0].trim() : null) || realIp || req.ip || req.socket?.remoteAddress || "Desconhecido";
+          const cfIp = req.headers['cf-connecting-ip']; // Muito usado se tiver Cloudflare
+          const clusterIp = req.headers['x-cluster-client-ip'];
+          
+          const clientIp = cfIp || clusterIp || (forwarded ? forwarded.split(',')[0].trim() : null) || realIp || req.ip || req.socket?.remoteAddress || "Desconhecido";
           
           const logData = {
             userId: req.user?.sub || req.user?.id || null,
