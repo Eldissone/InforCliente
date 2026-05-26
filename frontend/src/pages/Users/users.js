@@ -1202,9 +1202,6 @@ function renderLogs() {
           <div class="text-xs font-medium text-slate-600">${formatDateBR(log.createdAt)}</div>
           <div class="text-[9px] text-slate-400">${date.toLocaleTimeString("pt-BR")}</div>
         </td>
-        <td class="px-5 py-3 hidden lg:table-cell">
-          <span class="text-[10px] font-mono text-slate-500">${esc(log.ipAddress || 'N/A')}</span>
-        </td>
         <td class="px-5 py-3 text-center">
           ${getLogStatusBadge(log.status)}
         </td>
@@ -1324,8 +1321,7 @@ async function exportLogs(type) {
     "Email": log.userEmail || (log.user?.email) || "",
     "Módulo": log.module,
     "Ação": log.action,
-    "Status": log.status,
-    "IP": log.ipAddress || "N/A"
+    "Status": log.status
   }));
   
   if (type === "csv") {
