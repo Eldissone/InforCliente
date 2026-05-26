@@ -48,6 +48,10 @@ const auditMiddleware = (moduleName) => {
 
           const extractedModule = req.baseUrl ? req.baseUrl.split('/')[1]?.toUpperCase() : null;
           
+          const forwarded = req.headers['x-forwarded-for'];
+          const realIp = req.headers['x-real-ip'];
+          const clientIp = (forwarded ? forwarded.split(',')[0].trim() : null) || realIp || req.ip || req.socket?.remoteAddress || "Desconhecido";
+          
           const logData = {
             userId: req.user?.sub || req.user?.id || null,
             userName: req.user?.name || null,
@@ -55,7 +59,7 @@ const auditMiddleware = (moduleName) => {
             action,
             module: moduleName || extractedModule || "GENERAL",
             status,
-            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress,
+            ipAddress: clientIp,
             userAgent: req.headers['user-agent'],
             details: {
               path: req.originalUrl,
