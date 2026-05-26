@@ -21,6 +21,7 @@ model User {
   accounts         UserClient[]
   assignedProjects Project[]    @relation("AssignedUsers")
   dailyPlanTasks   DailyPlanTask[]
+  permissions      UserPermission[]
 
   @@index([clientId])
 }
@@ -400,6 +401,20 @@ model RolePermission {
   @@unique([role, module, action])
   @@index([role])
   @@map("role_permissions")
+}
+
+/// Overrides de permissão por utilizador (prevalece sobre o perfil/role)
+model UserPermission {
+  id      String   @id @default(cuid())
+  userId  String
+  module  String
+  action  String
+  allowed String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, module, action])
+  @@index([userId])
+  @@map("user_permissions")
 }
 
 enum WarehouseType {

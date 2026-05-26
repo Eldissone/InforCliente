@@ -30,7 +30,7 @@ itemRoutes.get(
         ...(productId && { productId }),
       },
       include: {
-        product: { select: { id: true, name: true, category: true, sku: true } },
+        product: { select: { id: true, name: true, category: true, sku: true, image: true } },
         warehouse: { select: { name: true } },
         targetWarehouse: { select: { name: true } },
         responsible: { select: { name: true, email: true } },
@@ -101,15 +101,15 @@ itemRoutes.patch(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const body = z.object({
-      serialNumber: z.string().optional().nullable(),
-      internalTag: z.string().optional().nullable(),
+      serialNumber: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
+      internalTag: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
       condition: z.string().optional(),
-      notes: z.string().optional().nullable(),
+      notes: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
       productId: z.string().optional(),
-      warehouseId: z.string().optional().nullable(),
-      projectId: z.string().optional().nullable(),
-      responsibleId: z.string().optional().nullable(),
-      targetWarehouseId: z.string().optional().nullable(),
+      warehouseId: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
+      projectId: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
+      responsibleId: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
+      targetWarehouseId: z.preprocess((v) => (v === "" ? null : v), z.string().optional().nullable()),
       status: z.enum(["AVAILABLE", "PENDING_RECEIPT", "ASSIGNED", "PENDING_RETURN", "MAINTENANCE", "BROKEN", "LOST", "RETIRED"]).optional(),
     }).partial().parse(req.body);
 

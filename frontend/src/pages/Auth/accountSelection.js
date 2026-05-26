@@ -59,6 +59,9 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.removeItem("pending_auth_accounts");
 
         setSession(res);
+        import("../../shared/permissions.js")
+          .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
+          .catch(() => {});
         toast(`Acedendo a ${acc.name}...`);
 
         const next = getNext();

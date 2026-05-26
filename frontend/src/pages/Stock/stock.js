@@ -1,7 +1,12 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { wireUsersNav, wireLogout } from "../../shared/session.js";
-import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb } from "../../shared/ui.js";
+import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb, toast, setButtonLoading } from "../../shared/ui.js";
 import { resolveProductImageUrl } from "../../services/api.js";
+import { can, initPermissionLayer } from "../../shared/permissions.js";
+
+function canEditTools() {
+    return can("stock", "manage") || can("stock", "edit") || can("ferramentas", "edit") || can("ferramentas", "manage");
+}
 
 function openProductImageLightbox(url, title) {
     const lightbox = document.getElementById("imageLightbox");
@@ -49,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     wireLogout();
     initMobileMenu();
     wireProductImagePreview();
+    await initPermissionLayer();
     init();
 });
 
@@ -1136,9 +1142,20 @@ async function renderTools(container) {
                         ` : ''}
 
                         ${group.status === 'AVAILABLE' ? `
-                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20 mt-4">
+                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20">
                                 Entregar
                             </button>
+                        ` : ''}
+                        ${canEditTools() ? `
+                            <button type="button" onclick="window.editToolGroup('${group.itemIds.join(',')}')" class="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all flex items-center justify-center gap-1" title="Editar">
+                                <span class="material-symbols-outlined text-base">edit</span>
+                                <span class="hidden sm:inline">Editar</span>
+                            </button>
+                            ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') && group.quantity <= 1 ? `
+                            <button type="button" onclick="window.deleteTool('${group.itemIds[0]}')" class="h-10 w-10 rounded-xl border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center" title="Eliminar">
+                                <span class="material-symbols-outlined text-base">delete</span>
+                            </button>
+                            ` : ''}
                         ` : ''}
                     </div>
                 </div>
@@ -1149,7 +1166,14 @@ async function renderTools(container) {
     html += `</div>`;
     container.innerHTML = html;
 
-    document.getElementById("btnCreateTool")?.addEventListener("click", () => openToolModal());
+    const btnCreate = document.getElementById("btnCreateTool");
+    if (btnCreate) {
+        if (canEditTools()) {
+            btnCreate.addEventListener("click", () => openToolModal());
+        } else {
+            btnCreate.classList.add("hidden");
+        }
+    }
 
     // Lógica de Pesquisa e Filtros
     const searchInput = document.getElementById("searchTools");
@@ -1195,49 +1219,77 @@ async function renderTools(container) {
 async function openToolModal(tool = null) {
     const productsRes = await apiRequest("/products");
     const warehousesRes = await apiRequest("/warehouses");
-
-    // FILTRO: Apenas produtos que sejam ferramentas ou equipamentos para o cadastro individual
-    const toolProducts = productsRes.items.filter(p => p.category === 'TOOL' || p.category === 'EQUIPMENT');
+    const toolProducts = productsRes.items.filter(p => p.category === "TOOL" || p.category === "EQUIPMENT");
+    const isEdit = Boolean(tool?.id);
+    const lockedAssignment = isEdit && ["ASSIGNED", "PENDING_RECEIPT", "PENDING_RETURN"].includes(tool.status);
 
     const contentHtml = `
         <form id="formTool" class="space-y-6 pt-4">
+            ${lockedAssignment ? `
+            <p class="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                Ativo em trânsito ou em obra — pode editar dados do ativo; armazém e produto estão bloqueados até concluir o fluxo logístico.
+            </p>` : ""}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Produto / Modelo</label>
-                    <select name="productId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <select name="productId" required ${isEdit ? "disabled" : ""} class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all disabled:opacity-60">
                         <option value="">Selecionar...</option>
-                        ${toolProducts.map(p => `<option value="${p.id}" ${tool?.productId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+                        ${toolProducts.map(p => `<option value="${p.id}" ${tool?.productId === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
                     </select>
+                    ${isEdit ? `<input type="hidden" name="productId" value="${esc(tool.productId)}" />` : ""}
                 </div>
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Armazém Base</label>
-                    <select name="warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                        ${warehousesRes.items.map(w => `<option value="${w.id}" ${tool?.warehouseId === w.id ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}
+                    <select name="warehouseId" required ${lockedAssignment ? "disabled" : ""} class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all disabled:opacity-60">
+                        ${warehousesRes.items.map(w => `<option value="${w.id}" ${tool?.warehouseId === w.id ? "selected" : ""}>${esc(w.name)}</option>`).join("")}
                     </select>
+                    ${lockedAssignment && tool?.warehouseId ? `<input type="hidden" name="warehouseId" value="${esc(tool.warehouseId)}" />` : ""}
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Número de Série</label>
-                    <input type="text" name="serialNumber" value="${esc(tool?.serialNumber || '')}" placeholder="Ex: SN-9928..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="text" name="serialNumber" value="${esc(tool?.serialNumber || "")}" placeholder="Ex: SN-9928..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">${tool ? 'Estado' : 'Quantidade'}</label>
-                    ${tool ? `
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Etiqueta Interna</label>
+                    <input type="text" name="internalTag" value="${esc(tool?.internalTag || "")}" placeholder="Ex: TAG-001" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">${isEdit ? "Estado" : "Quantidade"}</label>
+                    ${isEdit ? `
                         <select name="status" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                            <option value="AVAILABLE" ${tool?.status === 'AVAILABLE' ? 'selected' : ''}>Disponível</option>
-                            <option value="ASSIGNED" ${tool?.status === 'ASSIGNED' ? 'selected' : ''}>Em Obra</option>
-                            <option value="MAINTENANCE" ${tool?.status === 'MAINTENANCE' ? 'selected' : ''}>Manutenção</option>
+                            <option value="AVAILABLE" ${tool?.status === "AVAILABLE" ? "selected" : ""}>Disponível</option>
+                            <option value="MAINTENANCE" ${tool?.status === "MAINTENANCE" ? "selected" : ""}>Manutenção</option>
+                            <option value="ASSIGNED" ${tool?.status === "ASSIGNED" ? "selected" : ""}>Em Obra</option>
+                            <option value="PENDING_RECEIPT" ${tool?.status === "PENDING_RECEIPT" ? "selected" : ""}>Pendente Receção</option>
+                            <option value="PENDING_RETURN" ${tool?.status === "PENDING_RETURN" ? "selected" : ""}>Aguardando Validação</option>
+                            <option value="BROKEN" ${tool?.status === "BROKEN" ? "selected" : ""}>Avariado</option>
+                            <option value="LOST" ${tool?.status === "LOST" ? "selected" : ""}>Extraviado</option>
                         </select>
                     ` : `
-                        <input type="number" name="quantity" value="1" min="1" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                        <input type="number" name="quantity" value="1" min="1" max="50" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                     `}
                 </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Condição</label>
+                    <select name="condition" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                        <option value="GOOD" ${(tool?.condition || "GOOD") === "GOOD" ? "selected" : ""}>Bom</option>
+                        <option value="FAIR" ${tool?.condition === "FAIR" ? "selected" : ""}>Razoável</option>
+                        <option value="POOR" ${tool?.condition === "POOR" ? "selected" : ""}>Mau</option>
+                    </select>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Observações</label>
+                <textarea name="notes" rows="2" placeholder="Notas sobre o ativo..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all resize-none">${esc(tool?.notes || "")}</textarea>
             </div>
             <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto do Ativo</label>
                 <div class="flex gap-4 items-center">
-                    ${tool?.imageUrl ? `<img src="${getAssetUrl(tool.imageUrl)}" class="w-16 h-16 rounded-xl object-cover border border-slate-200">` : ''}
+                    ${tool?.imageUrl ? `<img src="${getAssetUrl(tool.imageUrl)}" class="w-16 h-16 rounded-xl object-cover border border-slate-200">` : ""}
                     <input type="file" name="photo" accept="image/*" capture="environment" class="flex-1 bg-slate-50 border-none rounded-2xl p-4 text-xs font-bold text-slate-400">
                 </div>
             </div>
@@ -1245,36 +1297,97 @@ async function openToolModal(tool = null) {
     `;
 
     const { close } = openModal({
-        title: tool ? "Editar Ativo" : "Novo Ativo",
+        title: isEdit ? "Editar Ferramenta / Equipamento" : "Novo Ativo",
         contentHtml,
-        primaryLabel: tool ? "Atualizar" : "Registar Ativo",
-        onPrimary: async ({ body }) => {
-            const formData = new FormData(body.querySelector("#formTool"));
+        primaryLabel: isEdit ? "Guardar alterações" : "Registar Ativo",
+        onPrimary: async ({ body, btn }) => {
+            const form = body.querySelector("#formTool");
+            const formData = new FormData(form);
             try {
-                if (tool) {
+                setButtonLoading(btn, true);
+                if (isEdit) {
                     await apiUpload(`/items/${tool.id}`, formData, "PATCH");
+                    toast("Ferramenta actualizada.", { type: "success" });
                 } else {
                     await apiUpload("/items", formData, "POST");
+                    toast("Ativo registado.", { type: "success" });
                 }
                 close();
                 loadTabContent("tools");
-            } catch (error) { alert("Erro: " + error.message); }
-        }
+            } catch (error) {
+                setButtonLoading(btn, false);
+                toast(error.message || "Erro ao guardar.", { type: "error" });
+            }
+        },
     });
 }
 
 window.editTool = async (id) => {
     const { items } = await apiRequest("/items");
     const tool = items.find(i => i.id === id);
+    if (!tool) {
+        toast("Ativo não encontrado.", { type: "error" });
+        return;
+    }
     openToolModal(tool);
 };
 
+window.editToolGroup = async (itemIdsCsv) => {
+    const ids = String(itemIdsCsv || "").split(",").filter(Boolean);
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+        return window.editTool(ids[0]);
+    }
+
+    const { items } = await apiRequest("/items");
+    const units = ids.map((id) => items.find((i) => i.id === id)).filter(Boolean);
+    if (!units.length) {
+        toast("Nenhuma unidade encontrada.", { type: "error" });
+        return;
+    }
+
+    const listHtml = units.map((u) => `
+        <button type="button" data-pick-item="${u.id}"
+            class="w-full flex items-center justify-between gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-all text-left">
+            <div>
+                <p class="text-sm font-bold text-slate-900">${esc(u.product?.name || "Ativo")}</p>
+                <p class="text-[10px] font-mono text-slate-500">S/N: ${esc(u.serialNumber || "—")} · ${esc(u.internalTag || "sem etiqueta")}</p>
+            </div>
+            <span class="material-symbols-outlined text-blue-600">edit</span>
+        </button>
+    `).join("");
+
+    const { close, panel } = openModal({
+        title: "Editar unidade",
+        contentHtml: `
+            <p class="text-sm text-slate-600 mb-4">Este grupo tem <strong>${units.length}</strong> unidades. Escolha qual deseja editar:</p>
+            <div class="space-y-2 max-h-[50vh] overflow-y-auto">${listHtml}</div>
+        `,
+        primaryLabel: "Fechar",
+        onPrimary: async ({ close: c }) => c(),
+    });
+
+    panel.querySelector("[data-body]")?.addEventListener("click", (e) => {
+        const pick = e.target.closest("[data-pick-item]");
+        if (!pick) return;
+        close();
+        window.editTool(pick.getAttribute("data-pick-item"));
+    });
+};
+
 window.deleteTool = async (id) => {
+    if (!canEditTools()) {
+        toast("Sem permissão para eliminar ferramentas.", { type: "error" });
+        return;
+    }
     if (!confirm("Confirmar eliminação permanente deste ativo?")) return;
     try {
         await apiRequest(`/items/${id}`, { method: "DELETE" });
+        toast("Ativo eliminado.", { type: "success" });
         loadTabContent("tools");
-    } catch (error) { alert("Erro ao eliminar: " + error.message); }
+    } catch (error) {
+        toast(error.message || "Erro ao eliminar.", { type: "error" });
+    }
 };
 
 window.openDeliveryModal = async ({ toolId, productId }) => {

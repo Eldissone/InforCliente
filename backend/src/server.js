@@ -91,12 +91,12 @@ app.use("/daily-plans", dailyPlansRoutes);
 app.use((err, _req, res, _next) => {
   // Zod validation
   if (err?.name === "ZodError") {
+    console.error("Zod Validation Error:", JSON.stringify(err.issues, null, 2));
+    console.error("Request Body:", _req.body);
+    const detailsMsg = err.issues?.map(i => `${i.path?.join(".")}: ${i.message}`).join(", ");
     return res.status(400).json({
-      error: "VALIDATION_ERROR",
-      details: err.issues?.map((i) => ({
-        path: i.path?.join("."),
-        message: i.message,
-      })),
+      error: `Erro de Validação: ${detailsMsg}`,
+      details: err.issues,
     });
   }
 

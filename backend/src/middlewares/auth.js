@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { config } = require("../config");
-const { prisma } = require("../db");
+const { checkUserPermission } = require("../services/permissionResolver");
 
 function authRequired(req, res, next) {
   const header = req.headers.authorization || "";
@@ -21,8 +21,8 @@ function authRequired(req, res, next) {
 
 function requireRole(allowed) {
   const allowedArray = Array.isArray(allowed) ? allowed : [allowed];
-  const allowedSet = new Set(allowedArray.map(r => r.toUpperCase()));
-  
+  const allowedSet = new Set(allowedArray.map((r) => r.toUpperCase()));
+
   return (req, res, next) => {
     const role = (req.user?.role || "").toUpperCase();
     if (!role || !allowedSet.has(role)) {
@@ -34,18 +34,12 @@ function requireRole(allowed) {
 
 function requirePermission(moduleName, action) {
   return async (req, res, next) => {
+    const userId = req.user?.sub;
     const userRole = (req.user?.role || "").toLowerCase();
-    if (!userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
-
-    // Superadmin bypass (normalized to check both cases if needed, but here lowercase is safer for DB)
-    if (userRole === "admin") return next();
+    if (!userId || !userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
 
     try {
-      const perm = await prisma.rolePermission.findFirst({
-        where: { role: userRole, module: moduleName, action },
-      });
-
-      const allowed = perm ? perm.allowed : "false";
+      const { allowed } = await checkUserPermission(userId, userRole, moduleName, action, req.method);
 
       if (allowed === "true") {
         return next();

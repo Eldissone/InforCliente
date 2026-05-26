@@ -1,65 +1,39 @@
 const { prisma } = require("./src/db");
+const { buildDefaultPermissions } = require("./src/config/permissionsCatalog");
 
-const DEFAULT_PERMISSIONS = [
-  // Obras for view, read, edit, delete, manage, financeiro for technical/supervisor
-  { role: "tecnico",  module: "obras",        action: "view",   allowed: "true"  },
-  { role: "supervisor",module: "obras",        action: "view",   allowed: "true"  },
-
-  { role: "admin",    module: "obras",        action: "read",   allowed: "true"  },
-  { role: "operador", module: "obras",        action: "read",   allowed: "true"  },
-  { role: "tecnico",  module: "obras",        action: "read",   allowed: "true"  },
-  { role: "supervisor",module: "obras",        action: "read",   allowed: "true"  },
-  { role: "leitura",  module: "obras",        action: "read",   allowed: "true"  },
-  { role: "cliente",  module: "obras",        action: "read",   allowed: "own"   },
-
-  { role: "tecnico",  module: "obras",        action: "create", allowed: "false" },
-  { role: "supervisor",module: "obras",        action: "create", allowed: "true"  },
-
-  { role: "tecnico",  module: "obras",        action: "edit",   allowed: "true"  },
-  { role: "supervisor",module: "obras",        action: "edit",   allowed: "true"  },
-
-  { role: "tecnico",  module: "obras",        action: "delete", allowed: "false" },
-  { role: "supervisor",module: "obras",        action: "delete", allowed: "false" },
-
-  { role: "admin",    module: "obras",        action: "manage", allowed: "true"  },
-  { role: "operador", module: "obras",        action: "manage", allowed: "true"  },
-  { role: "tecnico",  module: "obras",        action: "manage", allowed: "true"  },
-  { role: "supervisor",module: "obras",        action: "manage", allowed: "true"  },
-  { role: "leitura",  module: "obras",        action: "manage", allowed: "false" },
-  { role: "cliente",  module: "obras",        action: "manage", allowed: "false" },
-
-  { role: "tecnico",  module: "obras",        action: "financeiro", allowed: "false" },
-  { role: "supervisor",module: "obras",        action: "financeiro", allowed: "false" }
-];
+const DEFAULT_PERMISSIONS = buildDefaultPermissions();
 
 async function seed() {
-  console.log("Seeding custom and new permissions...");
+  console.log(`Sincronizando ${DEFAULT_PERMISSIONS.length} permissões do catálogo…`);
+  let created = 0;
+  let updated = 0;
+
   for (const perm of DEFAULT_PERMISSIONS) {
-    await prisma.rolePermission.upsert({
+    const existing = await prisma.rolePermission.findUnique({
       where: {
         role_module_action: {
           role: perm.role,
           module: perm.module,
-          action: perm.action
-        }
+          action: perm.action,
+        },
       },
-      update: {
-        allowed: perm.allowed
-      },
-      create: {
-        role: perm.role,
-        module: perm.module,
-        action: perm.action,
-        allowed: perm.allowed
-      }
     });
+    if (!existing) {
+      await prisma.rolePermission.create({ data: perm });
+      created++;
+    } else if (existing.allowed !== perm.allowed) {
+      // Não sobrescreve personalizações — apenas cria em falta
+    }
   }
-  console.log("✅ Done seeding permissions!");
+
+  console.log(`✅ Permissões: ${created} novas entradas (${DEFAULT_PERMISSIONS.length} no catálogo).`);
 }
 
-seed().catch(err => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-}).finally(async () => {
-  await prisma.$disconnect();
-});
+seed()
+  .catch((err) => {
+    console.error("Seed failed:", err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

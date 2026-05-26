@@ -89,6 +89,7 @@
             font-size: 1.2rem;
         }
 
+        .role-perm-cell,
         .perm-cell {
             background: none;
             border: none;
@@ -96,13 +97,124 @@
             transition: transform 0.15s, box-shadow 0.15s;
         }
 
+        .role-perm-cell:hover:not(:disabled),
         .perm-cell:hover:not(:disabled) {
             background: #f8fafc;
             border-radius: 0.75rem;
         }
 
+        .role-perm-cell:active:not(:disabled),
         .perm-cell:active:not(:disabled) {
             transform: scale(0.9);
+        }
+
+        .user-perm-cell {
+            background: none;
+            border: none;
+            padding: 0;
+            pointer-events: auto;
+        }
+
+        .user-perm-cell:hover:not(:disabled) {
+            background: #f5f3ff;
+            border-radius: 0.75rem;
+        }
+
+        .user-perm-cell:active:not(:disabled) {
+            transform: scale(0.9);
+        }
+
+        .perm-table-wrap {
+            max-height: calc(100vh - 22rem);
+            overflow: auto;
+        }
+
+        .perm-table-wrap thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #f8fafc;
+        }
+
+        .perm-module-row td {
+            position: sticky;
+            top: 3.5rem;
+            z-index: 1;
+            background: #f8fafc;
+            padding: 0 !important;
+        }
+
+        .perm-module-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            text-align: left;
+            padding: 0.75rem 1.75rem;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .perm-module-toggle:hover {
+            background: #f1f5f9;
+        }
+
+        .perm-module-toggle .perm-chevron {
+            font-size: 1.35rem;
+            color: #64748b;
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            flex-shrink: 0;
+        }
+
+        .perm-module-row.is-collapsed .perm-chevron {
+            transform: rotate(-90deg);
+        }
+
+        .perm-action-row {
+            transition: opacity 0.15s ease;
+        }
+
+        .perm-action-row.is-hidden-row {
+            display: none;
+        }
+
+        .perm-module-badge {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: #e2e8f0;
+            color: #64748b;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .perm-pages-panel {
+            padding: 0 1.75rem 0.75rem 3.25rem;
+            background: #f8fafc;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .perm-pages-panel.is-hidden-row {
+            display: none;
+        }
+
+        .perm-page-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #64748b;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 4px 10px;
+            margin: 2px 4px 2px 0;
         }
 
         #searchInput:focus {
@@ -475,7 +587,9 @@
                     <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
                             <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores</h1>
-                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais e níveis de acesso.
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais. Use o ícone
+                                <span class="material-symbols-outlined text-sm align-middle text-violet-600">shield_person</span>
+                                para permissões individuais por utilizador.
                             </p>
                         </div>
                         <button id="addUserBtn2"
@@ -498,7 +612,9 @@
                                 class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
                                 <option value="">Todos os perfis</option>
                                 <option value="admin">Admin</option>
+                                <option value="supervisor">Supervisor</option>
                                 <option value="operador">Operador</option>
+                                <option value="tecnico">Técnico</option>
                                 <option value="leitura">Leitura</option>
                                 <option value="cliente">Cliente</option>
                             </select>
@@ -538,14 +654,21 @@
                                     executar no sistema.</p>
                                 <p class="text-[11px] font-semibold text-[#0d3fd1] mt-2 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-sm">touch_app</span>
-                                    Clique em qualquer célula para alterar a permissão em tempo real.
+                                    Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para expandir ou ocultar blocos.
                                 </p>
                             </div>
-                            <button id="resetPermsBtn"
-                                class="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all">
-                                <span class="material-symbols-outlined text-base">restart_alt</span>
-                                Repor Padrões
-                            </button>
+                            <div class="flex flex-wrap gap-2 shrink-0">
+                                <button id="syncPermsBtn" type="button"
+                                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-[#0d3fd1] hover:border-[#0d3fd1]/30 hover:bg-blue-50 transition-all">
+                                    <span class="material-symbols-outlined text-base">sync</span>
+                                    Sincronizar
+                                </button>
+                                <button id="resetPermsBtn" type="button"
+                                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all">
+                                    <span class="material-symbols-outlined text-base">restart_alt</span>
+                                    Repor Padrões
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -577,8 +700,37 @@
                         </div>
                     </div>
 
+                    <div class="bg-white mb-4 rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex flex-col md:flex-row gap-3">
+                        <div class="flex-1 relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                            <input id="permSearch" type="search" placeholder="Pesquisar módulo, página ou acção…"
+                                class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                        </div>
+                        <select id="permModuleFilter"
+                            class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50 min-w-[200px]">
+                            <option value="">Todos os módulos</option>
+                        </select>
+                        <!--<div class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">
+                            <span id="permRowCount">0</span> acções
+                        </div>-->
+                        <div class="flex gap-2 shrink-0">
+                            <button type="button" id="permExpandAll"
+                                class="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+                                title="Expandir todos os módulos">
+                                <span class="material-symbols-outlined text-base">unfold_more</span>
+                                Expandir
+                            </button>
+                            <button type="button" id="permCollapseAll"
+                                class="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+                                title="Recolher todos os módulos">
+                                <span class="material-symbols-outlined text-base">unfold_less</span>
+                                Recolher
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div class="table-responsive">
+                        <div class="table-responsive perm-table-wrap">
                             <table class="w-full text-left">
                                 <thead>
                                     <tr class="bg-slate-50/70 border-b border-slate-100">
@@ -647,15 +799,27 @@
                     </div>
 
                     <!-- Legend -->
-                    <div class="flex flex-wrap items-center gap-6 mt-6 px-1">
-                        <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Acesso
-                            total</div>
-                        <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Acesso
-                            parcial / próprio</div>
-                        <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Sem acesso</div>
+                    <div class="mt-6 px-1 space-y-4">
+                        <div class="flex flex-wrap items-center gap-4">
+                            <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
+                                    class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Acesso total (true)</div>
+                            <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
+                                    class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Próprios / leitura (own · view)</div>
+                            <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
+                                    class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Sem acesso (false)</div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 w-full mb-1">Acções do sistema</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Visualizar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Criar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Editar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Eliminar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Aprovar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Exportar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Gerir permissões</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Acesso total</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-medium">Herança por perfil aplicada nos valores por defeito. Clique numa célula para alternar: false → view → own → true. Alterações guardam-se na API e aplicam-se ao middleware JWT em tempo real.</p>
                     </div>
                 </div>
 

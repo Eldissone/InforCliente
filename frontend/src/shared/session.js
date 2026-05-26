@@ -76,6 +76,11 @@ export function wireUsersNav() {
   }
 
   applyRoleVisibility(role);
+
+  import("./permissions.js")
+    .then(({ initPermissionLayer }) => initPermissionLayer())
+    .catch(() => {});
+
   wireUserProfile();
   processUrlMessages();
 }

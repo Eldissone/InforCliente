@@ -213,6 +213,8 @@ userRoutes.patch(
     });
     if (!user) return res.status(404).json({ error: "NOT_FOUND" });
 
+    const roleChanged = body.role && body.role !== user.role;
+
     const rawRole = body.role || user.role;
     const nextRole = rawRole.toUpperCase();
     const isClientRole = nextRole === "CLIENT" || nextRole === "CLIENTE";
@@ -262,6 +264,11 @@ userRoutes.patch(
 
       return user;
     });
+
+    if (roleChanged) {
+      await prisma.userPermission.deleteMany({ where: { userId: id } });
+    }
+
     return res.json({ id: updated.id });
   })
 );

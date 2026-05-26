@@ -61,9 +61,12 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     }
 
     setSession(res);
-    
-    // Toast com design premium
-    toast(`Bem-vindo, ${res.user.email || 'Usuário'}!`);
+
+    import("../../shared/permissions.js")
+      .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
+      .catch(() => {});
+
+    toast(`Bem-vindo, ${res.user.name || res.user.email || "Utilizador"}!`);
 
     const next = getNext();
     setTimeout(() => {

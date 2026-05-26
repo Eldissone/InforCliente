@@ -81,6 +81,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           localStorage.removeItem("pending_auth_accounts");
 
           setSession(authRes);
+          import("../../shared/permissions.js")
+            .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
+            .catch(() => {});
 
           // Store selected project ID to help the dashboard jump to it
           localStorage.setItem("selected_project_id", p.id);
