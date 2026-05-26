@@ -1065,10 +1065,12 @@ async function renderTools(container) {
     Object.values(displayGroups).forEach(group => {
         const statusMap = {
             'AVAILABLE': { label: 'Livre', color: 'bg-emerald-500', icon: 'check_circle' },
-            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-yellow-500', icon: 'hourglass_empty' },
+            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-orange-500', icon: 'hourglass_empty' },
             'ASSIGNED': { label: 'Em Obra', color: 'bg-blue-600', icon: 'construction' },
             'PENDING_RETURN': { label: 'Aguardando Validação', color: 'bg-indigo-500', icon: 'assignment_return' },
-            'MAINTENANCE': { label: 'Manutenção', color: 'bg-red-500', icon: 'build' }
+            'MAINTENANCE': { label: 'Manutenção', color: 'bg-yellow-500', icon: 'build' },
+            'BROKEN': { label: 'Avariado', color: 'bg-red-500', icon: 'broken_image' },
+            'LOST': { label: 'Extraviado', color: 'bg-red-500', icon: 'not_listed_location' }
         };
         const status = statusMap[group.status] || { label: group.status, color: 'bg-slate-500', icon: 'help' };
         const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -1168,8 +1170,8 @@ async function renderTools(container) {
                                 <span class="material-symbols-outlined text-base">edit</span>
                                 <span class="truncate hidden sm:inline">Editar</span>
                             </button>
-                            ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') && group.quantity <= 1 ? `
-                            <button type="button" onclick="window.deleteTool('${group.itemIds[0]}')" class="h-11 w-11 shrink-0 rounded-xl border-2 border-red-50 bg-white text-red-500 hover:bg-red-50 hover:border-red-100 hover:text-red-600 active:scale-95 transition-all flex items-center justify-center" title="Eliminar">
+                            ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') ? `
+                            <button type="button" onclick="window.deleteToolGroup('${group.itemIds.join(',')}')" class="h-11 w-11 shrink-0 rounded-xl border-2 border-red-50 bg-white text-red-500 hover:bg-red-50 hover:border-red-100 hover:text-red-600 active:scale-95 transition-all flex items-center justify-center" title="Eliminar">
                                 <span class="material-symbols-outlined text-base">delete</span>
                             </button>
                             ` : ''}
@@ -1363,11 +1365,11 @@ window.editToolGroup = async (itemIdsCsv) => {
         return;
     }
 
-    const listHtml = units.map((u) => `
+    const listHtml = units.map((u, index) => `
         <button type="button" data-pick-item="${u.id}"
             class="w-full flex items-center justify-between gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-all text-left">
             <div>
-                <p class="text-sm font-bold text-slate-900">${esc(u.product?.name || "Ativo")}</p>
+                <p class="text-sm font-bold text-slate-900">${esc(u.product?.name || "Ativo")} <span class="text-slate-400 font-normal">#${index + 1}</span></p>
                 <p class="text-[10px] font-mono text-slate-500">S/N: ${esc(u.serialNumber || "—")} · ${esc(u.internalTag || "sem etiqueta")}</p>
             </div>
             <span class="material-symbols-outlined text-blue-600">edit</span>
@@ -1405,6 +1407,69 @@ window.deleteTool = async (id) => {
     } catch (error) {
         toast(error.message || "Erro ao eliminar.", { type: "error" });
     }
+};
+
+window.deleteToolGroup = async (itemIdsCsv) => {
+    const ids = String(itemIdsCsv || "").split(",").filter(Boolean);
+    if (ids.length === 0) return;
+    if (ids.length === 1) {
+        return window.deleteTool(ids[0]);
+    }
+
+    if (!canEditTools()) {
+        toast("Sem permissão para eliminar ferramentas.", { type: "error" });
+        return;
+    }
+
+    const { items } = await apiRequest("/items");
+    const units = ids.map((id) => items.find((i) => i.id === id)).filter(Boolean);
+    if (!units.length) return;
+
+    const contentHtml = `
+        <div class="space-y-4 pt-4">
+            <p class="text-sm text-slate-600">Este grupo tem <strong>${units.length}</strong> unidades disponíveis/em manutenção. Quantas deseja eliminar permanentemente?</p>
+            <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade a Eliminar</label>
+                <input type="number" id="deleteQty" min="1" max="${units.length}" value="${units.length}" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-red-500 transition-all">
+            </div>
+            <p class="text-[10px] font-bold text-red-500 mt-2"><span class="material-symbols-outlined text-[12px] align-middle">warning</span> Atenção: Esta ação é irreversível.</p>
+        </div>
+    `;
+
+    const { close } = openModal({
+        title: "Eliminar Unidades em Lote",
+        contentHtml,
+        primaryLabel: "Eliminar Unidades",
+        onPrimary: async ({ body, btn }) => {
+            const qtyInput = body.querySelector("#deleteQty");
+            const qty = parseInt(qtyInput.value);
+            if (isNaN(qty) || qty < 1 || qty > units.length) {
+                return alert("Quantidade inválida.");
+            }
+            if (!confirm(`Tem a certeza absoluta que deseja eliminar ${qty} unidade(s) permanentemente?`)) return;
+
+            setButtonLoading(btn, true);
+            let success = 0;
+            let errors = 0;
+            
+            for (let i = 0; i < qty; i++) {
+                try {
+                    await apiRequest(`/items/${units[i].id}`, { method: "DELETE" });
+                    success++;
+                } catch (error) {
+                    errors++;
+                }
+            }
+            
+            close();
+            if (errors > 0) {
+                toast(`Eliminadas ${success} unidades. Ocorreram ${errors} erros (podem ter movimentos associados).`, { type: "warning" });
+            } else {
+                toast(`${success} unidade(s) eliminada(s).`, { type: "success" });
+            }
+            loadTabContent("tools");
+        }
+    });
 };
 
 window.openDeliveryModal = async ({ toolId, productId }) => {
