@@ -1077,82 +1077,99 @@ async function renderTools(container) {
         const imgUrl = getAssetUrl(group.imageUrl || group.product.image) || 'https://placehold.co/400x300/f8fafc/cbd5e1?text=Ferramenta';
 
         html += `
-            <div class="tool-card bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col h-full" 
+            <div class="tool-card group relative bg-white rounded-[2rem] border border-slate-100/80 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col h-full" 
                  data-status="${group.status}" 
                  data-search="${esc(group.product.name.toLowerCase())}">
                 
-                <div class="h-32 sm:h-40 overflow-hidden bg-slate-50 relative border-b border-slate-100 p-4 shrink-0">
-                    <img src="${imgUrl}" alt="${esc(group.product.name)}" class="w-full h-full object-contain group-hover:scale-110 transition-all duration-700 mix-blend-multiply">
-                    <div class="absolute top-3 right-3 sm:top-4 sm:right-4 px-2.5 py-1 sm:px-3 sm:py-1.5 ${status.color} text-white rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1 sm:gap-1.5 animate-pulse-slow">
+                <!-- Image Header with Premium Background -->
+                <div class="h-40 sm:h-48 relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 p-6 flex items-center justify-center shrink-0">
+                    <!-- Subtle Glow Effect -->
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-white rounded-full opacity-60 blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                    
+                    <img src="${imgUrl}" alt="${esc(group.product.name)}" class="relative z-10 w-full h-full object-contain drop-shadow-md group-hover:scale-110 group-hover:rotate-1 transition-transform duration-500">
+                    
+                    <!-- Glassmorphism Status Badge -->
+                    <div class="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 px-3 py-1.5 ${status.color} bg-opacity-90 backdrop-blur-md text-white rounded-2xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5 border border-white/20">
                         <span class="material-symbols-outlined text-[10px] sm:text-xs">${status.icon}</span>
                         ${status.label}
                     </div>
                 </div>
 
-                <div class="p-4 sm:p-6 flex flex-col flex-grow">
-                    <div class="mb-4">
-                        <h3 class="font-black text-slate-900 text-sm mb-1 group-hover:text-emerald-600 transition-colors line-clamp-2">${esc(group.product.name)}</h3>
-                        <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Modelo: ${esc(group.product.sku || '---')}</p>
+                <div class="p-5 sm:p-6 flex flex-col flex-grow bg-white relative">
+                    <!-- Title & SKU -->
+                    <div class="mb-5">
+                        <h3 class="font-bold text-slate-900 text-sm sm:text-base leading-tight mb-1.5 group-hover:text-[#2afc8d] transition-colors line-clamp-2">${esc(group.product.name)}</h3>
+                        <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[12px]">qr_code_2</span>
+                            ${esc(group.product.sku || '---')}
+                        </p>
                     </div>
                     
-                    <div class="space-y-2 sm:space-y-3 mb-5 sm:mb-6 flex-grow">
-                        <div class="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100/50">
-                            <div class="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
-                                <span class="material-symbols-outlined text-base sm:text-lg">${group.status === 'PENDING_RECEIPT' ? 'local_shipping' : 'location_on'}</span>
+                    <!-- Info Boxes -->
+                    <div class="space-y-2 mb-6 flex-grow">
+                        <!-- Location Box -->
+                        <div class="flex items-center gap-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-2xl border border-slate-100 transition-colors">
+                            <div class="w-8 h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
+                                <span class="material-symbols-outlined text-lg">${group.status === 'PENDING_RECEIPT' ? 'local_shipping' : 'location_on'}</span>
                             </div>
                             <div class="min-w-0 flex-grow">
-                                <p class="text-[9px] sm:text-[10px] font-bold text-slate-700 truncate w-full">
+                                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Localização</p>
+                                <p class="text-[10px] sm:text-[11px] font-bold text-slate-700 truncate w-full">
                                     ${group.status === 'PENDING_RECEIPT' ? esc(group.targetWarehouse?.name || '---') : esc(group.warehouse?.name || '---')}
                                 </p>
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 ${group.responsibleId ? 'bg-amber-50 border-amber-100/50' : 'bg-emerald-50 border-emerald-100/50'} rounded-2xl border transition-colors">
-                            <div class="w-7 h-7 sm:w-8 sm:h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'}">
-                                <span class="material-symbols-outlined text-base sm:text-lg">${group.responsibleId ? 'person_check' : 'check_circle'}</span>
+                        <!-- Status/Responsible Box -->
+                        <div class="flex items-center gap-3 p-3 ${group.responsibleId ? 'bg-amber-50/50 hover:bg-amber-50 border-amber-100/50' : 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100/50'} rounded-2xl border transition-colors">
+                            <div class="w-8 h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'}">
+                                <span class="material-symbols-outlined text-lg">${group.responsibleId ? 'person_check' : 'check_circle'}</span>
                             </div>
                             <div class="flex-grow min-w-0">
-                                <div class="flex justify-between items-baseline gap-1">
-                                    <p class="text-[9px] sm:text-[10px] font-bold ${group.responsibleId ? 'text-amber-900' : 'text-emerald-900'} truncate">
+                                <p class="text-[8px] sm:text-[9px] font-black ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'} uppercase tracking-widest mb-0.5">${group.responsibleId ? 'Responsável' : 'Estado'}</p>
+                                <div class="flex justify-between items-center gap-1">
+                                    <p class="text-[10px] sm:text-[11px] font-bold ${group.responsibleId ? 'text-amber-900' : 'text-emerald-900'} truncate">
                                         ${group.responsibleId ? esc(group.responsible?.name) : 'Livre em Stock'}
                                     </p>
-                                    <span class="text-[10px] sm:text-xs font-black ${group.responsibleId ? 'text-amber-600' : 'text-emerald-600'} shrink-0">x${group.quantity}</span>
+                                    <span class="px-2 py-0.5 rounded-lg bg-white ${group.responsibleId ? 'text-amber-600 border-amber-100' : 'text-emerald-600 border-emerald-100'} border text-[9px] sm:text-[10px] font-black shadow-sm shrink-0">x${group.quantity}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap gap-2 mt-auto">
+                    <!-- Action Buttons -->
+                    <div class="flex gap-2 mt-auto pt-4 border-t border-slate-50">
                         ${group.status === 'PENDING_RECEIPT' && isResponsible ? `
-                            <button onclick="window.confirmReceiptGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-[#2afc8d] text-slate-900 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-[#2afc8d]/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm sm:text-base">check</span> Receber
+                            <button onclick="window.confirmReceiptGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-[#2afc8d] text-slate-900 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#2afc8d]/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-base">check</span> <span class="truncate">Receber</span>
                             </button>
                         ` : ''}
 
                         ${group.status === 'ASSIGNED' && isResponsible ? `
-                            <button onclick="window.requestReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm sm:text-base">assignment_return</span> Devolver
+                            <button onclick="window.requestReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-base">assignment_return</span> <span class="truncate">Devolver</span>
                             </button>
                         ` : ''}
 
                         ${group.status === 'PENDING_RETURN' && isResponsible ? `
-                            <button onclick="window.confirmReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-10 rounded-xl bg-indigo-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-sm sm:text-base">verified</span> Validar
+                            <button onclick="window.confirmReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-indigo-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5">
+                                <span class="material-symbols-outlined text-base">verified</span> <span class="truncate">Validar</span>
                             </button>
                         ` : ''}
 
                         ${group.status === 'AVAILABLE' ? `
-                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-10 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-slate-900/20">
-                                Entregar
+                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-11 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center">
+                                <span class="truncate">Entregar</span>
                             </button>
                         ` : ''}
+                        
                         ${canEditTools() ? `
-                            <button type="button" onclick="window.editToolGroup('${group.itemIds.join(',')}')" class="h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all flex items-center justify-center gap-1" title="Editar">
+                            <button type="button" onclick="window.editToolGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl border-2 border-slate-100 bg-white text-slate-600 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 hover:border-slate-200 hover:text-slate-900 active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5" title="Editar">
                                 <span class="material-symbols-outlined text-base">edit</span>
-                                <span class="hidden sm:inline">Editar</span>
+                                <span class="truncate hidden sm:inline">Editar</span>
                             </button>
                             ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') && group.quantity <= 1 ? `
-                            <button type="button" onclick="window.deleteTool('${group.itemIds[0]}')" class="h-10 w-10 rounded-xl border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center" title="Eliminar">
+                            <button type="button" onclick="window.deleteTool('${group.itemIds[0]}')" class="h-11 w-11 shrink-0 rounded-xl border-2 border-red-50 bg-white text-red-500 hover:bg-red-50 hover:border-red-100 hover:text-red-600 active:scale-95 transition-all flex items-center justify-center" title="Eliminar">
                                 <span class="material-symbols-outlined text-base">delete</span>
                             </button>
                             ` : ''}
