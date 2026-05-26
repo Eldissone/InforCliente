@@ -1109,7 +1109,7 @@ function renderFiles(folders, files) {
 function renderBreadcrumbs() {
   const container = document.getElementById("fileBreadcrumbs");
   if (!container) return;
-  let html = `<button data-go-folder="root" class="hover:text-slate-900 transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Raiz Geral</button>`;
+  let html = `<button data-go-folder="root" class="hover:text-slate-900 transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Geral</button>`;
 
   state.breadcrumbs.forEach(b => {
     html += ` <span class="text-slate-300">/</span> <button data-go-folder="${b.id}" class="hover:text-slate-900 transition-colors">${escapeHtml(b.name)}</button>`;
