@@ -1186,7 +1186,7 @@ async function renderTools(container) {
         `;
     });
 
-    html += `</div>`;
+    html += `</div><div id="toolsPagination"></div>`;
     container.innerHTML = html;
 
     const btnCreate = document.getElementById("btnCreateTool");
@@ -1205,29 +1205,80 @@ async function renderTools(container) {
 
     let currentFilter = 'ALL';
     let currentSearch = '';
+    let currentToolsPage = 1;
+    const TOOLS_PER_PAGE = 12;
 
     const applyFilters = () => {
+        let filteredCards = [];
         toolCards.forEach(card => {
             const matchesStatus = currentFilter === 'ALL'
                 || (currentFilter === 'ASSIGNED' && (card.dataset.status === 'ASSIGNED' || card.dataset.status === 'PENDING_RECEIPT' || card.dataset.status === 'PENDING_RETURN'))
                 || card.dataset.status === currentFilter;
             const matchesSearch = card.dataset.search.includes(currentSearch);
             if (matchesStatus && matchesSearch) {
+                filteredCards.push(card);
+            } else {
+                card.classList.add("hidden");
+            }
+        });
+
+        const totalPages = Math.ceil(filteredCards.length / TOOLS_PER_PAGE) || 1;
+        if (currentToolsPage > totalPages) currentToolsPage = totalPages;
+        if (currentToolsPage < 1) currentToolsPage = 1;
+
+        const startIndex = (currentToolsPage - 1) * TOOLS_PER_PAGE;
+        const endIndex = startIndex + TOOLS_PER_PAGE;
+
+        filteredCards.forEach((card, index) => {
+            if (index >= startIndex && index < endIndex) {
                 card.classList.remove("hidden");
             } else {
                 card.classList.add("hidden");
             }
         });
+
+        renderToolsPagination(filteredCards.length, totalPages);
+    };
+
+    const renderToolsPagination = (totalItems, totalPages) => {
+        const paginationContainer = document.getElementById("toolsPagination");
+        if (!paginationContainer) return;
+        
+        if (totalPages <= 1) {
+            paginationContainer.innerHTML = '';
+            return;
+        }
+
+        paginationContainer.innerHTML = `
+            <div class="px-8 py-4 flex items-center justify-between bg-white rounded-[2rem] mt-6 shadow-sm border border-slate-100">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Página ${currentToolsPage} de ${totalPages} (${totalItems} Ferramentas)</span>
+                <div class="flex gap-2">
+                    <button onclick="window.changeToolsPage(-1)" class="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50" ${currentToolsPage === 1 ? 'disabled' : ''}>
+                        <span class="material-symbols-outlined text-sm">chevron_left</span>
+                    </button>
+                    <button onclick="window.changeToolsPage(1)" class="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50" ${currentToolsPage === totalPages ? 'disabled' : ''}>
+                        <span class="material-symbols-outlined text-sm">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    };
+
+    window.changeToolsPage = (delta) => {
+        currentToolsPage += delta;
+        applyFilters();
     };
 
     searchInput?.addEventListener("input", (e) => {
         currentSearch = e.target.value.toLowerCase();
+        currentToolsPage = 1;
         applyFilters();
     });
 
     filterBtns.forEach(btn => {
         btn.onclick = () => {
             currentFilter = btn.dataset.status;
+            currentToolsPage = 1;
             filterBtns.forEach(b => {
                 b.classList.remove("bg-slate-900", "text-white");
                 b.classList.add("bg-white", "border", "border-slate-200", "text-slate-400");
@@ -1237,6 +1288,8 @@ async function renderTools(container) {
             applyFilters();
         };
     });
+
+    applyFilters();
 }
 
 async function openToolModal(tool = null) {
