@@ -12,6 +12,14 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
+const {
+  isClienteRole,
+  getAccessibleWarehouseIds,
+  assertWarehouseAccessible,
+  assertProjectReadableForCliente,
+  getAccessibleWarehouseIdsForProject,
+} = require("../utils/warehouseAccess");
+
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
 
@@ -126,9 +134,12 @@ stockRoutes.get(
   asyncHandler(async (req, res) => {
     console.log("DEBUG: GET /stock/movements reached");
     const { warehouseId, productId, type, projectId } = req.query;
+    const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
+    if (projectId) await assertProjectReadableForCliente(req, String(projectId));
+
     const items = await prisma.stockMovement.findMany({
       where: {
-        ...(warehouseId && { warehouseId }),
+        ...warehouseFilter,
         ...(productId && { productId }),
         ...(type && { type }),
         ...(projectId && { projectId }),
@@ -161,10 +172,11 @@ stockRoutes.get(
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const { warehouseId, productId, ownerId } = req.query;
-    
+    const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
+
     const items = await prisma.warehouseStock.findMany({
       where: {
-        ...(warehouseId && { warehouseId }),
+        ...warehouseFilter,
         ...(productId && { productId }),
         ...(ownerId !== undefined && { ownerId: ownerId === "null" ? null : ownerId }),
       },
@@ -190,19 +202,28 @@ stockRoutes.get(
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
-    
-    // 1. Encontrar o armazém SITE do projecto
-    const warehouse = await prisma.warehouse.findFirst({
-      where: { projectId, type: "SITE" }
+    const requestedWarehouseId = req.query.warehouseId ? String(req.query.warehouseId) : null;
+    await assertProjectReadableForCliente(req, projectId);
+
+    const warehouseIds = await getAccessibleWarehouseIdsForProject(req, projectId, {
+      type: "SITE",
     });
-    
-    if (!warehouse) {
+
+    if (!warehouseIds.length) {
       return res.json({ items: [] });
     }
-    
-    // 2. Buscar o saldo deste armazém e agrupar por produto
+
+    let selectedWarehouseIds = warehouseIds;
+    if (requestedWarehouseId) {
+      await assertWarehouseAccessible(req, requestedWarehouseId);
+      if (!warehouseIds.includes(requestedWarehouseId)) {
+        return res.status(403).json({ error: "FORBIDDEN" });
+      }
+      selectedWarehouseIds = [requestedWarehouseId];
+    }
+
     const rawItems = await prisma.warehouseStock.findMany({
-      where: { warehouseId: warehouse.id },
+      where: { warehouseId: { in: selectedWarehouseIds } },
       include: {
         product: true,
         warehouse: true,
@@ -218,38 +239,52 @@ stockRoutes.get(
     
     // Agrupar para evitar duplicados por ownerId na visualização do projecto
     const grouped = {};
-    
-    // Primeiro, adicionar os materiais planeados
-    for (const plan of materialPlans) {
-      const key = `${plan.productId}_${warehouse.id}`;
-      grouped[key] = {
-        id: plan.id, // Ou mock do id
-        warehouseId: warehouse.id,
-        productId: plan.productId,
-        product: plan.product,
-        warehouse: warehouse,
-        quantity: 0,
-        quantityPlanned: Number(plan.plannedQty || 0)
-      };
-    }
-    
-    // Depois, adicionar os itens em stock
+    const planByProduct = {};
+    materialPlans.forEach((plan) => {
+      planByProduct[plan.productId] = Number(plan.plannedQty || 0);
+    });
+
     for (const item of rawItems) {
       const key = `${item.productId}_${item.warehouseId}`;
       if (!grouped[key]) {
         grouped[key] = {
           ...item,
           quantity: 0,
-          quantityPlanned: 0
+          quantityPlanned: planByProduct[item.productId] || 0,
         };
       }
       grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
     }
 
+    // Produtos planeados na obra sem saldo em nenhum armazém (sem atribuir a um armazém errado)
+    for (const plan of materialPlans) {
+      const hasStockRow = Object.values(grouped).some((g) => g.productId === plan.productId);
+      if (!hasStockRow) {
+        const key = `${plan.productId}_planned`;
+        grouped[key] = {
+          id: plan.id,
+          warehouseId: null,
+          productId: plan.productId,
+          product: plan.product,
+          warehouse: null,
+          quantity: 0,
+          quantityPlanned: Number(plan.plannedQty || 0),
+        };
+      }
+    }
+
     const productIds = [...new Set(Object.values(grouped).map((g) => g.productId))];
-    const evidenceMap = await getLatestEvidenceByProduct(productIds, warehouse.id);
+    const evidenceMap = await getLatestEvidenceByProduct(
+      productIds,
+      selectedWarehouseIds.length === 1 ? selectedWarehouseIds[0] : null
+    );
     const withImages = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
-    const enriched = await enrichStockItemsWithOwners(withImages);
+    let enriched = await enrichStockItemsWithOwners(withImages);
+    if (isClienteRole(req)) {
+      enriched = enriched.filter(
+        (item) => item.product?.category === "MATERIAL" || item.product?.category === "CONSUMABLE"
+      );
+    }
 
     return res.json({ items: enriched });
   })
@@ -273,6 +308,11 @@ stockRoutes.post(
       reference: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
     }).parse(req.body);
+
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+    await assertWarehouseAccessible(req, body.warehouseId);
 
     const uploadMovementImage = async (file, prefix) => {
       const extension = path.extname(file.originalname).toLowerCase();
@@ -406,9 +446,16 @@ stockRoutes.post(
       notes: z.string().optional().nullable(),
     }).parse(req.body);
 
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     if (body.fromWarehouseId === body.toWarehouseId) {
       return res.status(400).json({ error: "SAME_WAREHOUSE" });
     }
+
+    await assertWarehouseAccessible(req, body.fromWarehouseId);
+    await assertWarehouseAccessible(req, body.toWarehouseId);
 
     const [fromWarehouse, toWarehouse] = await Promise.all([
       prisma.warehouse.findUnique({
@@ -511,6 +558,19 @@ function getScopedClientId(req) {
   const role = (req.user?.role || "").toLowerCase();
   if (role !== "cliente") return null;
   return req.user.clientId || null;
+}
+
+async function resolveWarehouseFilter(req, warehouseId) {
+  if (warehouseId) {
+    await assertWarehouseAccessible(req, warehouseId);
+    return { warehouseId };
+  }
+  if (isClienteRole(req)) {
+    const ids = await getAccessibleWarehouseIds(req, { active: true });
+    if (!ids.length) return { warehouseId: { in: [] } };
+    return { warehouseId: { in: ids } };
+  }
+  return {};
 }
 
 // GET - Resumo de stock para um projecto específico
@@ -620,14 +680,23 @@ stockRoutes.get(
       if (!project) return res.status(403).json({ error: "FORBIDDEN" });
     }
 
+    let movementWhere = { projectId };
+    if (isClienteRole(req)) {
+      const warehouseIds = await getAccessibleWarehouseIdsForProject(req, projectId);
+      movementWhere = {
+        projectId,
+        warehouseId: warehouseIds.length ? { in: warehouseIds } : { in: [] },
+      };
+    }
+
     const items = await prisma.stockMovement.findMany({
-      where: { projectId },
-      include: { 
+      where: movementWhere,
+      include: {
         product: true,
-        warehouse: true
+        warehouse: true,
       },
       orderBy: { createdAt: "desc" },
-      take: 100
+      take: 100,
     });
 
     return res.json({ items });
@@ -647,10 +716,14 @@ stockRoutes.patch(
 
     const oldStock = await prisma.warehouseStock.findUnique({
       where: { id },
-      include: { product: true }
+      include: { product: true },
     });
 
     if (!oldStock) return res.status(404).json({ error: "STOCK_NOT_FOUND" });
+    await assertWarehouseAccessible(req, oldStock.warehouseId);
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
 
     const updated = await prisma.$transaction(async (tx) => {
       // 1. Atualizar o saldo
@@ -685,10 +758,14 @@ stockRoutes.delete(
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
-    // Opcional: Impedir eliminar se tiver quantidade? 
-    // Por agora permitimos para ser um CRUD completo.
-    
+
+    const oldStock = await prisma.warehouseStock.findUnique({ where: { id } });
+    if (!oldStock) return res.status(404).json({ error: "STOCK_NOT_FOUND" });
+    await assertWarehouseAccessible(req, oldStock.warehouseId);
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     await prisma.warehouseStock.delete({ where: { id } });
     return res.status(204).send();
   })

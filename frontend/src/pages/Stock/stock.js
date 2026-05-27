@@ -8,6 +8,10 @@ function canEditTools() {
     return can("stock", "manage") || can("stock", "edit") || can("ferramentas", "edit") || can("ferramentas", "manage");
 }
 
+function canManageWarehouses() {
+    return can("stock", "manage");
+}
+
 function openProductImageLightbox(url, title) {
     const lightbox = document.getElementById("imageLightbox");
     const img = document.getElementById("lightboxImage");
@@ -1589,9 +1593,10 @@ window.openDeliveryModal = async ({ toolId, productId }) => {
 };
 
 async function renderWarehouses(container) {
+    const manageWarehouses = canManageWarehouses();
     const { items: allWarehouses } = await apiRequest("/warehouses?includeDeleted=true");
     const warehouses = allWarehouses.filter(w => w.active);
-    const deletedWarehouses = allWarehouses.filter(w => !w.active);
+    const deletedWarehouses = manageWarehouses ? allWarehouses.filter(w => !w.active) : [];
 
     const { items: allStock } = await apiRequest("/stock/balance");
     const { items: allItems } = await apiRequest("/items");
@@ -1602,9 +1607,11 @@ async function renderWarehouses(container) {
                 <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Rede Logística</h4>
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Armazéns & Estaleiros</h2>
             </div>
+            ${manageWarehouses ? `
             <button id="btnCreateWarehouse" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
                 <span class="material-symbols-outlined text-lg">add</span> Novo Armazém
             </button>
+            ` : ""}
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
@@ -1629,17 +1636,25 @@ async function renderWarehouses(container) {
                                 ${pendingCount} a caminho
                             </div>
                             ` : ''}
+                            ${manageWarehouses ? `
                             <button onclick="event.stopPropagation(); window.editWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
                                 <span class="material-symbols-outlined text-base">edit</span>
                             </button>
                             <button onclick="event.stopPropagation(); window.deleteWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
                                 <span class="material-symbols-outlined text-base">delete</span>
                             </button>
+                            ` : ""}
                         </div>
                     </div>
 
                     <h3 class="text-xl font-bold text-slate-900 mb-1 group-hover:text-emerald-700 transition-colors">${esc(w.name)}</h3>
-                    <p class="text-xs text-slate-400 font-medium mb-6 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : 'Gestão Central de Inventário'}</p>
+                    <p class="text-xs text-slate-400 font-medium mb-2 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : 'Gestão Central de Inventário'}</p>
+                    ${w.project ? `
+                    <span class="inline-flex w-fit items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black capitalize tracking-widest mb-4 ${w.visibleToClient ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}">
+                        <span class="material-symbols-outlined text-xs">${w.visibleToClient ? "visibility" : "visibility_off"}</span>
+                        ${w.visibleToClient ? "Cliente" : "Gestão"}
+                    </span>
+                    ` : ""}
 
                     <div class="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
                         <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Detalhes do Local</span>
@@ -1709,6 +1724,11 @@ async function renderWarehouses(container) {
 
 
 async function openWarehouseModal(warehouseId = null) {
+    if (!canManageWarehouses()) {
+        alert("Sem permissão para gerir armazéns.");
+        return;
+    }
+
     let warehouse = null;
     if (warehouseId) {
         const { items } = await apiRequest("/warehouses");
@@ -1716,12 +1736,13 @@ async function openWarehouseModal(warehouseId = null) {
     }
 
     const projectsRes = await apiRequest("/projects");
+    const visibleChecked = warehouse?.visibleToClient ? "checked" : "";
 
     const contentHtml = `
         <form id="formWarehouse" class="space-y-6 pt-4">
             <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Armazém</label>
-                <input type="text" name="name" value="${esc(warehouse?.name || '')}" required placeholder="Ex: Estaleiro MBT" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <input type="text" name="name" value="${esc(warehouse?.name || '')}" required placeholder="Ex: Consumo Cozinha" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
@@ -1733,12 +1754,19 @@ async function openWarehouseModal(warehouseId = null) {
                 </div>
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Obra Associada</label>
-                    <select name="projectId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
+                    <select name="projectId" id="warehouseProjectSelect" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700">
                         <option value="">Sem obra (Geral)</option>
                         ${projectsRes.items.map(p => `<option value="${p.id}" ${warehouse?.projectId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
                     </select>
                 </div>
             </div>
+            <label id="warehouseVisibilityRow" class="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 cursor-pointer ${warehouse?.projectId || !warehouse ? '' : 'opacity-50'}">
+                <input type="checkbox" name="visibleToClient" value="true" ${visibleChecked} class="mt-1 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-[#2afc8d]" />
+                <span>
+                    <span class="block text-sm font-bold text-slate-800">Visível para o cliente</span>
+                    <span class="block text-[11px] text-slate-500 mt-1">Se activo, utilizadores com perfil Cliente podem ver este armazém e o respetivo stock na obra.</span>
+                </span>
+            </label>
         </form>
     `;
 
@@ -1747,8 +1775,10 @@ async function openWarehouseModal(warehouseId = null) {
         contentHtml,
         primaryLabel: warehouse ? "Atualizar" : "Criar Armazém",
         onPrimary: async ({ body }) => {
-            const data = Object.fromEntries(new FormData(body.querySelector("#formWarehouse")).entries());
+            const form = body.querySelector("#formWarehouse");
+            const data = Object.fromEntries(new FormData(form).entries());
             if (!data.projectId) data.projectId = null;
+            data.visibleToClient = form.querySelector('[name="visibleToClient"]')?.checked === true;
             try {
                 await apiRequest(warehouseId ? `/warehouses/${warehouseId}` : "/warehouses", {
                     method: warehouseId ? "PATCH" : "POST",
@@ -1759,6 +1789,20 @@ async function openWarehouseModal(warehouseId = null) {
             } catch (error) { alert("Erro: " + error.message); }
         }
     });
+
+    const projectSelect = document.getElementById("warehouseProjectSelect");
+    const visibilityRow = document.getElementById("warehouseVisibilityRow");
+    const visibilityCheckbox = visibilityRow?.querySelector('[name="visibleToClient"]');
+    const syncVisibility = () => {
+        const hasProject = Boolean(projectSelect?.value);
+        if (visibilityRow) visibilityRow.classList.toggle("opacity-50", !hasProject);
+        if (visibilityCheckbox) {
+            visibilityCheckbox.disabled = !hasProject;
+            if (!hasProject) visibilityCheckbox.checked = false;
+        }
+    };
+    projectSelect?.addEventListener("change", syncVisibility);
+    syncVisibility();
 }
 
 window.editWarehouse = (id) => openWarehouseModal(id);
@@ -1994,6 +2038,21 @@ async function renderWarehouseDetail(container, warehouseId) {
     // FILTROS RÍGIDOS
     const stock = allStock.filter(s => s.product.category === 'MATERIAL' || s.product.category === 'CONSUMABLE');
     const assignedTools = allTools.filter(t => t.product.category === 'TOOL' || t.product.category === 'EQUIPMENT');
+    const PAGE_SIZE = 8;
+    let materialSearch = "";
+    let toolsSearch = "";
+    let materialPage = 1;
+    let toolsPage = 1;
+    const groupedTools = (() => {
+        const groups = {};
+        assignedTools.forEach(t => {
+            const key = `${t.productId}-${t.responsibleId || 'none'}-${t.status}`;
+            if (!groups[key]) groups[key] = { ...t, quantity: 0, itemIds: [] };
+            groups[key].quantity++;
+            groups[key].itemIds.push(t.id);
+        });
+        return Object.values(groups);
+    })();
 
     const isCentral = warehouse.type === 'CENTRAL';
 
@@ -2053,6 +2112,12 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Stock Ativo</span>
                         </div>
                     </div>
+                    <div class="px-10 py-4 border-b border-slate-50 flex justify-end">
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input id="warehouseMaterialSearch" type="text" placeholder="Pesquisar material (nome, SKU, proprietário...)" class="pl-10 pr-3 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" />
+                        </div>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
@@ -2064,48 +2129,22 @@ async function renderWarehouseDetail(container, warehouseId) {
                                     <th class="px-10 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-50">
-                                ${stock.map(s => {
-        const isLow = s.quantity < 5; // Exemplo de regra simples
-        return `
-                                <tr class="group hover:bg-slate-50/50 transition-colors">
-                                    <td class="px-4 py-6 text-center">${renderProductImageThumb(s.product)}</td>
-                                    <td class="px-10 py-6">
-                                        <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
-                                        <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
-                                    </td>
-                                    <td class="px-10 py-6">
-                                        <span class="px-2 py-0.5 rounded-md ${stockOwnershipBadgeClass(s)} text-[9px] font-black uppercase tracking-widest max-w-[220px] truncate inline-block" title="${esc(stockOwnershipLabel(s))}">
-                                            ${esc(stockOwnershipLabel(s))}
-                                        </span>
-                                    </td>
-                                    <td class="px-10 py-6 text-center">
-                                        <div class="flex flex-col items-center">
-                                            <span class="text-2xl font-black ${isLow ? 'text-amber-500' : 'text-slate-900'}">${s.quantity}</span>
-                                            <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest">${esc(s.product.unit)}</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-10 py-6 text-right">
-                                        <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onclick="window.editStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
-                                                <span class="material-symbols-outlined text-lg">edit</span>
-                                            </button>
-                                            <button onclick="window.deleteStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
-                                                <span class="material-symbols-outlined text-lg">delete</span>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>`;
-    }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>'}
-                            </tbody>
+                            <tbody id="warehouseMaterialTableBody" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
+                    <div id="warehouseMaterialPagination" class="px-10 py-4 border-t border-slate-50"></div>
                 </div>
 
                 <!-- Ferramentas -->
                 <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden w-full shadow-sm mt-4">
                     <div class="px-10 py-8 border-b border-slate-50 flex justify-between items-center">
                         <h3 class="text-lg font-black text-slate-900 uppercase tracking-tighter">Controle de Ferramentas</h3>
+                    </div>
+                    <div class="px-10 py-4 border-b border-slate-50 flex justify-end">
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input id="warehouseToolsSearch" type="text" placeholder="Pesquisar ferramenta (nome, SKU, estado, responsável...)" class="pl-10 pr-3 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" />
+                        </div>
                     </div>
                     <div class="overflow-hidden w-full">
                         <table class="w-full text-left">
@@ -2118,69 +2157,10 @@ async function renderWarehouseDetail(container, warehouseId) {
                                     <th class="px-10 py-5 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-50">
-                                ${(() => {
-            const groups = {};
-            assignedTools.forEach(t => {
-                const key = `${t.productId}-${t.responsibleId || 'none'}-${t.status}`;
-                if (!groups[key]) groups[key] = { ...t, quantity: 0, itemIds: [] };
-                groups[key].quantity++;
-                groups[key].itemIds.push(t.id);
-            });
-
-            return Object.values(groups).map(t => {
-                const imgUrl = getAssetUrl(t.imageUrl || t.product.image) || 'https://placehold.co/100x100/f8fafc/cbd5e1?text=Tool';
-                const statusMap = {
-                    'AVAILABLE': { label: 'Em Stock', color: 'text-emerald-600 bg-emerald-50' },
-                    'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'text-yellow-600 bg-yellow-50' },
-                    'ASSIGNED': { label: 'Em Obra', color: 'text-emerald-600 bg-emerald-50' },
-                    'PENDING_RETURN': { label: 'Aguardando Validação', color: 'text-indigo-600 bg-indigo-50' },
-                    'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
-                };
-                const status = statusMap[t.status] || { label: t.status, color: 'text-slate-600 bg-slate-50' };
-
-                return `
-                                    <tr class="group hover:bg-slate-50/50 transition-colors">
-                                         <td class="px-10 py-6 flex items-center gap-5">
-                                            <div class="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100 shadow-sm transition-transform group-hover:scale-105">
-                                                <img src="${imgUrl}" class="w-full h-full object-cover">
-                                            </div>
-                                            <div>
-                                                <div class="font-bold text-slate-900 text-base">${esc(t.product.name)}</div>
-                                                <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Modelo: ${esc(t.product.sku || '---')}</div>
-                                            </div>
-                                        </td>
-                                        <td class="px-10 py-6 text-center">
-                                            <span class="text-xl font-black text-slate-900">x${t.quantity}</span>
-                                        </td>
-                                        <td class="px-10 py-6">
-                                            <span class="px-3 py-1 ${status.color} rounded-lg text-[9px] font-black uppercase tracking-widest">
-                                                ${status.label}
-                                            </span>
-                                        </td>
-                                        <td class="px-10 py-6">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px] tracking-tighter">
-                                                    ${(t.responsible?.name || '??').slice(0, 2).toUpperCase()}
-                                                </div>
-                                                <div class="flex flex-col">
-                                                    <span class="text-sm font-bold text-slate-700">${esc(t.responsible?.name || 'Indefinido')}</span>
-                                                    <span class="text-[9px] text-slate-400 font-bold italic">${t.assignedAt ? 'Desde ' + new Date(t.assignedAt).toLocaleDateString() : ''}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="px-10 py-6 text-right">
-                                            <button onclick="window.requestReturnGroup('${t.itemIds.join(',')}')" class="h-10 px-6 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
-                                                Devolver
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    `;
-            }).join('') || '<tr><td colspan="4" class="p-20 text-center text-slate-400 font-medium italic">Nenhum ativo alocado a este local.</td></tr>';
-        })()}
-                            </tbody>
+                            <tbody id="warehouseToolsTableBody" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
+                    <div id="warehouseToolsPagination" class="px-10 py-4 border-t border-slate-50"></div>
                 </div>
             </div>
 
@@ -2230,6 +2210,153 @@ async function renderWarehouseDetail(container, warehouseId) {
     window.backToWarehouses = () => { currentTab = "warehouses"; loadTabContent(currentTab); };
     window.openMovement = (id) => openMovementModal("ENTRY", id);
     window.openTransfer = (id) => openTransferModal(id);
+
+    const materialBody = document.getElementById("warehouseMaterialTableBody");
+    const toolsBody = document.getElementById("warehouseToolsTableBody");
+    const materialPager = document.getElementById("warehouseMaterialPagination");
+    const toolsPager = document.getElementById("warehouseToolsPagination");
+    const materialSearchInput = document.getElementById("warehouseMaterialSearch");
+    const toolsSearchInput = document.getElementById("warehouseToolsSearch");
+
+    const statusMap = {
+        'AVAILABLE': { label: 'Em Stock', color: 'text-emerald-600 bg-emerald-50' },
+        'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'text-yellow-600 bg-yellow-50' },
+        'ASSIGNED': { label: 'Em Obra', color: 'text-emerald-600 bg-emerald-50' },
+        'PENDING_RETURN': { label: 'Aguardando Validação', color: 'text-indigo-600 bg-indigo-50' },
+        'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
+    };
+    const renderPager = (el, page, totalPages, onPageFnName) => {
+        if (!el) return;
+        if (totalPages <= 1) {
+            el.innerHTML = `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">1 página</p>`;
+            return;
+        }
+        el.innerHTML = `
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
+                <div class="flex gap-2">
+                    <button ${page <= 1 ? "disabled" : ""} onclick="${onPageFnName}(${page - 1})" class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
+                    <button ${page >= totalPages ? "disabled" : ""} onclick="${onPageFnName}(${page + 1})" class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
+                </div>
+            </div>
+        `;
+    };
+    const renderMaterialsTable = () => {
+        const term = materialSearch.trim().toLowerCase();
+        const filtered = stock.filter((s) => {
+            const owner = stockOwnershipLabel(s).toLowerCase();
+            return (
+                !term ||
+                (s.product?.name || "").toLowerCase().includes(term) ||
+                (s.product?.sku || "").toLowerCase().includes(term) ||
+                owner.includes(term)
+            );
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        materialPage = Math.min(materialPage, totalPages);
+        const start = (materialPage - 1) * PAGE_SIZE;
+        const pageItems = filtered.slice(start, start + PAGE_SIZE);
+        materialBody.innerHTML = pageItems.map((s) => {
+            const isLow = s.quantity < 5;
+            return `
+                <tr class="group hover:bg-slate-50/50 transition-colors">
+                    <td class="px-4 py-6 text-center">${renderProductImageThumb(s.product)}</td>
+                    <td class="px-10 py-6">
+                        <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
+                        <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
+                    </td>
+                    <td class="px-10 py-6">
+                        <span class="px-2 py-0.5 rounded-md ${stockOwnershipBadgeClass(s)} text-[9px] font-black uppercase tracking-widest max-w-[220px] truncate inline-block" title="${esc(stockOwnershipLabel(s))}">
+                            ${esc(stockOwnershipLabel(s))}
+                        </span>
+                    </td>
+                    <td class="px-10 py-6 text-center">
+                        <div class="flex flex-col items-center">
+                            <span class="text-2xl font-black ${isLow ? 'text-amber-500' : 'text-slate-900'}">${s.quantity}</span>
+                            <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest">${esc(s.product.unit)}</span>
+                        </div>
+                    </td>
+                    <td class="px-10 py-6 text-right">
+                        <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onclick="window.editStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
+                                <span class="material-symbols-outlined text-lg">edit</span>
+                            </button>
+                            <button onclick="window.deleteStockBalance('${s.id}')" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>';
+        renderPager(materialPager, materialPage, totalPages, "window.changeWarehouseMaterialPage");
+    };
+    const renderToolsTable = () => {
+        const term = toolsSearch.trim().toLowerCase();
+        const filtered = groupedTools.filter((t) => {
+            const st = (statusMap[t.status]?.label || t.status || "").toLowerCase();
+            const responsible = (t.responsible?.name || "indefinido").toLowerCase();
+            return (
+                !term ||
+                (t.product?.name || "").toLowerCase().includes(term) ||
+                (t.product?.sku || "").toLowerCase().includes(term) ||
+                st.includes(term) ||
+                responsible.includes(term)
+            );
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        toolsPage = Math.min(toolsPage, totalPages);
+        const start = (toolsPage - 1) * PAGE_SIZE;
+        const pageItems = filtered.slice(start, start + PAGE_SIZE);
+        toolsBody.innerHTML = pageItems.map((t) => {
+            const imgUrl = getAssetUrl(t.imageUrl || t.product.image) || 'https://placehold.co/100x100/f8fafc/cbd5e1?text=Tool';
+            const status = statusMap[t.status] || { label: t.status, color: 'text-slate-600 bg-slate-50' };
+            return `
+                <tr class="group hover:bg-slate-50/50 transition-colors">
+                    <td class="px-10 py-6 flex items-center gap-5">
+                        <div class="w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100 shadow-sm transition-transform group-hover:scale-105">
+                            <img src="${imgUrl}" class="w-full h-full object-cover">
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-900 text-base">${esc(t.product.name)}</div>
+                            <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Modelo: ${esc(t.product.sku || '---')}</div>
+                        </div>
+                    </td>
+                    <td class="px-10 py-6 text-center">
+                        <span class="text-xl font-black text-slate-900">x${t.quantity}</span>
+                    </td>
+                    <td class="px-10 py-6">
+                        <span class="px-3 py-1 ${status.color} rounded-lg text-[9px] font-black uppercase tracking-widest">
+                            ${status.label}
+                        </span>
+                    </td>
+                    <td class="px-10 py-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px] tracking-tighter">
+                                ${(t.responsible?.name || '??').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-slate-700">${esc(t.responsible?.name || 'Indefinido')}</span>
+                                <span class="text-[9px] text-slate-400 font-bold italic">${t.assignedAt ? 'Desde ' + new Date(t.assignedAt).toLocaleDateString() : ''}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-10 py-6 text-right">
+                        <button onclick="window.requestReturnGroup('${t.itemIds.join(',')}')" class="h-10 px-6 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
+                            Devolver
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum ativo alocado a este local.</td></tr>';
+        renderPager(toolsPager, toolsPage, totalPages, "window.changeWarehouseToolsPage");
+    };
+    window.changeWarehouseMaterialPage = (p) => { materialPage = Math.max(1, p); renderMaterialsTable(); };
+    window.changeWarehouseToolsPage = (p) => { toolsPage = Math.max(1, p); renderToolsTable(); };
+    materialSearchInput?.addEventListener("input", (e) => { materialSearch = e.target.value || ""; materialPage = 1; renderMaterialsTable(); });
+    toolsSearchInput?.addEventListener("input", (e) => { toolsSearch = e.target.value || ""; toolsPage = 1; renderToolsTable(); });
+    renderMaterialsTable();
+    renderToolsTable();
 
     window.returnTool = async (itemId) => {
         if (!confirm("Confirmar devolução da ferramenta ao Armazém Central?")) return;

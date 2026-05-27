@@ -12,6 +12,12 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
+const {
+  isClienteRole,
+  getAccessibleWarehouseIds,
+  assertWarehouseAccessible,
+} = require("../utils/warehouseAccess");
+
 const itemRoutes = express.Router();
 itemRoutes.use(authRequired);
 
@@ -21,10 +27,22 @@ itemRoutes.get(
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const { status, warehouseId, projectId, responsibleId, productId } = req.query;
+
+    let warehouseFilter = {};
+    if (warehouseId) {
+      await assertWarehouseAccessible(req, String(warehouseId));
+      warehouseFilter = { warehouseId: String(warehouseId) };
+    } else if (isClienteRole(req)) {
+      const ids = await getAccessibleWarehouseIds(req, { active: true });
+      warehouseFilter = ids.length
+        ? { OR: [{ warehouseId: { in: ids } }, { targetWarehouseId: { in: ids } }] }
+        : { warehouseId: { in: [] } };
+    }
+
     const items = await prisma.item.findMany({
       where: {
         ...(status && { status }),
-        ...(warehouseId && { warehouseId }),
+        ...warehouseFilter,
         ...(projectId && { projectId }),
         ...(responsibleId && { responsibleId }),
         ...(productId && { productId }),

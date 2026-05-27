@@ -2452,7 +2452,8 @@ async function loadStock() {
 
   try {
     const { items: warehouses } = await apiRequest("/warehouses");
-    const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
+    const projectWarehouses = warehouses.filter((w) => w.projectId === id && w.type === "SITE");
+    const projectWarehouse = projectWarehouses[0];
 
     if (!projectWarehouse) {
       el("stockMovementsTbody").innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum armazém associado a esta obra.</td></tr>`;
@@ -2463,7 +2464,7 @@ async function loadStock() {
 
     const [balanceRes, movementsRes] = await Promise.all([
       apiRequest(`/stock/project/${id}/balance`),
-      apiRequest(`/stock/movements?warehouseId=${encodeURIComponent(projectWarehouse.id)}`),
+      apiRequest(`/stock/movements?projectId=${encodeURIComponent(id)}`),
     ]);
 
     stockState.summary = balanceRes.items; // Guardar o saldo
@@ -2570,15 +2571,23 @@ function openStockMovementDetailModal(moveId) {
   const m = movements.find((x) => x.id === moveId);
   if (!m) return;
 
-  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, m.productId);
+  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, m.productId, m.warehouseId);
   const { entries } = pickPrimaryEntryMovement(pMovements);
-  const balance = Number(stockState.summary?.find((s) => s.productId === m.productId)?.quantity ?? totalIn - totalOut);
+  const balance = Number(
+    stockState.summary?.find(
+      (s) => s.productId === m.productId && String(s.warehouseId || "") === String(m.warehouseId || "")
+    )?.quantity ?? totalIn - totalOut
+  );
 
   openModal({
     title: "Nova Operação Logística — Detalhes da Entrada",
     contentHtml: buildStockMovementDetailHtml(m, {
       stockSummary: {
-        planned: Number(stockState.summary?.find((s) => s.productId === m.productId)?.quantityPlanned || 0),
+        planned: Number(
+          stockState.summary?.find(
+            (s) => s.productId === m.productId && String(s.warehouseId || "") === String(m.warehouseId || "")
+          )?.quantityPlanned || 0
+        ),
         totalIn,
         totalOut,
         balance,
@@ -2591,18 +2600,20 @@ function openStockMovementDetailModal(moveId) {
   });
 }
 
-function openStockInventoryDetailModal(productId) {
+function openStockInventoryDetailModal(productId, warehouseId = null) {
   const root = el("stock_inventory_content");
   const summary = root?._summary || stockState.summary || [];
   const movements = root?._movements || stockState.items || [];
-  const item = summary.find((s) => s.productId === productId);
+  const item = summary.find(
+    (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
+  );
   if (!item) return;
 
   const product = item.product || {};
   const planned = Number(item.quantityPlanned || 0);
   const balance = Number(item.quantity || 0);
-  const warehouseName = item.warehouse?.name || "Geral";
-  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId);
+  const warehouseName = item.warehouse?.name || (warehouseId ? "Geral" : "Obra (planeado)");
+  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId, warehouseId);
   const { primary, entries } = pickPrimaryEntryMovement(pMovements);
 
   if (!primary) {
@@ -2802,15 +2813,12 @@ function renderStockInventory(movements, summary) {
     const balance = Number(item.quantity || 0);
     const product = item.product || {};
     const planned = Number(item.quantityPlanned || 0);
-    const warehouseName = item.warehouse?.name || "Geral";
+    const warehouseName = item.warehouse?.name || "Obra (planeado)";
 
-    // Calcular totalIn e totalOut a partir dos movimentos se necessário, 
-    // ou simplesmente mostrar o saldo atual.
-    // Para consistência com o backend, vamos filtrar os movimentos deste produto
-    const { totalIn, totalOut } = computeStockTotals(movements, item.productId);
+    const { totalIn, totalOut } = computeStockTotals(movements, item.productId, item.warehouseId);
 
     return `
-      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-inventory="${item.productId}" title="Clique para ver detalhes da entrada">
+      <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-inventory="${item.productId}::${item.warehouseId || ""}" title="Clique para ver detalhes da entrada">
         <td class="px-6 py-5 text-center text-xs font-bold text-slate-400 w-12">${idx + 1}</td>
         <td class="selection-cell-stock ${stockState.isSelectionModeStock ? "" : "hidden"} px-6 py-5">
           <input type="checkbox" class="stock-item-checkbox rounded border-slate-300" onclick="event.stopPropagation()"
@@ -3232,7 +3240,8 @@ function wireStock() {
 
     const invRow = e.target.closest("[data-view-inventory]");
     if (invRow && !e.target.closest("button")) {
-      openStockInventoryDetailModal(invRow.dataset.viewInventory);
+      const [productId, warehouseId] = String(invRow.dataset.viewInventory || "").split("::");
+      openStockInventoryDetailModal(productId, warehouseId || null);
     }
   });
 

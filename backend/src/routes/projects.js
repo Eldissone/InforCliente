@@ -315,12 +315,13 @@ projectRoutes.post(
         select: { id: true, name: true },
       });
 
-      // Automação Logística: Criar Armazém de Obra (Estaleiro)
+      // Automação Logística: Criar Armazém de Obra (Estaleiro) — visível ao cliente por defeito
       await tx.warehouse.create({
         data: {
           name: `Estaleiro: ${p.name}`,
           type: "SITE",
           projectId: p.id,
+          visibleToClient: true,
         },
       });
 

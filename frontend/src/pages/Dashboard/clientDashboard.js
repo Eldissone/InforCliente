@@ -50,6 +50,7 @@ let state = {
   stockFilters: {
     search: "",
   },
+  selectedStockWarehouseId: null,
   collapsedTables: JSON.parse(localStorage.getItem("InfoCliente.clientCollapsedTables") || "{}")
 };
 
@@ -327,27 +328,51 @@ async function loadStock() {
 
   try {
     const { items: warehouses } = await apiRequest("/warehouses");
-    const projectWarehouse = warehouses.find(
+    const projectWarehouses = warehouses.filter(
       (w) => w.projectId === state.projectId && w.type === "SITE"
     );
+    const hasMultipleWarehouses = projectWarehouses.length > 1;
+
+    if (!projectWarehouses.length) {
+      stockPageData = { summary: [], movements: [] };
+      state.selectedStockWarehouseId = null;
+      renderStockSummaryCards([], []);
+      renderStockWarehouseSelector([], null);
+      renderStockMovements([]);
+      renderStockInventory([], []);
+      renderStockGallery([]);
+      return;
+    }
+
+    if (!state.selectedStockWarehouseId || !projectWarehouses.some((w) => w.id === state.selectedStockWarehouseId)) {
+      state.selectedStockWarehouseId = projectWarehouses[0].id;
+    }
+    const projectWarehouse = projectWarehouses.find((w) => w.id === state.selectedStockWarehouseId) || projectWarehouses[0];
 
     const movementsUrl = projectWarehouse
       ? `/stock/movements?warehouseId=${encodeURIComponent(projectWarehouse.id)}`
       : `/stock/movements?projectId=${state.projectId}`;
 
+    const balanceUrl = projectWarehouse
+      ? `/stock/project/${state.projectId}/balance?warehouseId=${encodeURIComponent(projectWarehouse.id)}`
+      : `/stock/project/${state.projectId}/balance`;
+
     const [balanceRes, movementsRes, photosRes] = await Promise.all([
-      apiRequest(`/stock/project/${state.projectId}/balance`),
+      apiRequest(balanceUrl),
       apiRequest(movementsUrl),
       apiRequest(`/projects/${state.projectId}/photos`)
     ]);
 
-    const summaryItems = balanceRes.items || [];
+    const summaryItems = (balanceRes.items || []).filter(
+      (item) => item?.product?.category === "MATERIAL" || item?.product?.category === "CONSUMABLE"
+    );
     const movements = (movementsRes.items || []).filter(isStockEntryMovement);
     const photos = photosRes.items || [];
 
     stockPageData = { summary: summaryItems, movements };
 
     renderStockSummaryCards(summaryItems, movements);
+    renderStockWarehouseSelector(projectWarehouses, hasMultipleWarehouses ? projectWarehouse.id : null);
     renderStockMovements(movements);
     renderStockInventory(summaryItems, movements);
     renderStockGallery(photos);
@@ -362,30 +387,77 @@ function renderStockSummaryCards(summary, movements) {
   const container = document.getElementById("stockSummary");
   if (!container) return;
 
-  const uniqueProducts = summary.length;
-  const totalEntries = movements.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-  const currentBalance = summary.reduce((acc, s) => acc + Number(s.quantity || 0), 0);
+  const entryMovements = filterLogisticsEntries(movements || []);
+  const visibleSummary = (summary || []).filter((item) => {
+    const balance = Number(item.quantity || 0);
+    const totalIn = entryMovements
+      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
+      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    return balance > 0 || totalIn > 0;
+  });
 
+  const uniqueProducts = visibleSummary.length;
+  const totalEntries = entryMovements.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const currentBalance = visibleSummary.reduce((acc, s) => acc + Number(s.quantity || 0), 0);
   container.innerHTML = `
-        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total de Artigos</p>
-            <p class="text-2xl font-bold text-slate-900">${uniqueProducts}</p>
+        <div class="w-full bg-white p-6 rounded-2xl border border-slate-100 shadow-sm min-h-[118px] flex flex-col justify-between">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Total de Artigos</p>
+            <p class="text-4xl leading-none font-black text-slate-900">${uniqueProducts}</p>
         </div>
-        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total Recebido (Entradas)</p>
-            <p class="text-2xl font-bold text-emerald-600">${totalEntries.toLocaleString("pt-AO")}</p>
+        <div class="w-full bg-white p-6 rounded-2xl border border-slate-100 shadow-sm min-h-[118px] flex flex-col justify-between">
+            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Recebido (Entradas)</p>
+            <p class="text-4xl leading-none font-black text-emerald-600">${totalEntries.toLocaleString("pt-AO")}</p>
         </div>
-        <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl md:col-span-1">
-            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Saldo em Armazém</p>
-            <p class="text-2xl font-bold text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
+        <div class="w-full bg-[#0F172A] p-6 rounded-2xl border border-slate-800 shadow-lg min-h-[118px] flex flex-col justify-between">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Saldo em Armazém</p>
+            <p class="text-4xl leading-none font-black text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
         </div>
     `;
 }
 
-function buildClientEntryStockSummary(productId, warehouseName) {
-  const item = stockPageData.summary?.find((s) => s.productId === productId);
+function renderStockWarehouseSelector(projectWarehouses = [], selectedWarehouseId = null) {
+  const inventoryContent = document.getElementById("stock_inventory_content");
+  if (!inventoryContent) return;
+
+  const existing = document.getElementById("clientStockWarehouseSelectorWrap");
+  if (existing) existing.remove();
+
+  if ((projectWarehouses || []).length <= 1) return;
+
+  const wrap = document.createElement("div");
+  wrap.id = "clientStockWarehouseSelectorWrap";
+  wrap.className = "mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col md:flex-row md:items-center md:justify-between gap-3";
+  wrap.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-slate-400 text-lg">warehouse</span>
+      <div>
+        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Armazém visível</p>
+        <p class="text-[10px] font-bold text-slate-500">${projectWarehouses.length} armazéns disponíveis</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 md:min-w-[320px]">
+      <select id="clientStockWarehouseSelectInline" class="h-10 w-full bg-white border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+        ${projectWarehouses.map((w) => `<option value="${w.id}" ${w.id === selectedWarehouseId ? "selected" : ""}>${escapeHtml(w.name)}</option>`).join("")}
+      </select>
+    </div>
+  `;
+  inventoryContent.prepend(wrap);
+
+  const select = document.getElementById("clientStockWarehouseSelectInline");
+  select?.addEventListener("change", async (e) => {
+    state.selectedStockWarehouseId = e.target.value || null;
+    await loadStock();
+  });
+}
+
+function buildClientEntryStockSummary(productId, warehouseId, warehouseName) {
+  const item = stockPageData.summary?.find(
+    (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
+  );
   const productEntries = filterLogisticsEntries(
-    (stockPageData.movements || []).filter((m) => m.productId === productId)
+    (stockPageData.movements || []).filter(
+      (m) => m.productId === productId && String(m.warehouseId || "") === String(warehouseId || "")
+    )
   );
   const totalIn = productEntries.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
   return {
@@ -402,13 +474,17 @@ function openStockMovementDetailModal(moveId) {
   const m = movements.find((x) => x.id === moveId);
   if (!m) return;
 
-  const { entries } = pickPrimaryEntryMovement(movements.filter((x) => x.productId === m.productId));
+  const { entries } = pickPrimaryEntryMovement(
+    movements.filter(
+      (x) => x.productId === m.productId && String(x.warehouseId || "") === String(m.warehouseId || "")
+    )
+  );
 
   openModal({
     title: "Detalhes da Entrada em Armazém",
     contentHtml: buildStockMovementDetailHtml(m, {
       entriesOnly: true,
-      stockSummary: buildClientEntryStockSummary(m.productId, m.warehouse?.name),
+      stockSummary: buildClientEntryStockSummary(m.productId, m.warehouseId, m.warehouse?.name),
       entryHistory: entries,
     }),
     primaryLabel: "Fechar",
@@ -416,15 +492,19 @@ function openStockMovementDetailModal(moveId) {
   });
 }
 
-function openStockInventoryDetailModal(productId) {
+function openStockInventoryDetailModal(productId, warehouseId) {
   const summary = stockPageData.summary || [];
   const movements = stockPageData.movements || [];
-  const item = summary.find((s) => s.productId === productId);
+  const item = summary.find(
+    (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
+  );
   if (!item) return;
 
-  const stockSummary = buildClientEntryStockSummary(productId);
+  const stockSummary = buildClientEntryStockSummary(productId, warehouseId);
   const { primary, entries } = pickPrimaryEntryMovement(
-    filterLogisticsEntries(movements.filter((m) => m.productId === productId))
+    filterLogisticsEntries(
+      movements.filter((m) => m.productId === productId && String(m.warehouseId || "") === String(warehouseId || ""))
+    )
   );
 
   if (!primary) {
@@ -523,20 +603,32 @@ function renderStockInventory(summary, movements) {
   }
 
   const entryMovements = filterLogisticsEntries(movements);
+  const visibleSummary = summary.filter((item) => {
+    const balance = Number(item.quantity || 0);
+    const totalIn = entryMovements
+      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
+      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    return balance > 0 || totalIn > 0;
+  });
 
-  tbody.innerHTML = summary.map(item => {
+  if (visibleSummary.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Sem stock em armazém</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = visibleSummary.map(item => {
     const saldo = Number(item.quantity || 0);
     const product = item.product || {};
     const warehouseName = item.warehouse?.name || "Geral";
     const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
 
     const totalIn = entryMovements
-      .filter((m) => m.productId === item.productId)
+      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
       .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
     const planned = Number(item.quantityPlanned || 0);
 
     return `
-          <tr class="hover:bg-slate-50 transition-colors cursor-pointer hover:bg-slate-50/80" data-view-inventory="${item.productId}" title="Clique para ver detalhes da entrada">
+          <tr class="hover:bg-slate-50 transition-colors cursor-pointer hover:bg-slate-50/80" data-view-inventory="${item.productId}::${item.warehouseId || ""}" title="Clique para ver detalhes da entrada">
             <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
                 <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
@@ -1863,7 +1955,8 @@ function wireStockEvents() {
     }
     const rowInv = e.target.closest("[data-view-inventory]");
     if (rowInv) {
-      openStockInventoryDetailModal(rowInv.dataset.viewInventory);
+      const [productId, warehouseId] = String(rowInv.dataset.viewInventory || "").split("::");
+      openStockInventoryDetailModal(productId, warehouseId || null);
     }
   });
 }

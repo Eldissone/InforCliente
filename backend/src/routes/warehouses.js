@@ -3,6 +3,11 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
 const { authRequired, requirePermission } = require("../middlewares/auth");
+const {
+  buildWarehouseListWhere,
+  assertWarehouseAccessible,
+  isClienteRole,
+} = require("../utils/warehouseAccess");
 
 const warehouseRoutes = express.Router();
 warehouseRoutes.use(authRequired);
@@ -13,10 +18,12 @@ warehouseRoutes.get(
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
     const { includeDeleted } = req.query;
+    const baseWhere = {
+      ...(includeDeleted !== "true" && { active: true }),
+    };
+
     const items = await prisma.warehouse.findMany({
-      where: {
-        ...(includeDeleted !== "true" && { active: true })
-      },
+      where: buildWarehouseListWhere(req, baseWhere),
       orderBy: { name: "asc" },
       include: {
         project: {
@@ -37,14 +44,29 @@ warehouseRoutes.post(
   "/",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
-    const body = z.object({
-      name: z.string().min(2),
-      type: z.enum(["CENTRAL", "SITE", "CLIENT"]),
-      projectId: z.string().optional().nullable(),
-    }).parse(req.body);
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    const body = z
+      .object({
+        name: z.string().min(2),
+        type: z.enum(["CENTRAL", "SITE", "CLIENT"]),
+        projectId: z.string().optional().nullable(),
+        visibleToClient: z
+          .union([z.boolean(), z.string()])
+          .optional()
+          .transform((v) => v === true || v === "true" || v === "on"),
+      })
+      .parse(req.body);
 
     const warehouse = await prisma.warehouse.create({
-      data: body,
+      data: {
+        name: body.name,
+        type: body.type,
+        projectId: body.projectId || null,
+        visibleToClient: body.visibleToClient ?? false,
+      },
     });
     return res.status(201).json(warehouse);
   })
@@ -55,13 +77,26 @@ warehouseRoutes.patch(
   "/:id",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     const { id } = req.params;
-    const body = z.object({
-      name: z.string().optional(),
-      type: z.enum(["CENTRAL", "SITE", "CLIENT"]).optional(),
-      active: z.boolean().optional(),
-      projectId: z.string().optional().nullable(),
-    }).parse(req.body);
+    const body = z
+      .object({
+        name: z.string().optional(),
+        type: z.enum(["CENTRAL", "SITE", "CLIENT"]).optional(),
+        active: z.boolean().optional(),
+        projectId: z.string().optional().nullable(),
+        visibleToClient: z
+          .union([z.boolean(), z.string()])
+          .optional()
+          .transform((v) => {
+            if (v === undefined) return undefined;
+            return v === true || v === "true" || v === "on";
+          }),
+      })
+      .parse(req.body);
 
     const updated = await prisma.warehouse.update({
       where: { id },
@@ -76,35 +111,33 @@ warehouseRoutes.delete(
   "/:id",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     const { id } = req.params;
 
-    // 1. Verificar se existem saldos de stock
     const stockCount = await prisma.warehouseStock.count({
-      where: { warehouseId: id, quantity: { gt: 0 } }
+      where: { warehouseId: id, quantity: { gt: 0 } },
     });
 
     if (stockCount > 0) {
       return res.status(400).json({ error: "WAREHOUSE_HAS_STOCK" });
     }
 
-    // 2. Verificar se existem ativos (Items) vinculados
     const itemCount = await prisma.item.count({
-      where: { 
-        OR: [
-          { warehouseId: id },
-          { targetWarehouseId: id }
-        ]
-      }
+      where: {
+        OR: [{ warehouseId: id }, { targetWarehouseId: id }],
+      },
     });
 
     if (itemCount > 0) {
       return res.status(400).json({ error: "WAREHOUSE_HAS_ITEMS" });
     }
 
-    // 3. Em vez de eliminar permanentemente, movemos para a "Reciclagem" (active: false)
     await prisma.warehouse.update({
       where: { id },
-      data: { active: false }
+      data: { active: false },
     });
 
     return res.status(204).send();
@@ -116,10 +149,14 @@ warehouseRoutes.post(
   "/:id/restore",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     const { id } = req.params;
     await prisma.warehouse.update({
       where: { id },
-      data: { active: true }
+      data: { active: true },
     });
     return res.json({ message: "Armazém restaurado com sucesso." });
   })
@@ -130,16 +167,22 @@ warehouseRoutes.delete(
   "/:id/permanent",
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
     const { id } = req.params;
-    
-    // Deletar registros relacionados primeiro
+
     await prisma.$transaction([
       prisma.warehouseStock.deleteMany({ where: { warehouseId: id } }),
       prisma.stockMovement.deleteMany({ where: { warehouseId: id } }),
-      prisma.item.updateMany({ where: { targetWarehouseId: id }, data: { targetWarehouseId: null } }),
-      prisma.warehouse.delete({ where: { id } })
+      prisma.item.updateMany({
+        where: { targetWarehouseId: id },
+        data: { targetWarehouseId: null },
+      }),
+      prisma.warehouse.delete({ where: { id } }),
     ]);
-    
+
     return res.status(204).send();
   })
 );

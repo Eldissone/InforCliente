@@ -124,7 +124,7 @@ model Project {
   progressTasks       ProjectProgressTask[]
   transactions        ProjectTransaction[]
   stockMovements      StockMovement[]
-  warehouse           Warehouse?
+  warehouses          Warehouse[]
   assignedUsers       User[]                   @relation("AssignedUsers")
   dailyPlans          DailyPlan[]
   materialPlans       ProjectMaterialPlan[]
@@ -284,18 +284,21 @@ model ProjectPayment {
 }
 
 model Warehouse {
-  id          String           @id @default(cuid())
-  name        String
-  type        WarehouseType    @default(CENTRAL)
-  active      Boolean          @default(true)
-  projectId   String?          @unique
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  items       Item[]
-  targetItems Item[]           @relation("ItemTargetWarehouse")
-  movements   StockMovement[]
-  project     Project?         @relation(fields: [projectId], references: [id])
-  stock       WarehouseStock[]
+  id              String           @id @default(cuid())
+  name            String
+  type            WarehouseType    @default(CENTRAL)
+  active          Boolean          @default(true)
+  visibleToClient Boolean          @default(false)
+  projectId       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  items           Item[]
+  targetItems     Item[]           @relation("ItemTargetWarehouse")
+  movements       StockMovement[]
+  project         Project?         @relation(fields: [projectId], references: [id])
+  stock           WarehouseStock[]
+
+  @@index([projectId])
 }
 
 model Product {

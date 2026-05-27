@@ -194,8 +194,12 @@ export function buildStockMovementDetailHtml(m, options = {}) {
     </div>`;
 }
 
-export function computeStockTotals(movements, productId) {
-  const pMovements = movements.filter((m) => m.productId === productId);
+export function computeStockTotals(movements, productId, warehouseId = null) {
+  const pMovements = movements.filter((m) => {
+    if (m.productId !== productId) return false;
+    if (warehouseId == null || warehouseId === "") return true;
+    return String(m.warehouseId || "") === String(warehouseId);
+  });
   const totalIn = pMovements
     .filter((m) => m.type === "ENTRY" || m.type === "TRANSFER_IN" || m.type === "ENTRADA")
     .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
