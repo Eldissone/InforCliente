@@ -641,12 +641,19 @@ async function renderOperationStatus(lines) {
     }
   });
 
+  // Calcular os Custos Totais da Obra (soma de todos os lançados nas operações)
+  const totalCustos = Object.values(cats).reduce((acc, c) => acc + c.consumed, 0);
+
   Object.values(cats).forEach(c => {
-    const pct = c.total > 0 ? Math.round((c.consumed / c.total) * 100) : 0;
+    // Calculamos a % com base nos Custos Totais da Obra (peso de cada categoria)
+    const pct = totalCustos > 0 ? Math.round((c.consumed / totalCustos) * 100) : 0;
     const pctEl = el(c.pctId);
     if (pctEl) {
       pctEl.textContent = `${pct}%`;
-      pctEl.className = pct >= 100 ? "text-error font-bold" : "text-[#2afc8d] font-bold";
+      if (pct >= 100 && c.consumed > 0) {
+        pctEl.classList.remove("text-blue-400", "text-emerald-400", "text-yellow-400", "text-orange-400", "text-[#2afc8d]");
+        pctEl.classList.add("text-error", "font-bold", "animate-pulse");
+      }
     }
     const subEl = el(c.subId);
     if (subEl) {

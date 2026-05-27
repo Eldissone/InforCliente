@@ -1206,7 +1206,7 @@ async function renderTools(container) {
     let currentFilter = 'ALL';
     let currentSearch = '';
     let currentToolsPage = 1;
-    const TOOLS_PER_PAGE = 12;
+    const TOOLS_PER_PAGE = 10;
 
     const applyFilters = () => {
         let filteredCards = [];
