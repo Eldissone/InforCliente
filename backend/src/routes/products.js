@@ -43,8 +43,8 @@ productRoutes.post(
   requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const body = z.object({
-      sku: z.string().optional().nullable(),
-      barcode: z.string().optional().nullable(),
+      sku: z.string().trim().optional().nullable().transform(v => v === "" ? null : v),
+      barcode: z.string().trim().optional().nullable().transform(v => v === "" ? null : v),
       name: z.string().min(2),
       description: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "TOOL", "EQUIPMENT", "CONSUMABLE"]),
@@ -66,8 +66,8 @@ productRoutes.patch(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const body = z.object({
-      sku: z.string().optional().nullable(),
-      barcode: z.string().optional().nullable(),
+      sku: z.string().trim().optional().nullable().transform(v => v === "" ? null : v),
+      barcode: z.string().trim().optional().nullable().transform(v => v === "" ? null : v),
       name: z.string().optional(),
       description: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "TOOL", "EQUIPMENT", "CONSUMABLE"]).optional(),
