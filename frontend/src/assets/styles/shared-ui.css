@@ -80,8 +80,24 @@
 .table-responsive {
   width: 100%;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 85vh;
   -webkit-overflow-scrolling: touch;
 }
+
+.overflow-x-auto:has(> table) {
+  overflow-y: auto;
+  max-height: 65vh;
+}
+
+.table-responsive thead th,
+.overflow-x-auto:has(> table) thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #f8fafc;
+}
+
 
 .table-responsive table {
   min-width: 600px; /* Force minimum width to enable scrolling */

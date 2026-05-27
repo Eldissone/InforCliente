@@ -252,7 +252,7 @@ async function renderInventory(container) {
             </div>
         </div>
 
-        <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+        <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm table-responsive">
             <table class="w-full text-left">
                 <thead>
                     <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
@@ -450,7 +450,7 @@ async function renderCatalog(container) {
                         <span class="material-symbols-outlined text-xl transition-transform ${isExpanded ? 'rotate-180' : ''}">expand_more</span>
                     </div>
                 </div>
-                <div class="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm transition-all duration-300 ${isExpanded ? 'opacity-100 mt-2' : 'hidden opacity-0 h-0'} overflow-hidden">
+                <div class="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm transition-all duration-300 ${isExpanded ? 'opacity-100 mt-2' : 'hidden opacity-0 h-0'} overflow-hidden table-responsive">
                     <table class="w-full text-left">
                         <thead>
                             <tr class="bg-slate-50/50 border-b border-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
@@ -2146,7 +2146,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <input id="warehouseToolsSearch" type="text" placeholder="Pesquisar ferramenta (nome, SKU, estado, responsável...)" class="pl-10 pr-3 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" />
                         </div>
                     </div>
-                    <div class="overflow-hidden w-full">
+                    <div class="overflow-hidden w-full table-responsive">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
