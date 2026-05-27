@@ -52,10 +52,24 @@ productRoutes.post(
       minStock: z.number().default(0),
     }).parse(req.body);
 
-    const product = await prisma.product.create({
-      data: body,
-    });
-    return res.status(201).json(product);
+    try {
+      const product = await prisma.product.create({
+        data: body,
+      });
+      return res.status(201).json(product);
+    } catch (error) {
+      if (error.code === 'P2002') {
+        const target = error.meta?.target || [];
+        if (target.includes('sku')) {
+          return res.status(400).json({ error: "O SKU inserido já está em uso." });
+        }
+        if (target.includes('barcode')) {
+          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
+        }
+        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
+      }
+      throw error;
+    }
   })
 );
 
@@ -76,11 +90,25 @@ productRoutes.patch(
       image: z.string().optional().nullable(),
     }).parse(req.body);
 
-    const updated = await prisma.product.update({
-      where: { id },
-      data: body,
-    });
-    return res.json(updated);
+    try {
+      const updated = await prisma.product.update({
+        where: { id },
+        data: body,
+      });
+      return res.json(updated);
+    } catch (error) {
+      if (error.code === 'P2002') {
+        const target = error.meta?.target || [];
+        if (target.includes('sku')) {
+          return res.status(400).json({ error: "O SKU inserido já está em uso." });
+        }
+        if (target.includes('barcode')) {
+          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
+        }
+        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
+      }
+      throw error;
+    }
   })
 );
 
