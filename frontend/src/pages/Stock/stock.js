@@ -3216,14 +3216,29 @@ async function renderRequests(container) {
                             <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
                         </h5>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            ${p.materials.map(m => `
+                            ${p.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE').map(m => `
                                 <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
                                     <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
                                     <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
                                 </div>
+                            `).join('') || '<p class="text-xs text-slate-400">Nenhum material.</p>'}
+                        </div>
+                    </div>
+                    ${p.materials.some(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT') ? `
+                    <div class="bg-indigo-50 rounded-2xl p-4 border border-indigo-100 mt-2">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">build</span> Ferramentas Requisitadas
+                        </h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${p.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT').map(m => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-indigo-100 flex items-center justify-between">
+                                    <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+                                    <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
+                                </div>
                             `).join('')}
                         </div>
                     </div>
+                    ` : ''}
                 </div>
 
                 <div class="flex items-end shrink-0">
@@ -3257,19 +3272,21 @@ async function renderRequests(container) {
 window.providePlanMaterialsGlobal = async (id, event) => {
     // Procura o plano no cache
     const plan = _pendingPlans.find(p => p.id === id);
-    const materials = plan?.materials || [];
+    const allMaterials = plan?.materials || [];
+    const mats = allMaterials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
+    const tools = allMaterials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
 
-    const materialsHtml = materials.length > 0
-        ? materials.map((m, i) => `
+    const buildHtml = (items, type) => items.length > 0
+        ? items.map((m) => `
             <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
-                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Solicitado: <span class="text-amber-600 font-black">${m.requestedQty} ${m.product?.unit || ''}</span></p>
+                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || (type === 'TOOL' ? 'Ferramenta Desconhecida' : 'Material Desconhecido'))}</p>
+                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Solicitado: <span class="${type === 'TOOL' ? 'text-indigo-600' : 'text-amber-600'} font-black">${m.requestedQty} ${m.product?.unit || ''}</span></p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd. a Fornecer</label>
                     <input type="number"
-                        name="qty_${i}"
+                        name="qty_${type}_${m.productId || m.product?.id || ''}"
                         data-product-id="${m.productId || m.product?.id || ''}"
                         value="${m.requestedQty}"
                         min="0"
@@ -3278,7 +3295,10 @@ window.providePlanMaterialsGlobal = async (id, event) => {
                 </div>
             </div>
         `).join('')
-        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material associado a este pedido.</p>`;
+        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum ${type === 'TOOL' ? 'equipamento/ferramenta' : 'material'} associado a este pedido.</p>`;
+
+    const matsHtml = buildHtml(mats, 'MATERIAL');
+    const toolsHtml = buildHtml(tools, 'TOOL');
 
     const contentHtml = `
         <div class="space-y-5 pt-2">
@@ -3299,9 +3319,21 @@ window.providePlanMaterialsGlobal = async (id, event) => {
                         Materiais Solicitados
                     </h5>
                     <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        ${materialsHtml}
+                        ${matsHtml}
                     </div>
                 </div>
+
+                ${tools.length > 0 ? `
+                <div class="space-y-2 mt-4">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">build</span>
+                        Ferramentas Solicitadas
+                    </h5>
+                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        ${toolsHtml}
+                    </div>
+                </div>
+                ` : ''}
 
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -3434,7 +3466,7 @@ async function renderReturns(container) {
                             <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais a Devolver
                         </h5>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            ${p.materials.filter(m => Number(m.providedQty) > Number(m.consumedQty)).map(m => `
+                            ${p.materials.filter(m => (m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE') && Number(m.providedQty) > Number(m.consumedQty)).map(m => `
                                 <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
                                     <div class="flex flex-col min-w-0 flex-1">
                                       <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
@@ -3442,9 +3474,27 @@ async function renderReturns(container) {
                                     </div>
                                     <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg text-xs font-black shrink-0 ml-2">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
                                 </div>
+                            `).join('') || '<p class="text-xs text-slate-400">Nenhum material.</p>'}
+                        </div>
+                    </div>
+                    ${p.materials.some(m => (m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT') && Number(m.providedQty) > Number(m.consumedQty)) ? `
+                    <div class="bg-indigo-50 rounded-2xl p-4 border border-indigo-100 mt-2">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">build</span> Ferramentas a Devolver
+                        </h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            ${p.materials.filter(m => (m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT') && Number(m.providedQty) > Number(m.consumedQty)).map(m => `
+                                <div class="bg-white rounded-xl p-3 shadow-sm border border-indigo-100 flex items-center justify-between">
+                                    <div class="flex flex-col min-w-0 flex-1">
+                                      <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+                                      <span class="text-[9px] font-bold text-slate-400">Entreg: ${m.providedQty} / Extraviado: ${m.consumedQty}</span>
+                                    </div>
+                                    <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-lg text-xs font-black shrink-0 ml-2">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
+                                </div>
                             `).join('')}
                         </div>
                     </div>
+                    ` : ''}
                 </div>
 
                 <div class="flex items-end shrink-0">
@@ -3477,13 +3527,15 @@ async function renderReturns(container) {
 
 window.confirmReturnGlobal = async (id, event) => {
     const plan = _pendingPlans.find(p => p.id === id);
-    const materials = plan?.materials?.filter(m => Number(m.providedQty) > Number(m.consumedQty)) || [];
+    const allMaterials = plan?.materials?.filter(m => Number(m.providedQty) > Number(m.consumedQty)) || [];
+    const mats = allMaterials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
+    const tools = allMaterials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
 
-    const materialsHtml = materials.length > 0
-        ? materials.map((m) => `
+    const buildHtml = (items, type) => items.length > 0
+        ? items.map((m) => `
             <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
+                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Item Desconhecido')}</p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                     <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd a Devolver:</span>
@@ -3491,7 +3543,10 @@ window.confirmReturnGlobal = async (id, event) => {
                 </div>
             </div>
         `).join('')
-        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material a devolver.</p>`;
+        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum ${type === 'TOOL' ? 'equipamento/ferramenta' : 'material'} a devolver.</p>`;
+
+    const matsHtml = buildHtml(mats, 'MATERIAL');
+    const toolsHtml = buildHtml(tools, 'TOOL');
 
     const contentHtml = `
         <div class="space-y-5 pt-2">
@@ -3512,9 +3567,21 @@ window.confirmReturnGlobal = async (id, event) => {
                         Materiais a Receber
                     </h5>
                     <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        ${materialsHtml}
+                        ${matsHtml}
                     </div>
                 </div>
+
+                ${tools.length > 0 ? `
+                <div class="space-y-2 mt-4">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">build</span>
+                        Ferramentas a Receber
+                    </h5>
+                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        ${toolsHtml}
+                    </div>
+                </div>
+                ` : ''}
 
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">

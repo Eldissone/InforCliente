@@ -39,7 +39,7 @@ function renderStatusBadge(status) {
   switch (status) {
     case "DRAFT":
       return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Rascunho
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Disponível
       </span>`;
     case "PENDING_MATERIAL":
       return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-100">
@@ -145,11 +145,11 @@ function renderPlanCard(p) {
   const myUserId = currentUser?.id;
   const tasksListHtml = p.tasks.map(t => {
     const isMine = t.technicianId === myUserId;
-    const mineBadge = isMine 
-      ? `<span class="bg-blue-50 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-blue-100 tracking-wider">Atribuído a Si</span>` 
+    const mineBadge = isMine
+      ? `<span class="bg-blue-50 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-blue-100 tracking-wider">Atribuído a Si</span>`
       : `<span class="bg-slate-100 text-slate-500 text-[9px] font-medium px-2 py-0.5 rounded">${escapeHtml(t.technician?.name || "Técnico")}</span>`;
     const taskUnit = escapeHtml(t.progressTask?.unit || "");
-    
+
     return `
       <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -174,6 +174,75 @@ function renderPlanCard(p) {
     `;
   }).join("");
 
+  const planMats = p.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
+  const planTools = p.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
+
+  const buildMaterialRows = (items) => items.map(m => {
+    const showConsumed = p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN";
+    const consumedHtml = showConsumed ? `
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Usado</p>
+          <p class="text-xs font-bold text-blue-600">${m.consumedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvido</p>
+          <p class="text-xs font-bold text-amber-600">${Math.max(0, m.providedQty - (m.consumedQty || 0)).toFixed(2)} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+    ` : '';
+    return `
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 gap-3">
+      <div>
+        <p class="text-xs font-bold text-slate-800">${escapeHtml(m.product?.name || "Material")}</p>
+        <p class="text-[9px] text-slate-400">Unidade: ${escapeHtml(m.product?.unit || "un")}</p>
+      </div>
+      <div class="flex flex-wrap gap-4 text-right shrink-0">
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido</p>
+          <p class="text-xs font-bold text-slate-600">${m.requestedQty} <span class="text-[#2afc8d] font-black">${escapeHtml(m.product?.unit || "")}</span></p>
+        </div>
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
+          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} <span class="font-black">${escapeHtml(m.product?.unit || "")}</span></p>
+        </div>
+        ${consumedHtml}
+      </div>
+    </div>
+  `;
+  }).join("");
+
+  const buildToolRows = (items) => items.map(m => {
+    const showConsumed = p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN";
+    const consumedHtml = showConsumed ? `
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Extraviado</p>
+          <p class="text-xs font-bold text-red-600">${m.consumedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvido</p>
+          <p class="text-xs font-bold text-indigo-600">${Math.max(0, m.providedQty - (m.consumedQty || 0)).toFixed(2)} ${escapeHtml(m.product?.unit || "")}</p>
+        </div>
+    ` : '';
+    return `
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50 gap-3">
+      <div>
+        <p class="text-xs font-bold text-slate-800">${escapeHtml(m.product?.name || "Ferramenta")}</p>
+        <p class="text-[9px] text-slate-400">Unidade: ${escapeHtml(m.product?.unit || "un")}</p>
+      </div>
+      <div class="flex flex-wrap gap-4 text-right shrink-0">
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido</p>
+          <p class="text-xs font-bold text-slate-600">${m.requestedQty} <span class="text-indigo-400 font-black">${escapeHtml(m.product?.unit || "")}</span></p>
+        </div>
+        <div>
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
+          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} <span class="font-black">${escapeHtml(m.product?.unit || "")}</span></p>
+        </div>
+        ${consumedHtml}
+      </div>
+    </div>
+  `;
+  }).join("");
+
   const materialsHeaderHtml = p.materials.length > 0 ? `
     <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
       <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -194,39 +263,25 @@ function renderPlanCard(p) {
     </div>
   ` : '';
 
-  const materialsHtml = p.materials.length > 0 ? materialsHeaderHtml + p.materials.map(m => {
-    const showConsumed = p.status === "COMPLETED" || p.status === "PENDING_VALIDATION" || p.status === "PENDING_RETURN";
-    const consumedHtml = showConsumed ? `
-        <div>
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Usado</p>
-          <p class="text-xs font-bold text-blue-600">${m.consumedQty || 0} ${escapeHtml(m.product?.unit || "")}</p>
+  let materialsHtml = '';
+  if (p.materials.length === 0) {
+    materialsHtml = `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
+  } else {
+    materialsHtml = materialsHeaderHtml;
+    if (planMats.length > 0) {
+      materialsHtml += `<div class="space-y-2 mb-3">${buildMaterialRows(planMats)}</div>`;
+    }
+    if (planTools.length > 0) {
+      materialsHtml += `
+        <div class="mt-3">
+          <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 flex items-center gap-1.5 mb-2">
+            <span class="material-symbols-outlined text-sm">build</span> Ferramentas do Plano
+          </h5>
+          <div class="space-y-2">${buildToolRows(planTools)}</div>
         </div>
-        <div>
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Devolvido</p>
-          <p class="text-xs font-bold text-amber-600">${Math.max(0, m.providedQty - (m.consumedQty || 0)).toFixed(2)} ${escapeHtml(m.product?.unit || "")}</p>
-        </div>
-    ` : '';
-
-    return `
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 gap-3">
-      <div>
-        <p class="text-xs font-bold text-slate-800">${escapeHtml(m.product?.name || "Material")}</p>
-        <p class="text-[9px] text-slate-400">Unidade: ${escapeHtml(m.product?.unit || "un")}</p>
-      </div>
-      <div class="flex flex-wrap gap-4 text-right shrink-0">
-        <div>
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pedido</p>
-          <p class="text-xs font-bold text-slate-600">${m.requestedQty} <span class="text-[#2afc8d] font-black">${escapeHtml(m.product?.unit || "")}</span></p>
-        </div>
-        <div>
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Entregue</p>
-          <p class="text-xs font-bold ${m.providedQty > 0 ? 'text-emerald-600' : 'text-amber-500'}">${m.providedQty || 0} <span class="font-black">${escapeHtml(m.product?.unit || "")}</span></p>
-        </div>
-        ${consumedHtml}
-      </div>
-    </div>
-  `;
-  }).join("") : `<p class="text-xs text-slate-400 italic">Nenhum material associado a este plano.</p>`;
+      `;
+    }
+  }
 
   // Determine if materials were allocated by logistics (receivedBy set) but technician hasn't confirmed receipt yet
   const hasMaterials = p.materials.length > 0;
@@ -353,7 +408,7 @@ function renderPlanCard(p) {
   `;
 }
 
-window.startPlan = async function(planId) {
+window.startPlan = async function (planId) {
   if (!confirm("Deseja iniciar a execução deste plano diário agora?")) return;
 
   try {
@@ -367,35 +422,57 @@ window.startPlan = async function(planId) {
   }
 };
 
-window.receiveMaterials = async function(planId) {
+window.receiveMaterials = async function (planId) {
   const plan = state.plans.find(p => p.id === planId);
   if (!plan) return;
 
-  // Show a small confirmation with list of materials being confirmed
-  const matList = plan.materials.map(m =>
+  const planMats = plan.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
+  const planTools = plan.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
+
+  const buildList = (items, labelKey) => items.map(m =>
     `<li class="flex justify-between text-xs font-medium text-slate-700 py-1.5 border-b border-slate-100 last:border-0">
-      <span>${escapeHtml(m.product?.name || "Material")}</span>
+      <span>${escapeHtml(m.product?.name || labelKey)}</span>
       <span class="font-bold text-slate-900">${m.providedQty} <span class="text-[#2afc8d]">${escapeHtml(m.product?.unit || "")}</span></span>
     </li>`
   ).join("");
 
+  const matList = buildList(planMats, 'Material');
+  const toolList = buildList(planTools, 'Ferramenta');
+
+  const matSection = planMats.length > 0 ? `
+    <div>
+      <h4 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-2">Materiais a receber</h4>
+      <ul class="bg-slate-50 rounded-xl border border-slate-100 px-4 py-2">
+        ${matList}
+      </ul>
+    </div>
+  ` : '';
+
+  const toolSection = planTools.length > 0 ? `
+    <div class="mt-3">
+      <h4 class="text-xs font-black uppercase text-indigo-400 tracking-widest mb-2 flex items-center gap-1">
+        <span class="material-symbols-outlined text-sm">build</span> Ferramentas a receber
+      </h4>
+      <ul class="bg-indigo-50 rounded-xl border border-indigo-100 px-4 py-2">
+        ${toolList}
+      </ul>
+    </div>
+  ` : '';
+
   const { close } = openModal({
     title: "Confirmar Recepção de Material",
-    primaryLabel: "✓ Confirmar que Recebi o Material",
+    primaryLabel: "✓ Confirmar que Recebi os Itens",
     contentHtml: `
       <div class="space-y-4">
         <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
           <span class="material-symbols-outlined text-amber-600 text-xl shrink-0">warning</span>
           <p class="text-xs text-amber-800 font-medium leading-relaxed">
-            Ao confirmar, está a declarar que recebeu fisicamente os materiais abaixo listados e assume a responsabilidade pelos mesmos durante a execução da obra.
+            Ao confirmar, está a declarar que recebeu fisicamente os materiais e ferramentas abaixo listados e assume a responsabilidade pelos mesmos durante a execução da obra.
           </p>
         </div>
-        <div>
-          <h4 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-2">Materiais a receber</h4>
-          <ul class="bg-slate-50 rounded-xl border border-slate-100 px-4 py-2">
-            ${matList || '<li class="text-xs text-slate-400 italic py-2">Sem materiais listados</li>'}
-          </ul>
-        </div>
+        ${matSection}
+        ${toolSection}
+        ${plan.materials.length === 0 ? '<p class="text-xs text-slate-400 italic text-center py-4">Sem materiais ou ferramentas listados</p>' : ''}
         <p class="text-[10px] text-slate-400 text-center">Esta ação ficará registada com o seu nome de utilizador.</p>
       </div>
     `,
@@ -414,14 +491,14 @@ window.receiveMaterials = async function(planId) {
   });
 };
 
-window.completePlan = async function(planId) {
+window.completePlan = async function (planId) {
   const plan = state.plans.find(p => p.id === planId);
   if (!plan) return toast("Plano não encontrado.");
 
   const myUserId = currentUser?.id;
   // Get tasks that belong to the technician so they prioritize reporting them
   const myTasks = plan.tasks; // We let them see/edit all tasks of the plan if needed, but we can highlight their assigned ones!
-  
+
   const tasksHtml = myTasks.map(t => {
     const isMine = t.technicianId === myUserId;
     const highlightClass = isMine ? "border-blue-200 bg-blue-50/50" : "border-slate-100 bg-slate-50";
@@ -445,7 +522,10 @@ window.completePlan = async function(planId) {
     `;
   }).join('');
 
-  const matsHtml = plan.materials.map(m => `
+  const planMats = plan.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
+  const planTools = plan.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
+
+  const matsHtml = planMats.map(m => `
     <div class="bg-slate-50 p-3 rounded-xl mb-3 flex flex-col sm:flex-row sm:items-center gap-3 border border-slate-100">
       <div class="flex-1">
         <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
@@ -462,18 +542,36 @@ window.completePlan = async function(planId) {
     </div>
   `).join('');
 
+  const toolsHtml = planTools.map(m => `
+    <div class="bg-indigo-50/60 p-3 rounded-xl mb-3 flex flex-col sm:flex-row sm:items-center gap-3 border border-indigo-100">
+      <div class="flex-1">
+        <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Ferramenta")}</p>
+        <p class="text-[10px] text-slate-500">Disponibilizado: <span class="font-bold text-slate-700">${m.providedQty} <span class="text-indigo-500 font-black">${escapeHtml(m.product?.unit || "")}</span></span></p>
+      </div>
+      <div class="flex-1 w-full sm:w-36 shrink-0">
+        <label class="text-[9px] font-black uppercase text-slate-400 block mb-1" title="Quantidade extraviada ou danificada">Qtd Extraviada/Danificada (${escapeHtml(m.product?.unit || "un")})</label>
+        <input type="number" step="0.01" data-mat-id="${m.id}" data-provided="${m.providedQty}" value="0" max="${m.providedQty}" oninput="document.getElementById('dev-${m.id}').innerText = Math.max(0, this.dataset.provided - this.value).toFixed(2); if(window.checkReturnsNeeded) window.checkReturnsNeeded();" class="w-full h-9 bg-white border border-indigo-200 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+      </div>
+      <div class="flex-1 w-full sm:w-24 shrink-0 text-right">
+        <label class="text-[9px] font-black uppercase text-indigo-400 block mb-1">A Devolver (${escapeHtml(m.product?.unit || "un")})</label>
+        <p class="text-xs font-bold text-indigo-600" id="dev-${m.id}">${m.providedQty}</p>
+      </div>
+    </div>
+  `).join('');
+
   const returnedByHtml = plan.materials.length > 0 ? `
     <div id="returnedByContainer" class="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200" style="display: none;">
-      <label class="text-[10px] font-black uppercase text-amber-800 block mb-1">Quem vai devolver o material remanescente ao armazém?</label>
+      <label class="text-[10px] font-black uppercase text-amber-800 block mb-1">Quem vai devolver o material/ferramenta remanescente ao armazém?</label>
       <input type="text" id="returnedByInput" placeholder="Ex: João Silva (Técnico)" class="w-full h-10 bg-white border border-amber-300 rounded-lg px-3 text-xs font-bold focus:ring-2 focus:ring-amber-500 outline-none">
-      <p class="text-[9px] text-amber-600 mt-1">Obrigatório se as quantidades consumidas forem menores que as disponibilizadas.</p>
+      <p class="text-[9px] text-amber-600 mt-1">Obrigatório se as quantidades consumidas/extraviadas forem menores que as disponibilizadas.</p>
     </div>
   ` : '';
 
   const renderTasks = tasksHtml || '<p class="text-xs text-slate-400 italic">Sem tarefas para reportar.</p>';
-  const renderMats = matsHtml || '<p class="text-xs text-slate-400 italic">Nenhum material fornecido para este plano.</p>';
+  const renderMats = planMats.length > 0 ? matsHtml : '';
+  const renderTools = planTools.length > 0 ? toolsHtml : '';
 
-  window.checkReturnsNeeded = function() {
+  window.checkReturnsNeeded = function () {
     const inputs = document.querySelectorAll('input[data-mat-id]');
     let needsReturn = false;
     inputs.forEach(input => {
@@ -495,7 +593,7 @@ window.completePlan = async function(planId) {
         <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex gap-3">
           <span class="material-symbols-outlined text-emerald-600 text-xl">info</span>
           <p class="text-xs text-emerald-800 font-medium leading-relaxed">
-            Reporte as quantidades de trabalho físicas efetivamente executadas no terreno e os consumos reais de materiais. Itens não consumidos retornarão automaticamente ao stock do estaleiro.
+            Reporte as quantidades de trabalho físicas efetivamente executadas no terreno e os consumos reais de materiais. Ferramentas não danificadas devem ter o campo "Extraviado" em zero — serão devolvidas intactas.
           </p>
         </div>
 
@@ -508,15 +606,28 @@ window.completePlan = async function(planId) {
           </div>
         </div>
 
+        ${renderMats || renderTools ? `
         <div>
+          ${renderMats ? `
           <h4 class="text-sm font-bold text-slate-950 mb-3 flex items-center gap-1.5">
             <span class="material-symbols-outlined text-amber-600 text-lg">inventory_2</span> 2. Consumo de Materiais
           </h4>
           <div class="max-h-[250px] overflow-y-auto pr-1">
             ${renderMats}
+          </div>` : ''}
+          ${renderTools ? `
+          <h4 class="text-sm font-bold text-slate-950 mb-3 mt-5 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-indigo-600 text-lg">build</span> ${renderMats ? '3' : '2'}. Ferramentas a Devolver
+          </h4>
+          <div class="bg-indigo-50 p-2 rounded-lg border border-indigo-100 mb-3">
+            <p class="text-[10px] text-indigo-700 font-medium">Coloque 0 (zero) na caixa "Extraviado" para ferramentas que serão devolvidas intactas.</p>
           </div>
+          <div class="max-h-[250px] overflow-y-auto pr-1">
+            ${renderTools}
+          </div>` : ''}
           ${returnedByHtml}
         </div>
+        ` : `<p class="text-xs text-slate-400 italic text-center">Nenhum material ou ferramenta fornecido para este plano.</p>`}
       </div>
     `,
     onPrimary: async ({ close, btn, panel }) => {
