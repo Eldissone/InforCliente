@@ -2385,7 +2385,7 @@ function openPreview(fileId) {
     body.innerHTML = `
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-on-surface-variant/20 mb-6">description</span>
-        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo nÃ£o suporta prÃ©-visualizaÃ§Ã£o direta.</p>
+        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
         <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold hover:brightness-110 transition-all">
           <span class="material-symbols-outlined">download</span> Download do Arquivo
         </a>
