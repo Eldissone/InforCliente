@@ -75,7 +75,7 @@ dailyPlansRoutes.get(
           }
         }
       },
-      orderBy: { date: "desc" }
+      orderBy: { date: "asc" }
     });
 
     res.json(plans);
@@ -719,6 +719,25 @@ dailyPlansRoutes.post(
           const consQty = Number(mat.consumedQty || 0);
           const provided = Number(mat.providedQty || 0);
 
+          // Fetch product to check category
+          const product = await tx.product.findUnique({ where: { id: mat.productId } });
+          const isTool = product?.category === 'TOOL' || product?.category === 'EQUIPMENT';
+
+          // If tool/equipment and some units were reported as lost, create an EXIT movement to audit the loss
+          if (isTool && consQty > 0) {
+            await tx.stockMovement.create({
+              data: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId,
+                projectId: plan.projectId,
+                type: "EXIT",
+                quantity: consQty,
+                notes: `Ferramenta/Equipamento extraviado em obra (Plano Diário ${plan.id.slice(-6).toUpperCase()}) - Devolvido por: ${returnedBy}`,
+                userId: activeUserId
+              }
+            });
+          }
+
           if (consQty < provided) {
             const retorno = provided - consQty;
 
@@ -729,7 +748,9 @@ dailyPlansRoutes.post(
                 projectId: plan.projectId,
                 type: "ENTRY",
                 quantity: retorno,
-                notes: `Devolução de material não consumido (Plano ${plan.id}) - Devolvido por: ${returnedBy}`,
+                notes: isTool
+                  ? `Devolução de ferramenta/equipamento não extraviado (Plano ${plan.id}) - Devolvido por: ${returnedBy}`
+                  : `Devolução de material não consumido (Plano ${plan.id}) - Devolvido por: ${returnedBy}`,
                 userId: activeUserId
               }
             });
