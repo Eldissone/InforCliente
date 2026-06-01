@@ -605,11 +605,19 @@ async function renderCatalog(container) {
     document.getElementById("btnCreateProduct")?.addEventListener("click", () => openProductModal());
     window.editProduct = (id) => openProductModal(items.find(p => p.id === id));
     window.deleteProduct = async (id) => {
-        if (!confirm("Confirmar eliminação?")) return;
+        if (!confirm("Confirmar eliminação desta referência do catálogo?")) return;
         try {
-            await apiRequest(`/products/${id}`, { method: "DELETE" });
+            const res = await apiRequest(`/products/${id}`, { method: "DELETE" });
+            if (res?.archived) {
+                toast(res.message || "Produto arquivado (histórico de movimentos preservado).", { type: "success" });
+            } else {
+                toast("Produto eliminado.", { type: "success" });
+            }
             loadTabContent("catalog");
-        } catch (error) { alert("Erro ao eliminar: " + (error.data?.error || error.message || "Não pode eliminar produtos com stock ou ativos vinculados.")); }
+        } catch (error) {
+            const msg = error.data?.error || error.message || "Não foi possível eliminar o produto.";
+            toast(msg, { type: "error" });
+        }
     };
 
     window.deleteSelectedProducts = async () => {
@@ -632,7 +640,10 @@ async function renderCatalog(container) {
             }
         }
 
-        alert(`Operação concluída!\nSucesso: ${successCount}\nErros: ${errorCount} (podem ter stock ou ativos vinculados)`);
+        toast(
+            `Concluído: ${successCount} removido(s)/arquivado(s)${errorCount ? `, ${errorCount} com stock ou ativos` : ""}.`,
+            { type: errorCount ? "warning" : "success" }
+        );
         selectedProducts.clear();
         updateBulkDeleteBtn();
         loadTabContent("catalog");

@@ -311,6 +311,7 @@ model Product {
   category           ProductCategory     @default(MATERIAL)
   unit               ProductUnit         @default(UN)
   minStock           Decimal             @default(0) @db.Decimal(16, 4)
+  active             Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   items              Item[]

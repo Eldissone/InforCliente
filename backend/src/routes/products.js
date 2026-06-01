@@ -15,14 +15,16 @@ const upload = multer({
 const productRoutes = express.Router();
 productRoutes.use(authRequired);
 
-// GET - Listar catálogo de produtos/materiais
+// GET - Listar cat?logo de produtos/materiais
 productRoutes.get(
   "/",
   requirePermission("materiais", "view"),
   asyncHandler(async (req, res) => {
-    const { category, search } = req.query;
+    const { category, search, includeInactive } = req.query;
+    const showAll = String(includeInactive || "").toLowerCase() === "true";
     const items = await prisma.product.findMany({
       where: {
+        ...(showAll ? {} : { active: true }),
         ...(category && { category }),
         ...(search && {
           OR: [
@@ -61,12 +63,12 @@ productRoutes.post(
       if (error.code === 'P2002') {
         const target = error.meta?.target || [];
         if (target.includes('sku')) {
-          return res.status(400).json({ error: "O SKU inserido já está em uso." });
+          return res.status(400).json({ error: "O SKU inserido j? est? em uso." });
         }
         if (target.includes('barcode')) {
-          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
+          return res.status(400).json({ error: "O c?digo de barras inserido j? est? em uso." });
         }
-        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
+        return res.status(400).json({ error: "O SKU ou C?digo de Barras inserido j? est? em uso." });
       }
       throw error;
     }
@@ -100,12 +102,12 @@ productRoutes.patch(
       if (error.code === 'P2002') {
         const target = error.meta?.target || [];
         if (target.includes('sku')) {
-          return res.status(400).json({ error: "O SKU inserido já está em uso." });
+          return res.status(400).json({ error: "O SKU inserido j? est? em uso." });
         }
         if (target.includes('barcode')) {
-          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
+          return res.status(400).json({ error: "O c?digo de barras inserido j? est? em uso." });
         }
-        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
+        return res.status(400).json({ error: "O SKU ou C?digo de Barras inserido j? est? em uso." });
       }
       throw error;
     }
@@ -122,7 +124,7 @@ productRoutes.post(
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
     const product = await prisma.product.findUnique({ where: { id } });
-    if (!product) return res.status(404).json({ error: "Produto não encontrado." });
+    if (!product) return res.status(404).json({ error: "Produto n?o encontrado." });
 
     const extension = path.extname(req.file.originalname).toLowerCase() || ".jpg";
     const storagePath = `products/${id}/photo-${Date.now()}${extension}`;
@@ -138,14 +140,13 @@ productRoutes.post(
   })
 );
 
-// DELETE - Eliminar produto
+// DELETE - Eliminar produto (ou arquivar se tiver hist?rico de movimentos)
 productRoutes.delete(
   "/:id",
   requirePermission("materiais", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    
-    // Check if product has linked stock, items, movements or daily plans
+
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
@@ -153,27 +154,69 @@ productRoutes.delete(
           select: {
             items: true,
             movements: true,
-            stock: true,
-            dailyPlanMaterials: true
-          }
-        }
-      }
+            dailyPlanMaterials: true,
+            projectPlans: true,
+          },
+        },
+        stock: { select: { id: true, quantity: true } },
+      },
     });
 
     if (!product) {
-      return res.status(404).json({ error: "Produto não encontrado." });
+      return res.status(404).json({ error: "Produto n?o encontrado." });
     }
 
-    const { items, movements, stock, dailyPlanMaterials } = product._count;
-    if (items > 0 || movements > 0 || stock > 0 || dailyPlanMaterials > 0) {
-      return res.status(400).json({ error: "Não pode eliminar produtos com stock, movimentos ou ativos vinculados." });
+    const { items, movements, dailyPlanMaterials, projectPlans } = product._count;
+    const stockWithQty = product.stock.filter((s) => Number(s.quantity || 0) > 0);
+    const reasons = {};
+
+    if (items > 0) reasons.items = items;
+    if (stockWithQty.length > 0) reasons.stockPositive = stockWithQty.length;
+    if (movements > 0) reasons.movements = movements;
+
+    if (items > 0 || stockWithQty.length > 0) {
+      const parts = [];
+      if (items > 0) parts.push(`${items} ativo(s) vinculado(s)`);
+      if (stockWithQty.length > 0) {
+        parts.push(`stock positivo em ${stockWithQty.length} armaz?m(ns)`);
+      }
+      return res.status(400).json({
+        error: `N?o pode eliminar: ${parts.join("; ")}.`,
+        reasons,
+      });
     }
 
-    await prisma.product.delete({
-      where: { id }
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.warehouseStock.deleteMany({ where: { productId: id } });
+      if (dailyPlanMaterials > 0) {
+        await tx.dailyPlanMaterial.deleteMany({ where: { productId: id } });
+      }
+      if (projectPlans > 0) {
+        await tx.projectMaterialPlan.deleteMany({ where: { productId: id } });
+      }
+
+      if (movements > 0) {
+        await tx.product.update({
+          where: { id },
+          data: { active: false },
+        });
+        return { archived: true };
+      }
+
+      await tx.product.delete({ where: { id } });
+      return { archived: false };
     });
 
-    return res.json({ success: true });
+    if (result.archived) {
+      return res.json({
+        success: true,
+        archived: true,
+        message:
+          "Produto arquivado (mant?m hist?rico de movimentos). Deixou de aparecer no cat?logo.",
+      });
+    }
+
+    return res.json({ success: true, archived: false });
   })
 );
 
