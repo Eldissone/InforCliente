@@ -26,6 +26,16 @@ function isStockEntryMovement(m) {
   return STOCK_ENTRY_TYPES.has(m.type);
 }
 
+/** Cliente: apenas materiais / consumíveis no armazém (sem ferramentas nem equipamentos). */
+function isClientStockMaterialProduct(product) {
+  const cat = (product?.category || "").toUpperCase();
+  return cat === "MATERIAL" || cat === "CONSUMABLE" || cat === "BT" || cat === "MT";
+}
+
+function isClientVisibleStockMovement(m) {
+  return isStockEntryMovement(m) && isClientStockMaterialProduct(m?.product);
+}
+
 let stockPageData = { summary: [], movements: [] };
 
 let dashboardData = null;
@@ -377,10 +387,10 @@ async function loadStock() {
       apiRequest(`/projects/${state.projectId}/photos`)
     ]);
 
-    const summaryItems = (balanceRes.items || []).filter(
-      (item) => item?.product?.category === "MATERIAL" || item?.product?.category === "CONSUMABLE"
+    const summaryItems = (balanceRes.items || []).filter((item) =>
+      isClientStockMaterialProduct(item?.product)
     );
-    const movements = (movementsRes.items || []).filter(isStockEntryMovement);
+    const movements = (movementsRes.items || []).filter(isClientVisibleStockMovement);
     const photos = photosRes.items || [];
 
     stockPageData = { summary: summaryItems, movements };
@@ -552,7 +562,7 @@ function renderStockMovements(items) {
   const search = state.stockFilters.search.toLowerCase();
 
   const filtered = items.filter((m) => {
-    if (!isStockEntryMovement(m)) return false;
+    if (!isClientVisibleStockMovement(m)) return false;
     const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
     return !search ||
       (m.product?.name || "").toLowerCase().includes(search) ||

@@ -23,6 +23,13 @@ const {
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
 
+const CLIENT_STOCK_PRODUCT_CATEGORIES = new Set(["MATERIAL", "CONSUMABLE", "BT", "MT"]);
+
+function filterStockMovementsForCliente(items, userRole) {
+  if (!isClienteRole(userRole)) return items;
+  return items.filter((m) => CLIENT_STOCK_PRODUCT_CATEGORIES.has((m.product?.category || "").toUpperCase()));
+}
+
 /** Última foto de evidência por produto (movimentos de stock). */
 async function getLatestEvidenceByProduct(productIds, warehouseId = null) {
   if (!productIds?.length) return {};
@@ -161,7 +168,8 @@ stockRoutes.get(
       : [];
     const userById = Object.fromEntries(users.map((u) => [u.id, u]));
 
-    const enriched = items.map((m) => ({ ...m, user: userById[m.userId] || null }));
+    let enriched = items.map((m) => ({ ...m, user: userById[m.userId] || null }));
+    enriched = filterStockMovementsForCliente(enriched, req.user?.role);
     return res.json({ items: enriched });
   })
 );
