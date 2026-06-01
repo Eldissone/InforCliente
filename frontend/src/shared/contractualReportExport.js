@@ -2,6 +2,95 @@ import { formatDateBR } from "./format.js";
 import { escapeHtml } from "./ui.js";
 
 const HEADER_BLUE = [33, 46, 62];
+const EXCEL_NAVY = "212E3E";
+const EXCEL_WHITE = "FFFFFF";
+const EXCEL_ZEBRA = "F8FAFC";
+
+const EXCEL_STYLES = {
+  headerLabel: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, bold: true, sz: 10 },
+    alignment: { vertical: "center" },
+  },
+  headerValue: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, sz: 10 },
+    alignment: { vertical: "center", wrapText: true },
+  },
+  globalLabel: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, bold: true, sz: 9 },
+    alignment: { horizontal: "center", vertical: "top" },
+  },
+  globalPct: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, bold: true, sz: 20 },
+    alignment: { horizontal: "center", vertical: "center" },
+  },
+  title: {
+    font: { bold: true, sz: 11 },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+  },
+  tableHead: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, bold: true, sz: 9 },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+  },
+  groupRow: {
+    fill: { patternType: "solid", fgColor: { rgb: EXCEL_NAVY } },
+    font: { color: { rgb: EXCEL_WHITE }, bold: true, sz: 10 },
+    alignment: { vertical: "center", wrapText: true },
+  },
+  dataText: {
+    font: { sz: 10 },
+    alignment: { vertical: "center", wrapText: true },
+  },
+  dataCenter: {
+    font: { sz: 10 },
+    alignment: { horizontal: "center", vertical: "center" },
+  },
+  dataNum: {
+    font: { sz: 10 },
+    alignment: { horizontal: "right", vertical: "center" },
+    numFmt: "#,##0.00",
+  },
+  dataPct: {
+    font: { sz: 10 },
+    alignment: { horizontal: "right", vertical: "center" },
+    numFmt: "0.00%",
+  },
+};
+
+function excelCellRef(r, c) {
+  return XLSX.utils.encode_cell({ r, c });
+}
+
+function setExcelCell(ws, r, c, value, style) {
+  const ref = excelCellRef(r, c);
+  const isNum = typeof value === "number" && Number.isFinite(value);
+  ws[ref] = {
+    v: isNum ? value : value ?? "",
+    t: isNum ? "n" : "s",
+    ...(style ? { s: style } : {}),
+  };
+}
+
+function pushExcelMerge(merges, r1, c1, r2, c2) {
+  merges.push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
+}
+
+function applyExcelZebra(ws, row, cols, zebra) {
+  if (!zebra) return;
+  cols.forEach((c) => {
+    const ref = excelCellRef(row, c);
+    if (ws[ref]?.s) {
+      ws[ref].s = {
+        ...ws[ref].s,
+        fill: { patternType: "solid", fgColor: { rgb: EXCEL_ZEBRA } },
+      };
+    }
+  });
+}
 
 function groupLabelForFilter(t) {
   return escapeHtml(t.itemGroup || "Outros / Geral");
@@ -381,41 +470,138 @@ export function exportContractualReportExcel(reportData, filenameBase) {
   }
 
   const title = reportTitle(meta);
-  const aoa = [
-    ["Obra:", meta.obra, "", "Refª Contrato:", meta.referencia || "—", "", "% GLOBAL", `${Number(meta.globalPct || 0).toFixed(1)}%`],
+  const merges = [];
+  const ws = {};
+  const COLS = 7;
+  const L = 0;
+  const LV1 = 1;
+  const LV2 = 2;
+  const ML = 3;
+  const MV1 = 4;
+  const MV2 = 5;
+  const G = 6;
+
+  const headerRows = [
+    ["Obra:", meta.obra, "", "Refª Contrato:", meta.referencia || "—"],
     ["Local:", meta.local, "", "Data de Consignação:", meta.dataConsignacao ? formatDateBR(meta.dataConsignacao) : "—"],
-    ["Empreiteiro:", meta.empreiteiro, "", "Prazo Contratual:", meta.prazoContratual],
+    ["Empreiteiro:", meta.empreiteiro, "", "Prazo Contratual / Unid. Tempo:", meta.prazoContratual],
     ["Sub-Empreiteiro:", meta.subempreiteiro, "", `Relatório de Obra Nº ${meta.reportNumber}`, `Data: ${formatDateBR(meta.reportDate)}`],
-    ["Diretor de Obra:", meta.directorObra],
-    [],
-    [title],
-    [],
-    ["Item", "Descritivo", "Unid.", "Quantidade Contratual", "Quantidade Aplicada", "Quantidade Por Aplicar", "% Execução"],
+    ["Diretor de Obra:", meta.directorObra, "", "", ""],
   ];
+
+  headerRows.forEach((row, ri) => {
+    setExcelCell(ws, ri, L, row[0], EXCEL_STYLES.headerLabel);
+    setExcelCell(ws, ri, LV1, row[1], EXCEL_STYLES.headerValue);
+    pushExcelMerge(merges, ri, LV1, ri, LV2);
+    setExcelCell(ws, ri, ML, row[3] || "", EXCEL_STYLES.headerLabel);
+    setExcelCell(ws, ri, MV1, row[4] || "", EXCEL_STYLES.headerValue);
+    if (row[4]) pushExcelMerge(merges, ri, MV1, ri, MV2);
+    for (let c = 0; c < COLS; c++) {
+      const ref = excelCellRef(ri, c);
+      if (!ws[ref]) setExcelCell(ws, ri, c, "", EXCEL_STYLES.headerValue);
+      else if (!ws[ref].s) ws[ref].s = EXCEL_STYLES.headerValue;
+    }
+  });
+
+  setExcelCell(ws, 0, G, "% GLOBAL", EXCEL_STYLES.globalLabel);
+  setExcelCell(ws, 1, G, Number(meta.globalPct || 0) / 100, {
+    ...EXCEL_STYLES.globalPct,
+    numFmt: "0.0%",
+  });
+  for (let ri = 2; ri <= 4; ri++) {
+    setExcelCell(ws, ri, G, "", EXCEL_STYLES.headerValue);
+  }
+  pushExcelMerge(merges, 1, G, 4, G);
+
+  const TITLE_ROW = 6;
+  const TABLE_HEAD_ROW = 8;
+  const DATA_START = 9;
+
+  setExcelCell(ws, TITLE_ROW, 0, title, EXCEL_STYLES.title);
+  pushExcelMerge(merges, TITLE_ROW, 0, TITLE_ROW, G);
+
+  const headLabels = [
+    "Item",
+    "Descritivo",
+    "Unid.",
+    "Qtd. Contratual",
+    "Qtd. Aplicada",
+    "Qtd. Por Aplicar",
+    "% Exec.",
+  ];
+  headLabels.forEach((label, c) => {
+    setExcelCell(ws, TABLE_HEAD_ROW, c, label, EXCEL_STYLES.tableHead);
+  });
+
+  let dataRow = DATA_START;
+  let zebra = false;
 
   rows.forEach((r) => {
     if (r.kind === "group") {
-      aoa.push([r.descritivo, "", "", "", "", "", ""]);
+      setExcelCell(ws, dataRow, 0, r.descritivo, EXCEL_STYLES.groupRow);
+      pushExcelMerge(merges, dataRow, 0, dataRow, G);
+      for (let c = 1; c <= G; c++) {
+        setExcelCell(ws, dataRow, c, "", EXCEL_STYLES.groupRow);
+      }
+      dataRow += 1;
       return;
     }
-    aoa.push([
-      r.item,
-      r.descritivo,
-      r.unid,
-      Number(r.qtdContratual),
-      Number(r.qtdAplicada),
-      Number(r.qtdPorAplicar),
-      Number(r.pctExecucao),
-    ]);
+
+    const cols = [0, 1, 2, 3, 4, 5, 6];
+    setExcelCell(ws, dataRow, 0, String(r.item), EXCEL_STYLES.dataCenter);
+    setExcelCell(ws, dataRow, 1, r.descritivo, EXCEL_STYLES.dataText);
+    setExcelCell(ws, dataRow, 2, r.unid, EXCEL_STYLES.dataCenter);
+    setExcelCell(ws, dataRow, 3, Number(r.qtdContratual) || 0, EXCEL_STYLES.dataNum);
+    setExcelCell(ws, dataRow, 4, Number(r.qtdAplicada) || 0, EXCEL_STYLES.dataNum);
+    setExcelCell(ws, dataRow, 5, Number(r.qtdPorAplicar) || 0, EXCEL_STYLES.dataNum);
+    setExcelCell(
+      ws,
+      dataRow,
+      6,
+      (Number(r.pctExecucao) || 0) / 100,
+      EXCEL_STYLES.dataPct
+    );
+    applyExcelZebra(ws, dataRow, cols, zebra);
+    zebra = !zebra;
+    dataRow += 1;
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 10 }, { wch: 48 }, { wch: 8 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 12 }];
+  const lastRow = Math.max(dataRow - 1, TABLE_HEAD_ROW);
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: G } });
+  ws["!merges"] = merges;
+  ws["!cols"] = [
+    { wch: 11 },
+    { wch: 38 },
+    { wch: 8 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 12 },
+  ];
+  ws["!rows"] = [
+    { hpt: 16 },
+    { hpt: 16 },
+    { hpt: 16 },
+    { hpt: 16 },
+    { hpt: 16 },
+    {},
+    { hpt: 28 },
+    {},
+    { hpt: 32 },
+  ];
+
+  ws["!freeze"] = {
+    xSplit: 0,
+    ySplit: DATA_START,
+    topLeftCell: excelCellRef(DATA_START, 0),
+    activePane: "bottomLeft",
+    state: "frozen",
+  };
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Relatório de Avanço");
   const fname = `${filenameBase || safeFilePart(meta.obra)}_relatorio_avanco.xlsx`;
-  XLSX.writeFile(wb, fname);
+  XLSX.writeFile(wb, fname, { cellStyles: true });
 }
 
 export { safeFilePart };
