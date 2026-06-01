@@ -117,5 +117,6 @@
 @media (max-width: 767px) {
   [data-user-role] {
     display: none;
+    background-color: #960606;
   }
 }

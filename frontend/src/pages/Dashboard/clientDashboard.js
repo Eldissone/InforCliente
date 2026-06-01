@@ -19,6 +19,12 @@ import {
   activateFirstVisibleStockSubtab,
   getVisibleTabTriggers,
 } from "../../shared/permissions.js";
+import {
+  buildContractualReportData,
+  exportContractualReportPdf,
+  exportContractualReportExcel,
+  safeFilePart,
+} from "../../shared/contractualReportExport.js";
 
 const STOCK_ENTRY_TYPES = new Set(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
 
@@ -1144,6 +1150,56 @@ function renderProgressBreakdownRows() {
   tbody.innerHTML = html;
 }
 
+async function exportContractualSummary(type) {
+  if (!state.projectId || state.projectId === "all") {
+    toast("Seleccione uma obra para exportar o relatório.", { type: "warning" });
+    return;
+  }
+  if (!state.progressTasks?.length) {
+    toast("Sem dados do resumo contratual. Aguarde o carregamento ou registe tarefas de avanço.", { type: "warning" });
+    return;
+  }
+
+  const filterVal = document.getElementById("progressGroupFilter")?.value || "all";
+  let projectDetail = null;
+  try {
+    const res = await apiRequest(`/projects/${state.projectId}`);
+    projectDetail = res.project;
+  } catch {
+    /* metadados mínimos vêm do client-summary */
+  }
+
+  const reportData = buildContractualReportData(
+    state.progressTasks,
+    filterVal,
+    dashboardData,
+    state.projectId,
+    projectDetail
+  );
+
+  if (!reportData.rows.length) {
+    toast("Nenhuma tarefa no separador seleccionado.", { type: "warning" });
+    return;
+  }
+
+  const base = safeFilePart(reportData.meta.obra);
+  try {
+    if (type === "pdf") {
+      exportContractualReportPdf(reportData, base);
+    } else {
+      exportContractualReportExcel(reportData, base);
+    }
+    toast("Relatório exportado com sucesso.", { type: "success" });
+  } catch (err) {
+    if (err.message === "PDF_LIBRARY_MISSING" || err.message === "EXCEL_LIBRARY_MISSING") {
+      toast("Biblioteca de exportação não carregada. Recarregue a página.", { type: "error" });
+      return;
+    }
+    console.error("Exportação do resumo contratual", err);
+    toast("Não foi possível gerar o relatório.", { type: "error" });
+  }
+}
+
 /* =================================================================================
  *  FILE MANAGEMENT
  * ================================================================================= */
@@ -1609,6 +1665,13 @@ function wireEvents() {
       renderProgressBreakdownRows();
     });
   }
+
+  document.getElementById("exportContractualPdfBtn")?.addEventListener("click", () => {
+    exportContractualSummary("pdf");
+  });
+  document.getElementById("exportContractualExcelBtn")?.addEventListener("click", () => {
+    exportContractualSummary("excel");
+  });
 
   // Stock Filters
   ["stockFilterMaterial", "stockFilterState"].forEach(id => {

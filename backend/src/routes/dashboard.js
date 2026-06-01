@@ -549,6 +549,13 @@ dashboardRoutes.get(
       return {
         id: p.id,
         name: p.name,
+        location: p.location,
+        region: p.region,
+        empreiteiro: p.empreiteiro,
+        subempreiteiro: p.subempreiteiro,
+        referencia: p.referencia,
+        startDate: p.startDate,
+        dueDate: p.dueDate,
         budget,
         paid,
         debt: budget - paid,
