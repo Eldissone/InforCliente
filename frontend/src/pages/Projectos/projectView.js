@@ -244,10 +244,69 @@ let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: []
 let stockState = {
   items: [],
   summary: [],
+  projectWarehouses: [],
+  selectedStockWarehouseId: null,
   filters: { search: "", category: "", condition: "", status: "", warehouse: "" },
   isSelectionModeStock: false,
-  selectedStockItems: new Set()
+  selectedStockItems: new Set(),
 };
+
+function isStockMaterialProduct(product) {
+  const cat = (product?.category || "").toUpperCase();
+  return cat === "MATERIAL" || cat === "CONSUMABLE" || cat === "BT" || cat === "MT";
+}
+
+function getSelectedProjectWarehouse() {
+  const warehouses = stockState.projectWarehouses || [];
+  if (!warehouses.length) return null;
+  if (!stockState.selectedStockWarehouseId) return null;
+  return warehouses.find((w) => w.id === stockState.selectedStockWarehouseId) || null;
+}
+
+function syncStockWarehouseFilterOptions() {
+  const wrap = el("stockWarehouseFilterWrap");
+  const select = el("stockFilterWarehouse");
+  if (!wrap || !select) return;
+
+  const warehouses = stockState.projectWarehouses || [];
+  if (!warehouses.length) {
+    wrap.classList.add("hidden");
+    return;
+  }
+
+  if (warehouses.length === 1) {
+    wrap.classList.add("hidden");
+    stockState.selectedStockWarehouseId = warehouses[0].id;
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  const selected = stockState.selectedStockWarehouseId || "";
+  select.innerHTML = `<option value="">Todos os armazéns</option>` + warehouses.map((w) => {
+    const suffix = w.visibleToClient ? " (cliente)" : " (gestão)";
+    return `<option value="${w.id}" ${w.id === selected ? "selected" : ""}>${escapeHtml(w.name + suffix)}</option>`;
+  }).join("");
+  select.value = selected;
+}
+
+function updateStockWarehouseContextLabel() {
+  const ctx = el("stockWarehouseContext");
+  if (!ctx) return;
+  const warehouses = stockState.projectWarehouses || [];
+  if (!warehouses.length) {
+    ctx.classList.add("hidden");
+    ctx.textContent = "";
+    return;
+  }
+  const selected = getSelectedProjectWarehouse();
+  ctx.classList.remove("hidden");
+  if (!selected) {
+    ctx.textContent = `${warehouses.length} armazéns · vista consolidada`;
+    return;
+  }
+  const vis = selected.visibleToClient ? "visível ao cliente" : "apenas gestão";
+  ctx.textContent = `Armazém: ${selected.name} · ${vis}`;
+}
 let galleryState = { items: [] }; // Cache para fotos da galeria
 
 function updateOperationStatus(summary) {
@@ -641,19 +700,12 @@ async function renderOperationStatus(lines) {
     }
   });
 
-  // Calcular os Custos Totais da Obra (soma de todos os lançados nas operações)
-  const totalCustos = Object.values(cats).reduce((acc, c) => acc + c.consumed, 0);
-
   Object.values(cats).forEach(c => {
-    // Calculamos a % com base nos Custos Totais da Obra (peso de cada categoria)
-    const pct = totalCustos > 0 ? Math.round((c.consumed / totalCustos) * 100) : 0;
+    const pct = c.total > 0 ? Math.round((c.consumed / c.total) * 100) : 0;
     const pctEl = el(c.pctId);
     if (pctEl) {
       pctEl.textContent = `${pct}%`;
-      if (pct >= 100 && c.consumed > 0) {
-        pctEl.classList.remove("text-blue-400", "text-emerald-400", "text-yellow-400", "text-orange-400", "text-[#2afc8d]");
-        pctEl.classList.add("text-error", "font-bold", "animate-pulse");
-      }
+      pctEl.className = pct >= 100 ? "text-error font-bold" : "text-[#2afc8d] font-bold";
     }
     const subEl = el(c.subId);
     if (subEl) {
@@ -2385,7 +2437,7 @@ function openPreview(fileId) {
     body.innerHTML = `
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-on-surface-variant/20 mb-6">description</span>
-        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
+        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo nÃ£o suporta prÃ©-visualizaÃ§Ã£o direta.</p>
         <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold hover:brightness-110 transition-all">
           <span class="material-symbols-outlined">download</span> Download do Arquivo
         </a>
@@ -2460,38 +2512,71 @@ async function loadStock() {
   try {
     const { items: warehouses } = await apiRequest("/warehouses");
     const projectWarehouses = warehouses.filter((w) => w.projectId === id && w.type === "SITE");
-    const projectWarehouse = projectWarehouses[0];
+    stockState.projectWarehouses = projectWarehouses;
 
-    if (!projectWarehouse) {
+    if (!projectWarehouses.length) {
+      stockState.selectedStockWarehouseId = null;
+      stockState.warehouseId = null;
+      stockState.summary = [];
+      stockState.items = [];
       el("stockMovementsTbody").innerHTML = `<tr><td colspan="7" class="px-10 py-10 text-center text-slate-400 font-medium">Nenhum armazém associado a esta obra.</td></tr>`;
       el("stockSummary").innerHTML = "";
+      syncStockWarehouseFilterOptions();
+      updateStockWarehouseContextLabel();
+      renderStockInventory([], []);
       return;
     }
-    stockState.warehouseId = projectWarehouse.id;
+
+    if (
+      stockState.selectedStockWarehouseId &&
+      !projectWarehouses.some((w) => w.id === stockState.selectedStockWarehouseId)
+    ) {
+      stockState.selectedStockWarehouseId = null;
+    }
+
+    const selectedWarehouse = getSelectedProjectWarehouse();
+    stockState.warehouseId = selectedWarehouse?.id || projectWarehouses[0]?.id || null;
+
+    const balanceUrl = selectedWarehouse
+      ? `/stock/project/${id}/balance?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`
+      : `/stock/project/${id}/balance`;
+
+    const movementsUrl = selectedWarehouse
+      ? `/stock/movements?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`
+      : `/stock/movements?projectId=${encodeURIComponent(id)}`;
 
     const [balanceRes, movementsRes] = await Promise.all([
-      apiRequest(`/stock/project/${id}/balance`),
-      apiRequest(`/stock/movements?projectId=${encodeURIComponent(id)}`),
+      apiRequest(balanceUrl),
+      apiRequest(movementsUrl),
     ]);
 
-    stockState.summary = balanceRes.items; // Guardar o saldo
-    stockState.items = movementsRes.items;
+    const summaryItems = (balanceRes.items || []).filter((item) => isStockMaterialProduct(item.product));
+    const movements = movementsRes.items || [];
 
-    renderStockSummary(balanceRes.items);
-    renderStockMovements(movementsRes.items);
-    renderStockInventory(movementsRes.items, balanceRes.items);
+    stockState.summary = summaryItems;
+    stockState.items = movements;
+
+    syncStockWarehouseFilterOptions();
+    updateStockWarehouseContextLabel();
+    renderStockSummary(summaryItems, movements);
+    applyStockFilters();
   } catch (err) {
     toast("Erro ao carregar dados de stock", { type: "error" });
   }
 }
 
-function renderStockSummary(items) {
-  const uniqueProducts = items.length;
-  const totalStock = items.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
+function renderStockSummary(items, movements = []) {
+  const visible = (items || []).filter((item) => {
+    const balance = Number(item.quantity || 0);
+    const planned = Number(item.quantityPlanned || 0);
+    const { totalIn } = computeStockTotals(movements, item.productId, item.warehouseId);
+    return balance > 0 || planned > 0 || totalIn > 0;
+  });
 
-  // Categorias de materiais
-  const btCount = items.filter(i => i.product?.category === 'BT').length;
-  const mtCount = items.filter(i => i.product?.category === 'MT').length;
+  const uniqueProducts = visible.length;
+  const totalStock = visible.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
+  const btCount = visible.filter((i) => i.product?.category === "BT").length;
+  const mtCount = visible.filter((i) => i.product?.category === "MT").length;
 
   el("stockSummary").innerHTML = `
     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
@@ -2500,7 +2585,7 @@ function renderStockSummary(items) {
     </div>
     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total no Estaleiro</p>
-        <p class="text-2xl font-bold text-emerald-600">${totalStock}</p>
+        <p class="text-2xl font-bold text-emerald-600">${totalStock.toLocaleString("pt-AO")}</p>
     </div>
     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Material BT</p>
@@ -2511,6 +2596,21 @@ function renderStockSummary(items) {
         <p class="text-2xl font-bold text-[#2afc8d]">${mtCount}</p>
     </div>
   `;
+}
+
+function movementMatchesStockTypeFilter(m, filterType) {
+  if (!filterType) return true;
+  const t = (m.type || "").toUpperCase();
+  if (filterType === "ENTRADA") {
+    return t === "IN" || t === "ENTRY" || t === "TRANSFER_IN";
+  }
+  if (filterType === "SAIDA") {
+    return t === "OUT" || t === "EXIT" || t === "TRANSFER_OUT";
+  }
+  if (filterType === "TRANSFERENCIA") {
+    return t.includes("TRANSFER");
+  }
+  return true;
 }
 
 function renderStockMovements(items) {
@@ -2644,10 +2744,87 @@ function openStockInventoryDetailModal(productId, warehouseId = null) {
   });
 }
 
+async function openProjectWarehouseModal(warehouseId = null) {
+  const projectId = getProjectId();
+  if (!projectId) return toast("Obra não identificada.", { type: "error" });
+
+  let warehouse = null;
+  if (warehouseId) {
+    warehouse = stockState.projectWarehouses.find((w) => w.id === warehouseId) || null;
+    if (!warehouse) {
+      const { items } = await apiRequest("/warehouses");
+      warehouse = items.find((w) => w.id === warehouseId);
+    }
+  }
+
+  const visibleChecked = warehouse?.visibleToClient !== false ? "checked" : "";
+  const warehouses = stockState.projectWarehouses || [];
+
+  openModal({
+    title: warehouse ? "Editar Armazém da Obra" : "Novo Armazém da Obra",
+    contentHtml: `
+      <form id="formProjectWarehouse" class="space-y-6 pt-4">
+        <input type="hidden" name="projectId" value="${escapeHtml(projectId)}">
+        <input type="hidden" name="type" value="SITE">
+        <div class="space-y-2">
+          <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Armazém</label>
+          <input type="text" name="name" value="${escapeHtml(warehouse?.name || "")}" required placeholder="Ex: Consumo Cozinha"
+            class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+        </div>
+        <label class="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 cursor-pointer">
+          <input type="checkbox" name="visibleToClient" value="true" ${visibleChecked}
+            class="mt-1 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-[#2afc8d]" />
+          <span>
+            <span class="block text-sm font-bold text-slate-800">Visível para o cliente</span>
+            <span class="block text-[11px] text-slate-500 mt-1">O cliente só vê armazéns com esta opção activa.</span>
+          </span>
+        </label>
+        ${warehouses.length ? `
+          <div class="pt-2 border-t border-slate-100">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Armazéns desta obra</p>
+            <ul class="space-y-2 max-h-40 overflow-y-auto">
+              ${warehouses.map((w) => `
+                <li class="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 text-xs font-bold text-slate-700">
+                  <span>${escapeHtml(w.name)}</span>
+                  <button type="button" data-edit-project-warehouse="${w.id}" class="text-[9px] font-black uppercase text-emerald-700 hover:underline">Editar</button>
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+        ` : ""}
+      </form>
+    `,
+    primaryLabel: warehouse ? "Atualizar" : "Criar Armazém",
+    onPrimary: async ({ body, close }) => {
+      const form = body.querySelector("#formProjectWarehouse");
+      const data = Object.fromEntries(new FormData(form).entries());
+      data.visibleToClient = form.querySelector('[name="visibleToClient"]')?.checked === true;
+      try {
+        await apiRequest(warehouseId ? `/warehouses/${warehouseId}` : "/warehouses", {
+          method: warehouseId ? "PATCH" : "POST",
+          body: data,
+        });
+        toast(warehouseId ? "Armazém actualizado." : "Armazém criado.", { type: "success" });
+        close();
+        loadStock();
+      } catch (error) {
+        toast(error.message || "Erro ao guardar armazém.", { type: "error" });
+      }
+    },
+  });
+
+  document.querySelectorAll("[data-edit-project-warehouse]").forEach((btn) => {
+    btn.addEventListener("click", () => openProjectWarehouseModal(btn.dataset.editProjectWarehouse));
+  });
+}
+
 async function openStockMovementModal() {
-  if (!stockState.warehouseId) {
+  const warehouses = stockState.projectWarehouses || [];
+  if (!warehouses.length) {
     return toast("Nenhum armazém configurado para esta obra.", { type: "error" });
   }
+
+  const defaultWarehouseId = getSelectedProjectWarehouse()?.id || warehouses[0].id;
 
   try {
     const [productsRes, warehousesRes] = await Promise.all([
@@ -2658,7 +2835,11 @@ async function openStockMovementModal() {
     const products = (productsRes.items || []).filter(
       (p) => p.category === "MATERIAL" || p.category === "CONSUMABLE"
     );
-    const warehouse = (warehousesRes.items || []).find((w) => w.id === stockState.warehouseId);
+    const warehouseOptions = warehouses.map((w) =>
+      `<option value="${w.id}" ${w.id === defaultWarehouseId ? "selected" : ""}>${escapeHtml(w.name)}</option>`
+    ).join("");
+
+    const warehouse = (warehousesRes.items || []).find((w) => w.id === defaultWarehouseId);
     const linkedClient = warehouse?.project?.client || projectState?.client;
     let ownerOptions = `<option value="">${escapeHtml(warehouse?.name || "Armazém")}</option>`;
     if (linkedClient?.id && linkedClient?.name) {
@@ -2667,11 +2848,22 @@ async function openStockMovementModal() {
 
     const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
 
+    const warehouseField = warehouses.length > 1
+      ? `
+          <div class="space-y-2 md:col-span-2">
+            <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Armazém de destino</label>
+            <select name="warehouseId" id="st_warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+              ${warehouseOptions}
+            </select>
+          </div>
+        `
+      : `<input type="hidden" name="warehouseId" value="${defaultWarehouseId}">`;
+
     openModal({
       title: "Nova Operação Logística",
       contentHtml: `
         <form id="formStockMove" class="space-y-6 pt-4">
-          <input type="hidden" name="warehouseId" value="${stockState.warehouseId}">
+          ${warehouseField}
           <input type="hidden" name="projectId" value="${getProjectId() || ""}">
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2780,7 +2972,9 @@ async function openStockMovementModal() {
 
 function applyStockFilters() {
   const { search, condition, status, category, warehouse } = stockState.filters;
-  const filtered = stockState.items.filter((m) => {
+  const typeFilter = el("stockFilterType")?.value?.trim() || stockState.filters.type || "";
+
+  const filteredMovements = stockState.items.filter((m) => {
     const s = search.toLowerCase();
     const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
     const matchesSearch = !s ||
@@ -2793,12 +2987,27 @@ function applyStockFilters() {
     const matchesStatus = !status || m.auditStatus === status;
     const matchesCat = !category || m.product?.category === category;
     const matchesWarehouse = !warehouse || m.warehouse?.name === warehouse;
+    const matchesType = movementMatchesStockTypeFilter(m, typeFilter);
 
-    return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse;
+    return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse && matchesType;
   });
 
-  renderStockMovements(filtered);
-  renderStockInventory(stockState.items, stockState.summary || []);
+  let filteredSummary = (stockState.summary || []).filter((item) => isStockMaterialProduct(item.product));
+  if (search) {
+    const s = search.toLowerCase();
+    filteredSummary = filteredSummary.filter((item) => {
+      const p = item.product || {};
+      return (p.name || "").toLowerCase().includes(s) ||
+        (p.sku || p.reference || "").toLowerCase().includes(s) ||
+        (item.warehouse?.name || "").toLowerCase().includes(s);
+    });
+  }
+  if (warehouse) {
+    filteredSummary = filteredSummary.filter((item) => item.warehouse?.name === warehouse);
+  }
+
+  renderStockMovements(filteredMovements);
+  renderStockInventory(stockState.items, filteredSummary);
 }
 
 function renderStockInventory(movements, summary) {
@@ -2811,12 +3020,22 @@ function renderStockInventory(movements, summary) {
     root._movements = movements;
   }
 
-  if (!summary || summary.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">Sem stock disponível no armazém desta obra.</td></tr>`;
+  const visible = (summary || []).filter((item) => {
+    const balance = Number(item.quantity || 0);
+    const planned = Number(item.quantityPlanned || 0);
+    const { totalIn } = computeStockTotals(movements, item.productId, item.warehouseId);
+    return balance > 0 || planned > 0 || totalIn > 0;
+  });
+
+  if (!visible.length) {
+    const msg = stockState.projectWarehouses?.length
+      ? "Sem materiais com saldo ou planeados no armazém seleccionado."
+      : "Sem stock disponível no armazém desta obra.";
+    tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">${msg}</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = (summary || []).map((item, idx) => {
+  tbody.innerHTML = visible.map((item, idx) => {
     const balance = Number(item.quantity || 0);
     const product = item.product || {};
     const planned = Number(item.quantityPlanned || 0);
@@ -2839,6 +3058,7 @@ function renderStockInventory(movements, summary) {
         </td>
         <td class="px-6 md:px-10 py-5 text-center">
            <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(warehouseName)}</span>
+           ${item.warehouse?.visibleToClient === false ? `<span class="block mt-1 text-[8px] font-black uppercase text-slate-400">Só gestão</span>` : ""}
         </td>
         <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${product.unit || "un"}</td>
         <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
@@ -3211,12 +3431,29 @@ function wireStock() {
     }
   });
 
+  el("stockFilterWarehouse")?.addEventListener("change", (e) => {
+    const value = e.target.value || null;
+    stockState.selectedStockWarehouseId = value;
+    loadStock();
+  });
+
+  el("btnManageProjectWarehouses")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    setButtonLoading(btn, true);
+    try {
+      await openProjectWarehouseModal();
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  });
+
   const filters = ["Search", "Type"];
   filters.forEach(f => {
     const input = el(`stockFilter${f}`);
     if (input) {
       input.addEventListener(f === "Search" ? "input" : "change", (e) => {
-        stockState.filters[f.toLowerCase()] = e.target.value.trim();
+        const key = f === "Type" ? "type" : f.toLowerCase();
+        stockState.filters[key] = e.target.value.trim();
         applyStockFilters();
       });
     }
@@ -3645,7 +3882,7 @@ function wireGallery() {
         const descCustom = panel.querySelector("#gal_desc_custom");
 
         const dpStatusLabel = (s) => {
-          if (s === "DRAFT") return "Disponível";
+          if (s === "DRAFT") return "Rascunho";
           if (s === "PENDING_MATERIAL") return "Ag. Material";
           if (s === "IN_PROGRESS") return "Em Execução";
           if (s === "COMPLETED") return "Concluído";
@@ -3823,7 +4060,7 @@ function renderDailyPlansList() {
 
   container.innerHTML = filtered.map(p => {
     let statusBadge = "";
-    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
+    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
     if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
     if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
     if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
@@ -3970,13 +4207,8 @@ async function wireDailyPlans() {
       const pData = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`);
       progressTasks = pData.tasks || [];
 
-      const { items: warehouses } = await apiRequest("/warehouses");
-      const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
-
-      if (projectWarehouse) {
-        const sData = await apiRequest(`/stock/balance?warehouseId=${projectWarehouse.id}`);
-        products = sData.items || [];
-      }
+      const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
+      products = (sData.items || []).filter((item) => isStockMaterialProduct(item.product));
 
       const tData = await apiRequest("/users/technicians");
       technicians = tData.items || [];
@@ -3988,7 +4220,6 @@ async function wireDailyPlans() {
 
     let selectedTasks = [];
     let selectedMaterials = [];
-    let selectedTools = [];
 
     const updateTasksUI = (panel) => {
       const container = panel.querySelector("#selectedTasksContainer");
@@ -4032,25 +4263,6 @@ async function wireDailyPlans() {
             <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
           </div>
           <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedMaterial(${idx})">
-            <span class="material-symbols-outlined text-sm">close</span>
-          </button>
-        </div>
-      `).join('');
-    };
-
-    const updateToolsUI = (panel) => {
-      const container = panel.querySelector("#selectedToolsContainer");
-      if (selectedTools.length === 0) {
-        container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma ferramenta selecionada</p>`;
-        return;
-      }
-      container.innerHTML = selectedTools.map((m, idx) => `
-        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
-          <div class="text-xs flex flex-col">
-            <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
-            <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
-          </div>
-          <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedTool(${idx})">
             <span class="material-symbols-outlined text-sm">close</span>
           </button>
         </div>
@@ -4124,7 +4336,7 @@ async function wireDailyPlans() {
             <div class="flex flex-col gap-2 mb-4">
               <select id="dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione o material do Stock...</option>
-                ${products.filter(pr => pr.product?.category === 'MATERIAL' || pr.product?.category === 'CONSUMABLE').map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+                ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -4132,22 +4344,6 @@ async function wireDailyPlans() {
               </div>
             </div>
             <div id="selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
-          </div>
-
-          <!-- Ferramentas -->
-          <div class="border border-slate-100 rounded-xl p-4">
-            <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-indigo-600">build</span> Ferramentas a Requisitar</h4>
-            <div class="flex flex-col gap-2 mb-4">
-              <select id="dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
-                <option value="">Selecione a ferramenta do Stock...</option>
-                ${products.filter(pr => pr.product?.category === 'TOOL' || pr.product?.category === 'EQUIPMENT').map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
-              </select>
-              <div class="flex gap-2">
-                <input type="number" id="dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
-                <button type="button" id="dp_add_tool_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
-              </div>
-            </div>
-            <div id="selectedToolsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
           </div>
         </div>
       `,
@@ -4159,10 +4355,6 @@ async function wireDailyPlans() {
         window.removeSelectedMaterial = (idx) => {
           selectedMaterials.splice(idx, 1);
           updateMaterialsUI(panel);
-        };
-        window.removeSelectedTool = (idx) => {
-          selectedTools.splice(idx, 1);
-          updateToolsUI(panel);
         };
 
         panel.querySelector("#dp_add_task_btn").addEventListener("click", () => {
@@ -4199,22 +4391,8 @@ async function wireDailyPlans() {
           panel.querySelector("#dp_mat_qty").value = "";
         });
 
-        panel.querySelector("#dp_add_tool_btn").addEventListener("click", () => {
-          const sel = panel.querySelector("#dp_tool_select");
-          const qty = panel.querySelector("#dp_tool_qty").value;
-          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione ferramenta e quantidade válida.");
-
-          const opt = sel.options[sel.selectedIndex];
-          selectedTools.push({ productId: sel.value, name: opt.text.split('(')[0].trim(), requestedQty: Number(qty) });
-          updateToolsUI(panel);
-
-          sel.value = "";
-          panel.querySelector("#dp_tool_qty").value = "";
-        });
-
         updateTasksUI(panel);
         updateMaterialsUI(panel);
-        updateToolsUI(panel);
       },
       onPrimary: async ({ close, btn, panel }) => {
         const date = panel.querySelector("#dp_date").value;
@@ -4244,7 +4422,7 @@ async function wireDailyPlans() {
               date,
               description,
               tasks: finalTasks,
-              materials: [...selectedMaterials, ...selectedTools]
+              materials: selectedMaterials
             }
           });
           toast("Plano Diário criado com sucesso!", { type: "success" });
@@ -4280,10 +4458,7 @@ async function completePlan(planId) {
       </div>
     `).join('');
 
-    const mats = plan.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
-    const tools = plan.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
-
-    let matsHtml = mats.map(m => `
+    let matsHtml = plan.materials.map(m => `
       <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
         <div class="flex-1">
           <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Material")}</p>
@@ -4296,22 +4471,8 @@ async function completePlan(planId) {
       </div>
     `).join('');
 
-    let toolsHtml = tools.map(m => `
-      <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
-        <div class="flex-1">
-          <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Ferramenta")}</p>
-          <p class="text-[10px] text-slate-500">Disponibilizado: ${m.providedQty}</p>
-        </div>
-        <div class="w-32">
-          <label class="text-[9px] font-black uppercase text-slate-400" title="Quantidade que foi estragada ou perdida">Extraviado/Danificado</label>
-          <input type="number" step="0.01" data-mat-id="${m.id}" value="0" max="${m.providedQty}" class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-emerald-500">
-        </div>
-      </div>
-    `).join('');
-
     if (!tasksHtml) tasksHtml = '<p class="text-xs text-slate-400 italic">Sem tarefas.</p>';
     if (!matsHtml) matsHtml = '<p class="text-xs text-slate-400 italic">Sem materiais.</p>';
-    if (!toolsHtml) toolsHtml = '<p class="text-xs text-slate-400 italic">Sem ferramentas.</p>';
 
     openModal({
       title: "Concluir Plano Diário",
@@ -4328,13 +4489,6 @@ async function completePlan(planId) {
           <div>
             <h4 class="text-sm font-bold text-slate-900 mb-3"><span class="material-symbols-outlined text-amber-600 align-middle text-sm">inventory_2</span> Validação de Materiais</h4>
             ${matsHtml}
-          </div>
-          <div>
-            <h4 class="text-sm font-bold text-slate-900 mb-3 mt-4"><span class="material-symbols-outlined text-indigo-600 align-middle text-sm">build</span> Ferramentas a Devolver</h4>
-            <div class="bg-indigo-50 p-2 rounded-lg border border-indigo-100 mb-3">
-              <p class="text-[10px] text-indigo-700 font-medium">As ferramentas não danificadas ou perdidas devem ter o valor 0 (zero) na caixa "Extraviado", o que significa que serão devolvidas intactas ao armazém.</p>
-            </div>
-            ${toolsHtml}
           </div>
         </div>
       `,
@@ -4404,10 +4558,7 @@ async function validatePlan(planId) {
 
     const returnAlreadyDone = !!plan.returnConfirmedAt;
 
-    const mats = plan.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
-    const tools = plan.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
-
-    let matsHtml = mats.map(m => {
+    let matsHtml = plan.materials.map(m => {
       const consumed = Number(m.consumedQty || 0);
       const provided = Number(m.providedQty || 0);
       const toReturn = provided - consumed;
@@ -4426,28 +4577,8 @@ async function validatePlan(planId) {
     `;
     }).join('');
 
-    let toolsHtml = tools.map(m => {
-      const consumed = Number(m.consumedQty || 0);
-      const provided = Number(m.providedQty || 0);
-      const toReturn = provided - consumed;
-      const unit = escapeHtml(m.product?.unit || "un");
-      return `
-      <div class="bg-slate-50 p-3 rounded-xl mb-2 flex items-center gap-4">
-        <div class="flex-1">
-          <p class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "Ferramenta")}</p>
-          <p class="text-[10px] text-slate-500">Disponibilizado: <span class="font-bold text-slate-700">${provided} <span class="font-black text-slate-600">${unit}</span></span> | Reportado Extraviado: <strong class="text-indigo-600">${consumed} ${unit}</strong>${toReturn > 0 ? ` | <span class="text-amber-600 font-bold">A Devolver: ${toReturn.toFixed(2)} ${unit}</span>` : ''}</p>
-        </div>
-        <div class="w-36 shrink-0">
-          <label class="text-[9px] font-black uppercase text-slate-400 block mb-0.5">${returnAlreadyDone ? `Extraviado (${unit})` : `Validar Extravio (${unit})`}</label>
-          <input type="number" step="0.01" data-mat-id="${m.id}" value="${m.consumedQty ?? 0}" max="${m.providedQty}" ${returnAlreadyDone ? 'readonly class="w-full h-8 bg-slate-100 border border-slate-200 rounded px-2 text-xs font-bold text-slate-500 cursor-not-allowed"' : 'class="w-full h-8 bg-white border border-slate-200 rounded px-2 text-xs font-bold focus:ring-2 focus:ring-orange-500"'}>
-        </div>
-      </div>
-    `;
-    }).join('');
-
     if (!tasksHtml) tasksHtml = '<p class="text-xs text-slate-400 italic">Sem tarefas.</p>';
     if (!matsHtml) matsHtml = '<p class="text-xs text-slate-400 italic">Sem materiais.</p>';
-    if (!toolsHtml) toolsHtml = '<p class="text-xs text-slate-400 italic">Sem ferramentas.</p>';
 
     const returnNotice = returnAlreadyDone ? `
       <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 flex items-start gap-3">
@@ -4475,10 +4606,6 @@ async function validatePlan(planId) {
           <div>
             <h4 class="text-sm font-bold text-slate-900 mb-3"><span class="material-symbols-outlined text-amber-600 align-middle text-sm">inventory_2</span> Materiais Consumidos</h4>
             ${matsHtml}
-          </div>
-          <div>
-            <h4 class="text-sm font-bold text-slate-900 mb-3 mt-4"><span class="material-symbols-outlined text-indigo-600 align-middle text-sm">build</span> Ferramentas Devolvidas</h4>
-            ${toolsHtml}
           </div>
         </div>
       `,
@@ -4520,7 +4647,7 @@ window.viewPlanDetails = async function (planId) {
     const plan = await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`);
 
     let statusBadge = "";
-    if (plan.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
+    if (plan.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
     if (plan.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>`;
     if (plan.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
     if (plan.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
@@ -4535,9 +4662,6 @@ window.viewPlanDetails = async function (planId) {
         uniqueTechnicians.push(t.technician);
       }
     });
-
-    const mats = plan.materials.filter(m => m.product?.category === 'MATERIAL' || m.product?.category === 'CONSUMABLE');
-    const tools = plan.materials.filter(m => m.product?.category === 'TOOL' || m.product?.category === 'EQUIPMENT');
 
     const contentHtml = `
       <div class="space-y-6">
@@ -4593,7 +4717,7 @@ window.viewPlanDetails = async function (planId) {
         </div>
 
         <!-- Materiais -->
-        ${mats.length > 0 ? `
+        ${plan.materials && plan.materials.length > 0 ? `
           <div>
             <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
               <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
@@ -4611,7 +4735,7 @@ window.viewPlanDetails = async function (planId) {
               ` : ''}
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              ${mats.map(m => {
+              ${plan.materials.map(m => {
       const returned = Number(m.providedQty) - Number(m.consumedQty);
       return `
                 <div class="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between shadow-sm">
@@ -4625,41 +4749,6 @@ window.viewPlanDetails = async function (planId) {
                   <div class="flex flex-col items-end shrink-0">
                     ${plan.status === "COMPLETED" ? `
                       <span class="text-[10px] font-black text-emerald-600">Usado: ${m.consumedQty} ${escapeHtml(m.product?.unit || "")}</span>
-                      ${returned > 0 ? `<span class="text-[9px] font-bold text-amber-500">Devolv: ${returned.toFixed(2)} ${escapeHtml(m.product?.unit || "")}</span>` : ""}
-                    ` : `
-                      <span class="text-xs font-black text-amber-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
-                    `}
-                  </div>
-                </div>
-                `;
-    }).join('')}
-            </div>
-          </div>
-        ` : ""}
-
-        <!-- Ferramentas -->
-        ${tools.length > 0 ? `
-          <div>
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2 mt-2">
-              <h4 class="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm">build</span> Ferramentas Requisitadas
-              </h4>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              ${tools.map(m => {
-      const returned = Number(m.providedQty) - Number(m.consumedQty);
-      return `
-                <div class="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between shadow-sm">
-                  <div class="flex-1">
-                    <span class="text-xs font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Ferramenta")}</span>
-                    <div class="flex gap-2 mt-1">
-                       <span class="text-[9px] font-bold text-slate-400">Ped: ${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
-                       ${m.providedQty > 0 ? `<span class="text-[9px] font-bold text-blue-500">Entreg: ${m.providedQty} ${escapeHtml(m.product?.unit || "")}</span>` : ""}
-                    </div>
-                  </div>
-                  <div class="flex flex-col items-end shrink-0">
-                    ${plan.status === "COMPLETED" ? `
-                      <span class="text-[10px] font-black text-emerald-600">Extraviado: ${m.consumedQty} ${escapeHtml(m.product?.unit || "")}</span>
                       ${returned > 0 ? `<span class="text-[9px] font-bold text-amber-500">Devolv: ${returned.toFixed(2)} ${escapeHtml(m.product?.unit || "")}</span>` : ""}
                     ` : `
                       <span class="text-xs font-black text-amber-600">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
@@ -4699,13 +4788,8 @@ window.openEditPlanModal = async (planId) => {
     const pData = await apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`);
     progressTasks = pData.tasks || [];
 
-    const { items: warehouses } = await apiRequest("/warehouses");
-    const projectWarehouse = warehouses.find(w => w.projectId === id && w.type === 'SITE');
-
-    if (projectWarehouse) {
-      const sData = await apiRequest(`/stock/balance?warehouseId=${projectWarehouse.id}`);
-      products = sData.items || [];
-    }
+    const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
+    products = (sData.items || []).filter((item) => isStockMaterialProduct(item.product));
 
     const tData = await apiRequest("/users/technicians");
     technicians = tData.items || [];
@@ -4735,20 +4819,11 @@ window.openEditPlanModal = async (planId) => {
     };
   });
 
-  let selectedMaterials = plan.materials.filter(m => products.find(p => p.product.id === m.productId)?.product?.category === 'MATERIAL' || products.find(p => p.product.id === m.productId)?.product?.category === 'CONSUMABLE').map(m => {
+  let selectedMaterials = plan.materials.map(m => {
     const pr = products.find(p => p.product.id === m.productId);
     return {
       productId: m.productId,
       name: pr?.product?.name || m.product?.name || "Material",
-      requestedQty: Number(m.requestedQty)
-    };
-  });
-
-  let selectedTools = plan.materials.filter(m => products.find(p => p.product.id === m.productId)?.product?.category === 'TOOL' || products.find(p => p.product.id === m.productId)?.product?.category === 'EQUIPMENT').map(m => {
-    const pr = products.find(p => p.product.id === m.productId);
-    return {
-      productId: m.productId,
-      name: pr?.product?.name || m.product?.name || "Ferramenta",
       requestedQty: Number(m.requestedQty)
     };
   });
@@ -4799,29 +4874,6 @@ window.openEditPlanModal = async (planId) => {
           <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
         </div>
         <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeEditSelectedMaterial(${idx})">
-          <span class="material-symbols-outlined text-sm">close</span>
-        </button>
-      </div>
-    `).join('');
-  };
-
-  const updateToolsUI = (panel) => {
-    const container = panel.querySelector("#edit_selectedToolsContainer");
-    if (!canEditMaterials) {
-      container.innerHTML = `<p class="text-xs text-amber-600 font-bold p-3 bg-amber-50 rounded-lg border border-amber-100">As ferramentas não podem ser editadas pois o plano já está em execução.</p>`;
-      return;
-    }
-    if (selectedTools.length === 0) {
-      container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma ferramenta selecionada</p>`;
-      return;
-    }
-    container.innerHTML = selectedTools.map((m, idx) => `
-      <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
-        <div class="text-xs flex flex-col">
-          <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
-          <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
-        </div>
-        <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeEditSelectedTool(${idx})">
           <span class="material-symbols-outlined text-sm">close</span>
         </button>
       </div>
@@ -4892,7 +4944,7 @@ window.openEditPlanModal = async (planId) => {
         <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
           <select id="edit_dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
             <option value="">Selecione o material do Stock...</option>
-            ${products.filter(pr => pr.product?.category === 'MATERIAL' || pr.product?.category === 'CONSUMABLE').map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+            ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
           </select>
           <div class="flex gap-2">
             <input type="number" id="edit_dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -4900,22 +4952,6 @@ window.openEditPlanModal = async (planId) => {
           </div>
         </div>
         <div id="edit_selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
-      </div>
-
-      <!-- Ferramentas -->
-      <div class="border border-slate-100 rounded-xl p-4 mt-4 ${canEditMaterials ? '' : 'opacity-70'}">
-        <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-indigo-600">build</span> Ferramentas a Requisitar</h4>
-        <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
-          <select id="edit_dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
-            <option value="">Selecione a ferramenta do Stock...</option>
-            ${products.filter(pr => pr.product?.category === 'TOOL' || pr.product?.category === 'EQUIPMENT').map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
-          </select>
-          <div class="flex gap-2">
-            <input type="number" id="edit_dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
-            <button type="button" id="edit_dp_add_tool_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
-          </div>
-        </div>
-        <div id="edit_selectedToolsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
       </div>
     </div>
   `;
@@ -4933,11 +4969,6 @@ window.openEditPlanModal = async (planId) => {
         if (!canEditMaterials) return;
         selectedMaterials.splice(idx, 1);
         updateMaterialsUI(panel);
-      };
-      window.removeEditSelectedTool = (idx) => {
-        if (!canEditMaterials) return;
-        selectedTools.splice(idx, 1);
-        updateToolsUI(panel);
       };
 
       panel.querySelector("#edit_dp_add_task_btn").addEventListener("click", () => {
@@ -4979,29 +5010,10 @@ window.openEditPlanModal = async (planId) => {
           sel.value = "";
           panel.querySelector("#edit_dp_mat_qty").value = "";
         });
-
-        panel.querySelector("#edit_dp_add_tool_btn").addEventListener("click", () => {
-          const sel = panel.querySelector("#edit_dp_tool_select");
-          const qty = panel.querySelector("#edit_dp_tool_qty").value;
-          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione ferramenta e quantidade válida.");
-
-          const opt = sel.options[sel.selectedIndex];
-
-          selectedTools.push({
-            productId: sel.value,
-            name: opt.text.split('(')[0].trim(),
-            requestedQty: Number(qty)
-          });
-          updateToolsUI(panel);
-
-          sel.value = "";
-          panel.querySelector("#edit_dp_tool_qty").value = "";
-        });
       }
 
       updateTasksUI(panel);
       updateMaterialsUI(panel);
-      updateToolsUI(panel);
     },
     onPrimary: async ({ panel, close }) => {
       const date = panel.querySelector("#edit_dp_date").value;
@@ -5026,7 +5038,7 @@ window.openEditPlanModal = async (planId) => {
       };
 
       if (canEditMaterials) {
-        payload.materials = [...selectedMaterials, ...selectedTools].map(m => ({
+        payload.materials = selectedMaterials.map(m => ({
           productId: m.productId,
           requestedQty: m.requestedQty
         }));

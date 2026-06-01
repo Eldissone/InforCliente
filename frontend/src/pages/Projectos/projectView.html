@@ -822,10 +822,16 @@
             <div class="flex flex-row justify-between items-center gap-4">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Logística da Obra</h2>
-                    <p class="text-slate-500 text-sm font-medium">Controlo do armazém / estaleiro do projeto.</p>
+                    <p class="text-slate-500 text-sm font-medium">Controlo dos armazéns / estaleiro do projeto.</p>
+                    <p id="stockWarehouseContext" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1 hidden"></p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
 
+                    <button id="btnManageProjectWarehouses" data-role-visible="admin"
+                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all"
+                        title="Gerir armazéns desta obra">
+                        <span class="material-symbols-outlined text-xl">warehouse</span>
+                    </button>
                     <button id="btnDeleteSelectedStock"
                         class="hidden h-11 bg-red-50 text-red-600 px-4 rounded-xl font-bold items-center gap-2 hover:bg-red-100 transition-all text-xs">
                         <span class="material-symbols-outlined text-lg">delete</span>
@@ -860,6 +866,13 @@
                 </div>
 
                 <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
+                    <div id="stockWarehouseFilterWrap" class="hidden w-full sm:flex-1 lg:w-52">
+                        <select id="stockFilterWarehouse"
+                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500"
+                            title="Filtrar por armazém">
+                            <option value="">Todos os armazéns</option>
+                        </select>
+                    </div>
                     <!-- Tipo -->
                     <div class="w-full sm:flex-1 lg:w-44">
                         <select id="stockFilterType"
