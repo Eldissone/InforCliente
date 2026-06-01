@@ -13,6 +13,12 @@ import {
   pickPrimaryEntryMovement,
   filterLogisticsEntries,
 } from "../../shared/stockDetail.js";
+import {
+  initPermissionLayer,
+  activateFirstVisibleProjectTab,
+  activateFirstVisibleStockSubtab,
+  getVisibleTabTriggers,
+} from "../../shared/permissions.js";
 
 const STOCK_ENTRY_TYPES = new Set(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
 
@@ -132,6 +138,14 @@ function updateTabUI() {
     const campoBtn = document.querySelector('[data-tab-trigger="galeria-campo"]');
     if (campoBtn) campoBtn.classList.add("hidden");
     if (state.activeTab === "galeria-campo") state.activeTab = "galeria-obra";
+  }
+
+  const activeBtn = document.querySelector(`[data-tab-trigger="${state.activeTab}"]`);
+  if (activeBtn?.dataset.permDenied === "true" || activeBtn?.classList.contains("hidden")) {
+    const visible = getVisibleTabTriggers("[data-tab-trigger]");
+    if (visible.length) {
+      state.activeTab = visible[0].getAttribute("data-tab-trigger");
+    }
   }
 
   document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
@@ -1914,6 +1928,7 @@ function wireStockEvents() {
   // Sub-tabs
   document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.dataset.permDenied === "true" || btn.classList.contains("hidden")) return;
       state.stockSubTab = btn.getAttribute("data-stock-subtab");
 
       // Update buttons UI
@@ -2086,7 +2101,7 @@ function hoistTabs() {
   });
 }
 
-function init() {
+async function init() {
   hoistTabs(); // Fix any tab nesting issues first
   initMobileMenu();
   wireLogout();
@@ -2104,6 +2119,10 @@ function init() {
   }
 
   wireUsersNav();
+  await initPermissionLayer();
+  const firstTab = activateFirstVisibleProjectTab();
+  if (firstTab) state.activeTab = firstTab;
+  activateFirstVisibleStockSubtab();
   wireEvents();
   wirePreview();
   wireStockEvents();

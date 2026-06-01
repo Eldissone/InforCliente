@@ -11,6 +11,7 @@ const {
   buildDefaultPermissions,
   buildDisplayCatalog,
   PAGE_ROUTE_GUARDS,
+  TAB_PERMISSION_FALLBACKS,
 } = require("../config/permissionsCatalog");
 const {
   getEffectivePermissionsForUser,
@@ -42,6 +43,7 @@ permissionsRoutes.get(
       roleMap: data.roleMap,
       overrideKeys: data.overrideKeys,
       routeGuards: PAGE_ROUTE_GUARDS,
+      tabFallbacks: TAB_PERMISSION_FALLBACKS,
     });
   })
 );

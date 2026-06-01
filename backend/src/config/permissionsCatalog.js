@@ -32,7 +32,79 @@ const ACTION_LABELS = {
   read: "Visualizar (leitura)",
   manage: "Gerir / operar",
   financeiro: "Módulo financeiro",
+  tab_inventory: "Aba: Inventário geral",
+  tab_catalog: "Aba: Catálogo",
+  tab_tools: "Aba: Ferramentas",
+  tab_warehouses: "Aba: Armazéns",
+  tab_stock_requests: "Aba: Pedidos de obra (Stock)",
+  tab_returns: "Aba: Devoluções",
+  tab_movements: "Aba: Histórico de movimentos",
+  tab_dashboard: "Aba: Dashboard financeiro (obra)",
+  tab_progress: "Aba: Avanço físico (obra)",
+  tab_daily_plans: "Aba: Planos diários (obra)",
+  tab_files: "Aba: Gestão de arquivos (obra)",
+  tab_project_stock: "Aba: Gestão de armazém (obra)",
+  tab_project_stock_inventory: "Sub-aba: Stock/Armazém (obra)",
+  tab_project_stock_requests: "Sub-aba: Pedidos de obra (armazém na obra)",
+  tab_project_stock_history: "Sub-aba: Diário de armazém (obra)",
+  tab_gallery: "Aba: Galeria da obra",
+  tab_executive_summary: "Aba: Resumo executivo (portal)",
+  tab_portal_arquivos: "Aba: Arquivos (portal)",
+  tab_portal_obra_info: "Aba: Informação da obra (portal)",
+  tab_portal_armazem: "Aba: Armazém (portal)",
+  tab_portal_galeria: "Aba: Galeria da obra (portal)",
+  tab_portal_contactos: "Aba: Contactos (portal)",
+  tab_portal_stock_inventory: "Sub-aba: Inventário (portal)",
+  tab_portal_stock_history: "Sub-aba: Diário (portal)",
 };
+
+/**
+ * Abas configuráveis por página — groupModule = módulo no mapa de permissões onde aparece.
+ */
+const PAGE_TABS = [
+  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Inventário Geral", module: "stock", action: "tab_inventory" },
+  { groupModule: "materiais", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Catálogo", module: "materiais", action: "tab_catalog" },
+  { groupModule: "ferramentas", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Ferramentas", module: "ferramentas", action: "tab_tools" },
+  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Armazéns", module: "stock", action: "tab_warehouses" },
+  { groupModule: "obras", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Pedidos de Obra", module: "obras", action: "tab_stock_requests" },
+  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Devoluções", module: "stock", action: "tab_returns" },
+  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Histórico", module: "stock", action: "tab_movements" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Dashboard financeiro", module: "obras", action: "tab_dashboard", fallbackAction: "financeiro" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Avanço físico", module: "obras", action: "tab_progress" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Planos diários", module: "obras", action: "tab_daily_plans" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Gestão de arquivos", module: "obras", action: "tab_files" },
+  { groupModule: "stock", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Gestão de armazém", module: "stock", action: "tab_project_stock" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Galeria da obra", module: "obras", action: "tab_gallery" },
+  { groupModule: "stock", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Stock/Armazém (sub-aba)", module: "stock", action: "tab_project_stock_inventory", fallbackAction: "view" },
+  { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Pedidos de obra (sub-aba armazém)", module: "obras", action: "tab_project_stock_requests", fallbackAction: "view" },
+  { groupModule: "stock", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Diário de armazém (sub-aba)", module: "stock", action: "tab_project_stock_history", fallbackAction: "view" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Resumo executivo", module: "portal", action: "tab_executive_summary" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Gestão de arquivos", module: "portal", action: "tab_portal_arquivos" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Informação da obra", module: "portal", action: "tab_portal_obra_info" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Armazém", module: "portal", action: "tab_portal_armazem" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Galeria da obra", module: "portal", action: "tab_portal_galeria" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Contactos", module: "portal", action: "tab_portal_contactos" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Inventário (sub-aba armazém)", module: "portal", action: "tab_portal_stock_inventory" },
+  { groupModule: "portal", pageLabel: "Portal do cliente", route: "/Dashboard/clientDashboard.html", label: "Diário de armazém (sub-aba)", module: "portal", action: "tab_portal_stock_history" },
+];
+
+/** Herança quando a permissão da aba não está definida explicitamente */
+const TAB_PERMISSION_FALLBACKS = Object.fromEntries(
+  PAGE_TABS.map((t) => {
+    const key = `${t.module}:${t.action}`;
+    const fallbackAction = t.fallbackAction || "view";
+    return [key, { module: t.module, action: fallbackAction }];
+  })
+);
+
+function getTabsForGroup(groupModule) {
+  return PAGE_TABS.filter((t) => t.groupModule === groupModule);
+}
+
+function defaultAllowedForTab(role, tab) {
+  const fallbackAction = tab.fallbackAction || "view";
+  return defaultAllowedFor(role, tab.module, fallbackAction);
+}
 
 /** Grupos para o mapa de permissões (módulo → páginas → acções) */
 const PERMISSION_GROUPS = [
@@ -322,6 +394,21 @@ function buildDefaultPermissions() {
       }
     }
   }
+
+  for (const tab of PAGE_TABS) {
+    for (const role of ROLES) {
+      const key = `${role}|${tab.module}|${tab.action}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        role,
+        module: tab.module,
+        action: tab.action,
+        allowed: defaultAllowedForTab(role, tab),
+      });
+    }
+  }
+
   return rows;
 }
 
@@ -332,11 +419,19 @@ function buildDisplayCatalog() {
     module: group.id,
     icon: group.icon,
     pages: group.pages,
+    tabs: getTabsForGroup(group.id).map((t) => ({
+      label: t.label,
+      module: t.module,
+      action: t.action,
+      pageLabel: t.pageLabel,
+      route: t.route,
+    })),
     rows: group.actions.map((action) => ({
       label: ACTION_LABELS[action] || action,
       module: group.id,
       action,
       actionId: action,
+      isTab: false,
     })),
   }));
 }
@@ -352,9 +447,13 @@ module.exports = {
   ALLOWED_LEVELS,
   ACTION_LABELS,
   PERMISSION_GROUPS,
+  PAGE_TABS,
+  TAB_PERMISSION_FALLBACKS,
   PAGE_ROUTE_GUARDS,
   defaultAllowedFor,
+  defaultAllowedForTab,
   buildDefaultPermissions,
   buildDisplayCatalog,
+  getTabsForGroup,
   permKey,
 };

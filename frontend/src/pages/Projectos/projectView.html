@@ -244,27 +244,26 @@
 
         <!-- Tab Navigation -->
         <div class="flex flex-row flex-nowrap border-b border-slate-100 mb-8 overflow-x-auto no-scrollbar">
-            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="dashboard"
+            <button data-tab-trigger="dashboard" data-perm="obras:tab_dashboard"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="relatorio"
+            <button data-tab-trigger="relatorio" data-perm="obras:tab_progress"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 <span class="md:hidden">Avanço Físico</span>
                 <span class="hidden md:inline">Avanço Físico</span>
             </button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="planos_diarios"
+            <button data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 Planos Diários
             </button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="files"
+            <button data-tab-trigger="files" data-perm="obras:tab_files"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 <span class="md:hidden">Arquivos</span>
                 <span class="hidden md:inline">Gestão de Arquivos</span>
             </button>
-            <button data-role-visible="admin,supervisor,tecnico,leitura,operador" data-tab-trigger="stock"
+            <button data-tab-trigger="stock" data-perm="stock:tab_project_stock"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Armazém</button>
-            <button id="tabTriggerGaleria" data-role-visible="admin,supervisor,tecnico,leitura,operador,cliente"
-                data-tab-trigger="galeria_obra"
+            <button id="tabTriggerGaleria" data-tab-trigger="galeria_obra" data-perm="obras:tab_gallery"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra</button>
         </div>
@@ -892,12 +891,12 @@
                     class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
                     <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
 
-                        <button data-stock-subtab="inventory"
+                        <button data-stock-subtab="inventory" data-perm="stock:tab_project_stock_inventory"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Armazém</span>
                             <span class="hidden md:inline">Stock/Armazém</span>
                         </button>
-                        <button data-stock-subtab="requests"
+                        <button data-stock-subtab="requests" data-perm="obras:tab_project_stock_requests"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all relative">
                             <span class="md:hidden">Pedidos</span>
                             <span class="hidden md:inline">Pedidos de Obra</span>
@@ -909,7 +908,7 @@
                             <span class="md:hidden">Galeria</span>
                             <span class="hidden md:inline">Galeria do Armazém</span>
                         </button> -->
-                        <button data-stock-subtab="history"
+                        <button data-stock-subtab="history" data-perm="stock:tab_project_stock_history"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
                             <span class="md:hidden">Diário de Armazém</span>
                             <span class="hidden md:inline">Diário de Armazém</span>

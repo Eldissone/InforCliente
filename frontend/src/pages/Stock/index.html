@@ -229,41 +229,41 @@
 
         <!-- ═══════════════ TABS ═══════════════ -->
         <div class="flex gap-1 sm:gap-6 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
-            <button data-tab="inventory"
+            <button data-tab="inventory" data-perm="stock:tab_inventory"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent tab-active">
                 <span class="material-symbols-outlined text-lg">inventory</span>
                 <span class="tab-label">Inventário Geral</span>
             </button>
-            <button data-tab="catalog"
+            <button data-tab="catalog" data-perm="materiais:tab_catalog"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
                 <span class="material-symbols-outlined text-lg">list_alt</span>
                 <span class="tab-label">Catálogo</span>
             </button>
-            <button data-tab="tools" data-perm="ferramentas:view"
+            <button data-tab="tools" data-perm="ferramentas:tab_tools"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
                 <span class="material-symbols-outlined text-lg">construction</span>
                 <span class="tab-label">Ferramentas</span>
             </button>
-            <button data-tab="warehouses"
+            <button data-tab="warehouses" data-perm="stock:tab_warehouses"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
                 <span class="material-symbols-outlined text-lg">warehouse</span>
                 <span class="tab-label">Armazéns</span>
             </button>
-            <button data-tab="requests"
+            <button data-tab="requests" data-perm="obras:tab_stock_requests"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent relative">
                 <span class="material-symbols-outlined text-lg">fact_check</span>
                 <span class="tab-label">Pedidos de Obra</span>
                 <span id="requests_badge"
                     class="hidden absolute top-3 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
             </button>
-            <button data-tab="returns"
+            <button data-tab="returns" data-perm="stock:tab_returns"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent relative">
                 <span class="material-symbols-outlined text-lg">undo</span>
                 <span class="tab-label">Devoluções</span>
                 <span id="returns_badge"
                     class="hidden absolute top-3 right-0 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
             </button>
-            <button data-tab="movements"
+            <button data-tab="movements" data-perm="stock:tab_movements"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
                 <span class="material-symbols-outlined text-lg">history</span>
                 <span class="tab-label">Histórico</span>

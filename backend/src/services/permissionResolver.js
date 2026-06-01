@@ -1,4 +1,5 @@
 const { prisma } = require("../db");
+const { TAB_PERMISSION_FALLBACKS } = require("../config/permissionsCatalog");
 
 const MUTATION_ACTIONS = new Set(["create", "edit", "delete", "approve", "manage"]);
 
@@ -82,6 +83,20 @@ async function getEffectivePermissionsForUser(userId) {
 }
 
 function resolveAllowedWithAliases(map, moduleName, action, method = "GET") {
+  const mapKey = `${moduleName}:${action}`;
+
+  if (action.startsWith("tab_")) {
+    if (Object.prototype.hasOwnProperty.call(map, mapKey)) {
+      const explicit = map[mapKey];
+      if (explicit === "true" || explicit === "own") return explicit;
+      if (explicit === "view" && method === "GET") return explicit;
+      return explicit;
+    }
+    const fb = TAB_PERMISSION_FALLBACKS[mapKey];
+    if (fb) return resolveAllowedWithAliases(map, fb.module, fb.action, method);
+    return resolveAllowedFromMap(map, moduleName, "view");
+  }
+
   let allowed = resolveAllowedFromMap(map, moduleName, action);
 
   // GET: "read" no módulo obras equivale a visualizar listas/detalhe

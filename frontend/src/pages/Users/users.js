@@ -154,10 +154,10 @@ function renderRow(u) {
             <span class="material-symbols-outlined text-base">shield_person</span>
             <span class="hidden sm:inline">Permissões</span>
           </button>
-          <button data-edit-user="${u.id}" class="h-8 px-3 rounded-lg border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-900 hover:text-[#2afc8d] hover:border-slate-900 transition-all">
+          <button type="button" data-edit-user="${u.id}" class="h-8 px-3 rounded-lg border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-900 hover:text-[#2afc8d] hover:border-slate-900 transition-all">
             Editar
           </button>
-          <button data-delete-user="${u.id}" class="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all">
+          <button type="button" data-delete-user="${u.id}" class="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all">
             <span class="material-symbols-outlined text-base">delete</span>
           </button>
         </div>
@@ -303,6 +303,13 @@ function normalizeDisplayCatalog(catalog) {
     module: g.module,
     icon: g.icon,
     pages: g.pages || [],
+    tabs: (g.tabs || []).map((t) => ({
+      label: t.label,
+      module: t.module,
+      action: t.action,
+      pageLabel: t.pageLabel,
+      route: t.route,
+    })),
     rows: (g.rows || []).map((r) => ({
       label: r.label,
       module: r.module,
@@ -326,9 +333,18 @@ function filterDisplayCatalog(catalog) {
           (g.pages || []).some((p) => p.label?.toLowerCase().includes(q))
         );
       });
-      return { ...g, rows };
+      const tabs = (g.tabs || []).filter((t) => {
+        if (!q) return true;
+        return (
+          t.label.toLowerCase().includes(q) ||
+          t.action.toLowerCase().includes(q) ||
+          (t.pageLabel || "").toLowerCase().includes(q) ||
+          g.group.toLowerCase().includes(q)
+        );
+      });
+      return { ...g, rows, tabs };
     })
-    .filter((g) => g.rows.length > 0);
+    .filter((g) => g.rows.length > 0 || (g.tabs || []).length > 0);
 }
 
 async function loadPermissions() {
@@ -377,7 +393,11 @@ function populatePermModuleFilter(catalog) {
 function countModuleGranted(group) {
   let granted = 0;
   let total = 0;
-  group.rows.forEach(({ module: mod, action }) => {
+  const entries = [
+    ...group.rows.map((r) => ({ module: r.module, action: r.action })),
+    ...(group.tabs || []).map((t) => ({ module: t.module, action: t.action })),
+  ];
+  entries.forEach(({ module: mod, action }) => {
     ROLES.forEach((role) => {
       total++;
       const v = permMap[permKey(role, mod, action)] ?? "false";
@@ -385,6 +405,32 @@ function countModuleGranted(group) {
     });
   });
   return { granted, total };
+}
+
+function renderPermTabRow(tab, groupModule, hiddenCls) {
+  const { label, module: mod, action, pageLabel, route } = tab;
+  let html = `<tr class="hover:bg-violet-50/30 transition-colors border-b border-slate-50 perm-tab-row${hiddenCls}"
+    data-parent-module="${esc(groupModule)}" data-module="${esc(mod)}" data-action="${esc(action)}">
+    <td class="px-7 py-3 pl-12">
+      <div class="flex items-center gap-2">
+        <span class="w-1 h-8 rounded-full bg-violet-300 shrink-0"></span>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="material-symbols-outlined text-violet-500 text-base">tab</span>
+            <div class="text-sm font-semibold text-slate-800">${esc(label)}</div>
+            <span class="perm-tab-page-badge" title="${esc(route || "")}">${esc(pageLabel || "Página")}</span>
+          </div>
+          <div class="text-[9px] font-mono text-violet-500/80 mt-0.5">${esc(mod)} · ${esc(action)}</div>
+        </div>
+      </div>
+    </td>`;
+  ROLES.forEach((role) => {
+    const key = permKey(role, mod, action);
+    const val = permMap[key] ?? "false";
+    html += `<td class="px-4 py-3 text-center">${permIcon(val, { role, module: mod, action, clickable: true })}</td>`;
+  });
+  html += "</tr>";
+  return html;
 }
 
 function renderPermissionsTable() {
@@ -404,6 +450,7 @@ function renderPermissionsTable() {
     const collapsedCls = expanded ? "" : " is-collapsed";
     const hiddenCls = expanded ? "" : " is-hidden-row";
     const { granted, total } = countModuleGranted(group);
+    const tabCount = (group.tabs || []).length;
     const actionCount = group.rows.length;
 
     html += `<tr class="bg-slate-50/40 border-b border-slate-100 perm-module-row${collapsedCls}" data-module="${esc(group.module)}">
@@ -414,7 +461,7 @@ function renderPermissionsTable() {
           <span class="material-symbols-outlined perm-chevron">expand_more</span>
           <span class="material-symbols-outlined text-base text-[#0d3fd1]">${esc(group.icon || "folder")}</span>
           <span class="text-[10px] font-black uppercase tracking-widest text-slate-700">${esc(group.group)}</span>
-          <span class="perm-module-badge">${actionCount} acções · ${granted}/${total} activas</span>
+          <span class="perm-module-badge">${tabCount ? `${tabCount} abas · ` : ""}${actionCount} acções · ${granted}/${total} activas</span>
         </button>
       </td>
     </tr>`;
@@ -428,6 +475,19 @@ function renderPermissionsTable() {
             </span>`).join("")}
         </td>
       </tr>`;
+    }
+
+    if ((group.tabs || []).length) {
+      html += `<tr class="perm-tabs-header${hiddenCls}" data-parent-module="${esc(group.module)}">
+        <td colspan="7" class="px-7 py-2 pl-12 bg-violet-50/40 border-b border-violet-100">
+          <span class="text-[9px] font-black uppercase tracking-widest text-violet-700">Abas visíveis na interface</span>
+          <span class="text-[9px] font-medium text-violet-500/80 ml-2">— clique nas células para mostrar ou ocultar cada aba</span>
+        </td>
+      </tr>`;
+      group.tabs.forEach((tab) => {
+        rowCount++;
+        html += renderPermTabRow(tab, group.module, hiddenCls);
+      });
     }
 
     group.rows.forEach(({ label, module: mod, action }) => {
@@ -457,7 +517,10 @@ function renderPermissionsTable() {
 
   const expandedCount = catalog.filter((g) => isModuleExpanded(g.module)).length;
   el("permRowCount") && (el("permRowCount").textContent = `${rowCount} acções · ${expandedCount}/${catalog.length} módulos abertos`);
+  const wrap = document.querySelector(".perm-table-wrap");
+  const scrollTop = wrap?.scrollTop ?? 0;
   tbody.innerHTML = html;
+  if (wrap) wrap.scrollTop = scrollTop;
 }
 
 function updateModuleCollapseUI(moduleId) {
@@ -559,6 +622,23 @@ function buildUserPermTableHtml(state) {
     html += `<tr class="bg-slate-50/80"><td colspan="3" class="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-500">
       <span class="material-symbols-outlined text-sm align-middle text-[#0d3fd1]">${esc(group.icon || "folder")}</span> ${esc(group.group)}
     </td></tr>`;
+    if ((group.tabs || []).length) {
+      html += `<tr class="bg-violet-50/40"><td colspan="3" class="px-4 py-1.5 pl-8 text-[9px] font-black uppercase tracking-widest text-violet-600">Abas</td></tr>`;
+      group.tabs.forEach((tab) => {
+        const key = `${tab.module}:${tab.action}`;
+        const effective = effectiveMap[key] ?? "false";
+        const roleVal = roleMap[key] ?? "false";
+        const isOverride = overrideKeys.includes(key);
+        html += `<tr class="border-t border-violet-50 hover:bg-violet-50/30" data-user-perm-row data-perm-key="${esc(key)}">
+          <td class="px-4 py-2 pl-10">
+            <div class="font-medium text-slate-700 text-sm">${esc(tab.label)}</div>
+            <div class="text-[9px] text-violet-600/80">${esc(tab.pageLabel || "")} · ${esc(tab.module)} · ${esc(tab.action)}</div>
+          </td>
+          <td class="px-3 py-2 text-center">${rolePermIconHtml(roleVal)}</td>
+          <td class="px-3 py-2 text-center">${userPermIconHtml(effective, roleVal, isOverride, { userId, module: tab.module, action: tab.action })}</td>
+        </tr>`;
+      });
+    }
     group.rows.forEach(({ label, module: mod, action }) => {
       const key = `${mod}:${action}`;
       const effective = effectiveMap[key] ?? "false";
@@ -596,7 +676,30 @@ function resolveNextUserPermAllowed(state, mapKey) {
 
 function refreshUserPermModalUI(state) {
   const body = state.panel?.querySelector("[data-body]");
-  if (body) body.innerHTML = buildUserPermTableHtml(state);
+  if (!body) return;
+  const scrollTop = body.scrollTop;
+  body.innerHTML = buildUserPermTableHtml(state);
+  body.scrollTop = scrollTop;
+  const countEl = document.getElementById("userPermOverrideCount");
+  if (countEl) countEl.textContent = String(state.overrideKeys.length);
+  activeUserPermState = state;
+}
+
+function refreshUserPermCell(userId, mod, action, state) {
+  const mapKey = `${mod}:${action}`;
+  const row = state.panel?.querySelector(`[data-user-perm-row][data-perm-key="${CSS.escape(mapKey)}"]`);
+  if (!row) {
+    refreshUserPermModalUI(state);
+    return;
+  }
+  const effective = state.effectiveMap[mapKey] ?? "false";
+  const roleVal = state.roleMap[mapKey] ?? "false";
+  const isOverride = state.overrideKeys.includes(mapKey);
+  const cells = row.querySelectorAll("td");
+  if (cells[1]) cells[1].innerHTML = rolePermIconHtml(roleVal);
+  if (cells[2]) {
+    cells[2].innerHTML = userPermIconHtml(effective, roleVal, isOverride, { userId, module: mod, action });
+  }
   const countEl = document.getElementById("userPermOverrideCount");
   if (countEl) countEl.textContent = String(state.overrideKeys.length);
   activeUserPermState = state;
@@ -606,6 +709,7 @@ async function saveUserPermission(userId, mod, action, nextAllowed, state) {
   const key = userPermStateKey(userId, mod, action);
   const mapKey = `${mod}:${action}`;
   userPermSaving.add(key);
+  refreshUserPermCell(userId, mod, action, state);
   try {
     const res = await apiRequest(
       `/permissions/users/${encodeURIComponent(userId)}/${encodeURIComponent(mod)}/${encodeURIComponent(action)}`,
@@ -629,7 +733,7 @@ async function saveUserPermission(userId, mod, action, nextAllowed, state) {
     toast(err.message || "Erro ao guardar.", { type: "error" });
   } finally {
     userPermSaving.delete(key);
-    refreshUserPermModalUI(state);
+    refreshUserPermCell(userId, mod, action, state);
   }
 }
 

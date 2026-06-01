@@ -217,6 +217,22 @@
             margin: 2px 4px 2px 0;
         }
 
+        .perm-tabs-header.is-hidden-row,
+        .perm-tab-row.is-hidden-row {
+            display: none;
+        }
+
+        .perm-tab-page-badge {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #6d28d9;
+            background: #ede9fe;
+            border-radius: 6px;
+            padding: 2px 8px;
+        }
+
         #searchInput:focus {
             outline: none;
             border-color: #0F172A;
@@ -662,6 +678,11 @@
                                 <p class="text-[11px] font-semibold text-[#0d3fd1] mt-2 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-sm">touch_app</span>
                                     Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para expandir ou ocultar blocos.
+                                </p>
+                                <p class="text-[11px] font-medium text-slate-500 mt-2 max-w-3xl">
+                                    Expanda um módulo (<strong>Stock</strong>, <strong>Materiais</strong>, <strong>Ferramentas</strong>, <strong>Obras</strong> ou <strong>Portal</strong>) para ver
+                                    <strong>Abas visíveis na interface</strong> — Logística &amp; Stock, Vista da obra, Portal do cliente e sub-abas de armazém.
+                                    Use <strong>Sincronizar</strong> uma vez após actualizar o sistema para criar as novas permissões de abas na base de dados.
                                 </p>
                             </div>
                             <div class="flex flex-wrap gap-2 shrink-0">

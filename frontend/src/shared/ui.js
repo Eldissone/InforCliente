@@ -99,14 +99,14 @@ export function openModal({
   panel.innerHTML = `
     <div class="flex shrink-0 items-center justify-between px-8 py-6">
       <h3 class="text-xl font-bold text-slate-900">${title || ""}</h3>
-      <button data-close class="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+      <button type="button" data-close class="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-colors">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
     <div class="overflow-y-auto px-8 pb-8" data-body>${contentHtml || ""}</div>
     <div class="flex shrink-0 justify-end gap-3 bg-slate-50/50 px-8 py-6">
-      ${secondaryLabel ? `<button data-secondary class="h-11 px-6 rounded-xl text-slate-600 font-semibold hover:bg-slate-100 transition-colors">${secondaryLabel}</button>` : ""}
-      ${primaryLabel ? `<button data-primary class="h-11 px-6 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all active:scale-95">${primaryLabel}</button>` : ""}
+      ${secondaryLabel ? `<button type="button" data-secondary class="h-11 px-6 rounded-xl text-slate-600 font-semibold hover:bg-slate-100 transition-colors">${secondaryLabel}</button>` : ""}
+      ${primaryLabel ? `<button type="button" data-primary class="h-11 px-6 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all active:scale-95">${primaryLabel}</button>` : ""}
     </div>
   `;
 

@@ -2,7 +2,7 @@ import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { wireUsersNav, wireLogout } from "../../shared/session.js";
 import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb, toast, setButtonLoading } from "../../shared/ui.js";
 import { resolveProductImageUrl } from "../../services/api.js";
-import { can, initPermissionLayer } from "../../shared/permissions.js";
+import { can, initPermissionLayer, activateFirstVisibleStockTab, guardPageAccess } from "../../shared/permissions.js";
 
 function canEditTools() {
     return can("stock", "manage") || can("stock", "edit") || can("ferramentas", "edit") || can("ferramentas", "manage");
@@ -58,6 +58,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     wireLogout();
     initMobileMenu();
     wireProductImagePreview();
+    await guardPageAccess("stock", "view");
     await initPermissionLayer();
     init();
 });
@@ -121,7 +122,9 @@ function parseMovementParties(m) {
 
 function init() {
     setupTabs();
-    loadTabContent(currentTab);
+    const firstTab = activateFirstVisibleStockTab();
+    if (firstTab) currentTab = firstTab;
+    else loadTabContent(currentTab);
     setupGlobalEvents();
     updateRequestsBadge();
 }
@@ -130,6 +133,7 @@ function setupTabs() {
     const tabs = document.querySelectorAll(".tab-btn");
     tabs.forEach(tab => {
         tab.addEventListener("click", () => {
+            if (tab.dataset.permDenied === "true" || tab.classList.contains("hidden")) return;
             tabs.forEach(t => t.classList.remove("tab-active"));
             tab.classList.add("tab-active");
             currentTab = tab.dataset.tab;
@@ -145,6 +149,17 @@ function setupGlobalEvents() {
 
 async function loadTabContent(tab) {
     const container = document.getElementById("tabContent");
+    const tabBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (tabBtn?.dataset.permDenied === "true" || tabBtn?.classList.contains("hidden")) {
+        const fallback = activateFirstVisibleStockTab();
+        if (fallback) {
+            currentTab = fallback;
+            return loadTabContent(fallback);
+        }
+        container.innerHTML = `<div class="bg-slate-50 text-slate-500 p-10 rounded-2xl font-bold text-center">Sem permissão para aceder a esta secção.</div>`;
+        return;
+    }
+
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
 
     try {

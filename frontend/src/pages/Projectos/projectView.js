@@ -1,5 +1,11 @@
 import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
+import {
+  initPermissionLayer,
+  activateFirstVisibleProjectTab,
+  activateFirstVisibleStockSubtab,
+  guardPageAccess,
+} from "../../shared/permissions.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
 import {
   parseStockMovementLogistics,
@@ -36,6 +42,7 @@ function applyRoleVisibility() {
   const user = getSessionUser();
   const role = (user?.role || "leitura").toLowerCase();
   document.querySelectorAll("[data-role-visible]").forEach(el => {
+    if (el.dataset.permDenied === "true") return;
     const roles = el.getAttribute("data-role-visible").toLowerCase().split(",");
     if (roles.includes(role)) {
       el.classList.remove("hidden");
@@ -787,6 +794,7 @@ function wireTabs() {
   const triggers = document.querySelectorAll("[data-tab-trigger]");
   triggers.forEach(t => {
     t.addEventListener("click", () => {
+      if (t.dataset.permDenied === "true" || t.classList.contains("hidden")) return;
       const tabId = t.getAttribute("data-tab-trigger");
 
       // Update Triggers
@@ -2354,6 +2362,8 @@ async function init() {
   initMobileMenu();
   wireLogout();
   wireUsersNav();
+  await guardPageAccess("obras", "view");
+  await initPermissionLayer();
   await loadProject();
   await loadTransactions();
   await loadBudgetExecution();
@@ -2363,6 +2373,19 @@ async function init() {
   wireNewTransaction();
   wireLiquidation();
   wireTabs();
+  applyRoleVisibility();
+  const user = getSessionUser();
+  const role = (user?.role || "").toLowerCase();
+  if (role === "cliente" || role === "client") {
+    const galeria = el("tabTriggerGaleria");
+    if (galeria && galeria.dataset.permDenied !== "true" && !galeria.classList.contains("hidden")) {
+      galeria.click();
+    } else {
+      activateFirstVisibleProjectTab();
+    }
+  } else {
+    activateFirstVisibleProjectTab();
+  }
   wireFilesUpload();
   wireNewFolder();
   wireFileNavigation();
@@ -2371,6 +2394,7 @@ async function init() {
   wireProgressTasks();
   wirePayments();
   wireStock();
+  activateFirstVisibleStockSubtab();
   wireGallery();
   wireTablesToggle();
 
@@ -2405,14 +2429,6 @@ async function init() {
     if (e.key === "Escape") closeLightbox();
   });
 
-  // Redirecionamento automÃ¡tico para cliente
-  const user = getSessionUser();
-  if (user?.role === "cliente" || user?.role === "client") {
-    const tabBtn = el("tabTriggerGaleria");
-    if (tabBtn) tabBtn.click();
-  } else {
-    applyRoleVisibility();
-  }
 }
 
 function openPreview(fileId) {
@@ -3492,6 +3508,7 @@ function wireStock() {
   // Sub-tabs de Stock (Fluxo, InventÃ¡rio, Galeria)
   document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
     btn.addEventListener("click", () => {
+      if (btn.dataset.permDenied === "true" || btn.classList.contains("hidden")) return;
       const tab = btn.dataset.stockSubtab;
 
       // Estilo dos botÃµes

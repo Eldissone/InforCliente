@@ -282,28 +282,28 @@
         <!-- Tab Navigation -->
         <div
             class="flex flex-row flex-nowrap items-center gap-4 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar pb-4">
-            <button data-tab-trigger="dashboard"
+            <button data-tab-trigger="dashboard" data-perm="portal:tab_executive_summary"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Resumo
                 Executivo</button>
-            <button data-tab-trigger="arquivos"
+            <button data-tab-trigger="arquivos" data-perm="portal:tab_portal_arquivos"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Arquivos</button>
 
-            <button data-tab-trigger="obra"
+            <button data-tab-trigger="obra" data-perm="portal:tab_portal_obra_info"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Informação
                 da Obra</button>
 
-            <button data-tab-trigger="stock"
+            <button data-tab-trigger="stock" data-perm="portal:tab_portal_armazem"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Armazém
             </button>
 
-            <button data-tab-trigger="galeria-obra"
+            <button data-tab-trigger="galeria-obra" data-perm="portal:tab_portal_galeria"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
                 da Obra
             </button>
 
 
-            <button data-tab-trigger="equipa"
+            <button data-tab-trigger="equipa" data-perm="portal:tab_portal_contactos"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Contactos
             </button>
         </div>
@@ -530,7 +530,7 @@
                     class="flex flex-row justify-between items-center border-b border-slate-50 px-4 md:px-10 overflow-hidden">
                     <div class="flex flex-row flex-nowrap overflow-x-auto no-scrollbar">
 
-                        <button data-stock-subtab="inventory"
+                        <button data-stock-subtab="inventory" data-perm="portal:tab_portal_stock_inventory"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Armazém</span>
                             <span class="hidden md:inline">Stock/Armazém</span>
@@ -547,7 +547,7 @@
                             <span class="md:hidden">Galeria</span>
                             <span class="hidden md:inline">Galeria de Armazém</span>
                         </button> -->
-                        <button data-stock-subtab="history"
+                        <button data-stock-subtab="history" data-perm="portal:tab_portal_stock_history"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 transition-all">
                             <span class="md:hidden">Diário de Armazém</span>
                             <span class="hidden md:inline">Diário de Armazém</span>
