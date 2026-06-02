@@ -63,12 +63,12 @@ productRoutes.post(
       if (error.code === 'P2002') {
         const target = error.meta?.target || [];
         if (target.includes('sku')) {
-          return res.status(400).json({ error: "O SKU inserido j? est? em uso." });
+          return res.status(400).json({ error: "O SKU inserido já está em uso." });
         }
         if (target.includes('barcode')) {
-          return res.status(400).json({ error: "O c?digo de barras inserido j? est? em uso." });
+          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
         }
-        return res.status(400).json({ error: "O SKU ou C?digo de Barras inserido j? est? em uso." });
+        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
       }
       throw error;
     }
@@ -102,12 +102,12 @@ productRoutes.patch(
       if (error.code === 'P2002') {
         const target = error.meta?.target || [];
         if (target.includes('sku')) {
-          return res.status(400).json({ error: "O SKU inserido j? est? em uso." });
+          return res.status(400).json({ error: "O SKU inserido já está em uso." });
         }
         if (target.includes('barcode')) {
-          return res.status(400).json({ error: "O c?digo de barras inserido j? est? em uso." });
+          return res.status(400).json({ error: "O código de barras inserido já está em uso." });
         }
-        return res.status(400).json({ error: "O SKU ou C?digo de Barras inserido j? est? em uso." });
+        return res.status(400).json({ error: "O SKU ou Código de Barras inserido já está em uso." });
       }
       throw error;
     }
@@ -124,7 +124,7 @@ productRoutes.post(
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
     const product = await prisma.product.findUnique({ where: { id } });
-    if (!product) return res.status(404).json({ error: "Produto n?o encontrado." });
+    if (!product) return res.status(404).json({ error: "Produto não encontrado." });
 
     const extension = path.extname(req.file.originalname).toLowerCase() || ".jpg";
     const storagePath = `products/${id}/photo-${Date.now()}${extension}`;
@@ -163,7 +163,7 @@ productRoutes.delete(
     });
 
     if (!product) {
-      return res.status(404).json({ error: "Produto n?o encontrado." });
+      return res.status(404).json({ error: "Produto não encontrado." });
     }
 
     const { items, movements, dailyPlanMaterials, projectPlans } = product._count;
@@ -178,10 +178,10 @@ productRoutes.delete(
       const parts = [];
       if (items > 0) parts.push(`${items} ativo(s) vinculado(s)`);
       if (stockWithQty.length > 0) {
-        parts.push(`stock positivo em ${stockWithQty.length} armaz?m(ns)`);
+        parts.push(`stock positivo em ${stockWithQty.length} armazém(ns)`);
       }
       return res.status(400).json({
-        error: `N?o pode eliminar: ${parts.join("; ")}.`,
+        error: `Não pode eliminar: ${parts.join("; ")}.`,
         reasons,
       });
     }
@@ -212,7 +212,7 @@ productRoutes.delete(
         success: true,
         archived: true,
         message:
-          "Produto arquivado (mant?m hist?rico de movimentos). Deixou de aparecer no cat?logo.",
+          "Produto arquivado (mantém histórico de movimentos). Deixou de aparecer no catálogo.",
       });
     }
 
