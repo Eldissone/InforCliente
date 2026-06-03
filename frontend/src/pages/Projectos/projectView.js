@@ -3899,7 +3899,7 @@ function wireGallery() {
         const descCustom = panel.querySelector("#gal_desc_custom");
 
         const dpStatusLabel = (s) => {
-          if (s === "DRAFT") return "Rascunho";
+          if (s === "DRAFT") return "Disponível";
           if (s === "PENDING_MATERIAL") return "Ag. Material";
           if (s === "IN_PROGRESS") return "Em Execução";
           if (s === "COMPLETED") return "Concluído";
@@ -4077,7 +4077,7 @@ function renderDailyPlansList() {
 
   container.innerHTML = filtered.map(p => {
     let statusBadge = "";
-    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
+    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
     if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
     if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
     if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
@@ -4664,7 +4664,7 @@ window.viewPlanDetails = async function (planId) {
     const plan = await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`);
 
     let statusBadge = "";
-    if (plan.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Rascunho</span>`;
+    if (plan.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
     if (plan.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>`;
     if (plan.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
     if (plan.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
