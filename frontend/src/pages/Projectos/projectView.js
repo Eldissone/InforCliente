@@ -1005,7 +1005,7 @@ function syncMeasurementReportNumberInput() {
   }
 
   input.value = measurementState.nextReportNumber || "01";
-  /*if (hint) hint.textContent = "Próximo automático";*/
+  if (hint) hint.textContent = "Próximo automático";
 }
 
 function computeNextReportNumber(reports) {
