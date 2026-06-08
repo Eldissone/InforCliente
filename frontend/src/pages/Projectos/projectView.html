@@ -61,6 +61,68 @@
             display: none;
         }
 
+        .measurement-table thead th {
+            border: 1px solid #e2e8f0;
+        }
+
+        .measurement-table .meas-group-head th {
+            background: #f1f5f9;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #475569;
+            text-align: center;
+            padding: 8px 6px;
+        }
+
+        .measurement-table .meas-col-head th {
+            background: #f8fafc;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            text-align: center;
+            padding: 10px 6px;
+            white-space: nowrap;
+        }
+
+        .measurement-row-grand td {
+            background: #e2e8f0;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .measurement-row-section td {
+            background: #212e3e;
+            color: #fff;
+            font-weight: 800;
+        }
+
+        .measurement-row-category td {
+            background: #dbeafe;
+            color: #1e3a8a;
+            font-weight: 700;
+        }
+
+        .measurement-row-item td {
+            background: #fff;
+        }
+
+        .measurement-num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .measurement-wbs {
+            text-align: center;
+            font-weight: 700;
+            font-size: 11px;
+            color: #64748b;
+        }
+
         .tables-collapsed {
             display: none !important;
         }
@@ -250,6 +312,11 @@
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
                 <span class="md:hidden">Avanço Físico</span>
                 <span class="hidden md:inline">Avanço Físico</span>
+            </button>
+            <button data-tab-trigger="medicoes" data-perm="obras:tab_measurements"
+                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
+                <span class="md:hidden">Medições</span>
+                <span class="hidden md:inline">Autos de Medição</span>
             </button>
             <button data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
                 class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
@@ -726,6 +793,97 @@
                             class="bg-slate-900 text-white font-black text-xs uppercase tracking-widest border-t-4 border-slate-900">
                             <!-- JS populated -->
                         </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Autos de Medição Tab -->
+        <div id="tab_medicoes" class="tab-content hidden">
+            <div
+                class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
+                    <p class="text-sm text-slate-500 font-medium">Estrutura Analítica de Projeto (WBS).</p>
+                </div>
+                <div class="flex flex-wrap items-end gap-3 w-full lg:w-auto">
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto Nº</label>
+                        <input id="measurementReportNumber" type="text" value="01"
+                            class="w-20 h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data do Auto</label>
+                        <input id="measurementCurrentDate" type="date"
+                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto Anterior (até)</label>
+                        <input id="measurementPrevDate" type="date"
+                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                            title="Data limite do auto anterior — define o acumulado anterior" />
+                    </div>
+                    <button id="refreshMeasurementsBtn"
+                        class="h-10 bg-slate-900 text-white px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all">
+                        <span class="material-symbols-outlined text-lg">refresh</span>
+                        Atualizar
+                    </button>
+                </div>
+            </div>
+
+            <div id="measurementGroupTabs"
+                class="flex flex-row flex-nowrap border-b border-slate-100 mb-6 overflow-x-auto no-scrollbar gap-1">
+                <button data-measurement-group="all"
+                    class="px-5 py-2.5 text-xs font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Controlo</button>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
+                <div
+                    class="px-6 md:px-10 py-5 border-b border-slate-50 flex flex-row items-center justify-between gap-4">
+                    <div>
+                        <h3 id="measurementTableTitle" class="text-sm font-black uppercase tracking-widest text-slate-400">Controlo de Medições</h3>
+                        <p id="measurementTableSubtitle" class="text-[11px] text-slate-400 mt-1 font-medium"></p>
+                    </div>
+                    <button data-toggle-table="measurements"
+                        class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
+                        <span class="material-symbols-outlined transition-transform">expand_more</span>
+                    </button>
+                </div>
+                <div data-table-body="measurements" class="table-responsive custom-scroll">
+                    <table class="w-full measurement-table text-xs">
+                        <thead>
+                            <tr class="meas-group-head">
+                                <th colspan="2">Purchase Order</th>
+                                <th colspan="5">Total</th>
+                                <th colspan="3">Acumulado</th>
+                                <th colspan="3">Acumulado anterior</th>
+                                <th colspan="3">Em aberto</th>
+                            </tr>
+                            <tr class="meas-col-head">
+                                <th>Código WBS</th>
+                                <th class="text-left !text-left">Descrição</th>
+                                <th>UN</th>
+                                <th>QUANT</th>
+                                <th id="measurementPuHeader">PU</th>
+                                <th id="measurementTotalHeader">TOTAL</th>
+                                <th>% do Global</th>
+                                <th>QUANT</th>
+                                <th>TOTAL</th>
+                                <th>%</th>
+                                <th>QUANT</th>
+                                <th>TOTAL</th>
+                                <th>%</th>
+                                <th>QUANT</th>
+                                <th>TOTAL</th>
+                                <th>%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="measurementsTbody" class="divide-y divide-slate-50 text-slate-700">
+                            <tr>
+                                <td colspan="16" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Carregando...</td>
+                            </tr>
+                        </tbody>
+                        <tfoot id="measurementsTfoot" class="bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest"></tfoot>
                     </table>
                 </div>
             </div>

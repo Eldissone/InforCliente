@@ -811,6 +811,7 @@ function wireTabs() {
 
       if (tabId === "files") loadFiles();
       if (tabId === "relatorio") loadProgressTasks();
+      if (tabId === "medicoes") loadMeasurements();
       if (tabId === "stock") loadStock();
       if (tabId === "galeria_obra") loadGallery();
       if (tabId === "planos_diarios") loadDailyPlans();
@@ -965,6 +966,345 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       </td>
     </tr>
   `;
+}
+
+const measurementState = {
+  tasks: [],
+  history: [],
+  activeGroup: "all",
+};
+
+function measNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function measTaskUnitValue(t) {
+  const uvM = measNum(t.unitValueMaterial);
+  const uvS = measNum(t.unitValueService);
+  return (t.unitValue !== null && t.unitValue !== undefined) ? measNum(t.unitValue) : (uvM + uvS);
+}
+
+function measFmtQty(v) {
+  return measNum(v).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function measFmtMoney(v, currency = "Kz") {
+  if (!v && v !== 0) return "—";
+  return `${measNum(v).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function measFmtPct(v) {
+  return `${measNum(v).toFixed(2)}%`;
+}
+
+function measHistoryQtyAt(taskId, dateStr, history, fallback = 0) {
+  if (!dateStr || !history?.length) return fallback;
+  const cutoff = new Date(`${dateStr}T23:59:59`);
+  const entries = history
+    .filter((h) => h.taskId === taskId && new Date(h.date) <= cutoff)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  return entries.length ? measNum(entries[0].accumulatedQty) : 0;
+}
+
+function measResolveQtys(t, children, hasChildren, history, currentDate, prevDate) {
+  let exp;
+  const uv = measTaskUnitValue(t);
+
+  if (hasChildren && children.length > 0) {
+    exp = children.reduce((s, c) => s + measNum(c.expectedQty), 0);
+    const acc = children.reduce((s, c) => {
+      const q = currentDate
+        ? measHistoryQtyAt(c.id, currentDate, history, measNum(c.executedQty))
+        : measNum(c.executedQty);
+      return s + q;
+    }, 0);
+    const prev = children.reduce((s, c) => {
+      const q = prevDate
+        ? measHistoryQtyAt(c.id, prevDate, history, 0)
+        : 0;
+      return s + q;
+    }, 0);
+    const open = Math.max(0, exp - acc);
+    return {
+      exp,
+      acc,
+      prev,
+      open,
+      totalVal: children.reduce((s, c) => s + measTaskUnitValue(c) * measNum(c.expectedQty), 0),
+      accVal: children.reduce((s, c) => {
+        const q = currentDate
+          ? measHistoryQtyAt(c.id, currentDate, history, measNum(c.executedQty))
+          : measNum(c.executedQty);
+        return s + measTaskUnitValue(c) * q;
+      }, 0),
+      prevVal: children.reduce((s, c) => {
+        const q = prevDate ? measHistoryQtyAt(c.id, prevDate, history, 0) : 0;
+        return s + measTaskUnitValue(c) * q;
+      }, 0),
+      openVal: 0,
+      uv: exp > 0 ? (children.reduce((s, c) => s + measTaskUnitValue(c) * measNum(c.expectedQty), 0) / exp) : 0,
+      unit: t.unit,
+      currency: t.currency === "USD" ? "USD" : "Kz",
+    };
+  }
+
+  exp = measNum(t.expectedQty);
+  const acc = currentDate
+    ? measHistoryQtyAt(t.id, currentDate, history, measNum(t.executedQty))
+    : measNum(t.executedQty);
+  const prev = prevDate ? measHistoryQtyAt(t.id, prevDate, history, 0) : 0;
+  const open = Math.max(0, exp - acc);
+  const totalVal = uv * exp;
+  const accVal = uv * acc;
+  const prevVal = uv * prev;
+  const openVal = Math.max(0, totalVal - accVal);
+
+  return {
+    exp,
+    acc,
+    prev,
+    open,
+    totalVal,
+    accVal,
+    prevVal,
+    openVal,
+    uv,
+    unit: t.unit,
+    currency: t.currency === "USD" ? "USD" : "Kz",
+  };
+}
+
+function measRowCells(wbs, desc, q, globalTotal, rowClass, indent = 0) {
+  const pctGlobal = globalTotal > 0 ? (q.totalVal / globalTotal) * 100 : 0;
+  const accPct = q.totalVal > 0 ? (q.accVal / q.totalVal) * 100 : (q.acc > 0 ? 100 : 0);
+  const prevPct = q.totalVal > 0 ? (q.prevVal / q.totalVal) * 100 : 0;
+  const openVal = q.openVal || Math.max(0, q.totalVal - q.accVal);
+  const openPct = q.totalVal > 0 ? (openVal / q.totalVal) * 100 : 0;
+  const curr = q.currency || "Kz";
+  const indentPad = indent > 0 ? `padding-left:${indent * 16}px` : "";
+
+  return `
+    <tr class="${rowClass}">
+      <td class="px-3 py-3 measurement-wbs">${escapeHtml(wbs)}</td>
+      <td class="px-3 py-3 font-semibold" style="${indentPad}">${escapeHtml(desc)}</td>
+      <td class="px-2 py-3 text-center text-[10px] font-bold uppercase text-slate-500">${formatUnit(q.unit || "un")}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtQty(q.exp)}</td>
+      <td class="px-2 py-3 measurement-num">${q.uv > 0 ? measFmtMoney(q.uv, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num font-bold">${q.totalVal > 0 ? measFmtMoney(q.totalVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtPct(pctGlobal)}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtQty(q.acc)}</td>
+      <td class="px-2 py-3 measurement-num font-bold text-emerald-700">${q.accVal > 0 ? measFmtMoney(q.accVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num text-emerald-600">${measFmtPct(accPct)}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtQty(q.prev)}</td>
+      <td class="px-2 py-3 measurement-num text-blue-700">${q.prevVal > 0 ? measFmtMoney(q.prevVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num text-blue-600">${measFmtPct(prevPct)}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtQty(q.open)}</td>
+      <td class="px-2 py-3 measurement-num text-red-700">${openVal > 0 ? measFmtMoney(openVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num text-red-600">${measFmtPct(openPct)}</td>
+    </tr>`;
+}
+
+function renderMeasurementGroupTabs(groups) {
+  const container = el("measurementGroupTabs");
+  if (!container) return;
+
+  const active = measurementState.activeGroup || "all";
+  let html = `<button data-measurement-group="all" class="px-5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${active === "all" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">Controlo</button>`;
+
+  groups.forEach((g) => {
+    const safe = escapeHtml(g);
+    const isActive = active === g;
+    html += `<button data-measurement-group="${safe}" class="px-5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${isActive ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">${safe}</button>`;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll("[data-measurement-group]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      measurementState.activeGroup = btn.getAttribute("data-measurement-group");
+      renderMeasurementTable();
+      renderMeasurementGroupTabs(groups);
+    });
+  });
+}
+
+function renderMeasurementTable() {
+  const tbody = el("measurementsTbody");
+  const tfoot = el("measurementsTfoot");
+  if (!tbody) return;
+
+  const tasks = measurementState.tasks || [];
+  const history = measurementState.history || [];
+  const filterGroup = measurementState.activeGroup || "all";
+  const currentDate = el("measurementCurrentDate")?.value || "";
+  const prevDate = el("measurementPrevDate")?.value || "";
+  const reportNo = el("measurementReportNumber")?.value || "01";
+
+  const projectName = projectState?.name || "Obra";
+  const currency = projectState?.currency === "USD" ? "USD" : "Kz";
+
+  el("measurementPuHeader").textContent = `PU (${currency})`;
+  el("measurementTotalHeader").textContent = `TOTAL (${currency})`;
+
+  const subtitle = el("measurementTableSubtitle");
+  if (subtitle) {
+    const parts = [`Auto Nº ${reportNo}`];
+    if (currentDate) parts.push(`Data: ${formatDateBR(currentDate)}`);
+    if (prevDate) parts.push(`Anterior até: ${formatDateBR(prevDate)}`);
+    subtitle.textContent = parts.join(" · ");
+  }
+
+  const titleEl = el("measurementTableTitle");
+  if (titleEl) {
+    titleEl.textContent = filterGroup === "all" ? "Controlo de Medições" : `Controlo — ${filterGroup}`;
+  }
+
+  const filtered = tasks.filter((t) => filterGroup === "all" || (t.itemGroup || "") === filterGroup);
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Sem itens de medição cadastrados</td></tr>`;
+    if (tfoot) tfoot.innerHTML = "";
+    return;
+  }
+
+  const children = filtered.filter((t) => t.parentId);
+  const parents = filtered
+    .filter((t) => !t.parentId)
+    .sort((a, b) => (a.itemGroup || "").localeCompare(b.itemGroup || "", "pt", { sensitivity: "base" }) || measNum(a.order) - measNum(b.order));
+
+  let globalTotalVal = 0;
+  parents.forEach((t) => {
+    const subs = children.filter((c) => c.parentId === t.id);
+    const q = measResolveQtys(t, subs, subs.length > 0, history, currentDate, prevDate);
+    globalTotalVal += q.totalVal;
+  });
+
+  let html = "";
+  let grand = { exp: 0, acc: 0, prev: 0, open: 0, totalVal: 0, accVal: 0, prevVal: 0, openVal: 0, unit: "vg", currency };
+
+  let lastGroup = null;
+  let groupCounter = 0;
+  let groupIndex = 0;
+
+  parents.forEach((t) => {
+    const groupName = t.itemGroup || "Outros / Geral";
+    const subs = children.filter((c) => c.parentId === t.id);
+    const hasChildren = subs.length > 0;
+    const q = measResolveQtys(t, subs, hasChildren, history, currentDate, prevDate);
+
+    if (filterGroup === "all" && groupName !== lastGroup) {
+      groupCounter++;
+      groupIndex = 0;
+      const groupParents = parents.filter((p) => (p.itemGroup || "Outros / Geral") === groupName);
+      const groupAgg = groupParents.reduce((agg, p) => {
+        const pSubs = children.filter((c) => c.parentId === p.id);
+        const pq = measResolveQtys(p, pSubs, pSubs.length > 0, history, currentDate, prevDate);
+        agg.exp += pq.exp;
+        agg.acc += pq.acc;
+        agg.prev += pq.prev;
+        agg.open += pq.open;
+        agg.totalVal += pq.totalVal;
+        agg.accVal += pq.accVal;
+        agg.prevVal += pq.prevVal;
+        agg.openVal += pq.openVal || Math.max(0, pq.totalVal - pq.accVal);
+        return agg;
+      }, { exp: 0, acc: 0, prev: 0, open: 0, totalVal: 0, accVal: 0, prevVal: 0, openVal: 0, unit: "vg", currency: groupParents[0]?.currency === "USD" ? "USD" : currency });
+
+      html += measRowCells(String(groupCounter), groupName.toUpperCase(), groupAgg, globalTotalVal, "measurement-row-section");
+      lastGroup = groupName;
+    }
+
+    groupIndex++;
+    const wbsPrefix = filterGroup === "all" ? String(groupCounter) : "";
+    const wbs = wbsPrefix ? `${wbsPrefix}.${groupIndex}` : String(groupIndex);
+
+    grand.exp += q.exp;
+    grand.acc += q.acc;
+    grand.prev += q.prev;
+    grand.open += q.open;
+    grand.totalVal += q.totalVal;
+    grand.accVal += q.accVal;
+    grand.prevVal += q.prevVal;
+    grand.openVal += q.openVal || Math.max(0, q.totalVal - q.accVal);
+
+    if (hasChildren) {
+      html += measRowCells(wbs, t.description, q, globalTotalVal, "measurement-row-category");
+      subs.forEach((sub, subI) => {
+        const sq = measResolveQtys(sub, [], false, history, currentDate, prevDate);
+        html += measRowCells(`${wbs}.${subI + 1}`, sub.description, sq, globalTotalVal, "measurement-row-item", 1);
+      });
+    } else {
+      html += measRowCells(wbs, t.description, q, globalTotalVal, "measurement-row-item");
+    }
+  });
+
+  const grandRow = measRowCells("", projectName.toUpperCase(), { ...grand, currency }, globalTotalVal, "measurement-row-grand");
+  tbody.innerHTML = grandRow + html;
+
+  if (tfoot) {
+    const accPct = grand.totalVal > 0 ? (grand.accVal / grand.totalVal) * 100 : 0;
+    const openVal = grand.openVal || Math.max(0, grand.totalVal - grand.accVal);
+    const openPct = grand.totalVal > 0 ? (openVal / grand.totalVal) * 100 : 0;
+    tfoot.innerHTML = `
+      <tr>
+        <td colspan="2" class="px-4 py-4 text-center">TOTAL GERAL</td>
+        <td class="px-2 py-4 text-center">vg</td>
+        <td class="px-2 py-4 measurement-num">${measFmtQty(grand.exp)}</td>
+        <td class="px-2 py-4"></td>
+        <td class="px-2 py-4 measurement-num">${measFmtMoney(grand.totalVal, currency)}</td>
+        <td class="px-2 py-4 measurement-num">100,00%</td>
+        <td class="px-2 py-4 measurement-num">${measFmtQty(grand.acc)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtMoney(grand.accVal, currency)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtPct(accPct)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtQty(grand.prev)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtMoney(grand.prevVal, currency)}</td>
+        <td class="px-2 py-4"></td>
+        <td class="px-2 py-4 measurement-num">${measFmtQty(grand.open)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtMoney(openVal, currency)}</td>
+        <td class="px-2 py-4 measurement-num">${measFmtPct(openPct)}</td>
+      </tr>`;
+  }
+}
+
+async function loadMeasurements() {
+  const id = getProjectId();
+  const tbody = el("measurementsTbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Carregando...</td></tr>`;
+
+  const dateInput = el("measurementCurrentDate");
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+
+  try {
+    const [tasksRes, historyRes] = await Promise.all([
+      apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks"),
+      apiRequest("/projects/" + encodeURIComponent(id) + "/progress-history"),
+    ]);
+
+    measurementState.tasks = tasksRes.tasks || [];
+    measurementState.history = historyRes.items || [];
+
+    const groups = [...new Set(measurementState.tasks.map((t) => t.itemGroup).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, "pt", { sensitivity: "base" })
+    );
+
+    renderMeasurementGroupTabs(groups);
+    renderMeasurementTable();
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-red-500 font-bold uppercase">Erro ao carregar autos de medição</td></tr>`;
+    toast("Erro ao carregar autos de medição", { type: "error" });
+  }
+}
+
+function wireMeasurements() {
+  el("refreshMeasurementsBtn")?.addEventListener("click", () => loadMeasurements());
+  el("measurementCurrentDate")?.addEventListener("change", () => renderMeasurementTable());
+  el("measurementPrevDate")?.addEventListener("change", () => renderMeasurementTable());
+  el("measurementReportNumber")?.addEventListener("input", () => renderMeasurementTable());
 }
 
 async function loadProgressTasks() {
@@ -2392,6 +2732,7 @@ async function init() {
   wireFileDeletion();
   wirePreview();
   wireProgressTasks();
+  wireMeasurements();
   wirePayments();
   wireStock();
   activateFirstVisibleStockSubtab();
