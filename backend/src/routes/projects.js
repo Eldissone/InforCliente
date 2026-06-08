@@ -1460,7 +1460,8 @@ projectRoutes.post(
         unitValueService: z.union([z.number(), z.string()]).optional().nullable(),
         totalValue: z.union([z.number(), z.string()]).optional().nullable(),
         currency: z.string().optional().nullable(),
-        parentId: z.string().optional().nullable()
+        parentId: z.string().optional().nullable(),
+        wbsCode: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -1468,6 +1469,7 @@ projectRoutes.post(
       data: {
         projectId: id,
         itemGroup: body.itemGroup || null,
+        wbsCode: body.wbsCode || null,
         description: body.description,
         expectedQty: body.expectedQty,
         executedQty: body.executedQty || 0,
@@ -1505,7 +1507,10 @@ projectRoutes.patch(
         unitValueMaterial: z.union([z.number(), z.string()]).optional().nullable(),
         unitValueService: z.union([z.number(), z.string()]).optional().nullable(),
         totalValue: z.union([z.number(), z.string()]).optional().nullable(),
-        currency: z.string().optional().nullable()
+        currency: z.string().optional().nullable(),
+        wbsCode: z.string().optional().nullable(),
+        description: z.string().min(1).optional(),
+        itemGroup: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -1522,6 +1527,9 @@ projectRoutes.patch(
     if (body.unitValueService !== undefined) data.unitValueService = body.unitValueService !== null ? Number(body.unitValueService) : null;
     if (body.totalValue !== undefined) data.totalValue = body.totalValue !== null ? Number(body.totalValue) : null;
     if (body.currency !== undefined) data.currency = body.currency || "AOA";
+    if (body.wbsCode !== undefined) data.wbsCode = body.wbsCode || null;
+    if (body.description !== undefined) data.description = body.description;
+    if (body.itemGroup !== undefined) data.itemGroup = body.itemGroup || null;
 
     const task = await prisma.projectProgressTask.update({
       where: { id: taskId, projectId: id },
@@ -1674,6 +1682,7 @@ projectRoutes.post(
             unitValueMaterial: t.unitValueMaterial || 0,
             unitValueService: t.unitValueService || 0,
             currency,
+            wbsCode: t.wbsCode || t.itemCode || null,
             parentId: pId
           }
         });
@@ -1706,6 +1715,117 @@ projectRoutes.post(
     const { tasks, warnings } = parseTaskSheet(file.buffer, name);
     
     return res.json({ tasks, warnings });
+  })
+);
+
+const { buildMeasurementSnapshot } = require("../utils/measurementReport");
+
+projectRoutes.get(
+  "/:id/measurement-reports",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
+    const reports = await prisma.measurementReport.findMany({
+      where: { projectId: id },
+      orderBy: { reportDate: "desc" },
+    });
+    return res.json({ reports });
+  })
+);
+
+projectRoutes.post(
+  "/:id/measurement-reports",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
+    const body = z.object({
+      reportNumber: z.string().min(1),
+      reportDate: z.string(),
+      prevDate: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      filterGroup: z.string().optional().default("all"),
+    }).parse(req.body);
+
+    const [project, tasks, history] = await Promise.all([
+      prisma.project.findUnique({ where: { id }, select: { name: true, currency: true } }),
+      prisma.projectProgressTask.findMany({ where: { projectId: id }, orderBy: { order: "asc" } }),
+      prisma.projectProgressHistory.findMany({ where: { projectId: id }, orderBy: { date: "desc" } }),
+    ]);
+
+    const snapshot = buildMeasurementSnapshot(tasks, history, {
+      filterGroup: body.filterGroup || "all",
+      currentDate: body.reportDate,
+      prevDate: body.prevDate || null,
+      reportNumber: body.reportNumber,
+      projectName: project?.name || "Obra",
+      currency: project?.currency === "USD" ? "USD" : "Kz",
+    });
+
+    const report = await prisma.measurementReport.create({
+      data: {
+        projectId: id,
+        reportNumber: body.reportNumber,
+        reportDate: new Date(body.reportDate),
+        prevDate: body.prevDate ? new Date(body.prevDate) : null,
+        notes: body.notes || null,
+        status: "DRAFT",
+        snapshotData: snapshot,
+        periodQtyTotal: snapshot.periodQtyTotal,
+        periodValTotal: snapshot.periodValTotal,
+        createdBy: req.user?.name || req.user?.email || null,
+      },
+    });
+
+    return res.status(201).json({ report });
+  })
+);
+
+projectRoutes.patch(
+  "/:id/measurement-reports/:reportId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, reportId } = req.params;
+    await ensureProjectReadable(req, id);
+    const body = z.object({
+      status: z.enum(["DRAFT", "APPROVED"]).optional(),
+      notes: z.string().optional().nullable(),
+    }).parse(req.body);
+
+    const existing = await prisma.measurementReport.findFirst({
+      where: { id: reportId, projectId: id },
+    });
+    if (!existing) return res.status(404).json({ error: "NOT_FOUND" });
+    if (existing.status === "APPROVED" && body.status === "DRAFT") {
+      return res.status(400).json({ error: "CANNOT_REVERT_APPROVED" });
+    }
+
+    const data = {};
+    if (body.notes !== undefined) data.notes = body.notes;
+    if (body.status === "APPROVED") {
+      data.status = "APPROVED";
+      data.approvedBy = req.user?.name || req.user?.email || null;
+      data.approvedAt = new Date();
+    }
+
+    const report = await prisma.measurementReport.update({
+      where: { id: reportId },
+      data,
+    });
+    return res.json({ report });
+  })
+);
+
+projectRoutes.get(
+  "/:id/measurement-reports/:reportId",
+  asyncHandler(async (req, res) => {
+    const { id, reportId } = req.params;
+    await ensureProjectReadable(req, id);
+    const report = await prisma.measurementReport.findFirst({
+      where: { id: reportId, projectId: id },
+    });
+    if (!report) return res.status(404).json({ error: "NOT_FOUND" });
+    return res.json({ report });
   })
 );
 

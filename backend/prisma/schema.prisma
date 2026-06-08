@@ -122,6 +122,7 @@ model Project {
   photos              ProjectPhoto[]
   progressHistory     ProjectProgressHistory[]
   progressTasks       ProjectProgressTask[]
+  measurementReports  MeasurementReport[]
   transactions        ProjectTransaction[]
   stockMovements      StockMovement[]
   warehouses          Warehouse[]
@@ -230,6 +231,7 @@ model ProjectProgressTask {
   id                String                   @id @default(cuid())
   projectId         String
   itemGroup         String?
+  wbsCode           String?
   parentId          String?
   order             Int                      @default(0)
   description       String
@@ -265,6 +267,27 @@ model ProjectProgressHistory {
   task           ProjectProgressTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([projectId, taskId, date])
+}
+
+model MeasurementReport {
+  id             String    @id @default(cuid())
+  projectId      String
+  reportNumber   String
+  reportDate     DateTime
+  prevDate       DateTime?
+  status         String    @default("DRAFT")
+  approvedBy     String?
+  approvedAt     DateTime?
+  notes          String?
+  snapshotData   Json?
+  periodQtyTotal Decimal?  @db.Decimal(18, 2)
+  periodValTotal Decimal?  @db.Decimal(18, 2)
+  createdAt      DateTime  @default(now())
+  createdBy      String?
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, reportDate])
+  @@index([projectId, reportNumber])
 }
 
 model ProjectPayment {

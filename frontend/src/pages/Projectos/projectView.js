@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
+﻿import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import {
   initPermissionLayer,
@@ -15,6 +15,14 @@ import {
   pickPrimaryEntryMovement,
 } from "../../shared/stockDetail.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
+import {
+  buildMeasurementSnapshot,
+  flattenTasksForParentSelect,
+  getChildTasks,
+  getRootTasks,
+  resolveWbsCode,
+} from "../../shared/wbsHelpers.js";
+import { exportMeasurementExcel, exportMeasurementPdf } from "../../shared/measurementReportExport.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
@@ -844,7 +852,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
   `;
 }
 
-function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false, childItems = []) {
+function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasChildren = false, childItems = [], depth = 0) {
   const num = (v) => {
     const n = Number(v);
     return isNaN(n) ? 0 : n;
@@ -906,8 +914,11 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
   const logicalGroup = (isSub && parentGroup !== null) ? parentGroup : t.itemGroup;
   const safeGroupName = escapeHtml(logicalGroup || "Outros / Geral");
 
-  const indentStyle = isSub ? "pl-12 bg-slate-50/30" : "px-6";
-  const iconSub = isSub ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2 -ml-6">subdirectory_arrow_right</span>` : "";
+  const indentPx = depth > 0 ? 12 + depth * 14 : 0;
+  const indentStyle = depth > 0 ? `bg-slate-50/30` : "px-6";
+  const indentAttr = depth > 0 ? `style="padding-left:${indentPx}px"` : "";
+  const iconSub = depth > 0 ? `<span class="material-symbols-outlined text-[16px] text-slate-300 mr-2">subdirectory_arrow_right</span>` : "";
+  const wbsLabel = resolveWbsCode(t, index);
   const parentClass = hasChildren ? "bg-blue-50/40 border-y border-blue-100/50 cursor-pointer select-none" : "";
   const descClass = hasChildren ? "font-black text-[#1e293b]" : "font-bold text-[#212e3e]";
   const toggleAttr = hasChildren ? `data-toggle-sub-tasks="${t.id}"` : "";
@@ -934,15 +945,15 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
   return `
     <tr class="hidden hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
-      <td class="px-6 py-4 text-center font-black text-slate-400 text-[11px]">${index}</td>
-      <td class="py-4 ${indentStyle}">
+      <td class="px-6 py-4 text-center font-black text-slate-400 text-[11px] font-mono">${escapeHtml(wbsLabel)}</td>
+      <td class="py-4 ${indentStyle}" ${indentAttr}>
         <div class="${descClass} flex flex-col relative">
           <div class="flex items-start">
             ${iconSub}
             ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
             <div class="flex flex-col">
               <div class="flex items-center gap-2">
-                ${t.itemCode ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.itemCode)}</span>` : ""}
+                ${(t.wbsCode || t.itemCode) ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.wbsCode || t.itemCode)}</span>` : ""}
                 <span class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(t.description)}</span>
               </div>
               ${(!isSub && t.itemGroup && t.itemGroup.toUpperCase() !== "GERAL") ? `<span class="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-black">${escapeHtml(t.itemGroup)}</span>` : ""}
@@ -961,7 +972,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
       <td class="px-4 py-4 text-center font-bold text-slate-500 text-xs">${fmtQty(left)}</td>
       <td class="px-4 py-4 text-center font-black text-red-600 text-xs">${leftPct.toFixed(2)}%</td>
       <td class="px-4 py-4 text-right" data-actions>
-        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+        <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-wbs="${escapeHtml(t.wbsCode || t.itemCode || '')}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
       </td>
     </tr>
@@ -972,137 +983,79 @@ const measurementState = {
   tasks: [],
   history: [],
   activeGroup: "all",
+  snapshot: null,
+  savedReports: [],
+  currentReportId: null,
 };
 
-function measNum(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function measTaskUnitValue(t) {
-  const uvM = measNum(t.unitValueMaterial);
-  const uvS = measNum(t.unitValueService);
-  return (t.unitValue !== null && t.unitValue !== undefined) ? measNum(t.unitValue) : (uvM + uvS);
-}
-
 function measFmtQty(v) {
-  return measNum(v).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = Number(v);
+  return (Number.isFinite(n) ? n : 0).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function measFmtMoney(v, currency = "Kz") {
-  if (!v && v !== 0) return "—";
-  return `${measNum(v).toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  const n = Number(v);
+  if (!Number.isFinite(n) || (n === 0 && v !== 0)) return "—";
+  return `${n.toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 function measFmtPct(v) {
-  return `${measNum(v).toFixed(2)}%`;
+  const n = Number(v);
+  return `${(Number.isFinite(n) ? n : 0).toFixed(2)}%`;
 }
 
-function measHistoryQtyAt(taskId, dateStr, history, fallback = 0) {
-  if (!dateStr || !history?.length) return fallback;
-  const cutoff = new Date(`${dateStr}T23:59:59`);
-  const entries = history
-    .filter((h) => h.taskId === taskId && new Date(h.date) <= cutoff)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  return entries.length ? measNum(entries[0].accumulatedQty) : 0;
+function measRowClassToTr(rowClass) {
+  if (rowClass === "grand") return "measurement-row-grand";
+  if (rowClass === "section") return "measurement-row-section";
+  if (rowClass === "category") return "measurement-row-category";
+  return "measurement-row-item";
 }
 
-function measResolveQtys(t, children, hasChildren, history, currentDate, prevDate) {
-  let exp;
-  const uv = measTaskUnitValue(t);
-
-  if (hasChildren && children.length > 0) {
-    exp = children.reduce((s, c) => s + measNum(c.expectedQty), 0);
-    const acc = children.reduce((s, c) => {
-      const q = currentDate
-        ? measHistoryQtyAt(c.id, currentDate, history, measNum(c.executedQty))
-        : measNum(c.executedQty);
-      return s + q;
-    }, 0);
-    const prev = children.reduce((s, c) => {
-      const q = prevDate
-        ? measHistoryQtyAt(c.id, prevDate, history, 0)
-        : 0;
-      return s + q;
-    }, 0);
-    const open = Math.max(0, exp - acc);
-    return {
-      exp,
-      acc,
-      prev,
-      open,
-      totalVal: children.reduce((s, c) => s + measTaskUnitValue(c) * measNum(c.expectedQty), 0),
-      accVal: children.reduce((s, c) => {
-        const q = currentDate
-          ? measHistoryQtyAt(c.id, currentDate, history, measNum(c.executedQty))
-          : measNum(c.executedQty);
-        return s + measTaskUnitValue(c) * q;
-      }, 0),
-      prevVal: children.reduce((s, c) => {
-        const q = prevDate ? measHistoryQtyAt(c.id, prevDate, history, 0) : 0;
-        return s + measTaskUnitValue(c) * q;
-      }, 0),
-      openVal: 0,
-      uv: exp > 0 ? (children.reduce((s, c) => s + measTaskUnitValue(c) * measNum(c.expectedQty), 0) / exp) : 0,
-      unit: t.unit,
-      currency: t.currency === "USD" ? "USD" : "Kz",
-    };
-  }
-
-  exp = measNum(t.expectedQty);
-  const acc = currentDate
-    ? measHistoryQtyAt(t.id, currentDate, history, measNum(t.executedQty))
-    : measNum(t.executedQty);
-  const prev = prevDate ? measHistoryQtyAt(t.id, prevDate, history, 0) : 0;
-  const open = Math.max(0, exp - acc);
-  const totalVal = uv * exp;
-  const accVal = uv * acc;
-  const prevVal = uv * prev;
-  const openVal = Math.max(0, totalVal - accVal);
-
-  return {
-    exp,
-    acc,
-    prev,
-    open,
-    totalVal,
-    accVal,
-    prevVal,
-    openVal,
-    uv,
-    unit: t.unit,
-    currency: t.currency === "USD" ? "USD" : "Kz",
-  };
-}
-
-function measRowCells(wbs, desc, q, globalTotal, rowClass, indent = 0) {
-  const pctGlobal = globalTotal > 0 ? (q.totalVal / globalTotal) * 100 : 0;
-  const accPct = q.totalVal > 0 ? (q.accVal / q.totalVal) * 100 : (q.acc > 0 ? 100 : 0);
-  const prevPct = q.totalVal > 0 ? (q.prevVal / q.totalVal) * 100 : 0;
-  const openVal = q.openVal || Math.max(0, q.totalVal - q.accVal);
-  const openPct = q.totalVal > 0 ? (openVal / q.totalVal) * 100 : 0;
+function measRowCells(row) {
+  const q = row;
   const curr = q.currency || "Kz";
-  const indentPad = indent > 0 ? `padding-left:${indent * 16}px` : "";
+  const totalVal = q.totalVal || 0;
+  const accPct = totalVal > 0 ? (q.accVal / totalVal) * 100 : (q.acc > 0 ? 100 : 0);
+  const prevPct = totalVal > 0 ? (q.prevVal / totalVal) * 100 : 0;
+  const periodPct = totalVal > 0 ? (q.periodVal / totalVal) * 100 : 0;
+  const openVal = q.openVal ?? Math.max(0, totalVal - (q.accVal || 0));
+  const openPct = totalVal > 0 ? (openVal / totalVal) * 100 : 0;
+  const indentPad = (q.depth || 0) > 0 ? `padding-left:${(q.depth || 0) * 16}px` : "";
+  const trClass = measRowClassToTr(q.rowClass || "item");
 
   return `
-    <tr class="${rowClass}">
-      <td class="px-3 py-3 measurement-wbs">${escapeHtml(wbs)}</td>
-      <td class="px-3 py-3 font-semibold" style="${indentPad}">${escapeHtml(desc)}</td>
+    <tr class="${trClass}">
+      <td class="px-3 py-3 measurement-wbs">${escapeHtml(q.wbs || "")}</td>
+      <td class="px-3 py-3 font-semibold" style="${indentPad}">${escapeHtml(q.description || "")}</td>
       <td class="px-2 py-3 text-center text-[10px] font-bold uppercase text-slate-500">${formatUnit(q.unit || "un")}</td>
       <td class="px-2 py-3 measurement-num">${measFmtQty(q.exp)}</td>
       <td class="px-2 py-3 measurement-num">${q.uv > 0 ? measFmtMoney(q.uv, curr) : "—"}</td>
-      <td class="px-2 py-3 measurement-num font-bold">${q.totalVal > 0 ? measFmtMoney(q.totalVal, curr) : "—"}</td>
-      <td class="px-2 py-3 measurement-num">${measFmtPct(pctGlobal)}</td>
+      <td class="px-2 py-3 measurement-num font-bold">${totalVal > 0 ? measFmtMoney(totalVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num">${measFmtPct(q.pctGlobal ?? 0)}</td>
       <td class="px-2 py-3 measurement-num">${measFmtQty(q.acc)}</td>
       <td class="px-2 py-3 measurement-num font-bold text-emerald-700">${q.accVal > 0 ? measFmtMoney(q.accVal, curr) : "—"}</td>
       <td class="px-2 py-3 measurement-num text-emerald-600">${measFmtPct(accPct)}</td>
       <td class="px-2 py-3 measurement-num">${measFmtQty(q.prev)}</td>
       <td class="px-2 py-3 measurement-num text-blue-700">${q.prevVal > 0 ? measFmtMoney(q.prevVal, curr) : "—"}</td>
       <td class="px-2 py-3 measurement-num text-blue-600">${measFmtPct(prevPct)}</td>
+      <td class="px-2 py-3 measurement-num font-bold text-violet-700 bg-violet-50/40">${measFmtQty(q.period)}</td>
+      <td class="px-2 py-3 measurement-num font-bold text-violet-800 bg-violet-50/40">${q.periodVal > 0 ? measFmtMoney(q.periodVal, curr) : "—"}</td>
+      <td class="px-2 py-3 measurement-num text-violet-600 bg-violet-50/40">${measFmtPct(periodPct)}</td>
       <td class="px-2 py-3 measurement-num">${measFmtQty(q.open)}</td>
       <td class="px-2 py-3 measurement-num text-red-700">${openVal > 0 ? measFmtMoney(openVal, curr) : "—"}</td>
       <td class="px-2 py-3 measurement-num text-red-600">${measFmtPct(openPct)}</td>
     </tr>`;
+}
+
+function getMeasurementOptions() {
+  return {
+    filterGroup: measurementState.activeGroup || "all",
+    currentDate: el("measurementCurrentDate")?.value || "",
+    prevDate: el("measurementPrevDate")?.value || "",
+    reportNumber: el("measurementReportNumber")?.value || "01",
+    projectName: projectState?.name || "Obra",
+    currency: projectState?.currency === "USD" ? "USD" : "Kz",
+  };
 }
 
 function renderMeasurementGroupTabs(groups) {
@@ -1110,12 +1063,12 @@ function renderMeasurementGroupTabs(groups) {
   if (!container) return;
 
   const active = measurementState.activeGroup || "all";
-  let html = `<button data-measurement-group="all" class="px-5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${active === "all" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">Controlo</button>`;
+  let html = `<button data-measurement-group="all" class="px-5 py-2.5 text-xs font-bold uppercase border-b-2 whitespace-nowrap transition-all ${active === "all" ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">Controlo</button>`;
 
   groups.forEach((g) => {
     const safe = escapeHtml(g);
     const isActive = active === g;
-    html += `<button data-measurement-group="${safe}" class="px-5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-all ${isActive ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">${safe}</button>`;
+    html += `<button data-measurement-group="${safe}" class="px-5 py-2.5 text-xs font-bold uppercase border-b-2 whitespace-nowrap transition-all ${isActive ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600"}">${safe}</button>`;
   });
 
   container.innerHTML = html;
@@ -1134,115 +1087,41 @@ function renderMeasurementTable() {
   const tfoot = el("measurementsTfoot");
   if (!tbody) return;
 
-  const tasks = measurementState.tasks || [];
-  const history = measurementState.history || [];
-  const filterGroup = measurementState.activeGroup || "all";
-  const currentDate = el("measurementCurrentDate")?.value || "";
-  const prevDate = el("measurementPrevDate")?.value || "";
-  const reportNo = el("measurementReportNumber")?.value || "01";
-
-  const projectName = projectState?.name || "Obra";
-  const currency = projectState?.currency === "USD" ? "USD" : "Kz";
+  const opts = getMeasurementOptions();
+  const currency = opts.currency;
 
   el("measurementPuHeader").textContent = `PU (${currency})`;
   el("measurementTotalHeader").textContent = `TOTAL (${currency})`;
 
   const subtitle = el("measurementTableSubtitle");
   if (subtitle) {
-    const parts = [`Auto Nº ${reportNo}`];
-    if (currentDate) parts.push(`Data: ${formatDateBR(currentDate)}`);
-    if (prevDate) parts.push(`Anterior até: ${formatDateBR(prevDate)}`);
+    const parts = [`Auto Nº ${opts.reportNumber}`];
+    if (opts.currentDate) parts.push(`Data: ${formatDateBR(opts.currentDate)}`);
+    if (opts.prevDate) parts.push(`Anterior até: ${formatDateBR(opts.prevDate)}`);
     subtitle.textContent = parts.join(" · ");
   }
 
   const titleEl = el("measurementTableTitle");
   if (titleEl) {
-    titleEl.textContent = filterGroup === "all" ? "Controlo de Medições" : `Controlo — ${filterGroup}`;
+    titleEl.textContent = opts.filterGroup === "all" ? "Controlo de Medições" : `Controlo — ${opts.filterGroup}`;
   }
 
-  const filtered = tasks.filter((t) => filterGroup === "all" || (t.itemGroup || "") === filterGroup);
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Sem itens de medição cadastrados</td></tr>`;
+  if (!measurementState.tasks.length) {
+    tbody.innerHTML = `<tr><td colspan="19" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Sem itens de medição cadastrados</td></tr>`;
     if (tfoot) tfoot.innerHTML = "";
+    measurementState.snapshot = null;
     return;
   }
 
-  const children = filtered.filter((t) => t.parentId);
-  const parents = filtered
-    .filter((t) => !t.parentId)
-    .sort((a, b) => (a.itemGroup || "").localeCompare(b.itemGroup || "", "pt", { sensitivity: "base" }) || measNum(a.order) - measNum(b.order));
+  const snapshot = buildMeasurementSnapshot(measurementState.tasks, measurementState.history, opts);
+  measurementState.snapshot = snapshot;
 
-  let globalTotalVal = 0;
-  parents.forEach((t) => {
-    const subs = children.filter((c) => c.parentId === t.id);
-    const q = measResolveQtys(t, subs, subs.length > 0, history, currentDate, prevDate);
-    globalTotalVal += q.totalVal;
-  });
-
-  let html = "";
-  let grand = { exp: 0, acc: 0, prev: 0, open: 0, totalVal: 0, accVal: 0, prevVal: 0, openVal: 0, unit: "vg", currency };
-
-  let lastGroup = null;
-  let groupCounter = 0;
-  let groupIndex = 0;
-
-  parents.forEach((t) => {
-    const groupName = t.itemGroup || "Outros / Geral";
-    const subs = children.filter((c) => c.parentId === t.id);
-    const hasChildren = subs.length > 0;
-    const q = measResolveQtys(t, subs, hasChildren, history, currentDate, prevDate);
-
-    if (filterGroup === "all" && groupName !== lastGroup) {
-      groupCounter++;
-      groupIndex = 0;
-      const groupParents = parents.filter((p) => (p.itemGroup || "Outros / Geral") === groupName);
-      const groupAgg = groupParents.reduce((agg, p) => {
-        const pSubs = children.filter((c) => c.parentId === p.id);
-        const pq = measResolveQtys(p, pSubs, pSubs.length > 0, history, currentDate, prevDate);
-        agg.exp += pq.exp;
-        agg.acc += pq.acc;
-        agg.prev += pq.prev;
-        agg.open += pq.open;
-        agg.totalVal += pq.totalVal;
-        agg.accVal += pq.accVal;
-        agg.prevVal += pq.prevVal;
-        agg.openVal += pq.openVal || Math.max(0, pq.totalVal - pq.accVal);
-        return agg;
-      }, { exp: 0, acc: 0, prev: 0, open: 0, totalVal: 0, accVal: 0, prevVal: 0, openVal: 0, unit: "vg", currency: groupParents[0]?.currency === "USD" ? "USD" : currency });
-
-      html += measRowCells(String(groupCounter), groupName.toUpperCase(), groupAgg, globalTotalVal, "measurement-row-section");
-      lastGroup = groupName;
-    }
-
-    groupIndex++;
-    const wbsPrefix = filterGroup === "all" ? String(groupCounter) : "";
-    const wbs = wbsPrefix ? `${wbsPrefix}.${groupIndex}` : String(groupIndex);
-
-    grand.exp += q.exp;
-    grand.acc += q.acc;
-    grand.prev += q.prev;
-    grand.open += q.open;
-    grand.totalVal += q.totalVal;
-    grand.accVal += q.accVal;
-    grand.prevVal += q.prevVal;
-    grand.openVal += q.openVal || Math.max(0, q.totalVal - q.accVal);
-
-    if (hasChildren) {
-      html += measRowCells(wbs, t.description, q, globalTotalVal, "measurement-row-category");
-      subs.forEach((sub, subI) => {
-        const sq = measResolveQtys(sub, [], false, history, currentDate, prevDate);
-        html += measRowCells(`${wbs}.${subI + 1}`, sub.description, sq, globalTotalVal, "measurement-row-item", 1);
-      });
-    } else {
-      html += measRowCells(wbs, t.description, q, globalTotalVal, "measurement-row-item");
-    }
-  });
-
-  const grandRow = measRowCells("", projectName.toUpperCase(), { ...grand, currency }, globalTotalVal, "measurement-row-grand");
-  tbody.innerHTML = grandRow + html;
+  const grand = snapshot.grand;
+  tbody.innerHTML = measRowCells(grand) + snapshot.rows.map(measRowCells).join("");
 
   if (tfoot) {
     const accPct = grand.totalVal > 0 ? (grand.accVal / grand.totalVal) * 100 : 0;
+    const periodPct = grand.totalVal > 0 ? (grand.periodVal / grand.totalVal) * 100 : 0;
     const openVal = grand.openVal || Math.max(0, grand.totalVal - grand.accVal);
     const openPct = grand.totalVal > 0 ? (openVal / grand.totalVal) * 100 : 0;
     tfoot.innerHTML = `
@@ -1259,10 +1138,104 @@ function renderMeasurementTable() {
         <td class="px-2 py-4 measurement-num">${measFmtQty(grand.prev)}</td>
         <td class="px-2 py-4 measurement-num">${measFmtMoney(grand.prevVal, currency)}</td>
         <td class="px-2 py-4"></td>
+        <td class="px-2 py-4 measurement-num text-violet-300">${measFmtQty(grand.period)}</td>
+        <td class="px-2 py-4 measurement-num text-violet-300">${measFmtMoney(grand.periodVal, currency)}</td>
+        <td class="px-2 py-4 measurement-num text-violet-300">${measFmtPct(periodPct)}</td>
         <td class="px-2 py-4 measurement-num">${measFmtQty(grand.open)}</td>
         <td class="px-2 py-4 measurement-num">${measFmtMoney(openVal, currency)}</td>
         <td class="px-2 py-4 measurement-num">${measFmtPct(openPct)}</td>
       </tr>`;
+  }
+}
+
+function renderSavedMeasurementReports() {
+  const container = el("measurementReportsItems");
+  if (!container) return;
+
+  const reports = measurementState.savedReports || [];
+  if (!reports.length) {
+    container.innerHTML = `<p class="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Nenhum auto guardado</p>`;
+    return;
+  }
+
+  container.innerHTML = reports.map((r) => {
+    const statusCls = r.status === "APPROVED" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700";
+    const statusLabel = r.status === "APPROVED" ? "Aprovado" : "Rascunho";
+    const val = Number(r.periodValTotal || 0);
+    return `
+      <button type="button" data-load-report="${r.id}"
+        class="w-full text-left flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+        <div>
+          <span class="font-black text-slate-900">Auto Nº ${escapeHtml(r.reportNumber)}</span>
+          <span class="ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statusCls}">${statusLabel}</span>
+        </div>
+        <div class="text-slate-500 font-semibold">
+          ${formatDateBR(r.reportDate)} · Período: ${measFmtMoney(val, projectState?.currency === "USD" ? "USD" : "Kz")}
+        </div>
+      </button>`;
+  }).join("");
+
+  container.querySelectorAll("[data-load-report]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const reportId = btn.getAttribute("data-load-report");
+      await loadMeasurementReportById(reportId);
+    });
+  });
+}
+
+async function loadMeasurementReportById(reportId) {
+  const id = getProjectId();
+  try {
+    const res = await apiRequest(`/projects/${encodeURIComponent(id)}/measurement-reports/${encodeURIComponent(reportId)}`);
+    const report = res.report;
+    if (!report) return;
+
+    measurementState.currentReportId = report.id;
+    el("measurementReportNumber").value = report.reportNumber || "01";
+    if (report.reportDate) el("measurementCurrentDate").value = String(report.reportDate).slice(0, 10);
+    if (report.prevDate) el("measurementPrevDate").value = String(report.prevDate).slice(0, 10);
+
+    if (report.snapshotData) {
+      measurementState.snapshot = report.snapshotData;
+      const tbody = el("measurementsTbody");
+      const tfoot = el("measurementsTfoot");
+      const snap = report.snapshotData;
+      const currency = snap.meta?.currency || "Kz";
+      tbody.innerHTML = measRowCells(snap.grand) + (snap.rows || []).map(measRowCells).join("");
+      if (tfoot && snap.grand) {
+        const g = snap.grand;
+        const accPct = g.totalVal > 0 ? (g.accVal / g.totalVal) * 100 : 0;
+        const periodPct = g.totalVal > 0 ? (g.periodVal / g.totalVal) * 100 : 0;
+        const openVal = g.openVal || Math.max(0, g.totalVal - g.accVal);
+        const openPct = g.totalVal > 0 ? (openVal / g.totalVal) * 100 : 0;
+        tfoot.innerHTML = `
+          <tr>
+            <td colspan="2" class="px-4 py-4 text-center">TOTAL GERAL (${report.status === "APPROVED" ? "APROVADO" : "RASCUNHO"})</td>
+            <td class="px-2 py-4 text-center">vg</td>
+            <td class="px-2 py-4 measurement-num">${measFmtQty(g.exp)}</td>
+            <td class="px-2 py-4"></td>
+            <td class="px-2 py-4 measurement-num">${measFmtMoney(g.totalVal, currency)}</td>
+            <td class="px-2 py-4 measurement-num">100,00%</td>
+            <td class="px-2 py-4 measurement-num">${measFmtQty(g.acc)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtMoney(g.accVal, currency)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtPct(accPct)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtQty(g.prev)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtMoney(g.prevVal, currency)}</td>
+            <td class="px-2 py-4"></td>
+            <td class="px-2 py-4 measurement-num text-violet-300">${measFmtQty(g.period)}</td>
+            <td class="px-2 py-4 measurement-num text-violet-300">${measFmtMoney(g.periodVal, currency)}</td>
+            <td class="px-2 py-4 measurement-num text-violet-300">${measFmtPct(periodPct)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtQty(g.open)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtMoney(openVal, currency)}</td>
+            <td class="px-2 py-4 measurement-num">${measFmtPct(openPct)}</td>
+          </tr>`;
+      }
+      toast(`Auto Nº ${report.reportNumber} carregado`, { type: "success" });
+    } else {
+      renderMeasurementTable();
+    }
+  } catch (err) {
+    toast(err.message || "Erro ao carregar auto", { type: "error" });
   }
 }
 
@@ -1271,7 +1244,7 @@ async function loadMeasurements() {
   const tbody = el("measurementsTbody");
   if (!tbody) return;
 
-  tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Carregando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="19" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Carregando...</td></tr>`;
 
   const dateInput = el("measurementCurrentDate");
   if (dateInput && !dateInput.value) {
@@ -1279,13 +1252,16 @@ async function loadMeasurements() {
   }
 
   try {
-    const [tasksRes, historyRes] = await Promise.all([
+    const [tasksRes, historyRes, reportsRes] = await Promise.all([
       apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks"),
       apiRequest("/projects/" + encodeURIComponent(id) + "/progress-history"),
+      apiRequest("/projects/" + encodeURIComponent(id) + "/measurement-reports").catch(() => ({ reports: [] })),
     ]);
 
     measurementState.tasks = tasksRes.tasks || [];
     measurementState.history = historyRes.items || [];
+    measurementState.savedReports = reportsRes.reports || [];
+    measurementState.currentReportId = null;
 
     const groups = [...new Set(measurementState.tasks.map((t) => t.itemGroup).filter(Boolean))].sort((a, b) =>
       a.localeCompare(b, "pt", { sensitivity: "base" })
@@ -1293,18 +1269,133 @@ async function loadMeasurements() {
 
     renderMeasurementGroupTabs(groups);
     renderMeasurementTable();
+    renderSavedMeasurementReports();
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = `<tr><td colspan="16" class="text-center py-10 text-xs text-red-500 font-bold uppercase">Erro ao carregar autos de medição</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="19" class="text-center py-10 text-xs text-red-500 font-bold uppercase">Erro ao carregar autos de medição</td></tr>`;
     toast("Erro ao carregar autos de medição", { type: "error" });
   }
 }
 
 function wireMeasurements() {
   el("refreshMeasurementsBtn")?.addEventListener("click", () => loadMeasurements());
-  el("measurementCurrentDate")?.addEventListener("change", () => renderMeasurementTable());
-  el("measurementPrevDate")?.addEventListener("change", () => renderMeasurementTable());
+  el("measurementCurrentDate")?.addEventListener("change", () => {
+    measurementState.currentReportId = null;
+    renderMeasurementTable();
+  });
+  el("measurementPrevDate")?.addEventListener("change", () => {
+    measurementState.currentReportId = null;
+    renderMeasurementTable();
+  });
   el("measurementReportNumber")?.addEventListener("input", () => renderMeasurementTable());
+
+  el("showMeasurementReportsBtn")?.addEventListener("click", () => {
+    el("measurementReportsList")?.classList.remove("hidden");
+    el("showMeasurementReportsBtn")?.classList.add("hidden");
+  });
+  el("toggleMeasurementReportsBtn")?.addEventListener("click", () => {
+    el("measurementReportsList")?.classList.add("hidden");
+    el("showMeasurementReportsBtn")?.classList.remove("hidden");
+  });
+
+  el("saveMeasurementReportBtn")?.addEventListener("click", async () => {
+    const projectId = getProjectId();
+    const opts = getMeasurementOptions();
+    if (!opts.currentDate) {
+      toast("Defina a data do auto", { type: "warning" });
+      return;
+    }
+    try {
+      const res = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports`, {
+        method: "POST",
+        body: {
+          reportNumber: opts.reportNumber,
+          reportDate: opts.currentDate,
+          prevDate: opts.prevDate || null,
+          filterGroup: opts.filterGroup,
+        },
+      });
+      measurementState.currentReportId = res.report?.id;
+      measurementState.savedReports = [res.report, ...measurementState.savedReports.filter((r) => r.id !== res.report?.id)];
+      renderSavedMeasurementReports();
+      toast(`Auto Nº ${opts.reportNumber} guardado`, { type: "success" });
+    } catch (err) {
+      toast(err.message || "Erro ao guardar auto", { type: "error" });
+    }
+  });
+
+  el("approveMeasurementReportBtn")?.addEventListener("click", async () => {
+    const projectId = getProjectId();
+    let reportId = measurementState.currentReportId;
+
+    if (!reportId) {
+      const opts = getMeasurementOptions();
+      if (!opts.currentDate) {
+        toast("Defina a data do auto antes de aprovar", { type: "warning" });
+        return;
+      }
+      const created = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports`, {
+        method: "POST",
+        body: {
+          reportNumber: opts.reportNumber,
+          reportDate: opts.currentDate,
+          prevDate: opts.prevDate || null,
+          filterGroup: opts.filterGroup,
+        },
+      });
+      reportId = created.report?.id;
+    }
+
+    try {
+      const res = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports/${encodeURIComponent(reportId)}`, {
+        method: "PATCH",
+        body: { status: "APPROVED" },
+      });
+      measurementState.currentReportId = reportId;
+      measurementState.savedReports = measurementState.savedReports.map((r) =>
+        r.id === reportId ? res.report : r
+      );
+      if (!measurementState.savedReports.find((r) => r.id === reportId)) {
+        measurementState.savedReports.unshift(res.report);
+      }
+      renderSavedMeasurementReports();
+      toast("Auto aprovado com sucesso", { type: "success" });
+    } catch (err) {
+      toast(err.message || "Erro ao aprovar auto", { type: "error" });
+    }
+  });
+
+  el("exportMeasurementExcelBtn")?.addEventListener("click", () => {
+    if (!measurementState.snapshot) {
+      toast("Não há dados para exportar", { type: "warning" });
+      return;
+    }
+    try {
+      exportMeasurementExcel(measurementState.snapshot, {
+        name: projectState?.name,
+        location: projectState?.location,
+        currency: projectState?.currency === "USD" ? "USD" : "Kz",
+      });
+    } catch (err) {
+      toast(err.message, { type: "error" });
+    }
+  });
+
+  el("exportMeasurementPdfBtn")?.addEventListener("click", () => {
+    if (!measurementState.snapshot) {
+      toast("Não há dados para exportar", { type: "warning" });
+      return;
+    }
+    try {
+      exportMeasurementPdf(measurementState.snapshot, {
+        name: projectState?.name,
+        location: projectState?.location,
+        currency: projectState?.currency === "USD" ? "USD" : "Kz",
+      });
+    } catch (err) {
+      toast(err.message, { type: "error" });
+    }
+  });
 }
 
 async function loadProgressTasks() {
@@ -1397,27 +1488,36 @@ async function loadProgressTasks() {
         pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #f1f5f9 ${globalPct}%, #f1f5f9 100%)`;
       }
 
-      const children = data.tasks.filter(t => t.parentId);
       let groupIndex = 0;
+
+      function renderProgressSubtree(task, indexPath, depth, itemGroup, hidden) {
+        const subs = getChildTasks(data.tasks, task.id);
+        let row = renderProgressTaskRow(task, indexPath, depth > 0, itemGroup, subs.length > 0, subs, depth);
+        if (depth > 0 && task.parentId) {
+          row = row.replace("<tr", `<tr data-sub-of="${task.parentId}"`);
+        }
+        if (hidden) {
+          row = row.replace('<tr class="', '<tr class="hidden ');
+        }
+        let out = row;
+        subs.forEach((child, i) => {
+          const childPath = resolveWbsCode(child, `${indexPath}.${i + 1}`);
+          out += renderProgressSubtree(child, childPath, depth + 1, itemGroup, true);
+        });
+        return out;
+      }
 
       parentsAndOrphans.forEach((t) => {
         const currentGroup = t.itemGroup || "";
         if (currentGroup !== lastGroup) {
           html += renderGroupHeader(t.itemGroup, groupInvoicingTotals[currentGroup] || 0, groupCurrencies[currentGroup] || "Kz", groupProgressMap[currentGroup] || 0);
           lastGroup = currentGroup;
-          groupIndex = 0; // zera contagem no novo separador
+          groupIndex = 0;
         }
 
         groupIndex++;
-        const subs = children.filter(c => c.parentId === t.id);
-
-        html += renderProgressTaskRow(t, groupIndex.toString(), false, t.itemGroup, subs.length > 0, subs);
-
-        subs.forEach((sub, subI) => {
-          const subRow = renderProgressTaskRow(sub, `${groupIndex}.${subI + 1}`, true, t.itemGroup, false, []);
-          // Injetar o data-sub-of no tr retornado pelo helper
-          html += subRow.replace('<tr', `<tr data-sub-of="${t.id}"`);
-        });
+        const wbs = resolveWbsCode(t, String(groupIndex));
+        html += renderProgressSubtree(t, wbs, 0, t.itemGroup, false);
       });
       tbody.innerHTML = html;
 
@@ -1480,9 +1580,10 @@ function wireProgressTasks() {
   el("addProgressTaskBtn")?.addEventListener("click", () => {
     let parentOpts = `<option value="">Nenhuma (Item Principal Independente)</option>`;
     if (window.projectProgressTasksCache) {
-      const parents = window.projectProgressTasksCache.filter(t => !t.parentId); // max depth 1
-      parents.forEach(p => {
-        parentOpts += `<option value="${p.id}">${escapeHtml(p.description)} (${escapeHtml(p.itemGroup || 'Geral')})</option>`;
+      flattenTasksForParentSelect(window.projectProgressTasksCache).forEach(({ task: p, depth }) => {
+        const prefix = depth > 0 ? `${"—".repeat(depth)} ` : "";
+        const wbs = p.wbsCode || p.itemCode ? `[${p.wbsCode || p.itemCode}] ` : "";
+        parentOpts += `<option value="${p.id}">${prefix}${wbs}${escapeHtml(p.description)} (${escapeHtml(p.itemGroup || "Geral")})</option>`;
       });
     }
 
@@ -1500,7 +1601,10 @@ function wireProgressTasks() {
                 </select>
              </div>
           </div>
-          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
+          <div class="grid grid-cols-3 gap-4">
+            <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Código WBS</label><input id="rt_wbs" class="w-full rounded-lg border-slate-300 font-mono" placeholder="Ex: 1.1.2" /></div>
+            <div class="col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição da Tarefa</label><input id="rt_desc" class="w-full rounded-lg border-slate-300" placeholder="Ex: Marcação da obra" /></div>
+          </div>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Qtd Prevista</label><input id="rt_exp" type="number" step="any" class="w-full rounded-lg border-slate-300" value="0" oninput="document.getElementById('rt_tv').value = (this.value * document.getElementById('rt_uv').value).toFixed(10);" /></div>
             <div>
@@ -1557,6 +1661,7 @@ function wireProgressTasks() {
             body: {
               itemGroup: v("rt_group") || null,
               parentId: v("rt_parent") || null,
+              wbsCode: v("rt_wbs") || null,
               description: v("rt_desc"),
               expectedQty: Number(v("rt_exp") || 0),
               executedQty: 0,
@@ -1784,6 +1889,7 @@ function wireProgressTasks() {
     if (editBtn) {
       const taskId = editBtn.getAttribute("data-edit-task");
       const desc = editBtn.getAttribute("data-task-desc");
+      const wbs = editBtn.getAttribute("data-task-wbs") || "";
       const exe = editBtn.getAttribute("data-task-exe");
       const exp = editBtn.getAttribute("data-task-exp");
       const uni = editBtn.getAttribute("data-task-unit");
@@ -1803,7 +1909,10 @@ function wireProgressTasks() {
         primaryLabel: "Atualizar",
         contentHtml: `
           <div class="space-y-4">
-            <p class="font-bold text-[#212e3e] text-sm">${escapeHtml(desc)}</p>
+            <div class="grid grid-cols-3 gap-4">
+              <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Código WBS</label><input id="up_wbs" class="w-full rounded-lg border-slate-300 font-mono" value="${escapeHtml(wbs)}" placeholder="Ex: 1.1.2" /></div>
+              <div class="col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label><input id="up_desc" class="w-full rounded-lg border-slate-300" value="${escapeHtml(desc)}" /></div>
+            </div>
             ${hasSubs ? `<p class="text-[10px] text-blue-600 font-bold uppercase tracking-widest bg-blue-50 p-2 rounded-lg"><span class="material-symbols-outlined text-xs align-middle mr-1">info</span> Item Pai: Valores somados automaticamente</p>` : ""}
             <div class="grid grid-cols-2 gap-4">
               <div class="col-span-2">
@@ -1871,6 +1980,8 @@ function wireProgressTasks() {
                 executedQty: Number(panel.querySelector("#up_exe").value || 0),
                 expectedQty: Number(panel.querySelector("#up_exp").value || 0),
                 unit: panel.querySelector("#up_uni").value.trim().toLowerCase() || "un",
+                wbsCode: panel.querySelector("#up_wbs").value.trim() || null,
+                description: panel.querySelector("#up_desc").value.trim(),
                 unitValue: panel.querySelector("#up_uv").value,
                 unitValueMaterial: panel.querySelector("#up_um").value,
                 unitValueService: panel.querySelector("#up_us").value,

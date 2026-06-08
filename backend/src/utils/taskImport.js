@@ -211,6 +211,7 @@ function parseTaskSheet(buffer, originalName) {
       itemGroup: currentGroup,
       order: tasks.length + 1,
       itemCode: itemVal,
+      wbsCode: itemVal || null,
       description: descVal,
       expectedQty: qtyVal || 0,
       unit: (unitVal || "un").toLowerCase().trim().substring(0, 10),
