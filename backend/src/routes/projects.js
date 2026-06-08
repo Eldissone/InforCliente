@@ -1718,7 +1718,7 @@ projectRoutes.post(
   })
 );
 
-const { buildMeasurementSnapshot } = require("../utils/measurementReport");
+const { buildMeasurementSnapshot, getNextReportNumber } = require("../utils/measurementReport");
 
 projectRoutes.get(
   "/:id/measurement-reports",
@@ -1729,7 +1729,10 @@ projectRoutes.get(
       where: { projectId: id },
       orderBy: { reportDate: "desc" },
     });
-    return res.json({ reports });
+    return res.json({
+      reports,
+      nextReportNumber: getNextReportNumber(reports),
+    });
   })
 );
 
@@ -1740,12 +1743,29 @@ projectRoutes.post(
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
     const body = z.object({
-      reportNumber: z.string().min(1),
+      reportNumber: z.string().min(1).optional(),
       reportDate: z.string(),
       prevDate: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       filterGroup: z.string().optional().default("all"),
     }).parse(req.body);
+
+    const existingReports = await prisma.measurementReport.findMany({
+      where: { projectId: id },
+      select: { reportNumber: true },
+    });
+    const reportNumber = body.reportNumber?.trim() || getNextReportNumber(existingReports);
+
+    const duplicate = await prisma.measurementReport.findFirst({
+      where: { projectId: id, reportNumber },
+    });
+    if (duplicate) {
+      return res.status(409).json({
+        error: "DUPLICATE_REPORT_NUMBER",
+        message: `Já existe um auto com o número ${reportNumber} nesta obra.`,
+        nextReportNumber: getNextReportNumber(existingReports),
+      });
+    }
 
     const [project, tasks, history] = await Promise.all([
       prisma.project.findUnique({ where: { id }, select: { name: true, currency: true } }),
@@ -1757,7 +1777,7 @@ projectRoutes.post(
       filterGroup: body.filterGroup || "all",
       currentDate: body.reportDate,
       prevDate: body.prevDate || null,
-      reportNumber: body.reportNumber,
+      reportNumber,
       projectName: project?.name || "Obra",
       currency: project?.currency === "USD" ? "USD" : "Kz",
     });
@@ -1765,7 +1785,7 @@ projectRoutes.post(
     const report = await prisma.measurementReport.create({
       data: {
         projectId: id,
-        reportNumber: body.reportNumber,
+        reportNumber,
         reportDate: new Date(body.reportDate),
         prevDate: body.prevDate ? new Date(body.prevDate) : null,
         notes: body.notes || null,
@@ -1826,6 +1846,26 @@ projectRoutes.get(
     });
     if (!report) return res.status(404).json({ error: "NOT_FOUND" });
     return res.json({ report });
+  })
+);
+
+projectRoutes.delete(
+  "/:id/measurement-reports/:reportId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const { id, reportId } = req.params;
+    await ensureProjectReadable(req, id);
+
+    const existing = await prisma.measurementReport.findFirst({
+      where: { id: reportId, projectId: id },
+    });
+    if (!existing) return res.status(404).json({ error: "NOT_FOUND" });
+
+    await prisma.measurementReport.delete({
+      where: { id: reportId },
+    });
+
+    return res.json({ success: true });
   })
 );
 

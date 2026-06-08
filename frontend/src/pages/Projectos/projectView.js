@@ -986,7 +986,42 @@ const measurementState = {
   snapshot: null,
   savedReports: [],
   currentReportId: null,
+  nextReportNumber: "01",
+  viewingSavedReport: false,
 };
+
+function syncMeasurementReportNumberInput() {
+  const input = el("measurementReportNumber");
+  const hint = el("measurementReportNumberHint");
+  if (!input) return;
+
+  if (measurementState.viewingSavedReport && measurementState.currentReportId) {
+    const report = measurementState.savedReports.find((r) => r.id === measurementState.currentReportId);
+    if (report) {
+      input.value = report.reportNumber;
+      if (hint) hint.textContent = "Auto guardado";
+      return;
+    }
+  }
+
+  input.value = measurementState.nextReportNumber || "01";
+  /*if (hint) hint.textContent = "Próximo automático";*/
+}
+
+function computeNextReportNumber(reports) {
+  const nums = (reports || []).map((r) => {
+    const m = String(r.reportNumber || "").match(/\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+  }).filter((n) => n > 0);
+  return String((nums.length ? Math.max(...nums) : 0) + 1).padStart(2, "0");
+}
+
+function prepareNewMeasurementReport() {
+  measurementState.currentReportId = null;
+  measurementState.viewingSavedReport = false;
+  syncMeasurementReportNumberInput();
+  renderMeasurementTable();
+}
 
 function measFmtQty(v) {
   const n = Number(v);
@@ -1163,17 +1198,27 @@ function renderSavedMeasurementReports() {
     const statusLabel = r.status === "APPROVED" ? "Aprovado" : "Rascunho";
     const val = Number(r.periodValTotal || 0);
     return `
-      <button type="button" data-load-report="${r.id}"
-        class="w-full text-left flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
-        <div>
-          <span class="font-black text-slate-900">Auto Nº ${escapeHtml(r.reportNumber)}</span>
-          <span class="ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statusCls}">${statusLabel}</span>
-        </div>
-        <div class="text-slate-500 font-semibold">
-          ${formatDateBR(r.reportDate)} · Período: ${measFmtMoney(val, projectState?.currency === "USD" ? "USD" : "Kz")}
-        </div>
-      </button>`;
+      <div class="flex items-center gap-2 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+        <button type="button" data-load-report="${r.id}"
+          class="flex-1 text-left flex flex-wrap items-center justify-between gap-2 min-w-0">
+          <div>
+            <span class="font-black text-slate-900">Auto Nº ${escapeHtml(r.reportNumber)}</span>
+            <span class="ml-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statusCls}">${statusLabel}</span>
+          </div>
+          <div class="text-slate-500 font-semibold">
+            ${formatDateBR(r.reportDate)} · Período: ${measFmtMoney(val, projectState?.currency === "USD" ? "USD" : "Kz")}
+          </div>
+        </button>
+        <button type="button" data-delete-report="${r.id}" data-report-number="${escapeHtml(r.reportNumber)}"
+          data-report-status="${escapeHtml(r.status || "DRAFT")}" data-role-visible="admin,operador"
+          class="shrink-0 w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-all"
+          title="Apagar auto">
+          <span class="material-symbols-outlined text-lg">delete</span>
+        </button>
+      </div>`;
   }).join("");
+
+  applyRoleVisibility();
 
   container.querySelectorAll("[data-load-report]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -1181,6 +1226,45 @@ function renderSavedMeasurementReports() {
       await loadMeasurementReportById(reportId);
     });
   });
+
+  container.querySelectorAll("[data-delete-report]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const reportId = btn.getAttribute("data-delete-report");
+      const reportNumber = btn.getAttribute("data-report-number");
+      const status = btn.getAttribute("data-report-status");
+      await deleteMeasurementReport(reportId, reportNumber, status);
+    });
+  });
+}
+
+async function deleteMeasurementReport(reportId, reportNumber, status) {
+  const projectId = getProjectId();
+  const isApproved = status === "APPROVED";
+  const msg = isApproved
+    ? `O Auto Nº ${reportNumber} está APROVADO. Tem a certeza que pretende apagá-lo? Esta ação é irreversível.`
+    : `Apagar o Auto Nº ${reportNumber}?`;
+
+  if (!confirm(msg)) return;
+
+  try {
+    await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports/${encodeURIComponent(reportId)}`, {
+      method: "DELETE",
+    });
+
+    measurementState.savedReports = measurementState.savedReports.filter((r) => r.id !== reportId);
+    if (measurementState.currentReportId === reportId) {
+      measurementState.currentReportId = null;
+      measurementState.viewingSavedReport = false;
+      prepareNewMeasurementReport();
+    }
+    measurementState.nextReportNumber = computeNextReportNumber(measurementState.savedReports);
+    syncMeasurementReportNumberInput();
+    renderSavedMeasurementReports();
+    toast(`Auto Nº ${reportNumber} apagado`, { type: "success" });
+  } catch (err) {
+    toast(err.message || "Erro ao apagar auto", { type: "error" });
+  }
 }
 
 async function loadMeasurementReportById(reportId) {
@@ -1191,7 +1275,8 @@ async function loadMeasurementReportById(reportId) {
     if (!report) return;
 
     measurementState.currentReportId = report.id;
-    el("measurementReportNumber").value = report.reportNumber || "01";
+    measurementState.viewingSavedReport = true;
+    syncMeasurementReportNumberInput();
     if (report.reportDate) el("measurementCurrentDate").value = String(report.reportDate).slice(0, 10);
     if (report.prevDate) el("measurementPrevDate").value = String(report.prevDate).slice(0, 10);
 
@@ -1261,7 +1346,10 @@ async function loadMeasurements() {
     measurementState.tasks = tasksRes.tasks || [];
     measurementState.history = historyRes.items || [];
     measurementState.savedReports = reportsRes.reports || [];
+    measurementState.nextReportNumber = reportsRes.nextReportNumber || "01";
     measurementState.currentReportId = null;
+    measurementState.viewingSavedReport = false;
+    syncMeasurementReportNumberInput();
 
     const groups = [...new Set(measurementState.tasks.map((t) => t.itemGroup).filter(Boolean))].sort((a, b) =>
       a.localeCompare(b, "pt", { sensitivity: "base" })
@@ -1280,14 +1368,14 @@ async function loadMeasurements() {
 function wireMeasurements() {
   el("refreshMeasurementsBtn")?.addEventListener("click", () => loadMeasurements());
   el("measurementCurrentDate")?.addEventListener("change", () => {
-    measurementState.currentReportId = null;
-    renderMeasurementTable();
+    if (measurementState.viewingSavedReport) prepareNewMeasurementReport();
+    else renderMeasurementTable();
   });
   el("measurementPrevDate")?.addEventListener("change", () => {
-    measurementState.currentReportId = null;
-    renderMeasurementTable();
+    if (measurementState.viewingSavedReport) prepareNewMeasurementReport();
+    else renderMeasurementTable();
   });
-  el("measurementReportNumber")?.addEventListener("input", () => renderMeasurementTable());
+  el("newMeasurementReportBtn")?.addEventListener("click", () => prepareNewMeasurementReport());
 
   el("showMeasurementReportsBtn")?.addEventListener("click", () => {
     el("measurementReportsList")?.classList.remove("hidden");
@@ -1309,18 +1397,25 @@ function wireMeasurements() {
       const res = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports`, {
         method: "POST",
         body: {
-          reportNumber: opts.reportNumber,
           reportDate: opts.currentDate,
           prevDate: opts.prevDate || null,
           filterGroup: opts.filterGroup,
         },
       });
-      measurementState.currentReportId = res.report?.id;
-      measurementState.savedReports = [res.report, ...measurementState.savedReports.filter((r) => r.id !== res.report?.id)];
+      const saved = res.report;
+      measurementState.currentReportId = saved?.id;
+      measurementState.viewingSavedReport = true;
+      measurementState.savedReports = [saved, ...measurementState.savedReports.filter((r) => r.id !== saved?.id)];
+      measurementState.nextReportNumber = computeNextReportNumber(measurementState.savedReports);
+      syncMeasurementReportNumberInput();
       renderSavedMeasurementReports();
-      toast(`Auto Nº ${opts.reportNumber} guardado`, { type: "success" });
+      toast(`Auto Nº ${saved?.reportNumber} guardado`, { type: "success" });
     } catch (err) {
-      toast(err.message || "Erro ao guardar auto", { type: "error" });
+      if (err?.data?.nextReportNumber) {
+        measurementState.nextReportNumber = err.data.nextReportNumber;
+        syncMeasurementReportNumberInput();
+      }
+      toast(err.data?.message || err.message || "Erro ao guardar auto", { type: "error" });
     }
   });
 
@@ -1328,40 +1423,50 @@ function wireMeasurements() {
     const projectId = getProjectId();
     let reportId = measurementState.currentReportId;
 
-    if (!reportId) {
-      const opts = getMeasurementOptions();
-      if (!opts.currentDate) {
-        toast("Defina a data do auto antes de aprovar", { type: "warning" });
-        return;
-      }
-      const created = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports`, {
-        method: "POST",
-        body: {
-          reportNumber: opts.reportNumber,
-          reportDate: opts.currentDate,
-          prevDate: opts.prevDate || null,
-          filterGroup: opts.filterGroup,
-        },
-      });
-      reportId = created.report?.id;
-    }
-
     try {
+      if (!reportId) {
+        const opts = getMeasurementOptions();
+        if (!opts.currentDate) {
+          toast("Defina a data do auto antes de aprovar", { type: "warning" });
+          return;
+        }
+        const created = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports`, {
+          method: "POST",
+          body: {
+            reportDate: opts.currentDate,
+            prevDate: opts.prevDate || null,
+            filterGroup: opts.filterGroup,
+          },
+        });
+        const saved = created.report;
+        reportId = saved?.id;
+        measurementState.viewingSavedReport = true;
+        measurementState.savedReports = [saved, ...measurementState.savedReports.filter((r) => r.id !== saved?.id)];
+        measurementState.nextReportNumber = computeNextReportNumber(measurementState.savedReports);
+        syncMeasurementReportNumberInput();
+      }
+
       const res = await apiRequest(`/projects/${encodeURIComponent(projectId)}/measurement-reports/${encodeURIComponent(reportId)}`, {
         method: "PATCH",
         body: { status: "APPROVED" },
       });
       measurementState.currentReportId = reportId;
+      measurementState.viewingSavedReport = true;
       measurementState.savedReports = measurementState.savedReports.map((r) =>
         r.id === reportId ? res.report : r
       );
       if (!measurementState.savedReports.find((r) => r.id === reportId)) {
         measurementState.savedReports.unshift(res.report);
       }
+      syncMeasurementReportNumberInput();
       renderSavedMeasurementReports();
-      toast("Auto aprovado com sucesso", { type: "success" });
+      toast(`Auto Nº ${res.report?.reportNumber} aprovado com sucesso`, { type: "success" });
     } catch (err) {
-      toast(err.message || "Erro ao aprovar auto", { type: "error" });
+      if (err?.data?.nextReportNumber) {
+        measurementState.nextReportNumber = err.data.nextReportNumber;
+        syncMeasurementReportNumberInput();
+      }
+      toast(err.data?.message || err.message || "Erro ao aprovar auto", { type: "error" });
     }
   });
 

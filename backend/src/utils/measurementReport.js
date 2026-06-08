@@ -3,6 +3,19 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Próximo nº de auto sequencial (01, 02, …) para o projeto. */
+function getNextReportNumber(existingReports = []) {
+  const nums = (existingReports || [])
+    .map((r) => {
+      const m = String(r.reportNumber || "").match(/\d+/);
+      return m ? parseInt(m[0], 10) : 0;
+    })
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return String(next).padStart(2, "0");
+}
+
 function taskUnitValue(t) {
   const uvM = num(t.unitValueMaterial);
   const uvS = num(t.unitValueService);
@@ -213,6 +226,7 @@ function buildMeasurementSnapshot(tasks, history, options = {}) {
 
 module.exports = {
   buildMeasurementSnapshot,
+  getNextReportNumber,
   resolveTaskQtys,
   getChildTasks,
   getRootTasks,
