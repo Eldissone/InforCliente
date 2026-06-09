@@ -840,7 +840,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
 
   return `
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-      <td colspan="13" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+      <td colspan="14" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
         <div class="flex items-center gap-3 w-full">
           <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>chevron_right</span>
           <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
@@ -945,33 +945,36 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
   return `
     <tr class="hidden hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
-      <td class="px-6 py-4 text-center font-black text-slate-400 text-[11px] font-mono">${escapeHtml(wbsLabel)}</td>
-      <td class="py-4 ${indentStyle}" ${indentAttr}>
-        <div class="${descClass} flex flex-col relative">
-          <div class="flex items-start">
-            ${iconSub}
-            ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
-            <div class="flex flex-col">
-              <div class="flex items-center gap-2">
-                ${(t.wbsCode || t.itemCode) ? `<span class="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50">${escapeHtml(t.wbsCode || t.itemCode)}</span>` : ""}
-                <span class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(t.description)}</span>
+      <td class="px-4 py-3 text-center font-black text-slate-400 text-[11px] font-mono measurement-wbs">${escapeHtml(wbsLabel)}</td>
+      <td class="py-3 px-4 w-[250px] max-w-[250px]" ${indentAttr}>
+          <div class="${descClass} flex flex-col relative min-w-0">
+              <div class="flex items-start min-w-0">
+                  ${iconSub}
+                  ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
+                  
+                  <div class="flex flex-col min-w-0">
+                      <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-sm font-bold text-slate-900 leading-snug break-words whitespace-normal min-w-0">
+                              ${escapeHtml(t.description)}
+                          </span>
+                      </div>
+                  </div>
               </div>
-              ${(!isSub && t.itemGroup && t.itemGroup.toUpperCase() !== "GERAL") ? `<span class="text-[10px] text-slate-400 uppercase tracking-widest mt-1 font-black">${escapeHtml(t.itemGroup)}</span>` : ""}
-            </div>
           </div>
-        </div>
       </td>
-      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${fmtQty(exp)}</td>
-      <td class="px-4 py-4 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
-      <td class="px-4 py-4 text-center font-bold text-blue-600 text-xs">${uvSStr}</td>
-      <td class="px-4 py-4 text-center font-bold text-emerald-600 text-xs">${uvMStr}</td>
-      <td class="px-4 py-4 text-center font-black text-slate-900 text-xs">${invoicingValStr}</td>
-      <td class="px-4 py-4 text-center font-bold text-slate-800 text-xs">${fmtQty(exe)}</td>
-      <td class="px-4 py-4 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs">${invoicedValStr}</td>
-      <td class="px-4 py-4 text-center font-medium text-[#0d3fd1]">${pctBadge}</td>
-      <td class="px-4 py-4 text-center font-bold text-slate-500 text-xs">${fmtQty(left)}</td>
-      <td class="px-4 py-4 text-center font-black text-red-600 text-xs">${leftPct.toFixed(2)}%</td>
-      <td class="px-4 py-4 text-right" data-actions>
+
+      <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exp)}</td>
+      <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-3 text-center font-black text-slate-900 text-xs measurement-num">${invoicingValStr}</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exe)}</td>
+      <td class="px-4 py-3 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs measurement-num">${invoicedValStr}</td>
+      <td class="px-4 py-3 text-center font-medium text-[#0d3fd1] measurement-num">${pctBadge}</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-700 text-xs measurement-num">${fmtQty(exe)}</td>
+      <td class="px-4 py-3 text-center font-black text-slate-700 text-xs measurement-num">${invoicedValStr}</td>
+      <td class="px-4 py-3 text-center font-medium text-slate-600 text-xs measurement-num">${exePct.toFixed(2)}%</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-500 text-xs measurement-num">${fmtQty(left)}</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-500 text-xs measurement-num">—</td>
+      <td class="px-4 py-3 text-center" data-actions style="white-space: nowrap;">
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-wbs="${escapeHtml(t.wbsCode || t.itemCode || '')}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
       </td>
@@ -1057,6 +1060,8 @@ function measRowCells(row) {
   const openPct = totalVal > 0 ? (openVal / totalVal) * 100 : 0;
   const indentPad = (q.depth || 0) > 0 ? `padding-left:${(q.depth || 0) * 16}px` : "";
   const trClass = measRowClassToTr(q.rowClass || "item");
+
+  /* tabela de autos de medição */
 
   return `
     <tr class="${trClass}">
@@ -1508,12 +1513,12 @@ async function loadProgressTasks() {
   const tbody = el("progressTasksTbody");
   if (!tbody) return;
 
-  tbody.innerHTML = renderLoadingRow(8);
+  tbody.innerHTML = renderLoadingRow(14);
   try {
     const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
     window.projectProgressTasksCache = data.tasks || [];
     if (data.tasks.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+      tbody.innerHTML = `<tr><td colspan="14" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
     } else {
       let html = "";
       let lastGroup = null;
@@ -1634,15 +1639,17 @@ async function loadProgressTasks() {
 
         tfoot.innerHTML = `
           <tr>
-            <td class="px-4 py-5 text-center" text-sm colspan="2">TOTAL GERAL DA OBRA</td>
-            <td class="px-4 py-5 text-center" colspan="4"></td>
-            <td class="px-4 py-5 text-center bg-slate-800 text-white">${globalFmt(globalInvoicing)}</td>
+            <td class="px-4 py-5 text-center" colspan="2">TOTAL GERAL DA OBRA</td>
+            <td class="px-4 py-5 text-center">${globalFmt(globalInvoicing)}</td>
+            <td class="px-4 py-5 text-center" colspan="3"></td>
             <td class="px-4 py-5 text-center"></td>
-            <td class="px-4 py-5 text-center bg-emerald-900 text-white">${globalFmt(globalInvoiced)}</td>
-            <td class="px-4 py-5 text-center bg-blue-900 text-white">${globalPct.toFixed(2)}%</td>
             <td class="px-4 py-5 text-center"></td>
-            <td class="px-4 py-5 text-center bg-red-900 text-white">${(100 - globalPct).toFixed(2)}%</td>
-            <td class="px-8 py-5"></td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center">${globalFmt(globalInvoiced)}</td>
+            <td class="px-4 py-5 text-center">${globalPct.toFixed(2)}%</td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center" colspan="2"></td>
           </tr>
         `;
       }
