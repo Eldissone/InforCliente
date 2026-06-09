@@ -840,7 +840,7 @@ function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupPro
 
   return `
     <tr class="bg-slate-50 cursor-pointer select-none group" data-toggle-progress-group="${safeGroupName}">
-      <td colspan="14" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
+      <td colspan="13" class="px-6 py-3 border-y border-slate-100 hover:bg-slate-100/50 transition-colors">
         <div class="flex items-center gap-3 w-full">
           <span class="material-symbols-outlined text-slate-400 group-hover:text-blue-600 transition-colors text-xl" data-icon>chevron_right</span>
           <span class="text-[11px] font-black uppercase tracking-[0.2em] text-[#212e3e]">${safeGroupName}</span>
@@ -965,15 +965,14 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
 
       <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs">${fmtQty(exp)}</td>
       <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-600 text-xs measurement-num">${!hasChildren ? fmtUV(unitVal) + ' ' + currencyStr : '—'}</td>
       <td class="px-4 py-3 text-center font-black text-slate-900 text-xs measurement-num">${invoicingValStr}</td>
       <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exe)}</td>
       <td class="px-4 py-3 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs measurement-num">${invoicedValStr}</td>
       <td class="px-4 py-3 text-center font-medium text-[#0d3fd1] measurement-num">${pctBadge}</td>
-      <td class="px-4 py-3 text-center font-bold text-slate-700 text-xs measurement-num">${fmtQty(exe)}</td>
-      <td class="px-4 py-3 text-center font-black text-slate-700 text-xs measurement-num">${invoicedValStr}</td>
-      <td class="px-4 py-3 text-center font-medium text-slate-600 text-xs measurement-num">${exePct.toFixed(2)}%</td>
       <td class="px-4 py-3 text-center font-bold text-slate-500 text-xs measurement-num">${fmtQty(left)}</td>
-      <td class="px-4 py-3 text-center font-bold text-slate-500 text-xs measurement-num">—</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-500 text-xs measurement-num">${left > 0 ? fmt(unitVal * left) + ' ' + currencyStr : '—'}</td>
+      <td class="px-4 py-3 text-center font-medium text-slate-600 text-xs measurement-num">${leftPct.toFixed(2)}%</td>
       <td class="px-4 py-3 text-center" data-actions style="white-space: nowrap;">
         <button data-edit-task="${t.id}" data-task-desc="${escapeHtml(t.description)}" data-task-wbs="${escapeHtml(t.wbsCode || t.itemCode || '')}" data-task-exe="${exe}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit)}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${unitVal}" data-task-total-value="${t.totalValue || ''}" data-task-currency="${escapeHtml(t.currency || 'AOA')}" title="Atualizar Progresso" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
         <button data-delete-task="${t.id}" title="Remover" class="material-symbols-outlined text-slate-400 hover:text-error transition-colors p-1 rounded-md hover:bg-error/10">delete</button>
@@ -1062,9 +1061,8 @@ function measRowCells(row) {
   const trClass = measRowClassToTr(q.rowClass || "item");
 
   /* tabela de autos de medição */
-
   return `
-    <tr class="${trClass}">
+    <tr class="${trClass} hover:bg-slate-200 cursor-pointer">
       <td class="px-3 py-3 measurement-wbs">${escapeHtml(q.wbs || "")}</td>
       <td class="px-3 py-3 font-semibold" style="${indentPad}">${escapeHtml(q.description || "")}</td>
       <td class="px-2 py-3 text-center text-[10px] font-bold uppercase text-slate-500">${formatUnit(q.unit || "un")}</td>
@@ -1513,12 +1511,12 @@ async function loadProgressTasks() {
   const tbody = el("progressTasksTbody");
   if (!tbody) return;
 
-  tbody.innerHTML = renderLoadingRow(14);
+  tbody.innerHTML = renderLoadingRow(13);
   try {
     const data = await apiRequest("/projects/" + encodeURIComponent(id) + "/progress-tasks");
     window.projectProgressTasksCache = data.tasks || [];
     if (data.tasks.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="14" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td</tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-6 text-xs text-slate-400 font-bold uppercase">Sem tarefas cadastradas</td></tr>`;
     } else {
       let html = "";
       let lastGroup = null;
@@ -1637,19 +1635,22 @@ async function loadProgressTasks() {
         const globalCurrency = (projectState && projectState.currency === "USD") ? "USD" : "Kz";
         const globalFmt = (v) => num(v).toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + globalCurrency;
 
+        const globalOpenVal = Math.max(0, globalInvoicing - globalInvoiced);
+        const globalOpenPct = globalInvoicing > 0 ? Math.max(0, 100 - globalPct) : 0;
         tfoot.innerHTML = `
           <tr>
             <td class="px-4 py-5 text-center" colspan="2">TOTAL GERAL DA OBRA</td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center"></td>
             <td class="px-4 py-5 text-center">${globalFmt(globalInvoicing)}</td>
-            <td class="px-4 py-5 text-center" colspan="3"></td>
-            <td class="px-4 py-5 text-center"></td>
-            <td class="px-4 py-5 text-center"></td>
             <td class="px-4 py-5 text-center"></td>
             <td class="px-4 py-5 text-center">${globalFmt(globalInvoiced)}</td>
             <td class="px-4 py-5 text-center">${globalPct.toFixed(2)}%</td>
             <td class="px-4 py-5 text-center"></td>
+            <td class="px-4 py-5 text-center">${globalFmt(globalOpenVal)}</td>
+            <td class="px-4 py-5 text-center">${globalOpenPct.toFixed(2)}%</td>
             <td class="px-4 py-5 text-center"></td>
-            <td class="px-4 py-5 text-center" colspan="2"></td>
           </tr>
         `;
       }
@@ -2077,7 +2078,7 @@ function wireProgressTasks() {
               </div>
               <div>
                 <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">V. Faturado <span class="text-slate-300 lowercase text-[9px]">(Global)</span></label>
-                <input id="up_tv" type="number" step="any" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="Pode sobrescrever" />
+                <input id="up_tv" type="number" step="any" min="0" value="${tv || ''}" class="w-full rounded-lg border-slate-300 ${bgClass}" ${readonlyAttr} title="${titleHint}" placeholder="" />
               </div>
             </div>
           </div>

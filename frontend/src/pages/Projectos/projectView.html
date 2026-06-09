@@ -122,6 +122,10 @@
             background: #fff;
         }
 
+        .measurement-table tbody tr:hover td {
+            background: #e2e8f0 !important;
+        }
+
         .measurement-num {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -788,10 +792,9 @@
                         <thead>
                             <tr class="meas-group-head">
                                 <th colspan="2">Identificação</th>
-                                <th colspan="3">Previsto</th>
+                                <th colspan="4">Previsto</th>
                                 <th colspan="3">Executado</th>
-                                <th colspan="3">Acumulado</th>
-                                <th colspan="2">Em Aberto</th>
+                                <th colspan="3">Em Aberto</th>
                                 <th rowspan="2" class="align-middle">Acção</th>
                             </tr>
                             <tr class="meas-col-head">
@@ -799,6 +802,7 @@
                                 <th class="text-left !text-left min-w-[100px] max-w-[250px]">Descrição</th>
                                 <th>QTD</th>
                                 <th>UN</th>
+                                <th>PU</th>
                                 <th>VALOR</th>
                                 <th>QTD</th>
                                 <th>VALOR</th>
@@ -806,8 +810,6 @@
                                 <th>QTD</th>
                                 <th>VALOR</th>
                                 <th>%</th>
-                                <th>QTD</th>
-                                <th>VALOR</th>
                             </tr>
                         </thead>
                         <tbody id="progressTasksTbody" class="divide-y divide-slate-50 text-slate-700"></tbody>
