@@ -193,6 +193,7 @@ model ProjectTransaction {
   amount         Decimal             @db.Decimal(16, 2)
   realizedAmount Decimal?            @db.Decimal(16, 2)
   budgetLineId   String?
+  currency       String?
   budgetLine     ProjectBudgetLine?  @relation(fields: [budgetLineId], references: [id])
   project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

@@ -712,6 +712,7 @@ projectRoutes.post(
         status: z.enum(["PAID", "PENDING", "LATE"]).optional(),
         amount: z.union([z.number(), z.string()]),
         budgetLineId: z.string().optional().nullable(),
+        currency: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -733,6 +734,7 @@ projectRoutes.post(
           status: body.status || "PENDING",
           amount: String(amount),
           budgetLineId: body.budgetLineId || null,
+          currency: body.currency || "AOA",
         },
         select: { id: true },
       });
@@ -808,6 +810,147 @@ projectRoutes.patch(
     }
     // INVESTIMENTOS and DEPRECIACAO: only update status, no budget impact
     // DEPRECIACAO: only update status, no budget impact
+
+    await prisma.$transaction(txOps);
+
+    return res.json({ ok: true });
+  })
+);
+
+projectRoutes.patch(
+  "/:id/transactions/:txId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const txId = String(req.params.txId);
+
+    const body = z
+      .object({
+        date: z.string().datetime().optional(),
+        description: z.string().min(2).optional(),
+        category: z.enum([
+          "MATERIALS", "EQUIPMENT", "LABOR", "OTHER",
+          "MATERIAIS_INSUMOS", "SERVICOS_MAO_DE_OBRA", "GASTOS_PESSOAL",
+          "DESPESAS_OPERACIONAIS", "INVESTIMENTOS", "DEPRECIACAO",
+          "OUTRAS_DESPESAS", "DEDUCOES", "IMPOSTOS"
+        ]).optional(),
+        ownerName: z.string().optional().nullable(),
+        status: z.enum(["PAID", "PENDING", "LATE"]).optional(),
+        amount: z.union([z.number(), z.string()]).optional(),
+        currency: z.string().optional().nullable(),
+      })
+      .parse(req.body);
+
+    const oldTx = await prisma.projectTransaction.findUnique({
+      where: { id: txId, projectId },
+    });
+
+    if (!oldTx) return res.status(404).json({ error: "TRANSACTION_NOT_FOUND" });
+
+    const newAmount = body.amount !== undefined ? Number(body.amount) : Number(oldTx.amount);
+    const newStatus = body.status !== undefined ? body.status : oldTx.status;
+    const oldAmount = Number(oldTx.amount);
+    const oldIsPaid = oldTx.status === "PAID";
+    const newIsPaid = newStatus === "PAID";
+
+    const isInvestmentOld = oldTx.category === "INVESTIMENTOS";
+    const isInfoOnlyOld = oldTx.category === "DEPRECIACAO";
+    const newCategory = body.category !== undefined ? body.category : oldTx.category;
+    const isInvestmentNew = newCategory === "INVESTIMENTOS";
+    const isInfoOnlyNew = newCategory === "DEPRECIACAO";
+
+    const txOps = [];
+
+    // Revert old impact if it was a regular cost
+    if (!isInvestmentOld && !isInfoOnlyOld) {
+      txOps.push(
+        prisma.project.update({
+          where: { id: projectId },
+          data: {
+            budgetConsumed: { decrement: oldIsPaid ? oldAmount : 0 },
+            budgetCommitted: { decrement: !oldIsPaid ? oldAmount : 0 },
+            budgetAvailable: { increment: oldAmount },
+          },
+        })
+      );
+    }
+
+    // Apply new impact if it is a regular cost
+    if (!isInvestmentNew && !isInfoOnlyNew) {
+      txOps.push(
+        prisma.project.update({
+          where: { id: projectId },
+          data: {
+            budgetConsumed: { increment: newIsPaid ? newAmount : 0 },
+            budgetCommitted: { increment: !newIsPaid ? newAmount : 0 },
+            budgetAvailable: { decrement: newAmount },
+          },
+        })
+      );
+    }
+
+    // Update the transaction
+    txOps.push(
+      prisma.projectTransaction.update({
+        where: { id: txId },
+        data: {
+          ...(body.date ? { date: new Date(body.date) } : {}),
+          ...(body.description ? { description: body.description } : {}),
+          ...(body.category ? { category: body.category } : {}),
+          ...(body.ownerName !== undefined ? { ownerName: body.ownerName } : {}),
+          ...(body.status ? { status: body.status } : {}),
+          ...(body.amount !== undefined ? { amount: String(newAmount) } : {}),
+          ...(body.currency !== undefined ? { currency: body.currency } : {}),
+        },
+      })
+    );
+
+    await prisma.$transaction(txOps);
+
+    return res.json({ ok: true });
+  })
+);
+
+projectRoutes.delete(
+  "/:id/transactions/:txId",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const txId = String(req.params.txId);
+
+    const oldTx = await prisma.projectTransaction.findUnique({
+      where: { id: txId, projectId },
+    });
+
+    if (!oldTx) return res.status(404).json({ error: "TRANSACTION_NOT_FOUND" });
+
+    const isInvestment = oldTx.category === "INVESTIMENTOS";
+    const isInfoOnly = oldTx.category === "DEPRECIACAO";
+    const amount = Number(oldTx.amount);
+    const isPaid = oldTx.status === "PAID";
+
+    const txOps = [];
+
+    // Revert budget impact if regular cost
+    if (!isInvestment && !isInfoOnly) {
+      txOps.push(
+        prisma.project.update({
+          where: { id: projectId },
+          data: {
+            budgetConsumed: { decrement: isPaid ? amount : 0 },
+            budgetCommitted: { decrement: !isPaid ? amount : 0 },
+            budgetAvailable: { increment: amount },
+          },
+        })
+      );
+    }
+
+    // Delete transaction
+    txOps.push(
+      prisma.projectTransaction.delete({
+        where: { id: txId },
+      })
+    );
 
     await prisma.$transaction(txOps);
 

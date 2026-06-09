@@ -1,4 +1,4 @@
-﻿import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
+import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl, resolveProductImageUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import {
   initPermissionLayer,
@@ -126,19 +126,27 @@ function renderTxRow(t) {
         </div>
       </td>
       <td class="px-10 py-5 text-right font-black text-slate-900">
-        ${formatCurrency(t.amount, projectState?.currency)}
-        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrency(t.realizedAmount, projectState?.currency)}</div>` : ""}
+        ${formatCurrency(t.amount, t.currency || projectState?.currency)}
+        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrency(t.realizedAmount, t.currency || projectState?.currency)}</div>` : ""}
       </td>
       <td class="px-10 py-5 text-center">
-        ${t.status !== "PAID" ? `
-          <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Liquidado" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all mx-auto">
-            <span class="material-symbols-outlined text-lg">check_circle</span>
+        <div class="flex items-center justify-center gap-2">
+          ${t.status !== "PAID" ? `
+            <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Liquidado" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+              <span class="material-symbols-outlined text-lg">check_circle</span>
+            </button>
+          ` : `
+            <div class="w-8 h-8 rounded-lg bg-slate-50 text-slate-300 flex items-center justify-center">
+              <span class="material-symbols-outlined text-lg">done_all</span>
+            </div>
+          `}
+          <button data-edit-tx="${t.id}" data-tx='${escapeHtml(JSON.stringify(t))}' title="Editar" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
+            <span class="material-symbols-outlined text-lg">edit</span>
           </button>
-        ` : `
-          <div class="w-8 h-8 rounded-lg bg-slate-50 text-slate-300 flex items-center justify-center mx-auto">
-            <span class="material-symbols-outlined text-lg">done_all</span>
-          </div>
-        `}
+          <button data-delete-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" title="Eliminar" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
+            <span class="material-symbols-outlined text-lg">delete</span>
+          </button>
+        </div>
       </td>
     </tr>
   `;
@@ -520,6 +528,7 @@ async function loadBudgetExecution() {
     const realizedAmount = t.realizedAmount != null ? Number(t.realizedAmount) : forecastAmount;
 
     const cKey = getCatKey(t.category);
+    const txCurr = t.currency || projectState?.currency || "AOA";
 
     if (t.status === "PENDING" || t.status === "LATE") {
       cats[cKey].total += forecastAmount;
@@ -529,7 +538,7 @@ async function loadBudgetExecution() {
       const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
       let row = cats[cKey].items.find(i => i._key === descKey);
       if (!row) {
-        row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: 0, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
+        row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: 0, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
         cats[cKey].items.push(row);
       }
       row.totalP += forecastAmount;
@@ -548,7 +557,7 @@ async function loadBudgetExecution() {
         const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
         let row = cats[cKey].items.find(i => i._key === descKey);
         if (!row) {
-          row = { id: t.id, _key: descKey, desc: cleanDesc, totalP: forecastAmount, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
+          row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: forecastAmount, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
           cats[cKey].items.push(row);
           cats[cKey].total += forecastAmount;
           cats[cKey].byMonth[mIdx].p += forecastAmount;
@@ -585,21 +594,33 @@ async function loadBudgetExecution() {
   const formatTableCurrency = (val) => val === 0 ? "-" : new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
   const formatPct = (c, p) => p > 0 ? Math.round((c / p) * 100) + '%' : (c > 0 ? '100%' : '0%');
 
-  const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null) => {
+  const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null, rowCurrency = null) => {
     let rowCls = customRowCls || (isHeader ? "bg-slate-100 font-black text-slate-900" : "bg-white text-slate-800 hover:bg-slate-50 transition-colors");
     let titleCls = customRowCls ? `px-2 md:px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls} text-[10px] md:text-xs` : (isHeader ? "px-2 md:px-4 py-2 sticky left-0 bg-slate-100 z-10 whitespace-nowrap text-[10px] md:text-xs" : "px-2 md:px-4 py-1.5 sticky left-0 bg-white group-hover:bg-slate-50 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] md:max-w-[250px] pl-4 md:pl-8 text-[9px] md:text-xs font-semibold");
 
+    // Format value with currency suffix for this row (e.g. "3.000 AOA")
+    const projCurr = projectState?.currency || "AOA";
+    const effectiveCurr = rowCurrency || projCurr;
+    const currLabel = effectiveCurr === "AOA" ? "Kz" : effectiveCurr;
+    const showCurrSuffix = !isHeader; // only on leaf rows, not category headers
+    const fmtVal = (val) => {
+      if (val === 0) return "-";
+      const num = new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+      return showCurrSuffix ? `${num} <span class="text-[8px] text-slate-400 font-normal">${currLabel}</span>` : num;
+    };
+
+    // Remove description badge (currency now shown in value cells)
     let html = `<tr class="border-b border-slate-100 group ${rowCls}">`;
     html += `<td class="${titleCls}" title="${escapeHtml(title)}">${escapeHtml(title)}</td>`;
 
     // Total column
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right font-black border-l border-slate-100 bg-slate-50 text-[10px] md:text-xs text-slate-900">${formatTableCurrency(totalP)}</td>`;
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[10px] md:text-xs ${totalC > totalP ? 'text-red-600' : 'text-slate-900'}">${formatTableCurrency(totalC)}</td>`;
+    html += `<td class="px-1.5 md:px-2 py-1.5 text-right font-black border-l border-slate-100 bg-slate-50 text-[10px] md:text-xs text-slate-900">${fmtVal(totalP)}</td>`;
+    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[10px] md:text-xs ${totalC > totalP ? 'text-red-600' : 'text-slate-900'}">${fmtVal(totalC)}</td>`;
     html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400 font-bold">${formatPct(totalC, totalP)}</td>`;
 
     monthsData.forEach((m) => {
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right border-l border-slate-100 text-[9px] md:text-[11px] text-slate-500">${formatTableCurrency(m.p)}</td>`;
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[9px] md:text-[11px] font-bold ${m.c > m.p ? 'text-red-600' : 'text-slate-900'}">${formatTableCurrency(m.c)}</td>`;
+      html += `<td class="px-1.5 md:px-2 py-1.5 text-right border-l border-slate-100 text-[9px] md:text-[11px] text-slate-500">${fmtVal(m.p)}</td>`;
+      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[9px] md:text-[11px] font-bold ${m.c > m.p ? 'text-red-600' : 'text-slate-900'}">${fmtVal(m.c)}</td>`;
       html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400">${formatPct(m.c, m.p)}</td>`;
     });
 
@@ -649,7 +670,7 @@ async function loadBudgetExecution() {
 
     // Category Items
     cat.items.forEach(item => {
-      tbodyHtml += drawRow(item.desc, isInfoOnly ? 0 : item.totalP, isInfoOnly ? 0 : item.totalC, item.byMonth, false);
+      tbodyHtml += drawRow(item.desc, isInfoOnly ? 0 : item.totalP, isInfoOnly ? 0 : item.totalC, item.byMonth, false, null, item.currency || null);
     });
   });
 
@@ -675,7 +696,6 @@ async function loadBudgetExecution() {
     if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, totalPct))}%`;
   }
 
-  // Renderiza Curva S com dados reais (todas as transaÃ§Ãµes + linhas de orÃ§amento)
 
   renderOperationStatus(lines);
 }
@@ -699,7 +719,7 @@ async function renderOperationStatus(lines) {
     return null;
   };
 
-  // Somar orÃ§amento total por categoria (das linhas de orÃ§amento)
+  // Somar orçamento total por categoria (das linhas de orçamento)
   lines.forEach(l => {
     const group = getGroup(l.category);
     if (group && cats[group]) {
@@ -707,7 +727,7 @@ async function renderOperationStatus(lines) {
     }
   });
 
-  // Somar todos os custos lanÃ§ados por categoria
+  // Somar todos os custos lançados por categoria
   (txData.items || []).forEach(t => {
     const group = getGroup(t.category);
     if (group && cats[group]) {
@@ -727,7 +747,90 @@ async function renderOperationStatus(lines) {
       subEl.textContent = `${formatCurrency(c.consumed, projectState?.currency)} lançados`;
     }
   });
+
+  // Update Fluxo Financeiro card with per-currency breakdown
+  updateFluxoFinanceiro(txData.items || []);
 }
+
+/**
+ * Aggregates transaction totals by currency (liquidated vs committed)
+ * and updates the Fluxo Financeiro card with multi-currency breakdown lines.
+ */
+function updateFluxoFinanceiro(txItems) {
+  // Exclude purely informational categories from budget impact
+  const excluded = new Set(["INVESTIMENTOS", "DEPRECIACAO"]);
+
+  // Aggregate: { [currency]: { paid: number, pending: number } }
+  const byCurrency = {};
+  txItems.forEach(t => {
+    if (excluded.has(t.category)) return;
+    const curr = t.currency || projectState?.currency || "AOA";
+    if (!byCurrency[curr]) byCurrency[curr] = { paid: 0, pending: 0 };
+    const amount = Number(t.amount || 0);
+    if (t.status === "PAID") {
+      byCurrency[curr].paid += amount;
+    } else {
+      byCurrency[curr].pending += amount;
+    }
+  });
+
+  const currencies = Object.keys(byCurrency).sort();
+  const hasMix = currencies.length > 1;
+
+  // Helper: render currency label badge for secondary currencies
+  const currBadge = (curr) => hasMix
+    ? `<span class="inline-block ml-2 text-[6px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">${curr}</span>`
+    : "";
+
+  // ── Liquidado ──────────────────────────────────────────────────────────
+  const consumedContainer = el("budgetConsumedBreakdown");
+  if (consumedContainer) {
+    if (currencies.length === 0) {
+      consumedContainer.innerHTML = `<p id="budgetConsumed" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
+    } else {
+      consumedContainer.innerHTML = currencies.map((curr, i) => {
+        const val = byCurrency[curr].paid;
+        const isFirst = i === 0;
+        return `<p ${isFirst ? 'id="budgetConsumed"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
+          ${formatCurrency(val, curr)}${currBadge(curr)}
+        </p>`;
+      }).join("");
+    }
+  }
+
+  // ── Comprometido ──────────────────────────────────────────────────────
+  const committedContainer = el("budgetCommittedBreakdown");
+  if (committedContainer) {
+    if (currencies.length === 0) {
+      committedContainer.innerHTML = `<p id="budgetCommitted" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
+    } else {
+      committedContainer.innerHTML = currencies.map((curr, i) => {
+        const val = byCurrency[curr].pending;
+        const isFirst = i === 0;
+        return `<p ${isFirst ? 'id="budgetCommitted"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
+          ${formatCurrency(val, curr)}${currBadge(curr)}
+        </p>`;
+      }).join("");
+    }
+  }
+
+  // ── Custos da Obra (total = paid + pending) ───────────────────────────
+  const availableContainer = el("budgetAvailableBreakdown");
+  if (availableContainer) {
+    if (currencies.length === 0) {
+      availableContainer.innerHTML = `<p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">---</p>`;
+    } else {
+      availableContainer.innerHTML = currencies.map((curr, i) => {
+        const val = byCurrency[curr].paid + byCurrency[curr].pending;
+        const isFirst = i === 0;
+        return `<p ${isFirst ? 'id="budgetAvailable"' : ''} class="font-bold text-blue-600 tracking-tight ${isFirst ? "text-[10px]" : "text-base"}">
+          ${formatCurrency(val, curr)}${currBadge(curr)}
+        </p>`;
+      }).join("");
+    }
+  }
+}
+
 
 function wireLiquidation() {
   document.addEventListener("click", async (e) => {
@@ -795,6 +898,153 @@ function wireLiquidation() {
         }
       },
     });
+  });
+}
+
+function wireTransactionsActions() {
+  document.addEventListener("click", async (e) => {
+    // Delete action
+    const btnDelete = e.target?.closest("[data-delete-tx]");
+    if (btnDelete) {
+      const txId = btnDelete.getAttribute("data-delete-tx");
+      const txDesc = btnDelete.getAttribute("data-tx-desc") || "este lançamento";
+      const projectId = getProjectId();
+
+      if (!confirm(`Tem a certeza que deseja eliminar "${txDesc}"? Esta acção não pode ser desfeita.`)) return;
+
+      try {
+        const btn = btnDelete;
+        const ogHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span>`;
+        btn.disabled = true;
+
+        await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}`, {
+          method: "DELETE"
+        });
+
+        toast("Lançamento eliminado com sucesso", { type: "success" });
+        await loadProject();
+        await loadTransactions();
+        await loadBudgetExecution();
+      } catch (err) {
+        toast(err.message || "Erro ao eliminar lançamento", { type: "error" });
+        btnDelete.disabled = false;
+        btnDelete.innerHTML = ogHtml;
+      }
+      return;
+    }
+
+    // Edit action
+    const btnEdit = e.target?.closest("[data-edit-tx]");
+    if (btnEdit) {
+      const txId = btnEdit.getAttribute("data-edit-tx");
+      let tx = null;
+      try {
+        tx = JSON.parse(btnEdit.getAttribute("data-tx"));
+      } catch (e) {
+        return;
+      }
+      const projectId = getProjectId();
+
+      // Retrieve budget lines for the select
+      let budgetOptionsHtml = `<option value="">(Nenhum item específico)</option>`;
+      try {
+        const budgetData = await apiRequest(`/projects/${encodeURIComponent(projectId)}/budget/lines`);
+        budgetOptionsHtml += (budgetData.items || []).map(l => `<option value="${l.id}" ${tx.budgetLineId === l.id ? "selected" : ""}>${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`).join("");
+      } catch (e) {
+        // Ignorar erro se não conseguir carregar as linhas de orçamento
+      }
+
+      openModal({
+        title: "Editar lançamento",
+        primaryLabel: "Actualizar",
+        contentHtml: `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
+            <input id="e_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." value="${escapeHtml(tx.description || '')}" />
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
+            <select id="e_cat" class="w-full rounded-lg border-slate-300">
+              <optgroup label="Custos Operacionais e Diretos">
+                <option value="MATERIAIS_INSUMOS" ${tx.category === 'MATERIAIS_INSUMOS' ? 'selected' : ''}>Materiais e Insumos</option>
+                <option value="SERVICOS_MAO_DE_OBRA" ${tx.category === 'SERVICOS_MAO_DE_OBRA' ? 'selected' : ''}>Mão de Obra e Serviços</option>
+              </optgroup>
+              <optgroup label="Gastos e Despesas">
+                <option value="GASTOS_PESSOAL" ${tx.category === 'GASTOS_PESSOAL' ? 'selected' : ''}>Gastos com Pessoal</option>
+                <option value="DESPESAS_OPERACIONAIS" ${tx.category === 'DESPESAS_OPERACIONAIS' ? 'selected' : ''}>Despesas Operacionais</option>
+                <option value="DEPRECIACAO" ${tx.category === 'DEPRECIACAO' ? 'selected' : ''}>Depreciação</option>
+                <option value="IMPOSTOS" ${tx.category === 'IMPOSTOS' ? 'selected' : ''}>Impostos</option>
+                <option value="OUTRAS_DESPESAS" ${tx.category === 'OUTRAS_DESPESAS' ? 'selected' : ''}>Outras Despesas</option>
+              </optgroup>
+              <optgroup label="Deduções">
+                <option value="DEDUCOES" ${tx.category === 'DEDUCOES' ? 'selected' : ''}>Dedução de Custos / Reembolso</option>
+              </optgroup>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label>
+            <select id="e_status" class="w-full rounded-lg border-slate-300">
+              <option value="PENDING" ${tx.status === 'PENDING' ? 'selected' : ''}>Pendente</option>
+              <option value="PAID" ${tx.status === 'PAID' ? 'selected' : ''}>Liquidado</option>
+              <option value="LATE" ${tx.status === 'LATE' ? 'selected' : ''}>Atrasado</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Responsável</label>
+            <input id="e_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" value="${escapeHtml(tx.ownerName || '')}" />
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label>
+            <select id="e_currency" class="w-full rounded-lg border-slate-300">
+              <option value="AOA" ${tx.currency === 'AOA' ? 'selected' : ''}>AOA (Kz)</option>
+              <option value="USD" ${tx.currency === 'USD' ? 'selected' : ''}>USD ($)</option>
+              <option value="EUR" ${tx.currency === 'EUR' ? 'selected' : ''}>EUR (€)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor</label>
+            <input id="e_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${tx.amount}" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do Orçamento</label>
+            <select id="e_line" class="w-full rounded-lg border-slate-300 text-sm">
+              ${budgetOptionsHtml}
+            </select>
+          </div>
+        </div>
+      `,
+        onPrimary: async ({ close, panel }) => {
+          const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
+          const primaryBtn = panel.querySelector("[data-primary]");
+          try {
+            setButtonLoading(primaryBtn, true);
+            await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}`, {
+              method: "PATCH",
+              body: {
+                description: v("e_desc"),
+                category: v("e_cat"),
+                status: v("e_status"),
+                ownerName: v("e_owner") || null,
+                currency: v("e_currency") || "AOA",
+                amount: Number(v("e_amount") || 0),
+                budgetLineId: v("e_line") || null,
+              },
+            });
+            toast("Lançamento editado com sucesso", { type: "success" });
+            close();
+            await loadProject();
+            await loadTransactions();
+            await loadBudgetExecution();
+          } catch (err) {
+            setButtonLoading(primaryBtn, false);
+            toast(err.message || "Erro ao editar lançamento", { type: "error" });
+          }
+        },
+      });
+      return;
+    }
   });
 }
 
@@ -2585,7 +2835,15 @@ function wireNewTransaction() {
             <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor (${projectState?.currency || "Kz"})</label>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label>
+            <select id="t_currency" class="w-full rounded-lg border-slate-300">
+              <option value="AOA">AOA (Kz)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor</label>
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
           <div class="md:col-span-2">
@@ -2610,6 +2868,7 @@ function wireNewTransaction() {
                 status: v("t_status"),
                 ownerName: v("t_owner") || null,
                 amount: Number(v("t_amount") || 0),
+                currency: v("t_currency") || "AOA",
                 budgetLineId: v("t_line") || null,
               },
             });
@@ -2936,6 +3195,7 @@ async function init() {
   wireExport();
   wireNewTransaction();
   wireLiquidation();
+  wireTransactionsActions();
   wireTabs();
   applyRoleVisibility();
   const user = getSessionUser();

@@ -431,33 +431,36 @@
                         <div class="flex justify-between items-center mb-6 md:mb-10">
                             <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
                             </h3>
-                            <div
-                                class="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 font-bold italic">
-                            </div>
+                         
                         </div>
                         <div class="space-y-6">
-                            <div class="flex items-center gap-6">
+                            <div class="flex items-start gap-4">
                                 <div
-                                    class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                    class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
                                     <span class="material-symbols-outlined">payments</span>
                                 </div>
-                                <div class="flex-1">
+                                <div class="flex-1 min-w-0">
                                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                                         Liquidado</p>
-                                    <p id="budgetConsumed" class="text-xl font-bold text-slate-900 tracking-tight">---
-                                    </p>
+                                    <div id="budgetConsumedBreakdown" class="space-y-0.5">
+                                        <p id="budgetConsumed"
+                                            class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-6">
+                            <div class="flex items-start gap-6">
                                 <div
-                                    class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                    class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
                                     <span class="material-symbols-outlined">schedule</span>
                                 </div>
-                                <div class="flex-1">
+                                <div class="flex-1 min-w-0">
                                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                                         Comprometido</p>
-                                    <p id="budgetCommitted" class="text-xl font-bold text-slate-900 tracking-tight">---
-                                    </p>
+                                    <div id="budgetCommittedBreakdown" class="space-y-0.5">
+                                        <p id="budgetCommitted"
+                                            class="text-[10px] font-bold text-slate-900 tracking-tight">
+                                            ---</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -467,7 +470,11 @@
                             <div>
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                                     Custos da Obra</p>
-                                <p id="budgetAvailable" class="text-2xl font-bold text-blue-600 tracking-tight">---</p>
+                                <div id="budgetAvailableBreakdown" class="space-y-0.5">
+                                    <p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">
+                                        ---
+                                    </p>
+                                </div>
                             </div>
                             <div
                                 class="h-10 px-4 rounded-xl bg-blue-50 text-blue-600 flex items-center text-[10px] font-black uppercase tracking-widest">
@@ -475,6 +482,7 @@
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Progress & Timeline Card -->
                 <div
@@ -779,8 +787,10 @@
                 <div
                     class="px-6 md:px-10 py-6 border-b border-slate-50 flex flex-row items-center justify-between gap-4">
                     <div>
-                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-900">Tabela de Quantidades</h3>
-                        <p class="text-[11px] text-slate-400 mt-1 font-medium">Controlo detalhado de quantidades e execução</p>
+                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-900">Tabela de Quantidades
+                        </h3>
+                        <p class="text-[11px] text-slate-400 mt-1 font-medium">Controlo detalhado de quantidades e
+                            execução</p>
                     </div>
                     <button data-toggle-table="progress"
                         class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center hover:bg-slate-100 transition-all text-slate-400 hover:text-slate-900">
@@ -828,11 +838,13 @@
                 class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
-                    <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto (WBS).</p>
+                    <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto
+                        (WBS).</p>
                 </div>
                 <div class="flex flex-wrap items-end gap-3 w-full lg:w-auto">
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto Nº</label>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
+                            Nº</label>
                         <input id="measurementReportNumber" type="text" value="01" readonly
                             class="w-12 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
                             title="Atribuído automaticamente" />
@@ -844,12 +856,14 @@
                         <span class="material-symbols-outlined text-lg">add</span>
                     </button>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data do Auto</label>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data
+                            do Auto</label>
                         <input id="measurementCurrentDate" type="date"
                             class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto Anterior (até)</label>
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
+                            Anterior (até)</label>
                         <input id="measurementPrevDate" type="date"
                             class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                             title="Data limite do auto anterior — define o acumulado anterior" />
@@ -872,12 +886,12 @@
                     <button id="exportMeasurementExcelBtn"
                         class="h-10 bg-white border border-slate-200 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-lg">table</span>
-        
+
                     </button>
                     <button id="exportMeasurementPdfBtn"
                         class="h-10 bg-white border border-slate-200 text-red-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-lg">picture_as_pdf</span>
-                        
+
                     </button>
                 </div>
             </div>
@@ -909,7 +923,9 @@
                 <div
                     class="px-6 md:px-10 py-5 border-b border-slate-50 flex flex-row items-center justify-between gap-4">
                     <div>
-                        <h3 id="measurementTableTitle" class="text-sm font-black uppercase tracking-widest text-slate-900">Controlo de Medições</h3>
+                        <h3 id="measurementTableTitle"
+                            class="text-sm font-black uppercase tracking-widest text-slate-900">Controlo de Medições
+                        </h3>
                         <p id="measurementTableSubtitle" class="text-[11px] text-slate-400 mt-1 font-medium"></p>
                     </div>
                     <button data-toggle-table="measurements"
@@ -952,10 +968,12 @@
                         </thead>
                         <tbody id="measurementsTbody" class="divide-y divide-slate-50 text-slate-700">
                             <tr>
-                                <td colspan="19" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">Carregando...</td>
+                                <td colspan="19" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">
+                                    Carregando...</td>
                             </tr>
                         </tbody>
-                        <tfoot id="measurementsTfoot" class="bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest"></tfoot>
+                        <tfoot id="measurementsTfoot"
+                            class="bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest"></tfoot>
                     </table>
                 </div>
             </div>
@@ -971,7 +989,9 @@
                     </p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
-                    <button onclick="window.loadDailyPlans()" class="w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all" title="Atualizar Planos Diários">
+                    <button onclick="window.loadDailyPlans()"
+                        class="w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all"
+                        title="Atualizar Planos Diários">
                         <span class="material-symbols-outlined text-xl">refresh</span>
                     </button>
                     <button id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
@@ -1052,7 +1072,8 @@
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Logística da Obra</h2>
                     <p class="text-slate-500 text-sm font-medium">Controlo dos armazéns / estaleiro do projeto.</p>
-                    <p id="stockWarehouseContext" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1 hidden"></p>
+                    <p id="stockWarehouseContext"
+                        class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1 hidden"></p>
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
 
