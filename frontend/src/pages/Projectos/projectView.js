@@ -964,7 +964,7 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
     </td>
 
       <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs">${fmtQty(exp)}</td>
-      <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] lowercase">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
       <td class="px-4 py-3 text-center font-black text-slate-900 text-xs measurement-num">${invoicingValStr}</td>
       <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exe)}</td>
       <td class="px-4 py-3 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs measurement-num">${invoicedValStr}</td>
