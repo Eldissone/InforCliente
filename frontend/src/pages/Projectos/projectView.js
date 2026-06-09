@@ -947,24 +947,24 @@ function renderProgressTaskRow(t, index, isSub = false, parentGroup = null, hasC
     <tr class="hidden hover:bg-surface-container-low transition-colors group ${parentClass}" data-progress-item-group="${safeGroupName}" ${toggleAttr}>
       <td class="px-4 py-3 text-center font-black text-slate-400 text-[11px] font-mono measurement-wbs">${escapeHtml(wbsLabel)}</td>
       <td class="py-3 px-4 w-[250px] max-w-[250px]" ${indentAttr}>
-          <div class="${descClass} flex flex-col relative min-w-0">
-              <div class="flex items-start min-w-0">
-                  ${iconSub}
-                  ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
-                  
-                  <div class="flex flex-col min-w-0">
-                      <div class="flex items-center gap-2 min-w-0">
-                          <span class="text-sm font-bold text-slate-900 leading-snug break-words whitespace-normal min-w-0">
-                              ${escapeHtml(t.description)}
-                          </span>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      </td>
+        <div class="${descClass} flex flex-col relative min-w-0">
+            <div class="flex items-start min-w-0">
+                ${iconSub}
+                ${hasChildren ? `<span class="material-symbols-outlined text-slate-400 mr-2 text-lg mt-0.5" data-sub-icon>chevron_right</span>` : ""}
+                
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-sm font-bold text-slate-900 leading-snug break-words whitespace-normal min-w-0">
+                            ${escapeHtml(t.description)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </td>
 
-      <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exp)}</td>
-      <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] uppercase">${formatUnit(t.unit)}</td>
+      <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs">${fmtQty(exp)}</td>
+      <td class="px-4 py-3 text-center tracking-widest text-slate-500 font-bold text-[10px] lowercase">${formatUnit(t.unit)}</td>
       <td class="px-4 py-3 text-center font-black text-slate-900 text-xs measurement-num">${invoicingValStr}</td>
       <td class="px-4 py-3 text-center font-bold text-slate-800 text-xs measurement-num">${fmtQty(exe)}</td>
       <td class="px-4 py-3 text-center font-black text-emerald-700 bg-emerald-50/30 text-xs measurement-num">${invoicedValStr}</td>
