@@ -245,6 +245,47 @@ stockRoutes.get(
       include: { product: true }
     });
     
+    // Buscar quantidade de itens AVAILABLE/ASSIGNED para ferramentas (lendo diretamente da tabela Item para garantir precisão física)
+    const availableToolsCount = {};
+    const itemsGroup = await prisma.item.groupBy({
+      by: ['productId', 'warehouseId'],
+      where: {
+        warehouseId: { in: selectedWarehouseIds },
+        status: { in: ['AVAILABLE', 'ASSIGNED'] }
+      },
+      _count: { id: true }
+    });
+
+    // É preciso garantir que estes produtos existem na lista rawItems, mesmo que não haja registo de WarehouseStock
+    const missingProductIds = itemsGroup
+      .map(i => i.productId)
+      .filter(pId => !rawItems.some(r => r.productId === pId));
+
+    if (missingProductIds.length > 0) {
+      const missingProducts = await prisma.product.findMany({
+        where: { id: { in: missingProductIds } }
+      });
+      itemsGroup.forEach(i => {
+        if (!rawItems.some(r => r.productId === i.productId && r.warehouseId === i.warehouseId)) {
+          const prod = missingProducts.find(p => p.id === i.productId);
+          if (prod && (prod.category === 'TOOL' || prod.category === 'EQUIPMENT')) {
+            rawItems.push({
+              id: `virtual_${i.productId}_${i.warehouseId}`,
+              productId: i.productId,
+              warehouseId: i.warehouseId,
+              quantity: 0,
+              product: prod,
+              warehouse: rawItems.length > 0 ? rawItems[0].warehouse : { id: i.warehouseId }
+            });
+          }
+        }
+      });
+    }
+
+    itemsGroup.forEach(i => {
+      availableToolsCount[`${i.productId}_${i.warehouseId}`] = i._count.id;
+    });
+
     // Agrupar para evitar duplicados por ownerId na visualização do projecto
     const grouped = {};
     const planByProduct = {};
@@ -254,14 +295,17 @@ stockRoutes.get(
 
     for (const item of rawItems) {
       const key = `${item.productId}_${item.warehouseId}`;
+      const isTool = item.product.category === 'TOOL' || item.product.category === 'EQUIPMENT';
       if (!grouped[key]) {
         grouped[key] = {
           ...item,
-          quantity: 0,
+          quantity: isTool ? (availableToolsCount[key] || 0) : 0,
           quantityPlanned: planByProduct[item.productId] || 0,
         };
       }
-      grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
+      if (!isTool) {
+        grouped[key].quantity = Number(grouped[key].quantity) + Number(item.quantity);
+      }
     }
 
     // Produtos planeados na obra sem saldo em nenhum armazém (sem atribuir a um armazém errado)
@@ -555,6 +599,30 @@ stockRoutes.post(
         });
       }
 
+      const product = await tx.product.findUnique({ where: { id: body.productId } });
+      if (product && (product.category === 'TOOL' || product.category === 'EQUIPMENT')) {
+        const qtyToMove = Math.floor(body.quantity);
+        const itemsToMove = await tx.item.findMany({
+          where: {
+            productId: body.productId,
+            warehouseId: body.fromWarehouseId,
+            status: { in: ['AVAILABLE', 'ASSIGNED'] }
+          },
+          take: qtyToMove
+        });
+
+        if (itemsToMove.length > 0) {
+          const itemIds = itemsToMove.map(i => i.id);
+          await tx.item.updateMany({
+            where: { id: { in: itemIds } },
+            data: {
+              warehouseId: body.toWarehouseId,
+              updatedAt: new Date()
+            }
+          });
+        }
+      }
+
       return { ok: true };
     });
 
@@ -815,3 +883,4 @@ stockRoutes.patch(
 );
 
 module.exports = { stockRoutes };
+
