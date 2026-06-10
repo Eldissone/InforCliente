@@ -120,6 +120,17 @@ function renderPlansList() {
     }
   });
 
+  // Sort plans by date
+  filteredPlans.sort((a, b) => {
+    const dateA = new Date(a.date);
+    const dateB = new Date(b.date);
+    if (state.activeTab === "history") {
+      return dateB - dateA; // Descending: newest first
+    } else {
+      return dateA - dateB; // Ascending: oldest first
+    }
+  });
+
   if (filteredPlans.length === 0) {
     container.innerHTML = `
       <div class="p-12 text-center bg-white rounded-2xl border border-slate-100 shadow-xl shadow-black/5">

@@ -5050,7 +5050,10 @@ async function wireDailyPlans() {
       progressTasks = pData.tasks || [];
 
       const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
-      products = (sData.items || []).filter((item) => isStockMaterialProduct(item.product));
+      products = (sData.items || []).filter((item) => {
+        const cat = (item.product?.category || "").toUpperCase();
+        return isStockMaterialProduct(item.product) || cat === "TOOL";
+      });
 
       const tData = await apiRequest("/users/technicians");
       technicians = tData.items || [];
@@ -5062,6 +5065,7 @@ async function wireDailyPlans() {
 
     let selectedTasks = [];
     let selectedMaterials = [];
+    let selectedTools = [];
 
     const updateTasksUI = (panel) => {
       const container = panel.querySelector("#selectedTasksContainer");
@@ -5105,6 +5109,25 @@ async function wireDailyPlans() {
             <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
           </div>
           <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedMaterial(${idx})">
+            <span class="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      `).join('');
+    };
+
+    const updateToolsUI = (panel) => {
+      const container = panel.querySelector("#selectedToolsContainer");
+      if (selectedTools.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma ferramenta selecionada</p>`;
+        return;
+      }
+      container.innerHTML = selectedTools.map((m, idx) => `
+        <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
+          <div class="text-xs flex flex-col">
+            <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
+            <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
+          </div>
+          <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeSelectedTool(${idx})">
             <span class="material-symbols-outlined text-sm">close</span>
           </button>
         </div>
@@ -5178,7 +5201,7 @@ async function wireDailyPlans() {
             <div class="flex flex-col gap-2 mb-4">
               <select id="dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione o material do Stock...</option>
-                ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+                ${products.filter(pr => isStockMaterialProduct(pr.product)).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -5186,6 +5209,22 @@ async function wireDailyPlans() {
               </div>
             </div>
             <div id="selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+          </div>
+
+          <!-- Ferramentas -->
+          <div class="border border-slate-100 rounded-xl p-4">
+            <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-indigo-600">build</span> Ferramentas a Requisitar</h4>
+            <div class="flex flex-col gap-2 mb-4">
+              <select id="dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecione a ferramenta do Stock...</option>
+                ${products.filter(pr => (pr.product?.category || "").toUpperCase() === "TOOL").map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+              </select>
+              <div class="flex gap-2">
+                <input type="number" id="dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+                <button type="button" id="dp_add_tool_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+              </div>
+            </div>
+            <div id="selectedToolsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
           </div>
         </div>
       `,
@@ -5197,6 +5236,10 @@ async function wireDailyPlans() {
         window.removeSelectedMaterial = (idx) => {
           selectedMaterials.splice(idx, 1);
           updateMaterialsUI(panel);
+        };
+        window.removeSelectedTool = (idx) => {
+          selectedTools.splice(idx, 1);
+          updateToolsUI(panel);
         };
 
         panel.querySelector("#dp_add_task_btn").addEventListener("click", () => {
@@ -5233,8 +5276,22 @@ async function wireDailyPlans() {
           panel.querySelector("#dp_mat_qty").value = "";
         });
 
+        panel.querySelector("#dp_add_tool_btn").addEventListener("click", () => {
+          const sel = panel.querySelector("#dp_tool_select");
+          const qty = panel.querySelector("#dp_tool_qty").value;
+          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione ferramenta e quantidade válida.");
+
+          const opt = sel.options[sel.selectedIndex];
+          selectedTools.push({ productId: sel.value, name: opt.text.split('(')[0].trim(), requestedQty: Number(qty) });
+          updateToolsUI(panel);
+
+          sel.value = "";
+          panel.querySelector("#dp_tool_qty").value = "";
+        });
+
         updateTasksUI(panel);
         updateMaterialsUI(panel);
+        updateToolsUI(panel);
       },
       onPrimary: async ({ close, btn, panel }) => {
         const date = panel.querySelector("#dp_date").value;
@@ -5264,7 +5321,7 @@ async function wireDailyPlans() {
               date,
               description,
               tasks: finalTasks,
-              materials: selectedMaterials
+              materials: [...selectedMaterials, ...selectedTools]
             }
           });
           toast("Plano Diário criado com sucesso!", { type: "success" });
@@ -5631,7 +5688,10 @@ window.openEditPlanModal = async (planId) => {
     progressTasks = pData.tasks || [];
 
     const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
-    products = (sData.items || []).filter((item) => isStockMaterialProduct(item.product));
+    products = (sData.items || []).filter((item) => {
+      const cat = (item.product?.category || "").toUpperCase();
+      return isStockMaterialProduct(item.product) || cat === "TOOL";
+    });
 
     const tData = await apiRequest("/users/technicians");
     technicians = tData.items || [];
@@ -5661,11 +5721,20 @@ window.openEditPlanModal = async (planId) => {
     };
   });
 
-  let selectedMaterials = plan.materials.map(m => {
+  let selectedMaterials = plan.materials.filter(m => (m.product?.category || "").toUpperCase() !== "TOOL").map(m => {
     const pr = products.find(p => p.product.id === m.productId);
     return {
       productId: m.productId,
       name: pr?.product?.name || m.product?.name || "Material",
+      requestedQty: Number(m.requestedQty)
+    };
+  });
+
+  let selectedTools = plan.materials.filter(m => (m.product?.category || "").toUpperCase() === "TOOL").map(m => {
+    const pr = products.find(p => p.product.id === m.productId);
+    return {
+      productId: m.productId,
+      name: pr?.product?.name || m.product?.name || "Ferramenta",
       requestedQty: Number(m.requestedQty)
     };
   });
@@ -5716,6 +5785,29 @@ window.openEditPlanModal = async (planId) => {
           <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
         </div>
         <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeEditSelectedMaterial(${idx})">
+          <span class="material-symbols-outlined text-sm">close</span>
+        </button>
+      </div>
+    `).join('');
+  };
+
+  const updateToolsUI = (panel) => {
+    const container = panel.querySelector("#edit_selectedToolsContainer");
+    if (!canEditMaterials) {
+      container.innerHTML = `<p class="text-xs text-amber-600 font-bold p-3 bg-amber-50 rounded-lg border border-amber-100">As ferramentas não podem ser editadas pois o plano já está em execução.</p>`;
+      return;
+    }
+    if (selectedTools.length === 0) {
+      container.innerHTML = `<p class="text-xs text-slate-400 italic">Nenhuma ferramenta selecionada</p>`;
+      return;
+    }
+    container.innerHTML = selectedTools.map((m, idx) => `
+      <div class="flex items-center justify-between bg-slate-50 p-2 rounded-lg mb-2">
+        <div class="text-xs flex flex-col">
+          <span class="font-bold text-slate-900">${escapeHtml(m.name)}</span>
+          <span class="text-slate-500">Qtd. Req.: ${m.requestedQty}</span>
+        </div>
+        <button type="button" class="text-red-500 hover:text-red-700" onclick="window.removeEditSelectedTool(${idx})">
           <span class="material-symbols-outlined text-sm">close</span>
         </button>
       </div>
@@ -5786,7 +5878,7 @@ window.openEditPlanModal = async (planId) => {
         <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
           <select id="edit_dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
             <option value="">Selecione o material do Stock...</option>
-            ${products.map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+            ${products.filter(pr => isStockMaterialProduct(pr.product)).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
           </select>
           <div class="flex gap-2">
             <input type="number" id="edit_dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -5794,6 +5886,22 @@ window.openEditPlanModal = async (planId) => {
           </div>
         </div>
         <div id="edit_selectedMaterialsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
+      </div>
+
+      <!-- Ferramentas -->
+      <div class="border border-slate-100 rounded-xl p-4 ${canEditMaterials ? '' : 'opacity-70'}">
+        <h4 class="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-indigo-600">build</span> Ferramentas a Requisitar</h4>
+        <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
+          <select id="edit_dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <option value="">Selecione a ferramenta do Stock...</option>
+            ${products.filter(pr => (pr.product?.category || "").toUpperCase() === "TOOL").map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+          </select>
+          <div class="flex gap-2">
+            <input type="number" id="edit_dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
+            <button type="button" id="edit_dp_add_tool_btn" class="h-10 bg-slate-900 text-white px-4 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all">Adicionar</button>
+          </div>
+        </div>
+        <div id="edit_selectedToolsContainer" class="max-h-40 overflow-y-auto space-y-2"></div>
       </div>
     </div>
   `;
@@ -5811,6 +5919,11 @@ window.openEditPlanModal = async (planId) => {
         if (!canEditMaterials) return;
         selectedMaterials.splice(idx, 1);
         updateMaterialsUI(panel);
+      };
+      window.removeEditSelectedTool = (idx) => {
+        if (!canEditMaterials) return;
+        selectedTools.splice(idx, 1);
+        updateToolsUI(panel);
       };
 
       panel.querySelector("#edit_dp_add_task_btn").addEventListener("click", () => {
@@ -5852,10 +5965,29 @@ window.openEditPlanModal = async (planId) => {
           sel.value = "";
           panel.querySelector("#edit_dp_mat_qty").value = "";
         });
+
+        panel.querySelector("#edit_dp_add_tool_btn").addEventListener("click", () => {
+          const sel = panel.querySelector("#edit_dp_tool_select");
+          const qty = panel.querySelector("#edit_dp_tool_qty").value;
+          if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione ferramenta e quantidade válida.");
+
+          const opt = sel.options[sel.selectedIndex];
+
+          selectedTools.push({
+            productId: sel.value,
+            name: opt.text.split('(')[0].trim(),
+            requestedQty: Number(qty)
+          });
+          updateToolsUI(panel);
+
+          sel.value = "";
+          panel.querySelector("#edit_dp_tool_qty").value = "";
+        });
       }
 
       updateTasksUI(panel);
       updateMaterialsUI(panel);
+      updateToolsUI(panel);
     },
     onPrimary: async ({ panel, close }) => {
       const date = panel.querySelector("#edit_dp_date").value;
@@ -5880,7 +6012,7 @@ window.openEditPlanModal = async (planId) => {
       };
 
       if (canEditMaterials) {
-        payload.materials = selectedMaterials.map(m => ({
+        payload.materials = [...selectedMaterials, ...selectedTools].map(m => ({
           productId: m.productId,
           requestedQty: m.requestedQty
         }));
