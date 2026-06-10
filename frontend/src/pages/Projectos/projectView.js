@@ -5052,7 +5052,7 @@ async function wireDailyPlans() {
       const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
       products = (sData.items || []).filter((item) => {
         const cat = (item.product?.category || "").toUpperCase();
-        return isStockMaterialProduct(item.product) || cat === "TOOL";
+        return isStockMaterialProduct(item.product) || ["TOOL", "EQUIPMENT"].includes(cat);
       });
 
       const tData = await apiRequest("/users/technicians");
@@ -5201,7 +5201,7 @@ async function wireDailyPlans() {
             <div class="flex flex-col gap-2 mb-4">
               <select id="dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione o material do Stock...</option>
-                ${products.filter(pr => isStockMaterialProduct(pr.product)).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+                ${products.filter(pr => isStockMaterialProduct(pr.product) && pr.quantity > 0).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -5217,7 +5217,7 @@ async function wireDailyPlans() {
             <div class="flex flex-col gap-2 mb-4">
               <select id="dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione a ferramenta do Stock...</option>
-                ${products.filter(pr => (pr.product?.category || "").toUpperCase() === "TOOL").map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+                ${products.filter(pr => ["TOOL", "EQUIPMENT"].includes((pr.product?.category || "").toUpperCase()) && pr.quantity > 0).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
               </select>
               <div class="flex gap-2">
                 <input type="number" id="dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -5690,7 +5690,7 @@ window.openEditPlanModal = async (planId) => {
     const sData = await apiRequest(`/stock/project/${encodeURIComponent(id)}/balance`);
     products = (sData.items || []).filter((item) => {
       const cat = (item.product?.category || "").toUpperCase();
-      return isStockMaterialProduct(item.product) || cat === "TOOL";
+      return isStockMaterialProduct(item.product) || ["TOOL", "EQUIPMENT"].includes(cat);
     });
 
     const tData = await apiRequest("/users/technicians");
@@ -5721,7 +5721,7 @@ window.openEditPlanModal = async (planId) => {
     };
   });
 
-  let selectedMaterials = plan.materials.filter(m => (m.product?.category || "").toUpperCase() !== "TOOL").map(m => {
+  let selectedMaterials = plan.materials.filter(m => !["TOOL", "EQUIPMENT"].includes((m.product?.category || "").toUpperCase())).map(m => {
     const pr = products.find(p => p.product.id === m.productId);
     return {
       productId: m.productId,
@@ -5730,7 +5730,7 @@ window.openEditPlanModal = async (planId) => {
     };
   });
 
-  let selectedTools = plan.materials.filter(m => (m.product?.category || "").toUpperCase() === "TOOL").map(m => {
+  let selectedTools = plan.materials.filter(m => ["TOOL", "EQUIPMENT"].includes((m.product?.category || "").toUpperCase())).map(m => {
     const pr = products.find(p => p.product.id === m.productId);
     return {
       productId: m.productId,
@@ -5878,7 +5878,7 @@ window.openEditPlanModal = async (planId) => {
         <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
           <select id="edit_dp_mat_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
             <option value="">Selecione o material do Stock...</option>
-            ${products.filter(pr => isStockMaterialProduct(pr.product)).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+            ${products.filter(pr => isStockMaterialProduct(pr.product) && pr.quantity > 0).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
           </select>
           <div class="flex gap-2">
             <input type="number" id="edit_dp_mat_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -5894,7 +5894,7 @@ window.openEditPlanModal = async (planId) => {
         <div class="flex flex-col gap-2 mb-4" style="display: ${canEditMaterials ? 'flex' : 'none'}">
           <select id="edit_dp_tool_select" class="w-full h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
             <option value="">Selecione a ferramenta do Stock...</option>
-            ${products.filter(pr => (pr.product?.category || "").toUpperCase() === "TOOL").map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
+            ${products.filter(pr => ["TOOL", "EQUIPMENT"].includes((pr.product?.category || "").toUpperCase()) && pr.quantity > 0).map(pr => `<option value="${pr.product?.id}">${escapeHtml(pr.product?.name)} (Stock Atual: ${pr.quantity})</option>`).join('')}
           </select>
           <div class="flex gap-2">
             <input type="number" id="edit_dp_tool_qty" placeholder="Qtd. Requisitada" step="0.01" class="flex-1 h-10 bg-slate-50 border-none rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500">
@@ -6033,4 +6033,6 @@ window.openEditPlanModal = async (planId) => {
     }
   });
 };
+
+
 
