@@ -5181,7 +5181,8 @@ async function wireDailyPlans() {
                 return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
               };
               const fullDesc = buildPath(pt);
-              return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+              const missingQty = Number(pt.expectedQty) - Number(pt.executedQty);
+              return `<option value="${pt.id}" data-missing="${missingQty}">${escapeHtml(fullDesc)} (Falta: ${missingQty} ${pt.unit})</option>`;
             }).join('');
             return `<optgroup label="${groupTitle}">${options}</optgroup>`;
           }).join('');
@@ -5248,6 +5249,10 @@ async function wireDailyPlans() {
           if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione tarefa e quantidade válida.");
 
           const opt = sel.options[sel.selectedIndex];
+          const missingQty = Number(opt.dataset.missing);
+          if (Number(qty) > missingQty) {
+            return toast(`A quantidade planeada (${qty}) não pode ser maior que a em falta (${missingQty}).`, { type: "error" });
+          }
 
           const optgroup = opt.parentElement;
           const groupName = optgroup.tagName === "OPTGROUP" ? optgroup.label : "";
@@ -5858,7 +5863,8 @@ window.openEditPlanModal = async (planId) => {
             return parent ? buildPath(parent, visited) + " — " + t.description : t.description;
           };
           const fullDesc = buildPath(pt);
-          return `<option value="${pt.id}">${escapeHtml(fullDesc)} (Falta: ${Number(pt.expectedQty) - Number(pt.executedQty)} ${pt.unit})</option>`;
+          const missingQty = Number(pt.expectedQty) - Number(pt.executedQty);
+          return `<option value="${pt.id}" data-missing="${missingQty}">${escapeHtml(fullDesc)} (Falta: ${missingQty} ${pt.unit})</option>`;
         }).join('');
         return `<optgroup label="${groupTitle}">${options}</optgroup>`;
       }).join('');
@@ -5932,6 +5938,10 @@ window.openEditPlanModal = async (planId) => {
         if (!sel.value || !qty || Number(qty) <= 0) return toast("Selecione tarefa e quantidade válida.");
 
         const opt = sel.options[sel.selectedIndex];
+        const missingQty = Number(opt.dataset.missing);
+        if (Number(qty) > missingQty) {
+          return toast(`A quantidade planeada (${qty}) não pode ser maior que a em falta (${missingQty}).`, { type: "error" });
+        }
         const optgroup = opt.parentElement;
         const groupName = optgroup.tagName === "OPTGROUP" ? optgroup.label : "";
 
