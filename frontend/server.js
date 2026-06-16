@@ -32,8 +32,17 @@ app.use("/uploads", (req, res) => {
     .on("error", () => res.status(502).send("Erro ao carregar ficheiro do servidor API."));
 });
 
+// Remove .html da URL para SEO e consistência
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html')) {
+    const newUrl = req.originalUrl.replace(/\.html(\?.*)?$/, '$1');
+    return res.redirect(301, newUrl);
+  }
+  next();
+});
+
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)
-app.use(express.static(pagesRoot));
+app.use(express.static(pagesRoot, { extensions: ['html'] }));
 
 // Expõe /src inteiro (opcional)
 app.use("/src", express.static(srcRoot));
@@ -50,7 +59,7 @@ app.use("/routes", express.static(path.join(srcRoot, "routes")));
 
 // Rota padrão → login
 app.get("/", (_req, res) => {
-  res.redirect("/Auth/login.html");
+  res.redirect("/Auth/login");
 });
 
 // Helper: permitir acessar /Dashboard, /Clientes, /Projectos como diretórios
