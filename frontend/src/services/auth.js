@@ -27,7 +27,7 @@ export function logout() {
       localStorage.removeItem(key);
     }
   });
-  
+
   // Specific keys used without the InfoCliente prefix
   ["pending_auth_user", "pending_auth_accounts", "selected_project_id"].forEach(k => {
     localStorage.removeItem(k);
@@ -54,13 +54,11 @@ export function checkAuth({ allowedRoles = [] } = {}) {
   const currentRole = (user.role || "").toUpperCase();
   const normalizedAllowed = allowedRoles.map(r => r.toUpperCase());
 
-  console.log("checkAuth: Verificando papel", { currentRole, normalizedAllowed, path: window.location.pathname });
-
   if (normalizedAllowed.length > 0 && !normalizedAllowed.includes(currentRole)) {
     console.warn("checkAuth: Acesso negado para o papel", currentRole);
     // If access is denied, determine the best landing page based on role
     let target = "/Dashboard/index.html"; // Default for ADMIN/OPERADOR
-    
+
     if (currentRole === "CLIENT" || currentRole === "CLIENTE") {
       target = "/Dashboard/clientDashboard.html";
     } else if (currentRole === "TECNICO") {
