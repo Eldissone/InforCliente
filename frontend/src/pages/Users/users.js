@@ -877,7 +877,6 @@ async function loadUsers() {
   if (tbody) tbody.innerHTML = renderLoadingRow(5);
   const data = await apiRequest("/users");
   allUsers = data.items || [];
-  console.log("Users data loaded:", allUsers);
   renderStats(allUsers);
   renderRecentUsers(allUsers);
   if (activeSection === "users") renderTable(filterUsers());
