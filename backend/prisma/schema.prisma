@@ -129,6 +129,9 @@ model Project {
   assignedUsers       User[]                   @relation("AssignedUsers")
   dailyPlans          DailyPlan[]
   materialPlans       ProjectMaterialPlan[]
+  costCenters         CostCenter[]
+  workNeeds           WorkNeed[]
+  costPayments        CostPayment[]
 
   @@index([name])
   @@index([status])
@@ -194,10 +197,18 @@ model ProjectTransaction {
   realizedAmount Decimal?            @db.Decimal(16, 2)
   budgetLineId   String?
   currency       String?
+  
+  // Novos campos: Centro de Custo, Fornecedor, Tipo Pagamento
+  costCenterId   String?
+  supplier       String?
+  paymentType    String?             @default("PRONTO_PAGAMENTO")
+
   budgetLine     ProjectBudgetLine?  @relation(fields: [budgetLineId], references: [id])
   project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter     CostCenter?         @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
 
   @@index([projectId, date])
+  @@index([costCenterId])
 }
 
 model InteractionEvent {
@@ -549,6 +560,36 @@ enum PaymentStatus {
   PENDENTE
 }
 
+enum NeedPriority {
+  ALTA
+  MEDIA
+  BAIXA
+}
+
+enum NeedStatus {
+  PENDING
+  IN_QUOTATION
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum PaymentCategory {
+  MATERIAL
+  SERVICO
+  MAO_DE_OBRA
+  EQUIPAMENTO
+  TRANSPORTE
+  ADMINISTRATIVO
+  OUTRO
+}
+
+enum CostPayStatus {
+  PENDENTE
+  CONFIRMADO
+  CANCELADO
+}
+
 enum DailyPlanStatus {
   DRAFT
   PENDING_MATERIAL
@@ -614,6 +655,78 @@ model ProjectMaterialPlan {
   @@unique([projectId, productId])
 }
 
+// =============================================
+// MÓDULO: CENTRO DE CUSTOS
+// =============================================
+
+model CostCenter {
+  id        String        @id @default(cuid())
+  projectId String
+  code      String
+  name      String
+  currency  String        @default("AOA")
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  needs     WorkNeed[]
+  payments  CostPayment[]
+  transactions ProjectTransaction[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+}
+
+model WorkNeed {
+  id           String       @id @default(cuid())
+  projectId    String
+  costCenterId String
+  date         DateTime     @default(now())
+  description  String
+  quantity     Decimal?     @db.Decimal(16, 4)
+  unit         String?
+  unitPrice    Decimal?     @db.Decimal(16, 4)
+  hours        Decimal?     @db.Decimal(16, 4)
+  priority     NeedPriority @default(MEDIA)
+  status       NeedStatus   @default(PENDING)
+  scheduled    Boolean      @default(false)
+  responsible  String?
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter   CostCenter   @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  payments     CostPayment[]
+  quotes       NeedQuote[]
+
+  @@index([projectId, costCenterId])
+}
+
+model CostPayment {
+  id             String          @id @default(cuid())
+  projectId      String
+  costCenterId   String
+  needId         String?
+  docNumber      String?
+  paymentDate    DateTime
+  supplier       String?
+  category       PaymentCategory @default(MATERIAL)
+  description    String
+  budgetedAmount Decimal         @db.Decimal(16, 2)
+  paidAmount     Decimal         @db.Decimal(16, 2)
+  paymentMethod  String?
+  week           String?
+  installment    Int?
+  status         CostPayStatus   @default(PENDENTE)
+  notes          String?
+  createdAt      DateTime        @default(now())
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter     CostCenter      @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  need           WorkNeed?       @relation(fields: [needId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, costCenterId])
+  @@index([projectId, paymentDate])
+}
+
 model SystemLog {
   id          String   @id @default(cuid())
   userId      String?
@@ -633,4 +746,59 @@ model SystemLog {
   @@index([action])
   @@index([module])
   @@index([createdAt])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  nif       String?
+  contact   String?
+  phone     String?
+  email     String?
+  address   String?
+  category  String?
+  iban      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  products  SupplierProduct[]
+  quotes    NeedQuote[]
+}
+
+model SupplierProduct {
+  id          String   @id @default(cuid())
+  supplierId  String
+  name        String
+  description String?
+  unit        String?
+  price       Decimal  @db.Decimal(16, 4)
+  currency    String   @default("AOA")
+  validUntil  DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  quotes      NeedQuote[]
+}
+
+model NeedQuote {
+  id                String   @id @default(cuid())
+  needId            String
+  supplierId        String
+  supplierProductId String?
+  quotedPrice       Decimal  @db.Decimal(16, 4)
+  quantity          Decimal? @db.Decimal(16, 4)
+  totalValue        Decimal? @db.Decimal(16, 4)
+  currency          String   @default("AOA")
+  selected          Boolean  @default(false)
+  notes             String?
+  proformaUrl       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  need              WorkNeed         @relation(fields: [needId], references: [id], onDelete: Cascade)
+  supplier          Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierProduct   SupplierProduct? @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
 }

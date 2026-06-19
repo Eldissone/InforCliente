@@ -14,6 +14,9 @@ const { itemRoutes } = require("./routes/items");
 const { permissionsRoutes } = require("./routes/permissions");
 const { dailyPlansRoutes } = require("./routes/dailyPlans");
 const { logRoutes } = require("./routes/logs");
+const { costCenterRoutes } = require("./routes/costCenters");
+const { supplierRoutes } = require("./routes/suppliers");
+const { quoteRoutes } = require("./routes/quotes");
 const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 
@@ -92,6 +95,9 @@ app.use("/items", itemRoutes);
 app.use("/permissions", permissionsRoutes);
 app.use("/daily-plans", dailyPlansRoutes);
 app.use("/logs", logRoutes);
+app.use("/cost-centers", costCenterRoutes);
+app.use("/suppliers", supplierRoutes);
+app.use("/quotes", quoteRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

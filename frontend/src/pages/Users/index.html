@@ -326,7 +326,7 @@
 
     <!-- Navbar -->
     <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
-        <div class="max-w-[1440px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+        <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
             <div class="flex items-center gap-10">
                 <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                     <span
@@ -340,7 +340,11 @@
                         href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Projectos/ProjectGeral.html">Obras</a>
-                    <a data-nav-logistics class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                    <a href="../Projectos/centroCustos.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centro de
+                        Custos</a>
+                    <a data-nav-logistics
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Stock/index.html">Logística</a>
                 </div>
             </div>
@@ -366,19 +370,29 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Dashboard/index.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Clientes/clienteLista.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Clientes/clienteLista.html">
                 <span class="material-symbols-outlined text-lg">group</span> Clientes
             </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/ProjectGeral.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Stock/index.html">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/centroCustos.html">
+                <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
+            </a>
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
-            <button data-logout class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
+            <button data-logout
+                class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
             </button>
         </div>
@@ -489,7 +503,8 @@
         <!-- Main -->
         <main class="admin-main">
             <!-- Breadcrumb -->
-            <div class="border-b mt-4 border-slate-100 bg-white px-6 py-3.5 flex flex-row items-center justify-between gap-4">
+            <div
+                class="border-b mt-4 border-slate-100 bg-white px-6 py-3.5 flex flex-row items-center justify-between gap-4">
                 <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                     <a href="../Dashboard/index.html" class="hover:text-slate-600 transition-colors">Dashboard</a>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
@@ -509,7 +524,8 @@
                 <div id="section-overview" class="section-panel">
                     <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Painel Administrativo</h1>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Painel
+                                Administrativo</h1>
                             <p class="text-slate-500 font-medium mt-1 hidden sm:block">Gerencie <span
                                     class="text-[#0d3fd1] font-bold">utilizadores</span>, permissões e acessos.</p>
                         </div>
@@ -547,7 +563,8 @@
                         <div class="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
                             <div class="flex items-start justify-between mb-3">
                                 <div class="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-                                    <span class="material-symbols-outlined text-purple-600 text-xl">manage_accounts</span>
+                                    <span
+                                        class="material-symbols-outlined text-purple-600 text-xl">manage_accounts</span>
                                 </div>
                                 <span
                                     class="text-[9px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100">Supervisor</span>
@@ -609,9 +626,12 @@
                 <div id="section-users" class="section-panel hidden">
                     <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores</h1>
-                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais. Use o ícone
-                                <span class="material-symbols-outlined text-sm align-middle text-violet-600">shield_person</span>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores
+                            </h1>
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais. Use
+                                o ícone
+                                <span
+                                    class="material-symbols-outlined text-sm align-middle text-violet-600">shield_person</span>
                                 para permissões individuais por utilizador.
                             </p>
                         </div>
@@ -673,16 +693,22 @@
                         <div class="flex flex-row items-start justify-between gap-4">
                             <div>
                                 <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Mapa de Permissões</h1>
-                                <p class="text-slate-500 font-medium mt-1">Visão completa do que cada perfil pode aceder e
+                                <p class="text-slate-500 font-medium mt-1">Visão completa do que cada perfil pode aceder
+                                    e
                                     executar no sistema.</p>
                                 <p class="text-[11px] font-semibold text-[#0d3fd1] mt-2 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-sm">touch_app</span>
-                                    Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para expandir ou ocultar blocos.
+                                    Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para
+                                    expandir ou ocultar blocos.
                                 </p>
                                 <p class="text-[11px] font-medium text-slate-500 mt-2 max-w-3xl">
-                                    Expanda um módulo (<strong>Stock</strong>, <strong>Materiais</strong>, <strong>Ferramentas</strong>, <strong>Obras</strong> ou <strong>Portal</strong>) para ver
-                                    <strong>Abas visíveis na interface</strong> — Logística &amp; Stock, Vista da obra, Portal do cliente e sub-abas de armazém.
-                                    Use <strong>Sincronizar</strong> uma vez após actualizar o sistema para criar as novas permissões de abas na base de dados.
+                                    Expanda um módulo (<strong>Stock</strong>, <strong>Materiais</strong>,
+                                    <strong>Ferramentas</strong>, <strong>Obras</strong> ou <strong>Portal</strong>)
+                                    para ver
+                                    <strong>Abas visíveis na interface</strong> — Logística &amp; Stock, Vista da obra,
+                                    Portal do cliente e sub-abas de armazém.
+                                    Use <strong>Sincronizar</strong> uma vez após actualizar o sistema para criar as
+                                    novas permissões de abas na base de dados.
                                 </p>
                             </div>
                             <div class="flex flex-wrap gap-2 shrink-0">
@@ -728,9 +754,11 @@
                         </div>
                     </div>
 
-                    <div class="bg-white mb-4 rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex flex-col md:flex-row gap-3">
+                    <div
+                        class="bg-white mb-4 rounded-2xl border border-slate-100 shadow-sm px-5 py-4 flex flex-col md:flex-row gap-3">
                         <div class="flex-1 relative">
-                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                            <span
+                                class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
                             <input id="permSearch" type="search" placeholder="Pesquisar módulo, página ou acção…"
                                 class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
                         </div>
@@ -830,24 +858,39 @@
                     <div class="mt-6 px-1 space-y-4">
                         <div class="flex flex-wrap items-center gap-4">
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Acesso total (true)</div>
+                                    class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Acesso
+                                total (true)</div>
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Próprios / leitura (own · view)</div>
+                                    class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Próprios
+                                / leitura (own · view)</div>
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Sem acesso (false)</div>
+                                    class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Sem acesso
+                                (false)</div>
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 w-full mb-1">Acções do sistema</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Visualizar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Criar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Editar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Eliminar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Aprovar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Exportar</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Gerir permissões</span>
-                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Acesso total</span>
+                            <span
+                                class="text-[9px] font-black uppercase tracking-widest text-slate-400 w-full mb-1">Acções
+                                do sistema</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Visualizar</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Criar</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Editar</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Eliminar</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Aprovar</span>
+                            <span
+                                class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Exportar</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Gerir
+                                permissões</span>
+                            <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Acesso
+                                total</span>
                         </div>
-                        <p class="text-[10px] text-slate-400 font-medium">Herança por perfil aplicada nos valores por defeito. Clique numa célula para alternar: false → view → own → true. Alterações guardam-se na API e aplicam-se ao middleware JWT em tempo real.</p>
+                        <p class="text-[10px] text-slate-400 font-medium">Herança por perfil aplicada nos valores por
+                            defeito. Clique numa célula para alternar: false → view → own → true. Alterações guardam-se
+                            na API e aplicam-se ao middleware JWT em tempo real.</p>
                     </div>
                 </div>
 
@@ -855,24 +898,32 @@
                 <div id="section-history" class="section-panel hidden">
                     <div class="flex flex-row items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Histórico de Atividades</h1>
-                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Auditoria completa de logs e ações dos utilizadores no sistema.</p>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Histórico de
+                                Atividades</h1>
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Auditoria completa de logs e
+                                ações dos utilizadores no sistema.</p>
                         </div>
                         <div class="flex flex-wrap gap-2 shrink-0 justify-end">
-                            <button id="exportExcelBtn" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 transition-all">
+                            <button id="exportExcelBtn"
+                                class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 transition-all">
                                 <span class="material-symbols-outlined text-base">table</span>Excel
                             </button>
-                            <button id="exportPdfBtn" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-red-600 hover:bg-red-50 hover:border-red-200 transition-all">
+                            <button id="exportPdfBtn"
+                                class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-red-600 hover:bg-red-50 hover:border-red-200 transition-all">
                                 <span class="material-symbols-outlined text-base">picture_as_pdf</span>PDF
                             </button>
-                            
+
                             <!-- Danger zone actions -->
                             <div class="w-px h-10 bg-slate-200 mx-2 hidden lg:block"></div>
-                            
-                            <button id="clearCacheBtn" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-black uppercase tracking-widest text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition-all" title="Limpar cookies, local storage e fazer logout">
+
+                            <button id="clearCacheBtn"
+                                class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-black uppercase tracking-widest text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition-all"
+                                title="Limpar cookies, local storage e fazer logout">
                                 <span class="material-symbols-outlined text-base">cleaning_services</span>Limpar Cache
                             </button>
-                            <button id="clearLogsBtn" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-xs font-black uppercase tracking-widest text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-all" title="Apagar permanentemente todos os registos de auditoria">
+                            <button id="clearLogsBtn"
+                                class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-xs font-black uppercase tracking-widest text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition-all"
+                                title="Apagar permanentemente todos os registos de auditoria">
                                 <span class="material-symbols-outlined text-base">delete_forever</span>Apagar Histórico
                             </button>
                         </div>
@@ -882,16 +933,22 @@
                     <div class="bg-white mb-8 rounded-2xl border border-slate-100 shadow-sm p-5">
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div class="relative">
-                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
-                                <input id="logSearchInput" type="text" placeholder="Pesquisar por utilizador ou email..." class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 placeholder-slate-400 font-medium" />
+                                <span
+                                    class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                                <input id="logSearchInput" type="text"
+                                    placeholder="Pesquisar por utilizador ou email..."
+                                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 placeholder-slate-400 font-medium" />
                             </div>
                             <div class="relative">
-                                <input id="logStartDate" type="date" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium text-slate-600" />
+                                <input id="logStartDate" type="date"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium text-slate-600" />
                             </div>
                             <div class="relative">
-                                <input id="logEndDate" type="date" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium text-slate-600" />
+                                <input id="logEndDate" type="date"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium text-slate-600" />
                             </div>
-                            <select id="logModuleFilter" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
+                            <select id="logModuleFilter"
+                                class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
                                 <option value="">Todos os Módulos</option>
                                 <option value="AUTH">Autenticação</option>
                                 <option value="USERS">Utilizadores</option>
@@ -906,7 +963,8 @@
                         <div class="table-responsive">
                             <table class="w-full text-left">
                                 <thead>
-                                    <tr class="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/70 border-b border-slate-100">
+                                    <tr
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/70 border-b border-slate-100">
                                         <th class="px-5 py-4">Utilizador</th>
                                         <th class="px-5 py-4">Ação / Módulo</th>
                                         <th class="px-5 py-4 hidden md:table-cell">Detalhes</th>
@@ -917,13 +975,17 @@
                                 <tbody id="logsTbody" class="divide-y divide-slate-50"></tbody>
                             </table>
                         </div>
-                        
+
                         <!-- Pagination -->
                         <div class="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-                            <span class="text-xs font-semibold text-slate-500">Mostrando <span id="logRangeStart">0</span>-<span id="logRangeEnd">0</span> de <span id="logTotalCount">0</span> logs</span>
+                            <span class="text-xs font-semibold text-slate-500">Mostrando <span
+                                    id="logRangeStart">0</span>-<span id="logRangeEnd">0</span> de <span
+                                    id="logTotalCount">0</span> logs</span>
                             <div class="flex items-center gap-2">
-                                <button id="logPrevPage" class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all">Anterior</button>
-                                <button id="logNextPage" class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all">Próximo</button>
+                                <button id="logPrevPage"
+                                    class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all">Anterior</button>
+                                <button id="logNextPage"
+                                    class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all">Próximo</button>
                             </div>
                         </div>
                     </div>

@@ -69,7 +69,7 @@ function renderRow(p) {
   const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
 
   return `
-    <tr data-view-project="${p.id}" class="hover:bg-slate-50 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
+    <tr data-view-project="${p.id}" class="hover:bg-slate-200 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
           <div class="min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
@@ -104,9 +104,10 @@ function renderRow(p) {
       <td class="px-8 py-5 text-center">${renderStatusPill(p.status)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1">
-          <button data-view-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
-            <span class="material-symbols-outlined text-lg">visibility</span>
-          </button>
+          <a href="./centroCustos.html?projectId=${p.id}" title="Centro de Custos" onclick="event.stopPropagation()"
+            class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#2afc8d]/10 text-slate-400 hover:text-[#059669] transition-all">
+            <span class="material-symbols-outlined text-lg">account_balance</span>
+          </a>
           <button data-edit-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
             <span class="material-symbols-outlined text-lg">edit</span>
           </button>
@@ -177,6 +178,10 @@ function renderGridItem(p) {
 
       <!-- Quick Actions -->
       <div class="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+          <a href="./centroCustos.html?projectId=${p.id}" onclick="event.stopPropagation()" title="Centro de Custos"
+            class="h-9 w-9 bg-white shadow-xl rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:scale-110 transition-all">
+            <span class="material-symbols-outlined text-lg">account_balance</span>
+          </a>
           <button data-edit-project="${p.id}" class="h-9 w-9 bg-white shadow-xl rounded-xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:scale-110 transition-all">
             <span class="material-symbols-outlined text-lg">edit</span>
           </button>

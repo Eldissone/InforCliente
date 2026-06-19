@@ -713,6 +713,9 @@ projectRoutes.post(
         amount: z.union([z.number(), z.string()]),
         budgetLineId: z.string().optional().nullable(),
         currency: z.string().optional().nullable(),
+        costCenterId: z.string().optional().nullable(),
+        supplier: z.string().optional().nullable(),
+        paymentType: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -735,6 +738,9 @@ projectRoutes.post(
           amount: String(amount),
           budgetLineId: body.budgetLineId || null,
           currency: body.currency || "AOA",
+          costCenterId: body.costCenterId || null,
+          supplier: body.supplier || null,
+          paymentType: body.paymentType || "PRONTO_PAGAMENTO",
         },
         select: { id: true },
       });
@@ -838,6 +844,9 @@ projectRoutes.patch(
         status: z.enum(["PAID", "PENDING", "LATE"]).optional(),
         amount: z.union([z.number(), z.string()]).optional(),
         currency: z.string().optional().nullable(),
+        costCenterId: z.string().optional().nullable(),
+        supplier: z.string().optional().nullable(),
+        paymentType: z.string().optional().nullable(),
       })
       .parse(req.body);
 

@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Info Gestor — Planeamento</title>
+    <meta name="description"
+        content="Gestão de centros de custo, necessidades de obra e lançamentos de pagamento por projecto.">
+    <link rel="icon" href="../../assets/icon/favicon.ico" type="image/x-icon">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+    <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --accent: #2afc8d;
+            --accent-dim: rgba(42, 252, 141, 0.12);
+            --dark: #0F172A;
+            --card-border: #e2e8f0;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* ── SIDEBAR ── */
+        #sidebar {
+            width: 320px;
+            min-width: 280px;
+            max-width: 360px;
+            height: calc(100vh - 64px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: sticky;
+            top: 64px;
+            flex-shrink: 0;
+        }
+
+        #sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        /* ── TABS ── */
+        .cc-tab-btn {
+            padding: 10px 20px;
+            font-size: 12px;
+            font-weight: 700;
+            border-bottom: 2px solid transparent;
+            color: #94a3b8;
+            white-space: nowrap;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .cc-tab-btn.active {
+            border-bottom-color: #0f172a;
+            color: #0f172a;
+        }
+
+        .cc-tab-btn:hover:not(.active) {
+            color: #475569;
+        }
+
+        .cc-tab-panel {
+            display: none;
+        }
+
+        .cc-tab-panel.active {
+            display: block;
+        }
+
+        /* ── PRIORITY BADGE ── */
+        .badge-alta {
+            background: #fef2f2;
+            color: #ef4444;
+        }
+
+        .badge-media {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .badge-baixa {
+            background: #f0fdf4;
+            color: #22c55e;
+        }
+
+        /* ── STATUS BADGE ── */
+        .badge-pending {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .badge-approved {
+            background: #ecfdf5;
+            color: #059669;
+        }
+
+        .badge-rejected {
+            background: #fef2f2;
+            color: #ef4444;
+        }
+
+        .badge-paid {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .badge-confirmado {
+            background: #ecfdf5;
+            color: #059669;
+        }
+
+        .badge-pendente {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .badge-cancelado {
+            background: #fef2f2;
+            color: #ef4444;
+        }
+
+
+
+        /* ── KPI CARD ── */
+        .kpi-card {
+            border-radius: 20px;
+            padding: 1.25rem 1.5rem;
+            border: 1px solid var(--card-border);
+            background: #fff;
+        }
+
+        /* ── TABLE ── */
+        .cc-table thead th {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            padding: 12px 16px;
+            background: #f8fafc;
+            white-space: nowrap;
+        }
+
+        .cc-table tbody td {
+            padding: 14px 16px;
+            font-size: 13px;
+        }
+
+        .cc-table tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            transition: background 0.15s;
+        }
+
+        .cc-table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        /* ── PROGRESS BAR ── */
+        .prog-bar-wrap {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .prog-bar {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* ── PROJECT CARD (sidebar) ── */
+        .proj-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.18s;
+            border: 1px solid transparent;
+        }
+
+        .proj-card:hover {
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+
+        .proj-card.selected {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+        }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4rem 2rem;
+            gap: 1rem;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        .empty-state.hidden {
+            display: none !important;
+        }
+
+        /* ── OVERFLOW ALERT ── */
+        .overflow-row td {
+            background: #fff5f5 !important;
+        }
+
+        .overflow-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #fef2f2;
+            color: #ef4444;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        /* ── CHART WRAPPER ── */
+        #dashChart {
+            max-height: 280px;
+        }
+
+        /* ── CUSTOM SCROLL ── */
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        /* ── Spinner ── */
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 3px solid #e2e8f0;
+            border-top-color: #0f172a;
+            animation: spin 0.7s linear infinite;
+            margin: auto;
+        }
+
+        #sidebar {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease;
+        }
+
+        #sidebar.collapsed {
+            width: 0 !important;
+            min-width: 0 !important;
+            opacity: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        @media (max-width: 900px) {
+            #sidebar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-surface antialiased text-slate-900 min-h-screen flex flex-col">
+
+    <!-- ══════════════════════════════════════════════════════════ TOP NAV -->
+    <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
+        <div class="max-w-[1680px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-10">
+                <a href="../Projectos/ProjectGeral.html"
+                    class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <span
+                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
+                    <span>Gestor</span>
+                </a>
+                <div class="hidden lg:flex items-center gap-6">
+                    <a href="../Dashboard/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Dashboard</a>
+                    <a href="../Clientes/clienteLista.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Clientes</a>
+                    <a href="../Projectos/ProjectGeral.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Obras</a>
+                    <a href="../Projectos/centroCustos.html"
+                        class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg">Planeamento</a>
+                    <a href="../Projectos/Cotacao/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
+                    <a href="../Stock/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Logística</a>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <a data-nav-users
+                    class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2"
+                    href="../Users/index.html">
+                    <span class="material-symbols-outlined text-lg">manage_accounts</span>
+                    Gestão
+                </a>
+                <button data-user-profile
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all">
+                    <span class="material-symbols-outlined text-sm">person</span>
+                    <span data-user-role></span>
+                </button>
+                <button data-logout
+                    class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">Sair</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ══════════════════════════════════════════════════════════ LAYOUT -->
+    <div class="flex flex-1 pt-16 max-w-[1500px] mx-auto w-full px-4 md:px-8 gap-6 mt-10 mb-12 relative">
+
+        <!-- Floating Button to Open Sidebar -->
+        <button id="floatingToggleBtn" onclick="toggleSidebar()"
+            class="fixed left-4 top-24 z-40 hidden w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-[#2afc8d] shadow-md transition-all">
+            <span class="material-symbols-outlined text-[20px]">menu</span>
+        </button>
+
+        <!-- ── SIDEBAR: Lista de Obras ── -->
+        <aside id="sidebar" class="flex flex-col fixed top-20 gap-3">
+            <!-- Header -->
+            <div class="flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Obras</h2>
+                        <button onclick="toggleSidebar()"
+                            class="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                            title="Ocultar Menu">
+                            <span class="material-symbols-outlined text-[18px]">keyboard_double_arrow_left</span>
+                        </button>
+                    </div>
+                    <span id="projCount"
+                        class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">0</span>
+                </div>
+                <div class="relative">
+                    <span
+                        class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                    <input id="projSearch" type="text" placeholder="Pesquisar obra..."
+                        class="w-full pl-10 pr-4 h-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 transition-all" />
+                </div>
+            </div>
+
+            <!-- Obras list -->
+            <div id="projList" class="flex flex-col gap-1 flex-1 overflow-y-auto custom-scroll"></div>
+        </aside>
+
+        <!-- ── MAIN CONTENT ── -->
+        <main class="flex-1 min-w-0 flex flex-col gap-6">
+
+            <!-- ── Nenhuma obra selecionada ── -->
+            <div id="noProjectState" class="empty-state">
+                <div class="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-4xl text-slate-400">account_balance</span>
+                </div>
+                <h3 class="text-lg font-bold text-slate-700">Seleciona uma Obra</h3>
+                <p class="text-sm text-slate-400 max-w-xs">Escolhe uma obra na lista à esquerda para gerir os seus
+                    centros de custo, necessidades e lançamentos.</p>
+            </div>
+
+            <!-- ── Conteúdo da obra selecionada ── -->
+            <div id="projectContent" class="hidden flex flex-col gap-6">
+
+                <!-- Header da obra -->
+                <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <nav
+                            class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                            <a href="../Projectos/ProjectGeral.html"
+                                class="hover:text-slate-600 transition-colors">Obras</a>
+                            <span class="material-symbols-outlined text-xs">chevron_right</span>
+                            <span class="text-[#2afc8d]">Planeamento</span>
+                        </nav>
+                        <h1 id="selectedProjName"
+                            class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight"></h1>
+                        <p id="selectedProjCode"
+                            class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase"></p>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <a id="viewProjectBtn" href="#" target="_blank"
+                            class="h-10 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                            <span class="material-symbols-outlined text-base">open_in_new</span>
+                            Ver Obra
+                        </a>
+                        <button id="seedCCBtn"
+                            class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                            <span class="material-symbols-outlined text-base">auto_awesome</span>
+                            CCs Padrão
+                        </button>
+                        <button id="newCCBtn"
+                            class="h-10 px-5 rounded-xl bg-[#0F172A] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Novo CC
+                        </button>
+                    </div>
+                </header>
+
+                <!-- KPI Row -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpiRow">
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsto Total
+                        </p>
+                        <div id="kpiPrevisto" class="flex flex-col gap-1">
+                            <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pago Total</p>
+                        <div id="kpiPago" class="flex flex-col gap-1">
+                            <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Saldo Disponível
+                        </p>
+                        <div id="kpiSaldo" class="flex flex-col gap-1">
+                            <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">% Executado</p>
+                        <div class="prog-bar-wrap mb-1">
+                            <div id="kpiBar" class="prog-bar bg-[#2afc8d]" style="width:0%"></div>
+                        </div>
+                        <p id="kpiPct" class="text-sm font-bold text-slate-700">0%</p>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex flex-row flex-nowrap border-b border-slate-200 overflow-x-auto no-scrollbar -mb-1">
+                    <button class="cc-tab-btn active" data-tab="dashboard">
+                        <span class="material-symbols-outlined text-base align-middle mr-1">dashboard</span>Dashboard
+                    </button>
+                    <button class="cc-tab-btn" data-tab="centros">
+                        <span class="material-symbols-outlined text-base align-middle mr-1">account_tree</span>Centros
+                        de Custo
+                    </button>
+                    <button class="cc-tab-btn" data-tab="necessidades">
+                        <span class="material-symbols-outlined text-base align-middle mr-1">assignment</span>Orçamento
+                        Geral
+                    </button>
+                    <button class="cc-tab-btn" data-tab="lancamentos">
+                        <span
+                            class="material-symbols-outlined text-base align-middle mr-1">receipt_long</span>Lançamentos
+                    </button>
+                    <button class="cc-tab-btn" data-tab="pendentes">
+                        <span
+                            class="material-symbols-outlined text-base align-middle mr-1">pending_actions</span>Pendentes
+                    </button>
+                    <button class="cc-tab-btn" data-tab="historico">
+                        <span class="material-symbols-outlined text-base align-middle mr-1">history</span>Histórico
+                    </button>
+                </div>
+                <span id="pendentesCount"
+                    class="ml-1 text-[10px] font-black bg-amber-400 text-white px-1.5 py-0.5 rounded-full hidden"></span>
+
+                <!-- ═══════════ TAB: DASHBOARD ═══════════ -->
+                <div class="cc-tab-panel active" id="tab-dashboard">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                        <!-- Chart -->
+                        <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+                            <div class="flex justify-between items-center mb-4">
+                                <div>
+                                    <h3 class="font-bold text-slate-900">Previsto × Real</h3>
+                                    <p class="text-xs text-slate-400 font-medium">Por centro de custo</p>
+                                </div>
+                            </div>
+                            <canvas id="dashChart"></canvas>
+                        </div>
+
+                        <!-- Alertas de Estouro -->
+                        <div class="bg-[#0F172A] rounded-2xl p-6 text-white flex flex-col gap-4">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-red-400">warning</span>
+                                <h3 class="font-bold text-sm">Alertas de Estouro</h3>
+                            </div>
+                            <div id="alertsList"
+                                class="flex flex-col gap-3 flex-1 overflow-y-auto custom-scroll max-h-[220px]">
+                                <p class="text-xs text-slate-500 text-center mt-6">Sem alertas 🎉</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pagamentos por Semana + Top Despesas -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        <!-- Pagamentos por Semana -->
+                        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+                            <div class="flex justify-between items-center mb-5">
+                                <div>
+                                    <h3 class="font-bold text-slate-900">Pagamentos por Semana</h3>
+                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana de obra
+                                        (SEM 0–10)</p>
+                                </div>
+                                <span class="material-symbols-outlined text-slate-300">calendar_month</span>
+                            </div>
+                            <div id="weeklyBreakdownList" class="space-y-2.5">
+                                <div class="spinner my-4"></div>
+                            </div>
+                        </div>
+                        <!-- Top Despesas -->
+                        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+                            <div class="flex justify-between items-center mb-5">
+                                <div>
+                                    <h3 class="font-bold text-slate-900">Top 5 Maiores Despesas</h3>
+                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Lançamentos confirmados por
+                                        valor</p>
+                                </div>
+                                <span class="material-symbols-outlined text-slate-300">leaderboard</span>
+                            </div>
+                            <div id="topExpensesList" class="space-y-3">
+                                <div class="spinner my-4"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela resumo por CC -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mt-6">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 bg-[#0F172A] text-white flex justify-between items-center">
+                            <div>
+                                <h3 class="font-bold">Resumo por Centro de Custo</h3>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-0.5">
+                                    Comparativo Previsto × Real</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table" id="dashTable">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">CC</th>
+                                        <th class="text-left">Nome</th>
+                                        <th class="text-right">Previsto</th>
+                                        <th class="text-right">Pago</th>
+                                        <th class="text-right">Saldo</th>
+                                        <th class="text-right">Desvio</th>
+                                        <th class="text-center">% Exec.</th>
+                                        <th class="text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: CENTROS DE CUSTO ═══════════ -->
+                <div class="cc-tab-panel" id="tab-centros">
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-6 py-5 border-b border-slate-50 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Centros de Custo</h3>
+                                <p class="text-xs text-slate-400 mt-0.5" id="ccCount">0 centros registados</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Código</th>
+                                        <th class="text-left">Nome</th>
+                                        <th class="text-center">Necessidades</th>
+                                        <th class="text-center">Lançamentos</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ccTableBody">
+                                    <tr>
+                                        <td colspan="6">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: NECESSIDADES ═══════════ -->
+                <div class="cc-tab-panel" id="tab-necessidades">
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Orçamento Geral - Custos</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Orçamentação por centro de custo</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <select id="needsCCFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todos os CCs</option>
+                                </select>
+                                <select id="needsStatusFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todos os Status</option>
+                                    <option value="PENDING">Pendente</option>
+                                    <option value="APPROVED">Aprovado</option>
+                                    <option value="REJECTED">Rejeitado</option>
+                                    <option value="PAID">Pago</option>
+                                </select>
+                                <button onclick="sendAllToQuotation()" title="Enviar todos os itens pendentes para Cotação"
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-[#2afc8d] text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
+                                    <span class="material-symbols-outlined text-base">fact_check</span>
+                                    Precificar Tudo
+                                </button>
+                                <button id="newNeedBtn"
+                                    class="h-9 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20">
+                                    <span class="material-symbols-outlined text-base">add</span>
+                                    Criar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <!-- <th class="text-left">Data</th>
+                                        <th class="text-left">Tipo</th> -->
+                                        <th class="text-left">Descrição</th>
+                                        <th class="text-center">UN</th>
+                                        <th class="text-center">Qtde</th>
+                                        <th class="text-right">P. Unit.</th>
+                                        <th class="text-center">Hrs</th>
+                                        <th class="text-right">Total Obra</th>
+                                        <th class="text-right">Total / Semanas</th>
+                                        <th class="text-center">Prioridade</th>
+                                        <th class="text-left">Responsável</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Ações</th>  
+                                    </tr>
+                                </thead>
+                                <tbody id="needsTableBody">
+                                    <tr>
+                                        <td colspan="8">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <!-- Paginação necessidades -->
+                        <div id="needsPagination"
+                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: LANÇAMENTOS ═══════════ -->
+                <div class="cc-tab-panel" id="tab-lancamentos">
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Lançamentos de Pagamento</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Registo financeiro por centro de custo</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <select id="paysCCFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todos os CCs</option>
+                                </select>
+                                <select id="paysStatusFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todos os Status</option>
+                                    <option value="PENDENTE">Pendente</option>
+                                    <option value="CONFIRMADO">Confirmado</option>
+                                    <option value="CANCELADO">Cancelado</option>
+                                </select>
+                                <button id="newPayBtn"
+                                    class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
+                                    <span class="material-symbols-outlined text-base">add</span>
+                                    Novo Lançamento
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Doc.</th>
+                                        <th class="text-left">Data</th>
+                                        <th class="text-left">Fornecedor</th>
+                                        <th class="text-left">CC</th>
+                                        <th class="text-left">Descrição</th>
+                                        <th class="text-right">Previsto</th>
+                                        <th class="text-right">Pago</th>
+                                        <th class="text-center">Semana</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paysTableBody">
+                                    <tr>
+                                        <td colspan="10">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="paysPagination"
+                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: PENDENTES (Lançamentos por liquidar) ═══════════ -->
+                <div class="cc-tab-panel" id="tab-pendentes">
+                    <!-- KPIs pendentes -->
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div class="kpi-card">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pendentes
+                            </p>
+                            <p id="kpiTxPending" class="text-xl font-bold text-amber-600 tracking-tight">—</p>
+                        </div>
+                        <div class="kpi-card">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                                Comprometido</p>
+                            <p id="kpiTxCommitted" class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                        <div class="kpi-card">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Liquidados
+                            </p>
+                            <p id="kpiTxPaid" class="text-xl font-bold text-emerald-600 tracking-tight">—</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Lançamentos Pendentes de Liquidação</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra aguardando aprovação</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <select id="txCategoryFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todas as categorias</option>
+                                    <option value="MATERIALS">Materiais</option>
+                                    <option value="LABOR">Mão de Obra</option>
+                                    <option value="EQUIPMENT">Equipamentos</option>
+                                    <option value="MATERIAIS_INSUMOS">Materiais/Insumos</option>
+                                    <option value="SERVICOS_MAO_DE_OBRA">Serviços/Mão Obra</option>
+                                    <option value="GASTOS_PESSOAL">Gastos Pessoal</option>
+                                    <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
+                                    <option value="OTHER">Outro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Data</th>
+                                        <th class="text-left">Descrição</th>
+                                        <th class="text-left">Fornecedor</th>
+                                        <th class="text-left">Categoria</th>
+                                        <th class="text-left">T. Pagamento</th>
+                                        <th class="text-left">Responsável</th>
+                                        <th class="text-right">Previsto</th>
+                                        <th class="text-right">Realizado</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="txTableBody">
+                                    <tr>
+                                        <td colspan="10">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="txPagination"
+                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: HISTÓRICO (Lançamentos Liquidados) ═══════════ -->
+                <div class="cc-tab-panel" id="tab-historico">
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Histórico de Liquidações</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra já liquidados / pagos</p>
+                            </div>
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <select id="historyCategoryFilter"
+                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                    <option value="">Todas as categorias</option>
+                                    <option value="MATERIALS">Materiais</option>
+                                    <option value="LABOR">Mão de Obra</option>
+                                    <option value="EQUIPMENT">Equipamentos</option>
+                                    <option value="MATERIAIS_INSUMOS">Materiais/Insumos</option>
+                                    <option value="SERVICOS_MAO_DE_OBRA">Serviços/Mão Obra</option>
+                                    <option value="GASTOS_PESSOAL">Gastos Pessoal</option>
+                                    <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
+                                    <option value="OTHER">Outro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Data Liq.</th>
+                                        <th class="text-left">Descrição</th>
+                                        <th class="text-left">Fornecedor</th>
+                                        <th class="text-left">Categoria</th>
+                                        <th class="text-left">T. Pagamento</th>
+                                        <th class="text-left">Responsável</th>
+                                        <th class="text-right">Comprometido</th>
+                                        <th class="text-right">Liquidado</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">—</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody">
+                                    <tr>
+                                        <td colspan="10">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="historyPagination"
+                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- /projectContent -->
+
+        </main>
+
+
+    </div>
+
+    <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white">
+        <div
+            class="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InfoGestor © 2026 - Todos os
+                direitos
+                reservados</p>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> MBT Energia
+            </span>
+        </div>
+    </footer>
+
+    <!-- ══════════════════════════════════════════════════════════ MODALS -->
+
+    <!-- Modal: Novo / Editar Centro de Custo -->
+    <div class="modal-overlay" id="modalCC">
+        <div class="modal-box">
+            <div class="flex items-center justify-between mb-6">
+                <h2 id="modalCCTitle" class="text-lg font-bold text-slate-900">Novo Centro de Custo</h2>
+                <button onclick="document.getElementById('modalCC').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formCC" class="flex flex-col gap-4">
+                <input type="hidden" id="ccId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Código
+                            *</label>
+                        <input id="ccCode" type="text" placeholder="CC001" required maxlength="20"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Moeda
+                            *</label>
+                        <select id="ccCurrency" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            <option value="AOA">AOA (Kwanza)</option>
+                            <option value="USD">USD (Dólar)</option>
+                            <option value="EUR">EUR (Euro)</option>
+                            <option value="ZAR">ZAR (Rand)</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-1">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome
+                            *</label>
+                        <input id="ccName" type="text" placeholder="Terraplanagem" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                    </div>
+                    <div class="md:col-span-1">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Estado
+                            *</label>
+                        <select id="ccActive" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            <option value="true">Ativo</option>
+                            <option value="false">Inativo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" onclick="document.getElementById('modalCC').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit" id="ccSubmitBtn"
+                        class="h-10 px-6 rounded-xl bg-[#0F172A] text-white text-sm font-bold hover:bg-slate-800 transition-all">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Nova / Editar Necessidade -->
+    <div class="modal-overlay" id="modalNeed">
+        <div class="modal-box" style="max-width: 1100px;">
+            <div class="flex items-center justify-between mb-6">
+                <h2 id="modalNeedTitle" class="text-lg font-bold text-slate-900">Novo Item de Orçamento</h2>
+                <button onclick="document.getElementById('modalNeed').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formNeed" class="flex flex-col gap-4">
+                <input type="hidden" id="needId">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de Custo *</label>
+                        <select id="needCC" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            <option value="">Selecionar...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
+                            <span class="material-symbols-outlined text-xs align-middle mr-1">manage_accounts</span>
+                            Responsável (Operador) *
+                        </label>
+                        <select id="needResponsibleId" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            <option value="">Selecionar operador...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto pb-2">
+                    <table class="w-full text-left border-collapse min-w-[820px]">
+                        <thead>
+                            <tr class="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                <th class="py-2 px-1">Descrição *</th>
+                                <th class="py-2 px-1 w-16">UN</th>
+                                <th class="py-2 px-1 w-24">Qtd.</th>
+                                <th class="py-2 px-1 w-28">P. Unit.</th>
+                                <th class="py-2 px-1 w-20">Hrs</th>
+                                <th class="py-2 px-1 w-28">Prioridade</th>
+                                <th class="py-2 px-1 w-28">Status</th>
+                                <th class="py-2 px-1 w-32">Obs.</th>
+                                <th class="py-2 px-1 w-8 text-center"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="needItemsBody">
+                            <!-- Linhas inseridas via JS -->
+                        </tbody>
+                    </table>
+                    <button type="button" onclick="addNeedRow()" class="mt-3 h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">add</span> Adicionar Linha
+                    </button>
+                </div>
+                <div class="flex gap-3 justify-end pt-2 mt-2 border-t border-slate-100">
+                    <button type="button" onclick="document.getElementById('modalNeed').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-6 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition-all">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Novo / Editar Lançamento -->
+    <div class="modal-overlay" id="modalPay">
+        <div class="modal-box" style="max-width:640px">
+            <div class="flex items-center justify-between mb-6">
+                <h2 id="modalPayTitle" class="text-lg font-bold text-slate-900">Novo Lançamento</h2>
+                <button onclick="document.getElementById('modalPay').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formPay" class="flex flex-col gap-4">
+                <input type="hidden" id="payId">
+                <input type="hidden" id="payCCId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
+                            Custo *</label>
+                        <select id="payCC" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="">Selecionar...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nº
+                            Documento</label>
+                        <input id="payDoc" type="text" placeholder="FAT-001"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Data
+                            Pagamento *</label>
+                        <input id="payDate" type="date" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fornecedor</label>
+                        <input id="paySupplier" type="text" placeholder="Nome do fornecedor"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição
+                        *</label>
+                    <input id="payDesc" type="text" required placeholder="Motivo do pagamento"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria</label>
+                        <select id="payCat"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="MATERIAL">Material</option>
+                            <option value="SERVICO">Serviço</option>
+                            <option value="MAO_DE_OBRA">Mão de Obra</option>
+                            <option value="EQUIPAMENTO">Equipamento</option>
+                            <option value="TRANSPORTE">Transporte</option>
+                            <option value="ADMINISTRATIVO">Administrativo</option>
+                            <option value="OUTRO">Outro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor
+                            Previsto *</label>
+                        <input id="payBudgeted" type="number" step="0.01" min="0" required placeholder="0.00"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor Pago
+                            *</label>
+                        <input id="payPaid" type="number" step="0.01" min="0" required placeholder="0.00"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Forma de
+                            Pagamento</label>
+                        <select id="payMethod"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="">—</option>
+                            <option value="Caixa">Caixa</option>
+                            <option value="Banco">Banco</option>
+                            <option value="Transferência">Transferência</option>
+                            <option value="Cheque">Cheque</option>
+                            <option value="Multicaixa">Multicaixa</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Semana</label>
+                        <select id="payWeek"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="">—</option>
+                            <option value="SEM 0">SEM 0</option>
+                            <option value="SEM 1">SEM 1</option>
+                            <option value="SEM 2">SEM 2</option>
+                            <option value="SEM 3">SEM 3</option>
+                            <option value="SEM 4">SEM 4</option>
+                            <option value="SEM 5">SEM 5</option>
+                            <option value="SEM 6">SEM 6</option>
+                            <option value="SEM 7">SEM 7</option>
+                            <option value="SEM 8">SEM 8</option>
+                            <option value="SEM 9">SEM 9</option>
+                            <option value="SEM 10">SEM 10</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Status</label>
+                        <select id="payStatus"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="PENDENTE">Pendente</option>
+                            <option value="CONFIRMADO">Confirmado</option>
+                            <option value="CANCELADO">Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Observações</label>
+                    <textarea id="payNotes" rows="2" placeholder="Notas adicionais..."
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none resize-none"></textarea>
+                </div>
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" onclick="document.getElementById('modalPay').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Liquidar Lançamento -->
+    <div class="modal-overlay" id="modalLiq">
+        <div class="modal-box">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 tracking-tight">Liquidar Lançamento</h2>
+                    <p class="text-xs font-semibold text-slate-400 mt-0.5">Confirma o valor final pago</p>
+                </div>
+                <button type="button" onclick="document.getElementById('modalLiq').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <form id="formLiq" class="flex flex-col gap-5">
+                <input type="hidden" id="liqTxId" />
+
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Descrição do
+                        Lançamento</p>
+                    <p id="liqDesc" class="text-sm font-bold text-slate-900"></p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor
+                        Comprometido</label>
+                    <input type="text" id="liqCommitted" disabled
+                        class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed" />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor
+                        Realizado / Pago *</label>
+                    <input id="liqAmount" type="number" min="0" step="0.01" required
+                        class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Ajusta o valor se o montante final pago
+                        foi diferente do previsto.</p>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 mt-4">
+                    <button type="button" onclick="document.getElementById('modalLiq').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">Confirmar
+                        Liquidação</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- App Script -->
+    <script type="module" src="./centroCustos.js"></script>
+</body>
+
+</html>

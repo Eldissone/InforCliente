@@ -110,15 +110,21 @@ function formatUnit(u) {
 
 function renderTxRow(t) {
   const st = statusLabel(t.status);
+  const isAPrazo = t.paymentType === "A_PRAZO";
+  const paymentTypeStr = isAPrazo ? "A Prazo" : "Pronto Pag.";
+  const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
+
   return `
     <tr class="hover:bg-slate-50 transition-colors group">
       <td class="px-10 py-5 text-xs font-semibold text-slate-500">${formatDateBR(t.date)}</td>
       <td class="px-10 py-5">
         <div class="font-bold text-slate-900">${t.description}</div>
       </td>
+      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${t.supplier || "-"}</td>
       <td class="px-10 py-5">
         <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500">${catLabel(t.category)}</span>
       </td>
+      <td class="px-10 py-5">${paymentTypeBadge}</td>
       <td class="px-10 py-5">
         <div class="flex items-center gap-2 ${st.cls}">
           <span class="w-1.5 h-1.5 rounded-full ${st.dot} shadow-sm"></span>
@@ -405,13 +411,19 @@ async function loadTransactions() {
   const tbody = el("transactionsTbody");
   if (!tbody) return;
 
-  tbody.innerHTML = renderLoadingRow(7);
+  tbody.innerHTML = renderLoadingRow(8);
   const qs = new URLSearchParams({
     search: txState.search,
     page: "1",
-    pageSize: "20",
+    pageSize: "20"
   });
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?${qs.toString()}`);
+  
+  if (data.items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 text-sm">Nenhum lançamento pendente encontrado.</td></tr>`;
+    return;
+  }
+  
   tbody.innerHTML = data.items.map(renderTxRow).join("");
 }
 
@@ -2747,6 +2759,8 @@ function wireSearch() {
   });
 }
 
+
+
 function wireExport() {
   el("exportProjectBtn")?.addEventListener("click", async () => {
     const id = getProjectId();
@@ -2788,10 +2802,10 @@ function wireNewTransaction() {
     setButtonLoading(btn, true);
     try {
       const id = getProjectId();
-      const budgetData = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
-      const budgetOptions = [
-        `<option value="">(Nenhum item específico)</option>`,
-        ...(budgetData.items || []).map(l => `<option value="${l.id}">${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`)
+      const ccData = await apiRequest(`/cost-centers/project/${encodeURIComponent(id)}`);
+      const ccOptions = [
+        `<option value="">(Nenhum)</option>`,
+        ...(ccData.items || []).map(cc => `<option value="${cc.id}">${escapeHtml(cc.code)} - ${escapeHtml(cc.name)}</option>`)
       ].join("");
 
       openModal({
@@ -2846,11 +2860,23 @@ function wireNewTransaction() {
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor</label>
             <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
           </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do Orçamento</label>
-            <select id="t_line" class="w-full rounded-lg border-slate-300 text-sm">
-              ${budgetOptions}
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Centro de Custo</label>
+            <select id="t_costCenter" class="w-full rounded-lg border-slate-300 text-sm">
+              ${ccOptions}
             </select>
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fornecedor</label>
+            <input id="t_supplier" class="w-full rounded-lg border-slate-300" placeholder="Nome do fornecedor..." />
+          </div>
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Pagamento</label>
+            <select id="t_paymentType" class="w-full rounded-lg border-slate-300">
+              <option value="PRONTO_PAGAMENTO">Pronto Pagamento</option>
+              <option value="A_PRAZO">A Prazo</option>
+            </select>
+          </div>
           </div>
         </div>
       `,
@@ -2869,7 +2895,9 @@ function wireNewTransaction() {
                 ownerName: v("t_owner") || null,
                 amount: Number(v("t_amount") || 0),
                 currency: v("t_currency") || "AOA",
-                budgetLineId: v("t_line") || null,
+                costCenterId: v("t_costCenter") || null,
+                supplier: v("t_supplier") || null,
+                paymentType: v("t_paymentType") || "PRONTO_PAGAMENTO",
               },
             });
             toast("lançamento criado com sucesso", { type: "success" });

@@ -49,7 +49,6 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     console.log("Full Login Response:", res);
     
     if (res && res.status === "MULTI_ACCOUNT") {
-      console.log("Redirecting to ProjectSelection.html...");
       localStorage.setItem("pending_auth_user", JSON.stringify(res.user));
       localStorage.setItem("pending_auth_accounts", JSON.stringify(res.accounts || []));
       window.location.href = "ProjectSelection.html" + (getNext() ? `?next=${getNext()}` : "");
