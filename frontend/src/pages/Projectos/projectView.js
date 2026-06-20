@@ -109,36 +109,45 @@ function formatUnit(u) {
 }
 
 function renderTxRow(t) {
-  const st = statusLabel(t.status);
-  const isAPrazo = t.paymentType === "A_PRAZO";
-  const paymentTypeStr = isAPrazo ? "A Prazo" : "Pronto Pag.";
+  const isPaid = t.status === "CONFIRMADO";
+  const st = {
+    cls: isPaid ? "text-emerald-600 bg-emerald-50" : (t.status === "CANCELADO" ? "text-red-600 bg-red-50" : "text-amber-600 bg-amber-50"),
+    dot: isPaid ? "bg-emerald-500" : (t.status === "CANCELADO" ? "bg-red-500" : "bg-amber-500"),
+    text: isPaid ? "Liquidado" : (t.status === "CANCELADO" ? "Cancelado" : "Pendente")
+  };
+  const isAPrazo = t.paymentType === "CREDITO";
+  const paymentTypeStr = isAPrazo ? "C" : "PP";
   const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
+
+  const currency = t.costCenter?.currency || projectState?.currency || "AOA";
+  const budgetedAmount = t.budgetedAmount != null ? Number(t.budgetedAmount) : 0;
+  const paidAmount = t.paidAmount != null ? Number(t.paidAmount) : 0;
 
   return `
     <tr class="hover:bg-slate-50 transition-colors group">
-      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${formatDateBR(t.date)}</td>
+      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${formatDateBR(t.paymentDate)}</td>
       <td class="px-10 py-5">
-        <div class="font-bold text-slate-900">${t.description}</div>
+        <div class="font-bold text-slate-900">${escapeHtml(t.description || "")}</div>
       </td>
-      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${t.supplier || "-"}</td>
+      <td class="px-10 py-5 text-xs font-semibold text-slate-500">${escapeHtml(t.supplier || "-")}</td>
       <td class="px-10 py-5">
-        <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500">${catLabel(t.category)}</span>
+        <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500">${escapeHtml(t.category || "-")}</span>
       </td>
       <td class="px-10 py-5">${paymentTypeBadge}</td>
       <td class="px-10 py-5">
-        <div class="flex items-center gap-2 ${st.cls}">
+        <div class="flex items-center gap-2 ${st.cls} px-2 py-1 rounded w-max">
           <span class="w-1.5 h-1.5 rounded-full ${st.dot} shadow-sm"></span>
           <span class="text-[10px] font-black uppercase tracking-widest">${st.text}</span>
         </div>
       </td>
       <td class="px-10 py-5 text-right font-black text-slate-900">
-        ${formatCurrency(t.amount, t.currency || projectState?.currency)}
-        ${t.realizedAmount != null && t.realizedAmount !== t.amount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrency(t.realizedAmount, t.currency || projectState?.currency)}</div>` : ""}
+        ${formatCurrency(budgetedAmount, currency)}
+        ${paidAmount > 0 && paidAmount !== budgetedAmount ? `<div class="text-[9px] text-emerald-600 font-black mt-1">REAL: ${formatCurrency(paidAmount, currency)}</div>` : ""}
       </td>
       <td class="px-10 py-5 text-center">
         <div class="flex items-center justify-center gap-2">
-          ${t.status !== "PAID" ? `
-            <button data-liquidate-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" data-tx-amount="${t.amount}" title="Liquidado" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+          ${t.status !== "CONFIRMADO" ? `
+            <button data-liquidate-tx="${t.id}" data-cc-id="${t.costCenterId}" data-tx-desc="${escapeHtml(t.description || "")}" data-tx-amount="${budgetedAmount}" title="Liquidar" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
               <span class="material-symbols-outlined text-lg">check_circle</span>
             </button>
           ` : `
@@ -146,10 +155,10 @@ function renderTxRow(t) {
               <span class="material-symbols-outlined text-lg">done_all</span>
             </div>
           `}
-          <button data-edit-tx="${t.id}" data-tx='${escapeHtml(JSON.stringify(t))}' title="Editar" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
+          <button data-edit-tx="${t.id}" data-cc-id="${t.costCenterId}" data-tx='${escapeHtml(JSON.stringify(t))}' title="Editar" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
             <span class="material-symbols-outlined text-lg">edit</span>
           </button>
-          <button data-delete-tx="${t.id}" data-tx-desc="${escapeHtml(t.description)}" title="Eliminar" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
+          <button data-delete-tx="${t.id}" data-cc-id="${t.costCenterId}" data-tx-desc="${escapeHtml(t.description || "")}" title="Eliminar" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
             <span class="material-symbols-outlined text-lg">delete</span>
           </button>
         </div>
@@ -417,7 +426,7 @@ async function loadTransactions() {
     page: "1",
     pageSize: "20"
   });
-  const data = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?${qs.toString()}`);
+  const data = await apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/payments?${qs.toString()}`);
   
   if (data.items.length === 0) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 text-sm">Nenhum lançamento pendente encontrado.</td></tr>`;
@@ -444,7 +453,7 @@ async function loadBudgetExecution() {
   const [projRes, linesRes, txRes] = await Promise.all([
     apiRequest(`/projects/${encodeURIComponent(id)}`),
     apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`),
-    apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`)
+    apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/payments?page=1&pageSize=10000`)
   ]);
 
   const p = projRes.project;
@@ -714,7 +723,7 @@ async function loadBudgetExecution() {
 
 async function renderOperationStatus(lines) {
   const id = getProjectId();
-  const txData = await apiRequest(`/projects/${encodeURIComponent(id)}/transactions?page=1&pageSize=10000`);
+  const txData = await apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/payments?page=1&pageSize=10000`);
 
   const cats = {
     MATERIALS: { total: 0, consumed: 0, pctId: "stat_materials_pct", subId: "stat_materials_sub" },
@@ -724,10 +733,12 @@ async function renderOperationStatus(lines) {
   };
 
   const getGroup = (c) => {
-    if (c === "MATERIALS" || c === "MATERIAIS_INSUMOS") return "MATERIALS";
-    if (c === "LABOR" || c === "SERVICOS_MAO_DE_OBRA") return "LABOR";
-    if (c === "GASTOS_PESSOAL" || c === "PESSOAL") return "PESSOAL";
-    if (c === "DESPESAS_OPERACIONAIS" || c === "OPERACIONAL") return "OPERACIONAL";
+    if (!c) return null;
+    const cUpper = String(c).toUpperCase();
+    if (cUpper === "MATERIAL" || cUpper === "MATERIAIS_INSUMOS" || cUpper === "MATERIALS") return "MATERIALS";
+    if (cUpper === "MAO_DE_OBRA" || cUpper === "SERVICOS_MAO_DE_OBRA" || cUpper === "LABOR") return "LABOR";
+    if (cUpper === "ADMINISTRATIVO" || cUpper === "GASTOS_PESSOAL" || cUpper === "PESSOAL") return "PESSOAL";
+    if (cUpper === "SERVICO" || cUpper === "TRANSPORTE" || cUpper === "EQUIPAMENTO" || cUpper === "OUTRO" || cUpper === "OPERACIONAL" || cUpper === "DESPESAS_OPERACIONAIS") return "OPERACIONAL";
     return null;
   };
 
@@ -743,7 +754,7 @@ async function renderOperationStatus(lines) {
   (txData.items || []).forEach(t => {
     const group = getGroup(t.category);
     if (group && cats[group]) {
-      cats[group].consumed += Number(t.amount || 0);
+      cats[group].consumed += Number(t.budgetedAmount || 0);
     }
   });
 
@@ -776,12 +787,12 @@ function updateFluxoFinanceiro(txItems) {
   const byCurrency = {};
   txItems.forEach(t => {
     if (excluded.has(t.category)) return;
-    const curr = t.currency || projectState?.currency || "AOA";
+    const curr = t.costCenter?.currency || projectState?.currency || "AOA";
     if (!byCurrency[curr]) byCurrency[curr] = { paid: 0, pending: 0 };
-    const amount = Number(t.amount || 0);
-    if (t.status === "PAID") {
+    const amount = Number(t.budgetedAmount || 0);
+    if (t.status === "CONFIRMADO") {
       byCurrency[curr].paid += amount;
-    } else {
+    } else if (t.status !== "CANCELADO") {
       byCurrency[curr].pending += amount;
     }
   });
@@ -892,18 +903,21 @@ function wireLiquidation() {
         const realizedInput = panel.querySelector("#liq_realizedAmount");
         const realizedAmount = Number(realizedInput?.value || txAmount);
         const primaryBtn = panel.querySelector("[data-primary]");
+        const ccId = btn.getAttribute("data-cc-id");
         try {
           setButtonLoading(primaryBtn, true);
-          await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}/liquidate`, {
+          await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/payments/${encodeURIComponent(txId)}`, {
             method: "PATCH",
-            body: { realizedAmount },
+            body: { 
+              status: "CONFIRMADO",
+              paidAmount: realizedAmount 
+            },
           });
-          toast("lançamento liquidado com sucesso!", { type: "success" });
+          toast("Despesa liquidada com sucesso!", { type: "success" });
           close();
           await loadProject();
           await loadTransactions();
           await loadBudgetExecution();
-          await loadPayments();
         } catch (err) {
           setButtonLoading(primaryBtn, false);
           toast(err.message || "Erro ao liquidar lançamento", { type: "error" });
@@ -919,8 +933,8 @@ function wireTransactionsActions() {
     const btnDelete = e.target?.closest("[data-delete-tx]");
     if (btnDelete) {
       const txId = btnDelete.getAttribute("data-delete-tx");
+      const ccId = btnDelete.getAttribute("data-cc-id");
       const txDesc = btnDelete.getAttribute("data-tx-desc") || "este lançamento";
-      const projectId = getProjectId();
 
       if (!confirm(`Tem a certeza que deseja eliminar "${txDesc}"? Esta acção não pode ser desfeita.`)) return;
 
@@ -930,7 +944,7 @@ function wireTransactionsActions() {
         btn.innerHTML = `<span class="material-symbols-outlined text-lg animate-spin">refresh</span>`;
         btn.disabled = true;
 
-        await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}`, {
+        await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/payments/${encodeURIComponent(txId)}`, {
           method: "DELETE"
         });
 
@@ -950,21 +964,12 @@ function wireTransactionsActions() {
     const btnEdit = e.target?.closest("[data-edit-tx]");
     if (btnEdit) {
       const txId = btnEdit.getAttribute("data-edit-tx");
+      const ccId = btnEdit.getAttribute("data-cc-id");
       let tx = null;
       try {
         tx = JSON.parse(btnEdit.getAttribute("data-tx"));
       } catch (e) {
         return;
-      }
-      const projectId = getProjectId();
-
-      // Retrieve budget lines for the select
-      let budgetOptionsHtml = `<option value="">(Nenhum item específico)</option>`;
-      try {
-        const budgetData = await apiRequest(`/projects/${encodeURIComponent(projectId)}/budget/lines`);
-        budgetOptionsHtml += (budgetData.items || []).map(l => `<option value="${l.id}" ${tx.budgetLineId === l.id ? "selected" : ""}>${escapeHtml(l.description)} [Previsto: ${formatCurrency(l.total, projectState?.currency)}]</option>`).join("");
-      } catch (e) {
-        // Ignorar erro se não conseguir carregar as linhas de orçamento
       }
 
       openModal({
@@ -973,56 +978,46 @@ function wireTransactionsActions() {
         contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
-            <input id="e_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." value="${escapeHtml(tx.description || '')}" />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição *</label>
+            <input id="e_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." value="${escapeHtml(tx.description || '')}" required />
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
             <select id="e_cat" class="w-full rounded-lg border-slate-300">
-              <optgroup label="Custos Operacionais e Diretos">
-                <option value="MATERIAIS_INSUMOS" ${tx.category === 'MATERIAIS_INSUMOS' ? 'selected' : ''}>Materiais e Insumos</option>
-                <option value="SERVICOS_MAO_DE_OBRA" ${tx.category === 'SERVICOS_MAO_DE_OBRA' ? 'selected' : ''}>Mão de Obra e Serviços</option>
-              </optgroup>
-              <optgroup label="Gastos e Despesas">
-                <option value="GASTOS_PESSOAL" ${tx.category === 'GASTOS_PESSOAL' ? 'selected' : ''}>Gastos com Pessoal</option>
-                <option value="DESPESAS_OPERACIONAIS" ${tx.category === 'DESPESAS_OPERACIONAIS' ? 'selected' : ''}>Despesas Operacionais</option>
-                <option value="DEPRECIACAO" ${tx.category === 'DEPRECIACAO' ? 'selected' : ''}>Depreciação</option>
-                <option value="IMPOSTOS" ${tx.category === 'IMPOSTOS' ? 'selected' : ''}>Impostos</option>
-                <option value="OUTRAS_DESPESAS" ${tx.category === 'OUTRAS_DESPESAS' ? 'selected' : ''}>Outras Despesas</option>
-              </optgroup>
-              <optgroup label="Deduções">
-                <option value="DEDUCOES" ${tx.category === 'DEDUCOES' ? 'selected' : ''}>Dedução de Custos / Reembolso</option>
-              </optgroup>
+                <option value="MATERIAL" ${tx.category === 'MATERIAL' ? 'selected' : ''}>Material</option>
+                <option value="SERVICO" ${tx.category === 'SERVICO' ? 'selected' : ''}>Serviço</option>
+                <option value="MAO_DE_OBRA" ${tx.category === 'MAO_DE_OBRA' ? 'selected' : ''}>Mão de Obra</option>
+                <option value="EQUIPAMENTO" ${tx.category === 'EQUIPAMENTO' ? 'selected' : ''}>Equipamento</option>
+                <option value="TRANSPORTE" ${tx.category === 'TRANSPORTE' ? 'selected' : ''}>Transporte</option>
+                <option value="ADMINISTRATIVO" ${tx.category === 'ADMINISTRATIVO' ? 'selected' : ''}>Administrativo</option>
+                <option value="OUTRO" ${tx.category === 'OUTRO' ? 'selected' : ''}>Outro</option>
             </select>
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label>
             <select id="e_status" class="w-full rounded-lg border-slate-300">
-              <option value="PENDING" ${tx.status === 'PENDING' ? 'selected' : ''}>Pendente</option>
-              <option value="PAID" ${tx.status === 'PAID' ? 'selected' : ''}>Liquidado</option>
-              <option value="LATE" ${tx.status === 'LATE' ? 'selected' : ''}>Atrasado</option>
+              <option value="PENDENTE" ${tx.status === 'PENDENTE' ? 'selected' : ''}>Pendente</option>
+              <option value="CONFIRMADO" ${tx.status === 'CONFIRMADO' ? 'selected' : ''}>Liquidado / Confirmado</option>
+              <option value="CANCELADO" ${tx.status === 'CANCELADO' ? 'selected' : ''}>Cancelado</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Responsável</label>
-            <input id="e_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" value="${escapeHtml(tx.ownerName || '')}" />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Pagamento *</label>
+            <input id="e_date" type="date" class="w-full rounded-lg border-slate-300" value="${tx.paymentDate ? tx.paymentDate.split('T')[0] : ''}" required />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label>
-            <select id="e_currency" class="w-full rounded-lg border-slate-300">
-              <option value="AOA" ${tx.currency === 'AOA' ? 'selected' : ''}>AOA (Kz)</option>
-              <option value="USD" ${tx.currency === 'USD' ? 'selected' : ''}>USD ($)</option>
-              <option value="EUR" ${tx.currency === 'EUR' ? 'selected' : ''}>EUR (€)</option>
-            </select>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor *</label>
+            <input id="e_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${tx.budgetedAmount || 0}" required />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor</label>
-            <input id="e_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${tx.amount}" />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fornecedor</label>
+            <input id="e_supplier" class="w-full rounded-lg border-slate-300" placeholder="Nome" value="${escapeHtml(tx.supplier || '')}" />
           </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Vincular Item do Orçamento</label>
-            <select id="e_line" class="w-full rounded-lg border-slate-300 text-sm">
-              ${budgetOptionsHtml}
+          <div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Pagamento</label>
+            <select id="e_paymentType" class="w-full rounded-lg border-slate-300">
+              <option value="PRONTO_PAGAMENTO" ${tx.paymentType === 'PRONTO_PAGAMENTO' ? 'selected' : ''}>Pronto Pagamento</option>
+              <option value="CREDITO" ${tx.paymentType === 'CREDITO' ? 'selected' : ''}>Crédito (A Prazo)</option>
             </select>
           </div>
         </div>
@@ -1032,16 +1027,16 @@ function wireTransactionsActions() {
           const primaryBtn = panel.querySelector("[data-primary]");
           try {
             setButtonLoading(primaryBtn, true);
-            await apiRequest(`/projects/${encodeURIComponent(projectId)}/transactions/${encodeURIComponent(txId)}`, {
+            await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/payments/${encodeURIComponent(txId)}`, {
               method: "PATCH",
               body: {
                 description: v("e_desc"),
                 category: v("e_cat"),
                 status: v("e_status"),
-                ownerName: v("e_owner") || null,
-                currency: v("e_currency") || "AOA",
-                amount: Number(v("e_amount") || 0),
-                budgetLineId: v("e_line") || null,
+                budgetedAmount: Number(v("e_amount") || 0),
+                paymentDate: new Date(v("e_date")).toISOString(),
+                supplier: v("e_supplier") || null,
+                paymentType: v("e_paymentType") || "PRONTO_PAGAMENTO",
               },
             });
             toast("Lançamento editado com sucesso", { type: "success" });
@@ -2804,103 +2799,92 @@ function wireNewTransaction() {
       const id = getProjectId();
       const ccData = await apiRequest(`/cost-centers/project/${encodeURIComponent(id)}`);
       const ccOptions = [
-        `<option value="">(Nenhum)</option>`,
+        `<option value="">-- Selecionar Centro de Custo --</option>`,
         ...(ccData.items || []).map(cc => `<option value="${cc.id}">${escapeHtml(cc.code)} - ${escapeHtml(cc.name)}</option>`)
       ].join("");
 
       openModal({
-        title: "Novo lançamento",
+        title: "Novo lançamento de Pagamento",
         primaryLabel: "Salvar",
         contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
-            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição *</label>
+            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." required />
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
             <select id="t_cat" class="w-full rounded-lg border-slate-300">
-              <optgroup label="Custos Operacionais e Diretos">
-                <option value="MATERIAIS_INSUMOS">Materiais e Insumos</option>
-                <option value="SERVICOS_MAO_DE_OBRA">Mão de Obra e Serviços</option>
-              </optgroup>
-              <optgroup label="Gastos e Despesas">
-                <option value="GASTOS_PESSOAL">Gastos com Pessoal</option>
-                <option value="DESPESAS_OPERACIONAIS">Despesas Operacionais</option>
-                <option value="DEPRECIACAO">Depreciação</option>
-                <option value="IMPOSTOS">Impostos</option>
-                <option value="OUTRAS_DESPESAS">Outras Despesas</option>
-              </optgroup>
-              <optgroup label="Deduções">
-                <option value="DEDUCOES">Dedução de Custos / Reembolso</option>
-              </optgroup>
+                <option value="MATERIAL">Material</option>
+                <option value="SERVICO">Serviço</option>
+                <option value="MAO_DE_OBRA">Mão de Obra</option>
+                <option value="EQUIPAMENTO">Equipamento</option>
+                <option value="TRANSPORTE">Transporte</option>
+                <option value="ADMINISTRATIVO">Administrativo</option>
+                <option value="OUTRO">Outro</option>
             </select>
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label>
             <select id="t_status" class="w-full rounded-lg border-slate-300">
-              <option value="PENDING">Pendente</option>
-              <option value="PAID">Liquidado</option>
-              <option value="LATE">Atrasado</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="CONFIRMADO">Liquidado / Confirmado</option>
             </select>
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Responsável</label>
-            <input id="t_owner" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Pagamento *</label>
+            <input id="t_date" type="date" class="w-full rounded-lg border-slate-300" required />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label>
-            <select id="t_currency" class="w-full rounded-lg border-slate-300">
-              <option value="AOA">AOA (Kz)</option>
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
-            </select>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor *</label>
+            <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" required />
           </div>
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor</label>
-            <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Centro de Custo</label>
-            <select id="t_costCenter" class="w-full rounded-lg border-slate-300 text-sm">
+            <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Centro de Custo *</label>
+            <select id="t_costCenter" class="w-full rounded-lg border-slate-300 text-sm" required>
               ${ccOptions}
             </select>
           </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fornecedor</label>
-            <input id="t_supplier" class="w-full rounded-lg border-slate-300" placeholder="Nome do fornecedor..." />
-          </div>
+          
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Pagamento</label>
             <select id="t_paymentType" class="w-full rounded-lg border-slate-300">
-              <option value="PRONTO_PAGAMENTO">Pronto Pagamento</option>
-              <option value="A_PRAZO">A Prazo</option>
+              <option value="PRONTO_PAGAMENTO">PP</option>
+              <option value="CREDITO">C</option>
             </select>
           </div>
           </div>
         </div>
       `,
         onPrimary: async ({ close, panel }) => {
-          const id = getProjectId();
           const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
           const btn = panel.querySelector("[data-primary]");
+          
+          const ccId = v("t_costCenter");
+          if (!ccId) return toast("Seleciona um Centro de Custo", { type: "error" });
+          
+          const desc = v("t_desc");
+          if (!desc) return toast("A descrição é obrigatória", { type: "error" });
+          
+          let paymentDate = v("t_date");
+          if (!paymentDate) paymentDate = new Date().toISOString().split('T')[0];
+
           try {
             setButtonLoading(btn, true);
-            await apiRequest(`/projects/${encodeURIComponent(id)}/transactions`, {
+            await apiRequest(`/cost-centers/${ccId}/payments`, {
               method: "POST",
               body: {
-                description: v("t_desc"),
+                description: desc,
                 category: v("t_cat"),
                 status: v("t_status"),
-                ownerName: v("t_owner") || null,
-                amount: Number(v("t_amount") || 0),
-                currency: v("t_currency") || "AOA",
-                costCenterId: v("t_costCenter") || null,
+                budgetedAmount: Number(v("t_amount") || 0),
+                paidAmount: v("t_status") === "CONFIRMADO" ? Number(v("t_amount") || 0) : 0,
                 supplier: v("t_supplier") || null,
                 paymentType: v("t_paymentType") || "PRONTO_PAGAMENTO",
+                paymentDate: new Date(paymentDate).toISOString(),
               },
             });
-            toast("lançamento criado com sucesso", { type: "success" });
+            toast("Lançamento criado com sucesso", { type: "success" });
             close();
             await loadProject();
             await loadTransactions();
@@ -2911,6 +2895,8 @@ function wireNewTransaction() {
           }
         },
       });
+      // Pre-fill date
+      document.getElementById('t_date').value = new Date().toISOString().split('T')[0];
     } finally {
       setButtonLoading(btn, false);
     }

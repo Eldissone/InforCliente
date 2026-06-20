@@ -1439,7 +1439,7 @@ async function loadTransactions() {
       // Use html encoded description safely
       const descStr = t.description ? t.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
       const isAPrazo = t.paymentType === "CREDITO";
-      const paymentTypeStr = isAPrazo ? "A Prazo" : "Pronto Pag.";
+      const paymentTypeStr = isAPrazo ? "C" : "PP";
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
 
       return `
@@ -1519,8 +1519,8 @@ async function loadHistory() {
     };
 
     tbody.innerHTML = data.items.map((t) => {
-      const isAPrazo = t.paymentType === "A_PRAZO";
-      const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${isAPrazo ? 'A Prazo' : 'Pronto Pag.'}</span>`;
+      const isAPrazo = t.paymentType === "CREDITO";
+      const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${isAPrazo ? 'C' : 'PP'}</span>`;
       return `
         <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="VIEW">
           <td class="text-xs text-slate-500">${new Date(t.date).toLocaleDateString("pt-BR")}</td>
@@ -1622,15 +1622,6 @@ function updateTxKPIs(items) {
   document.getElementById("kpiTxCommitted").textContent = formatCurrency(committed, currency);
   document.getElementById("kpiTxPaid").textContent = formatCurrency(paid, currency);
 
-  const badge = document.getElementById("pendentesCount");
-  if (badge) {
-    if (pending > 0) {
-      badge.textContent = pending;
-      badge.classList.remove("hidden");
-    } else {
-      badge.classList.add("hidden");
-    }
-  }
 }
 
 window.openLiquidateModal = function(txId, description, amount, ccId) {
