@@ -131,7 +131,7 @@ function renderTxRow(t) {
       </td>
       <td class="px-10 py-5 text-xs font-semibold text-slate-500">${escapeHtml(t.supplier || "-")}</td>
       <td class="px-10 py-5">
-        <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500">${escapeHtml(t.category || "-")}</span>
+        <span class="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-500" title="${escapeHtml(t.costCenter?.name || "-")}">${escapeHtml(t.costCenter?.name || t.category || "-")}</span>
       </td>
       <td class="px-10 py-5">${paymentTypeBadge}</td>
       <td class="px-10 py-5">
@@ -499,31 +499,27 @@ async function loadBudgetExecution() {
   };
 
   // --- Categorize ---
-  const cats = {
-    MATERIAIS_INSUMOS: { name: "CUSTO DE INSUMOS E MATERIAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    SERVICOS_MAO_DE_OBRA: { name: "CUSTO DE MÃO DE OBRA E SERVIÇOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    GASTOS_PESSOAL: { name: "GASTOS COM PESSOAL", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DESPESAS_OPERACIONAIS: { name: "DESPESAS OPERACIONAIS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    INVESTIMENTOS: { name: "PAGAMENTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEPRECIACAO: { name: "DEPRECIAÇÃO", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    OUTRAS_DESPESAS: { name: "OUTRAS DESPESAS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    IMPOSTOS: { name: "IMPOSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] },
-    DEDUCOES: { name: "(-) DEDUÇÕES DE CUSTOS", total: 0, consumed: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })), items: [] }
-  };
+  const cats = {};
 
-  const getCatKey = (c) => {
-    if (c === "LABOR") return "SERVICOS_MAO_DE_OBRA";
-    if (c === "MATERIALS") return "MATERIAIS_INSUMOS";
-    if (c === "EQUIPMENT") return "INVESTIMENTOS";
-    if (cats[c]) return c;
-    return "OUTRAS_DESPESAS";
+  const getCatKey = (ccName) => {
+    const key = ccName ? String(ccName).toUpperCase().trim() : "ORCAMENTO_GERAL";
+    if (!cats[key]) {
+      cats[key] = {
+        name: ccName || "Orçamento Base / Geral",
+        total: 0,
+        consumed: 0,
+        byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })),
+        items: []
+      };
+    }
+    return key;
   };
 
   // Pre-process items mapping
   const itemsMap = new Map();
 
   lines.forEach(l => {
-    const cKey = getCatKey(l.category);
+    const cKey = getCatKey(null); // Budget lines don't have cost centers
     const totalP = Number(l.total || 0);
     const monthlyP = totalP / numMonths; // distribute linearly across all project months
 
@@ -543,19 +539,20 @@ async function loadBudgetExecution() {
 
   // Calculate forecast (Previsto) and consumed (Realizado) from transactions
   txs.forEach(t => {
-    const d = new Date(t.date);
+    const d = new Date(t.paymentDate || t.createdAt);
     const mIdx = getColIdx(d); // map to column in project range (clamped)
-    const forecastAmount = Number(t.amount || 0);
-    const realizedAmount = t.realizedAmount != null ? Number(t.realizedAmount) : forecastAmount;
+    const forecastAmount = Number(t.budgetedAmount || 0);
+    const realizedAmount = t.paidAmount != null ? Number(t.paidAmount) : forecastAmount;
 
-    const cKey = getCatKey(t.category);
-    const txCurr = t.currency || projectState?.currency || "AOA";
+    const cKey = getCatKey(t.costCenter?.name);
+    const txCurr = t.costCenter?.currency || projectState?.currency || "AOA";
 
-    if (t.status === "PENDING" || t.status === "LATE") {
+    // "PENDENTE" is considered forecast. "CONFIRMADO" is realized.
+    if (t.status === "PENDENTE" || t.status === "LATE") {
       cats[cKey].total += forecastAmount;
       cats[cKey].byMonth[mIdx].p += forecastAmount;
 
-      const cleanDesc = (t.description || "lançamento Avulso").trim();
+      const cleanDesc = (t.description || "Lançamento Avulso").trim();
       const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
       let row = cats[cKey].items.find(i => i._key === descKey);
       if (!row) {
@@ -565,7 +562,7 @@ async function loadBudgetExecution() {
       row.totalP += forecastAmount;
       row.byMonth[mIdx].p += forecastAmount;
 
-    } else if (t.status === "PAID") {
+    } else if (t.status === "CONFIRMADO") {
       cats[cKey].consumed += realizedAmount;
       cats[cKey].byMonth[mIdx].c += realizedAmount;
 
@@ -574,7 +571,7 @@ async function loadBudgetExecution() {
         bItem.totalC += realizedAmount;
         bItem.byMonth[mIdx].c += realizedAmount;
       } else {
-        const cleanDesc = (t.description || "lançamento Avulso").trim();
+        const cleanDesc = (t.description || "Lançamento Avulso").trim();
         const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
         let row = cats[cKey].items.find(i => i._key === descKey);
         if (!row) {
@@ -597,18 +594,11 @@ async function loadBudgetExecution() {
 
   Object.keys(cats).forEach(key => {
     const cat = cats[key];
-    const isDed = key === "DEDUCOES";
-    const isCapital = ["INVESTIMENTOS", "DEPRECIACAO"].includes(key);
-    // Capital and depreciation categories are off-budget à” excluded from grand totals
-    if (isCapital) return;
-    const sign = isDed ? -1 : 1;
-
-    // Add logic here to invert logic of display if needed, but for sum calculations:
-    gTotalP += cat.total * sign;
-    gTotalC += cat.consumed * sign;
+    gTotalP += cat.total;
+    gTotalC += cat.consumed;
     cat.byMonth.forEach((m, i) => {
-      gByMonth[i].p += m.p * sign;
-      gByMonth[i].c += m.c * sign;
+      gByMonth[i].p += m.p;
+      gByMonth[i].c += m.c;
     });
   });
 
@@ -678,20 +668,14 @@ async function loadBudgetExecution() {
     const cat = cats[key];
     if (cat.items.length === 0 && cat.total === 0 && cat.consumed === 0) return;
 
-    const isInvestment = key === "INVESTIMENTOS";
-    const isInfoOnly = key === "DEPRECIACAO"; // purely informational, no amounts shown
-
     // Category Header
-    let catTitle = key === "DEDUCOES" ? cat.name : `+ ${cat.name}`;
-    if (isInvestment) catTitle = `â–² ${cat.name}`;
-    if (isInfoOnly) catTitle = `~ ${cat.name}`;
+    let catTitle = `+ ${cat.name}`;
 
-    const customCls = isInvestment ? "bg-[#0f2e1a] font-black text-[#2afc8d]" : (isInfoOnly ? "bg-[#0f2540] font-black text-slate-300" : null);
-    tbodyHtml += drawRow(catTitle, isInfoOnly ? 0 : cat.total, isInfoOnly ? 0 : cat.consumed, cat.byMonth, true, customCls);
+    tbodyHtml += drawRow(catTitle, cat.total, cat.consumed, cat.byMonth, true, null);
 
     // Category Items
     cat.items.forEach(item => {
-      tbodyHtml += drawRow(item.desc, isInfoOnly ? 0 : item.totalP, isInfoOnly ? 0 : item.totalC, item.byMonth, false, null, item.currency || null);
+      tbodyHtml += drawRow(item.desc, item.totalP, item.totalC, item.byMonth, false, null, item.currency || null);
     });
   });
 
