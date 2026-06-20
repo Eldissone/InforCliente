@@ -64,16 +64,20 @@ function iconFor(name) {
   return "engineering";
 }
 
-function renderRow(p) {
+function renderRow(p, idx = 1) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
   const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+  const numStr = String(idx).padStart(2, '0');
 
   return `
     <tr data-view-project="${p.id}" class="hover:bg-slate-200 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
+          <div class="relative min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
             <span class="material-symbols-outlined text-[#2afc8d] group-hover:text-slate-900 text-lg">${iconFor(p.name)}</span>
+            <span class="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-black shadow-sm border-2 border-white">
+              ${numStr}
+            </span>
           </div>
           <div>
             <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${p.name}</h4>
@@ -120,15 +124,19 @@ function renderRow(p) {
   `;
 }
 
-function renderGridItem(p) {
+function renderGridItem(p, idx = 1) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
   const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+  const numStr = String(idx).padStart(2, '0');
 
   return `
     <div class="bg-white rounded-[2rem] border border-slate-100 p-8 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer relative overflow-hidden flex flex-col h-full" data-view-project="${p.id}">
       <div class="flex justify-between items-start mb-8">
-        <div class="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:bg-[#2afc8d] transition-colors duration-500">
+        <div class="relative w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center shadow-lg group-hover:bg-[#2afc8d] transition-colors duration-500">
           <span class="material-symbols-outlined text-[#2afc8d] group-hover:text-slate-900 text-2xl">${iconFor(p.name)}</span>
+          <span class="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black shadow-md border-2 border-white">
+            ${numStr}
+          </span>
         </div>
         <div class="flex flex-col items-end gap-2">
             ${renderStatusPill(p.status)}
@@ -241,9 +249,9 @@ async function load() {
   }
 
   if (isGrid) {
-    grid.innerHTML = data.items.map(renderGridItem).join("");
+    grid.innerHTML = data.items.map((p, i) => renderGridItem(p, (state.page - 1) * 12 + i + 1)).join("");
   } else {
-    tbody.innerHTML = data.items.map(renderRow).join("");
+    tbody.innerHTML = data.items.map((p, i) => renderRow(p, (state.page - 1) * state.pageSize + i + 1)).join("");
   }
 
   // --- Recycle Bin ---

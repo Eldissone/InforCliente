@@ -101,9 +101,16 @@ function renderRecentUsers(users) {
     host.innerHTML = `<div class="px-7 py-8 text-sm text-slate-400">Nenhum utilizador registado.</div>`;
     return;
   }
-  host.innerHTML = recent.map(u => `
+  host.innerHTML = recent.map((u, i) => {
+    const numStr = String(i + 1).padStart(2, '0');
+    return `
     <div class="flex items-center gap-4 px-7 py-4 hover:bg-slate-50 transition-colors">
-      ${avatarEl(u.email, u.profilePic || u.client?.profilePic)}
+      <div class="relative">
+        ${avatarEl(u.email, u.profilePic || u.client?.profilePic)}
+        <span class="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[8px] font-black shadow-sm border border-white">
+          ${numStr}
+        </span>
+      </div>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-bold text-slate-900 truncate">${esc(u.email)}</div>
         <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: ${u.id.slice(0, 8)}</div>
@@ -114,7 +121,7 @@ function renderRecentUsers(users) {
         Editar
       </button>
     </div>
-  `).join("");
+  `}).join("");
 }
 
 // ─── Users table ──────────────────────────────────────────────
@@ -122,17 +129,27 @@ function filterUsers() {
   const q = (el("searchInput")?.value || "").toLowerCase();
   const r = el("roleFilter")?.value || "";
   return allUsers.filter(u =>
-    (!q || u.email.toLowerCase().includes(q)) &&
+    (!q || u.email.toLowerCase().includes(q) || (u.name && u.name.toLowerCase().includes(q))) &&
     (!r || u.role === r)
-  );
+  ).sort((a, b) => {
+    const nameA = (a.name || a.email || "").toLowerCase();
+    const nameB = (b.name || b.email || "").toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 }
 
-function renderRow(u) {
+function renderRow(u, idx = 1) {
+  const numStr = String(idx).padStart(2, '0');
   return `
     <tr class="hover:bg-slate-50 transition-colors group border-b border-slate-50 last:border-0">
       <td class="px-7 py-4">
         <div class="flex items-center gap-3">
-          ${avatarEl(u.email, u.profilePic || u.client?.profilePic)}
+          <div class="relative">
+            ${avatarEl(u.email, u.profilePic || u.client?.profilePic)}
+            <span class="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[8px] font-black shadow-sm border border-white">
+              ${numStr}
+            </span>
+          </div>
           <div>
             <div class="text-sm font-bold text-slate-900">${esc(u.name || u.email)}</div>
             ${u.name ? `<div class="text-[10px] text-slate-400 font-medium">${esc(u.email)}</div>` : ''}
@@ -170,7 +187,7 @@ function renderTable(users) {
   if (!tbody) return;
   el("users-count-label") && (el("users-count-label").textContent = users.length);
   tbody.innerHTML = users.length
-    ? users.map(renderRow).join("")
+    ? users.map((u, i) => renderRow(u, i + 1)).join("")
     : `<tr><td colspan="5" class="px-7 py-10 text-sm text-slate-400 text-center">Nenhum utilizador encontrado.</td></tr>`;
 }
 
