@@ -2804,40 +2804,13 @@ function wireNewTransaction() {
       ].join("");
 
       openModal({
-        title: "Novo lançamento de Pagamento",
-        primaryLabel: "Salvar",
+        title: "Nova Necessidade de Despesa",
+        primaryLabel: "Adicionar",
         contentHtml: `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="md:col-span-2">
             <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição *</label>
-            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="Descrição..." required />
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Categoria</label>
-            <select id="t_cat" class="w-full rounded-lg border-slate-300">
-                <option value="MATERIAL">Material</option>
-                <option value="SERVICO">Serviço</option>
-                <option value="MAO_DE_OBRA">Mão de Obra</option>
-                <option value="EQUIPAMENTO">Equipamento</option>
-                <option value="TRANSPORTE">Transporte</option>
-                <option value="ADMINISTRATIVO">Administrativo</option>
-                <option value="OUTRO">Outro</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label>
-            <select id="t_status" class="w-full rounded-lg border-slate-300">
-              <option value="PENDENTE">Pendente</option>
-              <option value="CONFIRMADO">Liquidado / Confirmado</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Pagamento *</label>
-            <input id="t_date" type="date" class="w-full rounded-lg border-slate-300" required />
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor *</label>
-            <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" required />
+            <input id="t_desc" class="w-full rounded-lg border-slate-300" placeholder="O que precisa ser comprado ou contratado?..." required />
           </div>
           <div>
             <label class="block text-xs font-black uppercase tracking-widest text-primary mb-2">Centro de Custo *</label>
@@ -2845,14 +2818,10 @@ function wireNewTransaction() {
               ${ccOptions}
             </select>
           </div>
-          
           <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Pagamento</label>
-            <select id="t_paymentType" class="w-full rounded-lg border-slate-300">
-              <option value="PRONTO_PAGAMENTO">PP</option>
-              <option value="CREDITO">C</option>
-            </select>
-          </div>
+            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Valor Previsto</label>
+            <input id="t_amount" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" />
+            <p class="text-[10px] text-slate-400 mt-1">Este valor servirá como base. A precificação real será feita no Orçamento Geral.</p>
           </div>
         </div>
       `,
@@ -2866,37 +2835,27 @@ function wireNewTransaction() {
           const desc = v("t_desc");
           if (!desc) return toast("A descrição é obrigatória", { type: "error" });
           
-          let paymentDate = v("t_date");
-          if (!paymentDate) paymentDate = new Date().toISOString().split('T')[0];
-
           try {
             setButtonLoading(btn, true);
-            await apiRequest(`/cost-centers/${ccId}/payments`, {
+            await apiRequest(`/cost-centers/${ccId}/needs`, {
               method: "POST",
               body: {
                 description: desc,
-                category: v("t_cat"),
-                status: v("t_status"),
-                budgetedAmount: Number(v("t_amount") || 0),
-                paidAmount: v("t_status") === "CONFIRMADO" ? Number(v("t_amount") || 0) : 0,
-                supplier: v("t_supplier") || null,
-                paymentType: v("t_paymentType") || "PRONTO_PAGAMENTO",
-                paymentDate: new Date(paymentDate).toISOString(),
+                quantity: 1,
+                unitPrice: Number(v("t_amount") || 0),
+                priority: "MEDIA"
               },
             });
-            toast("Lançamento criado com sucesso", { type: "success" });
+            toast("Necessidade adicionada ao Orçamento Geral!", { type: "success" });
             close();
-            await loadProject();
-            await loadTransactions();
-            await loadBudgetExecution();
+            // Optional: You could redirect the user to centroCustos.html if desired
+            // window.location.href = `centroCustos.html?id=${id}`;
           } catch (err) {
             setButtonLoading(btn, false);
-            toast(err.message || "Erro ao criar lançamento", { type: "error" });
+            toast(err.message || "Erro ao criar necessidade", { type: "error" });
           }
         },
       });
-      // Pre-fill date
-      document.getElementById('t_date').value = new Date().toISOString().split('T')[0];
     } finally {
       setButtonLoading(btn, false);
     }
