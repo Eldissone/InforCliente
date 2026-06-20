@@ -1400,17 +1400,17 @@ async function loadTransactions() {
   const tbody = document.getElementById("txTableBody");
   if (!tbody) return;
 
-  const statusFilter = currentTxStatus;
+  const statusFilter = currentTxStatus === "PENDING" ? "PENDENTE" : "CONFIRMADO";
   const catFilter = document.getElementById("txCategoryFilter").value;
 
   tbody.innerHTML = `<tr><td colspan="8"><div class="spinner my-8"></div></td></tr>`;
 
   try {
     const data = await apiRequest(
-      `/projects/${selectedProject.id}/transactions?page=${txPage}&pageSize=${TX_PAGE_SIZE}&status=${statusFilter}&category=${catFilter}`
+      `/cost-centers/project/${selectedProject.id}/payments?page=${txPage}&pageSize=${TX_PAGE_SIZE}&status=${statusFilter}`
     );
 
-    // Update KPIs
+    // Update KPIs using the fetched data (if pagination is an issue, we should fetch all for KPI)
     updateTxKPIs(data.items);
 
     if (data.items.length === 0) {
@@ -1432,26 +1432,26 @@ async function loadTransactions() {
     };
 
     tbody.innerHTML = data.items.map((t) => {
-      const isPaid = t.status === "PAID";
-      const statusClass = isPaid ? "badge-approved" : "badge-pendente";
-      const statusText = isPaid ? "Liquidado" : "Pendente";
+      const isPaid = t.status === "CONFIRMADO";
+      const statusClass = isPaid ? "badge-approved" : (t.status === "CANCELADO" ? "badge-rejected" : "badge-pendente");
+      const statusText = isPaid ? "Liquidado" : (t.status === "CANCELADO" ? "Cancelado" : "Pendente");
 
       // Use html encoded description safely
       const descStr = t.description ? t.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
-      const isAPrazo = t.paymentType === "A_PRAZO";
+      const isAPrazo = t.paymentType === "CREDITO";
       const paymentTypeStr = isAPrazo ? "A Prazo" : "Pronto Pag.";
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
 
       return `
-        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="${!isPaid ? 'TRANSACTION' : 'VIEW'}">
-          <td class="text-xs text-slate-500">${new Date(t.date).toLocaleDateString("pt-BR")}</td>
-          <td class="font-bold text-slate-700">${t.description}</td>
+        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="PAYMENT">
+          <td class="text-xs text-slate-500">${new Date(t.paymentDate).toLocaleDateString("pt-PT")}</td>
+          <td class="font-bold text-slate-700 max-w-[200px] truncate" title="${descStr}">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
-          <td class="text-xs text-slate-500">${catNames[t.category] || t.category}</td>
+          <td class="text-xs text-slate-500">${catNames[t.category] || t.category || "-"}</td>
           <td class="text-xs text-slate-500">${paymentTypeBadge}</td>
-          <td class="text-xs text-slate-500">${t.ownerName || "-"}</td>
-          <td class="text-right font-black text-slate-900">${formatCurrency(t.amount, t.currency)}</td>
-          <td class="text-right font-black ${isPaid ? 'text-emerald-600' : 'text-slate-400'}">${isPaid ? formatCurrency(t.realizedAmount, t.currency) : "-"}</td>
+          <td class="text-xs text-slate-500">${t.costCenter?.name || "Geral"}</td>
+          <td class="text-right font-black text-slate-900">${formatCurrency(t.budgetedAmount, t.costCenter?.currency || "AOA")}</td>
+          <td class="text-right font-black ${isPaid ? 'text-emerald-600' : 'text-slate-400'}">${isPaid ? formatCurrency(t.paidAmount, t.costCenter?.currency || "AOA") : "-"}</td>
           <td class="text-center">
             <span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusClass}">
               ${statusText}
@@ -1468,6 +1468,9 @@ async function loadTransactions() {
                   <span class="material-symbols-outlined text-base">done_all</span>
                 </button>
               `}
+              <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="PAYMENT" title="Ver Detalhes" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d] hover:text-slate-900 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">visibility</span>
+              </button>
             </div>
           </td>
         </tr>
@@ -1605,15 +1608,15 @@ function updateTxKPIs(items) {
   let paid = 0;
 
   items.forEach(t => {
-    if (t.status === "PENDING") {
+    if (t.status === "PENDENTE") {
       pending++;
-      committed += Number(t.amount);
-    } else if (t.status === "PAID") {
-      paid += Number(t.realizedAmount || t.amount);
+      committed += Number(t.budgetedAmount);
+    } else if (t.status === "CONFIRMADO") {
+      paid += Number(t.paidAmount || t.budgetedAmount);
     }
   });
 
-  const currency = items[0]?.currency || "AOA";
+  const currency = items[0]?.costCenter?.currency || "AOA";
 
   document.getElementById("kpiTxPending").textContent = pending;
   document.getElementById("kpiTxCommitted").textContent = formatCurrency(committed, currency);
@@ -1630,25 +1633,37 @@ function updateTxKPIs(items) {
   }
 }
 
-window.openLiquidateModal = function(txId, description, amount) {
+window.openLiquidateModal = function(txId, description, amount, ccId) {
   document.getElementById("liqTxId").value = txId;
   document.getElementById("liqDesc").textContent = description;
   document.getElementById("liqCommitted").value = formatCurrency(amount, "AOA");
   document.getElementById("liqAmount").value = amount;
+  
+  // Create or update a hidden field for ccId
+  let ccInput = document.getElementById("liqCcId");
+  if (!ccInput) {
+    ccInput = document.createElement("input");
+    ccInput.type = "hidden";
+    ccInput.id = "liqCcId";
+    document.getElementById("formLiq").appendChild(ccInput);
+  }
+  ccInput.value = ccId;
+  
   document.getElementById("modalLiq").classList.add("open");
 };
 
 async function submitLiquidation(e) {
   e.preventDefault();
   const txId = document.getElementById("liqTxId").value;
+  const ccId = document.getElementById("liqCcId").value;
   const realizedAmount = document.getElementById("liqAmount").value;
   
   if (!realizedAmount) return showToast("Valor é obrigatório", "error");
 
   try {
-    await apiRequest(`/projects/${selectedProject.id}/transactions/${txId}/liquidate`, {
+    await apiRequest(`/cost-centers/${ccId}/payments/${txId}`, {
       method: "PATCH",
-      body: { realizedAmount: Number(realizedAmount) }
+      body: { paidAmount: Number(realizedAmount), status: "CONFIRMADO" }
     });
     showToast("Lançamento liquidado com sucesso!", "success");
     document.getElementById("modalLiq").classList.remove("open");
@@ -1745,7 +1760,7 @@ window.openPaymentAside = function(data, type) {
         payCostPayment(data);
       } else if (type === 'TRANSACTION') {
         const descStr = data.description ? data.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
-        openLiquidateModal(data.id, descStr, amount);
+        openLiquidateModal(data.id, descStr, amount, data.costCenterId);
       }
       closePaymentAside();
     };
