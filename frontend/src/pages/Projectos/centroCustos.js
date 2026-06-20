@@ -444,7 +444,7 @@ async function loadNeeds() {
     let html = `
       <tr class="bg-emerald-600">
         <td class="font-bold text-white text-sm" colspan="2">Total Geral</td>
-        <td colspan="3"></td>
+        <td colspan="4"></td>
         <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
         <td class="text-right font-bold text-white text-sm">${formatCurrency(totalSemanaGeral, currency)}</td>
         <td colspan="4"></td>
@@ -456,7 +456,7 @@ async function loadNeeds() {
       html += `
         <tr class="bg-slate-100 border-t border-slate-200">
         <td colspan="2"></td>
-        <td class="font-bold text-slate-800 uppercase text-xs" colspan="3">${ccName}</td>
+        <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
           <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalObra, group.currency)}</td>
           <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalSemana, group.currency)}</td>
           <td colspan="4"></td>
@@ -1502,7 +1502,7 @@ async function loadHistory() {
 
   try {
     const data = await apiRequest(
-      `/projects/${selectedProject.id}/transactions?page=${historyPage}&pageSize=${TX_PAGE_SIZE}&status=PAID&category=${catFilter}`
+      `/cost-centers/project/${selectedProject.id}/payments?page=${historyPage}&pageSize=${TX_PAGE_SIZE}&status=CONFIRMADO&category=${catFilter}`
     );
 
     if (data.items.length === 0) {
@@ -1512,10 +1512,8 @@ async function loadHistory() {
     }
 
     const catNames = {
-      MATERIALS: "Materiais", LABOR: "Mão de Obra", EQUIPMENT: "Equipamentos",
-      MATERIAIS_INSUMOS: "Materiais/Insumos", SERVICOS_MAO_DE_OBRA: "Serviços/Mão Obra",
-      GASTOS_PESSOAL: "Gastos Pessoal", DESPESAS_OPERACIONAIS: "Desp. Operacionais",
-      INVESTIMENTOS: "Investimentos", OTHER: "Outro"
+      MATERIAL: "Material", SERVICO: "Serviço", MAO_DE_OBRA: "Mão de Obra", 
+      EQUIPAMENTO: "Equipamentos", TRANSPORTE: "Transporte", ADMINISTRATIVO: "Administrativo", OUTRO: "Outro"
     };
 
     tbody.innerHTML = data.items.map((t) => {
@@ -1523,14 +1521,14 @@ async function loadHistory() {
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${isAPrazo ? 'C' : 'PP'}</span>`;
       return `
         <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="VIEW">
-          <td class="text-xs text-slate-500">${new Date(t.date).toLocaleDateString("pt-BR")}</td>
+          <td class="text-xs text-slate-500">${new Date(t.paymentDate).toLocaleDateString("pt-PT")}</td>
           <td class="font-bold text-slate-700">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
-          <td class="text-xs text-slate-500">${catNames[t.category] || t.category}</td>
+          <td class="text-xs text-slate-500">${catNames[t.category] || t.category || "-"}</td>
           <td class="text-xs text-slate-500">${paymentTypeBadge}</td>
-          <td class="text-xs text-slate-500">${t.ownerName || "-"}</td>
-          <td class="text-right font-black text-slate-900">${formatCurrency(t.amount, t.currency)}</td>
-          <td class="text-right font-black text-emerald-600">${formatCurrency(t.realizedAmount || t.amount, t.currency)}</td>
+          <td class="text-xs text-slate-500">${t.costCenter?.name || "Geral"}</td>
+          <td class="text-right font-black text-slate-900">${formatCurrency(t.budgetedAmount, t.costCenter?.currency || "AOA")}</td>
+          <td class="text-right font-black text-emerald-600">${formatCurrency(t.paidAmount || t.budgetedAmount, t.costCenter?.currency || "AOA")}</td>
           <td class="text-center">
             <span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase badge-approved">Liquidado</span>
           </td>
@@ -1692,6 +1690,21 @@ window.openPaymentAsideHandler = function(btn) {
 window.openPaymentAside = function(data, type) {
   const aside = document.getElementById("paymentAside");
   const overlay = document.getElementById("paymentAsideOverlay");
+
+  const badge = document.getElementById("asideStatusBadge");
+  if (badge) {
+    badge.classList.remove("hidden", "bg-emerald-100", "text-emerald-700", "bg-amber-100", "text-amber-700", "bg-red-100", "text-red-700");
+    if (data.status === "CONFIRMADO" || data.status === "PAID") {
+      badge.textContent = "Liquidado";
+      badge.classList.add("bg-emerald-100", "text-emerald-700");
+    } else if (data.status === "CANCELADO") {
+      badge.textContent = "Cancelado";
+      badge.classList.add("bg-red-100", "text-red-700");
+    } else {
+      badge.textContent = "Pendente";
+      badge.classList.add("bg-amber-100", "text-amber-700");
+    }
+  }
 
   document.getElementById("asideDesc").textContent = data.description || "—";
   document.getElementById("asideDate").textContent = data.paymentDate ? formatDateBR(data.paymentDate) : (data.date ? formatDateBR(data.date) : "—");
