@@ -248,7 +248,7 @@ costCenterRoutes.get(
       prisma.workNeed.count({ where }),
       prisma.workNeed.findMany({
         where,
-        orderBy: [{ priority: "asc" }, { date: "desc" }],
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -277,6 +277,7 @@ costCenterRoutes.get(
     const status = req.query.status ? String(req.query.status) : "";
     const priority = req.query.priority ? String(req.query.priority) : "";
     const ccId = req.query.costCenterId ? String(req.query.costCenterId) : "";
+    const scheduled = req.query.scheduled ? (req.query.scheduled === "true") : undefined;
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
 
@@ -285,13 +286,14 @@ costCenterRoutes.get(
       ...(status ? { status } : {}),
       ...(priority ? { priority } : {}),
       ...(ccId ? { costCenterId: ccId } : {}),
+      ...(scheduled !== undefined ? { scheduled } : {}),
     };
 
     const [total, items] = await Promise.all([
       prisma.workNeed.count({ where }),
       prisma.workNeed.findMany({
         where,
-        orderBy: [{ priority: "asc" }, { date: "desc" }],
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
@@ -402,6 +404,111 @@ costCenterRoutes.delete(
   })
 );
 
+// ─── Cronograma de Pagamentos ──────────────────────────────────────────────────
+
+// POST /cost-centers/project/:projectId/needs/schedule-bulk — Marcar múltiplas necessidades como agendadas
+costCenterRoutes.post(
+  "/project/:projectId/needs/schedule-bulk",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const body = z.object({
+      needIds: z.array(z.string()),
+    }).parse(req.body);
+
+    await prisma.workNeed.updateMany({
+      where: { id: { in: body.needIds }, projectId },
+      data: { scheduled: true },
+    });
+
+    return res.json({ ok: true });
+  })
+);
+
+// POST /cost-centers/:ccId/needs/:needId/schedule — Marcar uma necessidade como agendada
+costCenterRoutes.post(
+  "/:ccId/needs/:needId/schedule",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    await prisma.workNeed.update({
+      where: { id: needId },
+      data: { scheduled: true },
+    });
+    return res.json({ ok: true });
+  })
+);
+
+// POST /cost-centers/:ccId/needs/:needId/generate-installments — Gerar parcelas (CostPayment) para uma necessidade
+costCenterRoutes.post(
+  "/:ccId/needs/:needId/generate-installments",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const ccId = String(req.params.ccId);
+    
+    const body = z.object({
+      paymentType: z.string().optional().default("PRONTO_PAGAMENTO"),
+      installments: z.array(z.object({
+        paymentDate: z.string(),
+        amount: z.union([z.number(), z.string()]),
+        installment: z.number().int().min(1),
+      })),
+    }).parse(req.body);
+
+    const need = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      include: { 
+        costCenter: true,
+        quotes: {
+          where: { selected: true },
+          include: { supplier: true }
+        }
+      },
+    });
+    if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+
+    let supplierName = null;
+    if (need.quotes && need.quotes.length > 0 && need.quotes[0].supplier) {
+      supplierName = need.quotes[0].supplier.name;
+    }
+
+    // Create the installments
+    const createdPayments = [];
+    for (const inst of body.installments) {
+      const payment = await prisma.costPayment.create({
+        data: {
+          projectId: need.projectId,
+          costCenterId: ccId,
+          needId,
+          docNumber: null,
+          paymentDate: new Date(inst.paymentDate),
+          supplier: supplierName,
+          category: "OUTRO",
+          description: `Parcela ${inst.installment} - ${need.description}`,
+          budgetedAmount: String(inst.amount),
+          paidAmount: "0",
+          paymentMethod: null,
+          paymentType: body.paymentType,
+          week: null,
+          installment: inst.installment,
+          status: "PENDENTE",
+          notes: null,
+        },
+      });
+      createdPayments.push(payment);
+    }
+
+    // Scheduling creates pending payments; it should not mark the need as paid.
+    await prisma.workNeed.update({
+      where: { id: needId },
+      data: { status: "APPROVED", scheduled: true },
+    });
+
+    return res.json({ ok: true, payments: createdPayments.map(p => p.id) });
+  })
+);
+
 // ─── Lançamentos de Pagamento ─────────────────────────────────────────────────
 
 // GET /cost-centers/project/:projectId/payments — Listar TODOS os lançamentos da obra
@@ -432,18 +539,49 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
-          need: { select: { description: true } },
+          need: { 
+            select: { 
+              description: true,
+              quotes: {
+                where: { selected: true },
+                select: { proformaUrl: true }
+              }
+            } 
+          },
         },
       }),
     ]);
 
+    const supplierNames = [...new Set(items.map((p) => p.supplier).filter(Boolean))];
+    const supplierMap = {};
+    if (supplierNames.length > 0) {
+      const suppliers = await prisma.supplier.findMany({
+        where: { name: { in: supplierNames } },
+        select: { name: true, nif: true, iban: true },
+      });
+      suppliers.forEach((s) => {
+        supplierMap[s.name] = s;
+      });
+    }
+
     return res.json({
       page, pageSize, total,
-      items: items.map((p) => ({
-        ...p,
-        budgetedAmount: String(p.budgetedAmount),
-        paidAmount: String(p.paidAmount),
-      })),
+      items: items.map((p) => {
+        const sup = supplierMap[p.supplier] || {};
+        let proformaUrl = null;
+        if (p.need && p.need.quotes && p.need.quotes.length > 0) {
+          proformaUrl = p.need.quotes[0].proformaUrl;
+        }
+
+        return {
+          ...p,
+          nif: sup.nif || null,
+          iban: sup.iban || null,
+          proformaUrl: proformaUrl,
+          budgetedAmount: String(p.budgetedAmount),
+          paidAmount: String(p.paidAmount),
+        };
+      }),
     });
   })
 );
@@ -469,6 +607,7 @@ costCenterRoutes.post(
       budgetedAmount: z.union([z.number(), z.string()]),
       paidAmount: z.union([z.number(), z.string()]),
       paymentMethod: z.string().optional().nullable(),
+      paymentType: z.string().optional().default("PRONTO_PAGAMENTO"),
       week: z.string().optional().nullable(),
       status: z.enum(["PENDENTE", "CONFIRMADO", "CANCELADO"]).optional(),
       needId: z.string().optional().nullable(),
@@ -487,6 +626,7 @@ costCenterRoutes.post(
         budgetedAmount: String(body.budgetedAmount),
         paidAmount: String(body.paidAmount),
         paymentMethod: body.paymentMethod || null,
+        paymentType: body.paymentType,
         week: body.week || null,
         status: body.status || "PENDENTE",
         needId: body.needId || null,
@@ -513,6 +653,7 @@ costCenterRoutes.patch(
       budgetedAmount: z.union([z.number(), z.string()]).optional(),
       paidAmount: z.union([z.number(), z.string()]).optional(),
       paymentMethod: z.string().optional().nullable(),
+      paymentType: z.string().optional(),
       week: z.string().optional().nullable(),
       status: z.enum(["PENDENTE", "CONFIRMADO", "CANCELADO"]).optional(),
       needId: z.string().optional().nullable(),
@@ -530,6 +671,7 @@ costCenterRoutes.patch(
         ...(body.budgetedAmount !== undefined ? { budgetedAmount: String(body.budgetedAmount) } : {}),
         ...(body.paidAmount !== undefined ? { paidAmount: String(body.paidAmount) } : {}),
         ...(body.paymentMethod !== undefined ? { paymentMethod: body.paymentMethod } : {}),
+        ...(body.paymentType !== undefined ? { paymentType: body.paymentType } : {}),
         ...(body.week !== undefined ? { week: body.week } : {}),
         ...(body.status ? { status: body.status } : {}),
         ...(body.needId !== undefined ? { needId: body.needId } : {}),
@@ -612,3 +754,5 @@ costCenterRoutes.get(
 );
 
 module.exports = { costCenterRoutes };
+
+

@@ -714,6 +714,7 @@ model CostPayment {
   budgetedAmount Decimal         @db.Decimal(16, 2)
   paidAmount     Decimal         @db.Decimal(16, 2)
   paymentMethod  String?
+  paymentType    String?         @default("PRONTO_PAGAMENTO")
   week           String?
   installment    Int?
   status         CostPayStatus   @default(PENDENTE)

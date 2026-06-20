@@ -113,6 +113,11 @@
             color: #059669;
         }
 
+        .badge-in-quotation {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
         .badge-rejected {
             background: #fef2f2;
             color: #ef4444;
@@ -433,20 +438,20 @@
                 <!-- KPI Row -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpiRow">
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsto Total
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsão de Pagamentos
                         </p>
                         <div id="kpiPrevisto" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pago Total</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pagamentos Realizado</p>
                         <div id="kpiPago" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Saldo Disponível
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Saldo Pendente
                         </p>
                         <div id="kpiSaldo" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
@@ -473,6 +478,9 @@
                     <button class="cc-tab-btn" data-tab="necessidades">
                         <span class="material-symbols-outlined text-base align-middle mr-1">assignment</span>Orçamento
                         Geral
+                    </button>
+                    <button class="cc-tab-btn" data-tab="cronograma">
+                        <span class="material-symbols-outlined text-base align-middle mr-1">schedule</span>Cronograma
                     </button>
                     <button class="cc-tab-btn" data-tab="lancamentos">
                         <span
@@ -634,10 +642,17 @@
                                     <option value="REJECTED">Rejeitado</option>
                                     <option value="PAID">Pago</option>
                                 </select>
-                                <button onclick="sendAllToQuotation()" title="Enviar todos os itens pendentes para Cotação"
+                                <button onclick="sendAllToQuotation()"
+                                    title="Enviar todos os itens pendentes para Cotação"
                                     class="h-9 px-4 rounded-xl bg-[#0f172a] text-[#2afc8d] text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
                                     <span class="material-symbols-outlined text-base">fact_check</span>
                                     Precificar Tudo
+                                </button>
+                                <button onclick="sendAllToCronograma()"
+                                    title="Enviar todos os itens aprovados para Cronograma"
+                                    class="h-9 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20">
+                                    <span class="material-symbols-outlined text-base">schedule</span>
+                                    Agendar Todos
                                 </button>
                                 <button id="newNeedBtn"
                                     class="h-9 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20">
@@ -652,6 +667,7 @@
                                     <tr>
                                         <!-- <th class="text-left">Data</th>
                                         <th class="text-left">Tipo</th> -->
+                                        <th class="text-center w-14">Nº</th>
                                         <th class="text-left">Descrição</th>
                                         <th class="text-center">UN</th>
                                         <th class="text-center">Qtde</th>
@@ -662,7 +678,7 @@
                                         <th class="text-center">Prioridade</th>
                                         <th class="text-left">Responsável</th>
                                         <th class="text-center">Status</th>
-                                        <th class="text-center">Ações</th>  
+                                        <th class="text-center">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="needsTableBody">
@@ -677,6 +693,42 @@
                         <!-- Paginação necessidades -->
                         <div id="needsPagination"
                             class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ═══════════ TAB: CRONOGRAMA DE PAGAMENTOS ═══════════ -->
+                <div class="cc-tab-panel" id="tab-cronograma">
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Cronograma de Pagamentos</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Itens aprovados agendados para pagamento</p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Descrição</th>
+                                        <th class="text-center">UN</th>
+                                        <th class="text-center">Qtde</th>
+                                        <th class="text-right">P. Unit.</th>
+                                        <th class="text-right">Total Obra</th>
+                                        <th class="text-left">CC</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cronogramaTableBody">
+                                    <tr>
+                                        <td colspan="8">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -718,6 +770,7 @@
                                         <th class="text-left">Fornecedor</th>
                                         <th class="text-left">CC</th>
                                         <th class="text-left">Descrição</th>
+                                        <th class="text-left">Tipo</th>
                                         <th class="text-right">Previsto</th>
                                         <th class="text-right">Pago</th>
                                         <th class="text-center">Semana</th>
@@ -727,7 +780,7 @@
                                 </thead>
                                 <tbody id="paysTableBody">
                                     <tr>
-                                        <td colspan="10">
+                                        <td colspan="11">
                                             <div class="spinner my-8"></div>
                                         </td>
                                     </tr>
@@ -876,6 +929,86 @@
 
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════ ASIDE DE PAGAMENTO -->
+    <div id="paymentAsideOverlay"
+        class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-[50] hidden transition-opacity opacity-0"
+        onclick="closePaymentAside()"></div>
+    <aside id="paymentAside"
+        class="fixed right-0 top-0 h-full w-full max-w-[600px] bg-white shadow-2xl z-[60] transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-200">
+        <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div>
+                <h2 class="text-lg font-bold text-slate-900 tracking-tight">Detalhes do Lançamento</h2>
+                <p class="text-xs font-semibold text-slate-500 mt-0.5">Verificação antes do pagamento</p>
+            </div>
+            <button type="button" onclick="closePaymentAside()"
+                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 transition-colors">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6 custom-scroll flex flex-col gap-6">
+            <!-- Resumo -->
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-1">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição</p>
+                    <p id="asideDesc" class="text-sm font-bold text-slate-900"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Data</p>
+                        <p id="asideDate" class="text-sm font-bold text-slate-700"></p>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Fornecedor</p>
+                        <p id="asideSupplier" class="text-sm font-bold text-slate-700"></p>
+                    </div>
+                    <!-- Fornecedor Info (NIF/IBAN) -->
+                    <div id="asideSupplierDetails"
+                        class="hidden col-span-2 flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl mb-1">
+                        <div class="flex justify-between items-center">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">NIF</p>
+                            <p id="asideNIF" class="text-xs font-bold text-slate-700">—</p>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">IBAN</p>
+                            <p id="asideIBAN" class="text-xs font-bold text-slate-700">—</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Categoria</p>
+                        <p id="asideCategory" class="text-sm font-bold text-slate-700"></p>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Previsto</p>
+                        <p id="asideAmount" class="text-lg font-black text-slate-900"></p>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <!-- Proforma / Documento -->
+            <div class="flex flex-col gap-3 flex-1">
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Documento / Proforma</p>
+                </div>
+
+                <div id="asideProformaContainer"
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center min-h-[250px] p-4 text-center overflow-hidden">
+                    <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">description</span>
+                    <p class="text-xs font-semibold text-slate-500">Sem documento disponível.</p>
+                </div>
+            </div>
+        </div>
+        <div class="p-6 border-t border-slate-100 bg-white flex items-center justify-end gap-3">
+            <button type="button" onclick="closePaymentAside()"
+                class="h-11 px-5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
+            <button id="asideActionBtn" type="button"
+                class="h-11 px-6 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">payments</span> Confirmar & Pagar
+            </button>
+        </div>
+    </aside>
+
     <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white">
         <div
             class="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
@@ -889,7 +1022,6 @@
     </footer>
 
     <!-- ══════════════════════════════════════════════════════════ MODALS -->
-
     <!-- Modal: Novo / Editar Centro de Custo -->
     <div class="modal-overlay" id="modalCC">
         <div class="modal-box">
@@ -960,7 +1092,8 @@
                 <input type="hidden" id="needId">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de Custo *</label>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
+                            Custo *</label>
                         <select id="needCC" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
                             <option value="">Selecionar...</option>
@@ -980,7 +1113,8 @@
                 <div class="overflow-x-auto pb-2">
                     <table class="w-full text-left border-collapse min-w-[820px]">
                         <thead>
-                            <tr class="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <tr
+                                class="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                 <th class="py-2 px-1">Descrição *</th>
                                 <th class="py-2 px-1 w-16">UN</th>
                                 <th class="py-2 px-1 w-24">Qtd.</th>
@@ -996,7 +1130,8 @@
                             <!-- Linhas inseridas via JS -->
                         </tbody>
                     </table>
-                    <button type="button" onclick="addNeedRow()" class="mt-3 h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all flex items-center gap-1">
+                    <button type="button" onclick="addNeedRow()"
+                        class="mt-3 h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all flex items-center gap-1">
                         <span class="material-symbols-outlined text-sm">add</span> Adicionar Linha
                     </button>
                 </div>
@@ -1075,6 +1210,15 @@
                         </select>
                     </div>
                     <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
+                            Pagamento</label>
+                        <select id="payType"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="PRONTO_PAGAMENTO">Pronto Pagamento</option>
+                            <option value="CREDITO">Crédito</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor
                             Previsto *</label>
                         <input id="payBudgeted" type="number" step="0.01" min="0" required placeholder="0.00"
@@ -1087,7 +1231,7 @@
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                 </div>
-                <div class="grid grid-cols-3 gap-4">
+                <div class="grid grid-cols-4 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Forma de
                             Pagamento</label>
@@ -1142,6 +1286,82 @@
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
                     <button type="submit"
                         class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Definir Cronograma de Pagamento -->
+    <div class="modal-overlay" id="modalCronograma">
+        <div class="modal-box" style="max-width:720px">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 tracking-tight">Definir Cronograma de Pagamento</h2>
+                    <p id="cronogramaItemDesc" class="text-xs font-semibold text-slate-400 mt-0.5"></p>
+                </div>
+                <button type="button" onclick="document.getElementById('modalCronograma').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <form id="formCronograma" class="flex flex-col gap-5">
+                <input type="hidden" id="cronogramaNeedId" />
+                <input type="hidden" id="cronogramaCCId" />
+
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor Total do Item
+                    </p>
+                    <p id="cronogramaTotalValue" class="text-lg font-bold text-slate-900"></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
+                            Pagamento</label>
+                        <select id="cronogramaPaymentType"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            <option value="PRONTO_PAGAMENTO">Pronto Pagamento</option>
+                            <option value="CREDITO">Crédito</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Número de
+                            Parcelas</label>
+                        <div class="flex items-center gap-1 w-full">
+                            <input id="cronogramaNumParcelas" type="number" min="1" value="1"
+                                class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40" />
+                            <button type="button" onclick="gerarParcelasAutomaticas()"
+                                class="h-11 px-4 rounded-xl bg-[#0f172a] text-[#2afc8d] text-xs font-bold hover:bg-slate-800 transition-all">
+                                Gerar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                            <tr
+                                class="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                <th class="py-2 px-2 w-12 text-center">Parcela</th>
+                                <th class="py-2 px-2">Data de Pagamento *</th>
+                                <th class="py-2 px-2 w-32 text-right">Valor (%)</th>
+                                <th class="py-2 px-2 w-40 text-right">Valor (AOA) *</th>
+                                <th class="py-2 px-2 w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cronogramaParcelasBody">
+                            <!-- Linhas de parcelas inseridas via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 mt-4">
+                    <button type="button" onclick="document.getElementById('modalCronograma').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">Gerar
+                        Lançamentos</button>
                 </div>
             </form>
         </div>

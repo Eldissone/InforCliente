@@ -684,11 +684,32 @@ projectRoutes.get(
       }),
     ]);
 
+    const supplierNames = [...new Set(items.map((t) => t.supplier).filter(Boolean))];
+    const supplierMap = {};
+    if (supplierNames.length > 0) {
+      const suppliers = await prisma.supplier.findMany({
+        where: { name: { in: supplierNames } },
+        select: { name: true, nif: true, iban: true },
+      });
+      suppliers.forEach((s) => {
+        supplierMap[s.name] = s;
+      });
+    }
+
     return res.json({
       page,
       pageSize,
       total,
-      items: items.map((t) => ({ ...t, amount: String(t.amount), realizedAmount: t.realizedAmount != null ? String(t.realizedAmount) : null })),
+      items: items.map((t) => {
+        const sup = supplierMap[t.supplier] || {};
+        return {
+          ...t,
+          nif: sup.nif || null,
+          iban: sup.iban || null,
+          amount: String(t.amount),
+          realizedAmount: t.realizedAmount != null ? String(t.realizedAmount) : null,
+        };
+      }),
     });
   })
 );

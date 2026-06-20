@@ -1,4 +1,4 @@
-import { apiRequest } from "/services/api.js";
+import { apiRequest, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { getSessionUser, logout } from "/services/auth.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
@@ -387,7 +387,7 @@ async function loadNeeds() {
   const ccId = document.getElementById("needsCCFilter").value;
   const status = document.getElementById("needsStatusFilter").value;
   const tbody = document.getElementById("needsTableBody");
-  tbody.innerHTML = `<tr><td colspan="13"><div class="spinner my-8"></div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="12"><div class="spinner my-8"></div></td></tr>`;
 
   try {
     const params = new URLSearchParams({ pageSize: "100" });
@@ -395,16 +395,19 @@ async function loadNeeds() {
     if (status) params.set("status", status);
 
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
-    const items = data.items || [];
+    const items = (data.items || [])
+      .slice()
+      .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0))
+      .map((item, index) => ({ ...item, _orderNumber: index + 1 }));
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="13"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
       return;
     }
 
     const priorityLabels = { ALTA: "🔴 Alta", MEDIA: "🟡 Média", BAIXA: "🟢 Baixa" };
-    const statusLabels = { PENDING: "Pendente", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
-    const statusClasses = { PENDING: "badge-pending", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
+    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
     const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
 
     // Grouping
@@ -461,16 +464,23 @@ async function loadNeeds() {
         </tr>
       `;
 
-      html += group.items.map((n) => `
+      html += group.items.map((n) => {
+      const qty = Number(n.quantity) || 0;
+      const price = Number(n.unitPrice) || 0;
+      const hours = Number(n.hours) || 1;
+      const totalObra = qty * price * hours;
+      
+      return `
         <tr>
           <!--<td class="text-xs text-slate-500">${formatDateBR(n.date)}</td>
           <td><span class="text-xs font-bold text-slate-600">${n.costCenter?.code || "—"}</span> <span class="text-xs text-slate-400">${n.costCenter?.name || ""}</span></td>-->
+          <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg bg-slate-100 text-xs font-black text-slate-600 tabular-nums">${n._orderNumber}</span></td>
           <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
           <td class="text-center text-sm font-bold text-slate-700">${n.unit || "—"}</td>
           <td class="text-center text-sm font-bold text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
           <td class="text-right text-sm font-bold text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
           <td class="text-center text-sm font-bold text-slate-700">${n.hours ? Number(n.hours).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(n._calcTotalObra, n.costCenter?.currency || "AOA")}</td>
+          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
           <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(n._calcTotalSemana, n.costCenter?.currency || "AOA")}</td>
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${prioClasses[n.priority] || ""}">${priorityLabels[n.priority] || n.priority}</span></td>
           <td class="text-sm text-slate-500">${n.responsible || "—"}</td>
@@ -481,6 +491,12 @@ async function loadNeeds() {
               <button onclick="sendToQuotation('${n.id}', '${n.costCenterId}')" title="Cotação / Precificação"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">request_quote</span>
+              </button>
+              ` : ""}
+              ${n.status === "APPROVED" && !n.scheduled ? `
+              <button onclick="sendToCronograma('${n.id}', '${n.costCenterId}')" title="Enviar para Cronograma"
+                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-amber-100 hover:text-amber-600 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">schedule</span>
               </button>
               ` : ""}
               <button onclick="editNeed('${n.id}')" data-need-raw='${JSON.stringify(n).replace(/'/g, "&#39;")}'
@@ -494,7 +510,8 @@ async function loadNeeds() {
             </div>
           </td>
         </tr>
-      `).join("");
+      `;
+    }).join("");
     }
 
     tbody.innerHTML = html;
@@ -504,7 +521,7 @@ async function loadNeeds() {
       `${items.length} itens no Orçamento Geral`;
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="13" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
 }
 
@@ -514,7 +531,7 @@ async function loadPayments() {
   const ccId = document.getElementById("paysCCFilter").value;
   const status = document.getElementById("paysStatusFilter").value;
   const tbody = document.getElementById("paysTableBody");
-  tbody.innerHTML = `<tr><td colspan="10"><div class="spinner my-8"></div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="11"><div class="spinner my-8"></div></td></tr>`;
 
   try {
     const params = new URLSearchParams({ pageSize: "30" });
@@ -526,32 +543,44 @@ async function loadPayments() {
     const cur = selectedProject?.currency || "AOA";
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><span class="material-symbols-outlined text-3xl">receipt_long</span><p class="text-sm font-semibold">Sem lançamentos registados</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><span class="material-symbols-outlined text-3xl">receipt_long</span><p class="text-sm font-semibold">Sem lançamentos registados</p></div></td></tr>`;
       return;
     }
 
     const statusClasses = { PENDENTE: "badge-pendente", CONFIRMADO: "badge-confirmado", CANCELADO: "badge-cancelado" };
+    const typeLabels = { PRONTO_PAGAMENTO: "PP", CREDITO: "C" };
+    const typeClasses = {
+      PRONTO_PAGAMENTO: "bg-red-50 text-red-700 border border-red-200",
+      CREDITO: "bg-sky-50 text-sky-700 border border-sky-100",
+    };
 
     tbody.innerHTML = items.map((p) => {
       const cur = p.costCenter?.currency || "AOA";
       return `
-      <tr>
+      <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="${p.status === 'PENDENTE' ? 'PAYMENT' : 'VIEW'}">
         <td class="text-xs font-bold text-slate-500">${p.docNumber || "—"}</td>
         <td class="text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
         <td class="text-sm font-medium text-slate-700 max-w-[120px] truncate">${p.supplier || "—"}</td>
         <td><span class="text-xs font-bold text-blue-600">${p.costCenter?.code || "—"}</span></td>
         <td class="text-sm font-medium text-slate-900 max-w-xs truncate">${p.description}</td>
+        <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${typeClasses[p.paymentType] || "bg-slate-100 text-slate-500 border border-slate-200"}">${typeLabels[p.paymentType] || "—"}</span></td>
         <td class="text-right tabular-nums text-sm font-medium text-slate-600">${formatCurrency(p.budgetedAmount, cur)}</td>
         <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount, cur)}</td>
         <td class="text-center text-xs font-bold text-slate-500">${p.week || "—"}</td>
         <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${p.status}</span></td>
         <td class="text-center">
           <div class="flex justify-center gap-2">
-            <button onclick="editPay(${JSON.stringify(p).replace(/"/g, '&quot;')})"
+            ${p.status === "PENDENTE" ? `
+              <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT" title="Pagar lançamento"
+                class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all text-emerald-600">
+                <span class="material-symbols-outlined text-base">payments</span>
+              </button>
+            ` : ""}
+            <button onclick="event.stopPropagation(); editPay(${JSON.stringify(p).replace(/"/g, '&quot;')})" title="Editar lançamento"
               class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
               <span class="material-symbols-outlined text-base">edit</span>
             </button>
-            <button onclick="deletePay('${p.id}')"
+            <button onclick="event.stopPropagation(); deletePay('${p.id}')" title="Eliminar lançamento"
               class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
               <span class="material-symbols-outlined text-base">delete</span>
             </button>
@@ -564,7 +593,7 @@ async function loadPayments() {
       `${items.length} de ${data.total || items.length} lançamentos`;
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
 }
 
@@ -578,6 +607,7 @@ function switchTab(tabName) {
   });
   if (tabName === "necessidades") loadNeeds();
   if (tabName === "lancamentos") loadPayments();
+  if (tabName === "cronograma") loadCronograma();
   if (tabName === "pendentes") {
     currentTxStatus = "PENDING";
     txPage = 1;
@@ -586,6 +616,206 @@ function switchTab(tabName) {
   if (tabName === "historico") {
     historyPage = 1;
     loadHistory();
+  }
+}
+
+// ── Cronograma Functions ───────────────────────────────────────────────────────
+async function loadCronograma() {
+  if (!selectedProject) return;
+  const tbody = document.getElementById("cronogramaTableBody");
+  tbody.innerHTML = `<tr><td colspan="8"><div class="spinner my-8"></div></td></tr>`;
+
+  try {
+    const params = new URLSearchParams({ pageSize: "100", scheduled: "true" });
+    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
+    const items = data.items || [];
+
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span class="material-symbols-outlined text-3xl">schedule</span><p class="text-sm font-semibold">Nenhum item agendado</p></div></td></tr>`;
+      return;
+    }
+
+    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
+    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+
+    tbody.innerHTML = items.map((n) => {
+      const qty = Number(n.quantity) || 0;
+      const price = Number(n.unitPrice) || 0;
+      const hours = Number(n.hours) || 1;
+      const totalObra = qty * price * hours;
+
+      return `
+        <tr>
+          <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
+          <td class="text-center text-sm font-bold text-slate-700">${n.unit || "—"}</td>
+          <td class="text-center text-sm font-bold text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
+          <td class="text-right text-sm font-bold text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
+          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
+          <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${n.costCenter?.name || ""}</td>
+          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[n.status] || "badge-pending"}">${statusLabels[n.status] || n.status}</span></td>
+          <td class="text-center">
+            <div class="flex justify-center gap-2">
+              <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra})" title="Definir Cronograma"
+                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">calendar_month</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
+
+let currentCronogramaTotal = 0;
+
+window.openCronogramaModal = function(needId, ccId, description, total) {
+  currentCronogramaTotal = total;
+  document.getElementById("cronogramaNeedId").value = needId;
+  document.getElementById("cronogramaCCId").value = ccId;
+  document.getElementById("cronogramaItemDesc").textContent = description;
+  document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, selectedProject?.currency || "AOA");
+  document.getElementById("cronogramaNumParcelas").value = 1;
+  document.getElementById("cronogramaParcelasBody").innerHTML = "";
+  gerarParcelasAutomaticas();
+  document.getElementById("modalCronograma").classList.add("open");
+}
+
+window.gerarParcelasAutomaticas = function() {
+  const numParcelas = parseInt(document.getElementById("cronogramaNumParcelas").value) || 1;
+  const tbody = document.getElementById("cronogramaParcelasBody");
+  tbody.innerHTML = "";
+
+  const valorParcela = currentCronogramaTotal / numParcelas;
+  const percentParcela = 100 / numParcelas;
+
+  let currentDate = new Date();
+  for (let i = 1; i <= numParcelas; i++) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-slate-100';
+    tr.innerHTML = `
+      <td class="py-2 px-2 text-center text-sm font-bold text-slate-700">${i}</td>
+      <td class="py-2 px-2">
+        <input type="date" required value="${dateStr}" class="parcela-data w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
+      </td>
+      <td class="py-2 px-2 text-right">
+        <input type="number" step="0.01" min="0" max="100" value="${percentParcela.toFixed(2)}" class="parcela-percent w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 text-right">
+      </td>
+      <td class="py-2 px-2 text-right">
+        <input type="number" step="0.01" min="0" value="${valorParcela.toFixed(2)}" required class="parcela-valor w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 text-right">
+      </td>
+      <td class="py-2 px-2 text-center">
+        <button type="button" onclick="this.closest('tr').remove()" class="w-7 h-7 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors">
+          <span class="material-symbols-outlined text-[14px]">close</span>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+    // Add event listeners for percent/value changes
+    const percentInput = tr.querySelector('.parcela-percent');
+    const valorInput = tr.querySelector('.parcela-valor');
+
+    percentInput.addEventListener('input', () => {
+      const percent = parseFloat(percentInput.value) || 0;
+      valorInput.value = ((percent / 100) * currentCronogramaTotal).toFixed(2);
+    });
+
+    valorInput.addEventListener('input', () => {
+      const valor = parseFloat(valorInput.value) || 0;
+      percentInput.value = ((valor / currentCronogramaTotal) * 100).toFixed(2);
+    });
+
+    // Add 30 days for next installment
+    currentDate.setDate(currentDate.getDate() + 30);
+  }
+}
+
+async function submitCronograma(e) {
+  e.preventDefault();
+  const needId = document.getElementById("cronogramaNeedId").value;
+  const ccId = document.getElementById("cronogramaCCId").value;
+  const paymentType = document.getElementById("cronogramaPaymentType").value;
+  const parcelasRows = document.querySelectorAll("#cronogramaParcelasBody tr");
+
+  if (parcelasRows.length === 0) {
+    showToast("Adiciona pelo menos uma parcela", "error");
+    return;
+  }
+
+  try {
+    const installments = Array.from(parcelasRows).map((row, index) => {
+      const dataInput = row.querySelector('.parcela-data');
+      const valorInput = row.querySelector('.parcela-valor');
+      return {
+        paymentDate: dataInput.value,
+        amount: valorInput.value,
+        installment: index + 1
+      };
+    });
+
+    await apiRequest(`/cost-centers/${ccId}/needs/${needId}/generate-installments`, {
+      method: "POST",
+      body: { paymentType, installments }
+    });
+
+    showToast("Lançamentos gerados com sucesso!", "success");
+    document.getElementById("modalCronograma").classList.remove("open");
+    await Promise.all([loadCronograma(), loadPayments(), loadSummary()]);
+    switchTab("pendentes");
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+// ── Send to Cronograma Functions ────────────────────────────────────────────────
+window.sendToCronograma = async function(id, ccId) {
+  try {
+    showToast("A enviar para cronograma...", "info");
+    await apiRequest(`/cost-centers/${ccId}/needs/${id}/schedule`, { method: "POST" });
+    showToast("Item enviado para cronograma!", "success");
+    loadNeeds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+window.sendAllToCronograma = async function() {
+  if (!selectedProject) return;
+  try {
+    // First load all approved needs to get their IDs
+    const params = new URLSearchParams({ pageSize: "100", status: "APPROVED" });
+    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
+    const items = data.items || [];
+    
+    if (!items.length) {
+      showToast("Nenhum item aprovado para enviar", "info");
+      return;
+    }
+
+    const needIds = items.filter(n => !n.scheduled).map(n => n.id);
+    
+    if (needIds.length === 0) {
+      showToast("Todos os itens aprovados já estão no cronograma", "info");
+      return;
+    }
+
+    if (!confirm(`Enviar ${needIds.length} item(ns) para o cronograma?`)) return;
+
+    showToast("A enviar items para cronograma...", "info");
+    await apiRequest(`/cost-centers/project/${selectedProject.id}/needs/schedule-bulk`, {
+      method: "POST",
+      body: { needIds }
+    });
+
+    showToast(`${needIds.length} item(ns) enviados para cronograma!`, "success");
+    loadNeeds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
   }
 }
 
@@ -632,9 +862,10 @@ function bindEvents() {
   document.getElementById("formCC").addEventListener("submit", submitCC);
   document.getElementById("formNeed").addEventListener("submit", submitNeed);
   document.getElementById("formPay").addEventListener("submit", submitPay);
+  document.getElementById("formCronograma").addEventListener("submit", submitCronograma);
 
   // Close modals on overlay click
-  ["modalCC", "modalNeed", "modalPay", "modalLiq"].forEach((id) => {
+  ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma"].forEach((id) => {
     document.getElementById(id).addEventListener("click", (e) => {
       if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
     });
@@ -907,6 +1138,7 @@ function openPayModal(pay = null) {
   document.getElementById("paySupplier").value = pay?.supplier || "";
   document.getElementById("payDesc").value = pay?.description || "";
   document.getElementById("payCat").value = pay?.category || "MATERIAL";
+  document.getElementById("payType").value = pay?.paymentType || "PRONTO_PAGAMENTO";
   document.getElementById("payBudgeted").value = pay?.budgetedAmount || "";
   document.getElementById("payPaid").value = pay?.paidAmount || "";
   document.getElementById("payMethod").value = pay?.paymentMethod || "";
@@ -937,6 +1169,27 @@ window.deletePay = async function(id) {
   }
 };
 
+window.payCostPayment = async function(pay) {
+  if (typeof pay === "string") pay = JSON.parse(pay);
+  const paidAmount = Number(pay.paidAmount) > 0 ? Number(pay.paidAmount) : Number(pay.budgetedAmount) || 0;
+
+  if (!confirm(`Confirmar pagamento de ${formatCurrency(paidAmount, pay.costCenter?.currency || "AOA")}?`)) return;
+
+  try {
+    await apiRequest(`/cost-centers/${pay.costCenterId}/payments/${pay.id}`, {
+      method: "PATCH",
+      body: {
+        paidAmount,
+        status: "CONFIRMADO",
+      },
+    });
+    showToast("Lançamento pago com sucesso", "success");
+    await Promise.all([loadPayments(), loadSummary()]);
+  } catch (err) {
+    showToast("Erro ao pagar: " + err.message, "error");
+  }
+};
+
 async function submitPay(e) {
   e.preventDefault();
   const id = document.getElementById("payId").value;
@@ -950,6 +1203,7 @@ async function submitPay(e) {
     supplier: document.getElementById("paySupplier").value.trim() || null,
     description: document.getElementById("payDesc").value.trim(),
     category: document.getElementById("payCat").value,
+    paymentType: document.getElementById("payType").value,
     budgetedAmount: parseFloat(document.getElementById("payBudgeted").value) || 0,
     paidAmount: parseFloat(document.getElementById("payPaid").value) || 0,
     paymentMethod: document.getElementById("payMethod").value || null,
@@ -999,6 +1253,12 @@ let txPage = 1;
 let historyPage = 1;
 const TX_PAGE_SIZE = 20;
 
+function openPaymentAsideHandler(el) {
+  const data = JSON.parse(el.getAttribute('data-payload'));
+  const type = el.getAttribute('data-type');
+  openPaymentAside(data, type);
+}
+
 async function loadTransactions() {
   if (!selectedProject) return;
   const tbody = document.getElementById("txTableBody");
@@ -1047,7 +1307,7 @@ async function loadTransactions() {
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
 
       return `
-        <tr class="hover:bg-slate-50/50 transition-colors">
+        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="${!isPaid ? 'TRANSACTION' : 'VIEW'}">
           <td class="text-xs text-slate-500">${new Date(t.date).toLocaleDateString("pt-BR")}</td>
           <td class="font-bold text-slate-700">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
@@ -1064,7 +1324,7 @@ async function loadTransactions() {
           <td class="text-center">
             <div class="flex items-center justify-center gap-2">
               ${!isPaid ? `
-                <button onclick="openLiquidateModal('${t.id}', '${descStr}', ${t.amount})" title="Liquidar" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+                <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="TRANSACTION" title="Liquidar" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
                   <span class="material-symbols-outlined text-base">check_circle</span>
                 </button>
               ` : `
@@ -1123,7 +1383,7 @@ async function loadHistory() {
       const isAPrazo = t.paymentType === "A_PRAZO";
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${isAPrazo ? 'A Prazo' : 'Pronto Pag.'}</span>`;
       return `
-        <tr class="hover:bg-slate-50/50 transition-colors">
+        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="VIEW">
           <td class="text-xs text-slate-500">${new Date(t.date).toLocaleDateString("pt-BR")}</td>
           <td class="font-bold text-slate-700">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
@@ -1274,4 +1534,99 @@ window.toggleSidebar = function() {
   } else {
     floatingBtn.classList.add("hidden");
   }
+};
+
+// ── Payment Aside Logic ────────────────────────────────────────────────────────
+window.openPaymentAsideHandler = function(btn) {
+  try {
+    const payload = JSON.parse(btn.getAttribute("data-payload"));
+    const type = btn.getAttribute("data-type");
+    openPaymentAside(payload, type);
+  } catch (err) {
+    console.error("Erro ao abrir aside de pagamento:", err);
+  }
+};
+
+window.openPaymentAside = function(data, type) {
+  const aside = document.getElementById("paymentAside");
+  const overlay = document.getElementById("paymentAsideOverlay");
+
+  document.getElementById("asideDesc").textContent = data.description || "—";
+  document.getElementById("asideDate").textContent = data.paymentDate ? formatDateBR(data.paymentDate) : (data.date ? formatDateBR(data.date) : "—");
+  document.getElementById("asideSupplier").textContent = data.supplier || "—";
+  document.getElementById("asideCategory").textContent = data.category || "—";
+  
+  document.getElementById("asideNIF").textContent = data.supplierNif || data.nif || "—";
+  document.getElementById("asideIBAN").textContent = data.supplierIban || data.iban || "—";
+  
+  const supplierDetails = document.getElementById("asideSupplierDetails");
+  // Mostra sempre o bloco de detalhes (NIF/IBAN)
+  supplierDetails.classList.remove("hidden");
+
+  const amount = data.budgetedAmount || data.amount || 0;
+  const currency = data.currency || (data.costCenter ? data.costCenter.currency : "AOA");
+  document.getElementById("asideAmount").textContent = formatCurrency(amount, currency);
+
+  const proformaContainer = document.getElementById("asideProformaContainer");
+  if (data.proformaUrl) {
+    const isImage = data.proformaUrl.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i);
+    if (isImage) {
+      proformaContainer.innerHTML = `
+        <div class="relative w-full h-full flex flex-col items-center justify-center">
+          <img src="${getAssetUrl(data.proformaUrl)}" alt="Proforma" class="w-full h-auto object-contain max-h-full rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')">
+          <button type="button" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Imagem">
+            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+          </button>
+        </div>
+      `;
+    } else {
+      proformaContainer.innerHTML = `
+        <div class="relative w-full h-full min-h-[300px]">
+          <iframe src="${getAssetUrl(data.proformaUrl)}" class="w-full h-full rounded-lg shadow-sm border border-slate-200"></iframe>
+          <button type="button" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Documento">
+            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+          </button>
+        </div>
+      `;
+    }
+  } else {
+    proformaContainer.innerHTML = `
+      <div class="py-8 text-center text-slate-300">
+        <span class="material-symbols-outlined text-4xl mb-2">description</span>
+        <p class="text-xs font-semibold text-slate-500">Sem documento disponível.</p>
+      </div>
+    `;
+  }
+
+  const actionBtn = document.getElementById("asideActionBtn");
+  
+  if (type === 'VIEW') {
+    actionBtn.classList.add("hidden");
+  } else {
+    actionBtn.classList.remove("hidden");
+    actionBtn.onclick = () => {
+      if (type === 'PAYMENT') {
+        payCostPayment(data);
+      } else if (type === 'TRANSACTION') {
+        const descStr = data.description ? data.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
+        openLiquidateModal(data.id, descStr, amount);
+      }
+      closePaymentAside();
+    };
+  }
+
+  overlay.classList.remove("hidden");
+  // Força reflow
+  void overlay.offsetWidth;
+  overlay.classList.remove("opacity-0");
+  aside.classList.remove("translate-x-full");
+};
+
+window.closePaymentAside = function() {
+  const aside = document.getElementById("paymentAside");
+  const overlay = document.getElementById("paymentAsideOverlay");
+  
+  aside.classList.add("translate-x-full");
+  overlay.classList.add("opacity-0");
+  setTimeout(() => overlay.classList.add("hidden"), 300);
 };
