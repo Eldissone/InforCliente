@@ -644,6 +644,14 @@ async function loadCronograma() {
       const hours = Number(n.hours) || 1;
       const totalObra = qty * price * hours;
 
+      let badgeLabel = statusLabels[n.status] || n.status;
+      let badgeClass = statusClasses[n.status] || "badge-pending";
+      
+      if (n.scheduled && n._count && n._count.payments > 0 && n.status !== "PAID") {
+        badgeLabel = "Aguardar pagamento";
+        badgeClass = "bg-amber-100 text-amber-700";
+      }
+
       return `
         <tr>
           <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
@@ -652,10 +660,10 @@ async function loadCronograma() {
           <td class="text-right text-sm font-bold text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
           <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
           <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${n.costCenter?.name || ""}</td>
-          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[n.status] || "badge-pending"}">${statusLabels[n.status] || n.status}</span></td>
+          <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${badgeClass}">${badgeLabel}</span></td>
           <td class="text-center">
             <div class="flex justify-center gap-2">
-              <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra})" title="Definir Cronograma"
+              <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra}, '${n.costCenter?.currency || 'AOA'}')" title="Definir Cronograma"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">calendar_month</span>
               </button>
@@ -672,12 +680,12 @@ async function loadCronograma() {
 
 let currentCronogramaTotal = 0;
 
-window.openCronogramaModal = function(needId, ccId, description, total) {
+window.openCronogramaModal = function(needId, ccId, description, total, currency = "AOA") {
   currentCronogramaTotal = total;
   document.getElementById("cronogramaNeedId").value = needId;
   document.getElementById("cronogramaCCId").value = ccId;
   document.getElementById("cronogramaItemDesc").textContent = description;
-  document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, selectedProject?.currency || "AOA");
+  document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, currency);
   document.getElementById("cronogramaNumParcelas").value = 1;
   document.getElementById("cronogramaParcelasBody").innerHTML = "";
   gerarParcelasAutomaticas();
@@ -770,6 +778,134 @@ async function submitCronograma(e) {
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
+}
+
+
+
+// ── Gantt Chart Logic ──────────────────────────────────────────────────────────
+let currentGanttDate = new Date();
+let currentGanttPayments = [];
+
+window.toggleCronogramaView = function(view) {
+  const btnList = document.getElementById("btnViewList");
+  const btnGantt = document.getElementById("btnViewGantt");
+  const listContainer = document.getElementById("cronogramaListContainer");
+  const ganttContainer = document.getElementById("cronogramaGanttContainer");
+
+  if (view === "list") {
+    btnList.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm";
+    btnGantt.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900";
+    listContainer.classList.remove("hidden");
+    ganttContainer.classList.add("hidden");
+  } else {
+    btnGantt.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm";
+    btnList.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900";
+    listContainer.classList.add("hidden");
+    ganttContainer.classList.remove("hidden");
+    loadGanttData();
+  }
+};
+
+window.changeGanttMonth = function(delta) {
+  currentGanttDate.setMonth(currentGanttDate.getMonth() + delta);
+  renderGanttChart();
+};
+
+async function loadGanttData() {
+  if (!selectedProject) return;
+  const ganttBody = document.getElementById("ganttChartBody");
+  ganttBody.innerHTML = `<div class="p-8 text-center"><div class="spinner mx-auto mb-2"></div><p class="text-xs text-slate-400 font-bold">A carregar cronograma...</p></div>`;
+  
+  try {
+    // Busca todos os pagamentos para construir o gantt (ou podiamos filtrar por mês se tivéssemos essa query)
+    const params = new URLSearchParams({ pageSize: "500" });
+    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments?${params}`);
+    currentGanttPayments = data.items || [];
+    renderGanttChart();
+  } catch (err) {
+    ganttBody.innerHTML = `<div class="p-8 text-center text-red-500 text-sm font-bold">Erro: ${err.message}</div>`;
+  }
+}
+
+function renderGanttChart() {
+  const ganttBody = document.getElementById("ganttChartBody");
+  const monthLabel = document.getElementById("ganttMonthLabel");
+  
+  const year = currentGanttDate.getFullYear();
+  const month = currentGanttDate.getMonth();
+  
+  // Nomes dos meses
+  const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  if(monthLabel) monthLabel.textContent = `${monthNames[month]} ${year}`;
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  // Filtra pagamentos do mês atual
+  const paymentsThisMonth = currentGanttPayments.filter(p => {
+    const d = new Date(p.paymentDate);
+    return d.getFullYear() === year && d.getMonth() === month;
+  }).sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate));
+
+  if (paymentsThisMonth.length === 0) {
+    ganttBody.innerHTML = `<div class="py-16 text-center flex flex-col items-center justify-center bg-slate-50 flex-1"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">event_busy</span><p class="text-sm font-bold text-slate-500">Sem pagamentos agendados para este mês.</p></div>`;
+    return;
+  }
+
+  // HEADER: Dias do Mês
+  let daysHeaderHtml = `<div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-10 text-[10px] font-bold text-slate-500">`;
+  daysHeaderHtml += `<div class="w-64 shrink-0 px-4 py-2 border-r border-slate-200 flex items-center uppercase tracking-wide">Descrição do Lançamento</div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isWeekend = [0, 6].includes(new Date(year, month, d).getDay());
+    const bgClass = isWeekend ? 'bg-slate-100' : '';
+    daysHeaderHtml += `<div class="flex-1 min-w-[28px] border-r border-slate-200 py-2 text-center ${bgClass}">${d}</div>`;
+  }
+  daysHeaderHtml += `</div>`;
+
+  // BODY: Linhas de pagamentos
+  let rowsHtml = `<div class="flex-1 overflow-y-auto custom-scroll flex flex-col relative bg-white pb-4">`;
+  
+  // Grid Lines (Background)
+  rowsHtml += `<div class="absolute inset-0 flex pointer-events-none">`;
+  rowsHtml += `<div class="w-64 shrink-0 border-r border-slate-200 bg-white z-10"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isWeekend = [0, 6].includes(new Date(year, month, d).getDay());
+    const bgClass = isWeekend ? 'bg-slate-50/50' : 'bg-transparent';
+    rowsHtml += `<div class="flex-1 min-w-[28px] border-r border-slate-100 ${bgClass}"></div>`;
+  }
+  rowsHtml += `</div>`;
+
+  // Rows Content
+  paymentsThisMonth.forEach(p => {
+    const d = new Date(p.paymentDate);
+    const day = d.getDate();
+    
+    let colorClass = "bg-blue-400 border-blue-500 shadow-blue-400/20"; // PENDENTE
+    if (p.status === "PAID") colorClass = "bg-emerald-400 border-emerald-500 shadow-emerald-400/20";
+    else if (d < new Date() && p.status !== "PAID") colorClass = "bg-red-400 border-red-500 shadow-red-400/20"; // ATRASADO
+
+    const pctLeft = ((day - 1) / daysInMonth) * 100;
+    
+    rowsHtml += `
+      <div class="flex items-center relative z-20 group hover:bg-slate-50/50 border-b border-slate-50 transition-colors h-12">
+        <div class="w-64 shrink-0 px-4 py-3 flex flex-col justify-center bg-white border-r border-slate-200 z-10">
+          <p class="text-xs font-bold text-slate-800 truncate" title="${p.description}">${p.description}</p>
+          <p class="text-[10px] text-slate-400 font-semibold truncate">${p.supplier || 'Sem fornecedor'} · ${formatCurrency(p.budgetedAmount, "AOA")}</p>
+        </div>
+        <div class="flex-1 relative h-full">
+          <!-- Marker/Barra do Gantt -->
+          <div class="absolute top-1/2 -translate-y-1/2 h-6 rounded-md shadow-sm border text-[10px] font-bold text-white flex items-center justify-center overflow-hidden cursor-pointer hover:-translate-y-2 transition-transform duration-300 z-30 group-hover:z-40 ${colorClass}" 
+               style="left: calc(${pctLeft}% + 4px); width: calc(${100 / daysInMonth}% - 8px); min-width: 20px;" 
+               title="${p.description}\nData: ${d.toLocaleDateString('pt-PT')}\nValor: ${formatCurrency(p.budgetedAmount, "AOA")}"
+               onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT">
+               ${p.status === 'PAID' ? '<span class="material-symbols-outlined text-[12px]">check</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  rowsHtml += `</div>`;
+
+  ganttBody.innerHTML = daysHeaderHtml + rowsHtml;
 }
 
 // ── Send to Cronograma Functions ────────────────────────────────────────────────

@@ -298,6 +298,7 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
+          _count: { select: { payments: true } },
         },
       }),
     ]);

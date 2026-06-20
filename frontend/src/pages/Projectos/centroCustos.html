@@ -706,8 +706,12 @@
                                 <h3 class="font-bold text-slate-900">Cronograma de Pagamentos</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Itens aprovados agendados para pagamento</p>
                             </div>
+                            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                <button id="btnViewList" class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm" onclick="toggleCronogramaView('list')"><span class="material-symbols-outlined text-base">list</span> Lista</button>
+                                <button id="btnViewGantt" class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900" onclick="toggleCronogramaView('gantt')"><span class="material-symbols-outlined text-base">view_timeline</span> Gráfico</button>
+                            </div>
                         </div>
-                        <div class="overflow-x-auto custom-scroll">
+                        <div id="cronogramaListContainer" class="overflow-x-auto custom-scroll">
                             <table class="w-full cc-table">
                                 <thead>
                                     <tr>
@@ -729,6 +733,25 @@
                                     </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        </div>
+                        <div id="cronogramaGanttContainer" class="hidden overflow-x-auto custom-scroll p-6 bg-slate-50 min-h-[400px]">
+                            <div class="flex items-center justify-between mb-6">
+                                <div class="flex items-center gap-2">
+                                    <button onclick="changeGanttMonth(-1)" class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+                                    <span id="ganttMonthLabel" class="text-sm font-black text-slate-800 w-40 text-center uppercase tracking-wide">Mês</span>
+                                    <button onclick="changeGanttMonth(1)" class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div> Pago</span>
+                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div> Pendente</span>
+                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div> Atrasado</span>
+                                </div>
+                            </div>
+                            <div id="ganttChartBody" class="w-full min-w-[800px] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
+                                <!-- Gantt rendered by JS -->
+                                <div class="p-8 text-center text-slate-400 text-sm font-medium">A carregar cronograma...</div>
+                            </div>
                         </div>
                     </div>
                 </div>
