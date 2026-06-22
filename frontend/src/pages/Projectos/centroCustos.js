@@ -439,10 +439,10 @@ async function loadNeeds() {
       totalSemanaGeral += totalSemana;
     });
 
-    const currency = selectedProject?.currency || "AOA";
+    const currency = items.length > 0 ? (items[0].costCenter?.currency || "AOA") : "AOA";
     
     let html = `
-      <tr class="bg-emerald-600">
+      <tr class="bg-emerald-600" style="background-color: #059669 !important;">
         <td class="font-bold text-white text-sm" colspan="2">Total Geral</td>
         <td colspan="4"></td>
         <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
@@ -880,8 +880,8 @@ function renderGanttChart() {
     const day = d.getDate();
     
     let colorClass = "bg-blue-400 border-blue-500 shadow-blue-400/20"; // PENDENTE
-    if (p.status === "PAID") colorClass = "bg-emerald-400 border-emerald-500 shadow-emerald-400/20";
-    else if (d < new Date() && p.status !== "PAID") colorClass = "bg-red-400 border-red-500 shadow-red-400/20"; // ATRASADO
+    if (p.status === "CONFIRMADO") colorClass = "bg-emerald-400 border-emerald-500 shadow-emerald-400/20";
+    else if (d < new Date() && p.status !== "CONFIRMADO") colorClass = "bg-red-400 border-red-500 shadow-red-400/20"; // ATRASADO
 
     const pctLeft = ((day - 1) / daysInMonth) * 100;
     
@@ -897,7 +897,7 @@ function renderGanttChart() {
                style="left: calc(${pctLeft}% + 4px); width: calc(${100 / daysInMonth}% - 8px); min-width: 20px;" 
                title="${p.description}\nData: ${d.toLocaleDateString('pt-PT')}\nValor: ${formatCurrency(p.budgetedAmount, "AOA")}"
                onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT">
-               ${p.status === 'PAID' ? '<span class="material-symbols-outlined text-[12px]">check</span>' : ''}
+               ${p.status === 'CONFIRMADO' ? '<span class="material-symbols-outlined text-[12px]">check</span>' : ''}
           </div>
         </div>
       </div>
