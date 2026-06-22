@@ -36,6 +36,7 @@ supplierRoutes.post(
         address: z.string().optional().nullable(),
         category: z.string().optional().nullable(),
         iban: z.string().optional().nullable(),
+        paymentTerm: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -60,6 +61,7 @@ supplierRoutes.patch(
         address: z.string().optional().nullable(),
         category: z.string().optional().nullable(),
         iban: z.string().optional().nullable(),
+        paymentTerm: z.string().optional().nullable(),
         active: z.boolean().optional(),
       })
       .parse(req.body);

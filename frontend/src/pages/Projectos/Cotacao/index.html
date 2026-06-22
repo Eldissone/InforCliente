@@ -157,13 +157,15 @@
                 <nav class="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                     <a href="../../Projectos/ProjectGeral.html" class="hover:text-slate-600 transition-colors">Obras</a>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <a href="#" id="breadcrumbProject" class="hover:text-slate-600 transition-colors">Obra
-                        Selecionada</a>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="text-[#2afc8d]">Cotação & Precificação</span>
                 </nav>
-                <h1 id="selectedProjName"
-                    class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">Cotação</h1>
+                <div class="flex items-center gap-4 mt-1 flex-wrap">
+                    <h1 id="selectedProjName"
+                        class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">Cotação</h1>
+                    <select id="projectSelector" class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer hidden max-w-[300px]">
+                        <option value="">Selecionar Obra...</option>
+                    </select>
+                </div>
             </div>
             <div class="flex gap-3">
                 <a href="#" id="btnBackToBudget"
@@ -235,6 +237,7 @@
                                 <th class="py-4 px-4 w-32">NIF</th>
                                 <th class="py-4 px-4 w-48">Contacto / Email</th>
                                 <th class="py-4 px-4 w-32">Categoria</th>
+                                <th class="py-4 px-4 text-center w-24">Mod. Pag.</th>
                                 <th class="py-4 px-4 text-center w-24">Produtos</th>
                                 <th class="py-4 px-4 text-center w-24">Estado</th>
                                 <th class="py-4 px-4 text-center w-32"></th>
@@ -242,7 +245,7 @@
                         </thead>
                         <tbody id="suppliersTableBody" class="text-sm">
                             <tr>
-                                <td colspan="7">
+                                <td colspan="8">
                                     <div class="spinner my-8"></div>
                                 </td>
                             </tr>
@@ -393,11 +396,22 @@
                     <input type="email" id="supplierEmail"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria (Ex:
-                        Materiais, Serviços)</label>
-                    <input type="text" id="supplierCategory"
-                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria (Ex:
+                            Materiais)</label>
+                        <input type="text" id="supplierCategory"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Modalidade Pag.</label>
+                        <select id="supplierPaymentTerm"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                            <option value="">Selecionar...</option>
+                            <option value="PRONTO_PAGAMENTO">PP - Pronto Pagamento</option>
+                            <option value="CREDITO">C - Crédito</option>
+                        </select>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">IBAN</label>

@@ -5,6 +5,7 @@ import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 let currentProjectId = null;
 let currentNeeds = [];
 let currentSuppliers = [];
+let allProjects = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
   const ok = await guardPageAccess("obras", "view");
@@ -16,14 +17,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const urlParams = new URLSearchParams(window.location.search);
   currentProjectId = urlParams.get("project") || localStorage.getItem("InfoCliente.currentProjectId");
 
+  await loadProjects();
+
   if (!currentProjectId) {
     // Se não tiver obra, mostra apenas a gestão de fornecedores
     const pendentesBtn = document.querySelector('[data-tab="pendentes"]');
     if(pendentesBtn) pendentesBtn.style.display = "none";
     
-    document.getElementById("breadcrumbProject").textContent = "Geral";
-    const btnBack = document.getElementById("btnBackToBudget");
-    if(btnBack) btnBack.style.display = "none";
+    document.getElementById("btnBackToBudget").style.display = "none";
     document.getElementById("selectedProjName").textContent = "Fornecedores";
     
     initTabs();
@@ -38,12 +39,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   initTabs();
   initEvents();
 
-  // Carrega nome do projecto (opcional se houver endpoint, ou apenas mantém "Obra Selecionada")
   document.getElementById("btnBackToBudget").href = `../centroCustos.html?project=${currentProjectId}`;
 
   await loadSuppliers();
   await loadNeeds();
 });
+
+// ── Load Projects ──────────────────────────────────────────────────────────────
+async function loadProjects() {
+  try {
+    const data = await apiRequest("/projects?pageSize=100&sort=updatedAt_desc");
+    allProjects = data.items || [];
+    const selector = document.getElementById("projectSelector");
+    
+    if (selector) {
+      selector.innerHTML = '<option value="">Selecionar Obra...</option>' + 
+        allProjects.map(p => `<option value="${p.id}" ${p.id === currentProjectId ? 'selected' : ''}>${p.name}</option>`).join("");
+      
+      selector.classList.remove("hidden");
+      
+      selector.addEventListener("change", (e) => {
+        const id = e.target.value;
+        if (id) {
+          localStorage.setItem("InfoCliente.currentProjectId", id);
+          window.location.href = `?project=${id}`;
+        } else {
+          localStorage.removeItem("InfoCliente.currentProjectId");
+          window.location.href = `?`;
+        }
+      });
+      
+      // Update selected project name if we have a currentProjectId
+      if (currentProjectId) {
+        const p = allProjects.find(x => x.id === currentProjectId);
+        if (p) {
+          document.getElementById("selectedProjName").textContent = p.name;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro a carregar obras:", err);
+  }
+}
 
 // ── Nav Bindings ───────────────────────────────────────────────────────────────
 function bootNav(map) {
@@ -178,9 +215,14 @@ function renderSuppliers() {
   const tbody = document.getElementById("suppliersTableBody");
   
   if (currentSuppliers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
     return;
   }
+
+  const paymentTermLabels = {
+    "PRONTO_PAGAMENTO": "Pronto Pagamento",
+    "CREDITO": "Crédito"
+  };
 
   tbody.innerHTML = currentSuppliers.map(s => `
     <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
@@ -191,6 +233,7 @@ function renderSuppliers() {
         <div class="text-xs text-slate-400">${s.email || ""}</div>
       </td>
       <td class="py-3 px-4 text-sm text-slate-600">${s.category || "—"}</td>
+      <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—"}</td>
       <td class="py-3 px-4 text-center font-bold text-slate-700">${s._count?.products || 0}</td>
       <td class="py-3 px-4 text-center">
         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
@@ -225,6 +268,7 @@ function openSupplierModal(supplier = null) {
   document.getElementById("supplierPhone").value = supplier?.phone || "";
   document.getElementById("supplierEmail").value = supplier?.email || "";
   document.getElementById("supplierCategory").value = supplier?.category || "";
+  document.getElementById("supplierPaymentTerm").value = supplier?.paymentTerm || "";
   const ibanInput = document.getElementById("supplierIban");
   if (ibanInput) ibanInput.value = supplier?.iban || "";
   document.getElementById("modalSupplier").classList.add("open");
@@ -257,6 +301,7 @@ async function submitSupplier(e) {
     phone: document.getElementById("supplierPhone").value.trim() || null,
     email: document.getElementById("supplierEmail").value.trim() || null,
     category: document.getElementById("supplierCategory").value.trim() || null,
+    paymentTerm: document.getElementById("supplierPaymentTerm").value || null,
   };
   const ibanInput = document.getElementById("supplierIban");
   if (ibanInput) body.iban = ibanInput.value.trim() || null;
@@ -420,7 +465,12 @@ function updateQuoteSupplierSelect() {
   const sel = document.getElementById("quoteSupplier");
   if (!sel) return;
   sel.innerHTML = `<option value="">Selecionar...</option>` +
-    currentSuppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+    currentSuppliers.map(s => {
+      let termStr = "";
+      if (s.paymentTerm === "CREDITO") termStr = " (Crédito)";
+      else if (s.paymentTerm === "PRONTO_PAGAMENTO") termStr = " (PP)";
+      return `<option value="${s.id}">${s.name}${termStr}</option>`;
+    }).join("");
 }
 
 async function openQuoteModal(needId) {
@@ -522,13 +572,19 @@ async function findAndSuggestProducts(searchTerm) {
     });
 
     if (allMatches.length > 0) {
-      list.innerHTML = allMatches.map(m => `
+      list.innerHTML = allMatches.map(m => {
+        let termBadge = "";
+        if (m.supplier.paymentTerm === "CREDITO") termBadge = `<span class="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 w-max inline-block">Crédito</span>`;
+        else if (m.supplier.paymentTerm === "PRONTO_PAGAMENTO") termBadge = `<span class="mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 w-max inline-block">PP</span>`;
+        
+        return `
         <div class="bg-white p-3 rounded-xl border border-blue-100 flex flex-col gap-2 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group" 
              onclick="autoFillSuggestion('${m.supplier.id}', '${m.product.id}', '${m.product.price}', '${m.product.currency}')">
           <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
+            <div class="min-w-0 flex flex-col">
               <p class="text-sm font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors">${m.product.name}</p>
-              <p class="text-[10px] text-slate-500 font-medium truncate mt-0.5"><span class="material-symbols-outlined text-[10px] align-middle mr-0.5">storefront</span>${m.supplier.name}</p>
+              <p class="text-[10px] text-slate-500 font-medium truncate mt-0.5 flex items-center"><span class="material-symbols-outlined text-[10px] mr-0.5">storefront</span>${m.supplier.name}</p>
+              ${termBadge}
             </div>
             <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 group-hover:text-white transition-colors">
               <span class="material-symbols-outlined text-[14px]">add</span>
@@ -542,7 +598,7 @@ async function findAndSuggestProducts(searchTerm) {
             </div>
           </div>
         </div>
-      `).join("");
+      `}).join("");
       box.classList.remove("hidden");
     } else {
       box.classList.add("hidden");
@@ -606,12 +662,19 @@ async function loadQuotesForNeed(needId, isApproved) {
         : ``;
 
       const supplierProductName = q.supplierProduct?.name ? `(${q.supplierProduct.name})` : "";
+      
+      let paymentTermBadge = "";
+      if (q.supplier?.paymentTerm === "CREDITO") {
+        paymentTermBadge = `<span class="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">Crédito</span>`;
+      } else if (q.supplier?.paymentTerm === "PRONTO_PAGAMENTO") {
+        paymentTermBadge = `<span class="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">PP</span>`;
+      }
 
       return `
         <div class="bg-white p-4 rounded-xl border ${q.selected ? 'border-[#2afc8d] shadow-sm shadow-[#2afc8d]/20' : 'border-slate-200'} flex items-center justify-between gap-4">
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <h4 class="font-bold text-slate-800 text-sm">${q.supplier?.name} <span class="text-xs text-slate-400 font-medium">${supplierProductName}</span></h4>
+              <h4 class="font-bold text-slate-800 text-sm">${q.supplier?.name} ${paymentTermBadge} <span class="text-xs text-slate-400 font-medium">${supplierProductName}</span></h4>
               ${badge}
             </div>
             <div class="text-xs text-slate-500">${q.quantity} uni × ${price} ${q.currency}</div>
