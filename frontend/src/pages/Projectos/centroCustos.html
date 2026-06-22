@@ -352,7 +352,7 @@
     <div class="flex flex-1 pt-16 max-w-[1500px] mx-auto w-full px-4 md:px-8 gap-6 mt-10 mb-12 relative">
 
         <!-- Floating Button to Open Sidebar -->
-        <button id="floatingToggleBtn" onclick="toggleSidebar()"
+        <button id="floatingToggleBtn" onclick="toggleSidebar()" aria-label="Abrir Menu" title="Abrir Menu"
             class="fixed left-4 top-24 z-40 hidden w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 hover:text-[#2afc8d] shadow-md transition-all">
             <span class="material-symbols-outlined text-[20px]">menu</span>
         </button>
@@ -364,7 +364,7 @@
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Obras</h2>
-                        <button onclick="toggleSidebar()"
+                        <button onclick="toggleSidebar()" aria-label="Ocultar Menu"
                             class="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
                             title="Ocultar Menu">
                             <span class="material-symbols-outlined text-[18px]">keyboard_double_arrow_left</span>
@@ -391,7 +391,7 @@
             <!-- ── Nenhuma obra selecionada ── -->
             <div id="noProjectState" class="empty-state">
                 <div class="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-4xl text-slate-400">account_balance</span>
+                    <span class="material-symbols-outlined text-4xl text-slate-400">construction</span>
                 </div>
                 <h3 class="text-lg font-bold text-slate-700">Seleciona uma Obra</h3>
                 <p class="text-sm text-slate-400 max-w-xs">Escolhe uma obra na lista à esquerda para gerir os seus
@@ -438,14 +438,16 @@
                 <!-- KPI Row -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpiRow">
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsão de Pagamentos
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsão de
+                            Pagamentos
                         </p>
                         <div id="kpiPrevisto" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pagamentos Realizado</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pagamentos
+                            Realizados</p>
                         <div id="kpiPago" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
@@ -494,8 +496,6 @@
                         <span class="material-symbols-outlined text-base align-middle mr-1">history</span>Histórico
                     </button>
                 </div>
-                <!-- <span id="pendentesCount"
-                    class="ml-1 text-[10px] font-black bg-amber-400 text-white px-1.5 py-0.5 rounded-full hidden"></span> -->
 
                 <!-- ═══════════ TAB: DASHBOARD ═══════════ -->
                 <div class="cc-tab-panel active" id="tab-dashboard">
@@ -532,8 +532,7 @@
                             <div class="flex justify-between items-center mb-5">
                                 <div>
                                     <h3 class="font-bold text-slate-900">Pagamentos por Semana</h3>
-                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana de obra
-                                        (SEM 0–10)</p>
+                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana de obra</p>
                                 </div>
                                 <span class="material-symbols-outlined text-slate-300">calendar_month</span>
                             </div>
@@ -576,7 +575,7 @@
                                         <th class="text-right">Previsto</th>
                                         <th class="text-right">Pago</th>
                                         <th class="text-right">Saldo</th>
-                                        <th class="text-right">Desvio</th>
+                                        <th class="text-right">% Desvio</th>
                                         <th class="text-center">% Exec.</th>
                                         <th class="text-center">Status</th>
                                     </tr>
@@ -632,30 +631,31 @@
                             <div class="flex items-center gap-3 flex-wrap">
                                 <select id="needsCCFilter"
                                     class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todos os CCs</option>
+                                    <option value="">Todos CCs</option>
                                 </select>
                                 <select id="needsStatusFilter"
                                     class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todos os Status</option>
+                                    <option value="">Todos Status</option>
                                     <option value="PENDING">Pendente</option>
+                                    <option value="IN_QUOTATION">Em Cotação</option>
                                     <option value="APPROVED">Aprovado</option>
                                     <option value="REJECTED">Rejeitado</option>
                                     <option value="PAID">Pago</option>
                                 </select>
                                 <button onclick="sendAllToQuotation()"
                                     title="Enviar todos os itens pendentes para Cotação"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-[#2afc8d] text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
                                     <span class="material-symbols-outlined text-base">fact_check</span>
-                                    Precificar Tudo
+                                    Precificar
                                 </button>
                                 <button onclick="sendAllToCronograma()"
                                     title="Enviar todos os itens aprovados para Cronograma"
-                                    class="h-9 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20">
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
                                     <span class="material-symbols-outlined text-base">schedule</span>
-                                    Agendar Todos
+                                    Agendar
                                 </button>
                                 <button id="newNeedBtn"
-                                    class="h-9 px-4 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-2 hover:bg-amber-600 transition-all shadow-md shadow-amber-500/20">
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
                                     <span class="material-symbols-outlined text-base">add</span>
                                     Criar
                                 </button>
@@ -674,7 +674,7 @@
                                         <th class="text-right">P. Unit.</th>
                                         <th class="text-center">Hrs</th>
                                         <th class="text-right">Total Obra</th>
-                                        <th class="text-right">Total / Semanas</th>
+                                        <th class="text-right">Total / Semana</th>
                                         <th class="text-center">Prioridade</th>
                                         <th class="text-left">Responsável</th>
                                         <th class="text-center">Status</th>
@@ -707,243 +707,262 @@
                                 <p class="text-xs text-slate-400 mt-0.5">Itens aprovados agendados para pagamento</p>
                             </div>
                             <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-                                <button id="btnViewList" class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm" onclick="toggleCronogramaView('list')"><span class="material-symbols-outlined text-base">list</span> Lista</button>
-                                <button id="btnViewGantt" class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900" onclick="toggleCronogramaView('gantt')"><span class="material-symbols-outlined text-base">view_timeline</span> Gráfico</button>
+                                <button id="btnViewList"
+                                    class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm"
+                                    onclick="toggleCronogramaView('list')"><span
+                                        class="material-symbols-outlined text-base">list</span> Lista</button>
+                                <button id="btnViewGantt"
+                                    class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900"
+                                    onclick="toggleCronogramaView('gantt')"><span
+                                        class="material-symbols-outlined text-base">view_timeline</span>
+                                    Gráfico</button>
                             </div>
                         </div>
                         <div id="cronogramaListContainer" class="overflow-x-auto custom-scroll">
                             <table class="w-full cc-table">
                                 <thead>
                                     <tr>
+                                        <th class="text-left w-28">Data</th>
                                         <th class="text-left">Descrição</th>
-                                        <th class="text-center">UN</th>
-                                        <th class="text-center">Qtde</th>
-                                        <th class="text-right">P. Unit.</th>
-                                        <th class="text-right">Total Obra</th>
                                         <th class="text-left">CC</th>
+                                        <th class="text-right">Valor</th>
                                         <th class="text-center">Status</th>
                                         <th class="text-center">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="cronogramaTableBody">
                                     <tr>
-                                        <td colspan="8">
+                                        <td colspan="6">
                                             <div class="spinner my-8"></div>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        </div>
-                        <div id="cronogramaGanttContainer" class="hidden overflow-x-auto custom-scroll p-6 bg-slate-50 min-h-[400px]">
-                            <div class="flex items-center justify-between mb-6">
-                                <div class="flex items-center gap-2">
-                                    <button onclick="changeGanttMonth(-1)" class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
-                                    <span id="ganttMonthLabel" class="text-sm font-black text-slate-800 w-40 text-center uppercase tracking-wide">Mês</span>
-                                    <button onclick="changeGanttMonth(1)" class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
-                                </div>
-                                <div class="flex items-center gap-4">
-                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div> Pago</span>
-                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div> Pendente</span>
-                                    <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div> Atrasado</span>
-                                </div>
+                    </div>
+                    <div id="cronogramaGanttContainer"
+                        class="hidden overflow-x-auto custom-scroll p-6 bg-slate-50 min-h-[400px]">
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center gap-2">
+                                <button onclick="changeGanttMonth(-1)"
+                                    class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span
+                                        class="material-symbols-outlined text-sm">chevron_left</span></button>
+                                <span id="ganttMonthLabel"
+                                    class="text-sm font-black text-slate-800 w-40 text-center uppercase tracking-wide">Mês</span>
+                                <button onclick="changeGanttMonth(1)"
+                                    class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-all text-slate-600"><span
+                                        class="material-symbols-outlined text-sm">chevron_right</span></button>
                             </div>
-                            <div id="ganttChartBody" class="w-full min-w-[800px] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
-                                <!-- Gantt rendered by JS -->
-                                <div class="p-8 text-center text-slate-400 text-sm font-medium">A carregar cronograma...</div>
+                            <div class="flex items-center gap-4">
+                                <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div> Pago
+                                </span>
+                                <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-blue-400"></div> Pendente
+                                </span>
+                                <span class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-red-400"></div> Atrasado
+                                </span>
+                            </div>
+                        </div>
+                        <div id="ganttChartBody"
+                            class="w-full min-w-[800px] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
+                            <!-- Gantt rendered by JS -->
+                            <div class="p-8 text-center text-slate-400 text-sm font-medium">A carregar cronograma...
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- ═══════════ TAB: LANÇAMENTOS ═══════════ -->
-                <div class="cc-tab-panel" id="tab-lancamentos">
-                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div
-                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div>
-                                <h3 class="font-bold text-slate-900">Lançamentos de Pagamento</h3>
-                                <p class="text-xs text-slate-400 mt-0.5">Registo financeiro por centro de custo</p>
-                            </div>
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <select id="paysCCFilter"
-                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todos os CCs</option>
-                                </select>
-                                <select id="paysStatusFilter"
-                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todos os Status</option>
-                                    <option value="PENDENTE">Pendente</option>
-                                    <option value="CONFIRMADO">Confirmado</option>
-                                    <option value="CANCELADO">Cancelado</option>
-                                </select>
-                                <button id="newPayBtn"
-                                    class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
-                                    <span class="material-symbols-outlined text-base">add</span>
-                                    Novo Lançamento
-                                </button>
-                            </div>
+            <!-- ═══════════ TAB: LANÇAMENTOS ═══════════ -->
+            <div class="cc-tab-panel" id="tab-lancamentos">
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div
+                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Lançamentos de Pagamento</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Registo financeiro por centro de custo</p>
                         </div>
-                        <div class="overflow-x-auto custom-scroll">
-                            <table class="w-full cc-table">
-                                <thead>
-                                    <tr>
-                                        <th class="text-left">Doc.</th>
-                                        <th class="text-left">Data</th>
-                                        <th class="text-left">Fornecedor</th>
-                                        <th class="text-left">CC</th>
-                                        <th class="text-left">Descrição</th>
-                                        <th class="text-left">Tipo</th>
-                                        <th class="text-right">Previsto</th>
-                                        <th class="text-right">Pago</th>
-                                        <th class="text-center">Semana</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="paysTableBody">
-                                    <tr>
-                                        <td colspan="11">
-                                            <div class="spinner my-8"></div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <select id="paysCCFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todos os CCs</option>
+                            </select>
+                            <select id="paysStatusFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todos os Status</option>
+                                <option value="PENDENTE">Pendente</option>
+                                <option value="CONFIRMADO">Confirmado</option>
+                                <option value="CANCELADO">Cancelado</option>
+                            </select>
+                            <button id="newPayBtn"
+                                class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
+                                <span class="material-symbols-outlined text-base">add</span>
+                                Novo Lançamento
+                            </button>
                         </div>
-                        <div id="paysPagination"
-                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
-                        </div>
+                    </div>
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="w-full cc-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Doc.</th>
+                                    <th class="text-left">Data</th>
+                                    <th class="text-left">Fornecedor</th>
+                                    <th class="text-left">CC</th>
+                                    <th class="text-left">Descrição</th>
+                                    <th class="text-left">Tipo</th>
+                                    <th class="text-right">Previsto</th>
+                                    <th class="text-right">Pago</th>
+                                    <th class="text-center">Semana</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paysTableBody">
+                                <tr>
+                                    <td colspan="11">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="paysPagination"
+                        class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════ TAB: PENDENTES (Lançamentos por liquidar) ═══════════ -->
+            <div class="cc-tab-panel" id="tab-pendentes">
+                <!-- KPIs pendentes -->
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pendentes
+                        </p>
+                        <p id="kpiTxPending" class="text-xl font-bold text-amber-600 tracking-tight">—</p>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                            Comprometido</p>
+                        <p id="kpiTxCommitted" class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Liquidados
+                        </p>
+                        <p id="kpiTxPaid" class="text-xl font-bold text-emerald-600 tracking-tight">—</p>
                     </div>
                 </div>
 
-                <!-- ═══════════ TAB: PENDENTES (Lançamentos por liquidar) ═══════════ -->
-                <div class="cc-tab-panel" id="tab-pendentes">
-                    <!-- KPIs pendentes -->
-                    <div class="grid grid-cols-3 gap-4 mb-4">
-                        <div class="kpi-card">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pendentes
-                            </p>
-                            <p id="kpiTxPending" class="text-xl font-bold text-amber-600 tracking-tight">—</p>
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div
+                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Lançamentos Pendentes de Liquidação</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra aguardando liquidação</p>
                         </div>
-                        <div class="kpi-card">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
-                                Comprometido</p>
-                            <p id="kpiTxCommitted" class="text-xl font-bold text-slate-900 tracking-tight">—</p>
-                        </div>
-                        <div class="kpi-card">
-                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Liquidados
-                            </p>
-                            <p id="kpiTxPaid" class="text-xl font-bold text-emerald-600 tracking-tight">—</p>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <select id="txCategoryFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todas as categorias</option>
+                                <option value="MATERIAL">Material</option>
+                                <option value="SERVICO">Serviço</option>
+                                <option value="MAO_DE_OBRA">Mão de Obra</option>
+                                <option value="EQUIPAMENTO">Equipamento</option>
+                                <option value="TRANSPORTE">Transporte</option>
+                                <option value="ADMINISTRATIVO">Administrativo</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
                         </div>
                     </div>
-
-                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div
-                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div>
-                                <h3 class="font-bold text-slate-900">Lançamentos Pendentes de Liquidação</h3>
-                                <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra aguardando aprovação</p>
-                            </div>
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <select id="txCategoryFilter"
-                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todas as categorias</option>
-                                    <option value="MATERIAL">Material</option>
-                                    <option value="SERVICO">Serviço</option>
-                                    <option value="MAO_DE_OBRA">Mão de Obra</option>
-                                    <option value="EQUIPAMENTO">Equipamento</option>
-                                    <option value="TRANSPORTE">Transporte</option>
-                                    <option value="ADMINISTRATIVO">Administrativo</option>
-                                    <option value="OUTRO">Outro</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="overflow-x-auto custom-scroll">
-                            <table class="w-full cc-table">
-                                <thead>
-                                    <tr>
-                                        <th class="text-left">Data</th>
-                                        <th class="text-left">Descrição</th>
-                                        <th class="text-left">Fornecedor</th>
-                                        <th class="text-left">Categoria</th>
-                                        <th class="text-left">Tipo</th>
-                                        <th class="text-left">Responsável</th>
-                                        <th class="text-right">Previsto</th>
-                                        <th class="text-right">Realizado</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="txTableBody">
-                                    <tr>
-                                        <td colspan="10">
-                                            <div class="spinner my-8"></div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div id="txPagination"
-                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
-                        </div>
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="w-full cc-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Data</th>
+                                    <th class="text-left">Descrição</th>
+                                    <th class="text-left">Fornecedor</th>
+                                    <!-- <th class="text-left">Categoria</th> -->
+                                    <th class="text-center">Tipo</th>
+                                    <th class="text-center">Centro</th>
+                                    <th class="text-right">Previsto</th>
+                                    <th class="text-right">Realizado</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="txTableBody">
+                                <tr>
+                                    <td colspan="10">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="txPagination"
+                        class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
                     </div>
                 </div>
+            </div>
 
-                <!-- ═══════════ TAB: HISTÓRICO (Lançamentos Liquidados) ═══════════ -->
-                <div class="cc-tab-panel" id="tab-historico">
-                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div
-                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div>
-                                <h3 class="font-bold text-slate-900">Histórico de Liquidações</h3>
-                                <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra já liquidados / pagos</p>
-                            </div>
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <select id="historyCategoryFilter"
-                                    class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                    <option value="">Todas as categorias</option>
-                                    <option value="MATERIAL">Material</option>
-                                    <option value="SERVICO">Serviço</option>
-                                    <option value="MAO_DE_OBRA">Mão de Obra</option>
-                                    <option value="EQUIPAMENTO">Equipamento</option>
-                                    <option value="TRANSPORTE">Transporte</option>
-                                    <option value="ADMINISTRATIVO">Administrativo</option>
-                                    <option value="OUTRO">Outro</option>
-                                </select>
-                            </div>
+            <!-- ═══════════ TAB: HISTÓRICO (Lançamentos Liquidados) ═══════════ -->
+            <div class="cc-tab-panel" id="tab-historico">
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div
+                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Histórico de Liquidações</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Lançamentos da obra já liquidados / pagos</p>
                         </div>
-                        <div class="overflow-x-auto custom-scroll">
-                            <table class="w-full cc-table">
-                                <thead>
-                                    <tr>
-                                        <th class="text-left">Data Liq.</th>
-                                        <th class="text-left">Descrição</th>
-                                        <th class="text-left">Fornecedor</th>
-                                        <th class="text-left">Categoria</th>
-                                        <th class="text-left">Tipo</th>
-                                        <th class="text-left">Responsável</th>
-                                        <th class="text-right">Comprometido</th>
-                                        <th class="text-right">Liquidado</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-center">—</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="historyTableBody">
-                                    <tr>
-                                        <td colspan="10">
-                                            <div class="spinner my-8"></div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div id="historyPagination"
-                            class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <select id="historyCategoryFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todas as categorias</option>
+                                <option value="MATERIAL">Material</option>
+                                <option value="SERVICO">Serviço</option>
+                                <option value="MAO_DE_OBRA">Mão de Obra</option>
+                                <option value="EQUIPAMENTO">Equipamento</option>
+                                <option value="TRANSPORTE">Transporte</option>
+                                <option value="ADMINISTRATIVO">Administrativo</option>
+                                <option value="OUTRO">Outro</option>
+                            </select>
                         </div>
                     </div>
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="w-full cc-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Data Liq.</th>
+                                    <th class="text-left">Descrição</th>
+                                    <th class="text-left">Fornecedor</th>
+                                    <th class="text-left">Categoria</th>
+                                    <th class="text-left">Tipo</th>
+                                    <th class="text-left">CC</th>
+                                    <th class="text-right">Comprometido</th>
+                                    <th class="text-right">Liquidado</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">—</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr>
+                                    <td colspan="10">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="historyPagination"
+                        class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                    </div>
                 </div>
+            </div>
 
-                <!-- /projectContent -->
+            <!-- /projectContent -->
 
         </main>
 
@@ -960,11 +979,12 @@
             <div>
                 <div class="flex items-center gap-3">
                     <h2 class="text-lg font-bold text-slate-900 tracking-tight">Detalhes do Lançamento</h2>
-                    <span id="asideStatusBadge" class="hidden px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest"></span>
+                    <span id="asideStatusBadge"
+                        class="hidden px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest"></span>
                 </div>
                 <p class="text-xs font-semibold text-slate-500 mt-0.5">Verificação antes do pagamento</p>
             </div>
-            <button type="button" onclick="closePaymentAside()"
+            <button type="button" onclick="closePaymentAside()" aria-label="Fechar Detalhes"
                 class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 transition-colors">
                 <span class="material-symbols-outlined text-lg">close</span>
             </button>
@@ -1051,7 +1071,8 @@
         <div class="modal-box">
             <div class="flex items-center justify-between mb-6">
                 <h2 id="modalCCTitle" class="text-lg font-bold text-slate-900">Novo Centro de Custo</h2>
-                <button onclick="document.getElementById('modalCC').classList.remove('open')"
+                <button type="button" onclick="document.getElementById('modalCC').classList.remove('open')"
+                    aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
@@ -1060,13 +1081,15 @@
                 <input type="hidden" id="ccId">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Código
+                        <label for="ccCode"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Código
                             *</label>
                         <input id="ccCode" type="text" placeholder="CC001" required maxlength="20"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Moeda
+                        <label for="ccCurrency"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Moeda
                             *</label>
                         <select id="ccCurrency" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
@@ -1077,13 +1100,15 @@
                         </select>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome
+                        <label for="ccName"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome
                             *</label>
                         <input id="ccName" type="text" placeholder="Terraplanagem" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Estado
+                        <label for="ccActive"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Estado
                             *</label>
                         <select id="ccActive" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
@@ -1107,7 +1132,8 @@
         <div class="modal-box" style="max-width: 1100px;">
             <div class="flex items-center justify-between mb-6">
                 <h2 id="modalNeedTitle" class="text-lg font-bold text-slate-900">Novo Item de Orçamento</h2>
-                <button onclick="document.getElementById('modalNeed').classList.remove('open')"
+                <button type="button" onclick="document.getElementById('modalNeed').classList.remove('open')"
+                    aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
@@ -1116,7 +1142,8 @@
                 <input type="hidden" id="needId">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
+                        <label for="needCC"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
                             Custo *</label>
                         <select id="needCC" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
@@ -1124,7 +1151,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
+                        <label for="needResponsibleId"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
                             <span class="material-symbols-outlined text-xs align-middle mr-1">manage_accounts</span>
                             Responsável (Operador) *
                         </label>
@@ -1174,7 +1202,8 @@
         <div class="modal-box" style="max-width:640px">
             <div class="flex items-center justify-between mb-6">
                 <h2 id="modalPayTitle" class="text-lg font-bold text-slate-900">Novo Lançamento</h2>
-                <button onclick="document.getElementById('modalPay').classList.remove('open')"
+                <button type="button" onclick="document.getElementById('modalPay').classList.remove('open')"
+                    aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
@@ -1184,7 +1213,8 @@
                 <input type="hidden" id="payCCId">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
+                        <label for="payCC"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
                             Custo *</label>
                         <select id="payCC" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1192,7 +1222,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nº
+                        <label for="payDoc"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nº
                             Documento</label>
                         <input id="payDoc" type="text" placeholder="FAT-001"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1200,27 +1231,29 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Data
+                        <label for="payDate"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Data
                             Pagamento *</label>
                         <input id="payDate" type="date" required
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                     <div>
-                        <label
+                        <label for="paySupplier"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fornecedor</label>
                         <input id="paySupplier" type="text" placeholder="Nome do fornecedor"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição
+                    <label for="payDesc"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição
                         *</label>
                     <input id="payDesc" type="text" required placeholder="Motivo do pagamento"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
                 <div class="grid grid-cols-3 gap-4">
                     <div>
-                        <label
+                        <label for="payCat"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria</label>
                         <select id="payCat"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1234,7 +1267,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
+                        <label for="payType"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
                             Pagamento</label>
                         <select id="payType"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1243,21 +1277,24 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor
+                        <label for="payBudgeted"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor
                             Previsto *</label>
                         <input id="payBudgeted" type="number" step="0.01" min="0" required placeholder="0.00"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor Pago
+                        <label for="payPaid"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor Pago
                             *</label>
                         <input id="payPaid" type="number" step="0.01" min="0" required placeholder="0.00"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                 </div>
-                <div class="grid grid-cols-4 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Forma de
+                        <label for="payMethod"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Forma de
                             Pagamento</label>
                         <select id="payMethod"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1270,7 +1307,7 @@
                         </select>
                     </div>
                     <div>
-                        <label
+                        <label for="payWeek" 
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Semana</label>
                         <select id="payWeek"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1286,10 +1323,25 @@
                             <option value="SEM 8">SEM 8</option>
                             <option value="SEM 9">SEM 9</option>
                             <option value="SEM 10">SEM 10</option>
+                            <option value="SEM 11">SEM 11</option>
+                            <option value="SEM 12">SEM 12</option>
+                            <option value="SEM 13">SEM 13</option>
+                            <option value="SEM 14">SEM 14</option>
+                            <option value="SEM 15">SEM 15</option>
+                            <option value="SEM 16">SEM 16</option>
+                            <option value="SEM 17">SEM 17</option>
+                            <option value="SEM 18">SEM 18</option>
+                            <option value="SEM 19">SEM 19</option>
+                            <option value="SEM 20">SEM 20</option>
+                            <option value="SEM 21">SEM 21</option>
+                            <option value="SEM 22">SEM 22</option>
+                            <option value="SEM 23">SEM 23</option>
+                            <option value="SEM 24">SEM 24</option>
+                            <option value="SEM 25">SEM 25</option>
                         </select>
                     </div>
                     <div>
-                        <label
+                        <label for="payStatus"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Status</label>
                         <select id="payStatus"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1300,7 +1352,7 @@
                     </div>
                 </div>
                 <div>
-                    <label
+                    <label for="payNotes"
                         class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Observações</label>
                     <textarea id="payNotes" rows="2" placeholder="Notas adicionais..."
                         class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none resize-none"></textarea>
@@ -1324,6 +1376,7 @@
                     <p id="cronogramaItemDesc" class="text-xs font-semibold text-slate-400 mt-0.5"></p>
                 </div>
                 <button type="button" onclick="document.getElementById('modalCronograma').classList.remove('open')"
+                    aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
                     <span class="material-symbols-outlined text-lg">close</span>
                 </button>
@@ -1340,7 +1393,8 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
+                        <label for="cronogramaPaymentType"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo de
                             Pagamento</label>
                         <select id="cronogramaPaymentType"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
@@ -1349,7 +1403,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Número de
+                        <label for="cronogramaNumParcelas"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Número de
                             Parcelas</label>
                         <div class="flex items-center gap-1 w-full">
                             <input id="cronogramaNumParcelas" type="number" min="1" value="1"
@@ -1400,6 +1455,7 @@
                     <p class="text-xs font-semibold text-slate-400 mt-0.5">Confirma o valor final pago</p>
                 </div>
                 <button type="button" onclick="document.getElementById('modalLiq').classList.remove('open')"
+                    aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
                     <span class="material-symbols-outlined text-lg">close</span>
                 </button>
@@ -1421,7 +1477,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor
+                    <label for="liqAmount"
+                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor
                         Realizado / Pago *</label>
                     <input id="liqAmount" type="number" min="0" step="0.01" required
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />

@@ -42,8 +42,8 @@ function bootNav(map) {
     btn.addEventListener("click", () => { logout(); window.location.href = "/Auth/login.html"; })
   );
   // nav visibility
-  const navDash   = document.querySelector("[data-nav-dashboard]");
-  const navUsers  = document.querySelector("[data-nav-users]");
+  const navDash = document.querySelector("[data-nav-dashboard]");
+  const navUsers = document.querySelector("[data-nav-users]");
   if (navDash && !map["dashboard:view"]) navDash.classList.add("hidden");
   if (navUsers && (user?.role || "").toLowerCase() === "admin") navUsers.classList.remove("hidden");
 }
@@ -175,17 +175,17 @@ function renderKPIs(totalsByCurrency) {
     const t = totalsByCurrency[cur];
     previstoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.budgeted, cur)}</p>`;
     pagoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
-    
+
     const color = t.saldo < 0 ? "text-red-600" : "text-emerald-600";
     saldoEl.innerHTML += `<p class="text-xl font-bold tracking-tight ${color}" title="${cur}">${formatCurrency(t.saldo, cur)}</p>`;
-    
+
     totalPct += t.pctExecutado || 0;
   });
 
   const avgPct = currencies.length > 0 ? (totalPct / currencies.length) : 0;
   const pct = Math.min(100, avgPct);
   document.getElementById("kpiPct").textContent = pct.toFixed(1) + "%";
-  
+
   setTimeout(() => {
     const bar = document.getElementById("kpiBar");
     bar.style.width = pct + "%";
@@ -312,9 +312,9 @@ function renderDashTable(summary) {
       </td>
       <td class="text-center">
         ${cc.overflow
-          ? `<span class="overflow-badge"><span class="material-symbols-outlined text-xs">warning</span>Estouro</span>`
-          : `<span class="text-xs font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600">OK</span>`
-        }
+        ? `<span class="overflow-badge"><span class="material-symbols-outlined text-xs">warning</span>Estouro</span>`
+        : `<span class="text-xs font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600">OK</span>`
+      }
       </td>
     </tr>`;
   }).join("");
@@ -420,11 +420,11 @@ async function loadNeeds() {
       if (!grouped[ccName]) {
         grouped[ccName] = { name: ccName, items: [], totalObra: 0, totalSemana: 0, currency: n.costCenter?.currency || "AOA" };
       }
-      
+
       const qty = Number(n.quantity) || 0;
       const price = Number(n.unitPrice) || 0;
       const hours = Number(n.hours) || 1;
-      
+
       const totalObra = qty * price * hours;
       const totalSemana = totalObra / hours;
 
@@ -440,9 +440,9 @@ async function loadNeeds() {
     });
 
     const currency = items.length > 0 ? (items[0].costCenter?.currency || "AOA") : "AOA";
-    
+
     let html = `
-      <tr class="bg-emerald-600" style="background-color: #059669 !important;">
+      <tr class="bg-emerald-600" style="background-color: #0f172a !important;">
         <td class="font-bold text-white text-sm" colspan="2">Total Geral</td>
         <td colspan="4"></td>
         <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
@@ -465,21 +465,21 @@ async function loadNeeds() {
       `;
 
       html += group.items.map((n) => {
-      const qty = Number(n.quantity) || 0;
-      const price = Number(n.unitPrice) || 0;
-      const hours = Number(n.hours) || 1;
-      const totalObra = qty * price * hours;
-      
-      return `
+        const qty = Number(n.quantity) || 0;
+        const price = Number(n.unitPrice) || 0;
+        const hours = Number(n.hours) || 1;
+        const totalObra = qty * price * hours;
+
+        return `
         <tr>
           <!--<td class="text-xs text-slate-500">${formatDateBR(n.date)}</td>
           <td><span class="text-xs font-bold text-slate-600">${n.costCenter?.code || "—"}</span> <span class="text-xs text-slate-400">${n.costCenter?.name || ""}</span></td>-->
-          <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg bg-slate-100 text-xs font-black text-slate-600 tabular-nums">${n._orderNumber}</span></td>
+          <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg text-xs font-black text-slate-600 tabular-nums">${n._orderNumber}</span></td>
           <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
-          <td class="text-center text-sm font-bold text-slate-700">${n.unit || "—"}</td>
-          <td class="text-center text-sm font-bold text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
-          <td class="text-center text-sm font-bold text-slate-700">${n.hours ? Number(n.hours).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
+          <td class="text-center text-sm font-medium text-slate-700">${n.unit || "—"}</td>
+          <td class="text-center text-sm font-medium text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+          <td class="text-right text-sm font-medium text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+          <td class="text-center text-sm font-medium text-slate-700">${n.hours ? Number(n.hours).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
           <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
           <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(n._calcTotalSemana, n.costCenter?.currency || "AOA")}</td>
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${prioClasses[n.priority] || ""}">${priorityLabels[n.priority] || n.priority}</span></td>
@@ -490,7 +490,7 @@ async function loadNeeds() {
               ${n.status === "PENDING" || n.status === "IN_QUOTATION" ? `
               <button onclick="sendToQuotation('${n.id}', '${n.costCenterId}')" title="Cotação / Precificação"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
-                <span class="material-symbols-outlined text-base">request_quote</span>
+                <span class="material-symbols-outlined text-base">fact_check</span>
               </button>
               ` : ""}
               ${n.status === "APPROVED" && !n.scheduled ? `
@@ -511,7 +511,7 @@ async function loadNeeds() {
           </td>
         </tr>
       `;
-    }).join("");
+      }).join("");
     }
 
     tbody.innerHTML = html;
@@ -573,7 +573,7 @@ async function loadPayments() {
             ${p.status === "PENDENTE" ? `
               <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT" title="Pagar lançamento"
                 class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all text-emerald-600">
-                <span class="material-symbols-outlined text-base">payments</span>
+                 <span class="material-symbols-outlined text-base">check_circle</span>
               </button>
             ` : ""}
             <button onclick="event.stopPropagation(); editPay(${JSON.stringify(p).replace(/"/g, '&quot;')})" title="Editar lançamento"
@@ -623,64 +623,148 @@ function switchTab(tabName) {
 async function loadCronograma() {
   if (!selectedProject) return;
   const tbody = document.getElementById("cronogramaTableBody");
-  tbody.innerHTML = `<tr><td colspan="8"><div class="spinner my-8"></div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
 
   try {
-    const params = new URLSearchParams({ pageSize: "100", scheduled: "true" });
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
-    const items = data.items || [];
+    const [needsData, paysData] = await Promise.all([
+      apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=500&scheduled=true`),
+      apiRequest(`/cost-centers/project/${selectedProject.id}/payments?pageSize=500`)
+    ]);
 
-    if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><span class="material-symbols-outlined text-3xl">schedule</span><p class="text-sm font-semibold">Nenhum item agendado</p></div></td></tr>`;
-      return;
-    }
+    const items = needsData.items || [];
+    const payments = paysData.items || [];
+    currentGanttPayments = payments; // Sincroniza dados com o Gantt
 
-    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
-    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+    let combined = [];
 
-    tbody.innerHTML = items.map((n) => {
+    // Needs que AINDA NÃO têm parcelas geradas
+    const pendingNeeds = items.filter(n => !n._count || n._count.payments === 0);
+
+    pendingNeeds.forEach(n => {
       const qty = Number(n.quantity) || 0;
       const price = Number(n.unitPrice) || 0;
       const hours = Number(n.hours) || 1;
       const totalObra = qty * price * hours;
+      combined.push({
+        type: 'NEED',
+        id: n.id,
+        date: null,
+        description: n.description,
+        ccCode: n.costCenter?.code || "—",
+        ccName: n.costCenter?.name || "",
+        ccId: n.costCenterId,
+        currency: n.costCenter?.currency || "AOA",
+        amount: totalObra,
+        status: "A_DEFINIR",
+        raw: n
+      });
+    });
 
-      let badgeLabel = statusLabels[n.status] || n.status;
-      let badgeClass = statusClasses[n.status] || "badge-pending";
-      
-      if (n.scheduled && n._count && n._count.payments > 0 && n.status !== "PAID") {
-        badgeLabel = "Aguardar pagamento";
-        badgeClass = "bg-amber-100 text-amber-700";
+    // Adiciona todos os lançamentos
+    payments.forEach(p => {
+      // Apenas adicionar pagamentos se estivermos no contexto do cronograma e eles existirem
+      combined.push({
+        type: 'PAYMENT',
+        id: p.id,
+        date: new Date(p.paymentDate),
+        description: p.description,
+        ccCode: p.costCenter?.code || "—",
+        ccName: p.costCenter?.name || "",
+        ccId: p.costCenterId,
+        currency: p.costCenter?.currency || "AOA",
+        amount: p.budgetedAmount,
+        status: p.status,
+        raw: p
+      });
+    });
+
+    // Ordena: Needs por definir no topo, depois lançamentos por data
+    combined.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return -1;
+      if (!b.date) return 1;
+      return a.date - b.date;
+    });
+
+    // Se não houver itens, mostra estado vazio
+    if (!combined.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span class="material-symbols-outlined text-3xl">schedule</span><p class="text-sm font-semibold">Nenhum item ou pagamento agendado</p></div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = combined.map(item => {
+      if (item.type === 'NEED') {
+        return `
+          <tr class="bg-amber-50/30">
+            <td class="text-xs font-bold text-amber-600 w-28">A definir</td>
+            <td class="font-medium text-slate-900 max-w-xs truncate" title="${item.description.replace(/"/g, '&quot;')}">${item.description}</td>
+            <td class="text-sm text-slate-500">${item.ccCode} · ${item.ccName}</td>
+            <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.amount, item.currency)}</td>
+            <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Aguardar parcelamento</span></td>
+            <td class="text-center">
+              <div class="flex justify-center gap-2">
+                <button onclick="openCronogramaModal('${item.id}', '${item.ccId}', '${item.description.replace(/'/g, "\\'")}', ${item.amount}, '${item.currency}')" title="Definir Cronograma"
+                  class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center hover:bg-amber-200 hover:text-amber-700 transition-all text-amber-600 shadow-sm border border-amber-200">
+                  <span class="material-symbols-outlined text-base">calendar_month</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      } else {
+        const isPaid = item.status === "CONFIRMADO";
+        const isAtrasado = !isPaid && item.status !== "CANCELADO" && item.date < new Date(new Date().setHours(0, 0, 0, 0));
+
+        let statusBadge = "";
+        if (isPaid) {
+          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">Liquidado</span>`;
+        } else if (item.status === "CANCELADO") {
+          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Cancelado</span>`;
+        } else if (isAtrasado) {
+          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Atrasado</span>`;
+        } else {
+          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Pendente</span>`;
+        }
+
+        return `
+          <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(item.raw).replace(/'/g, "&#39;")}' data-type="VIEW">
+            <td class="text-xs font-bold text-slate-600 w-28">${formatDateBR(item.raw.paymentDate)}</td>
+            <td class="font-medium text-slate-900 max-w-xs truncate" title="${item.description.replace(/"/g, '&quot;')}">${item.description}</td>
+            <td class="text-sm text-slate-500">${item.ccCode} · ${item.ccName}</td>
+            <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.amount, item.currency)}</td>
+            <td class="text-center">${statusBadge}</td>
+            <td class="text-center">
+              <div class="flex justify-center gap-2">
+                ${!isPaid && item.status !== 'CANCELADO' ? `
+                <button onclick="event.stopPropagation(); editCronograma(${JSON.stringify(item.raw).replace(/"/g, '&quot;')})" title="Editar Cronograma (Data/Valor)"
+                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
+                  <span class="material-symbols-outlined text-base">edit</span>
+                </button>
+                <button onclick="event.stopPropagation(); deletePay('${item.id}')" title="Eliminar Parcela"
+                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
+                  <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+                ` : `
+                <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(item.raw).replace(/'/g, "&#39;")}' data-type="VIEW" title="Ver Detalhes"
+                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-all text-slate-500">
+                  <span class="material-symbols-outlined text-base">visibility</span>
+                </button>
+                `}
+              </div>
+            </td>
+          </tr>
+        `;
       }
-
-      return `
-        <tr>
-          <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
-          <td class="text-center text-sm font-bold text-slate-700">${n.unit || "—"}</td>
-          <td class="text-center text-sm font-bold text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
-          <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${n.costCenter?.name || ""}</td>
-          <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${badgeClass}">${badgeLabel}</span></td>
-          <td class="text-center">
-            <div class="flex justify-center gap-2">
-              <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra}, '${n.costCenter?.currency || 'AOA'}')" title="Definir Cronograma"
-                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
-                <span class="material-symbols-outlined text-base">calendar_month</span>
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
     }).join("");
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
 }
 
 let currentCronogramaTotal = 0;
 
-window.openCronogramaModal = function(needId, ccId, description, total, currency = "AOA") {
+window.openCronogramaModal = function (needId, ccId, description, total, currency = "AOA") {
   currentCronogramaTotal = total;
   document.getElementById("cronogramaNeedId").value = needId;
   document.getElementById("cronogramaCCId").value = ccId;
@@ -692,7 +776,7 @@ window.openCronogramaModal = function(needId, ccId, description, total, currency
   document.getElementById("modalCronograma").classList.add("open");
 }
 
-window.gerarParcelasAutomaticas = function() {
+window.gerarParcelasAutomaticas = function () {
   const numParcelas = parseInt(document.getElementById("cronogramaNumParcelas").value) || 1;
   const tbody = document.getElementById("cronogramaParcelasBody");
   tbody.innerHTML = "";
@@ -782,11 +866,33 @@ async function submitCronograma(e) {
 
 
 
-// ── Gantt Chart Logic ──────────────────────────────────────────────────────────
+// ── Form Cronograma Edition ──────────────────────────────────────────────────
+window.editCronograma = function (pay) {
+  if (typeof pay === "string") pay = JSON.parse(pay);
+
+  // Abre o modal de lançamento mas adaptado para o contexto de edição do cronograma
+  document.getElementById("modalPayTitle").textContent = "Editar Parcela do Cronograma";
+  document.getElementById("payId").value = pay?.id || "";
+  document.getElementById("payCCId").value = pay?.costCenterId || "";
+  document.getElementById("payCC").value = pay?.costCenterId || "";
+  document.getElementById("payDoc").value = pay?.docNumber || "";
+  document.getElementById("payDate").value = pay?.paymentDate ? pay.paymentDate.substring(0, 10) : new Date().toISOString().substring(0, 10);
+  document.getElementById("paySupplier").value = pay?.supplier || "";
+  document.getElementById("payDesc").value = pay?.description || "";
+  document.getElementById("payCat").value = pay?.category || "MATERIAL";
+  document.getElementById("payType").value = pay?.paymentType || "PRONTO_PAGAMENTO";
+  document.getElementById("payBudgeted").value = pay?.budgetedAmount || "";
+  document.getElementById("payPaid").value = pay?.paidAmount || "";
+  document.getElementById("payMethod").value = pay?.paymentMethod || "";
+  document.getElementById("payWeek").value = pay?.week || "";
+  document.getElementById("payStatus").value = pay?.status || "PENDENTE";
+  document.getElementById("payNotes").value = pay?.notes || "";
+  document.getElementById("modalPay").classList.add("open");
+}
 let currentGanttDate = new Date();
 let currentGanttPayments = [];
 
-window.toggleCronogramaView = function(view) {
+window.toggleCronogramaView = function (view) {
   const btnList = document.getElementById("btnViewList");
   const btnGantt = document.getElementById("btnViewGantt");
   const listContainer = document.getElementById("cronogramaListContainer");
@@ -806,7 +912,7 @@ window.toggleCronogramaView = function(view) {
   }
 };
 
-window.changeGanttMonth = function(delta) {
+window.changeGanttMonth = function (delta) {
   currentGanttDate.setMonth(currentGanttDate.getMonth() + delta);
   renderGanttChart();
 };
@@ -815,7 +921,7 @@ async function loadGanttData() {
   if (!selectedProject) return;
   const ganttBody = document.getElementById("ganttChartBody");
   ganttBody.innerHTML = `<div class="p-8 text-center"><div class="spinner mx-auto mb-2"></div><p class="text-xs text-slate-400 font-bold">A carregar cronograma...</p></div>`;
-  
+
   try {
     // Busca todos os pagamentos para construir o gantt (ou podiamos filtrar por mês se tivéssemos essa query)
     const params = new URLSearchParams({ pageSize: "500" });
@@ -830,16 +936,16 @@ async function loadGanttData() {
 function renderGanttChart() {
   const ganttBody = document.getElementById("ganttChartBody");
   const monthLabel = document.getElementById("ganttMonthLabel");
-  
+
   const year = currentGanttDate.getFullYear();
   const month = currentGanttDate.getMonth();
-  
+
   // Nomes dos meses
   const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  if(monthLabel) monthLabel.textContent = `${monthNames[month]} ${year}`;
+  if (monthLabel) monthLabel.textContent = `${monthNames[month]} ${year}`;
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
+
   // Filtra pagamentos do mês atual
   const paymentsThisMonth = currentGanttPayments.filter(p => {
     const d = new Date(p.paymentDate);
@@ -863,7 +969,7 @@ function renderGanttChart() {
 
   // BODY: Linhas de pagamentos
   let rowsHtml = `<div class="flex-1 overflow-y-auto custom-scroll flex flex-col relative bg-white pb-4">`;
-  
+
   // Grid Lines (Background)
   rowsHtml += `<div class="absolute inset-0 flex pointer-events-none">`;
   rowsHtml += `<div class="w-64 shrink-0 border-r border-slate-200 bg-white z-10"></div>`;
@@ -878,13 +984,13 @@ function renderGanttChart() {
   paymentsThisMonth.forEach(p => {
     const d = new Date(p.paymentDate);
     const day = d.getDate();
-    
+
     let colorClass = "bg-blue-400 border-blue-500 shadow-blue-400/20"; // PENDENTE
     if (p.status === "CONFIRMADO") colorClass = "bg-emerald-400 border-emerald-500 shadow-emerald-400/20";
     else if (d < new Date() && p.status !== "CONFIRMADO") colorClass = "bg-red-400 border-red-500 shadow-red-400/20"; // ATRASADO
 
     const pctLeft = ((day - 1) / daysInMonth) * 100;
-    
+
     rowsHtml += `
       <div class="flex items-center relative z-20 group hover:bg-slate-50/50 border-b border-slate-50 transition-colors h-12">
         <div class="w-64 shrink-0 px-4 py-3 flex flex-col justify-center bg-white border-r border-slate-200 z-10">
@@ -896,7 +1002,7 @@ function renderGanttChart() {
           <div class="absolute top-1/2 -translate-y-1/2 h-6 rounded-md shadow-sm border text-[10px] font-bold text-white flex items-center justify-center overflow-hidden cursor-pointer hover:-translate-y-2 transition-transform duration-300 z-30 group-hover:z-40 ${colorClass}" 
                style="left: calc(${pctLeft}% + 4px); width: calc(${100 / daysInMonth}% - 8px); min-width: 20px;" 
                title="${p.description}\nData: ${d.toLocaleDateString('pt-PT')}\nValor: ${formatCurrency(p.budgetedAmount, "AOA")}"
-               onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT">
+               onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="VIEW">
                ${p.status === 'CONFIRMADO' ? '<span class="material-symbols-outlined text-[12px]">check</span>' : ''}
           </div>
         </div>
@@ -909,7 +1015,7 @@ function renderGanttChart() {
 }
 
 // ── Send to Cronograma Functions ────────────────────────────────────────────────
-window.sendToCronograma = async function(id, ccId) {
+window.sendToCronograma = async function (id, ccId) {
   try {
     showToast("A enviar para cronograma...", "info");
     await apiRequest(`/cost-centers/${ccId}/needs/${id}/schedule`, { method: "POST" });
@@ -920,21 +1026,21 @@ window.sendToCronograma = async function(id, ccId) {
   }
 }
 
-window.sendAllToCronograma = async function() {
+window.sendAllToCronograma = async function () {
   if (!selectedProject) return;
   try {
     // First load all approved needs to get their IDs
     const params = new URLSearchParams({ pageSize: "100", status: "APPROVED" });
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
     const items = data.items || [];
-    
+
     if (!items.length) {
       showToast("Nenhum item aprovado para enviar", "info");
       return;
     }
 
     const needIds = items.filter(n => !n.scheduled).map(n => n.id);
-    
+
     if (needIds.length === 0) {
       showToast("Todos os itens aprovados já estão no cronograma", "info");
       return;
@@ -989,7 +1095,7 @@ function bindEvents() {
   ["paysCCFilter", "paysStatusFilter"].forEach((id) =>
     document.getElementById(id).addEventListener("change", loadPayments)
   );
-  
+
   // Transaction filters (tabs are now separate — no segmented controls needed)
   document.getElementById("txCategoryFilter")?.addEventListener("change", () => { txPage = 1; loadTransactions(); });
   document.getElementById("historyCategoryFilter")?.addEventListener("change", () => { historyPage = 1; loadHistory(); });
@@ -1022,12 +1128,12 @@ function openCCModal(cc = null) {
   document.getElementById("modalCC").classList.add("open");
 }
 
-window.editCC = function(id) {
+window.editCC = function (id) {
   const cc = costCenters.find((x) => x.id === id);
   if (cc) openCCModal(cc);
 };
 
-window.deleteCC = async function(id, name) {
+window.deleteCC = async function (id, name) {
   if (!confirm(`Eliminar "${name}"?\nTodos os dados associados serão perdidos.`)) return;
   try {
     await apiRequest(`/cost-centers/${id}`, { method: "DELETE" });
@@ -1104,11 +1210,11 @@ async function openNeedModal(need = null) {
   document.getElementById("modalNeed").classList.add("open");
 }
 
-window.addNeedRow = function(need = null) {
+window.addNeedRow = function (need = null) {
   const tbody = document.getElementById("needItemsBody");
   const tr = document.createElement("tr");
   tr.className = "border-b border-slate-100 need-item-row";
-  
+
   tr.innerHTML = `
     <td class="py-2 px-1">
       <textarea rows="1" required placeholder="Ex: Serviço Electrificação" class="row-desc w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-medium focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 resize-none">${need?.description || ""}</textarea>
@@ -1135,6 +1241,7 @@ window.addNeedRow = function(need = null) {
     <td class="py-2 px-1">
       <select class="row-status w-full h-8 px-1 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
         <option value="PENDING" ${(!need || need?.status === 'PENDING') ? 'selected' : ''}>Pendente</option>
+        <option value="IN_QUOTATION" ${need?.status === 'IN_QUOTATION' ? 'selected' : ''}>Em Cotação</option>
         <option value="APPROVED" ${need?.status === 'APPROVED' ? 'selected' : ''}>Aprovado</option>
         <option value="REJECTED" ${need?.status === 'REJECTED' ? 'selected' : ''}>Rejeitado</option>
         <option value="PAID" ${need?.status === 'PAID' ? 'selected' : ''}>Pago</option>
@@ -1152,17 +1259,17 @@ window.addNeedRow = function(need = null) {
   tbody.appendChild(tr);
 };
 
-window.editNeed = function(id) {
+window.editNeed = function (id) {
   const btn = document.querySelector(`[onclick="editNeed('${id}')"]`);
   if (!btn) return;
   try {
     const raw = btn.getAttribute("data-need-raw");
     const need = JSON.parse(raw);
     openNeedModal(need);
-  } catch {}
+  } catch { }
 };
 
-window.deleteNeed = async function(id, desc) {
+window.deleteNeed = async function (id, desc) {
   if (!confirm(`Eliminar necessidade "${desc}..."?`)) return;
   try {
     await apiRequest(`/cost-centers/X/needs/${id}`, { method: "DELETE" });
@@ -1209,7 +1316,7 @@ async function submitNeed(e) {
     });
 
     await Promise.all(promises);
-    
+
     showToast(id && rows.length === 1 ? "Item actualizado" : `${rows.length} item(ns) adicionado(s)`, "success");
     document.getElementById("modalNeed").classList.remove("open");
     loadNeeds();
@@ -1219,44 +1326,44 @@ async function submitNeed(e) {
   }
 }
 
-window.sendToQuotation = async function(id, ccId) {
+window.sendToQuotation = async function (id, ccId) {
   try {
     showToast("A enviar para cotação...", "info");
     // Muda o status para IN_QUOTATION
-    await apiRequest(`/cost-centers/${ccId}/needs/${id}`, { 
-      method: "PATCH", 
-      body: { status: "IN_QUOTATION" } 
+    await apiRequest(`/cost-centers/${ccId}/needs/${id}`, {
+      method: "PATCH",
+      body: { status: "IN_QUOTATION" }
     });
-    
+
     // Redireciona para a página de Cotação com o ID da obra na query string
-    window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
+    // window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
   } catch (err) {
     showToast("Erro ao preparar cotação: " + err.message, "error");
   }
 };
 
-window.sendAllToQuotation = async function() {
+window.sendAllToQuotation = async function () {
   if (!confirm("Enviar todos os itens pendentes para Cotação?")) return;
   try {
     showToast("A carregar itens...", "info");
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=1000`);
     const pendingItems = (data.items || []).filter(n => n.status === "PENDING");
-    
+
     if (pendingItems.length === 0) {
       showToast("Não há itens pendentes.", "warning");
       return;
     }
-    
+
     showToast(`A enviar ${pendingItems.length} itens...`, "info");
-    const promises = pendingItems.map(n => 
-      apiRequest(`/cost-centers/${n.costCenterId}/needs/${n.id}`, { 
-        method: "PATCH", 
-        body: { status: "IN_QUOTATION" } 
+    const promises = pendingItems.map(n =>
+      apiRequest(`/cost-centers/${n.costCenterId}/needs/${n.id}`, {
+        method: "PATCH",
+        body: { status: "IN_QUOTATION" }
       })
     );
-    
+
     await Promise.all(promises);
-    
+
     window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
   } catch (err) {
     showToast("Erro ao preparar cotações em lote: " + err.message, "error");
@@ -1284,12 +1391,12 @@ function openPayModal(pay = null) {
   document.getElementById("modalPay").classList.add("open");
 }
 
-window.editPay = function(pay) {
+window.editPay = function (pay) {
   if (typeof pay === "string") pay = JSON.parse(pay);
   openPayModal(pay);
 };
 
-window.deletePay = async function(id) {
+window.deletePay = async function (id) {
   if (!confirm("Eliminar este lançamento?")) return;
   try {
     const pay = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments`).then(
@@ -1299,13 +1406,14 @@ window.deletePay = async function(id) {
     await apiRequest(`/cost-centers/${ccId}/payments/${id}`, { method: "DELETE" });
     showToast("Lançamento eliminado", "success");
     loadPayments();
+    loadCronograma();
     loadSummary();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
 };
 
-window.payCostPayment = async function(pay) {
+window.payCostPayment = async function (pay) {
   if (typeof pay === "string") pay = JSON.parse(pay);
   const paidAmount = Number(pay.paidAmount) > 0 ? Number(pay.paidAmount) : Number(pay.budgetedAmount) || 0;
 
@@ -1358,6 +1466,7 @@ async function submitPay(e) {
     }
     document.getElementById("modalPay").classList.remove("open");
     loadPayments();
+    loadCronograma();
     loadSummary();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
@@ -1377,8 +1486,8 @@ function showToast(msg, type = "info") {
   el.className = `pointer-events-auto flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-sm font-bold ${colors[type]} animate-fade-in`;
   el.innerHTML = `<span class="material-symbols-outlined text-base">${icons[type]}</span>${msg}`;
   container.appendChild(el);
-  setTimeout(() => { 
-    el.style.opacity = "0"; 
+  setTimeout(() => {
+    el.style.opacity = "0";
     setTimeout(() => el.classList.add("opacity-0"), 4000);
     setTimeout(() => el.remove(), 4500);
   }, 3500);
@@ -1447,8 +1556,8 @@ async function loadTransactions() {
           <td class="text-xs text-slate-500">${new Date(t.paymentDate).toLocaleDateString("pt-PT")}</td>
           <td class="font-bold text-slate-700 max-w-[200px] truncate" title="${descStr}">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
-          <td class="text-xs text-slate-500">${catNames[t.category] || t.category || "-"}</td>
-          <td class="text-xs text-slate-500">${paymentTypeBadge}</td>
+          <!--<td class="text-xs text-slate-500">${catNames[t.category] || t.category || "-"}</td>-->
+          <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-500 text-slate-600'}">${paymentTypeBadge}</span></td>
           <td class="text-xs text-slate-500">${t.costCenter?.name || "Geral"}</td>
           <td class="text-right font-black text-slate-900">${formatCurrency(t.budgetedAmount, t.costCenter?.currency || "AOA")}</td>
           <td class="text-right font-black ${isPaid ? 'text-emerald-600' : 'text-slate-400'}">${isPaid ? formatCurrency(t.paidAmount, t.costCenter?.currency || "AOA") : "-"}</td>
@@ -1512,7 +1621,7 @@ async function loadHistory() {
     }
 
     const catNames = {
-      MATERIAL: "Material", SERVICO: "Serviço", MAO_DE_OBRA: "Mão de Obra", 
+      MATERIAL: "Material", SERVICO: "Serviço", MAO_DE_OBRA: "Mão de Obra",
       EQUIPAMENTO: "Equipamentos", TRANSPORTE: "Transporte", ADMINISTRATIVO: "Administrativo", OUTRO: "Outro"
     };
 
@@ -1540,8 +1649,8 @@ async function loadHistory() {
     document.getElementById("historyPagination").innerHTML = `
       <span>Página ${data.page} de ${totalPages} (${data.total} itens)</span>
       <div class="flex gap-2">
-        <button onclick="historyPage=Math.max(1,historyPage-1);loadHistory()" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page===1?'opacity-50 pointer-events-none':''}">Anterior</button>
-        <button onclick="historyPage=Math.min(${totalPages},historyPage+1);loadHistory()" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page===totalPages?'opacity-50 pointer-events-none':''}">Próxima</button>
+        <button onclick="historyPage=Math.max(1,historyPage-1);loadHistory()" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === 1 ? 'opacity-50 pointer-events-none' : ''}">Anterior</button>
+        <button onclick="historyPage=Math.min(${totalPages},historyPage+1);loadHistory()" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === totalPages ? 'opacity-50 pointer-events-none' : ''}">Próxima</button>
       </div>`;
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-400 text-sm">Erro ao carregar histórico.</td></tr>`;
@@ -1622,12 +1731,12 @@ function updateTxKPIs(items) {
 
 }
 
-window.openLiquidateModal = function(txId, description, amount, ccId) {
+window.openLiquidateModal = function (txId, description, amount, ccId) {
   document.getElementById("liqTxId").value = txId;
   document.getElementById("liqDesc").textContent = description;
   document.getElementById("liqCommitted").value = formatCurrency(amount, "AOA");
   document.getElementById("liqAmount").value = amount;
-  
+
   // Create or update a hidden field for ccId
   let ccInput = document.getElementById("liqCcId");
   if (!ccInput) {
@@ -1637,7 +1746,7 @@ window.openLiquidateModal = function(txId, description, amount, ccId) {
     document.getElementById("formLiq").appendChild(ccInput);
   }
   ccInput.value = ccId;
-  
+
   document.getElementById("modalLiq").classList.add("open");
 };
 
@@ -1646,7 +1755,7 @@ async function submitLiquidation(e) {
   const txId = document.getElementById("liqTxId").value;
   const ccId = document.getElementById("liqCcId").value;
   const realizedAmount = document.getElementById("liqAmount").value;
-  
+
   if (!realizedAmount) return showToast("Valor é obrigatório", "error");
 
   try {
@@ -1663,12 +1772,12 @@ async function submitLiquidation(e) {
 }
 
 // ── Sidebar Toggle ────────────────────────────────────────────────────────────
-window.toggleSidebar = function() {
+window.toggleSidebar = function () {
   const sidebar = document.getElementById("sidebar");
   const floatingBtn = document.getElementById("floatingToggleBtn");
-  
+
   sidebar.classList.toggle("collapsed");
-  
+
   if (sidebar.classList.contains("collapsed")) {
     floatingBtn.classList.remove("hidden");
   } else {
@@ -1677,7 +1786,7 @@ window.toggleSidebar = function() {
 };
 
 // ── Payment Aside Logic ────────────────────────────────────────────────────────
-window.openPaymentAsideHandler = function(btn) {
+window.openPaymentAsideHandler = function (btn) {
   try {
     const payload = JSON.parse(btn.getAttribute("data-payload"));
     const type = btn.getAttribute("data-type");
@@ -1687,7 +1796,7 @@ window.openPaymentAsideHandler = function(btn) {
   }
 };
 
-window.openPaymentAside = function(data, type) {
+window.openPaymentAside = function (data, type) {
   const aside = document.getElementById("paymentAside");
   const overlay = document.getElementById("paymentAsideOverlay");
 
@@ -1710,10 +1819,10 @@ window.openPaymentAside = function(data, type) {
   document.getElementById("asideDate").textContent = data.paymentDate ? formatDateBR(data.paymentDate) : (data.date ? formatDateBR(data.date) : "—");
   document.getElementById("asideSupplier").textContent = data.supplier || "—";
   document.getElementById("asideCategory").textContent = data.category || "—";
-  
+
   document.getElementById("asideNIF").textContent = data.supplierNif || data.nif || "—";
   document.getElementById("asideIBAN").textContent = data.supplierIban || data.iban || "—";
-  
+
   const supplierDetails = document.getElementById("asideSupplierDetails");
   // Mostra sempre o bloco de detalhes (NIF/IBAN)
   supplierDetails.classList.remove("hidden");
@@ -1754,7 +1863,7 @@ window.openPaymentAside = function(data, type) {
   }
 
   const actionBtn = document.getElementById("asideActionBtn");
-  
+
   if (type === 'VIEW') {
     actionBtn.classList.add("hidden");
   } else {
@@ -1777,10 +1886,10 @@ window.openPaymentAside = function(data, type) {
   aside.classList.remove("translate-x-full");
 };
 
-window.closePaymentAside = function() {
+window.closePaymentAside = function () {
   const aside = document.getElementById("paymentAside");
   const overlay = document.getElementById("paymentAsideOverlay");
-  
+
   aside.classList.add("translate-x-full");
   overlay.classList.add("opacity-0");
   setTimeout(() => overlay.classList.add("hidden"), 300);

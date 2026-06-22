@@ -453,7 +453,7 @@ async function openQuoteModal(needId) {
       if (products.length > 0) {
         productRow.style.display = "block";
         productSel.innerHTML = `<option value="">Selecionar produto...</option>` +
-          products.map(p => `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}">${p.name} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency}</option>`).join("");
+          products.map(p => `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}">${p.name} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency} / ${p.unit || 'uni'}</option>`).join("");
         productSel.onchange = function() {
           const opt = this.options[this.selectedIndex];
           if (opt.value) {
@@ -477,9 +477,99 @@ async function openQuoteModal(needId) {
     formBlock.classList.add("hidden");
   } else {
     formBlock.classList.remove("hidden");
+    // Suggest items from all catalogs based on description
+    findAndSuggestProducts(need.description);
   }
 
   await loadQuotesForNeed(need.id, need.status === "APPROVED");
+}
+
+async function findAndSuggestProducts(searchTerm) {
+  const box = document.getElementById("catalogSuggestionsBox");
+  const list = document.getElementById("catalogSuggestionsList");
+  
+  if (!searchTerm || searchTerm.length < 3) {
+    box.classList.add("hidden");
+    return;
+  }
+
+  try {
+    // Normaliza termo de pesquisa (remover quantidades e unidades)
+    // Ex: "Areia (36 m3)" -> "Areia"
+    const term = searchTerm.replace(/\(.*?\)/g, '').trim().toLowerCase();
+    
+    // Procura em todos os produtos de todos os fornecedores (idealmente seria um endpoint /products/search?q=...)
+    // Como temos currentSuppliers carregado, vamos iterar (ou chamar a API se precisarmos de garantir dados frescos)
+    
+    let allMatches = [];
+    
+    // Para simplificar, vou iterar nos fornecedores e fazer fetch dos produtos deles 
+    // Em produção seria melhor ter um endpoint de pesquisa global.
+    const promises = currentSuppliers.map(s => apiRequest(`/suppliers/${s.id}/products`).catch(() => ({items: []})));
+    const results = await Promise.all(promises);
+    
+    results.forEach((res, index) => {
+      const supplier = currentSuppliers[index];
+      const products = res.items || [];
+      const matches = products.filter(p => p.name.toLowerCase().includes(term) || (p.description && p.description.toLowerCase().includes(term)));
+      
+      matches.forEach(m => {
+        allMatches.push({
+          supplier: supplier,
+          product: m
+        });
+      });
+    });
+
+    if (allMatches.length > 0) {
+      list.innerHTML = allMatches.map(m => `
+        <div class="bg-white p-3 rounded-xl border border-blue-100 flex flex-col gap-2 shadow-sm hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group" 
+             onclick="autoFillSuggestion('${m.supplier.id}', '${m.product.id}', '${m.product.price}', '${m.product.currency}')">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-sm font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors">${m.product.name}</p>
+              <p class="text-[10px] text-slate-500 font-medium truncate mt-0.5"><span class="material-symbols-outlined text-[10px] align-middle mr-0.5">storefront</span>${m.supplier.name}</p>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+              <span class="material-symbols-outlined text-[14px]">add</span>
+            </div>
+          </div>
+          <div class="flex items-end justify-between border-t border-slate-50 pt-2 mt-1">
+            <span class="text-[10px] text-slate-400 font-semibold">Preço Base</span>
+            <div class="text-right flex-shrink-0">
+              <span class="text-sm font-black text-slate-900">${Number(m.product.price).toLocaleString("pt-PT")} ${m.product.currency}</span>
+              <span class="text-[10px] font-bold text-slate-400">/${m.product.unit || 'uni'}</span>
+            </div>
+          </div>
+        </div>
+      `).join("");
+      box.classList.remove("hidden");
+    } else {
+      box.classList.add("hidden");
+    }
+    
+  } catch (err) {
+    console.error("Erro ao procurar sugestões:", err);
+    box.classList.add("hidden");
+  }
+}
+
+window.autoFillSuggestion = async function(supplierId, productId, price, currency) {
+  // Preenche os campos do formulário
+  const supplierSel = document.getElementById("quoteSupplier");
+  supplierSel.value = supplierId;
+  
+  // Despoleta o evento onchange para carregar os produtos no select
+  await supplierSel.onchange();
+  
+  // Define o produto e o preço
+  setTimeout(() => {
+    const productSel = document.getElementById("quoteSupplierProduct");
+    if (productSel) productSel.value = productId;
+    
+    document.getElementById("quotePrice").value = price;
+    document.getElementById("quoteCurrency").value = currency;
+  }, 100); // Aguarda o carregamento dos produtos do fornecedor (promises)
 }
 
 async function loadQuotesForNeed(needId, isApproved) {
@@ -515,11 +605,13 @@ async function loadQuotesForNeed(needId, isApproved) {
         ? `<button onclick="openProformaViewer('${getAssetUrl(q.proformaUrl)}')" class="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Proforma"><span class="material-symbols-outlined text-sm">description</span></button>`
         : ``;
 
+      const supplierProductName = q.supplierProduct?.name ? `(${q.supplierProduct.name})` : "";
+
       return `
         <div class="bg-white p-4 rounded-xl border ${q.selected ? 'border-[#2afc8d] shadow-sm shadow-[#2afc8d]/20' : 'border-slate-200'} flex items-center justify-between gap-4">
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <h4 class="font-bold text-slate-800 text-sm">${q.supplier?.name}</h4>
+              <h4 class="font-bold text-slate-800 text-sm">${q.supplier?.name} <span class="text-xs text-slate-400 font-medium">${supplierProductName}</span></h4>
               ${badge}
             </div>
             <div class="text-xs text-slate-500">${q.quantity} uni × ${price} ${q.currency}</div>

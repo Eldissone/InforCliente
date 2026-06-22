@@ -269,8 +269,8 @@
 
             <div class="flex flex-col md:flex-row gap-6">
                 <!-- Esquerda: Adicionar Novo Preço -->
-                <div class="w-full md:w-1/3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                    <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Nova Cotação</h3>
+                <div class="w-full md:w-1/3 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-4">
+                    <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Nova Cotação</h3>
                     <form id="formAddQuote" class="flex flex-col gap-3">
                         <input type="hidden" id="quoteNeedId">
 
@@ -332,13 +332,26 @@
                     </form>
                 </div>
 
-                <!-- Direita: Cotações Existentes -->
-                <div class="w-full md:w-2/3">
-                    <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Preços Apresentados</h3>
-                    <div id="quotesList" class="flex flex-col gap-3">
-                        <div
-                            class="p-8 text-center text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
-                            Nenhuma cotação registada.</div>
+                <!-- Direita: Cotações Existentes & Sugestões -->
+                <div class="w-full md:w-2/3 flex flex-col gap-6">
+                    <div>
+                        <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Preços Apresentados</h3>
+                        <div id="quotesList" class="flex flex-col gap-3">
+                            <div
+                                class="p-8 text-center text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
+                                Nenhuma cotação registada.</div>
+                        </div>
+                    </div>
+
+                    <!-- Sugestões do Catálogo (Busca Inteligente) -->
+                    <div id="catalogSuggestionsBox" class="hidden flex flex-col gap-3 mt-2">
+                        <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <span class="material-symbols-outlined text-blue-500 text-lg">lightbulb</span>
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Sugestões de Catálogo</h3>
+                        </div>
+                        <div id="catalogSuggestionsList" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scroll pr-2">
+                            <!-- Injetado via JS -->
+                        </div>
                     </div>
                 </div>
             </div>
