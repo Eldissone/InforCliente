@@ -407,12 +407,24 @@ dailyPlansRoutes.post(
     try {
       await prisma.$transaction(async (tx) => {
         for (const mat of plan.materials) {
+          const alreadyProvided = Number(mat.providedQty || 0);
           const confirmedMat = materials?.find(m => m.productId === mat.productId);
-          const qtyToProvide = confirmedMat ? Number(confirmedMat.confirmedQty) : mat.requestedQty;
+          
+          // Se o frontend enviar confirmedQty, ele representa a quantidade *adicional* a fornecer.
+          // Caso não envie, assumimos que vamos fornecer todo o restante necessário.
+          const additionalQty = confirmedMat 
+              ? Number(confirmedMat.confirmedQty) 
+              : Math.max(0, mat.requestedQty - alreadyProvided);
+
+          if (additionalQty <= 0) {
+            continue; // Já foi disponibilizado o suficiente ou o user confirmou 0
+          }
+
+          const newTotalProvided = alreadyProvided + additionalQty;
 
           await tx.dailyPlanMaterial.update({
             where: { id: mat.id },
-            data: { providedQty: qtyToProvide }
+            data: { providedQty: newTotalProvided }
           });
 
           await tx.stockMovement.create({
@@ -421,7 +433,7 @@ dailyPlansRoutes.post(
               productId: mat.productId,
               projectId: plan.projectId,
               type: "EXIT",
-              quantity: qtyToProvide,
+              quantity: additionalQty,
               notes: `Disponibilizado para Plano Diario (ID: ${plan.id})${receivedBy ? ` - Recebido por: ${receivedBy}` : ''}`,
               userId: activeUserId
             }
@@ -438,14 +450,14 @@ dailyPlansRoutes.post(
           if (existingStock) {
             await tx.warehouseStock.update({
               where: { id: existingStock.id },
-              data: { quantity: { decrement: qtyToProvide } }
+              data: { quantity: { decrement: additionalQty } }
             });
           } else {
             await tx.warehouseStock.create({
               data: {
                 warehouseId: estaleiro.id,
                 productId: mat.productId,
-                quantity: -qtyToProvide,
+                quantity: -additionalQty,
                 ownerId: null
               }
             });
