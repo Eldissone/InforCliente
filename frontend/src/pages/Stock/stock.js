@@ -2063,7 +2063,7 @@ async function renderWarehouseDetail(container, warehouseId) {
 
     // FILTROS RÍGIDOS
     const stock = allStock.filter(s => s.product.category === 'MATERIAL' || s.product.category === 'CONSUMABLE');
-    const assignedTools = allTools.filter(t => t.product.category === 'TOOL' || t.product.category === 'EQUIPMENT');
+    const assignedTools = allTools.filter(t => (t.product.category === 'TOOL' || t.product.category === 'EQUIPMENT') && (t.status === 'AVAILABLE' || t.status === 'ASSIGNED'));
     const PAGE_SIZE = 8;
     let materialSearch = "";
     let toolsSearch = "";
@@ -2119,7 +2119,7 @@ async function renderWarehouseDetail(container, warehouseId) {
             </div>
             <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6">
                 <div class="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center"><span class="material-symbols-outlined text-3xl">construction</span></div>
-                <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ferramentas</p><p class="text-3xl font-black text-slate-900">${assignedTools.length} <span class="text-sm text-slate-300 font-bold">Ativos</span></p></div>
+                <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ferramentas</p><p class="text-3xl font-black text-slate-900">${groupedTools.length} <span class="text-sm text-slate-300 font-bold">Ativos</span></p></div>
             </div>
             <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-6">
                 <div class="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><span class="material-symbols-outlined text-3xl">swap_horiz</span></div>
@@ -3233,24 +3233,33 @@ window.providePlanMaterialsGlobal = async (id, event) => {
     const materials = plan?.materials || [];
 
     const materialsHtml = materials.length > 0
-        ? materials.map((m, i) => `
+        ? materials.map((m, i) => {
+            const alreadyProvided = Number(m.providedQty || 0);
+            const pendingQty = Math.max(0, m.requestedQty - alreadyProvided);
+            if (pendingQty <= 0) return ''; // Skip fully provided materials
+
+            return `
             <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
-                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Solicitado: <span class="text-amber-600 font-black">${m.requestedQty} ${m.product?.unit || ''}</span></p>
+                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                        Solicitado: <span class="text-amber-600 font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
+                        ${alreadyProvided > 0 ? `| Já Fornecido: <span class="text-emerald-600 font-black">${alreadyProvided}</span>` : ''}
+                    </p>
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd. a Fornecer</label>
                     <input type="number"
                         name="qty_${i}"
                         data-product-id="${m.productId || m.product?.id || ''}"
-                        value="${m.requestedQty}"
+                        value="${pendingQty}"
                         min="0"
                         step="0.01"
                         class="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:ring-2 focus:ring-emerald-500 text-center transition-all">
                 </div>
             </div>
-        `).join('')
+            `;
+        }).join('')
         : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material associado a este pedido.</p>`;
 
     const contentHtml = `
