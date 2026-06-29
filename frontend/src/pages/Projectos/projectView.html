@@ -1158,6 +1158,11 @@
                             <span id="stock_requests_badge"
                                 class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         </button>
+                        <button data-stock-subtab="adjustments" data-perm="stock:manage"
+                            class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
+                            <span class="md:hidden">Ajustes</span>
+                            <span class="hidden md:inline">Ajustes</span>
+                        </button>
                         <!-- <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
@@ -1233,6 +1238,34 @@
                     <div id="stock_requests_content" class="hidden p-6 md:p-10">
                         <div id="stockRequestsContainer" class="space-y-4">
                             <!-- Rendered JS: List of pending requests for this project -->
+                        </div>
+                    </div>
+
+                    <div id="stock_adjustments_content" class="hidden p-6 md:p-10">
+                        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Gestão de Ajustes de Stock</h3>
+                                <p class="text-xs text-slate-500 mt-1">Corrija duplicações de débitos (saídas) e ajuste quantidades de forma controlada.</p>
+                            </div>
+                            <div class="flex items-center gap-2 w-full lg:w-auto">
+                                <button id="btnReloadStockDuplicateDebits"
+                                    class="w-full lg:w-auto h-11 bg-slate-100 text-slate-700 px-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-all text-xs">
+                                    <span class="material-symbols-outlined text-lg">refresh</span>
+                                    Atualizar
+                                </button>
+                                <button id="btnApplyStockDuplicateDebits"
+                                    class="w-full lg:w-auto h-11 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all text-xs">
+                                    <span class="material-symbols-outlined text-lg">rule</span>
+                                    Aplicar Ajustes
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="stockDuplicateDebitsMessage" class="hidden mb-6 p-4 rounded-2xl border text-xs font-semibold"></div>
+
+                        <div id="stockDuplicateDebitsContainer"
+                            class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div class="p-10 text-center text-slate-400 font-bold">Carregando...</div>
                         </div>
                     </div>
 

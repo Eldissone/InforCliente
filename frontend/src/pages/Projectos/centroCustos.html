@@ -300,6 +300,89 @@
                 display: none;
             }
         }
+
+        /* ── IMPORT MODAL ── */
+        #importDropZone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 20px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        #importDropZone.drag-over {
+            border-color: #2afc8d;
+            background: rgba(42, 252, 141, 0.06);
+        }
+
+        #importDropZone:hover {
+            border-color: #94a3b8;
+            background: #f8fafc;
+        }
+
+        .import-step {
+            display: none;
+        }
+
+        .import-step.active {
+            display: block;
+        }
+
+        .import-cc-group {
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .import-cc-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            gap: 12px;
+        }
+
+        .import-preview-table thead th {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+            padding: 8px 10px;
+            background: #f8fafc;
+            white-space: nowrap;
+        }
+
+        .import-preview-table tbody td {
+            padding: 8px 10px;
+            font-size: 12px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .import-progress-bar {
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .import-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2afc8d, #00d4a8);
+            border-radius: 9999px;
+            transition: width 0.3s ease;
+        }
+
+        @keyframes pulse-import {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .import-loading .spinner {
+            animation: spin 0.7s linear infinite, pulse-import 1.5s ease-in-out infinite;
+        }
     </style>
 </head>
 
@@ -654,6 +737,13 @@
                                     <span class="material-symbols-outlined text-base">schedule</span>
                                     Agendar
                                 </button>
+                                <!-- ── IMPORT EXCEL BUTTON ── -->
+                                <button id="importExcelBtn"
+                                    title="Importar Orçamento via Planilha Excel"
+                                    class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
+                                    <span class="material-symbols-outlined text-base">upload_file</span>
+                                    Importar Excel
+                                </button>
                                 <button id="newNeedBtn"
                                     class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
                                     <span class="material-symbols-outlined text-base">add</span>
@@ -766,7 +856,7 @@
                             </div>
                         </div>
                         <div id="ganttChartBody"
-                            class="w-full min-w-[800px] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
+                            class="w-full min-w-max border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
                             <!-- Gantt rendered by JS -->
                             <div class="p-8 text-center text-slate-400 text-sm font-medium">A carregar cronograma...
                             </div>
@@ -1499,6 +1589,176 @@
 
     <!-- Toast -->
     <div id="toast" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ══════════════════════════════════════════════════════════ MODAL: IMPORTAR EXCEL -->
+    <div class="modal-overlay" id="modalImportExcel">
+        <div class="modal-box" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-5 flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <span class="material-symbols-outlined text-emerald-600">table_view</span>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">Importar Orçamento via Excel</h2>
+                        <p id="importModalSubtitle" class="text-xs text-slate-400 font-medium">Carrega a planilha Excel com os itens de orçamento</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeImportModal()" aria-label="Fechar"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all flex-shrink-0">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+
+            <!-- Step Indicator -->
+            <div class="flex items-center gap-3 mb-6 flex-shrink-0">
+                <div id="stepDot1" class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">1</div>
+                    <span class="text-xs font-bold text-emerald-700">Upload</span>
+                </div>
+                <div class="flex-1 h-px bg-slate-200" id="stepLine12"></div>
+                <div id="stepDot2" class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold" id="stepNum2">2</div>
+                    <span class="text-xs font-bold text-slate-400" id="stepLabel2">Mapeamento CCs</span>
+                </div>
+                <div class="flex-1 h-px bg-slate-200" id="stepLine23"></div>
+                <div id="stepDot3" class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold" id="stepNum3">3</div>
+                    <span class="text-xs font-bold text-slate-400" id="stepLabel3">Pré-visualização</span>
+                </div>
+            </div>
+
+            <!-- Scrollable body -->
+            <div class="flex-1 overflow-y-auto custom-scroll min-h-0">
+
+                <!-- ── STEP 1: Upload ── -->
+                <div class="import-step active" id="importStep1">
+                    <div id="importDropZone"
+                        class="flex flex-col items-center justify-center gap-4 py-16 px-8 text-center"
+                        onclick="document.getElementById('importFileInput').click()"
+                        ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                        ondragleave="this.classList.remove('drag-over')"
+                        ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleImportDrop(event)">
+                        <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-4xl text-emerald-500">upload_file</span>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800 text-base">Arrasta o ficheiro Excel aqui</p>
+                            <p class="text-sm text-slate-400 mt-1">ou clica para selecionar · .xlsx, .xls</p>
+                        </div>
+                        <input type="file" id="importFileInput" accept=".xlsx,.xls" class="hidden"
+                            onchange="handleImportFile(this.files[0])">
+                        <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xlsx</span>
+                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xls</span>
+                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> Até 20 MB</span>
+                        </div>
+                    </div>
+
+                    <!-- Template hint -->
+                    <div class="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                        <p class="text-xs font-bold text-blue-700 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">info</span>
+                            Estrutura esperada da planilha
+                        </p>
+                        <p class="text-xs text-blue-600 mt-2 leading-relaxed">
+                            A planilha deve ter colunas: <strong>TIPO</strong> (nome do Centro de Custo), <strong>DESCRIÇÃO</strong>,
+                            <strong>UN</strong> (unidade), <strong>QTD</strong> (quantidade), <strong>P. UNI</strong> (preço unitário),
+                            <strong>HF</strong> (horas/factor). As linhas de cabeçalho de grupo (ex: "Custo MATERIAL") identificam os CCs.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- ── STEP 2: CC Mapping ── -->
+                <div class="import-step" id="importStep2">
+                    <div class="mb-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                        <p class="text-xs font-bold text-amber-700 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">account_tree</span>
+                            Mapeia cada grupo da planilha para um Centro de Custo desta obra
+                        </p>
+                        <p class="text-xs text-amber-600 mt-1">Grupos sem mapeamento serão ignorados na importação.</p>
+                    </div>
+                    <div id="importCCMappingList" class="flex flex-col gap-3">
+                        <!-- CC mapping rows rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- ── STEP 3: Preview ── -->
+                <div class="import-step" id="importStep3">
+                    <div id="importSummaryBar" class="grid grid-cols-3 gap-4 mb-5">
+                        <!-- Summary KPIs rendered by JS -->
+                    </div>
+                    <div id="importPreviewGroups">
+                        <!-- Groups rendered by JS -->
+                    </div>
+                </div>
+
+                <!-- ── STEP 4: Importing (progress) ── -->
+                <div class="import-step" id="importStep4">
+                    <div class="flex flex-col items-center justify-center py-16 gap-6">
+                        <div class="import-loading">
+                            <div class="spinner" style="width:48px;height:48px;border-width:4px;"></div>
+                        </div>
+                        <div class="text-center">
+                            <p class="font-bold text-slate-800 text-base" id="importProgressLabel">A importar itens...</p>
+                            <p class="text-xs text-slate-400 mt-1" id="importProgressSub">0 de 0 itens processados</p>
+                        </div>
+                        <div class="w-full max-w-sm">
+                            <div class="import-progress-bar">
+                                <div class="import-progress-fill" id="importProgressFill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 5: Done ── -->
+                <div class="import-step" id="importStep5">
+                    <div class="flex flex-col items-center justify-center py-14 gap-5 text-center">
+                        <div class="w-20 h-20 rounded-3xl bg-emerald-100 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-4xl text-emerald-600">check_circle</span>
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-900 text-xl" id="importDoneTitle">Importação concluída!</p>
+                            <p class="text-sm text-slate-400 mt-2" id="importDoneSub">0 itens importados com sucesso.</p>
+                        </div>
+                        <div id="importDoneErrors" class="hidden w-full max-w-md p-4 bg-red-50 border border-red-100 rounded-xl text-left">
+                            <p class="text-xs font-bold text-red-700 mb-2 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-sm">error</span>
+                                Erros durante a importação
+                            </p>
+                            <ul id="importDoneErrorList" class="text-xs text-red-600 space-y-1 list-disc list-inside"></ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /scrollable body -->
+
+            <!-- Footer buttons -->
+            <div class="flex items-center justify-between pt-5 mt-4 border-t border-slate-100 flex-shrink-0">
+                <button type="button" id="importBtnBack" onclick="importGoBack()"
+                    class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all hidden">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">arrow_back</span>
+                    Voltar
+                </button>
+                <div class="ml-auto flex items-center gap-3">
+                    <button type="button" onclick="closeImportModal()"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all" id="importBtnCancel">
+                        Cancelar
+                    </button>
+                    <button type="button" id="importBtnNext" onclick="importGoNext()" disabled
+                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                        <span id="importBtnNextIcon" class="material-symbols-outlined text-base">arrow_forward</span>
+                        <span id="importBtnNextLabel">Continuar</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SheetJS CDN (Excel parsing) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

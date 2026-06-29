@@ -287,6 +287,7 @@ let stockState = {
   filters: { search: "", category: "", condition: "", status: "", warehouse: "" },
   isSelectionModeStock: false,
   selectedStockItems: new Set(),
+  duplicateDebits: { groups: [], selections: {} },
 };
 
 function isStockMaterialProduct(product) {
@@ -339,11 +340,17 @@ function updateStockWarehouseContextLabel() {
   const selected = getSelectedProjectWarehouse();
   ctx.classList.remove("hidden");
   if (!selected) {
-    ctx.textContent = `${warehouses.length} armazéns · vista consolidada`;
+    const apiHost = (() => {
+      try { return new URL(getApiBaseUrl()).host; } catch { return ""; }
+    })();
+    ctx.textContent = `${warehouses.length} armazéns · vista consolidada${apiHost ? ` · API: ${apiHost}` : ""}`;
     return;
   }
   const vis = selected.visibleToClient ? "visível ao cliente" : "apenas gestão";
-  ctx.textContent = `Armazém: ${selected.name} · ${vis}`;
+  const apiHost = (() => {
+    try { return new URL(getApiBaseUrl()).host; } catch { return ""; }
+  })();
+  ctx.textContent = `Armazém: ${selected.name} · ${vis}${apiHost ? ` · API: ${apiHost}` : ""}`;
 }
 let galleryState = { items: [] }; // Cache para fotos da galeria
 
@@ -3354,6 +3361,14 @@ async function loadStock() {
     stockState.summary = summaryItems;
     stockState.items = movements;
 
+    const hasServerTotals = summaryItems.some((i) => i.totalIn != null || i.totalOut != null);
+    if (!hasServerTotals && summaryItems.length) {
+      const apiHost = (() => {
+        try { return new URL(getApiBaseUrl()).host; } catch { return ""; }
+      })();
+      toast(`Totais de entradas/saídas ainda vêm do histórico parcial. Reinicie o backend API${apiHost ? ` (${apiHost})` : ""} e faça Ctrl+F5.`, { type: "warning" });
+    }
+
     syncStockWarehouseFilterOptions();
     updateStockWarehouseContextLabel();
     renderStockSummary(summaryItems, movements);
@@ -3453,6 +3468,247 @@ function renderStockMovements(items) {
       </tr>
     `;
   }).join("");
+}
+
+function setStockDuplicateDebitsMessage(message, { type = "info" } = {}) {
+  const box = el("stockDuplicateDebitsMessage");
+  if (!box) return;
+  if (!message) {
+    box.classList.add("hidden");
+    box.textContent = "";
+    box.className = "hidden mb-6 p-4 rounded-2xl border text-xs font-semibold";
+    return;
+  }
+  box.classList.remove("hidden");
+  const cls =
+    type === "error"
+      ? "bg-red-50 border-red-200 text-red-700"
+      : type === "success"
+        ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+        : "bg-slate-50 border-slate-200 text-slate-700";
+  box.className = `mb-6 p-4 rounded-2xl border text-xs font-semibold ${cls}`;
+  box.textContent = message;
+}
+
+function initDefaultDuplicateDebitSelections(groups) {
+  const selections = {};
+  (groups || []).forEach((g) => {
+    const items = (g.items || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    items.forEach((m, idx) => {
+      const locked = m.isProcessed === true || m.locked === true;
+      selections[m.id] = {
+        action: locked ? "KEEP" : (idx === 0 ? "KEEP" : "UNDO"),
+        newQuantity: m.quantity != null ? Number(m.quantity) : 0,
+        locked,
+      };
+    });
+  });
+  stockState.duplicateDebits.selections = selections;
+}
+
+function renderStockDuplicateDebits(groups) {
+  const container = el("stockDuplicateDebitsContainer");
+  if (!container) return;
+
+  if (!groups || groups.length === 0) {
+    container.innerHTML = `
+      <div class="p-10 text-center bg-slate-50">
+        <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">verified</span>
+        <p class="text-slate-600 font-bold">Nenhuma duplicação de débitos detectada.</p>
+        <p class="text-xs text-slate-500 mt-1">Se o problema persistir, ajuste via histórico ou revise o fluxo de disponibilização/consumo.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const sel = stockState.duplicateDebits.selections || {};
+  const groupHtml = (groups || []).map((g, idx) => {
+    const items = (g.items || []).slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    const title = escapeHtml(g.title || g.key || `Grupo ${idx + 1}`);
+    const hint = escapeHtml(g.hint || "");
+    return `
+      <div class="border-b border-slate-100 last:border-b-0">
+        <div class="p-6 md:p-8 bg-slate-50/70">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <div class="text-xs font-black uppercase tracking-widest text-slate-400">Duplicação de Débito</div>
+              <div class="text-sm font-bold text-slate-900 mt-1">${title}</div>
+              ${hint ? `<div class="text-xs text-slate-500 mt-1">${hint}</div>` : ""}
+            </div>
+            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400">${items.length} lançamentos</div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="w-full text-left">
+            <thead class="bg-white">
+              <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <th class="px-6 py-4">ID</th>
+                <th class="px-6 py-4">Data</th>
+                <th class="px-6 py-4">Material</th>
+                <th class="px-6 py-4 text-center">Qtd</th>
+                <th class="px-6 py-4 hidden lg:table-cell">Notas</th>
+                <th class="px-6 py-4 text-center">Ação</th>
+                <th class="px-6 py-4 text-center">Qtd Correta</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50 text-slate-700">
+              ${items.map((m) => {
+                const shortId = escapeHtml(String(m.id || "").slice(-8).toUpperCase());
+                const productName = escapeHtml(m.product?.name || m.productName || "Material");
+                const warehouseName = escapeHtml(m.warehouse?.name || m.warehouseName || "");
+                const userName = escapeHtml(m.user?.name || m.user?.email || m.userName || "");
+                const notes = escapeHtml(m.notes || "");
+                const created = formatDateBR(m.createdAt);
+                const qty = Number(m.quantity || 0);
+                const s = sel[m.id] || { action: "KEEP", newQuantity: qty, locked: false };
+                const disabled = s.locked ? "disabled" : "";
+                const badge = s.locked
+                  ? `<span class="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">Processado</span>`
+                  : `<span class="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[9px] font-black uppercase tracking-widest">Editável</span>`;
+                const action = s.action || "KEEP";
+                const qtyDisabled = s.locked || action !== "ADJUST" ? "disabled" : "";
+                return `
+                  <tr data-dup-move-row="${escapeHtml(m.id)}" class="hover:bg-slate-50/60">
+                    <td class="px-6 py-4 text-xs font-black text-slate-900">
+                      <div class="flex flex-col">
+                        <span>${shortId}</span>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">${warehouseName}</span>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <div class="text-xs font-bold text-slate-900">${created}</div>
+                      <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${userName || "-"}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                      <div class="text-xs font-bold text-slate-900">${productName}</div>
+                      <div class="mt-1">${badge}</div>
+                    </td>
+                    <td class="px-6 py-4 text-center text-xs font-black text-slate-900">${qty}</td>
+                    <td class="px-6 py-4 hidden lg:table-cell text-xs text-slate-500">${notes || "-"}</td>
+                    <td class="px-6 py-4">
+                      <div class="flex flex-col gap-2 items-center text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                          <input type="radio" name="dup_action_${escapeHtml(m.id)}" value="KEEP" ${action === "KEEP" ? "checked" : ""} ${disabled} data-dup-action="${escapeHtml(m.id)}">
+                          Manter
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                          <input type="radio" name="dup_action_${escapeHtml(m.id)}" value="UNDO" ${action === "UNDO" ? "checked" : ""} ${disabled} data-dup-action="${escapeHtml(m.id)}">
+                          Desfazer
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                          <input type="radio" name="dup_action_${escapeHtml(m.id)}" value="ADJUST" ${action === "ADJUST" ? "checked" : ""} ${disabled} data-dup-action="${escapeHtml(m.id)}">
+                          Ajustar
+                        </label>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                      <input type="number" step="0.01" min="0" value="${Number.isFinite(Number(s.newQuantity)) ? Number(s.newQuantity) : qty}"
+                        class="w-28 h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-black text-slate-700 focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50"
+                        ${qtyDisabled} data-dup-qty="${escapeHtml(m.id)}">
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = `<div class="divide-y divide-slate-100">${groupHtml}</div>`;
+}
+
+function updatePendingDuplicateDebitsSummary() {
+  const selections = stockState.duplicateDebits.selections || {};
+  let undo = 0;
+  let adjust = 0;
+  let locked = 0;
+  for (const k of Object.keys(selections)) {
+    const s = selections[k];
+    if (!s) continue;
+    if (s.locked) {
+      locked++;
+      continue;
+    }
+    if (s.action === "UNDO") undo++;
+    if (s.action === "ADJUST") adjust++;
+  }
+  const total = undo + adjust;
+  if (!total) {
+    setStockDuplicateDebitsMessage(`Selecione as ações (Manter/Desfazer/Ajustar). Registos bloqueados: ${locked}.`, { type: "info" });
+    return;
+  }
+  const parts = [];
+  if (undo) parts.push(`${undo} a desfazer`);
+  if (adjust) parts.push(`${adjust} a ajustar`);
+  setStockDuplicateDebitsMessage(`Pendentes: ${parts.join(" · ")}. Registos bloqueados: ${locked}.`, { type: "info" });
+}
+
+async function loadStockDuplicateDebits({ silent = false } = {}) {
+  const container = el("stockDuplicateDebitsContainer");
+  if (!container) return;
+
+  if (!silent) {
+    container.innerHTML = `<div class="p-10 text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500 mx-auto"></div></div>`;
+  }
+  setStockDuplicateDebitsMessage("", { type: "info" });
+
+  try {
+    const pid = getProjectId();
+    const wh = getSelectedProjectWarehouse()?.id || null;
+    const url = `/stock/${encodeURIComponent(pid)}/duplicate-debits` + (wh ? `?warehouseId=${encodeURIComponent(wh)}` : "");
+    const res = await apiRequest(url);
+    const groups = res.groups || [];
+    stockState.duplicateDebits.groups = groups;
+    initDefaultDuplicateDebitSelections(groups);
+    renderStockDuplicateDebits(groups);
+    updatePendingDuplicateDebitsSummary();
+  } catch (err) {
+    container.innerHTML = `<div class="p-8 text-center text-red-600 bg-red-50 rounded-2xl font-bold">Erro: ${escapeHtml(err.message || "Falha ao carregar duplicados")}</div>`;
+  }
+}
+
+async function applyStockDuplicateDebitsAdjustments() {
+  const selections = stockState.duplicateDebits.selections || {};
+  const ids = Object.keys(selections);
+  if (!ids.length) return toast("Nenhum lançamento para ajustar.", { type: "warning" });
+
+  const actions = [];
+  for (const id of ids) {
+    const s = selections[id];
+    if (!s || s.locked) continue;
+    if (s.action === "KEEP") continue;
+    if (s.action === "UNDO") {
+      actions.push({ movementId: id, action: "UNDO" });
+      continue;
+    }
+    if (s.action === "ADJUST") {
+      const q = Number(s.newQuantity);
+      if (!Number.isFinite(q) || q < 0) {
+        setStockDuplicateDebitsMessage("Existe ajuste com quantidade inválida. Use valores iguais ou maiores que 0.", { type: "error" });
+        return;
+      }
+      actions.push({ movementId: id, action: "ADJUST", newQuantity: q });
+      continue;
+    }
+  }
+
+  if (!actions.length) return toast("Nenhuma alteração selecionada.", { type: "warning" });
+
+  try {
+    const pid = getProjectId();
+    setStockDuplicateDebitsMessage("", { type: "info" });
+    await apiRequest(`/stock/${encodeURIComponent(pid)}/duplicate-debits/apply`, {
+      method: "POST",
+      body: { actions }
+    });
+    setStockDuplicateDebitsMessage("Ajustes aplicados com sucesso. Recalculando saldos...", { type: "success" });
+    await loadStock();
+    await loadStockDuplicateDebits({ silent: true });
+  } catch (err) {
+    setStockDuplicateDebitsMessage(err.message || "Erro ao aplicar ajustes.", { type: "error" });
+  }
 }
 
 function wireStockWorkflow() {
@@ -3821,7 +4077,9 @@ function renderStockInventory(movements, summary) {
   const visible = (summary || []).filter((item) => {
     const balance = Number(item.quantity || 0);
     const planned = Number(item.quantityPlanned || 0);
-    const { totalIn } = computeStockTotals(movements, item.productId, item.warehouseId);
+    const totalIn = item.totalIn != null
+      ? Number(item.totalIn || 0)
+      : computeStockTotals(movements, item.productId, item.warehouseId).totalIn;
     return balance > 0 || planned > 0 || totalIn > 0;
   });
 
@@ -3839,7 +4097,9 @@ function renderStockInventory(movements, summary) {
     const planned = Number(item.quantityPlanned || 0);
     const warehouseName = item.warehouse?.name || "Obra (planeado)";
 
-    const { totalIn, totalOut } = computeStockTotals(movements, item.productId, item.warehouseId);
+    const fallbackTotals = computeStockTotals(movements, item.productId, item.warehouseId);
+    const totalIn = item.totalIn != null ? Number(item.totalIn || 0) : fallbackTotals.totalIn;
+    const totalOut = item.totalOut != null ? Number(item.totalOut || 0) : fallbackTotals.totalOut;
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-inventory="${item.productId}::${item.warehouseId || ""}" title="Clique para ver detalhes da entrada">
@@ -4287,6 +4547,52 @@ function wireStock() {
     }
   });
 
+  el("btnReloadStockDuplicateDebits")?.addEventListener("click", () => {
+    loadStockDuplicateDebits();
+  });
+  el("btnApplyStockDuplicateDebits")?.addEventListener("click", () => {
+    applyStockDuplicateDebitsAdjustments();
+  });
+
+  document.addEventListener("click", (e) => {
+    const label = e.target.closest("label");
+    if (!label) return;
+    const input = label.querySelector("input[data-dup-action]");
+    if (!input || input.disabled) return;
+    if (input.checked) return;
+    input.checked = true;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  document.addEventListener("change", (e) => {
+    const actionEl = e.target.closest("[data-dup-action]");
+    if (actionEl) {
+      const id = actionEl.getAttribute("data-dup-action");
+      const action = actionEl.value;
+      if (!id || !stockState.duplicateDebits.selections?.[id]) return;
+      stockState.duplicateDebits.selections[id].action = action;
+      const row = actionEl.closest(`[data-dup-move-row="${id}"]`);
+      const qtyInput = row ? row.querySelector("[data-dup-qty]") : null;
+      const locked = stockState.duplicateDebits.selections[id].locked;
+      if (qtyInput) qtyInput.disabled = locked || action !== "ADJUST";
+      if (row) {
+        row.classList.remove("bg-red-50", "bg-amber-50");
+        if (action === "UNDO") row.classList.add("bg-red-50");
+        if (action === "ADJUST") row.classList.add("bg-amber-50");
+      }
+      updatePendingDuplicateDebitsSummary();
+      return;
+    }
+
+    const qtyEl = e.target.closest("[data-dup-qty]");
+    if (qtyEl) {
+      const id = qtyEl.getAttribute("data-dup-qty");
+      if (!id || !stockState.duplicateDebits.selections?.[id]) return;
+      stockState.duplicateDebits.selections[id].newQuantity = Number(qtyEl.value || 0);
+      updatePendingDuplicateDebitsSummary();
+    }
+  });
+
   // Sub-tabs de Stock (Fluxo, InventÃ¡rio, Galeria)
   document.querySelectorAll("[data-stock-subtab]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -4302,7 +4608,7 @@ function wireStock() {
       btn.classList.remove("text-slate-400", "border-transparent");
 
       // Visibilidade do conteÃºdo
-      ["stock_history_content", "stock_inventory_content", "stock_gallery_content", "stock_requests_content"].forEach(id => {
+      ["stock_history_content", "stock_inventory_content", "stock_gallery_content", "stock_requests_content", "stock_adjustments_content"].forEach(id => {
         el(id)?.classList.add("hidden");
       });
       el(`stock_${tab}_content`)?.classList.remove("hidden");
@@ -4312,6 +4618,9 @@ function wireStock() {
       }
       if (tab === "requests") {
         loadStockRequests();
+      }
+      if (tab === "adjustments") {
+        loadStockDuplicateDebits();
       }
     });
   });

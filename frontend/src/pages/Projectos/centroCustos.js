@@ -119,6 +119,27 @@ async function selectProject(project) {
   switchTab("dashboard");
 }
 
+// ── Toggle Group (Orçamento Geral) ─────────────────────────────────────────────
+window.toggleCCGroup = function(groupId) {
+  const items = document.querySelectorAll(`.${groupId}-item`);
+  const icon = document.getElementById(`${groupId}-icon`);
+  let isHidden = false;
+
+  items.forEach(item => {
+    if (item.classList.contains('hidden')) {
+      item.classList.remove('hidden');
+      isHidden = false;
+    } else {
+      item.classList.add('hidden');
+      isHidden = true;
+    }
+  });
+
+  if (icon) {
+    icon.style.transform = isHidden ? 'rotate(-90deg)' : 'rotate(0deg)';
+  }
+}
+
 // ── Load Cost Centers ──────────────────────────────────────────────────────────
 async function loadCostCenters() {
   if (!selectedProject) return;
@@ -390,7 +411,7 @@ async function loadNeeds() {
   tbody.innerHTML = `<tr><td colspan="12"><div class="spinner my-8"></div></td></tr>`;
 
   try {
-    const params = new URLSearchParams({ pageSize: "100" });
+    const params = new URLSearchParams({ pageSize: "1000" });
     if (ccId) params.set("costCenterId", ccId);
     if (status) params.set("status", status);
 
@@ -452,14 +473,17 @@ async function loadNeeds() {
       </tr>
     `;
 
+    let groupIndex = 0;
     for (const [ccName, group] of Object.entries(grouped)) {
+      const groupId = `cc-group-${groupIndex++}`;
       html += `
-        <tr class="bg-slate-100 border-t border-slate-200">
-        <td colspan="2"></td>
-        <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
+        <tr class="bg-slate-100 border-t border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors" onclick="toggleCCGroup('${groupId}')">
+          <td colspan="2" class="pl-4">
+            <span id="${groupId}-icon" class="material-symbols-outlined text-slate-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
+          </td>
+          <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
           <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalObra, group.currency)}</td>
           <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalSemana, group.currency)}</td>
-          <td colspan="4"></td>
           <td colspan="4"></td>
         </tr>
       `;
@@ -471,7 +495,7 @@ async function loadNeeds() {
         const totalObra = qty * price * hours;
 
         return `
-        <tr>
+        <tr class="${groupId}-item">
           <!--<td class="text-xs text-slate-500">${formatDateBR(n.date)}</td>
           <td><span class="text-xs font-bold text-slate-600">${n.costCenter?.code || "—"}</span> <span class="text-xs text-slate-400">${n.costCenter?.name || ""}</span></td>-->
           <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg text-xs font-black text-slate-600 tabular-nums">${n._orderNumber}</span></td>
@@ -1085,6 +1109,9 @@ function bindEvents() {
   // New Need button
   document.getElementById("newNeedBtn").addEventListener("click", () => openNeedModal());
 
+  // Import Excel button
+  document.getElementById("importExcelBtn").addEventListener("click", () => openImportModal());
+
   // New Payment button
   document.getElementById("newPayBtn").addEventListener("click", () => openPayModal());
 
@@ -1107,7 +1134,7 @@ function bindEvents() {
   document.getElementById("formCronograma").addEventListener("submit", submitCronograma);
 
   // Close modals on overlay click
-  ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma"].forEach((id) => {
+  ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma", "modalImportExcel"].forEach((id) => {
     document.getElementById(id).addEventListener("click", (e) => {
       if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
     });
@@ -1894,3 +1921,636 @@ window.closePaymentAside = function () {
   overlay.classList.add("opacity-0");
   setTimeout(() => overlay.classList.add("hidden"), 300);
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── IMPORT EXCEL FEATURE ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let importCurrentStep = 1;
+let importParsedGroups = []; // [{ sheetGroupName, items: [] }]
+let importMapping = {};      // sheetGroupName -> ccId or ""
+
+// Column name aliases (handles different spellings from the spreadsheet)
+const COL_ALIASES = {
+  tipo:       ["tipo", "type", "categoria"],
+  desc:       ["descri\u00e7\u00e3o", "descricao", "description", "desc", "item", "material", "servi\u00e7o"],
+  unit:       ["un", "und", "unit", "unidade", "un.", "und."],
+  qty:        ["qtd", "qtde", "qty", "quantidade", "quant"],
+  price:      ["p. uni", "p.uni", "preco unit", "pre\u00e7o unit\u00e1rio", "unit price", "p_uni", "p uni", "pu", "valor unit\u00e1rio"],
+  hours:      ["hf", "hrs", "horas", "factor", "h/f", "h.f", "hours"],
+};
+
+function resolveCol(headers) {
+  const idx = {};
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  headers.forEach((h, i) => {
+    const hn = norm(h);
+    for (const [key, aliases] of Object.entries(COL_ALIASES)) {
+      if (!idx[key] && aliases.some(a => hn.includes(a))) {
+        idx[key] = i;
+      }
+    }
+  });
+  return idx;
+}
+
+// ── Open / Close ──────────────────────────────────────────────────────────────
+function openImportModal() {
+  if (!selectedProject) { showToast("Seleciona uma Obra primeiro", "error"); return; }
+
+  importCurrentStep = 1;
+  importParsedGroups = [];
+  importMapping = {};
+
+  // Reset file input
+  const fi = document.getElementById("importFileInput");
+  if (fi) fi.value = "";
+
+  // Reset drop zone appearance
+  const dz = document.getElementById("importDropZone");
+  if (dz) {
+    dz.innerHTML = `
+      <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
+        <span class="material-symbols-outlined text-4xl text-emerald-500">upload_file</span>
+      </div>
+      <div>
+        <p class="font-bold text-slate-800 text-base">Arrasta o ficheiro Excel aqui</p>
+        <p class="text-sm text-slate-400 mt-1">ou clica para selecionar · .xlsx, .xls</p>
+      </div>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls" class="hidden"
+        onchange="handleImportFile(this.files[0])">
+      <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xlsx</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xls</span>
+        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> Até 20 MB</span>
+      </div>`;
+  }
+
+  updateImportStepUI(1);
+  document.getElementById("modalImportExcel").classList.add("open");
+}
+
+window.closeImportModal = function () {
+  document.getElementById("modalImportExcel").classList.remove("open");
+};
+
+// ── File handling ─────────────────────────────────────────────────────────────
+window.handleImportDrop = function (event) {
+  const file = event.dataTransfer.files[0];
+  if (file) handleImportFile(file);
+};
+
+window.handleImportFile = function (file) {
+  if (!file) return;
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["xlsx", "xls"].includes(ext)) {
+    showToast("Formato inválido. Use .xlsx ou .xls", "error");
+    return;
+  }
+
+  // Show loading in drop zone
+  const dz = document.getElementById("importDropZone");
+  dz.innerHTML = `
+    <div class="spinner"></div>
+    <p class="text-sm font-semibold text-slate-500">A processar <strong>${file.name}</strong>...</p>`;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+
+      // Try to find the most relevant sheet (first one with data, or the one with budget keywords)
+      const sheetNames = workbook.SheetNames;
+      let targetSheet = sheetNames[0];
+      for (const sn of sheetNames) {
+        const lower = sn.toLowerCase();
+        if (lower.includes("custo") || lower.includes("or") || lower.includes("tp") || lower.includes("budget")) {
+          targetSheet = sn;
+          break;
+        }
+      }
+
+      const ws = workbook.Sheets[targetSheet];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+      importParsedGroups = parseSheetRows(rows);
+
+      if (importParsedGroups.length === 0) {
+        dz.innerHTML = `
+          <div class="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center">
+            <span class="material-symbols-outlined text-4xl text-red-400">error</span>
+          </div>
+          <p class="font-bold text-red-700">Não foram encontrados itens válidos</p>
+          <p class="text-sm text-slate-400">Verifica se a planilha tem o formato correcto.</p>`;
+        return;
+      }
+
+      const totalItems = importParsedGroups.reduce((s, g) => s + g.items.length, 0);
+
+      // Show success in drop zone
+      dz.innerHTML = `
+        <div class="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
+          <span class="material-symbols-outlined text-4xl text-emerald-500">check_circle</span>
+        </div>
+        <div>
+          <p class="font-bold text-slate-800 text-base">${file.name}</p>
+          <p class="text-sm text-emerald-600 font-semibold mt-1">
+            ${importParsedGroups.length} grupo(s) detectado(s) · ${totalItems} itens
+          </p>
+        </div>
+        <button type="button"
+          onclick="document.getElementById('importFileInput').click()"
+          class="h-8 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all">
+          Trocar ficheiro
+        </button>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls" class="hidden"
+          onchange="handleImportFile(this.files[0])">`;
+
+      // Enable Next button
+      document.getElementById("importBtnNext").disabled = false;
+
+    } catch (err) {
+      console.error("Import parse error:", err);
+      dz.innerHTML = `
+        <div class="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center">
+          <span class="material-symbols-outlined text-4xl text-red-400">error</span>
+        </div>
+        <p class="font-bold text-red-700">Erro ao ler o ficheiro</p>
+        <p class="text-sm text-slate-400">${err.message}</p>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+};
+
+// ── Parser ────────────────────────────────────────────────────────────────────
+function parseSheetRows(rows) {
+  if (!rows || rows.length < 2) return [];
+
+  // Find header row (contains column names like TIPO, DESCRIÇÃO, UN, QTD, etc.)
+  let headerRowIdx = -1;
+  let colIdx = {};
+
+  for (let i = 0; i < Math.min(15, rows.length); i++) {
+    const r = rows[i];
+    const candidate = resolveCol(r);
+    // Need at least desc column to be a valid header
+    if (candidate.desc !== undefined) {
+      colIdx = candidate;
+      headerRowIdx = i;
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1) return [];
+
+  // Parse data rows below header
+  const groups = {};
+  let currentGroup = "GERAL";
+
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+
+    // Skip completely empty rows
+    const allEmpty = row.every(c => String(c).trim() === "");
+    if (allEmpty) continue;
+
+    const tipo = String(row[colIdx.tipo] ?? "").trim();
+    const desc = String(row[colIdx.desc] ?? "").trim();
+    const unit = String(row[colIdx.unit] ?? "").trim();
+    const qtyRaw = row[colIdx.qty] ?? "";
+    const priceRaw = row[colIdx.price] ?? "";
+    const hoursRaw = row[colIdx.hours] ?? "";
+
+    const qty = parseFloat(String(qtyRaw).replace(",", ".")) || 0;
+    const price = parseFloat(String(priceRaw).replace(",", ".")) || 0;
+    const hours = parseFloat(String(hoursRaw).replace(",", ".")) || 1;
+
+    if (tipo) {
+      currentGroup = tipo.toUpperCase();
+    }
+
+    // Must have description to be a valid item
+    if (!desc) continue;
+
+    // Ignore summary or empty-ish rows that might be mistaken as items
+    if (desc.toLowerCase().includes("total") && qty === 0 && price === 0) continue;
+
+    if (!groups[currentGroup]) {
+      groups[currentGroup] = { sheetGroupName: currentGroup, items: [] };
+    }
+
+    groups[currentGroup].items.push({
+      description: desc,
+      unit: unit || null,
+      quantity: qty || null,
+      unitPrice: price || null,
+      hours: hours !== 1 ? hours : null,
+      priority: "MEDIA",
+      status: "PENDING",
+      _totalObra: qty * price * hours,
+    });
+  }
+
+  return Object.values(groups).filter(g => g.items.length > 0);
+}
+
+// ── Step Navigation ───────────────────────────────────────────────────────────
+function updateImportStepUI(step) {
+  importCurrentStep = step;
+
+  // Hide all steps
+  document.querySelectorAll(".import-step").forEach(el => el.classList.remove("active"));
+
+  // Show current
+  const stepIds = ["", "importStep1", "importStep2", "importStep3", "importStep4", "importStep5"];
+  if (stepIds[step]) document.getElementById(stepIds[step])?.classList.add("active");
+
+  // Step indicator dots
+  [1, 2, 3].forEach(n => {
+    const numEl = document.getElementById(n === 1 ? null : `stepNum${n}`);
+    const lblEl = document.getElementById(n === 1 ? null : `stepLabel${n}`);
+    if (numEl) numEl.className = `w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${n <= step ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`;
+    if (lblEl) lblEl.className = `text-xs font-bold ${n <= step ? "text-emerald-700" : "text-slate-400"}`;
+  });
+
+  // Connector lines
+  const l12 = document.getElementById("stepLine12");
+  const l23 = document.getElementById("stepLine23");
+  if (l12) l12.style.background = step >= 2 ? "#2afc8d" : "#e2e8f0";
+  if (l23) l23.style.background = step >= 3 ? "#2afc8d" : "#e2e8f0";
+
+  // Step 1 dot (always active in step 1+)
+  const dot1 = document.querySelector("#stepDot1 > div");
+  if (dot1) dot1.className = `w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold`;
+
+  // Back button
+  const backBtn = document.getElementById("importBtnBack");
+  if (backBtn) backBtn.classList.toggle("hidden", step <= 1 || step >= 4);
+
+  // Next button
+  const nextBtn = document.getElementById("importBtnNext");
+  const nextIcon = document.getElementById("importBtnNextIcon");
+  const nextLabel = document.getElementById("importBtnNextLabel");
+  const cancelBtn = document.getElementById("importBtnCancel");
+
+  if (step === 1) {
+    nextBtn.disabled = importParsedGroups.length === 0;
+    nextIcon.textContent = "arrow_forward";
+    nextLabel.textContent = "Continuar";
+    nextBtn.classList.remove("hidden");
+    cancelBtn.classList.remove("hidden");
+  } else if (step === 2) {
+    nextBtn.disabled = false;
+    nextIcon.textContent = "visibility";
+    nextLabel.textContent = "Pré-visualizar";
+    nextBtn.classList.remove("hidden");
+    cancelBtn.classList.remove("hidden");
+  } else if (step === 3) {
+    nextBtn.disabled = false;
+    nextIcon.textContent = "upload";
+    nextLabel.textContent = "Confirmar Importação";
+    nextBtn.style.background = "";
+    nextBtn.classList.remove("hidden");
+    cancelBtn.classList.remove("hidden");
+  } else if (step === 4) {
+    nextBtn.classList.add("hidden");
+    cancelBtn.classList.add("hidden");
+    backBtn.classList.add("hidden");
+  } else if (step === 5) {
+    nextBtn.classList.add("hidden");
+    cancelBtn.textContent = "Fechar";
+    cancelBtn.classList.remove("hidden");
+  }
+}
+
+window.importGoNext = function () {
+  if (importCurrentStep === 1) {
+    renderCCMappingStep();
+    updateImportStepUI(2);
+  } else if (importCurrentStep === 2) {
+    collectCCMapping();
+    renderPreviewStep();
+    updateImportStepUI(3);
+  } else if (importCurrentStep === 3) {
+    runImport();
+  }
+};
+
+window.importGoBack = function () {
+  if (importCurrentStep === 2) updateImportStepUI(1);
+  else if (importCurrentStep === 3) updateImportStepUI(2);
+};
+
+// ── Step 2: CC Mapping ────────────────────────────────────────────────────────
+function renderCCMappingStep() {
+  const container = document.getElementById("importCCMappingList");
+  if (!container) return;
+
+  const ccOptions = costCenters.map(cc =>
+    `<option value="${cc.id}">${cc.code} — ${cc.name}</option>`).join("");
+
+  container.innerHTML = importParsedGroups.map((group, idx) => {
+    // Try auto-match by name similarity
+    const autoMatch = tryAutoMatch(group.sheetGroupName);
+    const selectedId = autoMatch ? autoMatch.id : "CREATE_NEW";
+
+    return `
+      <div class="import-cc-group">
+        <div class="import-cc-header">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center flex-shrink-0 text-xs font-bold text-slate-600">
+              ${group.items.length}
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-bold text-slate-800 truncate">${group.sheetGroupName}</p>
+              <p class="text-[10px] text-slate-400">${group.items.length} item(s) · Total: ${formatCurrency(
+      group.items.reduce((s, it) => s + (it._totalObra || 0), 0), "AOA")}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            ${autoMatch ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Auto-mapeado</span>` : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Novo CC</span>`}
+            <select data-group-idx="${idx}" id="ccMapSelect_${idx}"
+              class="h-9 px-3 bg-white border ${autoMatch ? "border-emerald-300" : "border-slate-200"} rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 min-w-[200px]">
+              <option value="CREATE_NEW">✨ Criar automaticamente</option>
+              <option value="">— Ignorar grupo —</option>
+              <optgroup label="Centros Existentes">
+                ${ccOptions}
+              </optgroup>
+            </select>
+          </div>
+        </div>
+        <!-- Preview of first 3 items -->
+        <div class="px-4 py-2 text-[10px] text-slate-400 font-semibold">
+          ${group.items.slice(0, 3).map(it => `<span class="inline-block mr-3">${it.description.substring(0, 40)}</span>`).join("")}
+          ${group.items.length > 3 ? `<span class="text-slate-300">+${group.items.length - 3} mais...</span>` : ""}
+        </div>
+      </div>`;
+  }).join("");
+
+  // Set auto-matched values
+  importParsedGroups.forEach((group, idx) => {
+    const autoMatch = tryAutoMatch(group.sheetGroupName);
+    const sel = document.getElementById(`ccMapSelect_${idx}`);
+    if (sel) {
+      sel.value = autoMatch ? autoMatch.id : "CREATE_NEW";
+    }
+  });
+}
+
+function tryAutoMatch(groupName) {
+  const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const gn = norm(groupName);
+
+  // Exact match on name or code
+  let match = costCenters.find(cc => norm(cc.name) === gn || norm(cc.code) === gn);
+  if (match) return match;
+
+  // Partial contains match
+  match = costCenters.find(cc => gn.includes(norm(cc.name)) || norm(cc.name).includes(gn));
+  if (match) return match;
+
+  // Keyword match (e.g. "FERRAMENTAS" matches CC named "Ferramentas de Obra")
+  const keywords = gn.split(/[\s\-_/]+/);
+  match = costCenters.find(cc => {
+    const ccNorm = norm(cc.name);
+    return keywords.some(kw => kw.length > 3 && ccNorm.includes(kw));
+  });
+  return match || null;
+}
+
+function collectCCMapping() {
+  importMapping = {};
+  importParsedGroups.forEach((group, idx) => {
+    const sel = document.getElementById(`ccMapSelect_${idx}`);
+    if (sel && sel.value) {
+      importMapping[group.sheetGroupName] = sel.value;
+    }
+  });
+}
+
+// ── Step 3: Preview ───────────────────────────────────────────────────────────
+function renderPreviewStep() {
+  const summaryBar = document.getElementById("importSummaryBar");
+  const previewGroups = document.getElementById("importPreviewGroups");
+
+  // Only include mapped groups
+  const mappedGroups = importParsedGroups.filter(g => importMapping[g.sheetGroupName]);
+  const totalItems = mappedGroups.reduce((s, g) => s + g.items.length, 0);
+  const totalValue = mappedGroups.reduce((s, g) =>
+    s + g.items.reduce((gs, it) => gs + (it._totalObra || 0), 0), 0);
+  const ignoredGroups = importParsedGroups.length - mappedGroups.length;
+
+  summaryBar.innerHTML = `
+    <div class="kpi-card">
+      <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Grupos Mapeados</p>
+      <p class="text-xl font-bold text-emerald-600">${mappedGroups.length}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Total de Itens</p>
+      <p class="text-xl font-bold text-slate-900">${totalItems}</p>
+    </div>
+    <div class="kpi-card">
+      <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor Total Estimado</p>
+      <p class="text-xl font-bold text-slate-900">${formatCurrency(totalValue, "AOA")}</p>
+    </div>`;
+
+  if (mappedGroups.length === 0) {
+    previewGroups.innerHTML = `
+      <div class="empty-state">
+        <span class="material-symbols-outlined text-3xl">warning</span>
+        <p class="text-sm font-semibold">Nenhum grupo mapeado</p>
+        <p class="text-xs text-slate-400">Volta ao passo anterior e mapeia pelo menos um Centro de Custo.</p>
+      </div>`;
+    document.getElementById("importBtnNext").disabled = true;
+    return;
+  }
+
+  document.getElementById("importBtnNext").disabled = false;
+
+  if (ignoredGroups > 0) {
+    previewGroups.innerHTML = `
+      <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl mb-4 text-xs font-semibold text-amber-700 flex items-center gap-2">
+        <span class="material-symbols-outlined text-sm">info</span>
+        ${ignoredGroups} grupo(s) sem mapeamento serão ignorados.
+      </div>`;
+  } else {
+    previewGroups.innerHTML = "";
+  }
+
+  mappedGroups.forEach(group => {
+    let ccName = "Novo Centro de Custo";
+    let ccCode = "NOVO";
+    let cur = selectedProject?.currency || "AOA";
+    if (importMapping[group.sheetGroupName] !== "CREATE_NEW") {
+        const cc = costCenters.find(c => c.id === importMapping[group.sheetGroupName]);
+        if (cc) {
+            ccName = cc.name;
+            ccCode = cc.code;
+            cur = cc.currency || "AOA";
+        }
+    }
+    const groupTotal = group.items.reduce((s, it) => s + (it._totalObra || 0), 0);
+
+    previewGroups.innerHTML += `
+      <div class="import-cc-group">
+        <div class="import-cc-header">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${group.sheetGroupName}</span>
+            <span class="material-symbols-outlined text-sm text-emerald-500">arrow_forward</span>
+            <span class="text-xs font-bold ${ccCode === 'NOVO' ? 'text-blue-600' : 'text-slate-900'}">${ccCode === 'NOVO' ? '✨ ' : ''}${ccCode} — ${ccName}</span>
+          </div>
+          <span class="text-xs font-bold text-slate-600">${group.items.length} itens · ${formatCurrency(groupTotal, cur)}</span>
+        </div>
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full import-preview-table">
+            <thead>
+              <tr>
+                <th class="text-left">Descrição</th>
+                <th class="text-center">UN</th>
+                <th class="text-right">Qtd</th>
+                <th class="text-right">P. Unit.</th>
+                <th class="text-right">Hrs</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${group.items.map(it => `
+                <tr>
+                  <td class="font-medium text-slate-800 max-w-xs" style="max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${(it.description || "").replace(/"/g, "&quot;")}">${it.description}</td>
+                  <td class="text-center text-slate-500">${it.unit || "—"}</td>
+                  <td class="text-right text-slate-700">${it.quantity ? Number(it.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+                  <td class="text-right text-slate-700">${it.unitPrice ? Number(it.unitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+                  <td class="text-right text-slate-500">${it.hours ? Number(it.hours).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+                  <td class="text-right font-bold text-slate-900">${formatCurrency(it._totalObra || 0, cur)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  });
+}
+
+// ── Step 4: Run Import ────────────────────────────────────────────────────────
+async function runImport() {
+  updateImportStepUI(4);
+  const progressFill = document.getElementById("importProgressFill");
+  const progressLabel = document.getElementById("importProgressLabel");
+  const progressSub = document.getElementById("importProgressSub");
+  let done = 0;
+  const errors = [];
+
+  // First create missing cost centers
+  progressLabel.textContent = "A criar Centros de Custo...";
+  for (let i = 0; i < importParsedGroups.length; i++) {
+    const group = importParsedGroups[i];
+    if (importMapping[group.sheetGroupName] === "CREATE_NEW") {
+      try {
+        let safeName = (group.sheetGroupName || "").trim();
+        if (safeName.length < 2) safeName = safeName ? `CC ${safeName}` : "CUSTO GERAL";
+        let safeCode = safeName.substring(0, 4).toUpperCase().trim();
+        if (safeCode.length < 1) safeCode = "GER";
+        // Append a short random suffix to guarantee uniqueness (e.g., GER-X2)
+        safeCode = `${safeCode}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
+
+        const body = {
+          code: safeCode,
+          name: safeName,
+          currency: selectedProject.currency || "AOA",
+          active: true
+        };
+        const newCc = await apiRequest(`/cost-centers/project/${selectedProject.id}`, { method: "POST", body });
+        importMapping[group.sheetGroupName] = newCc.id || newCc.ccId || (newCc.items && newCc.items[0]?.id) || newCc;
+        // In case the API returns the object differently, we try a few id paths. Usually just newCc.id.
+        if (typeof newCc === 'object' && newCc.id) {
+            importMapping[group.sheetGroupName] = newCc.id;
+        }
+      } catch (err) {
+        errors.push(`Erro ao criar CC ${group.sheetGroupName}: ${err.message}`);
+        importMapping[group.sheetGroupName] = null; // Prevent importing items for this CC
+      }
+    }
+  }
+
+  // Build list of items to import
+  const toImport = [];
+  for (const group of importParsedGroups) {
+    let ccId = importMapping[group.sheetGroupName];
+    if (!ccId || ccId === "CREATE_NEW") continue; // Skip if failed to create or ignored
+    // Just to ensure ccId is a string, if api returned an object fallback
+    if (typeof ccId === "object" && ccId.id) ccId = ccId.id;
+
+    for (const item of group.items) {
+      toImport.push({ ccId, ...item });
+    }
+  }
+
+  if (toImport.length === 0 && errors.length === 0) {
+    showToast("Nenhum item para importar", "warning");
+    updateImportStepUI(1);
+    return;
+  }
+
+  // Get responsible name — use the first available user or a fallback
+  let responsibleName = null;
+  try {
+    const ud = await apiRequest("/users/receivers");
+    if (ud.items && ud.items.length > 0) responsibleName = ud.items[0].name || ud.items[0].email;
+  } catch { /* ignore — responsible is optional */ }
+
+  for (const item of toImport) {
+    try {
+      const body = {
+        costCenterId: item.ccId,
+        description: item.description,
+        unit: item.unit || null,
+        quantity: item.quantity || null,
+        unitPrice: item.unitPrice || null,
+        hours: item.hours || null,
+        priority: item.priority || "MEDIA",
+        status: item.status || "PENDING",
+        responsible: responsibleName || null,
+      };
+      await apiRequest(`/cost-centers/${item.ccId}/needs`, { method: "POST", body });
+      done++;
+    } catch (err) {
+      errors.push(`"${item.description.substring(0, 40)}": ${err.message}`);
+    }
+
+    // Update progress
+    const pct = Math.round((done / toImport.length) * 100);
+    if (progressFill) progressFill.style.width = `${pct}%`;
+    if (progressLabel) progressLabel.textContent = `A importar itens... (${pct}%)`;
+    if (progressSub) progressSub.textContent = `${done} de ${toImport.length} itens processados`;
+  }
+
+  // Step 5: Done
+  updateImportStepUI(5);
+  document.getElementById("importDoneTitle").textContent =
+    done > 0 ? "Importação concluída!" : "Sem itens importados";
+  document.getElementById("importDoneSub").textContent =
+    `${done} de ${toImport.length} itens importados com sucesso.`;
+
+  if (errors.length > 0) {
+    const errDiv = document.getElementById("importDoneErrors");
+    const errList = document.getElementById("importDoneErrorList");
+    errDiv.classList.remove("hidden");
+    errList.innerHTML = errors.slice(0, 10).map(e => `<li>${e}</li>`).join("");
+    if (errors.length > 10) errList.innerHTML += `<li>...e mais ${errors.length - 10} erros.</li>`;
+  }
+
+  // Refresh data
+  if (done > 0) {
+    showToast(`${done} itens importados com sucesso!`, "success");
+    await Promise.all([loadNeeds(), loadSummary()]);
+    // Switch to the needs tab when modal is closed
+    const cancelBtn = document.getElementById("importBtnCancel");
+    if (cancelBtn) {
+      cancelBtn.onclick = () => {
+        closeImportModal();
+        switchTab("necessidades");
+      };
+    }
+  }
+}

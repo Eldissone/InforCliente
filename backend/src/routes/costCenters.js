@@ -236,7 +236,7 @@ costCenterRoutes.get(
     const status = req.query.status ? String(req.query.status) : "";
     const priority = req.query.priority ? String(req.query.priority) : "";
     const page = Math.max(1, Number(req.query.page || 1));
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+    const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
     const where = {
       costCenterId,
@@ -279,7 +279,7 @@ costCenterRoutes.get(
     const ccId = req.query.costCenterId ? String(req.query.costCenterId) : "";
     const scheduled = req.query.scheduled ? (req.query.scheduled === "true") : undefined;
     const page = Math.max(1, Number(req.query.page || 1));
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+    const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
     const where = {
       projectId,
@@ -522,7 +522,7 @@ costCenterRoutes.get(
     const status = req.query.status ? String(req.query.status) : "";
     const week = req.query.week ? String(req.query.week) : "";
     const page = Math.max(1, Number(req.query.page || 1));
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+    const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
     const where = {
       projectId,

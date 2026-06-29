@@ -331,7 +331,37 @@ stockRoutes.get(
       selectedWarehouseIds.length === 1 ? selectedWarehouseIds[0] : null
     );
     const withImages = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
-    let enriched = await enrichStockItemsWithOwners(withImages);
+    
+    const totalsRows = await prisma.stockMovement.groupBy({
+      by: ["productId", "warehouseId", "type"],
+      where: {
+        projectId,
+        warehouseId: { in: selectedWarehouseIds },
+        productId: { in: productIds },
+        quantity: { gt: 0 },
+        type: { in: ["ENTRY", "EXIT", "TRANSFER_IN", "TRANSFER_OUT", "LOSS"] },
+      },
+      _sum: { quantity: true },
+    });
+    const totalsByKey = {};
+    for (const r of totalsRows) {
+      const key = `${r.productId}_${r.warehouseId}`;
+      if (!totalsByKey[key]) totalsByKey[key] = { totalIn: 0, totalOut: 0 };
+      const qty = Number(r._sum?.quantity || 0);
+      if (r.type === "ENTRY" || r.type === "TRANSFER_IN") {
+        totalsByKey[key].totalIn += qty;
+      } else if (r.type === "EXIT" || r.type === "TRANSFER_OUT" || r.type === "LOSS") {
+        totalsByKey[key].totalOut += qty;
+      }
+    }
+
+    const withTotals = withImages.map((item) => {
+      if (!item?.productId || !item?.warehouseId) return { ...item, totalIn: 0, totalOut: 0 };
+      const key = `${item.productId}_${item.warehouseId}`;
+      const t = totalsByKey[key] || { totalIn: 0, totalOut: 0 };
+      return { ...item, totalIn: t.totalIn, totalOut: t.totalOut };
+    });
+    let enriched = await enrichStockItemsWithOwners(withTotals);
     if (isClienteRole(req)) {
       enriched = enriched.filter(
         (item) => item.product?.category === "MATERIAL" || item.product?.category === "CONSUMABLE"
@@ -636,6 +666,216 @@ function getScopedClientId(req) {
   return req.user.clientId || null;
 }
 
+function extractDailyPlanIdFromNotes(notes) {
+  const s = String(notes || "");
+  const m = s.match(/\b(c[a-z0-9]{24,})\b/i);
+  return m ? m[1] : null;
+}
+
+function extractDailyPlanShortCodeFromNotes(notes) {
+  const s = String(notes || "");
+  const m = s.match(/plano(?:\s+di[aá]rio)?[^a-z0-9]*([a-z0-9]{6})\b/i);
+  return m ? String(m[1]).toLowerCase() : null;
+}
+
+async function resolveDailyPlanIdFromNotes(db, projectId, notes) {
+  const full = extractDailyPlanIdFromNotes(notes);
+  if (full) return full;
+  const code = extractDailyPlanShortCodeFromNotes(notes);
+  if (!code || !projectId) return null;
+  const plans = await db.dailyPlan.findMany({
+    where: { projectId, id: { endsWith: code } },
+    select: { id: true },
+    take: 2,
+  });
+  if (plans.length !== 1) return null;
+  return plans[0].id;
+}
+
+function normalizeNotes(notes) {
+  return String(notes || "")
+    .replace(/\[[^\]]*ajustado[^\]]*\]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function movementEffectQty(m) {
+  const qty = Number(m.quantity || 0);
+  const t = String(m.type || "").toUpperCase();
+  if (t === "EXIT" || t === "LOSS" || t === "TRANSFER_OUT") return -qty;
+  return qty;
+}
+
+async function createSystemLog(tx, req, { action, status, details }) {
+  const u = req.user || {};
+  return tx.systemLog.create({
+    data: {
+      userId: u.sub || null,
+      userName: u.name || null,
+      userEmail: u.email || null,
+      action: String(action || "unknown"),
+      module: "stock",
+      status: String(status || "success"),
+      ipAddress: req.ip || null,
+      userAgent: String(req.headers["user-agent"] || ""),
+      details: details || null,
+    },
+  });
+}
+
+async function isMovementLockedHard(tx, movement) {
+  const cat = String(movement?.product?.category || "").toUpperCase();
+  if (cat === "TOOL" || cat === "EQUIPMENT") return true;
+  const photoCount = await tx.projectPhoto.count({ where: { movementId: movement.id } });
+  if (photoCount > 0) return true;
+  return false;
+}
+
+async function isMovementProcessed(tx, movement) {
+  if (await isMovementLockedHard(tx, movement)) return true;
+  const planId = await resolveDailyPlanIdFromNotes(tx, movement.projectId, movement.notes);
+  if (!planId) return false;
+  const plan = await tx.dailyPlan.findUnique({
+    where: { id: planId },
+    select: { status: true, returnConfirmedAt: true },
+  });
+  if (!plan) return false;
+  if (plan.status === "COMPLETED") return true;
+  if (plan.returnConfirmedAt) return true;
+  return false;
+}
+
+async function applyMovementQuantityAdjustment(tx, req, movementId, newQuantity, notes) {
+  const oldMovement = await tx.stockMovement.findUnique({
+    where: { id: movementId },
+    include: { product: true },
+  });
+  if (!oldMovement) {
+    const err = new Error("MOVEMENT_NOT_FOUND");
+    err.code = "MOVEMENT_NOT_FOUND";
+    throw err;
+  }
+
+  const oldQty = Number(oldMovement.quantity);
+  const newQty = Number(newQuantity);
+  const oldEffect = movementEffectQty(oldMovement);
+  const newEffect = movementEffectQty({ ...oldMovement, quantity: newQty });
+  const delta = newEffect - oldEffect;
+
+  const motive =
+    notes === "__VOID__"
+      ? "Anulado (duplicado)"
+      : (notes || "Correção de duplicado");
+  const auditNote = `[Ajustado por ${req.user?.name || req.user?.email || "Admin"} em ${new Date().toLocaleString("pt-PT")}: de ${oldQty} para ${newQty}. Motivo: ${motive}]`;
+
+  const mov = await tx.stockMovement.update({
+    where: { id: movementId },
+    data: {
+      quantity: newQty,
+      notes: oldMovement.notes ? `${oldMovement.notes}\n${auditNote}` : auditNote,
+    },
+  });
+
+  if (delta !== 0) {
+    const stock = await tx.warehouseStock.findFirst({
+      where: {
+        productId: oldMovement.productId,
+        warehouseId: oldMovement.warehouseId,
+        ownerId: oldMovement.ownerId,
+      },
+    });
+
+    if (stock) {
+      await tx.warehouseStock.update({
+        where: { id: stock.id },
+        data: { quantity: { increment: delta } },
+      });
+    } else {
+      await tx.warehouseStock.create({
+        data: {
+          productId: oldMovement.productId,
+          warehouseId: oldMovement.warehouseId,
+          ownerId: oldMovement.ownerId,
+          quantity: delta,
+        },
+      });
+    }
+  }
+
+  await createSystemLog(tx, req, {
+    action: notes === "__VOID__" ? "stock_movement_void" : "stock_movement_adjust",
+    status: "success",
+    details: {
+      movementId,
+      productId: oldMovement.productId,
+      warehouseId: oldMovement.warehouseId,
+      type: oldMovement.type,
+      oldQty,
+      newQty,
+      delta,
+      notes: notes === "__VOID__" ? null : (notes || null),
+    },
+  });
+
+  return mov;
+}
+
+async function deleteMovementAndRevertStock(tx, req, movementId) {
+  const oldMovement = await tx.stockMovement.findUnique({
+    where: { id: movementId },
+    include: { product: true },
+  });
+  if (!oldMovement) {
+    const err = new Error("MOVEMENT_NOT_FOUND");
+    err.code = "MOVEMENT_NOT_FOUND";
+    throw err;
+  }
+
+  const effect = movementEffectQty(oldMovement);
+  const delta = -effect;
+
+  const stock = await tx.warehouseStock.findFirst({
+    where: {
+      productId: oldMovement.productId,
+      warehouseId: oldMovement.warehouseId,
+      ownerId: oldMovement.ownerId,
+    },
+  });
+  if (stock) {
+    await tx.warehouseStock.update({
+      where: { id: stock.id },
+      data: { quantity: { increment: delta } },
+    });
+  } else {
+    await tx.warehouseStock.create({
+      data: {
+        productId: oldMovement.productId,
+        warehouseId: oldMovement.warehouseId,
+        ownerId: oldMovement.ownerId,
+        quantity: delta,
+      },
+    });
+  }
+
+  await tx.stockMovement.delete({ where: { id: movementId } });
+
+  await createSystemLog(tx, req, {
+    action: "stock_movement_delete",
+    status: "success",
+    details: {
+      movementId,
+      productId: oldMovement.productId,
+      warehouseId: oldMovement.warehouseId,
+      type: oldMovement.type,
+      quantity: Number(oldMovement.quantity),
+      delta,
+    },
+  });
+
+  return { ok: true };
+}
+
 async function resolveWarehouseFilter(req, warehouseId) {
   if (warehouseId) {
     await assertWarehouseAccessible(req, warehouseId);
@@ -779,6 +1019,224 @@ stockRoutes.get(
   })
 );
 
+stockRoutes.get(
+  "/:id/duplicate-debits",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    const warehouseId = req.query.warehouseId ? String(req.query.warehouseId) : null;
+
+    if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
+    if (warehouseId) await assertWarehouseAccessible(req, warehouseId);
+
+    const where = {
+      projectId,
+      type: "EXIT",
+      quantity: { gt: 0 },
+      ...(warehouseId ? { warehouseId } : {}),
+    };
+
+    const raw = await prisma.stockMovement.findMany({
+      where,
+      include: { product: true, warehouse: true },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
+
+    const userIds = [...new Set(raw.map((m) => m.userId).filter(Boolean))];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const userById = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const withUser = raw.map((m) => ({ ...m, user: userById[m.userId] || null }));
+
+    const planResolved = await Promise.all(
+      withUser.map(async (m) => {
+        const planId = await resolveDailyPlanIdFromNotes(prisma, m.projectId, m.notes);
+        return { ...m, _planIdResolved: planId };
+      })
+    );
+
+    const onlyPlan = planResolved.filter((m) => Boolean(m._planIdResolved));
+
+    const byKey = new Map();
+    for (const m of onlyPlan) {
+      const planId = m._planIdResolved;
+      const key = `plan:${planId}|${m.productId}|${m.warehouseId}`;
+      const arr = byKey.get(key) || [];
+      arr.push(m);
+      byKey.set(key, arr);
+    }
+
+    const dupGroups = [...byKey.entries()]
+      .filter(([, items]) => items.length > 1)
+      .map(([key, items]) => ({ key, items }));
+
+    if (!dupGroups.length) return res.json({ groups: [] });
+
+    const allMoveIds = dupGroups.flatMap((g) => g.items.map((i) => i.id));
+    const photoCounts = await prisma.projectPhoto.groupBy({
+      by: ["movementId"],
+      where: { movementId: { in: allMoveIds } },
+      _count: { movementId: true },
+    });
+    const photoCountByMoveId = Object.fromEntries(photoCounts.map((r) => [r.movementId, r._count.movementId]));
+
+    const planIds = [...new Set(dupGroups.map((g) => g.items.map((i) => i._planIdResolved).filter(Boolean)).flat())];
+    const plans = planIds.length
+      ? await prisma.dailyPlan.findMany({
+          where: { id: { in: planIds } },
+          select: { id: true, status: true, returnConfirmedAt: true },
+        })
+      : [];
+    const planById = Object.fromEntries(plans.map((p) => [p.id, p]));
+
+    const groups = dupGroups.map((g) => {
+      const sample = g.items[0];
+      const productName = sample.product?.name || "Material";
+      const unit = sample.product?.unit || "UN";
+      const wName = sample.warehouse?.name || "Armazém";
+      const qty = Number(sample.quantity || 0);
+      const planId = sample._planIdResolved;
+      const hint = planId ? `Plano ${String(planId).slice(-6).toUpperCase()}` : "";
+
+      const items = g.items.map((m) => {
+        const pid = m._planIdResolved;
+        const plan = pid ? planById[pid] : null;
+        const cat = String(m.product?.category || "").toUpperCase();
+        const processed =
+          cat === "TOOL" ||
+          cat === "EQUIPMENT" ||
+          (photoCountByMoveId[m.id] || 0) > 0;
+        return { ...m, isProcessed: Boolean(processed) };
+      });
+
+      return {
+        key: g.key,
+        title: `${productName} · ${wName} · ${qty} ${unit}`,
+        hint,
+        items,
+      };
+    });
+
+    return res.json({ groups });
+  })
+);
+
+stockRoutes.post(
+  "/:id/duplicate-debits/apply",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const body = z.object({
+      actions: z.array(z.object({
+        movementId: z.string(),
+        action: z.enum(["UNDO", "ADJUST"]),
+        newQuantity: z.number().min(0).optional(),
+        notes: z.string().optional().nullable(),
+      })).min(1),
+    }).parse(req.body);
+
+    const ids = body.actions.map((a) => a.movementId);
+    const movements = await prisma.stockMovement.findMany({
+      where: { id: { in: ids }, projectId },
+      include: { product: true },
+    });
+    const byId = Object.fromEntries(movements.map((m) => [m.id, m]));
+
+    for (const a of body.actions) {
+      const m = byId[a.movementId];
+      if (!m) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND", movementId: a.movementId });
+      await assertWarehouseAccessible(req, m.warehouseId);
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const applied = [];
+      for (const a of body.actions) {
+        const m = await tx.stockMovement.findUnique({
+          where: { id: a.movementId },
+          include: { product: true },
+        });
+        if (!m || m.projectId !== projectId) {
+          const err = new Error("MOVEMENT_NOT_FOUND");
+          err.code = "MOVEMENT_NOT_FOUND";
+          throw err;
+        }
+        const lockedHard = await isMovementLockedHard(tx, m);
+        if (lockedHard) {
+          const err = new Error("MOVEMENT_ALREADY_PROCESSED");
+          err.code = "MOVEMENT_ALREADY_PROCESSED";
+          err.movementId = a.movementId;
+          throw err;
+        }
+
+        if (a.action === "UNDO") {
+          await applyMovementQuantityAdjustment(tx, req, a.movementId, 0, "__VOID__");
+          applied.push({ movementId: a.movementId, action: "UNDO", newQuantity: 0 });
+          continue;
+        }
+        if (a.action === "ADJUST") {
+          if (a.newQuantity === undefined) {
+            const err = new Error("NEW_QUANTITY_REQUIRED");
+            err.code = "NEW_QUANTITY_REQUIRED";
+            throw err;
+          }
+          await applyMovementQuantityAdjustment(tx, req, a.movementId, a.newQuantity, a.notes || "Correção de duplicado");
+          applied.push({ movementId: a.movementId, action: "ADJUST", newQuantity: a.newQuantity });
+          continue;
+        }
+      }
+      return { ok: true, applied };
+    });
+
+    return res.json(result);
+  })
+);
+
+stockRoutes.delete(
+  "/:projectId/movements/:id",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const movementId = String(req.params.id);
+
+    if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const movement = await prisma.stockMovement.findUnique({
+      where: { id: movementId },
+      include: { product: true },
+    });
+    if (!movement || movement.projectId !== projectId) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+
+    await assertWarehouseAccessible(req, movement.warehouseId);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.stockMovement.findUnique({
+        where: { id: movementId },
+        include: { product: true },
+      });
+      if (!fresh || fresh.projectId !== projectId) return null;
+      const processed = await isMovementProcessed(tx, fresh);
+      if (processed) {
+        const err = new Error("MOVEMENT_ALREADY_PROCESSED");
+        err.code = "MOVEMENT_ALREADY_PROCESSED";
+        throw err;
+      }
+      await deleteMovementAndRevertStock(tx, req, movementId);
+      return { ok: true };
+    });
+
+    if (!updated) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    return res.json(updated);
+  })
+);
+
 // PATCH - Atualizar saldo diretamente (Ajuste Rápido)
 stockRoutes.patch(
   "/balance/:id",
@@ -847,6 +1305,45 @@ stockRoutes.delete(
   })
 );
 
+// PATCH - Ajustar movimento de stock (Correção de duplicados/erros)
+stockRoutes.patch(
+  "/movements/:id/adjust",
+  requirePermission("stock", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { newQuantity, notes } = z.object({
+      newQuantity: z.number().min(0),
+      notes: z.string().optional().nullable(),
+    }).parse(req.body);
+
+    const oldMovement = await prisma.stockMovement.findUnique({
+      where: { id },
+      include: { product: true }
+    });
+
+    if (!oldMovement) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    
+    await assertWarehouseAccessible(req, oldMovement.warehouseId);
+    if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    let delta = 0;
+    const oldQty = Number(oldMovement.quantity);
+    
+    if (oldMovement.type === "EXIT" || oldMovement.type === "LOSS") {
+      delta = oldQty - newQuantity;
+    } else {
+      delta = newQuantity - oldQty;
+    }
+    
+    const updated = await prisma.$transaction(async (tx) => {
+      const mov = await applyMovementQuantityAdjustment(tx, req, id, newQuantity, notes || "Correção de duplicado");
+      return mov;
+    });
+
+    return res.json(updated);
+  })
+);
+
 // PATCH - Atualizar quantidade planeada para um material do projeto
 stockRoutes.patch(
   "/:id/planned",
@@ -883,4 +1380,3 @@ stockRoutes.patch(
 );
 
 module.exports = { stockRoutes };
-

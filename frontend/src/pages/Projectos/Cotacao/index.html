@@ -190,10 +190,21 @@
 
             <!-- TAB: ITENS EM COTAÇÃO -->
             <div class="tab-panel active" id="tab-pendentes">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold text-slate-800">Itens a Precificar</h2>
-                    <span id="pendentesCount"
-                        class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">Carregando...</span>
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-lg font-bold text-slate-800">Itens a Precificar</h2>
+                        <span id="pendentesCount"
+                            class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">Carregando...</span>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                        <div class="relative w-full sm:w-64">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input type="text" id="searchPendentes" placeholder="Pesquisar item..." class="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm transition-all">
+                        </div>
+                        <select id="filterCentroCusto" class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer w-full sm:w-auto max-w-[200px] truncate">
+                            <option value="">Todos Centros de Custo</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="overflow-x-auto rounded-xl border border-slate-200">
                     <table class="w-full text-left border-collapse min-w-[800px]">

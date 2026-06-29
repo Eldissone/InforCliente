@@ -122,6 +122,11 @@ function initTabs() {
 function initEvents() {
   document.getElementById("formSupplier").addEventListener("submit", submitSupplier);
   document.getElementById("formAddQuote").addEventListener("submit", submitQuote);
+
+  const searchInput = document.getElementById("searchPendentes");
+  const filterCc = document.getElementById("filterCentroCusto");
+  if (searchInput) searchInput.addEventListener("input", renderNeeds);
+  if (filterCc) filterCc.addEventListener("change", renderNeeds);
 }
 
 // ==========================================
@@ -131,6 +136,24 @@ async function loadNeeds() {
   try {
     const data = await apiRequest(`/quotes/project/${currentProjectId}/needs`);
     currentNeeds = data.items || [];
+
+    const filterCc = document.getElementById("filterCentroCusto");
+    if (filterCc) {
+      try {
+        const ccData = await apiRequest(`/cost-centers/project/${currentProjectId}`);
+        const ccs = ccData.items || [];
+        ccs.sort((a, b) => a.name.localeCompare(b.name));
+        const currentVal = filterCc.value;
+        filterCc.innerHTML = '<option value="">Todos Centros de Custo</option>' + 
+          ccs.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+        if (ccs.some(c => c.id === currentVal)) {
+          filterCc.value = currentVal;
+        }
+      } catch (ccErr) {
+        console.error("Erro a carregar centros de custo:", ccErr);
+      }
+    }
+
     renderNeeds();
   } catch (err) {
     console.error("Erro a carregar needs:", err);
@@ -140,9 +163,26 @@ async function loadNeeds() {
 
 function renderNeeds() {
   const tbody = document.getElementById("pendentesTableBody");
-  document.getElementById("pendentesCount").textContent = currentNeeds.length;
+  
+  const searchInput = document.getElementById("searchPendentes");
+  const filterCc = document.getElementById("filterCentroCusto");
+  
+  const term = searchInput ? searchInput.value.toLowerCase() : "";
+  const ccId = filterCc ? filterCc.value : "";
 
-  if (currentNeeds.length === 0) {
+  let filtered = currentNeeds;
+  
+  if (term) {
+    filtered = filtered.filter(n => n.description.toLowerCase().includes(term));
+  }
+  
+  if (ccId) {
+    filtered = filtered.filter(n => String(n.costCenter?.id || n.costCenterId) === String(ccId));
+  }
+
+  document.getElementById("pendentesCount").textContent = filtered.length;
+
+  if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium">Nenhum item em cotação.</td></tr>`;
     return;
   }
@@ -161,7 +201,7 @@ function renderNeeds() {
     "REJECTED": "bg-red-100 text-red-600"
   };
 
-  tbody.innerHTML = currentNeeds.map(n => {
+  tbody.innerHTML = filtered.map(n => {
     const qty = n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—";
     const quotesCount = n.quotes ? n.quotes.length : 0;
     
