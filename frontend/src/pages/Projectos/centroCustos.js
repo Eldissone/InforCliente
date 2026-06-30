@@ -426,7 +426,7 @@ async function loadNeeds() {
       return;
     }
 
-    const priorityLabels = { ALTA: "🔴 Alta", MEDIA: "🟡 Média", BAIXA: "🟢 Baixa" };
+    const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
     const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
     const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
     const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
