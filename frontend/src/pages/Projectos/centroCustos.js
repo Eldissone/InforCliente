@@ -961,6 +961,10 @@ function renderGanttChart() {
   const ganttBody = document.getElementById("ganttChartBody");
   const monthLabel = document.getElementById("ganttMonthLabel");
 
+  if (ganttBody) {
+    ganttBody.style.minWidth = "1200px";
+  }
+
   const year = currentGanttDate.getFullYear();
   const month = currentGanttDate.getMonth();
 
@@ -1576,7 +1580,10 @@ async function loadTransactions() {
       const descStr = t.description ? t.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
       const isAPrazo = t.paymentType === "CREDITO";
       const paymentTypeStr = isAPrazo ? "C" : "PP";
-      const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}">${paymentTypeStr}</span>`;
+      const paymentTypeClass = isAPrazo 
+          ? "bg-sky-50 text-sky-700 border border-sky-100" 
+          : "bg-red-50 text-red-700 border border-red-200";
+      const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${paymentTypeClass}">${paymentTypeStr}</span>`;
 
       return `
         <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="PAYMENT">
@@ -1584,7 +1591,7 @@ async function loadTransactions() {
           <td class="font-bold text-slate-700 max-w-[200px] truncate" title="${descStr}">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
           <!--<td class="text-xs text-slate-500">${catNames[t.category] || t.category || "-"}</td>-->
-          <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${isAPrazo ? 'bg-amber-100 text-amber-700' : 'bg-slate-500 text-slate-600'}">${paymentTypeBadge}</span></td>
+          <td>${paymentTypeBadge}</td>
           <td class="text-xs text-slate-500">${t.costCenter?.name || "Geral"}</td>
           <td class="text-right font-black text-slate-900">${formatCurrency(t.budgetedAmount, t.costCenter?.currency || "AOA")}</td>
           <td class="text-right font-black ${isPaid ? 'text-emerald-600' : 'text-slate-400'}">${isPaid ? formatCurrency(t.paidAmount, t.costCenter?.currency || "AOA") : "-"}</td>

@@ -84,13 +84,14 @@
                         href="../../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../../Projectos/ProjectGeral.html">Obras</a>
+                    <a data-nav-logistics
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        href="../../Stock/index.html">Logística</a>
                     <a href="../../Projectos/centroCustos.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
                     <a href="../../Projectos/Cotacao/index.html"
                         class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg">Cotação</a>
-                    <a data-nav-logistics
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../../Stock/index.html">Logística</a>
+
                 </div>
             </div>
 
@@ -130,6 +131,11 @@
                 href="../../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../../Stock/index.html">
+                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+            </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
@@ -138,11 +144,7 @@
                 href="../../Projectos/Cotacao/index.html">
                 <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
             </a>
-            <a data-nav-logistics
-                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../../Stock/index.html">
-                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
-            </a>
+
             <button data-logout
                 class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
@@ -162,7 +164,8 @@
                 <div class="flex items-center gap-4 mt-1 flex-wrap">
                     <h1 id="selectedProjName"
                         class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">Cotação</h1>
-                    <select id="projectSelector" class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer hidden max-w-[300px]">
+                    <select id="projectSelector"
+                        class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer hidden max-w-[300px]">
                         <option value="">Selecionar Obra...</option>
                     </select>
                 </div>
@@ -198,10 +201,13 @@
                     </div>
                     <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                         <div class="relative w-full sm:w-64">
-                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                            <input type="text" id="searchPendentes" placeholder="Pesquisar item..." class="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm transition-all">
+                            <span
+                                class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input type="text" id="searchPendentes" placeholder="Pesquisar item..."
+                                class="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm transition-all">
                         </div>
-                        <select id="filterCentroCusto" class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer w-full sm:w-auto max-w-[200px] truncate">
+                        <select id="filterCentroCusto"
+                            class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer w-full sm:w-auto max-w-[200px] truncate">
                             <option value="">Todos Centros de Custo</option>
                         </select>
                     </div>
@@ -299,7 +305,8 @@
                         </div>
 
                         <div id="quoteProductRow" style="display:none;">
-                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Produto do Catálogo</label>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Produto
+                                do Catálogo</label>
                             <select id="quoteSupplierProduct"
                                 class="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#2afc8d]">
                                 <option value="">Selecionar produto...</option>
@@ -333,8 +340,8 @@
                         </div>
 
                         <div>
-                            <label
-                                class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fatura Proforma (Opcional)</label>
+                            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fatura
+                                Proforma (Opcional)</label>
                             <input type="file" id="quoteProforma" accept="image/*,.pdf"
                                 class="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-sm font-semibold focus:outline-none focus:border-[#2afc8d] file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
                         </div>
@@ -349,7 +356,8 @@
                 <!-- Direita: Cotações Existentes & Sugestões -->
                 <div class="w-full md:w-2/3 flex flex-col gap-6">
                     <div>
-                        <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Preços Apresentados</h3>
+                        <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Preços Apresentados
+                        </h3>
                         <div id="quotesList" class="flex flex-col gap-3">
                             <div
                                 class="p-8 text-center text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
@@ -361,9 +369,11 @@
                     <div id="catalogSuggestionsBox" class="hidden flex flex-col gap-3 mt-2">
                         <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
                             <span class="material-symbols-outlined text-blue-500 text-lg">lightbulb</span>
-                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Sugestões de Catálogo</h3>
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Sugestões de Catálogo
+                            </h3>
                         </div>
-                        <div id="catalogSuggestionsList" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scroll pr-2">
+                        <div id="catalogSuggestionsList"
+                            class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scroll pr-2">
                             <!-- Injetado via JS -->
                         </div>
                     </div>
@@ -409,13 +419,15 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria (Ex:
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria
+                            (Ex:
                             Materiais)</label>
                         <input type="text" id="supplierCategory"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Modalidade Pag.</label>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Modalidade
+                            Pag.</label>
                         <select id="supplierPaymentTerm"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
                             <option value="">Selecionar...</option>
@@ -474,31 +486,38 @@
                         <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                             <!-- Nome -->
                             <div class="md:col-span-2">
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Nome do Produto *</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Nome
+                                    do Produto *</label>
                                 <input type="text" id="productName" required placeholder="Ex: Pedra, Cimento, Areia..."
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
                             <!-- Descrição -->
                             <div class="md:col-span-2">
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Descrição</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Descrição</label>
                                 <input type="text" id="productDescription" placeholder="Opcional"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
                             <!-- Unidade -->
                             <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Unidade</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Unidade</label>
                                 <input type="text" id="productUnit" placeholder="m³, un, kg..."
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
                             <!-- Preço -->
                             <div class="md:col-span-1">
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Preço Base *</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Preço
+                                    Base *</label>
                                 <input type="number" step="0.01" id="productPrice" required placeholder="0.00"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
                             <!-- Moeda -->
                             <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Moeda</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Moeda</label>
                                 <select id="productCurrency"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                                     <option value="AOA">AOA</option>
@@ -508,7 +527,9 @@
                             </div>
                             <!-- Válido até -->
                             <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Válido até</label>
+                                <label
+                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Válido
+                                    até</label>
                                 <input type="date" id="productValidUntil"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
@@ -519,7 +540,8 @@
                                     <span class="material-symbols-outlined text-base">save</span>
                                     <span id="supplierProductSubmitLabel">Guardar Produto</span>
                                 </button>
-                                <button type="button" id="supplierProductCancelEdit" onclick="cancelProductEdit()" style="display:none;"
+                                <button type="button" id="supplierProductCancelEdit" onclick="cancelProductEdit()"
+                                    style="display:none;"
                                     class="h-11 px-4 rounded-xl bg-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-300 transition-all">
                                     <span class="material-symbols-outlined text-base align-middle">close</span>
                                 </button>
@@ -532,7 +554,8 @@
                 <div class="flex items-center gap-4 px-8 py-4 border-b border-slate-100">
                     <span class="text-xs font-black uppercase tracking-widest text-slate-500">Produtos Registados</span>
                     <div class="flex-1 h-px bg-slate-200"></div>
-                    <span id="supplierProductsCount" class="text-xs font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full"></span>
+                    <span id="supplierProductsCount"
+                        class="text-xs font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full"></span>
                 </div>
 
                 <!-- Secção: Lista de Produtos -->
@@ -540,7 +563,8 @@
                     <div class="overflow-x-auto rounded-xl border border-slate-200">
                         <table class="w-full text-left border-collapse min-w-[560px]">
                             <thead>
-                                <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                <tr
+                                    class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                     <th class="py-3 px-5">Produto</th>
                                     <th class="py-3 px-5 w-24 text-center">Und.</th>
                                     <th class="py-3 px-5 text-right">Preço Base</th>
@@ -549,7 +573,10 @@
                                 </tr>
                             </thead>
                             <tbody id="supplierProductsTableBody" class="text-sm">
-                                <tr><td colspan="5" class="text-center py-10 text-slate-400">Nenhum produto registado.</td></tr>
+                                <tr>
+                                    <td colspan="5" class="text-center py-10 text-slate-400">Nenhum produto registado.
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -560,23 +587,33 @@
     </div>
 
     <!-- Document Viewer Side Panel -->
-    <div id="sideViewerOverlay" onclick="closeProformaViewer()" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" style="z-index: 9998;"></div>
-    <aside id="sideViewerPanel" class="fixed top-0 right-0 h-screen w-full md:w-[600px] lg:w-[800px] bg-white shadow-2xl transition-transform duration-300 flex flex-col" style="z-index: 9999; transform: translateX(100%);">
+    <div id="sideViewerOverlay" onclick="closeProformaViewer()"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300"
+        style="z-index: 9998;"></div>
+    <aside id="sideViewerPanel"
+        class="fixed top-0 right-0 h-screen w-full md:w-[600px] lg:w-[800px] bg-white shadow-2xl transition-transform duration-300 flex flex-col"
+        style="z-index: 9999; transform: translateX(100%);">
         <div class="px-8 py-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
             <div>
                 <h3 class="text-xl font-bold text-slate-900 truncate max-w-[400px]">Fatura Proforma</h3>
                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Documento Anexado</p>
             </div>
             <div class="flex items-center gap-4">
-                <a id="sideViewerDownloadBtn" href="#" target="_blank" download class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span class="material-symbols-outlined text-xl">download</span></a>
-                <button onclick="closeProformaViewer()" class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span class="material-symbols-outlined text-xl">close</span></button>
+                <a id="sideViewerDownloadBtn" href="#" target="_blank" download
+                    class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">download</span></a>
+                <button onclick="closeProformaViewer()"
+                    class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all"><span
+                        class="material-symbols-outlined text-xl">close</span></button>
             </div>
         </div>
         <div class="flex-1 bg-slate-50 relative p-6 flex items-center justify-center overflow-auto">
             <div id="sideViewerLoading" class="absolute inset-0 flex items-center justify-center bg-slate-50 z-10">
                 <div class="spinner"></div>
             </div>
-            <iframe id="sideViewerIframe" class="w-full h-full border border-slate-200 rounded-xl bg-white shadow-sm relative z-20 hidden" src="" onload="document.getElementById('sideViewerLoading').style.display='none'; this.classList.remove('hidden');"></iframe>
+            <iframe id="sideViewerIframe"
+                class="w-full h-full border border-slate-200 rounded-xl bg-white shadow-sm relative z-20 hidden" src=""
+                onload="document.getElementById('sideViewerLoading').style.display='none'; this.classList.remove('hidden');"></iframe>
         </div>
     </aside>
 

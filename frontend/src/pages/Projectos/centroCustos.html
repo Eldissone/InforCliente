@@ -376,8 +376,15 @@
         }
 
         @keyframes pulse-import {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
 
         .import-loading .spinner {
@@ -405,12 +412,13 @@
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Clientes</a>
                     <a href="../Projectos/ProjectGeral.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Obras</a>
+                    <a href="../Stock/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Logística</a>
                     <a href="../Projectos/centroCustos.html"
                         class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg">Planeamento</a>
                     <a href="../Projectos/Cotacao/index.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-                    <a href="../Stock/index.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Logística</a>
+
                 </div>
             </div>
             <div class="flex items-center gap-4">
@@ -615,7 +623,8 @@
                             <div class="flex justify-between items-center mb-5">
                                 <div>
                                     <h3 class="font-bold text-slate-900">Pagamentos por Semana</h3>
-                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana de obra</p>
+                                    <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana de obra
+                                    </p>
                                 </div>
                                 <span class="material-symbols-outlined text-slate-300">calendar_month</span>
                             </div>
@@ -738,8 +747,7 @@
                                     Agendar
                                 </button>
                                 <!-- ── IMPORT EXCEL BUTTON ── -->
-                                <button id="importExcelBtn"
-                                    title="Importar Orçamento via Planilha Excel"
+                                <button id="importExcelBtn" title="Importar Orçamento via Planilha Excel"
                                     class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
                                     <span class="material-symbols-outlined text-base">upload_file</span>
                                     Importar Excel
@@ -856,7 +864,7 @@
                             </div>
                         </div>
                         <div id="ganttChartBody"
-                            class="w-full min-w-max border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
+                            class="w-full min-w-[1200px] border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col">
                             <!-- Gantt rendered by JS -->
                             <div class="p-8 text-center text-slate-400 text-sm font-medium">A carregar cronograma...
                             </div>
@@ -1397,7 +1405,7 @@
                         </select>
                     </div>
                     <div>
-                        <label for="payWeek" 
+                        <label for="payWeek"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Semana</label>
                         <select id="payWeek"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
@@ -1602,7 +1610,8 @@
                     </div>
                     <div>
                         <h2 class="text-lg font-bold text-slate-900">Importar Orçamento via Excel</h2>
-                        <p id="importModalSubtitle" class="text-xs text-slate-400 font-medium">Carrega a planilha Excel com os itens de orçamento</p>
+                        <p id="importModalSubtitle" class="text-xs text-slate-400 font-medium">Carrega a planilha Excel
+                            com os itens de orçamento</p>
                     </div>
                 </div>
                 <button type="button" onclick="closeImportModal()" aria-label="Fechar"
@@ -1614,17 +1623,21 @@
             <!-- Step Indicator -->
             <div class="flex items-center gap-3 mb-6 flex-shrink-0">
                 <div id="stepDot1" class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">1</div>
+                    <div
+                        class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
+                        1</div>
                     <span class="text-xs font-bold text-emerald-700">Upload</span>
                 </div>
                 <div class="flex-1 h-px bg-slate-200" id="stepLine12"></div>
                 <div id="stepDot2" class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold" id="stepNum2">2</div>
+                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold"
+                        id="stepNum2">2</div>
                     <span class="text-xs font-bold text-slate-400" id="stepLabel2">Mapeamento CCs</span>
                 </div>
                 <div class="flex-1 h-px bg-slate-200" id="stepLine23"></div>
                 <div id="stepDot3" class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold" id="stepNum3">3</div>
+                    <div class="w-7 h-7 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs font-bold"
+                        id="stepNum3">3</div>
                     <span class="text-xs font-bold text-slate-400" id="stepLabel3">Pré-visualização</span>
                 </div>
             </div>
@@ -1649,10 +1662,14 @@
                         </div>
                         <input type="file" id="importFileInput" accept=".xlsx,.xls" class="hidden"
                             onchange="handleImportFile(this.files[0])">
-                        <div class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xlsx</span>
-                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> .xls</span>
-                            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-xs">check_circle</span> Até 20 MB</span>
+                        <div
+                            class="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            <span class="flex items-center gap-1"><span
+                                    class="material-symbols-outlined text-xs">check_circle</span> .xlsx</span>
+                            <span class="flex items-center gap-1"><span
+                                    class="material-symbols-outlined text-xs">check_circle</span> .xls</span>
+                            <span class="flex items-center gap-1"><span
+                                    class="material-symbols-outlined text-xs">check_circle</span> Até 20 MB</span>
                         </div>
                     </div>
 
@@ -1663,9 +1680,12 @@
                             Estrutura esperada da planilha
                         </p>
                         <p class="text-xs text-blue-600 mt-2 leading-relaxed">
-                            A planilha deve ter colunas: <strong>TIPO</strong> (nome do Centro de Custo), <strong>DESCRIÇÃO</strong>,
-                            <strong>UN</strong> (unidade), <strong>QTD</strong> (quantidade), <strong>P. UNI</strong> (preço unitário),
-                            <strong>HF</strong> (horas/factor). As linhas de cabeçalho de grupo (ex: "Custo MATERIAL") identificam os CCs.
+                            A planilha deve ter colunas: <strong>TIPO</strong> (nome do Centro de Custo),
+                            <strong>DESCRIÇÃO</strong>,
+                            <strong>UN</strong> (unidade), <strong>QTD</strong> (quantidade), <strong>P. UNI</strong>
+                            (preço unitário),
+                            <strong>HF</strong> (horas/factor). As linhas de cabeçalho de grupo (ex: "Custo MATERIAL")
+                            identificam os CCs.
                         </p>
                     </div>
                 </div>
@@ -1701,7 +1721,8 @@
                             <div class="spinner" style="width:48px;height:48px;border-width:4px;"></div>
                         </div>
                         <div class="text-center">
-                            <p class="font-bold text-slate-800 text-base" id="importProgressLabel">A importar itens...</p>
+                            <p class="font-bold text-slate-800 text-base" id="importProgressLabel">A importar itens...
+                            </p>
                             <p class="text-xs text-slate-400 mt-1" id="importProgressSub">0 de 0 itens processados</p>
                         </div>
                         <div class="w-full max-w-sm">
@@ -1720,14 +1741,17 @@
                         </div>
                         <div>
                             <p class="font-bold text-slate-900 text-xl" id="importDoneTitle">Importação concluída!</p>
-                            <p class="text-sm text-slate-400 mt-2" id="importDoneSub">0 itens importados com sucesso.</p>
+                            <p class="text-sm text-slate-400 mt-2" id="importDoneSub">0 itens importados com sucesso.
+                            </p>
                         </div>
-                        <div id="importDoneErrors" class="hidden w-full max-w-md p-4 bg-red-50 border border-red-100 rounded-xl text-left">
+                        <div id="importDoneErrors"
+                            class="hidden w-full max-w-md p-4 bg-red-50 border border-red-100 rounded-xl text-left">
                             <p class="text-xs font-bold text-red-700 mb-2 flex items-center gap-2">
                                 <span class="material-symbols-outlined text-sm">error</span>
                                 Erros durante a importação
                             </p>
-                            <ul id="importDoneErrorList" class="text-xs text-red-600 space-y-1 list-disc list-inside"></ul>
+                            <ul id="importDoneErrorList" class="text-xs text-red-600 space-y-1 list-disc list-inside">
+                            </ul>
                         </div>
                     </div>
                 </div>
@@ -1743,7 +1767,8 @@
                 </button>
                 <div class="ml-auto flex items-center gap-3">
                     <button type="button" onclick="closeImportModal()"
-                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all" id="importBtnCancel">
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all"
+                        id="importBtnCancel">
                         Cancelar
                     </button>
                     <button type="button" id="importBtnNext" onclick="importGoNext()" disabled
