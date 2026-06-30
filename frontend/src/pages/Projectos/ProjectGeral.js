@@ -227,6 +227,7 @@ async function load() {
     ...(state.dateFrom ? { dateFrom: new Date(state.dateFrom).toISOString() } : {}),
     page: String(state.page),
     pageSize: isGrid ? "12" : String(state.pageSize),
+    sort: "created_asc"
   });
 
   const data = await apiRequest(`/projects?${qs.toString()}`);

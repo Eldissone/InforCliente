@@ -171,7 +171,11 @@ projectRoutes.get(
         ? { physicalProgressPct: "desc" }
         : sort === "budget_desc"
           ? { budgetTotal: "desc" }
-          : { updatedAt: "desc" };
+          : sort === "created_asc"
+            ? { createdAt: "asc" }
+            : sort === "created_desc"
+              ? { createdAt: "desc" }
+              : { updatedAt: "desc" };
 
     const [total, items] = await Promise.all([
       prisma.project.count({ where }),
