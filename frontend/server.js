@@ -44,9 +44,6 @@ app.use((req, res, next) => {
 // Serve os arquivos estáticos do frontend (HTML/JS/CSS/assets)
 app.use(express.static(pagesRoot, { extensions: ['html'] }));
 
-// Expõe /src inteiro (opcional)
-app.use("/src", express.static(srcRoot));
-
 // Suporte aos imports atuais que resolvem para /services/* e /shared/*
 app.use("/services", express.static(path.join(srcRoot, "services")));
 app.use("/shared", express.static(path.join(srcRoot, "shared")));

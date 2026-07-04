@@ -145,6 +145,13 @@ const PERMISSION_GROUPS = [
     actions: ["view", "create", "edit", "delete"],
   },
   {
+    id: "chat",
+    label: "Chat & Mensagens",
+    icon: "chat",
+    pages: [{ id: "chat.panel", label: "Painel de chat (global)", route: "*" }],
+    actions: ["view", "send", "create_group"],
+  },
+  {
     id: "obras",
     label: "Obras",
     icon: "construction",
@@ -273,6 +280,7 @@ function defaultAllowedFor(role, module, action) {
       analytics: { view: "true", export: "true" },
       clientes: { view: "true", create: "false", edit: "true", delete: "false", export: "true", full_access: "false" },
       interacoes: { view: "true", create: "true", edit: "true", delete: "false" },
+      chat: { view: "true", send: "true", create_group: "true" },
       obras: {
         view: "true", read: "true", create: "true", edit: "true", delete: "false",
         approve: "true", export: "true", manage: "true", financeiro: "view", full_access: "false",
@@ -300,6 +308,7 @@ function defaultAllowedFor(role, module, action) {
       analytics: { view: "true", export: "true" },
       clientes: { view: "true", create: "true", edit: "true", delete: "false", export: "true", full_access: "false" },
       interacoes: { view: "true", create: "true", edit: "true", delete: "false" },
+      chat: { view: "true", send: "true", create_group: "true" },
       obras: {
         view: "true", read: "true", create: "true", edit: "true", delete: "false",
         approve: "true", export: "true", manage: "true", financeiro: "true", full_access: "false",
@@ -327,6 +336,7 @@ function defaultAllowedFor(role, module, action) {
       analytics: { view: "false", export: "false" },
       clientes: { view: "view", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       interacoes: { view: "view", create: "false", edit: "false", delete: "false" },
+      chat: { view: "true", send: "true", create_group: "false" },
       obras: {
         view: "true", read: "true", create: "false", edit: "true", delete: "false",
         approve: "false", export: "view", manage: "true", financeiro: "false", full_access: "false",
@@ -352,6 +362,10 @@ function defaultAllowedFor(role, module, action) {
     const readOnly = ["view", "read", "export"];
     if (module === "portal") return "false";
     if (module === "sistema" || module === "permissoes" || module === "configuracoes") return "false";
+    if (module === "chat") {
+      if (action === "view") return "true";
+      return "false";
+    }
     if (action === "full_access" || action === "manage_permissions") return "false";
     if (readOnly.includes(action)) {
       if (module === "obras" && action === "financeiro") return "view";
@@ -362,6 +376,10 @@ function defaultAllowedFor(role, module, action) {
   }
 
   if (role === "cliente") {
+    if (module === "chat") {
+      if (action === "view" || action === "send") return "true";
+      return "false";
+    }
     if (module === "portal") {
       if (["view", "export", "full_access"].includes(action)) return action === "full_access" ? "false" : "true";
     }

@@ -23,8 +23,145 @@ model User {
   dailyPlanTasks   DailyPlanTask[]
   permissions      UserPermission[]
   systemLogs       SystemLog[]
+  profile          UserProfile?
+  presence         UserPresence?
+  conversationParticipants ConversationParticipant[]
+  sentMessages     Message[]    @relation("MessageSender")
+  messageReads     MessageRead[]
+  mentionsReceived Mention[]    @relation("MentionsReceived")
+  notifications    Notification[]
 
   @@index([clientId])
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  phone     String?
+  jobTitle  String?
+  bio       String?
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum PresenceStatus {
+  ONLINE
+  AWAY
+  OFFLINE
+}
+
+model UserPresence {
+  userId     String         @id
+  status     PresenceStatus @default(OFFLINE)
+  lastSeenAt DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  type         ConversationType          @default(DIRECT)
+  title        String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Message {
+  id             String              @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  status         MessageStatus       @default(SENT)
+  createdAt      DateTime            @default(now())
+  editedAt       DateTime?
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User                @relation("MessageSender", fields: [senderId], references: [id])
+  reads          MessageRead[]
+  mentions       Mention[]
+  attachments    MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+}
+
+model MessageRead {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+}
+
+model Mention {
+  id              String  @id @default(cuid())
+  messageId       String
+  mentionedUserId String
+  message         Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mentionedUser   User    @relation("MentionsReceived", fields: [mentionedUserId], references: [id])
+
+  @@index([mentionedUserId])
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  MENTION
+  REQUEST
+  APPROVAL
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model MessageAttachment {
+  id        String  @id @default(cuid())
+  messageId String
+  fileName  String
+  mimeType  String
+  size      Int
+  path      String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model UserClient {

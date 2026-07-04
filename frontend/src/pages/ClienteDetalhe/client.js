@@ -198,8 +198,8 @@ function wireFullHistory() {
   });
 }
 
-function wireFab() {
-  el("clientFab")?.addEventListener("click", () => {
+function wireAddInteraction() {
+  el("addInteractionBtn")?.addEventListener("click", () => {
     openModal({
       title: "Adicionar interação",
       primaryLabel: "Salvar",
@@ -266,7 +266,7 @@ async function init() {
   await loadClient();
   await loadTimeline();
   wireFullHistory();
-  wireFab();
+  wireAddInteraction();
 }
 
 init().catch((err) => toast(err.message || "Falha ao carregar cliente. Verifique login/API.", { type: "error" }));

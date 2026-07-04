@@ -122,7 +122,11 @@ export function openModal({
   function close() {
     overlay.classList.add("opacity-0");
     panel.classList.add("scale-95");
-    overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+    // Fallback: remove after 400ms even if transitionend never fires
+    // (can happen with prefers-reduced-motion or interrupted animations)
+    const cleanup = () => overlay.remove();
+    overlay.addEventListener("transitionend", cleanup, { once: true });
+    setTimeout(cleanup, 400);
   }
 
   overlay.addEventListener("click", (e) => {

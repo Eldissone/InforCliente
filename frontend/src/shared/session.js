@@ -83,6 +83,10 @@ export function wireUsersNav() {
 
   wireUserProfile();
   processUrlMessages();
+
+  import("./chatFab.js")
+    .then(({ initChatFab }) => initChatFab())
+    .catch(() => {});
 }
 
 function processUrlMessages() {
@@ -116,6 +120,19 @@ async function openProfileModal() {
     primaryLabel: "Guardar",
     contentHtml: `
       <div class="space-y-4">
+        <div class="flex items-center gap-4 mb-2">
+          <div class="relative w-20 h-20 rounded-full bg-slate-100 overflow-hidden shrink-0 group cursor-pointer shadow-sm border border-slate-200">
+            <img id="p_avatar_preview" src="${user.profilePic || '/assets/img/placeholder-user.png'}" onerror="this.src='/assets/img/placeholder-user.png'" class="w-full h-full object-cover" />
+            <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <span class="material-symbols-outlined text-white">photo_camera</span>
+            </div>
+            <input type="file" id="p_avatar_input" accept="image/jpeg, image/png, image/webp" class="absolute inset-0 opacity-0 cursor-pointer" />
+          </div>
+          <div>
+            <h4 class="font-bold text-slate-900 text-sm">Foto de Perfil</h4>
+            <p class="text-xs text-slate-500 mt-0.5">Clique na imagem para alterar.<br/>Use JPG, PNG ou WEBP (Max 2MB).</p>
+          </div>
+        </div>
         <div>
           <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nome Completo</label>
           <input id="p_name" type="text" value="${escapeHtml(user.name || '')}" class="w-full h-12 bg-slate-50 border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="O seu nome..." />
@@ -130,12 +147,42 @@ async function openProfileModal() {
         </div>
       </div>
     `,
+    onRender: ({ panel }) => {
+      const input = panel.querySelector("#p_avatar_input");
+      const preview = panel.querySelector("#p_avatar_preview");
+      input.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          preview.src = URL.createObjectURL(file);
+        }
+      });
+    },
     onPrimary: async ({ close, btn, panel }) => {
       const name = panel.querySelector("#p_name").value.trim();
       const password = panel.querySelector("#p_pass").value.trim();
+      const fileInput = panel.querySelector("#p_avatar_input");
+      const file = fileInput.files[0];
 
       setButtonLoading(btn, true);
       try {
+        if (file) {
+          const { getToken } = await import("../services/auth.js");
+          const { getApiBaseUrl } = await import("../services/api.js");
+          const res = await fetch(`${getApiBaseUrl()}/users/me/avatar`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: (() => {
+              const fd = new FormData();
+              fd.append("file", file);
+              return fd;
+            })()
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || "Erro ao atualizar foto de perfil.");
+          }
+        }
+
         await apiRequest("/users/me", {
           method: "PATCH",
           body: {

@@ -1,4 +1,5 @@
 const express = require("express");
+const http = require("http");
 const cors = require("cors");
 const { config } = require("./config");
 
@@ -17,8 +18,11 @@ const { logRoutes } = require("./routes/logs");
 const { costCenterRoutes } = require("./routes/costCenters");
 const { supplierRoutes } = require("./routes/suppliers");
 const { quoteRoutes } = require("./routes/quotes");
+const { conversationRoutes } = require("./routes/conversations");
+const { notificationRoutes } = require("./routes/notifications");
 const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
+const { createSocketServer } = require("./socket");
 
 const app = express();
 app.set("trust proxy", 1); // Confiar no IP original através de Nginx/Load Balancers
@@ -98,6 +102,8 @@ app.use("/logs", logRoutes);
 app.use("/cost-centers", costCenterRoutes);
 app.use("/suppliers", supplierRoutes);
 app.use("/quotes", quoteRoutes);
+app.use("/conversations", conversationRoutes);
+app.use("/notifications", notificationRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
@@ -123,9 +129,13 @@ app.use((err, _req, res, _next) => {
   return res.status(status).json({ error: message });
 });
 
+const server = http.createServer(app);
+const io = createSocketServer(server, { corsOrigins: allowedOrigins });
+app.set("io", io);
 
-app.listen(config.port, async () => {
+server.listen(config.port, async () => {
   console.log(`API listening on port ${config.port}`);
+  console.log("WebSocket (Socket.IO) enabled at /socket.io");
 
   await initialize();
 });

@@ -742,6 +742,8 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+  const { initChatFab } = await import("../../shared/chatFab.js");
+  initChatFab();
   await loadPlans();
 }
 

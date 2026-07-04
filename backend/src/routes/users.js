@@ -1,9 +1,23 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const multer = require("multer");
+const path = require("path");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
+const { serializeUser, USER_PUBLIC_SELECT } = require("../services/chatService");
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("INVALID_IMAGE_TYPE"));
+  },
+});
 
 const userRoutes = express.Router();
 userRoutes.use(authRequired);
@@ -34,9 +48,38 @@ userRoutes.get(
         name: true,
         role: true,
         profilePic: true,
+        createdAt: true,
+        profile: { select: { phone: true, jobTitle: true, bio: true } },
+        presence: { select: { status: true, lastSeenAt: true } },
       },
     });
-    return res.json(user);
+    if (!user) return res.status(404).json({ error: "NOT_FOUND" });
+    return res.json(serializeUser(user));
+  })
+);
+
+userRoutes.get(
+  "/search",
+  authRequired,
+  asyncHandler(async (req, res) => {
+    const q = String(req.query.q || "").trim();
+    const whereClause = { NOT: { id: req.user.sub } };
+    
+    if (q.length > 0) {
+      whereClause.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    const items = await prisma.user.findMany({
+      where: whereClause,
+      take: 20,
+      select: USER_PUBLIC_SELECT,
+      orderBy: { name: "asc" },
+    });
+
+    return res.json({ items: items.map(serializeUser) });
   })
 );
 
@@ -84,6 +127,9 @@ userRoutes.patch(
         name: z.string().optional().nullable(),
         password: z.string().min(6).optional(),
         profilePic: z.string().optional().nullable(),
+        phone: z.string().optional().nullable(),
+        jobTitle: z.string().optional().nullable(),
+        bio: z.string().optional().nullable(),
       })
       .parse(req.body);
 
@@ -96,12 +142,65 @@ userRoutes.patch(
       data.passwordHash = await bcrypt.hash(body.password, 10);
     }
 
-    await prisma.user.update({
-      where: { id: req.user.sub },
-      data,
+    const hasProfileFields =
+      body.phone !== undefined || body.jobTitle !== undefined || body.bio !== undefined;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: req.user.sub },
+        data,
+      });
+
+      if (hasProfileFields) {
+        await tx.userProfile.upsert({
+          where: { userId: req.user.sub },
+          create: {
+            userId: req.user.sub,
+            phone: body.phone ?? null,
+            jobTitle: body.jobTitle ?? null,
+            bio: body.bio ?? null,
+          },
+          update: {
+            ...(body.phone !== undefined ? { phone: body.phone } : {}),
+            ...(body.jobTitle !== undefined ? { jobTitle: body.jobTitle } : {}),
+            ...(body.bio !== undefined ? { bio: body.bio } : {}),
+          },
+        });
+      }
     });
 
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("user:profile_updated", { userId: req.user.sub });
+    }
+
     return res.json({ ok: true });
+  })
+);
+
+userRoutes.post(
+  "/me/avatar",
+  avatarUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
+    const storagePath = `avatars/${req.user.sub}${safeExt}`;
+
+    const profilePic = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
+    await prisma.user.update({
+      where: { id: req.user.sub },
+      data: { profilePic },
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("user:profile_updated", { userId: req.user.sub, profilePic });
+    }
+
+    return res.json({ profilePic });
   })
 );
 

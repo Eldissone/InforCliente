@@ -86,7 +86,7 @@ authRoutes.post(
     const activeRole = accounts.length === 1 ? (accounts[0].role || "").toUpperCase() : userRole;
 
     const token = jwt.sign(
-      { sub: user.id, email: user.email, role: activeRole, clientId: activeClientId },
+      { sub: user.id, email: user.email, name: user.name, role: activeRole, clientId: activeClientId },
       config.jwtSecret,
       { expiresIn: "7d" }
     );
@@ -151,7 +151,7 @@ authRoutes.post(
     });
 
     const token = jwt.sign(
-      { sub: user.id, email: user.email, role: activeRole, clientId: clientId },
+      { sub: user.id, email: user.email, name: user.name, role: activeRole, clientId: clientId },
       config.jwtSecret,
       { expiresIn: "7d" }
     );
