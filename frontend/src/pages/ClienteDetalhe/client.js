@@ -151,105 +151,6 @@ async function loadClient() {
   return c;
 }
 
-async function loadTimeline() {
-  const id = getClientId();
-  const host = el("clientTimeline");
-  if (!host) return;
-  host.innerHTML = renderLoadingRow(1);
-
-  const data = await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`);
-  const items = data.items || [];
-  if (!items.length) {
-    host.innerHTML = `<div class="p-6 rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400 font-medium">Sem interações registradas.</div>`;
-    return;
-  }
-  host.innerHTML = items.slice(0, 8).map(renderTimelineItem).join("");
-}
-
-function wireFullHistory() {
-  el("viewFullHistory")?.addEventListener("click", async () => {
-    const id = getClientId();
-    const data = await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`);
-    const items = data.items || [];
-    openModal({
-      title: "Histórico completo",
-      primaryLabel: "Fechar",
-      secondaryLabel: "OK",
-      contentHtml: `
-        <div class="space-y-3 max-h-[60vh] overflow-auto">
-          ${items
-            .map(
-              (i) => `
-            <div class="border border-slate-200 rounded-xl p-4">
-              <div class="text-[10px] font-black uppercase tracking-widest text-slate-500">${formatDateBR(
-                i.occurredAt
-              )} • ${i.type}</div>
-              <div class="mt-1 font-extrabold text-slate-900">${i.title}</div>
-              <div class="mt-1 text-sm text-slate-700">${i.description || ""}</div>
-              ${i.leadName ? `<div class="mt-2 text-xs text-slate-500">Lead: ${i.leadName}</div>` : ""}
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      `,
-      onPrimary: async ({ close }) => close(),
-    });
-  });
-}
-
-function wireAddInteraction() {
-  el("addInteractionBtn")?.addEventListener("click", () => {
-    openModal({
-      title: "Adicionar interação",
-      primaryLabel: "Salvar",
-      contentHtml: `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo</label>
-            <input id="i_type" class="w-full rounded-lg border-slate-300" placeholder="Pedido de Suporte" />
-          </div>
-          <div>
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Identificação</label>
-            <input id="i_lead" class="w-full rounded-lg border-slate-300" placeholder="Nome" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Título</label>
-            <input id="i_title" class="w-full rounded-lg border-slate-300" placeholder="Organizar Arquivo" />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição</label>
-            <textarea id="i_desc" class="w-full rounded-lg border-slate-300" rows="4" placeholder="Detalhes..."></textarea>
-          </div>
-        </div>
-      `,
-      onPrimary: async ({ close, panel }) => {
-        const id = getClientId();
-        const v = (x) => panel.querySelector(`#${x}`)?.value?.trim?.();
-        const btn = panel.querySelector("[data-primary]");
-        try {
-          setButtonLoading(btn, true);
-          await apiRequest(`/clients/${encodeURIComponent(id)}/interactions`, {
-            method: "POST",
-            body: {
-              type: v("i_type") || "Note",
-              title: v("i_title") || "Interação",
-              description: v("i_desc") || null,
-              leadName: v("i_lead") || null,
-            },
-          });
-          toast("Interação adicionada", { type: "success" });
-          close();
-          await loadTimeline();
-        } catch (err) {
-          setButtonLoading(btn, false);
-          toast(err.message || "Erro ao adicionar interação", { type: "error" });
-        }
-      },
-    });
-  });
-}
-
 function wireProjectLinks() {
   document.addEventListener("click", (e) => {
     const id = e.target?.closest?.("[data-open-project]")?.getAttribute?.("data-open-project");
@@ -264,9 +165,6 @@ async function init() {
   wireUsersNav();
   wireProjectLinks();
   await loadClient();
-  await loadTimeline();
-  wireFullHistory();
-  wireAddInteraction();
 }
 
 init().catch((err) => toast(err.message || "Falha ao carregar cliente. Verifique login/API.", { type: "error" }));

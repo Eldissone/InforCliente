@@ -345,7 +345,7 @@ function renderConversationList() {
         else previewHTML = `<span class="material-symbols-outlined text-[14px] align-text-bottom mr-0.5">attach_file</span> Anexo`;
       }
       previewHTML = previewHTML || (c.lastMessage ? "Nova mensagem" : "Sem mensagens");
-      
+
       const time = formatTime(c.lastMessage?.createdAt || c.updatedAt);
       const unread = c.unreadCount > 0;
       return `
@@ -458,28 +458,28 @@ async function handleFileUpload(file) {
   input.placeholder = "A enviar anexo...";
   input.disabled = true;
   el("globalChatSend").disabled = true;
-  
+
   try {
     const fd = new FormData();
     fd.append("file", file);
-    
+
     const res = await fetch(`${getApiBaseUrl()}/conversations/${state.activeId}/attachments`, {
       method: "POST",
       headers: { Authorization: `Bearer ${getToken()}` },
       body: fd
     });
-    
+
     if (!res.ok) throw new Error("Upload falhou");
     const data = await res.json();
-    
-    const result = await sendSocketMessage({ 
-      conversationId: state.activeId, 
-      body: "", 
-      attachments: [data] 
+
+    const result = await sendSocketMessage({
+      conversationId: state.activeId,
+      body: "",
+      attachments: [data]
     });
-    
+
     if (!result?.ok) {
-       throw new Error("Falha ao enviar anexo via socket");
+      throw new Error("Falha ao enviar anexo via socket");
     }
   } catch (err) {
     console.error("Upload error:", err);
@@ -522,7 +522,7 @@ function openImageLightbox(url, fileName) {
     if (e.target === overlay) overlay.remove();
   });
   overlay.querySelector('#chatLightboxClose').addEventListener('click', () => overlay.remove());
-  
+
   const onKeydown = (e) => {
     if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKeydown); }
   };
@@ -580,7 +580,7 @@ async function openNewConversationPrompt() {
             listEl.innerHTML = '<div class="text-center text-sm text-slate-500 py-4">Nenhum utilizador encontrado.</div>';
             return;
           }
-          
+
           listEl.innerHTML = items.map(u => `
             <button type="button" data-user-id="${u.id}" class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group border border-transparent hover:border-slate-100">
               <img src="${getAssetUrl(u.profilePic) || '/assets/img/placeholder-user.png'}" class="w-10 h-10 rounded-full object-cover bg-slate-100 shrink-0" onerror="this.src='/assets/img/placeholder-user.png'" />
@@ -686,7 +686,6 @@ function wireSocketEvents() {
 }
 
 export function openChatPanel() {
-  console.log("[Chat] openChatPanel chamado, panelEl:", panelEl);
   if (!panelEl) createPanel();
   // Recover panelEl from DOM in case createPanel() returned early (element already existed)
   if (!panelEl) panelEl = document.getElementById("globalChatPanel");
@@ -726,6 +725,6 @@ export async function initChatFab() {
   createFab();
   createPanel();
   wireSocketEvents();
-  await connectSocket().catch(() => {});
+  await connectSocket().catch(() => { });
   await loadConversations();
 }
