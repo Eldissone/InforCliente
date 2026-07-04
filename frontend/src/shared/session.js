@@ -58,6 +58,57 @@ export function wireUsersNav() {
     el.textContent = user?.name || (role ? String(role).toUpperCase() : "");
   });
 
+  // Fetch fresh user data from server to get the real avatar, bypassing localStorage
+  import("../services/api.js").then(({ getAssetUrl, apiRequest }) => {
+    apiRequest("/users/me").then(freshUser => {
+      if (!freshUser) return;
+      
+      document.querySelectorAll("[data-user-profile]").forEach((btn) => {
+        // Replace the material icon (or existing image if called twice) with the real avatar
+        const icon = btn.querySelector(".material-symbols-outlined") || btn.querySelector("img") || btn.querySelector("span:not([data-user-role])");
+        if (!icon) return;
+        
+        const avatarSrc = freshUser.profilePic ? getAssetUrl(freshUser.profilePic) : null;
+        const nameInitial = (freshUser.name || freshUser.email || "?")[0].toUpperCase();
+        
+        if (avatarSrc) {
+          const img = document.createElement("img");
+          img.src = avatarSrc;
+          img.alt = freshUser.name || "Avatar";
+          img.className = "w-7 h-7 rounded-lg object-cover ring-1 ring-[#2afc8d]/40";
+          img.onerror = () => {
+            const fallback = document.createElement("span");
+            fallback.className = "material-symbols-outlined text-sm";
+            fallback.textContent = "person";
+            img.replaceWith(fallback);
+          };
+          icon.replaceWith(img);
+        } else {
+          // Text avatar fallback
+          const span = document.createElement("span");
+          span.textContent = nameInitial;
+          span.className = "w-7 h-7 rounded-lg bg-[#2afc8d]/20 text-[#2afc8d] text-xs font-black flex items-center justify-center";
+          icon.replaceWith(span);
+        }
+      });
+      
+      // Update name text instantly if it changed
+      document.querySelectorAll("[data-user-role]").forEach((el) => {
+        el.textContent = freshUser.name || (role ? String(role).toUpperCase() : "");
+      });
+      document.querySelectorAll("[data-user-name]").forEach((el) => {
+        el.textContent = freshUser.name || freshUser.email || "";
+      });
+
+      // Keep localStorage in sync silently for other parts of the app
+      const USER_KEY = "InfoCliente.user";
+      const storedUser = JSON.parse(localStorage.getItem(USER_KEY) || "{}");
+      storedUser.profilePic = freshUser.profilePic;
+      storedUser.name = freshUser.name;
+      localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
+    }).catch(() => {});
+  });
+
   // Also support data-user-name explicitly if needed
   document.querySelectorAll("[data-user-name]").forEach((el) => {
     el.textContent = user?.name || user?.email || "";
@@ -165,6 +216,7 @@ async function openProfileModal() {
 
       setButtonLoading(btn, true);
       try {
+        let uploadedAvatar = null;
         if (file) {
           const { getToken } = await import("../services/auth.js");
           const { getApiBaseUrl } = await import("../services/api.js");
@@ -181,6 +233,8 @@ async function openProfileModal() {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.error || "Erro ao atualizar foto de perfil.");
           }
+          const resData = await res.json();
+          uploadedAvatar = resData.profilePic;
         }
 
         await apiRequest("/users/me", {
@@ -195,14 +249,13 @@ async function openProfileModal() {
         const USER_KEY = "InfoCliente.user";
         const storedUser = JSON.parse(localStorage.getItem(USER_KEY) || "{}");
         storedUser.name = name;
+        if (uploadedAvatar) storedUser.profilePic = uploadedAvatar;
         localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
 
         toast("Perfil atualizado com sucesso!", { type: "success" });
 
-        // Update the header name instantly
-        document.querySelectorAll("[data-user-role], [data-user-name]").forEach(el => {
-          el.textContent = name || storedUser.email;
-        });
+        // Instantly update the entire header (name + avatar)
+        wireUsersNav();
 
         close();
       } catch (err) {

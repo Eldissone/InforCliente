@@ -6,6 +6,7 @@ const USER_PUBLIC_SELECT = {
   email: true,
   role: true,
   profilePic: true,
+  client: { select: { profilePic: true } },
   profile: { select: { jobTitle: true, phone: true } },
   presence: { select: { status: true, lastSeenAt: true } },
 };
@@ -17,7 +18,7 @@ function serializeUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
-    profilePic: user.profilePic,
+    profilePic: user.profilePic || user.client?.profilePic || null,
     createdAt: user.createdAt || null,
     jobTitle: user.profile?.jobTitle || null,
     phone: user.profile?.phone || null,
