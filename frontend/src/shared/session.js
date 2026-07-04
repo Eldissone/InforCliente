@@ -79,14 +79,14 @@ export function wireUsersNav() {
 
   import("./permissions.js")
     .then(({ initPermissionLayer }) => initPermissionLayer())
-    .catch(() => {});
+    .catch(() => { });
 
   wireUserProfile();
   processUrlMessages();
 
   import("./chatFab.js")
     .then(({ initChatFab }) => initChatFab())
-    .catch(() => {});
+    .catch(() => { });
 }
 
 function processUrlMessages() {
@@ -110,10 +110,11 @@ export function wireUserProfile() {
 
 async function openProfileModal() {
   const { openModal, toast, setButtonLoading, escapeHtml } = await import("./ui.js");
-  const { apiRequest } = await import("../services/api.js");
+  const { apiRequest, getAssetUrl } = await import("../services/api.js");
 
   // Fetch fresh data
   const user = await apiRequest("/users/me");
+  const avatarUrl = user.profilePic ? getAssetUrl(user.profilePic) : '/assets/img/placeholder-user.png';
 
   openModal({
     title: "O Meu Perfil",
@@ -122,15 +123,14 @@ async function openProfileModal() {
       <div class="space-y-4">
         <div class="flex items-center gap-4 mb-2">
           <div class="relative w-20 h-20 rounded-full bg-slate-100 overflow-hidden shrink-0 group cursor-pointer shadow-sm border border-slate-200">
-            <img id="p_avatar_preview" src="${user.profilePic || '/assets/img/placeholder-user.png'}" onerror="this.src='/assets/img/placeholder-user.png'" class="w-full h-full object-cover" />
+            <img id="p_avatar_preview" src="${avatarUrl}" onerror="this.src='/assets/img/placeholder-user.png'" class="w-full h-full object-cover" />
             <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <span class="material-symbols-outlined text-white">photo_camera</span>
             </div>
             <input type="file" id="p_avatar_input" accept="image/jpeg, image/png, image/webp" class="absolute inset-0 opacity-0 cursor-pointer" />
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-sm">Foto de Perfil</h4>
-            <p class="text-xs text-slate-500 mt-0.5">Clique na imagem para alterar.<br/>Use JPG, PNG ou WEBP (Max 2MB).</p>
+            <h4 class="font-bold text-slate-900 text-base">${escapeHtml(user.name || user.email)}</h4>
           </div>
         </div>
         <div>
