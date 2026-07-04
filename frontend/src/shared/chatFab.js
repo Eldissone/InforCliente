@@ -703,6 +703,8 @@ export function openChatPanel() {
 export function closeChatPanel() {
   if (!panelEl) return;
   isOpen = false;
+  if (!fabEl) fabEl = document.getElementById("globalChatFab");
+  fabEl?.focus();
   panelEl.setAttribute("aria-hidden", "true");
   panelEl.classList.add("scale-95", "opacity-0", "pointer-events-none");
   panelEl.classList.remove("scale-100", "opacity-100", "pointer-events-auto");
