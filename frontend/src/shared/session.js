@@ -163,16 +163,18 @@ async function openProfileModal() {
   const { openModal, toast, setButtonLoading, escapeHtml } = await import("./ui.js");
   const { apiRequest, getAssetUrl } = await import("../services/api.js");
 
-  // Fetch fresh data
   const user = await apiRequest("/users/me");
-  const avatarUrl = user.profilePic ? getAssetUrl(user.profilePic) : '/assets/img/placeholder-user.png';
+  const avatarUrl = user.profilePic ? getAssetUrl(user.profilePic) : "/assets/img/placeholder-user.png";
+  const displayName = escapeHtml(user.name || user.email);
+  const displayBio = user.bio ? escapeHtml(user.bio) : "";
+  const bioPlaceholder = "Sem bio definida.";
 
   openModal({
     title: "O Meu Perfil",
     primaryLabel: "Guardar",
     contentHtml: `
       <div class="space-y-4">
-        <div class="flex items-center gap-4 mb-2">
+        <div class="flex items-start gap-4 mb-2">
           <div class="relative w-20 h-20 rounded-full bg-slate-100 overflow-hidden shrink-0 group cursor-pointer shadow-sm border border-slate-200">
             <img id="p_avatar_preview" src="${avatarUrl}" onerror="this.src='/assets/img/placeholder-user.png'" class="w-full h-full object-cover" />
             <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -180,37 +182,69 @@ async function openProfileModal() {
             </div>
             <input type="file" id="p_avatar_input" accept="image/jpeg, image/png, image/webp" class="absolute inset-0 opacity-0 cursor-pointer" />
           </div>
-          <div>
-            <h4 class="font-bold text-slate-900 text-base">${escapeHtml(user.name || user.email)}</h4>
+          <div class="flex-1 min-w-0 pt-1">
+            <div class="flex items-center gap-2">
+              <h4 id="p_display_name" class="font-bold text-slate-900 text-base truncate">${displayName}</h4>
+              <button type="button" id="p_edit_toggle" aria-label="Editar perfil" aria-expanded="false"
+                class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors shrink-0">
+                <span class="material-symbols-outlined text-lg">edit</span>
+              </button>
+            </div>
+            <p id="p_display_bio" class="mt-1 text-sm leading-relaxed ${displayBio ? "text-slate-500" : "text-slate-400 italic"}">${displayBio || bioPlaceholder}</p>
+            <div class="flex items-center gap-2 mt-2 min-w-0">
+              <span class="material-symbols-outlined text-base text-slate-400 shrink-0">mail</span>
+              <span class="text-sm text-slate-400 truncate">${escapeHtml(user.email)}</span>
+            </div>
           </div>
         </div>
-        <div>
-          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nome Completo</label>
-          <input id="p_name" type="text" value="${escapeHtml(user.name || '')}" class="w-full h-12 bg-slate-50 border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="O seu nome..." />
-        </div>
-        <div>
-          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Email (Apenas Leitura)</label>
-          <input type="text" value="${escapeHtml(user.email)}" class="w-full h-12 bg-slate-100 border-none rounded-xl px-4 text-sm font-bold text-slate-400 cursor-not-allowed" readonly />
-        </div>
-        <div>
-          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nova Senha (Deixe em branco para manter)</label>
-          <input id="p_pass" type="password" class="w-full h-12 bg-slate-50 border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="••••••••" />
+
+        <div id="p_edit_fields" class="hidden space-y-4">
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nome Completo</label>
+            <input id="p_name" type="text" value="${escapeHtml(user.name || "")}" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="O seu nome..." />
+          </div>
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Bio</label>
+            <textarea id="p_bio" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-[#2afc8d] transition-all resize-none" placeholder="Conte um pouco sobre si...">${displayBio}</textarea>
+          </div>
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nova Senha (Deixe em branco para manter)</label>
+            <input id="p_pass" type="password" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="••••••••" />
+          </div>
         </div>
       </div>
     `,
     onRender: ({ panel }) => {
       const input = panel.querySelector("#p_avatar_input");
       const preview = panel.querySelector("#p_avatar_preview");
+      const editToggle = panel.querySelector("#p_edit_toggle");
+      const editFields = panel.querySelector("#p_edit_fields");
+      const nameInput = panel.querySelector("#p_name");
+      const passInput = panel.querySelector("#p_pass");
+
       input.addEventListener("change", (e) => {
         const file = e.target.files[0];
-        if (file) {
-          preview.src = URL.createObjectURL(file);
+        if (file) preview.src = URL.createObjectURL(file);
+      });
+
+      editToggle.addEventListener("click", () => {
+        const isOpen = !editFields.classList.contains("hidden");
+        if (isOpen) {
+          editFields.classList.add("hidden");
+          editToggle.setAttribute("aria-expanded", "false");
+          editToggle.classList.remove("bg-slate-900", "text-white");
+          passInput.value = "";
+        } else {
+          editFields.classList.remove("hidden");
+          editToggle.setAttribute("aria-expanded", "true");
+          editToggle.classList.add("bg-slate-900", "text-white");
+          nameInput.focus();
         }
       });
     },
     onPrimary: async ({ close, btn, panel }) => {
-      const name = panel.querySelector("#p_name").value.trim();
-      const password = panel.querySelector("#p_pass").value.trim();
+      const editFields = panel.querySelector("#p_edit_fields");
+      const isEditing = !editFields.classList.contains("hidden");
       const fileInput = panel.querySelector("#p_avatar_input");
       const file = fileInput.files[0];
 
@@ -227,7 +261,7 @@ async function openProfileModal() {
               const fd = new FormData();
               fd.append("file", file);
               return fd;
-            })()
+            })(),
           });
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -237,31 +271,47 @@ async function openProfileModal() {
           uploadedAvatar = resData.profilePic;
         }
 
-        await apiRequest("/users/me", {
-          method: "PATCH",
-          body: {
-            name: name || null,
-            ...(password ? { password } : {})
-          }
-        });
+        const patchBody = {};
+        if (isEditing) {
+          const name = panel.querySelector("#p_name").value.trim();
+          const password = panel.querySelector("#p_pass").value.trim();
+          const bio = panel.querySelector("#p_bio").value.trim();
+          patchBody.name = name || null;
+          patchBody.bio = bio || null;
+          if (password) patchBody.password = password;
+        }
 
-        // Update session info locally to persist after refresh
+        if (Object.keys(patchBody).length > 0) {
+          await apiRequest("/users/me", {
+            method: "PATCH",
+            body: patchBody,
+          });
+        }
+
+        if (isEditing) {
+          const name = patchBody.name || user.email;
+          const bio = patchBody.bio || "";
+          panel.querySelector("#p_display_name").textContent = name;
+          const bioEl = panel.querySelector("#p_display_bio");
+          bioEl.textContent = bio || bioPlaceholder;
+          bioEl.classList.toggle("text-slate-500", Boolean(bio));
+          bioEl.classList.toggle("text-slate-400", !bio);
+          bioEl.classList.toggle("italic", !bio);
+        }
+
         const USER_KEY = "InfoCliente.user";
         const storedUser = JSON.parse(localStorage.getItem(USER_KEY) || "{}");
-        storedUser.name = name;
+        if (isEditing && patchBody.name) storedUser.name = patchBody.name;
         if (uploadedAvatar) storedUser.profilePic = uploadedAvatar;
         localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
 
         toast("Perfil atualizado com sucesso!", { type: "success" });
-
-        // Instantly update the entire header (name + avatar)
         wireUsersNav();
-
         close();
       } catch (err) {
         setButtonLoading(btn, false);
         toast(err.message || "Erro ao atualizar perfil", { type: "error" });
       }
-    }
+    },
   });
 }
