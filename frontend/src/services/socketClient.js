@@ -1,4 +1,4 @@
-import { getToken } from "./auth.js";
+import { getToken, getSessionUser } from "./auth.js";
 import { getApiBaseUrl } from "./api.js";
 
 let socket = null;
@@ -154,15 +154,19 @@ export function leaveConversation(conversationId) {
   socket?.emit("conversation:leave", { conversationId });
 }
 
-export function sendSocketMessage({ conversationId, body, mentionIds }) {
+export function sendSocketMessage({ conversationId, body, mentionIds, attachments }) {
   return new Promise((resolve) => {
     if (!socket?.connected) return resolve({ ok: false, error: "OFFLINE" });
-    socket.emit("message:send", { conversationId, body, mentionIds }, resolve);
+    const user = getSessionUser();
+    const userName = user?.name || (user?.email ? user.email.split('@')[0] : "Utilizador");
+    socket.emit("message:send", { conversationId, body, mentionIds, attachments, userName }, resolve);
   });
 }
 
 export function emitTypingStart(conversationId) {
-  socket?.emit("typing:start", { conversationId });
+  const user = getSessionUser();
+  const userName = user?.name || (user?.email ? user.email.split('@')[0] : "Utilizador");
+  socket?.emit("typing:start", { conversationId, userName });
 }
 
 export function emitTypingStop(conversationId) {

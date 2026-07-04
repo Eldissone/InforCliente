@@ -24,9 +24,9 @@ function registerChatHandlers(io, socket) {
     if (conversationId) socket.leave(`conversation:${conversationId}`);
   });
 
-  socket.on("message:send", async ({ conversationId, body, mentionIds }, ack) => {
+  socket.on("message:send", async ({ conversationId, body, mentionIds, attachments, userName }, ack) => {
     try {
-      const message = await sendMessage({ conversationId, senderId: userId, body, mentionIds });
+      const message = await sendMessage({ conversationId, senderId: userId, body, mentionIds, attachments });
 
       await prisma.message.update({
         where: { id: message.id },
@@ -46,9 +46,11 @@ function registerChatHandlers(io, socket) {
 
       const parsedMentions = parseMentionIds(body, mentionIds).filter((id) => id !== userId);
 
+      const computedSenderName = userName || socket.user.name || (socket.user.email ? socket.user.email.split('@')[0] : "Utilizador");
+
       await notifyNewMessage({
         recipientIds,
-        senderName: socket.user.name || socket.user.email,
+        senderName: computedSenderName,
         conversationId,
         messageId: message.id,
       });
@@ -56,7 +58,7 @@ function registerChatHandlers(io, socket) {
       if (parsedMentions.length) {
         await notifyMentions({
           mentionIds: parsedMentions,
-          senderName: socket.user.name || socket.user.email,
+          senderName: computedSenderName,
           conversationId,
           messageId: message.id,
           bodyPreview: body,
@@ -101,13 +103,14 @@ function registerChatHandlers(io, socket) {
 
   const typingTimers = new Map();
 
-  socket.on("typing:start", ({ conversationId }) => {
+  socket.on("typing:start", ({ conversationId, userName }) => {
     if (!conversationId) return;
+    const computedSenderName = userName || socket.user.name || (socket.user.email ? socket.user.email.split('@')[0] : "Utilizador");
     socket.to(`conversation:${conversationId}`).emit("typing:update", {
       conversationId,
       userId,
       isTyping: true,
-      userName: socket.user.name || socket.user.email,
+      userName: computedSenderName,
     });
     clearTimeout(typingTimers.get(conversationId));
     typingTimers.set(

@@ -42,6 +42,7 @@ function serializeMessage(message) {
       userId: m.mentionedUserId,
       user: serializeUser(m.mentionedUser),
     })),
+    attachments: message.attachments || [],
   };
 }
 
@@ -105,6 +106,7 @@ async function listConversationsForUser(userId) {
             include: {
               sender: { select: USER_PUBLIC_SELECT },
               mentions: { include: { mentionedUser: { select: USER_PUBLIC_SELECT } } },
+              attachments: true,
             },
           },
         },
@@ -156,6 +158,7 @@ async function getMessages(conversationId, userId, { cursor, limit = 50 } = {}) 
       sender: { select: USER_PUBLIC_SELECT },
       mentions: { include: { mentionedUser: { select: USER_PUBLIC_SELECT } } },
       reads: { where: { userId }, select: { readAt: true } },
+      attachments: true,
     },
   });
 
@@ -175,11 +178,11 @@ function parseMentionIds(body, mentionIds = []) {
   return [...ids];
 }
 
-async function sendMessage({ conversationId, senderId, body, mentionIds = [] }) {
+async function sendMessage({ conversationId, senderId, body, mentionIds = [], attachments = [] }) {
   await assertParticipant(senderId, conversationId);
 
   const trimmed = String(body || "").trim();
-  if (!trimmed) {
+  if (!trimmed && !attachments.length) {
     const err = new Error("EMPTY_MESSAGE");
     err.status = 400;
     throw err;
@@ -206,10 +209,23 @@ async function sendMessage({ conversationId, senderId, body, mentionIds = [] }) 
               },
             }
           : {}),
+        ...(attachments.length
+          ? {
+              attachments: {
+                create: attachments.map(a => ({
+                  fileName: a.fileName,
+                  mimeType: a.mimeType,
+                  size: a.size,
+                  path: a.path
+                })),
+              }
+            }
+          : {}),
       },
       include: {
         sender: { select: USER_PUBLIC_SELECT },
         mentions: { include: { mentionedUser: { select: USER_PUBLIC_SELECT } } },
+        attachments: true,
       },
     });
 

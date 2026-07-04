@@ -3,8 +3,8 @@
  * Injetado em todas as páginas autenticadas via wireUsersNav().
  */
 
-import { getSessionUser } from "../services/auth.js";
-import { getAssetUrl } from "../services/api.js";
+import { getSessionUser, getToken } from "../services/auth.js";
+import { getAssetUrl, getApiBaseUrl } from "../services/api.js";
 import { openModal } from "./ui.js";
 import {
   fetchConversations,
@@ -156,11 +156,20 @@ function createPanel() {
     </div>
 
     <footer id="globalChatFooter" class="hidden shrink-0 p-4 border-t border-slate-100 bg-slate-50/50">
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
+        <input type="file" id="globalChatFileInput" class="hidden" />
+        <button type="button" id="globalChatAttach" title="Anexar ficheiro"
+          class="w-11 h-11 text-slate-400 hover:text-slate-900 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-all shrink-0">
+          <span class="material-symbols-outlined">attach_file</span>
+        </button>
+        <button type="button" id="globalChatAudio" title="Gravar áudio"
+          class="w-11 h-11 text-slate-400 hover:text-red-500 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-all shrink-0">
+          <span class="material-symbols-outlined">mic</span>
+        </button>
         <input id="globalChatInput" type="text" disabled placeholder="Seleccione uma conversa..."
-          class="flex-1 h-11 bg-white border border-slate-200 rounded-xl px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 disabled:text-slate-400 disabled:cursor-not-allowed" />
+          class="flex-1 min-w-0 h-11 bg-white border border-slate-200 rounded-xl px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 disabled:text-slate-400 disabled:cursor-not-allowed" />
         <button type="button" id="globalChatSend" disabled
-          class="w-11 h-11 bg-slate-900 text-[#2afc8d] rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:hover:scale-100">
+          class="w-11 h-11 bg-slate-900 text-[#2afc8d] rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:hover:scale-100 shrink-0">
           <span class="material-symbols-outlined">send</span>
         </button>
       </div>
@@ -192,6 +201,55 @@ function createPanel() {
   });
 
   panelEl.querySelector("#globalChatNew")?.addEventListener("click", openNewConversationPrompt);
+
+  const fileInput = panelEl.querySelector("#globalChatFileInput");
+  const attachBtn = panelEl.querySelector("#globalChatAttach");
+  const audioBtn = panelEl.querySelector("#globalChatAudio");
+
+  attachBtn?.addEventListener("click", () => fileInput?.click());
+  fileInput?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) handleFileUpload(file);
+    e.target.value = "";
+  });
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
+
+  audioBtn?.addEventListener("click", async () => {
+    if (!state.activeId) return;
+    if (isRecording) {
+      mediaRecorder?.stop();
+      isRecording = false;
+      audioBtn.classList.remove("text-red-500", "animate-pulse");
+      audioBtn.classList.add("text-slate-400");
+      el("globalChatInput").placeholder = "Escreva uma mensagem...";
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          const file = new File([audioBlob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
+          handleFileUpload(file);
+          stream.getTracks().forEach(track => track.stop());
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        audioBtn.classList.remove("text-slate-400");
+        audioBtn.classList.add("text-red-500", "animate-pulse");
+        el("globalChatInput").placeholder = "A gravar áudio... (clique no microfone para parar)";
+      } catch (err) {
+        console.error("Erro no microfone:", err);
+        alert("Não foi possível aceder ao microfone.");
+      }
+    }
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isOpen) closeChatPanel();
@@ -279,7 +337,15 @@ function renderConversationList() {
   host.innerHTML = filtered
     .map((c) => {
       const other = (c.participants || []).find((p) => p.id !== getCurrentUserId()) || c.participants?.[0];
-      const preview = c.lastMessage?.body || "Sem mensagens";
+      let previewHTML = escapeHtml(c.lastMessage?.body || "");
+      if (!previewHTML && c.lastMessage?.attachments?.length > 0) {
+        const mime = c.lastMessage.attachments[0].mimeType || "";
+        if (mime.startsWith('image/')) previewHTML = `<span class="material-symbols-outlined text-[14px] align-text-bottom mr-0.5">image</span> Imagem`;
+        else if (mime.startsWith('audio/')) previewHTML = `<span class="material-symbols-outlined text-[14px] align-text-bottom mr-0.5">mic</span> Áudio`;
+        else previewHTML = `<span class="material-symbols-outlined text-[14px] align-text-bottom mr-0.5">attach_file</span> Anexo`;
+      }
+      previewHTML = previewHTML || (c.lastMessage ? "Nova mensagem" : "Sem mensagens");
+      
       const time = formatTime(c.lastMessage?.createdAt || c.updatedAt);
       const unread = c.unreadCount > 0;
       return `
@@ -294,7 +360,7 @@ function renderConversationList() {
               <span class="text-sm font-bold text-slate-900 truncate">${escapeHtml(c.title || other?.name || "Conversa")}</span>
               <span class="text-[10px] text-slate-400 shrink-0">${time}</span>
             </div>
-            <p class="text-xs text-slate-500 truncate mt-0.5 ${unread ? "font-bold text-slate-800" : ""}">${escapeHtml(preview)}</p>
+            <p class="text-xs text-slate-500 truncate mt-0.5 ${unread ? "font-bold text-slate-800" : ""}">${previewHTML}</p>
           </div>
           ${unread ? `<span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2afc8d] text-[#0F172A] text-[10px] font-black flex items-center justify-center">${c.unreadCount > 9 ? "9+" : c.unreadCount}</span>` : ""}
         </button>`;
@@ -326,7 +392,8 @@ function renderMessages() {
           <div class="max-w-[75%]">
             ${!mine ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
             <div class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
-              ${renderMentionBody(m.body)}
+              ${m.body ? renderMentionBody(m.body) : ''}
+              ${renderAttachments(m.attachments, mine)}
             </div>
             <p class="text-[9px] text-slate-400 mt-1 ${mine ? "text-right" : "ml-1"}">${formatTime(m.createdAt)} · ${m.status === "READ" ? "Lida" : m.status === "DELIVERED" ? "Entregue" : "Enviada"}</p>
           </div>
@@ -335,6 +402,12 @@ function renderMessages() {
     .join("");
 
   host.scrollTop = host.scrollHeight;
+
+  // Delegated click for image lightbox
+  host.onclick = (e) => {
+    const img = e.target.closest('img[data-lightbox-url]');
+    if (img) openImageLightbox(img.dataset.lightboxUrl, img.dataset.lightboxName);
+  };
 }
 
 function updateTypingIndicator() {
@@ -376,6 +449,107 @@ async function handleSend() {
   input.disabled = false;
   el("globalChatSend").disabled = false;
   input.focus();
+}
+
+async function handleFileUpload(file) {
+  if (!state.activeId) return;
+  const input = el("globalChatInput");
+  const originalPlaceholder = input.placeholder;
+  input.placeholder = "A enviar anexo...";
+  input.disabled = true;
+  el("globalChatSend").disabled = true;
+  
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    
+    const res = await fetch(`${getApiBaseUrl()}/conversations/${state.activeId}/attachments`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: fd
+    });
+    
+    if (!res.ok) throw new Error("Upload falhou");
+    const data = await res.json();
+    
+    const result = await sendSocketMessage({ 
+      conversationId: state.activeId, 
+      body: "", 
+      attachments: [data] 
+    });
+    
+    if (!result?.ok) {
+       throw new Error("Falha ao enviar anexo via socket");
+    }
+  } catch (err) {
+    console.error("Upload error:", err);
+    alert("Erro ao enviar anexo: " + err.message);
+  } finally {
+    input.placeholder = originalPlaceholder;
+    input.disabled = false;
+    el("globalChatSend").disabled = false;
+    input.focus();
+  }
+}
+
+function openImageLightbox(url, fileName) {
+  const existing = document.getElementById('chatImageLightbox');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'chatImageLightbox';
+  overlay.className = 'fixed inset-0 z-[200] flex items-center justify-center p-4';
+  overlay.style.cssText = 'background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);';
+  overlay.innerHTML = `
+    <div class="relative max-w-[90vw] max-h-[90vh] flex flex-col items-center gap-3">
+      <img src="${url}" alt="${escapeHtml(fileName || 'Imagem')}"
+        class="max-w-[85vw] max-h-[80vh] rounded-2xl object-contain shadow-2xl"
+        style="border: 1px solid rgba(255,255,255,0.1);" />
+      <div class="flex items-center gap-3">
+        <a href="${url}" download="${escapeHtml(fileName || 'imagem')}" target="_blank"
+          class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all backdrop-blur-sm border border-white/10">
+          <span class="material-symbols-outlined text-[16px]">download</span> Guardar
+        </a>
+        <button type="button" id="chatLightboxClose"
+          class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-all backdrop-blur-sm border border-white/10">
+          <span class="material-symbols-outlined text-[16px]">close</span> Fechar
+        </button>
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+  overlay.querySelector('#chatLightboxClose').addEventListener('click', () => overlay.remove());
+  
+  const onKeydown = (e) => {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKeydown); }
+  };
+  document.addEventListener('keydown', onKeydown);
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => { overlay.style.opacity = '1'; });
+}
+
+function renderAttachments(attachments, mine) {
+  if (!attachments || !attachments.length) return "";
+  return attachments.map(a => {
+    const url = getAssetUrl(a.path) || a.url;
+    const safeName = escapeHtml(a.fileName || "ficheiro");
+    if (a.mimeType.startsWith('image/')) {
+      return `<img src="${url}" alt="${safeName}"
+        class="max-w-[200px] rounded-xl mt-2 cursor-pointer hover:opacity-90 hover:scale-[1.02] transition-all shadow-md"
+        data-lightbox-url="${url}" data-lightbox-name="${safeName}" />`;
+    }
+    if (a.mimeType.startsWith('audio/')) {
+      return `<audio controls src="${url}" class="max-w-[200px] mt-2 h-10 ${mine ? 'grayscale invert opacity-90' : ''}"></audio>`;
+    }
+    return `<a href="${url}" target="_blank" class="flex items-center gap-2 mt-2 p-2 rounded bg-black/10 hover:bg-black/20 transition-colors text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">download</span>
+      <span class="truncate" style="max-width: 150px;">${safeName}</span>
+    </a>`;
+  }).join('');
 }
 
 async function openNewConversationPrompt() {

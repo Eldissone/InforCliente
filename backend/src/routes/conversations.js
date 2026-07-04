@@ -2,7 +2,11 @@ const express = require("express");
 const { z } = require("zod");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const multer = require("multer");
+const path = require("path");
+const crypto = require("crypto");
 const { prisma } = require("../db");
+const { uploadToSupabase } = require("../utils/storage");
 const {
   findOrCreateDirectConversation,
   listConversationsForUser,
@@ -120,6 +124,37 @@ conversationRoutes.patch(
     const conversationId = String(req.params.id);
     const result = await markConversationRead(conversationId, req.user.sub);
     return res.json(result);
+  })
+);
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+});
+
+conversationRoutes.post(
+  "/:id/attachments",
+  requirePermission("chat", "send"),
+  attachmentUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const conversationId = String(req.params.id);
+    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
+
+    const { assertParticipant } = require("../services/chatService");
+    await assertParticipant(req.user.sub, conversationId);
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const hash = crypto.randomBytes(8).toString("hex");
+    const storagePath = `chat/${conversationId}/${Date.now()}_${hash}${ext}`;
+
+    const uploadedUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
+    return res.status(201).json({
+      fileName: req.file.originalname || "attachment",
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      path: storagePath,
+      url: uploadedUrl
+    });
   })
 );
 
