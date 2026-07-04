@@ -155,7 +155,7 @@ function createPanel() {
       <p id="globalChatTyping" class="hidden px-4 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest"></p>
     </div>
 
-    <footer class="shrink-0 p-4 border-t border-slate-100 bg-slate-50/50">
+    <footer id="globalChatFooter" class="hidden shrink-0 p-4 border-t border-slate-100 bg-slate-50/50">
       <div class="flex gap-2">
         <input id="globalChatInput" type="text" disabled placeholder="Seleccione uma conversa..."
           class="flex-1 h-11 bg-white border border-slate-200 rounded-xl px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 disabled:text-slate-400 disabled:cursor-not-allowed" />
@@ -207,11 +207,11 @@ function showListView() {
   el("globalChatBack")?.classList.add("hidden");
   el("globalChatTitle").textContent = "Mensagens";
   el("globalChatSubtitle").textContent = "Comunicação em tempo real";
+  el("globalChatFooter")?.classList.add("hidden");
   const input = el("globalChatInput");
   const sendBtn = el("globalChatSend");
   if (input) {
     input.disabled = true;
-    input.placeholder = "Seleccione uma conversa...";
     input.value = "";
   }
   if (sendBtn) sendBtn.disabled = true;
@@ -231,6 +231,8 @@ async function openConversation(conversationId) {
   el("globalChatBack")?.classList.remove("hidden");
   el("globalChatTitle").textContent = conv.title || "Conversa";
   el("globalChatSubtitle").textContent = conv.participants?.map((p) => p.name || p.email).join(", ") || "";
+
+  el("globalChatFooter")?.classList.remove("hidden");
 
   const input = el("globalChatInput");
   const sendBtn = el("globalChatSend");
