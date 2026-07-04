@@ -32,16 +32,21 @@
                 <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                     <span
                         class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
-                    <span id="navBrandText">Cliente</span>
+                    <span id="navBrandText">Gestor</span>
                 </span>
                 <div class="hidden lg:flex items-center gap-6">
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                    <a data-nav-dashboard class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Dashboard/index.html">Dashboard</a>
                     <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
                         href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Projectos/ProjectGeral.html">Obras</a>
-                   
+                    <a data-nav-logistics class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        href="../Stock/index.html">Logística</a>
+                    <a href="../Projectos/centroCustos.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
+                    <a href="../Projectos/Cotacao/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
                 </div>
             </div>
 
@@ -68,7 +73,8 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-dashboard
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
@@ -80,7 +86,19 @@
                 href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/centroCustos.html">
+                <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/Cotacao/index.html">
+                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
+            </a>
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Stock/index.html">
+                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+            </a>
             <button data-logout
                 class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
@@ -91,7 +109,12 @@
     <!-- Main Content -->
     <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-20">
         <!-- Header: Client ID & Health -->
-        <header class="flex flex-col lg:flex-row justify-between items-start gap-10 mb-12">
+        <header class="flex flex-col gap-8 mb-12">
+            <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <span>Clientes</span>
+                <span class="material-symbols-outlined text-xs">chevron_right</span>
+                <span id="clientBreadcrumb" class="text-[#0d3fd1]">Detalhe</span>
+            </nav>
             <div class="flex flex-col md:flex-row items-center md:items-start gap-8">
                 <div class="relative group">
                     <img alt="Perfil" id="clientProfilePic"
@@ -164,7 +187,6 @@
     </footer>
 
     <script type="module" src="./client.js"></script>
-</body>
 </body>
 
 </html>

@@ -112,6 +112,7 @@ async function loadClient() {
   const c = data.client;
 
   setText(el("clientName"), c.name);
+  setText(el("clientBreadcrumb"), c.name);
   setText(el("clientCode"), `ID: ${c.code}`);
   if (c.profilePic) {
     const imgEl = el("clientProfilePic");
@@ -121,7 +122,7 @@ async function loadClient() {
     }
   }
 
-  setText(el("clientLocationTier"), `${c.region || "Região não informada"} • ${c.tier || "Tier não informado"}`);
+  setText(el("clientLocationTier"), `${c.region || "Região não informada"} • ${c.tier || "Perfil Info Cliente"}`);
   setText(el("clientAccountEmail"), c.accountEmail || "Sem conta vinculada");
 
   const statusBadgeEl = el("clientStatusBadge");
