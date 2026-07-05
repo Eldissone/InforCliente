@@ -2,7 +2,7 @@ const { prisma } = require("../../db");
 const {
   sendMessage,
   markConversationRead,
-  assertParticipant,
+  assertConversationAccess,
   parseMentionIds,
 } = require("../../services/chatService");
 const { notifyNewMessage, notifyMentions } = require("../../services/notificationService");
@@ -12,7 +12,7 @@ function registerChatHandlers(io, socket) {
 
   socket.on("conversation:join", async ({ conversationId }, ack) => {
     try {
-      await assertParticipant(userId, conversationId);
+      await assertConversationAccess(userId, conversationId);
       socket.join(`conversation:${conversationId}`);
       if (typeof ack === "function") ack({ ok: true });
     } catch (err) {

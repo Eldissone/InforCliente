@@ -13,6 +13,8 @@ const {
   getMessages,
   sendMessage,
   markConversationRead,
+  assertClientChatPolicy,
+  assertConversationAccess,
   serializeUser,
   USER_PUBLIC_SELECT,
 } = require("../services/chatService");
@@ -45,6 +47,8 @@ conversationRoutes.post(
     if (!uniqueIds.length) {
       return res.status(400).json({ error: "PARTICIPANTS_REQUIRED" });
     }
+
+    await assertClientChatPolicy(req.user.sub, uniqueIds);
 
     if ((body.type || "DIRECT") === "DIRECT" && uniqueIds.length === 1) {
       const conversation = await findOrCreateDirectConversation(req.user.sub, uniqueIds[0]);
@@ -139,8 +143,7 @@ conversationRoutes.post(
     const conversationId = String(req.params.id);
     if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
 
-    const { assertParticipant } = require("../services/chatService");
-    await assertParticipant(req.user.sub, conversationId);
+    await assertConversationAccess(req.user.sub, conversationId);
 
     const ext = path.extname(req.file.originalname).toLowerCase();
     const hash = crypto.randomBytes(8).toString("hex");

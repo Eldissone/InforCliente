@@ -74,6 +74,15 @@ function getCurrentUserId() {
   return getSessionUser()?.id || null;
 }
 
+function isCurrentUserCliente() {
+  return String(getSessionUser()?.role || "").toLowerCase() === "cliente";
+}
+
+function filterChatUsers(items) {
+  if (!isCurrentUserCliente()) return items;
+  return (items || []).filter((u) => String(u.role || "").toLowerCase() !== "cliente");
+}
+
 function totalUnread() {
   return state.conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 }
@@ -575,7 +584,7 @@ async function openNewConversationPrompt() {
       const renderUsers = async (q = "") => {
         try {
           const data = await searchUsers(q);
-          const items = data.items || [];
+          const items = filterChatUsers(data.items || []);
           if (!items.length) {
             listEl.innerHTML = '<div class="text-center text-sm text-slate-500 py-4">Nenhum utilizador encontrado.</div>';
             return;
@@ -601,7 +610,10 @@ async function openNewConversationPrompt() {
                 if (created?.conversation?.id) openConversation(created.conversation.id);
                 close();
               } catch (err) {
-                alert(err.message || "Erro ao criar conversa.");
+                const msg = err.message?.includes("CLIENT_TO_CLIENT")
+                  ? "Clientes não podem iniciar conversas com outros clientes."
+                  : (err.message || "Erro ao criar conversa.");
+                alert(msg);
                 btn.classList.remove("opacity-50", "pointer-events-none");
               }
             });

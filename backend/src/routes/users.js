@@ -7,7 +7,7 @@ const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
-const { serializeUser, USER_PUBLIC_SELECT } = require("../services/chatService");
+const { serializeUser, USER_PUBLIC_SELECT, buildChatUserSearchWhere } = require("../services/chatService");
 
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
@@ -63,14 +63,8 @@ userRoutes.get(
   authRequired,
   asyncHandler(async (req, res) => {
     const q = String(req.query.q || "").trim();
-    const whereClause = { NOT: { id: req.user.sub } };
-    
-    if (q.length > 0) {
-      whereClause.OR = [
-        { name: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-      ];
-    }
+    const requesterRole = (req.user?.role || "").toLowerCase();
+    const whereClause = buildChatUserSearchWhere(req.user.sub, requesterRole, q);
 
     const items = await prisma.user.findMany({
       where: whereClause,

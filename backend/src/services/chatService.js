@@ -59,12 +59,77 @@ async function assertParticipant(userId, conversationId) {
   return row;
 }
 
+function isClienteRole(role) {
+  return String(role || "").toLowerCase() === "cliente";
+}
+
+async function assertClientChatPolicy(requesterId, otherUserIds) {
+  const requester = await prisma.user.findUnique({
+    where: { id: requesterId },
+    select: { role: true },
+  });
+  if (!isClienteRole(requester?.role)) return;
+
+  const ids = [...new Set((otherUserIds || []).filter(Boolean))];
+  if (!ids.length) return;
+
+  const blocked = await prisma.user.findFirst({
+    where: { id: { in: ids }, role: "cliente" },
+    select: { id: true },
+  });
+  if (blocked) {
+    const err = new Error("CLIENT_TO_CLIENT_CHAT_FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+}
+
+async function assertConversationAccess(userId, conversationId) {
+  await assertParticipant(userId, conversationId);
+
+  const requester = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (!isClienteRole(requester?.role)) return;
+
+  const others = await prisma.conversationParticipant.findMany({
+    where: { conversationId, userId: { not: userId } },
+    include: { user: { select: { role: true } } },
+  });
+
+  if (others.some((p) => isClienteRole(p.user?.role))) {
+    const err = new Error("CLIENT_TO_CLIENT_CHAT_FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+}
+
+function buildChatUserSearchWhere(requesterId, requesterRole, q) {
+  const whereClause = { NOT: { id: requesterId } };
+
+  if (isClienteRole(requesterRole)) {
+    whereClause.role = { not: "cliente" };
+  }
+
+  if (q.length > 0) {
+    whereClause.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  return whereClause;
+}
+
 async function findOrCreateDirectConversation(userId, otherUserId) {
   if (userId === otherUserId) {
     const err = new Error("INVALID_PARTICIPANT");
     err.status = 400;
     throw err;
   }
+
+  await assertClientChatPolicy(userId, [otherUserId]);
 
   const existing = await prisma.conversation.findFirst({
     where: {
@@ -95,6 +160,11 @@ async function findOrCreateDirectConversation(userId, otherUserId) {
 }
 
 async function listConversationsForUser(userId) {
+  const requester = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+
   const rows = await prisma.conversationParticipant.findMany({
     where: { userId },
     include: {
@@ -144,11 +214,18 @@ async function listConversationsForUser(userId) {
     })
   );
 
+  if (isClienteRole(requester?.role)) {
+    return items.filter((conv) => {
+      const others = (conv.participants || []).filter((p) => p.id !== userId);
+      return !others.some((p) => isClienteRole(p.role));
+    });
+  }
+
   return items;
 }
 
 async function getMessages(conversationId, userId, { cursor, limit = 50 } = {}) {
-  await assertParticipant(userId, conversationId);
+  await assertConversationAccess(userId, conversationId);
 
   const messages = await prisma.message.findMany({
     where: { conversationId },
@@ -180,7 +257,7 @@ function parseMentionIds(body, mentionIds = []) {
 }
 
 async function sendMessage({ conversationId, senderId, body, mentionIds = [], attachments = [] }) {
-  await assertParticipant(senderId, conversationId);
+  await assertConversationAccess(senderId, conversationId);
 
   const trimmed = String(body || "").trim();
   if (!trimmed && !attachments.length) {
@@ -242,7 +319,7 @@ async function sendMessage({ conversationId, senderId, body, mentionIds = [], at
 }
 
 async function markConversationRead(conversationId, userId) {
-  await assertParticipant(userId, conversationId);
+  await assertConversationAccess(userId, conversationId);
 
   const unread = await prisma.message.findMany({
     where: {
@@ -280,6 +357,10 @@ module.exports = {
   serializeUser,
   serializeMessage,
   assertParticipant,
+  assertConversationAccess,
+  assertClientChatPolicy,
+  buildChatUserSearchWhere,
+  isClienteRole,
   findOrCreateDirectConversation,
   listConversationsForUser,
   getMessages,
