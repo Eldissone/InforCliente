@@ -3,9 +3,163 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
+const multer = require("multer");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit for PDFs/Images
+});
 
 const costCenterRoutes = express.Router();
 costCenterRoutes.use(authRequired);
+
+const WEEK_ORDER = Array.from({ length: 26 }, (_, i) => `SEM ${i}`);
+
+function sortWeekEntries(weekMap) {
+  const known = WEEK_ORDER.filter((w) => weekMap[w]).map((w) => weekMap[w]);
+  const extra = Object.keys(weekMap)
+    .filter((w) => !WEEK_ORDER.includes(w))
+    .sort((a, b) => {
+      const na = Number(String(a).replace(/\D/g, "")) || 999;
+      const nb = Number(String(b).replace(/\D/g, "")) || 999;
+      return na - nb;
+    })
+    .map((w) => weekMap[w]);
+  return [...known, ...extra];
+}
+
+function buildGlobalPaymentWhere(query) {
+  const projectId = query.projectId ? String(query.projectId) : "";
+  const ccId = query.costCenterId ? String(query.costCenterId) : "";
+  const status = query.status ? String(query.status) : "";
+  const week = query.week ? String(query.week) : "";
+
+  return {
+    ...(projectId ? { projectId } : {}),
+    ...(ccId ? { costCenterId: ccId } : {}),
+    ...(status ? { status } : {}),
+    ...(week ? { week } : {}),
+  };
+}
+
+async function mapPaymentItems(items) {
+  const supplierNames = [...new Set(items.map((p) => p.supplier).filter(Boolean))];
+  const supplierMap = {};
+  if (supplierNames.length > 0) {
+    const suppliers = await prisma.supplier.findMany({
+      where: { name: { in: supplierNames } },
+      select: { name: true, nif: true, iban: true },
+    });
+    suppliers.forEach((s) => {
+      supplierMap[s.name] = s;
+    });
+  }
+
+  return items.map((p) => {
+    const sup = supplierMap[p.supplier] || {};
+    let proformaUrl = null;
+    if (p.need && p.need.quotes && p.need.quotes.length > 0) {
+      proformaUrl = p.need.quotes[0].proformaUrl;
+    }
+
+    return {
+      ...p,
+      nif: sup.nif || null,
+      iban: sup.iban || null,
+      proformaUrl,
+      budgetedAmount: String(p.budgetedAmount),
+      paidAmount: String(p.paidAmount),
+    };
+  });
+}
+
+// GET /cost-centers/payments — Lançamentos de todas as obras
+costCenterRoutes.get(
+  "/payments",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const where = buildGlobalPaymentWhere(req.query);
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
+
+    const [total, items] = await Promise.all([
+      prisma.costPayment.count({ where }),
+      prisma.costPayment.findMany({
+        where,
+        orderBy: { paymentDate: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          project: { select: { id: true, name: true, code: true } },
+          costCenter: { select: { code: true, name: true, currency: true } },
+          need: {
+            select: {
+              description: true,
+              quotes: {
+                where: { selected: true },
+                select: { proformaUrl: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return res.json({
+      page,
+      pageSize,
+      total,
+      items: await mapPaymentItems(items),
+    });
+  })
+);
+
+// GET /cost-centers/payments/weekly-summary — Pagamentos por semana (todas as obras)
+costCenterRoutes.get(
+  "/payments/weekly-summary",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const where = {
+      ...buildGlobalPaymentWhere(req.query),
+      week: req.query.week ? String(req.query.week) : { not: null },
+    };
+
+    const payments = await prisma.costPayment.findMany({
+      where,
+      select: {
+        week: true,
+        paidAmount: true,
+        budgetedAmount: true,
+        status: true,
+        costCenter: { select: { currency: true } },
+      },
+    });
+
+    const weekMap = {};
+    payments.forEach((p) => {
+      const w = p.week;
+      if (!w) return;
+      const currency = p.costCenter?.currency || "AOA";
+      const key = `${w}::${currency}`;
+      if (!weekMap[key]) {
+        weekMap[key] = { week: w, paid: 0, budgeted: 0, count: 0, currency };
+      }
+      weekMap[key].paid += Number(p.paidAmount || 0);
+      weekMap[key].budgeted += Number(p.budgetedAmount || 0);
+      weekMap[key].count += 1;
+    });
+
+    const weeks = Object.values(weekMap).sort((a, b) => {
+      const na = Number(String(a.week).replace(/\D/g, "")) || 999;
+      const nb = Number(String(b.week).replace(/\D/g, "")) || 999;
+      if (na !== nb) return na - nb;
+      return (a.currency || "").localeCompare(b.currency || "");
+    });
+
+    return res.json({ weeks });
+  })
+);
 
 // ─── Centros de Custo ─────────────────────────────────────────────────────────
 
@@ -553,36 +707,9 @@ costCenterRoutes.get(
       }),
     ]);
 
-    const supplierNames = [...new Set(items.map((p) => p.supplier).filter(Boolean))];
-    const supplierMap = {};
-    if (supplierNames.length > 0) {
-      const suppliers = await prisma.supplier.findMany({
-        where: { name: { in: supplierNames } },
-        select: { name: true, nif: true, iban: true },
-      });
-      suppliers.forEach((s) => {
-        supplierMap[s.name] = s;
-      });
-    }
-
     return res.json({
       page, pageSize, total,
-      items: items.map((p) => {
-        const sup = supplierMap[p.supplier] || {};
-        let proformaUrl = null;
-        if (p.need && p.need.quotes && p.need.quotes.length > 0) {
-          proformaUrl = p.need.quotes[0].proformaUrl;
-        }
-
-        return {
-          ...p,
-          nif: sup.nif || null,
-          iban: sup.iban || null,
-          proformaUrl: proformaUrl,
-          budgetedAmount: String(p.budgetedAmount),
-          paidAmount: String(p.paidAmount),
-        };
-      }),
+      items: await mapPaymentItems(items),
     });
   })
 );
@@ -643,6 +770,7 @@ costCenterRoutes.post(
 costCenterRoutes.patch(
   "/:id/payments/:payId",
   requireRole(["admin", "operador"]),
+  upload.fields([{ name: "comprovativo", maxCount: 1 }, { name: "fatura", maxCount: 1 }]),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
     const body = z.object({
@@ -661,6 +789,24 @@ costCenterRoutes.patch(
       notes: z.string().optional().nullable(),
     }).parse(req.body);
 
+    let comprovativoUrl = undefined;
+    let faturaUrl = undefined;
+
+    if (req.files) {
+      if (req.files.comprovativo && req.files.comprovativo.length > 0) {
+        const file = req.files.comprovativo[0];
+        const ext = file.originalname.split(".").pop();
+        const filename = `comprovativo-${Date.now()}.${ext}`;
+        comprovativoUrl = await uploadToSupabase(filename, file.buffer, file.mimetype);
+      }
+      if (req.files.fatura && req.files.fatura.length > 0) {
+        const file = req.files.fatura[0];
+        const ext = file.originalname.split(".").pop();
+        const filename = `fatura-${Date.now()}.${ext}`;
+        faturaUrl = await uploadToSupabase(filename, file.buffer, file.mimetype);
+      }
+    }
+
     const updated = await prisma.costPayment.update({
       where: { id: payId },
       data: {
@@ -677,6 +823,8 @@ costCenterRoutes.patch(
         ...(body.status ? { status: body.status } : {}),
         ...(body.needId !== undefined ? { needId: body.needId } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(comprovativoUrl !== undefined ? { comprovativoUrl } : {}),
+        ...(faturaUrl !== undefined ? { faturaUrl } : {}),
       },
       select: { id: true },
     });
@@ -720,8 +868,7 @@ costCenterRoutes.get(
       weekMap[w].paid += Number(p.paidAmount || 0);
     });
 
-    const weekOrder = ["SEM 0","SEM 1","SEM 2","SEM 3","SEM 4","SEM 5","SEM 6","SEM 7","SEM 8","SEM 9","SEM 10"];
-    const weeks = weekOrder.filter((w) => weekMap[w]).map((w) => weekMap[w]);
+    const weeks = sortWeekEntries(weekMap);
 
     return res.json({ weeks });
   })

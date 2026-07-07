@@ -479,14 +479,96 @@
         <!-- ── MAIN CONTENT ── -->
         <main class="flex-1 min-w-0 flex flex-col gap-6">
 
-            <!-- ── Nenhuma obra selecionada ── -->
-            <div id="noProjectState" class="empty-state">
-                <div class="w-20 h-20 rounded-3xl bg-slate-100 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-4xl text-slate-400">construction</span>
+            <!-- ── Vista global (sem obra selecionada) ── -->
+            <div id="globalPaymentsView" class="hidden flex flex-col gap-6">
+                <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <nav
+                            class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                            <a href="../Projectos/ProjectGeral.html"
+                                class="hover:text-slate-600 transition-colors">Obras</a>
+                            <span class="material-symbols-outlined text-xs">chevron_right</span>
+                            <span class="text-[#2afc8d]">Planeamento</span>
+                        </nav>
+                        <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">
+                            Lançamentos — Todas as Obras</h1>
+                        <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
+                            Pagamentos consolidados com filtros por obra, semana e status</p>
+                    </div>
+                </header>
+
+                <!-- Pagamentos por Semana -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+                    <div class="flex justify-between items-center mb-5">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Pagamentos por Semana</h3>
+                            <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana em todas as obras
+                            </p>
+                        </div>
+                        <span class="material-symbols-outlined text-slate-300">calendar_month</span>
+                    </div>
+                    <div id="globalWeeklyBreakdownList" class="space-y-2.5">
+                        <div class="spinner my-4"></div>
+                    </div>
                 </div>
-                <h3 class="text-lg font-bold text-slate-700">Seleciona uma Obra</h3>
-                <p class="text-sm text-slate-400 max-w-xs">Escolhe uma obra na lista à esquerda para gerir os seus
-                    centros de custo, necessidades e lançamentos.</p>
+
+                <!-- Tabela de Lançamentos -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div
+                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Lançamentos de Pagamento</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Registo financeiro de todas as obras</p>
+                        </div>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <select id="globalProjFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todas as Obras</option>
+                            </select>
+                            <select id="globalWeekFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todas as Semanas</option>
+                            </select>
+                            <select id="globalStatusFilter"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todos os Status</option>
+                                <option value="PENDENTE">Pendente</option>
+                                <option value="CONFIRMADO">Confirmado</option>
+                                <option value="CANCELADO">Cancelado</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto custom-scroll">
+                        <table class="w-full cc-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Doc.</th>
+                                    <th class="text-left">Data</th>
+                                    <th class="text-left">Obra</th>
+                                    <th class="text-left">Fornecedor</th>
+                                    <th class="text-left">CC</th>
+                                    <th class="text-left">Descrição</th>
+                                    <th class="text-left">Tipo</th>
+                                    <th class="text-right">Previsto</th>
+                                    <th class="text-right">Pago</th>
+                                    <th class="text-center">Semana</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="globalPaysTableBody">
+                                <tr>
+                                    <td colspan="12">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="globalPaysPagination"
+                        class="flex items-center justify-between px-6 py-4 border-t border-slate-50 text-xs font-semibold text-slate-400">
+                    </div>
+                </div>
             </div>
 
             <!-- ── Conteúdo da obra selecionada ── -->
@@ -611,7 +693,7 @@
                             </div>
                             <div id="alertsList"
                                 class="flex flex-col gap-3 flex-1 overflow-y-auto custom-scroll max-h-[220px]">
-                                <p class="text-xs text-slate-500 text-center mt-6">Sem alertas 🎉</p>
+                                <p class="text-xs text-slate-500 text-center mt-6">Sem alertas!</p>
                             </div>
                         </div>
                     </div>
@@ -1140,10 +1222,33 @@
                     <p class="text-xs font-semibold text-slate-500">Sem documento disponível.</p>
                 </div>
             </div>
+
+            <!-- Comprovativo -->
+            <div id="asideComprovativoSection" class="flex flex-col gap-3 flex-1 hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Comprovativo de Pagamento
+                    </p>
+                </div>
+
+                <div id="asideComprovativoContainer"
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center min-h-[250px] p-4 text-center overflow-hidden">
+                </div>
+            </div>
+
+            <!-- Fatura -->
+            <div id="asideFaturaSection" class="flex flex-col gap-3 flex-1 hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Fatura / Recibo</p>
+                </div>
+
+                <div id="asideFaturaContainer"
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center min-h-[250px] p-4 text-center overflow-hidden">
+                </div>
+            </div>
         </div>
         <div class="p-6 border-t border-slate-100 bg-white flex items-center justify-end gap-3">
-            <button type="button" onclick="closePaymentAside()"
-                class="h-11 px-5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
+            <!-- <button type="button" onclick="closePaymentAside()"
+                class="h-11 px-5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button> -->
             <button id="asideActionBtn" type="button"
                 class="h-11 px-6 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2">
                 <span class="material-symbols-outlined text-base">payments</span> Confirmar & Pagar
@@ -1582,6 +1687,22 @@
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
                     <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Ajusta o valor se o montante final pago
                         foi diferente do previsto.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="liqComprovativo"
+                            class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Comprovativo*</label>
+                        <input id="liqComprovativo" type="file" accept="image/*,.pdf" required
+                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" />
+                    </div>
+                    <div>
+                        <label for="liqFatura"
+                            class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Fatura /
+                            Recibo (Opcional)</label>
+                        <input id="liqFatura" type="file" accept="image/*,.pdf"
+                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 transition-all cursor-pointer" />
+                    </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-3 mt-4">

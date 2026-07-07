@@ -1,6 +1,6 @@
-import { apiRequest, getAssetUrl } from "/services/api.js";
+import { apiRequest, getAssetUrl, apiUpload } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
-import { getSessionUser, logout } from "/services/auth.js";
+import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -11,14 +11,17 @@ let currentCC = null;
 let currentTxStatus = "PENDING"; // Add variable to keep track of segmented tab
 let dashSummary = null;
 let chartInstance = null;
+let globalPayPage = 1;
+const GLOBAL_PAY_PAGE_SIZE = 30;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 (async () => {
   const ok = await guardPageAccess("obras", "view");
   if (!ok) return;
 
-  const map = await initPermissionLayer();
-  bootNav(map);
+  await initPermissionLayer();
+  wireLogout();
+  wireUsersNav();
   await loadProjects();
   bindEvents();
 
@@ -27,26 +30,11 @@ let chartInstance = null;
   if (urlPid) {
     const p = allProjects.find((x) => x.id === urlPid);
     if (p) selectProject(p);
+    else showGlobalView();
+  } else {
+    showGlobalView();
   }
 })();
-
-// ── Nav Bindings ───────────────────────────────────────────────────────────────
-function bootNav(map) {
-  const user = getSessionUser();
-  // role badge
-  document.querySelectorAll("[data-user-role]").forEach((el) => {
-    el.textContent = user?.name || user?.email || "Utilizador";
-  });
-  // logout
-  document.querySelectorAll("[data-logout]").forEach((btn) =>
-    btn.addEventListener("click", () => { logout(); window.location.href = "/Auth/login.html"; })
-  );
-  // nav visibility
-  const navDash = document.querySelector("[data-nav-dashboard]");
-  const navUsers = document.querySelector("[data-nav-users]");
-  if (navDash && !map["dashboard:view"]) navDash.classList.add("hidden");
-  if (navUsers && (user?.role || "").toLowerCase() === "admin") navUsers.classList.remove("hidden");
-}
 
 // ── Load Projects ──────────────────────────────────────────────────────────────
 async function loadProjects() {
@@ -85,13 +73,202 @@ function renderProjectList(projects) {
     </div>`;
   }).join("");
 
-  // Click events
+  // Click events — clicar na obra selecionada desseleciona
   list.querySelectorAll(".proj-card").forEach((card) => {
     card.addEventListener("click", () => {
       const p = allProjects.find((x) => x.id === card.dataset.pid);
-      if (p) selectProject(p);
+      if (!p) return;
+      if (selectedProject?.id === p.id) {
+        clearProjectSelection();
+        return;
+      }
+      selectProject(p);
     });
   });
+}
+
+function showGlobalView() {
+  document.getElementById("globalPaymentsView")?.classList.remove("hidden");
+  document.getElementById("projectContent")?.classList.add("hidden");
+  populateGlobalFilters();
+  globalPayPage = 1;
+  loadGlobalPayments();
+  loadGlobalWeeklySummary();
+}
+
+function clearProjectSelection() {
+  selectedProject = null;
+  localStorage.removeItem("InfoCliente.currentProjectId");
+  const url = new URL(window.location.href);
+  url.searchParams.delete("projectId");
+  window.history.replaceState({}, "", url.toString());
+  renderProjectList(allProjects);
+  showGlobalView();
+}
+
+function populateGlobalFilters() {
+  const projSel = document.getElementById("globalProjFilter");
+  if (projSel) {
+    const current = projSel.value;
+    projSel.innerHTML = `<option value="">Todas as Obras</option>` +
+      allProjects.map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`).join("");
+    if (allProjects.some((p) => p.id === current)) projSel.value = current;
+  }
+
+  const weekSel = document.getElementById("globalWeekFilter");
+  if (weekSel && weekSel.options.length <= 1) {
+    weekSel.innerHTML = `<option value="">Todas as Semanas</option>` +
+      Array.from({ length: 26 }, (_, i) => `<option value="SEM ${i}">SEM ${i}</option>`).join("");
+  }
+}
+
+function getGlobalPaymentFilters() {
+  const params = new URLSearchParams();
+  const projectId = document.getElementById("globalProjFilter")?.value;
+  const status = document.getElementById("globalStatusFilter")?.value;
+  const week = document.getElementById("globalWeekFilter")?.value;
+  if (projectId) params.set("projectId", projectId);
+  if (status) params.set("status", status);
+  if (week) params.set("week", week);
+  return params;
+}
+
+function reloadPaymentsView() {
+  if (selectedProject) {
+    loadPayments();
+    loadSummary();
+    loadCronograma();
+  } else {
+    loadGlobalPayments();
+    loadGlobalWeeklySummary();
+  }
+}
+
+async function loadGlobalPayments() {
+  const tbody = document.getElementById("globalPaysTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="12"><div class="spinner my-8"></div></td></tr>`;
+
+  try {
+    const params = getGlobalPaymentFilters();
+    params.set("page", String(globalPayPage));
+    params.set("pageSize", String(GLOBAL_PAY_PAGE_SIZE));
+
+    const data = await apiRequest(`/cost-centers/payments?${params}`);
+    const items = data.items || [];
+
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">receipt_long</span><p class="text-sm font-semibold">Sem lançamentos encontrados</p></div></td></tr>`;
+      document.getElementById("globalPaysPagination").innerHTML = "";
+      return;
+    }
+
+    tbody.innerHTML = items.map((p) => renderPaymentRowHtml(p, { showProject: true })).join("");
+
+    const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || GLOBAL_PAY_PAGE_SIZE)));
+    const pagination = document.getElementById("globalPaysPagination");
+    pagination.innerHTML = `
+      <span>${items.length} de ${data.total || items.length} lançamentos</span>
+      <div class="flex gap-2 items-center">
+        <button id="globalPaysPrev" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === 1 ? "opacity-50 pointer-events-none" : ""}">Anterior</button>
+        <span>Página ${data.page} de ${totalPages}</span>
+        <button id="globalPaysNext" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === totalPages ? "opacity-50 pointer-events-none" : ""}">Próxima</button>
+      </div>`;
+    pagination.querySelector("#globalPaysPrev")?.addEventListener("click", () => {
+      globalPayPage = Math.max(1, globalPayPage - 1);
+      loadGlobalPayments();
+    });
+    pagination.querySelector("#globalPaysNext")?.addEventListener("click", () => {
+      globalPayPage = Math.min(totalPages, globalPayPage + 1);
+      loadGlobalPayments();
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
+
+async function loadGlobalWeeklySummary() {
+  const el = document.getElementById("globalWeeklyBreakdownList");
+  if (!el) return;
+
+  try {
+    const params = getGlobalPaymentFilters();
+    const data = await apiRequest(`/cost-centers/payments/weekly-summary?${params}`);
+    if (!data.weeks?.length) {
+      el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais registados</p>`;
+      return;
+    }
+    const max = Math.max(...data.weeks.map((w) => w.paid));
+    el.innerHTML = data.weeks.map((w) => {
+      const pct = max > 0 ? (w.paid / max) * 100 : 0;
+      const label = w.currency && w.currency !== "AOA" ? `${w.week} · ${w.currency}` : w.week;
+      return `
+        <div class="flex items-center gap-3">
+          <span class="text-[10px] font-black text-slate-400 uppercase w-24 flex-shrink-0">${label}</span>
+          <div class="flex-1 prog-bar-wrap">
+            <div class="prog-bar bg-blue-500" style="width:${pct.toFixed(1)}%"></div>
+          </div>
+          <span class="text-xs font-bold text-slate-700 w-32 text-right tabular-nums">${formatCurrency(w.paid, w.currency || "AOA")}</span>
+          <span class="text-[10px] font-bold text-slate-400 w-10 text-right">${w.count || ""}</span>
+        </div>`;
+    }).join("");
+  } catch {
+    el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais</p>`;
+  }
+}
+
+function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}) {
+  const statusClasses = { PENDENTE: "badge-pendente", CONFIRMADO: "badge-confirmado", CANCELADO: "badge-cancelado" };
+  const typeLabels = { PRONTO_PAGAMENTO: "PP", CREDITO: "C" };
+  const typeClasses = {
+    PRONTO_PAGAMENTO: "bg-red-50 text-red-700 border border-red-200",
+    CREDITO: "bg-sky-50 text-sky-700 border border-sky-100",
+  };
+  const cur = p.costCenter?.currency || "AOA";
+  const payload = JSON.stringify(p).replace(/'/g, "&#39;");
+  const projectCell = showProject
+    ? `<td class="text-xs font-bold text-slate-700 max-w-[120px] truncate" title="${p.project?.name || ""}">${p.project?.name || "—"}</td>`
+    : "";
+
+  const editActions = allowEdit ? `
+          <button onclick="event.stopPropagation(); editPay(${JSON.stringify(p).replace(/"/g, "&quot;")})" title="Editar lançamento"
+            class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
+            <span class="material-symbols-outlined text-base">edit</span>
+          </button>
+          <button onclick="event.stopPropagation(); deletePay('${p.id}', '${p.costCenterId}')" title="Eliminar lançamento"
+            class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
+            <span class="material-symbols-outlined text-base">delete</span>
+          </button>` : `
+          <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${payload}' data-type="VIEW" title="Ver detalhes"
+            class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d] hover:text-slate-900 transition-all text-slate-500">
+            <span class="material-symbols-outlined text-base">visibility</span>
+          </button>`;
+
+  return `
+    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${payload}' data-type="${p.status === "PENDENTE" ? "PAYMENT" : "VIEW"}">
+      <td class="text-xs font-bold text-slate-500">${p.docNumber || "—"}</td>
+      <td class="text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
+      ${projectCell}
+      <td class="text-sm font-medium text-slate-700 max-w-[120px] truncate">${p.supplier || "—"}</td>
+      <td><span class="text-xs font-bold text-blue-600">${p.costCenter?.code || "—"}</span></td>
+      <td class="text-sm font-medium text-slate-900 max-w-xs truncate">${p.description}</td>
+      <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${typeClasses[p.paymentType] || "bg-slate-100 text-slate-500 border border-slate-200"}">${typeLabels[p.paymentType] || "—"}</span></td>
+      <td class="text-right tabular-nums text-sm font-medium text-slate-600">${formatCurrency(p.budgetedAmount, cur)}</td>
+      <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount, cur)}</td>
+      <td class="text-center text-xs font-bold text-slate-500">${p.week || "—"}</td>
+      <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${p.status}</span></td>
+      <td class="text-center">
+        <div class="flex justify-center gap-2">
+          ${p.status === "PENDENTE" ? `
+            <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${payload}' data-type="PAYMENT" title="Pagar lançamento"
+              class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all text-emerald-600">
+              <span class="material-symbols-outlined text-base">check_circle</span>
+            </button>
+          ` : ""}
+          ${editActions}
+        </div>
+      </td>
+    </tr>`;
 }
 
 // ── Select Project ─────────────────────────────────────────────────────────────
@@ -105,7 +282,7 @@ async function selectProject(project) {
   window.history.replaceState({}, "", url.toString());
 
   // UI
-  document.getElementById("noProjectState").classList.add("hidden");
+  document.getElementById("globalPaymentsView")?.classList.add("hidden");
   document.getElementById("projectContent").classList.remove("hidden");
   document.getElementById("selectedProjName").textContent = project.name;
   document.getElementById("selectedProjCode").textContent = project.code || "";
@@ -120,7 +297,7 @@ async function selectProject(project) {
 }
 
 // ── Toggle Group (Orçamento Geral) ─────────────────────────────────────────────
-window.toggleCCGroup = function(groupId) {
+window.toggleCCGroup = function (groupId) {
   const items = document.querySelectorAll(`.${groupId}-item`);
   const icon = document.getElementById(`${groupId}-icon`);
   let isHidden = false;
@@ -285,7 +462,7 @@ function renderAlerts(summary) {
   const el = document.getElementById("alertsList");
   const overflows = (summary || []).filter((cc) => cc.overflow);
   if (!overflows.length) {
-    el.innerHTML = `<p class="text-xs text-slate-500 text-center mt-6">Sem alertas de estouro 🎉</p>`;
+    el.innerHTML = `<p class="text-xs text-slate-500 text-center mt-6">Sem alertas de estouro!</p>`;
     return;
   }
   el.innerHTML = overflows.map((cc) => `
@@ -571,47 +748,7 @@ async function loadPayments() {
       return;
     }
 
-    const statusClasses = { PENDENTE: "badge-pendente", CONFIRMADO: "badge-confirmado", CANCELADO: "badge-cancelado" };
-    const typeLabels = { PRONTO_PAGAMENTO: "PP", CREDITO: "C" };
-    const typeClasses = {
-      PRONTO_PAGAMENTO: "bg-red-50 text-red-700 border border-red-200",
-      CREDITO: "bg-sky-50 text-sky-700 border border-sky-100",
-    };
-
-    tbody.innerHTML = items.map((p) => {
-      const cur = p.costCenter?.currency || "AOA";
-      return `
-      <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="${p.status === 'PENDENTE' ? 'PAYMENT' : 'VIEW'}">
-        <td class="text-xs font-bold text-slate-500">${p.docNumber || "—"}</td>
-        <td class="text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
-        <td class="text-sm font-medium text-slate-700 max-w-[120px] truncate">${p.supplier || "—"}</td>
-        <td><span class="text-xs font-bold text-blue-600">${p.costCenter?.code || "—"}</span></td>
-        <td class="text-sm font-medium text-slate-900 max-w-xs truncate">${p.description}</td>
-        <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${typeClasses[p.paymentType] || "bg-slate-100 text-slate-500 border border-slate-200"}">${typeLabels[p.paymentType] || "—"}</span></td>
-        <td class="text-right tabular-nums text-sm font-medium text-slate-600">${formatCurrency(p.budgetedAmount, cur)}</td>
-        <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount, cur)}</td>
-        <td class="text-center text-xs font-bold text-slate-500">${p.week || "—"}</td>
-        <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${p.status}</span></td>
-        <td class="text-center">
-          <div class="flex justify-center gap-2">
-            ${p.status === "PENDENTE" ? `
-              <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="PAYMENT" title="Pagar lançamento"
-                class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all text-emerald-600">
-                 <span class="material-symbols-outlined text-base">check_circle</span>
-              </button>
-            ` : ""}
-            <button onclick="event.stopPropagation(); editPay(${JSON.stringify(p).replace(/"/g, '&quot;')})" title="Editar lançamento"
-              class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
-              <span class="material-symbols-outlined text-base">edit</span>
-            </button>
-            <button onclick="event.stopPropagation(); deletePay('${p.id}')" title="Eliminar lançamento"
-              class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
-              <span class="material-symbols-outlined text-base">delete</span>
-            </button>
-          </div>
-        </td>
-      </tr>
-    `}).join("");
+    tbody.innerHTML = items.map((p) => renderPaymentRowHtml(p, { allowEdit: true })).join("");
 
     document.getElementById("paysPagination").textContent =
       `${items.length} de ${data.total || items.length} lançamentos`;
@@ -1119,6 +1256,14 @@ function bindEvents() {
   // New Payment button
   document.getElementById("newPayBtn").addEventListener("click", () => openPayModal());
 
+  ["globalProjFilter", "globalStatusFilter", "globalWeekFilter"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      globalPayPage = 1;
+      loadGlobalPayments();
+      loadGlobalWeeklySummary();
+    });
+  });
+
   // Filters
   ["needsCCFilter", "needsStatusFilter"].forEach((id) =>
     document.getElementById(id).addEventListener("change", loadNeeds)
@@ -1427,18 +1572,23 @@ window.editPay = function (pay) {
   openPayModal(pay);
 };
 
-window.deletePay = async function (id) {
+window.deletePay = async function (id, ccId) {
   if (!confirm("Eliminar este lançamento?")) return;
   try {
-    const pay = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments`).then(
-      (d) => d.items?.find((p) => p.id === id)
-    );
-    const ccId = pay?.costCenterId || "X";
-    await apiRequest(`/cost-centers/${ccId}/payments/${id}`, { method: "DELETE" });
+    let costCenterId = ccId;
+    if (!costCenterId && selectedProject) {
+      const pay = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments`).then(
+        (d) => d.items?.find((p) => p.id === id)
+      );
+      costCenterId = pay?.costCenterId;
+    }
+    if (!costCenterId) {
+      showToast("Não foi possível identificar o centro de custo", "error");
+      return;
+    }
+    await apiRequest(`/cost-centers/${costCenterId}/payments/${id}`, { method: "DELETE" });
     showToast("Lançamento eliminado", "success");
-    loadPayments();
-    loadCronograma();
-    loadSummary();
+    reloadPaymentsView();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1459,7 +1609,7 @@ window.payCostPayment = async function (pay) {
       },
     });
     showToast("Lançamento pago com sucesso", "success");
-    await Promise.all([loadPayments(), loadSummary()]);
+    reloadPaymentsView();
   } catch (err) {
     showToast("Erro ao pagar: " + err.message, "error");
   }
@@ -1496,9 +1646,7 @@ async function submitPay(e) {
       showToast("Lançamento criado", "success");
     }
     document.getElementById("modalPay").classList.remove("open");
-    loadPayments();
-    loadCronograma();
-    loadSummary();
+    reloadPaymentsView();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1580,9 +1728,9 @@ async function loadTransactions() {
       const descStr = t.description ? t.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
       const isAPrazo = t.paymentType === "CREDITO";
       const paymentTypeStr = isAPrazo ? "C" : "PP";
-      const paymentTypeClass = isAPrazo 
-          ? "bg-sky-50 text-sky-700 border border-sky-100" 
-          : "bg-red-50 text-red-700 border border-red-200";
+      const paymentTypeClass = isAPrazo
+        ? "bg-sky-50 text-sky-700 border border-sky-100"
+        : "bg-red-50 text-red-700 border border-red-200";
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${paymentTypeClass}">${paymentTypeStr}</span>`;
 
       return `
@@ -1792,15 +1940,45 @@ async function submitLiquidation(e) {
 
   if (!realizedAmount) return showToast("Valor é obrigatório", "error");
 
+  const compInput = document.getElementById("liqComprovativo");
+  if (!compInput || !compInput.files[0]) {
+    return showToast("Comprovativo de pagamento é obrigatório", "error");
+  }
+
+  const fd = new FormData();
+  fd.append("paidAmount", realizedAmount);
+  fd.append("status", "CONFIRMADO");
+  fd.append("comprovativo", compInput.files[0]);
+
+  const fatInput = document.getElementById("liqFatura");
+  if (fatInput && fatInput.files[0]) {
+    fd.append("fatura", fatInput.files[0]);
+  }
+
   try {
-    await apiRequest(`/cost-centers/${ccId}/payments/${txId}`, {
-      method: "PATCH",
-      body: { paidAmount: Number(realizedAmount), status: "CONFIRMADO" }
-    });
+    const btn = e.target.querySelector("button[type='submit']");
+    const oldText = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner w-4 h-4 mr-2 inline-block align-middle border-white"></span> A liquidar...`;
+    btn.disabled = true;
+
+    await apiUpload(`/cost-centers/${ccId}/payments/${txId}`, fd, "PATCH");
+
+    btn.innerHTML = oldText;
+    btn.disabled = false;
+
     showToast("Lançamento liquidado com sucesso!", "success");
     document.getElementById("modalLiq").classList.remove("open");
-    loadTransactions();
+
+    // Reset inputs
+    compInput.value = "";
+    if (fatInput) fatInput.value = "";
+
+    if (selectedProject) loadTransactions();
+    else reloadPaymentsView();
   } catch (err) {
+    const btn = e.target.querySelector("button[type='submit']");
+    btn.innerHTML = "Confirmar Liquidação";
+    btn.disabled = false;
     showToast("Erro: " + err.message, "error");
   }
 }
@@ -1865,35 +2043,61 @@ window.openPaymentAside = function (data, type) {
   const currency = data.currency || (data.costCenter ? data.costCenter.currency : "AOA");
   document.getElementById("asideAmount").textContent = formatCurrency(amount, currency);
 
-  const proformaContainer = document.getElementById("asideProformaContainer");
-  if (data.proformaUrl) {
-    const isImage = data.proformaUrl.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i);
+  function renderAsideDocument(url, title = "Documento") {
+    if (!url) {
+      return `
+        <div class="py-8 text-center text-slate-300">
+          <span class="material-symbols-outlined text-4xl mb-2">description</span>
+          <p class="text-xs font-semibold text-slate-500">Sem ${title.toLowerCase()} disponível.</p>
+        </div>
+      `;
+    }
+    const isImage = url.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i);
     if (isImage) {
-      proformaContainer.innerHTML = `
+      return `
         <div class="relative w-full h-full flex flex-col items-center justify-center">
-          <img src="${getAssetUrl(data.proformaUrl)}" alt="Proforma" class="w-full h-auto object-contain max-h-full rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')">
-          <button type="button" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Imagem">
+          <img src="${getAssetUrl(url)}" alt="${title}" class="w-full h-auto object-contain max-h-full rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${getAssetUrl(url)}','_blank')">
+          <button type="button" onclick="window.open('${getAssetUrl(url)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Imagem">
             <span class="material-symbols-outlined text-[16px]">open_in_new</span>
           </button>
         </div>
       `;
     } else {
-      proformaContainer.innerHTML = `
+      return `
         <div class="relative w-full h-full min-h-[300px]">
-          <iframe src="${getAssetUrl(data.proformaUrl)}" class="w-full h-full rounded-lg shadow-sm border border-slate-200"></iframe>
-          <button type="button" onclick="window.open('${getAssetUrl(data.proformaUrl)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Documento">
+          <iframe src="${getAssetUrl(url)}" class="w-full h-full rounded-lg shadow-sm border border-slate-200"></iframe>
+          <button type="button" onclick="window.open('${getAssetUrl(url)}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Documento">
             <span class="material-symbols-outlined text-[16px]">open_in_new</span>
           </button>
         </div>
       `;
     }
+  }
+
+  document.getElementById("asideProformaContainer").innerHTML = renderAsideDocument(data.proformaUrl, "Documento");
+
+  const compSection = document.getElementById("asideComprovativoSection");
+  const compContainer = document.getElementById("asideComprovativoContainer");
+  const faturaSection = document.getElementById("asideFaturaSection");
+  const faturaContainer = document.getElementById("asideFaturaContainer");
+
+  if (data.status === "CONFIRMADO" || data.status === "PAID") {
+    if (data.comprovativoUrl) {
+      compSection.classList.remove("hidden");
+      compContainer.innerHTML = renderAsideDocument(data.comprovativoUrl, "Comprovativo");
+    } else {
+      compSection.classList.add("hidden");
+    }
+
+    if (data.faturaUrl) {
+      faturaSection.classList.remove("hidden");
+      faturaContainer.innerHTML = renderAsideDocument(data.faturaUrl, "Fatura");
+    } else {
+      faturaSection.classList.add("hidden");
+    }
   } else {
-    proformaContainer.innerHTML = `
-      <div class="py-8 text-center text-slate-300">
-        <span class="material-symbols-outlined text-4xl mb-2">description</span>
-        <p class="text-xs font-semibold text-slate-500">Sem documento disponível.</p>
-      </div>
-    `;
+    compSection.classList.add("hidden");
+    faturaSection.classList.add("hidden");
   }
 
   const actionBtn = document.getElementById("asideActionBtn");
@@ -1903,9 +2107,7 @@ window.openPaymentAside = function (data, type) {
   } else {
     actionBtn.classList.remove("hidden");
     actionBtn.onclick = () => {
-      if (type === 'PAYMENT') {
-        payCostPayment(data);
-      } else if (type === 'TRANSACTION') {
+      if (type === 'PAYMENT' || type === 'TRANSACTION') {
         const descStr = data.description ? data.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
         openLiquidateModal(data.id, descStr, amount, data.costCenterId);
       }
@@ -1939,12 +2141,12 @@ let importMapping = {};      // sheetGroupName -> ccId or ""
 
 // Column name aliases (handles different spellings from the spreadsheet)
 const COL_ALIASES = {
-  tipo:       ["tipo", "type", "categoria"],
-  desc:       ["descri\u00e7\u00e3o", "descricao", "description", "desc", "item", "material", "servi\u00e7o"],
-  unit:       ["un", "und", "unit", "unidade", "un.", "und."],
-  qty:        ["qtd", "qtde", "qty", "quantidade", "quant"],
-  price:      ["p. uni", "p.uni", "preco unit", "pre\u00e7o unit\u00e1rio", "unit price", "p_uni", "p uni", "pu", "valor unit\u00e1rio"],
-  hours:      ["hf", "hrs", "horas", "factor", "h/f", "h.f", "hours"],
+  tipo: ["tipo", "type", "categoria"],
+  desc: ["descri\u00e7\u00e3o", "descricao", "description", "desc", "item", "material", "servi\u00e7o"],
+  unit: ["un", "und", "unit", "unidade", "un.", "und."],
+  qty: ["qtd", "qtde", "qty", "quantidade", "quant"],
+  price: ["p. uni", "p.uni", "preco unit", "pre\u00e7o unit\u00e1rio", "unit price", "p_uni", "p uni", "pu", "valor unit\u00e1rio"],
+  hours: ["hf", "hrs", "horas", "factor", "h/f", "h.f", "hours"],
 };
 
 function resolveCol(headers) {
@@ -2390,12 +2592,12 @@ function renderPreviewStep() {
     let ccCode = "NOVO";
     let cur = selectedProject?.currency || "AOA";
     if (importMapping[group.sheetGroupName] !== "CREATE_NEW") {
-        const cc = costCenters.find(c => c.id === importMapping[group.sheetGroupName]);
-        if (cc) {
-            ccName = cc.name;
-            ccCode = cc.code;
-            cur = cc.currency || "AOA";
-        }
+      const cc = costCenters.find(c => c.id === importMapping[group.sheetGroupName]);
+      if (cc) {
+        ccName = cc.name;
+        ccCode = cc.code;
+        cur = cc.currency || "AOA";
+      }
     }
     const groupTotal = group.items.reduce((s, it) => s + (it._totalObra || 0), 0);
 
@@ -2471,7 +2673,7 @@ async function runImport() {
         importMapping[group.sheetGroupName] = newCc.id || newCc.ccId || (newCc.items && newCc.items[0]?.id) || newCc;
         // In case the API returns the object differently, we try a few id paths. Usually just newCc.id.
         if (typeof newCc === 'object' && newCc.id) {
-            importMapping[group.sheetGroupName] = newCc.id;
+          importMapping[group.sheetGroupName] = newCc.id;
         }
       } catch (err) {
         errors.push(`Erro ao criar CC ${group.sheetGroupName}: ${err.message}`);

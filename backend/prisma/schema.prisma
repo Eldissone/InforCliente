@@ -856,6 +856,8 @@ model CostPayment {
   installment    Int?
   status         CostPayStatus   @default(PENDENTE)
   notes          String?
+  comprovativoUrl String?
+  faturaUrl      String?
   createdAt      DateTime        @default(now())
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   costCenter     CostCenter      @relation(fields: [costCenterId], references: [id], onDelete: Cascade)

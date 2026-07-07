@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
-import { getSessionUser, logout } from "/services/auth.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
+import { wireLogout, wireUsersNav } from "/shared/session.js";
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -11,8 +11,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const ok = await guardPageAccess("obras", "view");
   if (!ok) return;
 
-  const map = await initPermissionLayer();
-  bootNav(map);
+  await initPermissionLayer();
+  wireLogout();
+  wireUsersNav();
 
   const urlParams = new URLSearchParams(window.location.search);
   currentProjectId = urlParams.get("project") || localStorage.getItem("InfoCliente.currentProjectId");
@@ -80,30 +81,6 @@ async function loadProjects() {
   } catch (err) {
     console.error("Erro a carregar obras:", err);
   }
-}
-
-// ── Nav Bindings ───────────────────────────────────────────────────────────────
-function bootNav(map) {
-  const user = getSessionUser();
-  // Nome do utilizador no header
-  document.querySelectorAll("[data-user-role]").forEach((el) => {
-    el.textContent = user?.name || user?.email || "Utilizador";
-  });
-  // Logout
-  document.querySelectorAll("[data-logout]").forEach((btn) =>
-    btn.addEventListener("click", () => { logout(); window.location.href = "/Auth/login.html"; })
-  );
-  // Mostra link de Gestão apenas para Admin
-  const navUsers = document.querySelector("[data-nav-users]");
-  if (navUsers && (user?.role || "").toLowerCase() === "admin") {
-    navUsers.classList.remove("hidden");
-  }
-  // Perfil ao clicar no nome
-  document.querySelectorAll("[data-user-profile]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      import("/shared/session.js").then(({ wireUserProfile }) => wireUserProfile());
-    });
-  });
 }
 
 function initTabs() {
