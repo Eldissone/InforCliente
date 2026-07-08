@@ -30,6 +30,7 @@ model User {
   messageReads     MessageRead[]
   mentionsReceived Mention[]    @relation("MentionsReceived")
   notifications    Notification[]
+  permissionAuditLogs PermissionAuditLog[]
 
   @@index([clientId])
 }
@@ -592,6 +593,28 @@ model UserPermission {
   @@unique([userId, module, action])
   @@index([userId])
   @@map("user_permissions")
+}
+
+model PermissionAuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  targetType    String?  // "role" or "user"
+  targetId      String?  // role name or user id
+  role          String?
+  module        String?
+  action        String?
+  beforeValue   String?
+  afterValue    String?
+  reason        String?
+  context       Json?
+  createdAt     DateTime @default(now())
+  
+  actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("permission_audit_logs")
 }
 
 enum WarehouseType {

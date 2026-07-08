@@ -1,5 +1,11 @@
 import { apiRequest } from "../../services/api.js";
-import { setSession } from "../../services/auth.js";
+import {
+  clearPendingAuthSelection,
+  getPendingAuthAccounts,
+  getPendingAuthSelectionToken,
+  getPendingAuthUser,
+  setSession,
+} from "../../services/auth.js";
 import { toast } from "../../shared/ui.js";
 
 function getNext() {
@@ -8,10 +14,11 @@ function getNext() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const user = JSON.parse(localStorage.getItem("pending_auth_user") || "{}");
-  const accounts = JSON.parse(localStorage.getItem("pending_auth_accounts") || "[]");
+  const user = getPendingAuthUser() || {};
+  const accounts = getPendingAuthAccounts();
+  const selectionToken = getPendingAuthSelectionToken();
 
-  if (!user.id || accounts.length === 0) {
+  if (!user.id || !selectionToken || accounts.length === 0) {
     window.location.href = "login.html";
     return;
   }
@@ -48,15 +55,15 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const res = await apiRequest("/auth/select-account", {
           method: "POST",
+          headers: {
+            Authorization: `Bearer ${selectionToken}`,
+          },
           body: {
-            userId: user.id,
             clientId: acc.id
           }
         });
 
-        // Clear temp storage
-        localStorage.removeItem("pending_auth_user");
-        localStorage.removeItem("pending_auth_accounts");
+        clearPendingAuthSelection();
 
         setSession(res);
         import("../../shared/permissions.js")

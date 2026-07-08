@@ -22,6 +22,38 @@ const DEFAULT_PERMISSIONS = buildDefaultPermissions();
 
 const permissionsRoutes = express.Router();
 
+async function logPermissionChange({
+  actorUserId,
+  targetType, // "role" or "user",
+  targetId, // role name or user id,
+  role,
+  module,
+  action,
+  beforeValue,
+  afterValue,
+  reason,
+  context,
+}) {
+  try {
+    await prisma.permissionAuditLog.create({
+      data: {
+        actorUserId,
+        targetType,
+        targetId,
+        role,
+        module,
+        action,
+        beforeValue,
+        afterValue,
+        reason,
+        context,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to log permission change:", err);
+  }
+}
+
 // ─── Permissões efectivas do utilizador autenticado (JWT) ───────────────────
 permissionsRoutes.get(
   "/me",
@@ -147,11 +179,22 @@ permissionsRoutes.put(
 
     const key = `${mod}:${action}`;
     const roleDefault = data.roleMap[key] ?? "false";
+    const currentOverride = data.overrides.find(o => o.module === mod && o.action === action);
+    const beforeValue = currentOverride ? currentOverride.allowed : "inherit";
 
     // Só remove override quando o admin escolhe explicitamente "herdar perfil"
     if (body.allowed === "inherit") {
       await prisma.userPermission.deleteMany({
         where: { userId, module: mod, action },
+      });
+      await logPermissionChange({
+        actorUserId: req.user.sub,
+        targetType: "user",
+        targetId: userId,
+        module: mod,
+        action,
+        beforeValue,
+        afterValue: "inherit",
       });
       return res.json({
         userId,
@@ -167,6 +210,16 @@ permissionsRoutes.put(
       where: { userId_module_action: { userId, module: mod, action } },
       create: { userId, module: mod, action, allowed: body.allowed },
       update: { allowed: body.allowed },
+    });
+
+    await logPermissionChange({
+      actorUserId: req.user.sub,
+      targetType: "user",
+      targetId: userId,
+      module: mod,
+      action,
+      beforeValue,
+      afterValue: body.allowed,
     });
 
     return res.json({ ...updated, source: "user", inherited: false });
@@ -230,10 +283,26 @@ permissionsRoutes.put(
       return res.status(400).json({ error: "CANNOT_REVOKE_ADMIN_PERMISSIONS" });
     }
 
+    const existing = await prisma.rolePermission.findUnique({
+      where: { role_module_action: { role, module: mod, action } },
+    });
+    const beforeValue = existing ? existing.allowed : null;
+
     const updated = await prisma.rolePermission.upsert({
       where: { role_module_action: { role, module: mod, action } },
       create: { role, module: mod, action, allowed },
       update: { allowed },
+    });
+
+    await logPermissionChange({
+      actorUserId: req.user.sub,
+      targetType: "role",
+      targetId: role,
+      role,
+      module: mod,
+      action,
+      beforeValue,
+      afterValue: allowed,
     });
 
     return res.json(updated);
@@ -271,6 +340,19 @@ permissionsRoutes.post(
     await prisma.rolePermission.deleteMany({});
     await prisma.rolePermission.createMany({ data: DEFAULT_PERMISSIONS, skipDuplicates: true });
     return res.json({ ok: true, count: DEFAULT_PERMISSIONS.length });
+  })
+);
+
+// ─── GET /permissions/audit — audit logs ──────────────────────────────────────
+permissionsRoutes.get(
+  "/audit",
+  asyncHandler(async (req, res) => {
+    const logs = await prisma.permissionAuditLog.findMany({
+      include: { actorUser: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    return res.json({ items: logs });
   })
 );
 

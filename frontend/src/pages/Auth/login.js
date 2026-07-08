@@ -1,5 +1,5 @@
-import { apiRequest, getApiBaseUrl } from "../../services/api.js";
-import { setSession } from "../../services/auth.js";
+import { apiRequest } from "../../services/api.js";
+import { setPendingAuthSelection, setSession } from "../../services/auth.js";
 import { toast, setButtonLoading } from "../../shared/ui.js";
 
 function qs(id) {
@@ -49,8 +49,11 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
     console.log("Full Login Response:", res);
     
     if (res && res.status === "MULTI_ACCOUNT") {
-      localStorage.setItem("pending_auth_user", JSON.stringify(res.user));
-      localStorage.setItem("pending_auth_accounts", JSON.stringify(res.accounts || []));
+      setPendingAuthSelection({
+        user: res.user,
+        accounts: res.accounts || [],
+        selectionToken: res.selectionToken || null,
+      });
       window.location.href = "ProjectSelection.html" + (getNext() ? `?next=${getNext()}` : "");
       return;
     }

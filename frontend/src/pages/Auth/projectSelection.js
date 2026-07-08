@@ -1,5 +1,10 @@
 import { apiRequest } from "../../services/api.js";
-import { setSession } from "../../services/auth.js";
+import {
+  clearPendingAuthSelection,
+  getPendingAuthSelectionToken,
+  getPendingAuthUser,
+  setSession,
+} from "../../services/auth.js";
 import { toast } from "../../shared/ui.js";
 
 function getNext() {
@@ -8,9 +13,10 @@ function getNext() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const user = JSON.parse(localStorage.getItem("pending_auth_user") || "{}");
+  const user = getPendingAuthUser() || {};
+  const selectionToken = getPendingAuthSelectionToken();
 
-  if (!user.id) {
+  if (!user.id || !selectionToken) {
     window.location.href = "login.html";
     return;
   }
@@ -23,9 +29,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const listEl = document.getElementById("projectsList");
   const overlay = document.getElementById("loadingOverlay");
+  const selectionHeaders = {
+    Authorization: `Bearer ${selectionToken}`,
+  };
 
   try {
-    const res = await apiRequest(`/auth/available-projects?userId=${user.id}`);
+    const res = await apiRequest("/auth/available-projects", { headers: selectionHeaders });
     const projects = res.items || [];
 
     if (projects.length === 0) {
@@ -70,15 +79,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           const authRes = await apiRequest("/auth/select-account", {
             method: "POST",
+            headers: selectionHeaders,
             body: {
-              userId: user.id,
               clientId: p.client?.id || null
             }
           });
 
-          // Clear temp storage
-          localStorage.removeItem("pending_auth_user");
-          localStorage.removeItem("pending_auth_accounts");
+          clearPendingAuthSelection();
 
           setSession(authRes);
           import("../../shared/permissions.js")

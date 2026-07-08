@@ -8,6 +8,52 @@ const { asyncHandler } = require("../utils/http");
 const { authRequired } = require("../middlewares/auth");
 
 const authRoutes = express.Router();
+const SELECTION_TOKEN_TTL = "10m";
+
+function buildSessionToken(user, activeRole, activeClientId) {
+  return jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+      role: activeRole,
+      clientId: activeClientId,
+    },
+    config.jwtSecret,
+    { expiresIn: "7d" }
+  );
+}
+
+function buildSelectionToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+      email: user.email,
+      type: "auth_selection",
+    },
+    config.jwtSecret,
+    { expiresIn: SELECTION_TOKEN_TTL }
+  );
+}
+
+function getSelectionPayload(req) {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return null;
+  }
+
+  try {
+    const payload = jwt.verify(token, config.jwtSecret);
+    if (payload?.type !== "auth_selection" || !payload?.sub) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 authRoutes.post(
   "/login",
@@ -63,6 +109,7 @@ authRoutes.post(
     if (!isDirectLoginRole) {
       return res.json({
         status: "MULTI_ACCOUNT",
+        selectionToken: buildSelectionToken(user),
         user: { 
           id: user.id, 
           email: user.email, 
@@ -85,11 +132,7 @@ authRoutes.post(
     const activeClientId = accounts.length === 1 ? accounts[0].clientId : (user.clientId || null);
     const activeRole = accounts.length === 1 ? (accounts[0].role || "").toUpperCase() : userRole;
 
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, name: user.name, role: activeRole, clientId: activeClientId },
-      config.jwtSecret,
-      { expiresIn: "7d" }
-    );
+    const token = buildSessionToken(user, activeRole, activeClientId);
 
     return res.json({
       token,
@@ -101,10 +144,13 @@ authRoutes.post(
 authRoutes.post(
   "/select-account",
   asyncHandler(async (req, res) => {
-    const { userId, clientId } = z.object({
-      userId: z.string(),
+    const selection = getSelectionPayload(req);
+    if (!selection) return res.status(401).json({ error: "UNAUTHORIZED_SELECTION" });
+
+    const { clientId } = z.object({
       clientId: z.string().nullable().optional()
     }).parse(req.body);
+    const userId = selection.sub;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });
@@ -150,11 +196,7 @@ authRoutes.post(
       data: { clientId: clientId || null }
     });
 
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, name: user.name, role: activeRole, clientId: clientId },
-      config.jwtSecret,
-      { expiresIn: "7d" }
-    );
+    const token = buildSessionToken(user, activeRole, clientId);
 
     return res.json({
       token,
@@ -166,8 +208,9 @@ authRoutes.post(
 authRoutes.get(
   "/available-projects",
   asyncHandler(async (req, res) => {
-    const userId = req.query.userId;
-    if (!userId) return res.status(400).json({ error: "USER_ID_REQUIRED" });
+    const selection = getSelectionPayload(req);
+    if (!selection) return res.status(401).json({ error: "UNAUTHORIZED_SELECTION" });
+    const userId = selection.sub;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: "USER_NOT_FOUND" });

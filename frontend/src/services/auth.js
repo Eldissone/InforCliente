@@ -1,11 +1,57 @@
 const TOKEN_KEY = "InfoCliente.token";
 const USER_KEY = "InfoCliente.user";
+const PENDING_AUTH_USER_KEY = "pending_auth_user";
+const PENDING_AUTH_ACCOUNTS_KEY = "pending_auth_accounts";
+const PENDING_AUTH_SELECTION_TOKEN_KEY = "pending_auth_selection_token";
+
+export function setPendingAuthSelection({ user, accounts = [], selectionToken }) {
+  sessionStorage.setItem(PENDING_AUTH_USER_KEY, JSON.stringify(user || null));
+  sessionStorage.setItem(PENDING_AUTH_ACCOUNTS_KEY, JSON.stringify(accounts));
+  if (selectionToken) {
+    sessionStorage.setItem(PENDING_AUTH_SELECTION_TOKEN_KEY, selectionToken);
+  } else {
+    sessionStorage.removeItem(PENDING_AUTH_SELECTION_TOKEN_KEY);
+  }
+}
+
+export function getPendingAuthUser() {
+  const raw = sessionStorage.getItem(PENDING_AUTH_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function getPendingAuthAccounts() {
+  const raw = sessionStorage.getItem(PENDING_AUTH_ACCOUNTS_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function getPendingAuthSelectionToken() {
+  return sessionStorage.getItem(PENDING_AUTH_SELECTION_TOKEN_KEY);
+}
+
+export function clearPendingAuthSelection() {
+  [
+    PENDING_AUTH_USER_KEY,
+    PENDING_AUTH_ACCOUNTS_KEY,
+    PENDING_AUTH_SELECTION_TOKEN_KEY,
+  ].forEach((key) => sessionStorage.removeItem(key));
+}
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
 export function setSession({ token, user }) {
+  clearPendingAuthSelection();
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
@@ -29,9 +75,10 @@ export function logout() {
   });
 
   // Specific keys used without the InfoCliente prefix
-  ["pending_auth_user", "pending_auth_accounts", "selected_project_id"].forEach(k => {
+  ["selected_project_id"].forEach(k => {
     localStorage.removeItem(k);
   });
+  clearPendingAuthSelection();
 }
 
 /**
