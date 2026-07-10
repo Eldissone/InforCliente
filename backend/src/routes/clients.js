@@ -8,6 +8,7 @@ const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
+const { getStaffOwnClientCondition } = require("../services/scopeService");
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -27,13 +28,30 @@ function getScopedClientId(req) {
   return req.user.clientId || null;
 }
 
-function assertClientAccess(req, clientId) {
+async function assertClientAccess(req, clientId) {
   const scopedClientId = getScopedClientId(req);
-  if (!scopedClientId) return;
-  if (scopedClientId !== clientId) {
-    const err = new Error("FORBIDDEN");
-    err.status = 403;
-    throw err;
+  if (scopedClientId) {
+    if (scopedClientId !== clientId) {
+      const err = new Error("FORBIDDEN");
+      err.status = 403;
+      throw err;
+    }
+    return;
+  }
+
+  // Enforcement real do escopo "own" para staff interno. Só tem efeito
+  // quando a permissão efetiva do pedido é "own"; para "true" nada muda.
+  const ownCondition = getStaffOwnClientCondition(req);
+  if (ownCondition) {
+    const match = await prisma.client.findFirst({
+      where: { id: clientId, ...ownCondition },
+      select: { id: true },
+    });
+    if (!match) {
+      const err = new Error("FORBIDDEN");
+      err.status = 403;
+      throw err;
+    }
   }
 }
 
@@ -53,6 +71,11 @@ clientRoutes.get(
 
     if (scopedClientId) {
       whereClauses.push({ id: scopedClientId });
+    } else {
+      const ownCondition = getStaffOwnClientCondition(req);
+      if (ownCondition) {
+        whereClauses.push(ownCondition);
+      }
     }
     if (search) {
       whereClauses.push({
@@ -213,7 +236,7 @@ clientRoutes.get(
   requirePermission("clientes", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    assertClientAccess(req, id);
+    await assertClientAccess(req, id);
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
@@ -267,6 +290,7 @@ clientRoutes.patch(
   requirePermission("clientes", "edit"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await assertClientAccess(req, id);
     const body = z
       .object({
         code: z.string().min(2).optional(),
@@ -361,6 +385,7 @@ clientRoutes.delete(
   requirePermission("clientes", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await assertClientAccess(req, id);
     await prisma.client.delete({ where: { id } });
     return res.json({ ok: true });
   })
@@ -371,7 +396,7 @@ clientRoutes.get(
   requirePermission("interacoes", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    assertClientAccess(req, id);
+    await assertClientAccess(req, id);
     const items = await prisma.interactionEvent.findMany({
       where: { clientId: id },
       orderBy: { occurredAt: "desc" },
@@ -386,7 +411,7 @@ clientRoutes.post(
   requirePermission("interacoes", "create"),
   asyncHandler(async (req, res) => {
     const clientId = String(req.params.id);
-    assertClientAccess(req, clientId);
+    await assertClientAccess(req, clientId);
     const body = z
       .object({
         type: z.string().min(1),
@@ -419,7 +444,7 @@ clientRoutes.post(
   upload.single("file"),
   asyncHandler(async (req, res) => {
     const clientId = String(req.params.id);
-    assertClientAccess(req, clientId);
+    await assertClientAccess(req, clientId);
     if (!req.file) throw new Error("FILE_REQUIRED");
 
     const extension = path.extname(req.file.originalname).toLowerCase();

@@ -8,6 +8,7 @@ const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
+const { getStaffOwnProjectCondition } = require("../services/scopeService");
 const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
@@ -51,13 +52,21 @@ async function ensureProjectReadable(req, projectId) {
   const scopedClientId = getScopedClientId(req);
 
   const where = { id: projectId };
-  
-  // Scoping only applies to clients
+
+  // Scoping para clientes (comportamento existente, inalterado)
   if (role === "cliente") {
     where.OR = [
       ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
       { assignedUsers: { some: { id: req.user.sub } } }
     ];
+  } else {
+    // Enforcement real do escopo "own" para staff interno: só tem efeito
+    // quando a permissão efetiva para este pedido é "own" (definida por
+    // requirePermission). Para escopo "true" nada muda.
+    const ownCondition = getStaffOwnProjectCondition(req);
+    if (ownCondition) {
+      where.AND = [ownCondition];
+    }
   }
 
   const project = await prisma.project.findFirst({

@@ -20,9 +20,12 @@ const { supplierRoutes } = require("./routes/suppliers");
 const { quoteRoutes } = require("./routes/quotes");
 const { conversationRoutes } = require("./routes/conversations");
 const { notificationRoutes } = require("./routes/notifications");
+const { pettyCashRoutes } = require("./routes/pettyCash");
+const { extraRequestRoutes } = require("./routes/extraRequests");
 const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 const { createSocketServer } = require("./socket");
+const { scanDueAndOverduePayments } = require("./services/paymentNotificationService");
 
 const app = express();
 app.set("trust proxy", 1); // Confiar no IP original através de Nginx/Load Balancers
@@ -104,6 +107,8 @@ app.use("/suppliers", supplierRoutes);
 app.use("/quotes", quoteRoutes);
 app.use("/conversations", conversationRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/petty-cash", pettyCashRoutes);
+app.use("/extra-requests", extraRequestRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
@@ -138,5 +143,12 @@ server.listen(config.port, async () => {
   console.log("WebSocket (Socket.IO) enabled at /socket.io");
 
   await initialize();
+
+  const io = app.get("io");
+  const scanPayments = () => {
+    scanDueAndOverduePayments(io).catch((e) => console.error("scanDueAndOverduePayments:", e));
+  };
+  scanPayments();
+  setInterval(scanPayments, 6 * 60 * 60 * 1000);
 });
 

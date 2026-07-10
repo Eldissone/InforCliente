@@ -1057,6 +1057,29 @@ async function openEdit(id) {
           <input id="e_email" type="email" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" value="${esc(u.email)}" />
         </div>
         <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Telefone</label>
+          <input id="e_phone" type="tel" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" value="${esc(u.profile?.phone || '')}" placeholder="+244 ..." />
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">WhatsApp</label>
+          <input id="e_whatsapp" type="tel" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50" value="${esc(u.profile?.whatsapp || '')}" placeholder="+244 ..." />
+        </div>
+        <div class="md:col-span-2 border border-slate-100 rounded-xl p-4 bg-slate-50/60 space-y-3">
+          <p class="text-xs font-black uppercase tracking-widest text-slate-500">Notificações Financeiras</p>
+          <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input id="e_fin_receiver" type="checkbox" ${u.profile?.isFinancialReceiver ? "checked" : ""} class="w-4 h-4 rounded border-slate-300" />
+            Receptor financeiro
+          </label>
+          <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input id="e_approver" type="checkbox" ${u.profile?.isApprover ? "checked" : ""} class="w-4 h-4 rounded border-slate-300" />
+            Aprovador
+          </label>
+          <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input id="e_proj_resp" type="checkbox" ${u.profile?.isProjectResponsible ? "checked" : ""} class="w-4 h-4 rounded border-slate-300" />
+            Responsável pela obra
+          </label>
+        </div>
+        <div>
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Perfil de Acesso</label>
           <select id="e_role" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 font-semibold">
             <option value="leitura" ${u.role === "leitura" ? "selected" : ""}>Leitura</option>
@@ -1102,7 +1125,12 @@ async function openEdit(id) {
             name: v("e_name") || null,
             role,
             clientId,
-            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : []
+            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : [],
+            phone: v("e_phone") || null,
+            whatsapp: v("e_whatsapp") || null,
+            isFinancialReceiver: panel.querySelector("#e_fin_receiver")?.checked || false,
+            isApprover: panel.querySelector("#e_approver")?.checked || false,
+            isProjectResponsible: panel.querySelector("#e_proj_resp")?.checked || false,
           }
         });
         toast("Utilizador atualizado.", { type: "success" });

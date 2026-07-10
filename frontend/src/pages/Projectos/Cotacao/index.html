@@ -288,8 +288,8 @@
             </div>
 
             <div class="flex flex-col md:flex-row gap-6">
-                <!-- Esquerda: Adicionar Novo Preço -->
-                <div class="w-full md:w-1/3 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-4">
+                <!-- Esquerda: Nova Cotação (oculta por defeito) -->
+                <div id="quoteNewPanel" class="hidden w-full md:w-1/3 bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-4">
                     <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Nova Cotação</h3>
                     <form id="formAddQuote" class="flex flex-col gap-3">
                         <input type="hidden" id="quoteNeedId">
@@ -353,29 +353,22 @@
                     </form>
                 </div>
 
-                <!-- Direita: Cotações Existentes & Sugestões -->
-                <div class="w-full md:w-2/3 flex flex-col gap-6">
+                <!-- Direita: Preços Apresentados -->
+                <div id="quotePresentedPanel" class="w-full flex-1 flex flex-col gap-6">
                     <div>
-                        <h3 class="font-bold text-slate-800 mb-4 text-sm uppercase tracking-wider">Preços Apresentados
-                        </h3>
+                        <div class="flex items-center justify-between gap-3 mb-4">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Preços Apresentados</h3>
+                            <button type="button" id="btnShowNewQuote"
+                                class="h-9 px-4 rounded-lg bg-amber-500 text-white text-xs font-bold hover:bg-amber-600 transition-all flex items-center gap-1.5 shrink-0">
+                                <span class="material-symbols-outlined text-base">add</span> Novo
+                            </button>
+                        </div>
                         <div id="quotesList" class="flex flex-col gap-3">
                             <div
                                 class="p-8 text-center text-slate-400 text-sm font-medium border border-dashed border-slate-200 rounded-xl">
                                 Nenhuma cotação registada.</div>
                         </div>
-                    </div>
-
-                    <!-- Sugestões do Catálogo (Busca Inteligente) -->
-                    <div id="catalogSuggestionsBox" class="hidden flex flex-col gap-3 mt-2">
-                        <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
-                            <span class="material-symbols-outlined text-blue-500 text-lg">lightbulb</span>
-                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider">Sugestões de Catálogo
-                            </h3>
-                        </div>
-                        <div id="catalogSuggestionsList"
-                            class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto custom-scroll pr-2">
-                            <!-- Injetado via JS -->
-                        </div>
+                        <p class="text-[10px] text-slate-400 mt-3">Inclui cotações registadas e sugestões automáticas do catálogo de fornecedores.</p>
                     </div>
                 </div>
             </div>
@@ -384,7 +377,7 @@
 
     <!-- Modal: Fornecedor -->
     <div class="modal-overlay" id="modalSupplier">
-        <div class="modal-box" style="max-width: 500px;">
+        <div class="modal-box" style="max-width: 560px;">
             <div class="flex items-center justify-between mb-6">
                 <h2 id="modalSupplierTitle" class="text-lg font-bold text-slate-900">Novo Fornecedor</h2>
                 <button onclick="document.getElementById('modalSupplier').classList.remove('open')"
@@ -437,9 +430,15 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">IBAN</label>
-                    <input type="text" id="supplierIban" placeholder="AO06..."
-                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Contas Bancárias (IBAN)</label>
+                        <button type="button" id="btnAddSupplierBank"
+                            class="h-8 px-3 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-bold hover:bg-slate-200 transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">add</span> Adicionar
+                        </button>
+                    </div>
+                    <div id="supplierBankAccounts" class="flex flex-col gap-2"></div>
+                    <p class="text-[10px] text-slate-400 mt-2">Registe um ou mais IBANs identificados pelo banco.</p>
                 </div>
                 <div class="flex gap-3 justify-end pt-4 border-t border-slate-100 mt-2">
                     <button type="button" onclick="document.getElementById('modalSupplier').classList.remove('open')"
@@ -472,8 +471,8 @@
 
             <div class="overflow-y-auto" style="max-height: calc(90vh - 80px);">
 
-                <!-- Secção: Formulário de Produto -->
-                <div class="px-8 py-6 bg-slate-50 border-b-2 border-slate-200">
+                <!-- Formulário de Produto (oculto por defeito) -->
+                <div id="supplierProductFormPanel" class="hidden px-8 py-6 bg-slate-50 border-b-2 border-slate-200">
                     <h3 class="font-bold text-slate-700 mb-4 text-xs uppercase tracking-widest flex items-center gap-2">
                         <span class="w-5 h-5 rounded-full bg-[#2afc8d] flex items-center justify-center">
                             <span class="material-symbols-outlined text-[12px] text-[#0f172a]">add</span>
@@ -550,12 +549,16 @@
                     </form>
                 </div>
 
-                <!-- Divider com título -->
+                <!-- Cabeçalho da lista -->
                 <div class="flex items-center gap-4 px-8 py-4 border-b border-slate-100">
                     <span class="text-xs font-black uppercase tracking-widest text-slate-500">Produtos Registados</span>
                     <div class="flex-1 h-px bg-slate-200"></div>
                     <span id="supplierProductsCount"
                         class="text-xs font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full"></span>
+                    <button type="button" id="btnShowNewProduct"
+                        class="h-9 px-4 rounded-lg bg-[#0f172a] text-white text-xs font-bold hover:bg-slate-800 transition-all flex items-center gap-1.5 shrink-0">
+                        <span class="material-symbols-outlined text-base">add</span> Novo Produto
+                    </button>
                 </div>
 
                 <!-- Secção: Lista de Produtos -->
@@ -620,6 +623,8 @@
     <!-- Toast Container -->
     <div id="toast" class="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <!-- App Script -->
     <script type="module" src="./cotacao.js"></script>
 </body>

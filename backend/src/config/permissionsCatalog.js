@@ -28,6 +28,8 @@ const ACTION_LABELS = {
   export: "Exportar",
   manage_permissions: "Gerir permissões",
   full_access: "Acesso total",
+  confirm_invoice: "Confirmar fatura (crédito)",
+  pay: "Executar pagamento",
   // Legado (rotas existentes)
   read: "Visualizar (leitura)",
   manage: "Gerir / operar",
@@ -207,7 +209,7 @@ const PERMISSION_GROUPS = [
       { id: "financeiro.obras", label: "Financeiro por obra", route: "/Projectos/projectView.html" },
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
-    actions: ["view", "edit", "export", "approve", "full_access"],
+    actions: ["view", "edit", "export", "approve", "confirm_invoice", "full_access"],
   },
   {
     id: "relatorios",
@@ -247,6 +249,20 @@ const PERMISSION_GROUPS = [
     icon: "business",
     pages: [{ id: "portal.main", label: "Portal cliente", route: "/Dashboard/clientDashboard.html" }],
     actions: ["view", "export", "full_access"],
+  },
+  {
+    id: "fundoManeio",
+    label: "Fundo de Maneio",
+    icon: "account_balance_wallet",
+    pages: [{ id: "fundoManeio.main", label: "Fundo de Maneio", route: "/Projectos/centroCustos.html" }],
+    actions: ["view", "create", "edit", "manage", "full_access"],
+  },
+  {
+    id: "pedidosExtras",
+    label: "Pedidos Extras",
+    icon: "request_quote",
+    pages: [{ id: "pedidosExtras.main", label: "Pedidos Extras (Obra e Geral)", route: "/Projectos/centroCustos.html" }],
+    actions: ["view", "create", "approve", "pay", "delete", "full_access"],
   },
 ];
 
@@ -292,12 +308,14 @@ function defaultAllowedFor(role, module, action) {
       },
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "true", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
-      financeiro: { view: "view", edit: "false", export: "true", approve: "false", full_access: "false" },
+      financeiro: { view: "view", edit: "false", export: "true", approve: "false", confirm_invoice: "false", full_access: "false" },
       relatorios: { view: "true", export: "true", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
       configuracoes: { view: "view", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
+      fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", approve: "true", pay: "false", delete: "true", full_access: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -320,12 +338,14 @@ function defaultAllowedFor(role, module, action) {
       },
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "true", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
-      financeiro: { view: "true", edit: "true", export: "true", approve: "false", full_access: "false" },
+      financeiro: { view: "true", edit: "true", export: "true", approve: "false", confirm_invoice: "false", full_access: "false" },
       relatorios: { view: "true", export: "true", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
       configuracoes: { view: "false", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
+      fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", approve: "false", pay: "true", delete: "false", full_access: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -348,12 +368,14 @@ function defaultAllowedFor(role, module, action) {
       },
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "false", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "false" },
-      financeiro: { view: "false", edit: "false", export: "false", approve: "false", full_access: "false" },
+      financeiro: { view: "false", edit: "false", export: "false", approve: "false", confirm_invoice: "false", full_access: "false" },
       relatorios: { view: "view", export: "false", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
       configuracoes: { view: "false", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
+      fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", approve: "false", pay: "false", delete: "false", full_access: "false" },
     };
     return map[module]?.[action] ?? "false";
   }

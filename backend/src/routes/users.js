@@ -49,7 +49,17 @@ userRoutes.get(
         role: true,
         profilePic: true,
         createdAt: true,
-        profile: { select: { phone: true, jobTitle: true, bio: true } },
+        profile: {
+          select: {
+            phone: true,
+            whatsapp: true,
+            jobTitle: true,
+            bio: true,
+            isFinancialReceiver: true,
+            isApprover: true,
+            isProjectResponsible: true,
+          },
+        },
         presence: { select: { status: true, lastSeenAt: true } },
       },
     });
@@ -95,6 +105,39 @@ userRoutes.get(
   })
 );
 
+// Lista de utilizadores elegíveis para receber notificações/comprovativos
+// (ex.: selecção de destinatário ao liquidar um pagamento). Exposição
+// deliberadamente limitada a campos não sensíveis, já visíveis noutros
+// pontos do sistema (ex.: participantes de chat).
+userRoutes.get(
+  "/notification-recipients",
+  authRequired,
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.user.findMany({
+      where: { role: { in: ["admin", "operador", "supervisor", "tecnico"] } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        profile: { select: { whatsapp: true, isFinancialReceiver: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    const mapped = items.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      whatsapp: u.profile?.whatsapp || null,
+      isFinancialReceiver: Boolean(u.profile?.isFinancialReceiver),
+    }));
+
+    mapped.sort((a, b) => (b.isFinancialReceiver ? 1 : 0) - (a.isFinancialReceiver ? 1 : 0));
+
+    return res.json({ items: mapped });
+  })
+);
+
 userRoutes.get(
   "/technicians",
   asyncHandler(async (_req, res) => {
@@ -122,6 +165,7 @@ userRoutes.patch(
         password: z.string().min(6).optional(),
         profilePic: z.string().optional().nullable(),
         phone: z.string().optional().nullable(),
+        whatsapp: z.string().optional().nullable(),
         jobTitle: z.string().optional().nullable(),
         bio: z.string().optional().nullable(),
       })
@@ -137,7 +181,10 @@ userRoutes.patch(
     }
 
     const hasProfileFields =
-      body.phone !== undefined || body.jobTitle !== undefined || body.bio !== undefined;
+      body.phone !== undefined ||
+      body.whatsapp !== undefined ||
+      body.jobTitle !== undefined ||
+      body.bio !== undefined;
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -151,11 +198,13 @@ userRoutes.patch(
           create: {
             userId: req.user.sub,
             phone: body.phone ?? null,
+            whatsapp: body.whatsapp ?? null,
             jobTitle: body.jobTitle ?? null,
             bio: body.bio ?? null,
           },
           update: {
             ...(body.phone !== undefined ? { phone: body.phone } : {}),
+            ...(body.whatsapp !== undefined ? { whatsapp: body.whatsapp } : {}),
             ...(body.jobTitle !== undefined ? { jobTitle: body.jobTitle } : {}),
             ...(body.bio !== undefined ? { bio: body.bio } : {}),
           },
@@ -214,6 +263,16 @@ userRoutes.get(
         createdAt: true,
         client: { select: { id: true, name: true, code: true, profilePic: true } },
         assignedProjects: { select: { id: true, name: true, code: true } },
+        profile: {
+          select: {
+            phone: true,
+            whatsapp: true,
+            jobTitle: true,
+            isFinancialReceiver: true,
+            isApprover: true,
+            isProjectResponsible: true,
+          },
+        },
       },
     });
     return res.json({ items });
@@ -297,6 +356,11 @@ userRoutes.patch(
         clientId: z.string().optional().nullable(),
         profilePic: z.string().optional().nullable(),
         assignedProjectIds: z.array(z.string()).optional(),
+        phone: z.string().optional().nullable(),
+        whatsapp: z.string().optional().nullable(),
+        isFinancialReceiver: z.boolean().optional(),
+        isApprover: z.boolean().optional(),
+        isProjectResponsible: z.boolean().optional(),
       })
       .parse(req.body);
 
@@ -357,6 +421,34 @@ userRoutes.patch(
 
       return user;
     });
+
+    const hasProfileFields =
+      body.phone !== undefined ||
+      body.whatsapp !== undefined ||
+      body.isFinancialReceiver !== undefined ||
+      body.isApprover !== undefined ||
+      body.isProjectResponsible !== undefined;
+
+    if (hasProfileFields) {
+      await prisma.userProfile.upsert({
+        where: { userId: id },
+        create: {
+          userId: id,
+          phone: body.phone ?? null,
+          whatsapp: body.whatsapp ?? null,
+          isFinancialReceiver: body.isFinancialReceiver ?? false,
+          isApprover: body.isApprover ?? false,
+          isProjectResponsible: body.isProjectResponsible ?? false,
+        },
+        update: {
+          ...(body.phone !== undefined ? { phone: body.phone } : {}),
+          ...(body.whatsapp !== undefined ? { whatsapp: body.whatsapp } : {}),
+          ...(body.isFinancialReceiver !== undefined ? { isFinancialReceiver: body.isFinancialReceiver } : {}),
+          ...(body.isApprover !== undefined ? { isApprover: body.isApprover } : {}),
+          ...(body.isProjectResponsible !== undefined ? { isProjectResponsible: body.isProjectResponsible } : {}),
+        },
+      });
+    }
 
     if (roleChanged) {
       await prisma.userPermission.deleteMany({ where: { userId: id } });

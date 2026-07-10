@@ -36,13 +36,17 @@ model User {
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  phone     String?
-  jobTitle  String?
-  bio       String?
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  phone                String?
+  whatsapp             String?
+  jobTitle             String?
+  bio                  String?
+  isFinancialReceiver  Boolean  @default(false)
+  isApprover           Boolean  @default(false)
+  isProjectResponsible Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum PresenceStatus {
@@ -138,6 +142,7 @@ enum NotificationType {
   REQUEST
   APPROVAL
   SYSTEM
+  PAYMENT
 }
 
 model Notification {
@@ -270,6 +275,8 @@ model Project {
   costCenters         CostCenter[]
   workNeeds           WorkNeed[]
   costPayments        CostPayment[]
+  pettyCashFunds      PettyCashFund[]
+  extraRequests       ExtraRequest[]
 
   @@index([name])
   @@index([status])
@@ -729,6 +736,7 @@ enum NeedPriority {
 enum NeedStatus {
   PENDING
   IN_QUOTATION
+  ORDERED
   APPROVED
   REJECTED
   PAID
@@ -831,6 +839,7 @@ model CostCenter {
   needs     WorkNeed[]
   payments  CostPayment[]
   transactions ProjectTransaction[]
+  extraRequests ExtraRequest[]
 
   @@unique([projectId, code])
   @@index([projectId])
@@ -857,6 +866,7 @@ model WorkNeed {
   costCenter   CostCenter   @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
   payments     CostPayment[]
   quotes       NeedQuote[]
+  installments PaymentInstallment[]
 
   @@index([projectId, costCenterId])
 }
@@ -866,6 +876,7 @@ model CostPayment {
   projectId      String
   costCenterId   String
   needId         String?
+  supplierId     String?
   docNumber      String?
   paymentDate    DateTime
   supplier       String?
@@ -885,9 +896,140 @@ model CostPayment {
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   costCenter     CostCenter      @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
   need           WorkNeed?       @relation(fields: [needId], references: [id], onDelete: SetNull)
+  supplierRef    Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  paymentInstallment PaymentInstallment?
+
+  @@index([supplierId])
 
   @@index([projectId, costCenterId])
   @@index([projectId, paymentDate])
+}
+
+// =============================================
+// MÓDULO: FUNDO DE MANEIO & PEDIDOS EXTRA (Fase 7/8)
+// =============================================
+
+enum FundMovementType {
+  CREDITO // reforço de saldo
+  DEBITO  // utilização (ex.: Pedido Extra)
+  AJUSTE  // correcção manual auditada
+}
+
+enum ExtraRequestType {
+  OBRA  // vinculado a uma obra específica
+  GERAL // sem vínculo obrigatório a uma obra
+}
+
+enum ExtraPaymentSource {
+  CAIXA
+  BANCO
+  FUNDO_MANEIO
+  SOLICITACAO_TRANSFERENCIA // pedido de transferência bancária (substitui BANCO nos novos pedidos)
+}
+
+enum ExtraRequestStatus {
+  PENDENTE
+  APROVADO
+  REJEITADO
+  PAGO
+  CANCELADO
+}
+
+// O Fundo de Maneio representa um saldo disponível (não é um custo).
+// Pode existir por obra ou, quando projectId é nulo, como fundo geral.
+model PettyCashFund {
+  id             String   @id @default(cuid())
+  projectId      String?
+  name           String
+  currency       String   @default("AOA")
+  initialBalance Decimal  @default(0) @db.Decimal(16, 2)
+  currentBalance Decimal  @default(0) @db.Decimal(16, 2)
+  active         Boolean  @default(true)
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project       Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  cards         PettyCashCard[]
+  movements     PettyCashMovement[]
+  extraRequests ExtraRequest[]
+
+  @@index([projectId])
+}
+
+// Cartões associados a um Fundo de Maneio (Cartão 1, Cartão 2...).
+model PettyCashCard {
+  id         String   @id @default(cuid())
+  fundId     String
+  label      String
+  lastDigits String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  fund          PettyCashFund       @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  movements     PettyCashMovement[]
+  extraRequests ExtraRequest[]
+
+  @@index([fundId])
+}
+
+// Histórico auditável de todas as movimentações de um Fundo de Maneio.
+model PettyCashMovement {
+  id             String           @id @default(cuid())
+  fundId         String
+  cardId         String?
+  type           FundMovementType
+  amount         Decimal          @db.Decimal(16, 2)
+  balanceAfter   Decimal          @db.Decimal(16, 2)
+  description    String
+  extraRequestId String?          @unique
+  createdBy      String?
+  createdAt      DateTime         @default(now())
+
+  fund         PettyCashFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  card         PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  extraRequest ExtraRequest?  @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
+
+  @@index([fundId, createdAt])
+  @@index([cardId])
+}
+
+// Pedido Extra: da Obra (vinculado) ou Geral (sem vínculo obrigatório).
+// Pode ser pago via Caixa, Banco ou débito num Fundo de Maneio.
+model ExtraRequest {
+  id             String             @id @default(cuid())
+  type           ExtraRequestType   @default(OBRA)
+  projectId      String?
+  costCenterId   String?
+  description    String
+  amount         Decimal            @db.Decimal(16, 2)
+  currency       String             @default("AOA")
+  paymentSource  ExtraPaymentSource @default(CAIXA)
+  fundId         String?
+  cardId         String?
+  status         ExtraRequestStatus @default(PENDENTE)
+  requestedBy    String?
+  requestedAt    DateTime           @default(now())
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  paidBy         String?
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  project    Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  fund       PettyCashFund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
+  card       PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  movement   PettyCashMovement?
+
+  @@index([projectId])
+  @@index([status])
+  @@index([type])
+  @@index([fundId])
 }
 
 model SystemLog {
@@ -926,8 +1068,23 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  products  SupplierProduct[]
-  quotes    NeedQuote[]
+  products     SupplierProduct[]
+  quotes       NeedQuote[]
+  bankAccounts SupplierBankAccount[]
+  payments     CostPayment[]
+}
+
+model SupplierBankAccount {
+  id         String   @id @default(cuid())
+  supplierId String
+  bankName   String
+  iban       String
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
 }
 
 model SupplierProduct {
@@ -959,10 +1116,76 @@ model NeedQuote {
   selected          Boolean  @default(false)
   notes             String?
   proformaUrl       String?
+  purchaseOrderUrl  String?
+  orderNumber       Int?     @unique
+  poDocumentId      String?
+  poIssuedBy        String?
+  poIssuedAt        DateTime?
+
+  // Crédito — preenchido apenas quando a condição de pagamento do fornecedor é "Crédito"
+  creditTermDays       Int?
+  expectedReceiptDate  DateTime?
+  installmentsPlanned  Int?
+  invoiceConfirmedAt   DateTime?
+  invoiceConfirmedBy   String?
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  need              WorkNeed         @relation(fields: [needId], references: [id], onDelete: Cascade)
-  supplier          Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierProduct   SupplierProduct? @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  need              WorkNeed              @relation(fields: [needId], references: [id], onDelete: Cascade)
+  supplier          Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierProduct   SupplierProduct?      @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  installments      PaymentInstallment[]
+}
+
+enum InstallmentStatus {
+  PENDENTE
+  VENCIDO
+  PAGO
+  CANCELADO
+}
+
+// Plano de parcelas gerado automaticamente após a confirmação da fatura de uma
+// encomenda a crédito. Cada parcela também é espelhada num CostPayment (via
+// costPaymentId) para continuar a aparecer nos ecrãs de Cronograma/Pagamentos
+// já existentes, sem duplicar lógica de apresentação.
+model PaymentInstallment {
+  id            String            @id @default(cuid())
+  quoteId       String
+  needId        String
+  costPaymentId String?           @unique
+  number        Int
+  amount        Decimal           @db.Decimal(16, 2)
+  currency      String            @default("AOA")
+  dueDate       DateTime
+  paidDate      DateTime?
+  status        InstallmentStatus @default(PENDENTE)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  quote         NeedQuote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  need          WorkNeed     @relation(fields: [needId], references: [id], onDelete: Cascade)
+  costPayment   CostPayment? @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
+  history       PaymentInstallmentHistory[]
+
+  @@index([needId])
+  @@index([quoteId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model PaymentInstallmentHistory {
+  id            String   @id @default(cuid())
+  installmentId String
+  action        String
+  fromValue     String?
+  toValue       String?
+  userId        String?
+  userName      String?
+  createdAt     DateTime @default(now())
+
+  installment   PaymentInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@index([installmentId])
 }

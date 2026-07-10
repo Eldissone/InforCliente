@@ -4,6 +4,14 @@ const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
+const { buildPaymentTimeline } = require("../services/paymentTimelineService");
+const {
+  notifyPaymentEvent,
+  notifyPaymentBatchCreated,
+  scanDueAndOverduePayments,
+  loadPaymentForNotification,
+} = require("../services/paymentNotificationService");
+const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
 const multer = require("multer");
 
 const upload = multer({
@@ -29,27 +37,47 @@ function sortWeekEntries(weekMap) {
   return [...known, ...extra];
 }
 
-function buildGlobalPaymentWhere(query) {
+// Nota: `status` NÃO é tratado aqui de propósito. O filtro de estado usado
+// no cronograma (ex.: "VENCIDO") é um estado virtual calculado a partir da
+// data de vencimento (ver paymentTimelineService.resolveTimelineStatus) e
+// não existe no enum `CostPayStatus` da base de dados — só "PENDENTE",
+// "CONFIRMADO" e "CANCELADO" são valores reais. Rotas que precisam de
+// filtrar pelo estado real da BD (ex.: listagem simples) devem aplicá-lo
+// explicitamente com o valor bruto da query, tal como já acontece na rota
+// equivalente por obra (`/project/:projectId/payments/timeline`).
+function buildGlobalPaymentWhere(query, req) {
   const projectId = query.projectId ? String(query.projectId) : "";
   const ccId = query.costCenterId ? String(query.costCenterId) : "";
-  const status = query.status ? String(query.status) : "";
   const week = query.week ? String(query.week) : "";
+
+  // Enforcement real do escopo "own": só restringe quando a permissão
+  // efetiva do pedido é "own" (staff com obras atribuídas); para "true"
+  // (comportamento atual da generalidade dos perfis) nada muda.
+  const ownProjectCondition = req ? getStaffOwnProjectCondition(req) : null;
 
   return {
     ...(projectId ? { projectId } : {}),
     ...(ccId ? { costCenterId: ccId } : {}),
-    ...(status ? { status } : {}),
     ...(week ? { week } : {}),
+    ...(ownProjectCondition ? { project: ownProjectCondition } : {}),
   };
 }
 
+// Fornecedores relacionados via FK explícito (supplierId). Usado como fallback
+// para registos legados que só têm o nome em texto livre (sem supplierId).
+const PAYMENT_SUPPLIER_INCLUDE = {
+  select: { id: true, name: true, nif: true, iban: true, phone: true, paymentTerm: true },
+};
+
 async function mapPaymentItems(items) {
-  const supplierNames = [...new Set(items.map((p) => p.supplier).filter(Boolean))];
+  const legacyNames = [
+    ...new Set(items.filter((p) => !p.supplierRef && !p.supplierId).map((p) => p.supplier).filter(Boolean)),
+  ];
   const supplierMap = {};
-  if (supplierNames.length > 0) {
+  if (legacyNames.length > 0) {
     const suppliers = await prisma.supplier.findMany({
-      where: { name: { in: supplierNames } },
-      select: { name: true, nif: true, iban: true },
+      where: { name: { in: legacyNames } },
+      select: { id: true, name: true, nif: true, iban: true, phone: true, paymentTerm: true },
     });
     suppliers.forEach((s) => {
       supplierMap[s.name] = s;
@@ -57,7 +85,7 @@ async function mapPaymentItems(items) {
   }
 
   return items.map((p) => {
-    const sup = supplierMap[p.supplier] || {};
+    const sup = p.supplierRef || supplierMap[p.supplier] || {};
     let proformaUrl = null;
     if (p.need && p.need.quotes && p.need.quotes.length > 0) {
       proformaUrl = p.need.quotes[0].proformaUrl;
@@ -65,8 +93,12 @@ async function mapPaymentItems(items) {
 
     return {
       ...p,
+      supplierId: p.supplierId || sup.id || null,
+      supplierName: sup.name || p.supplier || null,
       nif: sup.nif || null,
       iban: sup.iban || null,
+      supplierPhone: sup.phone || null,
+      supplierPaymentTerm: sup.paymentTerm || null,
       proformaUrl,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
@@ -74,12 +106,112 @@ async function mapPaymentItems(items) {
   });
 }
 
+// GET /cost-centers/payments/timeline — Cronograma agrupado (todas as obras)
+// Pagamentos visíveis 1 dia antes do vencimento.
+costCenterRoutes.get(
+  "/payments/timeline",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const where = buildGlobalPaymentWhere(req.query, req);
+    const search = req.query.search ? String(req.query.search) : "";
+    const status = req.query.status ? String(req.query.status) : "";
+    const includePaid = req.query.includePaid === "true";
+    const daysAhead = Math.min(365, Math.max(7, Number(req.query.daysAhead || 120)));
+    const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
+
+    const payments = await prisma.costPayment.findMany({
+      where,
+      orderBy: { paymentDate: "asc" },
+      include: {
+        project: { select: { id: true, name: true, code: true } },
+        costCenter: { select: { code: true, name: true, currency: true } },
+        supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+      },
+    });
+
+    const mapped = await mapPaymentItems(payments);
+    const timeline = buildPaymentTimeline(mapped, {
+      search,
+      statusFilter: status,
+      onlyVisible: true,
+      includePaid,
+      daysAhead,
+      daysPast,
+    });
+
+    setImmediate(() => {
+      scanDueAndOverduePayments(req.app.get("io")).catch((e) =>
+        console.error("scanDueAndOverduePayments:", e)
+      );
+    });
+
+    return res.json(timeline);
+  })
+);
+
+// GET /cost-centers/project/:projectId/payments/timeline — Cronograma da obra
+costCenterRoutes.get(
+  "/project/:projectId/payments/timeline",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const ccId = req.query.costCenterId ? String(req.query.costCenterId) : "";
+    const search = req.query.search ? String(req.query.search) : "";
+    const status = req.query.status ? String(req.query.status) : "";
+    const includePaid = req.query.includePaid === "true";
+    // Por omissão os pagamentos só ficam visíveis 1 dia antes do vencimento (regra do
+    // cronograma "lista"/"timeline"). A vista de calendário precisa de ver o mês completo,
+    // por isso permite desligar essa restrição de forma explícita e retrocompatível.
+    const onlyVisible = req.query.onlyVisible !== "false";
+    const daysAhead = Math.min(365, Math.max(7, Number(req.query.daysAhead || 120)));
+    const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
+
+    const where = {
+      projectId,
+      ...(ccId ? { costCenterId: ccId } : {}),
+    };
+
+    const payments = await prisma.costPayment.findMany({
+      where,
+      orderBy: { paymentDate: "asc" },
+      include: {
+        project: { select: { id: true, name: true, code: true } },
+        costCenter: { select: { code: true, name: true, currency: true } },
+        supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+      },
+    });
+
+    const mapped = await mapPaymentItems(payments);
+    const timeline = buildPaymentTimeline(mapped, {
+      search,
+      statusFilter: status,
+      onlyVisible,
+      includePaid,
+      daysAhead,
+      daysPast,
+    });
+
+    setImmediate(() => {
+      scanDueAndOverduePayments(req.app.get("io")).catch((e) =>
+        console.error("scanDueAndOverduePayments:", e)
+      );
+    });
+
+    return res.json(timeline);
+  })
+);
+
 // GET /cost-centers/payments — Lançamentos de todas as obras
 costCenterRoutes.get(
   "/payments",
   requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
-    const where = buildGlobalPaymentWhere(req.query);
+    const status = req.query.status ? String(req.query.status) : "";
+    const where = {
+      ...buildGlobalPaymentWhere(req.query, req),
+      ...(status ? { status } : {}),
+    };
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
 
@@ -93,6 +225,7 @@ costCenterRoutes.get(
         include: {
           project: { select: { id: true, name: true, code: true } },
           costCenter: { select: { code: true, name: true, currency: true } },
+          supplierRef: PAYMENT_SUPPLIER_INCLUDE,
           need: {
             select: {
               description: true,
@@ -120,8 +253,10 @@ costCenterRoutes.get(
   "/payments/weekly-summary",
   requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
+    const weeklyStatus = req.query.status ? String(req.query.status) : "";
     const where = {
-      ...buildGlobalPaymentWhere(req.query),
+      ...buildGlobalPaymentWhere(req.query, req),
+      ...(weeklyStatus ? { status: weeklyStatus } : {}),
       week: req.query.week ? String(req.query.week) : { not: null },
     };
 
@@ -167,6 +302,7 @@ costCenterRoutes.get(
 costCenterRoutes.get(
   "/project/:projectId",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const items = await prisma.costCenter.findMany({
@@ -184,6 +320,7 @@ costCenterRoutes.get(
 costCenterRoutes.get(
   "/project/:projectId/summary",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
 
@@ -316,36 +453,6 @@ costCenterRoutes.post(
   })
 );
 
-// POST /cost-centers/project/:projectId/seed — Criar CCs pré-definidos
-costCenterRoutes.post(
-  "/project/:projectId/seed",
-  requireRole(["admin", "operador"]),
-  asyncHandler(async (req, res) => {
-    const projectId = String(req.params.projectId);
-
-    const defaults = [
-      { code: "CC001", name: "Material" },
-      { code: "CC002", name: "Ferramentas" },
-      { code: "CC003", name: "Maquinaria" },
-      { code: "CC004", name: "EPIs" },
-      { code: "CC005", name: "Mão de obra" },
-      { code: "CC006", name: "Combustivel" },
-    ];
-
-    const created = [];
-    for (const cc of defaults) {
-      try {
-        const item = await prisma.costCenter.create({ data: { projectId, ...cc } });
-        created.push(item);
-      } catch {
-        // ignora duplicados
-      }
-    }
-
-    return res.status(201).json({ created: created.length });
-  })
-);
-
 // PATCH /cost-centers/:id — Editar Centro de Custo
 costCenterRoutes.patch(
   "/:id",
@@ -392,10 +499,12 @@ costCenterRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
+    const ownProjectCondition = getStaffOwnProjectCondition(req);
     const where = {
       costCenterId,
       ...(status ? { status } : {}),
       ...(priority ? { priority } : {}),
+      ...(ownProjectCondition ? { costCenter: { project: ownProjectCondition } } : {}),
     };
 
     const [total, items] = await Promise.all([
@@ -426,6 +535,7 @@ costCenterRoutes.get(
 costCenterRoutes.get(
   "/project/:projectId/needs",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const status = req.query.status ? String(req.query.status) : "";
@@ -524,7 +634,7 @@ costCenterRoutes.patch(
       unitPrice: z.union([z.number(), z.string()]).optional().nullable(),
       hours: z.union([z.number(), z.string()]).optional().nullable(),
       priority: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
-      status: z.enum(["PENDING", "IN_QUOTATION", "APPROVED", "REJECTED", "PAID"]).optional(),
+      status: z.enum(["PENDING", "IN_QUOTATION", "ORDERED", "APPROVED", "REJECTED", "PAID"]).optional(),
       responsible: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
     }).parse(req.body);
@@ -624,8 +734,10 @@ costCenterRoutes.post(
     if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
 
     let supplierName = null;
+    let supplierId = null;
     if (need.quotes && need.quotes.length > 0 && need.quotes[0].supplier) {
       supplierName = need.quotes[0].supplier.name;
+      supplierId = need.quotes[0].supplier.id;
     }
 
     // Create the installments
@@ -636,6 +748,7 @@ costCenterRoutes.post(
           projectId: need.projectId,
           costCenterId: ccId,
           needId,
+          supplierId,
           docNumber: null,
           paymentDate: new Date(inst.paymentDate),
           supplier: supplierName,
@@ -660,6 +773,12 @@ costCenterRoutes.post(
       data: { status: "APPROVED", scheduled: true },
     });
 
+    setImmediate(() => {
+      notifyPaymentBatchCreated(req.app.get("io"), createdPayments, req.user).catch((e) =>
+        console.error("notifyPaymentBatchCreated:", e)
+      );
+    });
+
     return res.json({ ok: true, payments: createdPayments.map(p => p.id) });
   })
 );
@@ -670,6 +789,7 @@ costCenterRoutes.post(
 costCenterRoutes.get(
   "/project/:projectId/payments",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const ccId = req.query.costCenterId ? String(req.query.costCenterId) : "";
@@ -694,6 +814,7 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
+          supplierRef: PAYMENT_SUPPLIER_INCLUDE,
           need: { 
             select: { 
               description: true,
@@ -730,6 +851,7 @@ costCenterRoutes.post(
       docNumber: z.string().optional().nullable(),
       paymentDate: z.string().datetime(),
       supplier: z.string().optional().nullable(),
+      supplierId: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "SERVICO", "MAO_DE_OBRA", "EQUIPAMENTO", "TRANSPORTE", "ADMINISTRATIVO", "OUTRO"]).optional(),
       description: z.string().min(2),
       budgetedAmount: z.union([z.number(), z.string()]),
@@ -742,13 +864,25 @@ costCenterRoutes.post(
       notes: z.string().optional().nullable(),
     }).parse(req.body);
 
+    // Se o fornecedor foi seleccionado a partir da lista (FK), garante que o
+    // texto livre "supplier" fica sincronizado para compatibilidade retroactiva.
+    let resolvedSupplierName = body.supplier || null;
+    if (body.supplierId) {
+      const sup = await prisma.supplier.findUnique({
+        where: { id: body.supplierId },
+        select: { name: true },
+      });
+      if (sup) resolvedSupplierName = sup.name;
+    }
+
     const created = await prisma.costPayment.create({
       data: {
         projectId: cc.projectId,
         costCenterId,
         docNumber: body.docNumber || null,
         paymentDate: new Date(body.paymentDate),
-        supplier: body.supplier || null,
+        supplier: resolvedSupplierName,
+        supplierId: body.supplierId || null,
         category: body.category || "MATERIAL",
         description: body.description,
         budgetedAmount: String(body.budgetedAmount),
@@ -762,6 +896,16 @@ costCenterRoutes.post(
       },
       select: { id: true },
     });
+
+    setImmediate(async () => {
+      try {
+        const payment = await loadPaymentForNotification(created.id);
+        if (payment) await notifyPaymentEvent(req.app.get("io"), payment, "PAYMENT_CREATED", req.user);
+      } catch (e) {
+        console.error("notifyPaymentEvent CREATE:", e);
+      }
+    });
+
     return res.status(201).json({ id: created.id });
   })
 );
@@ -773,10 +917,17 @@ costCenterRoutes.patch(
   upload.fields([{ name: "comprovativo", maxCount: 1 }, { name: "fatura", maxCount: 1 }]),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
+    const before = await prisma.costPayment.findUnique({
+      where: { id: payId },
+      select: { status: true },
+    });
+    if (!before) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+
     const body = z.object({
       docNumber: z.string().optional().nullable(),
       paymentDate: z.string().datetime().optional(),
       supplier: z.string().optional().nullable(),
+      supplierId: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "SERVICO", "MAO_DE_OBRA", "EQUIPAMENTO", "TRANSPORTE", "ADMINISTRATIVO", "OUTRO"]).optional(),
       description: z.string().min(2).optional(),
       budgetedAmount: z.union([z.number(), z.string()]).optional(),
@@ -787,7 +938,33 @@ costCenterRoutes.patch(
       status: z.enum(["PENDENTE", "CONFIRMADO", "CANCELADO"]).optional(),
       needId: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      recipientIds: z.string().optional().nullable(),
     }).parse(req.body);
+
+    // recipientIds chega como JSON (multipart/form-data não suporta arrays nativos):
+    // quem liquida o pagamento escolhe explicitamente quem deve receber o comprovativo.
+    let explicitRecipientIds = [];
+    if (body.recipientIds) {
+      try {
+        const parsed = JSON.parse(body.recipientIds);
+        if (Array.isArray(parsed)) explicitRecipientIds = parsed.filter((id) => typeof id === "string" && id);
+      } catch {
+        explicitRecipientIds = [];
+      }
+    }
+
+    // Mantém o texto livre "supplier" sincronizado quando um fornecedor
+    // registado é seleccionado explicitamente via supplierId.
+    let resolvedSupplierName = body.supplier;
+    if (body.supplierId) {
+      const sup = await prisma.supplier.findUnique({
+        where: { id: body.supplierId },
+        select: { name: true },
+      });
+      if (sup) resolvedSupplierName = sup.name;
+    } else if (body.supplierId === null) {
+      resolvedSupplierName = body.supplier !== undefined ? body.supplier : null;
+    }
 
     let comprovativoUrl = undefined;
     let faturaUrl = undefined;
@@ -812,7 +989,8 @@ costCenterRoutes.patch(
       data: {
         ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
         ...(body.paymentDate ? { paymentDate: new Date(body.paymentDate) } : {}),
-        ...(body.supplier !== undefined ? { supplier: body.supplier } : {}),
+        ...(resolvedSupplierName !== undefined ? { supplier: resolvedSupplierName } : {}),
+        ...(body.supplierId !== undefined ? { supplierId: body.supplierId || null } : {}),
         ...(body.category ? { category: body.category } : {}),
         ...(body.description ? { description: body.description } : {}),
         ...(body.budgetedAmount !== undefined ? { budgetedAmount: String(body.budgetedAmount) } : {}),
@@ -828,6 +1006,22 @@ costCenterRoutes.patch(
       },
       select: { id: true },
     });
+
+    if (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") {
+      setImmediate(async () => {
+        try {
+          const payment = await loadPaymentForNotification(updated.id);
+          if (payment) {
+            await notifyPaymentEvent(req.app.get("io"), payment, "PAYMENT_CONFIRMED", req.user, {
+              explicitRecipientIds,
+            });
+          }
+        } catch (e) {
+          console.error("notifyPaymentEvent CONFIRMED:", e);
+        }
+      });
+    }
+
     return res.json({ id: updated.id });
   })
 );
@@ -849,6 +1043,7 @@ costCenterRoutes.delete(
 costCenterRoutes.get(
   "/project/:projectId/weekly-summary",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
 
@@ -878,6 +1073,7 @@ costCenterRoutes.get(
 costCenterRoutes.get(
   "/project/:projectId/top-expenses",
   requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const limit = Math.min(20, Math.max(1, Number(req.query.limit || 5)));

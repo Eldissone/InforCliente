@@ -2,6 +2,7 @@ const express = require("express");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
 const { requirePermission, authRequired } = require("../middlewares/auth");
+const { assertOwnProjectAccess, enforceOwnProjectScope } = require("../services/scopeService");
 const dailyPlansRoutes = express.Router();
 
 dailyPlansRoutes.use(authRequired);
@@ -94,6 +95,7 @@ dailyPlansRoutes.post(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano Diário não encontrado." });
+    await assertOwnProjectAccess(req, plan.projectId);
 
     if (plan.status !== "DRAFT") {
       return res.status(400).json({ error: `O plano diário não pode ser iniciado porque está no estado ${plan.status}.` });
@@ -112,6 +114,7 @@ dailyPlansRoutes.post(
 dailyPlansRoutes.get(
   "/",
   requirePermission("obras", "read"),
+  enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ error: "projectId is required" });
@@ -163,6 +166,7 @@ dailyPlansRoutes.get(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
     res.json(plan);
   })
 );
@@ -177,6 +181,7 @@ dailyPlansRoutes.post(
     if (!projectId || !date || !tasks || tasks.length === 0) {
       return res.status(400).json({ error: "projectId, date e tasks são obrigatórios." });
     }
+    await assertOwnProjectAccess(req, projectId);
 
     const plan = await prisma.dailyPlan.create({
       data: {
@@ -230,6 +235,7 @@ dailyPlansRoutes.patch(
     if (!existing) {
       return res.status(404).json({ error: "Plano Diário não encontrado." });
     }
+    await assertOwnProjectAccess(req, existing.projectId);
 
     if (existing.status === "PENDING_VALIDATION" || existing.status === "COMPLETED") {
       return res.status(400).json({ error: "Não é possível editar um plano já concluído ou pendente de validação." });
@@ -343,6 +349,7 @@ dailyPlansRoutes.post(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
     
     let newStatus = "IN_PROGRESS";
     if (plan.status === "DRAFT" && plan.materials.length > 0 && !plan.receivedBy) {
@@ -366,6 +373,7 @@ dailyPlansRoutes.delete(
     const { id } = req.params;
     const plan = await prisma.dailyPlan.findUnique({ where: { id } });
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
 
     if (plan.status === "IN_PROGRESS" || plan.status === "COMPLETED") {
       return res.status(400).json({ error: "Não pode apagar um plano já disponibilizado ou concluído." });
@@ -494,6 +502,7 @@ dailyPlansRoutes.post(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
     if (plan.status !== "DRAFT") return res.status(400).json({ error: "O plano não está pronto para recepção." });
 
     const updated = await prisma.dailyPlan.update({
@@ -526,6 +535,7 @@ dailyPlansRoutes.post(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
     if (plan.status !== "IN_PROGRESS" && plan.status !== "DRAFT") {
       return res.status(400).json({ error: "O plano não está em execução." });
     }
@@ -593,6 +603,7 @@ dailyPlansRoutes.post(
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
     if (plan.status !== "PENDING_VALIDATION" && plan.status !== "IN_PROGRESS" && plan.status !== "DRAFT") {
       return res.status(400).json({ error: "Este plano não está pendente de validação." });
     }

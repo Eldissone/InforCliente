@@ -1,7 +1,9 @@
 import { apiRequest, getAssetUrl, apiUpload } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
+import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
+import { renderPaymentTimeline, renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let allProjects = [];
@@ -10,9 +12,12 @@ let costCenters = [];
 let currentCC = null;
 let currentTxStatus = "PENDING"; // Add variable to keep track of segmented tab
 let dashSummary = null;
-let chartInstance = null;
-let globalPayPage = 1;
-const GLOBAL_PAY_PAGE_SIZE = 30;
+let cachedNeeds = [];
+let currentSuppliers = [];
+
+// ── Fase 7/8: Fundo de Maneio + Pedidos Extra ───────────────────────────────
+let currentFunds = [];
+let selectedFundId = null;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 (async () => {
@@ -91,9 +96,8 @@ function showGlobalView() {
   document.getElementById("globalPaymentsView")?.classList.remove("hidden");
   document.getElementById("projectContent")?.classList.add("hidden");
   populateGlobalFilters();
-  globalPayPage = 1;
-  loadGlobalPayments();
-  loadGlobalWeeklySummary();
+  loadGlobalPaymentTimeline();
+  loadGlobalExtras();
 }
 
 function clearProjectSelection() {
@@ -114,23 +118,6 @@ function populateGlobalFilters() {
       allProjects.map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`).join("");
     if (allProjects.some((p) => p.id === current)) projSel.value = current;
   }
-
-  const weekSel = document.getElementById("globalWeekFilter");
-  if (weekSel && weekSel.options.length <= 1) {
-    weekSel.innerHTML = `<option value="">Todas as Semanas</option>` +
-      Array.from({ length: 26 }, (_, i) => `<option value="SEM ${i}">SEM ${i}</option>`).join("");
-  }
-}
-
-function getGlobalPaymentFilters() {
-  const params = new URLSearchParams();
-  const projectId = document.getElementById("globalProjFilter")?.value;
-  const status = document.getElementById("globalStatusFilter")?.value;
-  const week = document.getElementById("globalWeekFilter")?.value;
-  if (projectId) params.set("projectId", projectId);
-  if (status) params.set("status", status);
-  if (week) params.set("week", week);
-  return params;
 }
 
 function reloadPaymentsView() {
@@ -139,86 +126,41 @@ function reloadPaymentsView() {
     loadSummary();
     loadCronograma();
   } else {
-    loadGlobalPayments();
-    loadGlobalWeeklySummary();
+    loadGlobalPaymentTimeline();
   }
 }
 
-async function loadGlobalPayments() {
-  const tbody = document.getElementById("globalPaysTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="12"><div class="spinner my-8"></div></td></tr>`;
+function getGlobalTimelineFilters() {
+  const params = new URLSearchParams();
+  const projectId = document.getElementById("globalProjFilter")?.value;
+  const status = document.getElementById("globalTimelineStatus")?.value;
+  const search = document.getElementById("globalTimelineSearch")?.value?.trim();
+  if (projectId) params.set("projectId", projectId);
+  if (status) params.set("status", status);
+  if (search) params.set("search", search);
+  return params;
+}
+
+async function loadGlobalPaymentTimeline() {
+  const el = document.getElementById("globalTimelineBody");
+  if (!el) return;
+  el.innerHTML = `<div class="spinner my-8"></div>`;
 
   try {
-    const params = getGlobalPaymentFilters();
-    params.set("page", String(globalPayPage));
-    params.set("pageSize", String(GLOBAL_PAY_PAGE_SIZE));
-
-    const data = await apiRequest(`/cost-centers/payments?${params}`);
-    const items = data.items || [];
-
-    if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">receipt_long</span><p class="text-sm font-semibold">Sem lançamentos encontrados</p></div></td></tr>`;
-      document.getElementById("globalPaysPagination").innerHTML = "";
-      return;
-    }
-
-    tbody.innerHTML = items.map((p) => renderPaymentRowHtml(p, { showProject: true })).join("");
-
-    const totalPages = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || GLOBAL_PAY_PAGE_SIZE)));
-    const pagination = document.getElementById("globalPaysPagination");
-    pagination.innerHTML = `
-      <span>${items.length} de ${data.total || items.length} lançamentos</span>
-      <div class="flex gap-2 items-center">
-        <button id="globalPaysPrev" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === 1 ? "opacity-50 pointer-events-none" : ""}">Anterior</button>
-        <span>Página ${data.page} de ${totalPages}</span>
-        <button id="globalPaysNext" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 ${data.page === totalPages ? "opacity-50 pointer-events-none" : ""}">Próxima</button>
-      </div>`;
-    pagination.querySelector("#globalPaysPrev")?.addEventListener("click", () => {
-      globalPayPage = Math.max(1, globalPayPage - 1);
-      loadGlobalPayments();
-    });
-    pagination.querySelector("#globalPaysNext")?.addEventListener("click", () => {
-      globalPayPage = Math.min(totalPages, globalPayPage + 1);
-      loadGlobalPayments();
+    const params = getGlobalTimelineFilters();
+    const data = await apiRequest(`/cost-centers/payments/timeline?${params}`);
+    el.innerHTML = renderPaymentTimeline(data.days, {
+      showProject: true,
+      emptyMessage: "Nenhum pagamento visível no cronograma.",
     });
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
-  }
-}
-
-async function loadGlobalWeeklySummary() {
-  const el = document.getElementById("globalWeeklyBreakdownList");
-  if (!el) return;
-
-  try {
-    const params = getGlobalPaymentFilters();
-    const data = await apiRequest(`/cost-centers/payments/weekly-summary?${params}`);
-    if (!data.weeks?.length) {
-      el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais registados</p>`;
-      return;
-    }
-    const max = Math.max(...data.weeks.map((w) => w.paid));
-    el.innerHTML = data.weeks.map((w) => {
-      const pct = max > 0 ? (w.paid / max) * 100 : 0;
-      const label = w.currency && w.currency !== "AOA" ? `${w.week} · ${w.currency}` : w.week;
-      return `
-        <div class="flex items-center gap-3">
-          <span class="text-[10px] font-black text-slate-400 uppercase w-24 flex-shrink-0">${label}</span>
-          <div class="flex-1 prog-bar-wrap">
-            <div class="prog-bar bg-blue-500" style="width:${pct.toFixed(1)}%"></div>
-          </div>
-          <span class="text-xs font-bold text-slate-700 w-32 text-right tabular-nums">${formatCurrency(w.paid, w.currency || "AOA")}</span>
-          <span class="text-[10px] font-bold text-slate-400 w-10 text-right">${w.count || ""}</span>
-        </div>`;
-    }).join("");
-  } catch {
-    el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais</p>`;
+    el.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p>`;
   }
 }
 
 function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}) {
   const statusClasses = { PENDENTE: "badge-pendente", CONFIRMADO: "badge-confirmado", CANCELADO: "badge-cancelado" };
+  const statusLabels = { PENDENTE: "Pendente", CONFIRMADO: "Liquidado", CANCELADO: "Cancelado" };
   const typeLabels = { PRONTO_PAGAMENTO: "PP", CREDITO: "C" };
   const typeClasses = {
     PRONTO_PAGAMENTO: "bg-red-50 text-red-700 border border-red-200",
@@ -256,7 +198,7 @@ function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}
       <td class="text-right tabular-nums text-sm font-medium text-slate-600">${formatCurrency(p.budgetedAmount, cur)}</td>
       <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount, cur)}</td>
       <td class="text-center text-xs font-bold text-slate-500">${p.week || "—"}</td>
-      <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${p.status}</span></td>
+      <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${statusLabels[p.status] || p.status}</span></td>
       <td class="text-center">
         <div class="flex justify-center gap-2">
           ${p.status === "PENDENTE" ? `
@@ -337,9 +279,7 @@ async function loadSummary() {
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/summary`);
     dashSummary = data;
     renderKPIs(data.totals);
-    renderDashTable(data.summary);
-    renderChart(data.summary);
-    renderAlerts(data.summary);
+    renderPrevistoRealTable(data.summary, data.totals);
     // Dashboard extra cards
     loadWeeklyBreakdown();
     loadTopExpenses();
@@ -391,128 +331,32 @@ function renderKPIs(totalsByCurrency) {
   }, 50);
 }
 
-// ── Chart ──────────────────────────────────────────────────────────────────────
-function renderChart(summary) {
-  const canvas = document.getElementById("dashChart");
-  if (!canvas) return;
-  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-  if (!summary?.length) return;
+// ── Previsto x Real (tabela de execução orçamental por CC) ─────────────────────
+function renderPrevistoRealTable(summary) {
+  const tbody = document.getElementById("dashPrevistoRealBody");
+  if (!tbody) return;
 
-  const labels = summary.map((cc) => `${cc.code} · ${cc.name}`);
-  const budgeted = summary.map((cc) => cc.budgeted);
-  const paid = summary.map((cc) => cc.paid);
-
-  chartInstance = new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Previsto",
-          data: budgeted,
-          backgroundColor: "rgba(59,130,246,0.15)",
-          borderColor: "rgba(59,130,246,0.8)",
-          borderWidth: 2,
-          borderRadius: 6,
-        },
-        {
-          label: "Pago",
-          data: paid,
-          backgroundColor: "rgba(42,252,141,0.15)",
-          borderColor: "rgba(42,252,141,0.9)",
-          borderWidth: 2,
-          borderRadius: 6,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { position: "top", labels: { font: { size: 11, weight: "700" }, usePointStyle: true } },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const cc = summary[ctx.dataIndex];
-              return ` ${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y, cc.currency || "AOA")}`;
-            },
-          },
-        },
-      },
-      scales: {
-        y: {
-          ticks: {
-            callback: (v) => {
-              if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
-              if (v >= 1_000) return (v / 1_000).toFixed(0) + "k";
-              return v;
-            },
-            font: { size: 10 },
-          },
-          grid: { color: "#f1f5f9" },
-        },
-        x: { ticks: { font: { size: 10 }, maxRotation: 30 }, grid: { display: false } },
-      },
-    },
-  });
-}
-
-// ── Alerts ─────────────────────────────────────────────────────────────────────
-function renderAlerts(summary) {
-  const el = document.getElementById("alertsList");
-  const overflows = (summary || []).filter((cc) => cc.overflow);
-  if (!overflows.length) {
-    el.innerHTML = `<p class="text-xs text-slate-500 text-center mt-6">Sem alertas de estouro!</p>`;
-    return;
-  }
-  el.innerHTML = overflows.map((cc) => `
-    <div class="flex items-start gap-3 bg-red-500/10 rounded-xl p-3 border border-red-500/20">
-      <span class="material-symbols-outlined text-red-400 text-base flex-shrink-0">warning</span>
-      <div class="min-w-0">
-        <p class="text-xs font-bold text-white truncate">${cc.code} · ${cc.name}</p>
-        <p class="text-[10px] text-slate-400 mt-0.5">
-          Pago: ${formatCurrency(cc.paid, cc.currency || "AOA")} |
-          Previsto: ${formatCurrency(cc.budgeted, cc.currency || "AOA")}
-        </p>
-        <p class="text-[10px] font-bold text-red-400 mt-0.5">Desvio: +${Math.abs(cc.desvio).toFixed(1)}%</p>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderDashTable(summary) {
-  const tbody = document.getElementById("dashTableBody");
   if (!summary?.length) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><p class="text-xs">Sem dados</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><p class="text-xs">Sem dados</p></div></td></tr>`;
     return;
   }
+
   tbody.innerHTML = summary.map((cc) => {
     const cur = cc.currency || "AOA";
-    const desvioStr = cc.budgeted > 0
-      ? `<span class="${cc.overflow ? "text-red-600 font-bold" : "text-emerald-600 font-bold"}">${cc.desvio > 0 ? "+" : ""}${cc.desvio.toFixed(1)}%</span>`
-      : "—";
-    const pct = Math.min(100, cc.pctExecutado);
+    const pct = Math.min(100, Math.max(0, cc.pctExecutado || 0));
+    const barColor = cc.overflow ? "bg-red-500" : pct >= 80 ? "bg-amber-400" : "bg-emerald-500";
     return `
     <tr class="${cc.overflow ? "overflow-row" : ""}">
-      <td class="font-bold text-slate-600">${cc.code}</td>
       <td class="font-semibold text-slate-900">${cc.name}</td>
-      <td class="text-right tabular-nums font-medium">${formatCurrency(cc.budgeted, cur)}</td>
-      <td class="text-right tabular-nums font-medium">${formatCurrency(cc.paid, cur)}</td>
-      <td class="text-right tabular-nums font-medium ${cc.saldo < 0 ? "text-red-600" : "text-emerald-600"}">${formatCurrency(cc.saldo, cur)}</td>
-      <td class="text-right">${desvioStr}</td>
-      <td class="text-center">
+      <td class="text-right tabular-nums font-bold ${cc.overflow ? "text-red-600" : "text-slate-900"}">${formatCurrency(cc.paid, cur)}</td>
+      <td class="text-right tabular-nums font-medium text-slate-500">${formatCurrency(cc.budgeted, cur)}</td>
+      <td>
         <div class="flex items-center gap-2">
-          <div class="prog-bar-wrap flex-1" style="min-width:60px">
-            <div class="prog-bar ${pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-400" : "bg-emerald-500"}" style="width:${pct}%"></div>
+          <div class="prog-bar-wrap flex-1" style="min-width:80px">
+            <div class="prog-bar ${barColor}" style="width:${pct}%"></div>
           </div>
-          <span class="text-xs font-bold text-slate-600">${pct.toFixed(0)}%</span>
+          <span class="text-xs font-bold text-slate-600 w-12 text-right">${pct.toFixed(1)}%</span>
         </div>
-      </td>
-      <td class="text-center">
-        ${cc.overflow
-        ? `<span class="overflow-badge"><span class="material-symbols-outlined text-xs">warning</span>Estouro</span>`
-        : `<span class="text-xs font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-600">OK</span>`
-      }
       </td>
     </tr>`;
   }).join("");
@@ -528,7 +372,7 @@ function renderCCTable() {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
       <span class="material-symbols-outlined text-3xl">account_tree</span>
       <p class="text-sm font-semibold">Nenhum centro de custo criado</p>
-      <p class="text-xs">Clica em "CCs Padrão" para adicionar os centros mais comuns.</p>
+      <p class="text-xs">Clica em "Novo CC" para criar o primeiro centro de custo.</p>
     </div></td></tr>`;
     return;
   }
@@ -598,14 +442,16 @@ async function loadNeeds() {
       .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0))
       .map((item, index) => ({ ...item, _orderNumber: index + 1 }));
 
+    cachedNeeds = items;
+
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
       return;
     }
 
     const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
-    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
-    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
+    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
     const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
 
     // Grouping
@@ -620,7 +466,7 @@ async function loadNeeds() {
       }
 
       const qty = Number(n.quantity) || 0;
-      const price = Number(n.unitPrice) || 0;
+      const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
       const hours = Number(n.hours) || 1;
 
       const totalObra = qty * price * hours;
@@ -667,7 +513,7 @@ async function loadNeeds() {
 
       html += group.items.map((n) => {
         const qty = Number(n.quantity) || 0;
-        const price = Number(n.unitPrice) || 0;
+        const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
         const hours = Number(n.hours) || 1;
         const totalObra = qty * price * hours;
 
@@ -688,8 +534,8 @@ async function loadNeeds() {
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[n.status] || "badge-pending"}">${statusLabels[n.status] || n.status}</span></td>
           <td class="text-center">
             <div class="flex justify-center gap-2">
-              ${n.status === "PENDING" || n.status === "IN_QUOTATION" ? `
-              <button onclick="sendToQuotation('${n.id}', '${n.costCenterId}')" title="Cotação / Precificação"
+              ${n.status === "PENDING" || n.status === "IN_QUOTATION" || n.status === "ORDERED" || n.status === "APPROVED" ? `
+              <button onclick="openPrecificarModal('${n.id}', '${n.costCenterId}')" title="${n.status === "ORDERED" ? "Carregar proforma" : "Precificar / Selecionar fornecedor"}"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">fact_check</span>
               </button>
@@ -769,6 +615,8 @@ function switchTab(tabName) {
   if (tabName === "necessidades") loadNeeds();
   if (tabName === "lancamentos") loadPayments();
   if (tabName === "cronograma") loadCronograma();
+  if (tabName === "fundomaneio") loadFunds();
+  if (tabName === "extras") loadExtras();
   if (tabName === "pendentes") {
     currentTxStatus = "PENDING";
     txPage = 1;
@@ -781,146 +629,263 @@ function switchTab(tabName) {
 }
 
 // ── Cronograma Functions ───────────────────────────────────────────────────────
+let cronogramaViewMode = "list";
+let cronogramaPendingNeeds = [];
+
+function getCronogramaFilters() {
+  const params = new URLSearchParams();
+  const status = document.getElementById("cronogramaStatusFilter")?.value;
+  const search = document.getElementById("cronogramaSearch")?.value?.trim();
+  if (status) params.set("status", status);
+  if (search) params.set("search", search);
+  if (status === "CONFIRMADO") params.set("includePaid", "true");
+  return params;
+}
+
 async function loadCronograma() {
   if (!selectedProject) return;
   const tbody = document.getElementById("cronogramaTableBody");
-  tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
+  if (tbody) tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
 
   try {
-    const [needsData, paysData] = await Promise.all([
+    const [needsData, timelineData] = await Promise.all([
       apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=500&scheduled=true`),
-      apiRequest(`/cost-centers/project/${selectedProject.id}/payments?pageSize=500`)
+      apiRequest(`/cost-centers/project/${selectedProject.id}/payments/timeline?${getCronogramaFilters()}`),
     ]);
 
     const items = needsData.items || [];
-    const payments = paysData.items || [];
-    currentGanttPayments = payments; // Sincroniza dados com o Gantt
+    cronogramaPendingNeeds = items.filter((n) => !n._count || n._count.payments === 0);
 
-    let combined = [];
+    renderCronogramaList(timelineData.days);
 
-    // Needs que AINDA NÃO têm parcelas geradas
-    const pendingNeeds = items.filter(n => !n._count || n._count.payments === 0);
-
-    pendingNeeds.forEach(n => {
-      const qty = Number(n.quantity) || 0;
-      const price = Number(n.unitPrice) || 0;
-      const hours = Number(n.hours) || 1;
-      const totalObra = qty * price * hours;
-      combined.push({
-        type: 'NEED',
-        id: n.id,
-        date: null,
-        description: n.description,
-        ccCode: n.costCenter?.code || "—",
-        ccName: n.costCenter?.name || "",
-        ccId: n.costCenterId,
-        currency: n.costCenter?.currency || "AOA",
-        amount: totalObra,
-        status: "A_DEFINIR",
-        raw: n
-      });
-    });
-
-    // Adiciona todos os lançamentos
-    payments.forEach(p => {
-      // Apenas adicionar pagamentos se estivermos no contexto do cronograma e eles existirem
-      combined.push({
-        type: 'PAYMENT',
-        id: p.id,
-        date: new Date(p.paymentDate),
-        description: p.description,
-        ccCode: p.costCenter?.code || "—",
-        ccName: p.costCenter?.name || "",
-        ccId: p.costCenterId,
-        currency: p.costCenter?.currency || "AOA",
-        amount: p.budgetedAmount,
-        status: p.status,
-        raw: p
-      });
-    });
-
-    // Ordena: Needs por definir no topo, depois lançamentos por data
-    combined.sort((a, b) => {
-      if (!a.date && !b.date) return 0;
-      if (!a.date) return -1;
-      if (!b.date) return 1;
-      return a.date - b.date;
-    });
-
-    // Se não houver itens, mostra estado vazio
-    if (!combined.length) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span class="material-symbols-outlined text-3xl">schedule</span><p class="text-sm font-semibold">Nenhum item ou pagamento agendado</p></div></td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = combined.map(item => {
-      if (item.type === 'NEED') {
-        return `
-          <tr class="bg-amber-50/30">
-            <td class="text-xs font-bold text-amber-600 w-28">A definir</td>
-            <td class="font-medium text-slate-900 max-w-xs truncate" title="${item.description.replace(/"/g, '&quot;')}">${item.description}</td>
-            <td class="text-sm text-slate-500">${item.ccCode} · ${item.ccName}</td>
-            <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.amount, item.currency)}</td>
-            <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Aguardar parcelamento</span></td>
-            <td class="text-center">
-              <div class="flex justify-center gap-2">
-                <button onclick="openCronogramaModal('${item.id}', '${item.ccId}', '${item.description.replace(/'/g, "\\'")}', ${item.amount}, '${item.currency}')" title="Definir Cronograma"
-                  class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center hover:bg-amber-200 hover:text-amber-700 transition-all text-amber-600 shadow-sm border border-amber-200">
-                  <span class="material-symbols-outlined text-base">calendar_month</span>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `;
-      } else {
-        const isPaid = item.status === "CONFIRMADO";
-        const isAtrasado = !isPaid && item.status !== "CANCELADO" && item.date < new Date(new Date().setHours(0, 0, 0, 0));
-
-        let statusBadge = "";
-        if (isPaid) {
-          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">Liquidado</span>`;
-        } else if (item.status === "CANCELADO") {
-          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Cancelado</span>`;
-        } else if (isAtrasado) {
-          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700">Atrasado</span>`;
-        } else {
-          statusBadge = `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Pendente</span>`;
-        }
-
-        return `
-          <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(item.raw).replace(/'/g, "&#39;")}' data-type="VIEW">
-            <td class="text-xs font-bold text-slate-600 w-28">${formatDateBR(item.raw.paymentDate)}</td>
-            <td class="font-medium text-slate-900 max-w-xs truncate" title="${item.description.replace(/"/g, '&quot;')}">${item.description}</td>
-            <td class="text-sm text-slate-500">${item.ccCode} · ${item.ccName}</td>
-            <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.amount, item.currency)}</td>
-            <td class="text-center">${statusBadge}</td>
-            <td class="text-center">
-              <div class="flex justify-center gap-2">
-                ${!isPaid && item.status !== 'CANCELADO' ? `
-                <button onclick="event.stopPropagation(); editCronograma(${JSON.stringify(item.raw).replace(/"/g, '&quot;')})" title="Editar Cronograma (Data/Valor)"
-                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-emerald-100 hover:text-emerald-600 transition-all text-slate-500">
-                  <span class="material-symbols-outlined text-base">edit</span>
-                </button>
-                <button onclick="event.stopPropagation(); deletePay('${item.id}')" title="Eliminar Parcela"
-                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
-                  <span class="material-symbols-outlined text-base">delete</span>
-                </button>
-                ` : `
-                <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(item.raw).replace(/'/g, "&#39;")}' data-type="VIEW" title="Ver Detalhes"
-                  class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 hover:text-slate-700 transition-all text-slate-500">
-                  <span class="material-symbols-outlined text-base">visibility</span>
-                </button>
-                `}
-              </div>
-            </td>
-          </tr>
-        `;
-      }
-    }).join("");
-
+    if (cronogramaViewMode === "calendar") loadCronogramaCalendar();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
+}
+
+// ── Cronograma · Vista Calendário ───────────────────────────────────────────────
+let cronogramaCalendarDate = new Date();
+cronogramaCalendarDate.setDate(1);
+let cronogramaCalendarDayMap = new Map();
+
+window.shiftCronogramaCalendarMonth = function (delta) {
+  cronogramaCalendarDate.setMonth(cronogramaCalendarDate.getMonth() + delta);
+  loadCronogramaCalendar();
+};
+
+window.goToCurrentCronogramaMonth = function () {
+  cronogramaCalendarDate = new Date();
+  cronogramaCalendarDate.setDate(1);
+  loadCronogramaCalendar();
+};
+
+async function loadCronogramaCalendar() {
+  if (!selectedProject) return;
+  const body = document.getElementById("cronogramaCalendarBody");
+  const label = document.getElementById("calMonthLabel");
+  if (label) {
+    label.textContent = cronogramaCalendarDate.toLocaleDateString("pt-PT", { month: "long", year: "numeric" });
+  }
+  if (body) body.innerHTML = `<div class="spinner my-8"></div>`;
+
+  const year = cronogramaCalendarDate.getFullYear();
+  const month = cronogramaCalendarDate.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const lastOfMonth = new Date(year, month + 1, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const daysPast = Math.max(0, Math.ceil((today - firstOfMonth) / 86400000));
+  const daysAhead = Math.max(7, Math.ceil((lastOfMonth - today) / 86400000));
+
+  try {
+    const params = getCronogramaFilters();
+    params.set("onlyVisible", "false");
+    params.set("includePaid", "true");
+    params.set("daysPast", String(daysPast));
+    params.set("daysAhead", String(daysAhead));
+
+    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments/timeline?${params}`);
+    renderCronogramaCalendar(data.days, firstOfMonth, lastOfMonth);
+  } catch (err) {
+    if (body) body.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p>`;
+  }
+}
+
+// Estado dominante do dia quando há vários pagamentos: mostra sempre o mais urgente.
+const CRONOGRAMA_STATUS_PRIORITY = ["VENCIDO", "PENDENTE", "PAGO", "CANCELADO"];
+
+const CRONOGRAMA_DAY_COLORS = {
+  VENCIDO: "bg-red-100 border-red-200",
+  PENDENTE: "bg-blue-100 border-blue-200",
+  PAGO: "bg-emerald-100 border-emerald-200",
+  CANCELADO: "bg-slate-100 border-slate-200",
+};
+
+function getDayDominantStatus(dayData) {
+  const statuses = new Set((dayData?.items || []).map((p) => p.timelineStatus));
+  return CRONOGRAMA_STATUS_PRIORITY.find((s) => statuses.has(s)) || null;
+}
+
+function renderCronogramaCalendarLegend() {
+  return `
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 px-1">
+      ${CRONOGRAMA_STATUS_PRIORITY.map((status) => `
+        <div class="flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full ${TIMELINE_STATUS[status].dot}"></span>
+          <span class="text-[10px] font-bold text-slate-500">${TIMELINE_STATUS[status].label}</span>
+        </div>
+      `).join("")}
+    </div>`;
+}
+
+function renderCronogramaCalendar(days, firstOfMonth, lastOfMonth) {
+  const body = document.getElementById("cronogramaCalendarBody");
+  if (!body) return;
+
+  const dayMap = new Map();
+  (days || []).forEach((d) => {
+    const key = new Date(d.date).toDateString();
+    dayMap.set(key, d);
+  });
+
+  const weekdayNames = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const header = weekdayNames.map((w) => `
+    <div class="text-center text-[11px] font-black uppercase tracking-wide text-slate-500 py-2 bg-slate-50 border border-slate-100">${w}</div>
+  `).join("");
+
+  const cells = [];
+  const leadingBlanks = firstOfMonth.getDay();
+  for (let i = 0; i < leadingBlanks; i++) {
+    cells.push(`<div class="border border-transparent min-h-[92px]"></div>`);
+  }
+
+  const totalDays = lastOfMonth.getDate();
+  const todayKey = new Date().toDateString();
+  for (let d = 1; d <= totalDays; d++) {
+    const cellDate = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), d);
+    const key = cellDate.toDateString();
+    const dayData = dayMap.get(key);
+    const hasPayments = Boolean(dayData?.items?.length);
+    const isToday = key === todayKey;
+    const cur = dayData?.currency === "MIXED" ? "AOA" : (dayData?.currency || "AOA");
+
+    const dominantStatus = hasPayments ? getDayDominantStatus(dayData) : null;
+    const bgClass = dominantStatus ? CRONOGRAMA_DAY_COLORS[dominantStatus] : "bg-white border-slate-100";
+    const ringClass = isToday ? "ring-2 ring-emerald-500 ring-inset" : "";
+
+    const statusMeta = dominantStatus ? TIMELINE_STATUS[dominantStatus] : null;
+    const statusBadge = statusMeta ? `
+      <span class="inline-flex items-center gap-1 mt-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${statusMeta.badge}">
+        <span class="w-1.5 h-1.5 rounded-full ${statusMeta.dot}"></span>${statusMeta.label}
+      </span>` : "";
+
+    const valueHtml = hasPayments ? `
+      <p class="text-[10px] font-bold text-slate-600 mt-1 leading-tight">Valor a pagar:</p>
+      <p class="text-xs font-black text-slate-900 leading-tight">${formatCurrency(dayData.totalBudgeted, cur)}</p>
+      ${statusBadge}
+    ` : "";
+
+    cells.push(`
+      <button type="button" ${hasPayments ? `onclick="openCronogramaDayDetails('${key}')"` : ""}
+        class="min-h-[92px] p-2 text-left border ${bgClass} ${ringClass} flex flex-col ${hasPayments ? "cursor-pointer hover:brightness-95" : "cursor-default"} transition-all">
+        <span class="text-xs font-black text-slate-700">${String(d).padStart(2, "0")}</span>
+        ${valueHtml}
+      </button>
+    `);
+  }
+
+  body.innerHTML = `
+    ${renderCronogramaCalendarLegend()}
+    <div class="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+      ${header}
+      ${cells.join("")}
+    </div>
+  `;
+
+  cronogramaCalendarDayMap = dayMap;
+}
+
+window.openCronogramaDayDetails = function (dayKey) {
+  const dayData = cronogramaCalendarDayMap.get(dayKey);
+  if (!dayData?.items?.length) return;
+  if (dayData.items.length === 1) {
+    openPaymentAside(dayData.items[0], "VIEW");
+    return;
+  }
+  openCronogramaDayListModal(dayKey, dayData);
+};
+
+function openCronogramaDayListModal(dayKey, dayData) {
+  const label = document.getElementById("cronogramaDayLabel");
+  const body = document.getElementById("cronogramaDayListBody");
+  if (label) label.textContent = `${formatTimelineDayLabel(dayKey)} · ${dayData.items.length} pagamento(s)`;
+
+  if (body) {
+    body.innerHTML = dayData.items.map((p) => {
+      const meta = TIMELINE_STATUS[p.timelineStatus] || TIMELINE_STATUS.PENDENTE;
+      const cur = p.costCenter?.currency || "AOA";
+      return `
+        <button type="button" onclick="openCronogramaDayItem('${dayKey}', '${p.id}')"
+          class="w-full text-left flex items-center gap-3 p-3 rounded-xl border ${meta.border} bg-white hover:bg-slate-50 transition-colors">
+          <div class="w-2 h-2 rounded-full shrink-0 ${meta.dot}"></div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-900 truncate">${(p.description || "—").replace(/</g, "&lt;")}</p>
+            <p class="text-[10px] text-slate-500 truncate">${(p.supplier || "Sem fornecedor").replace(/</g, "&lt;")} · ${p.costCenter?.code || "—"}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(p.budgetedAmount, cur)}</p>
+            <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${meta.badge}">${meta.label}</span>
+          </div>
+        </button>`;
+    }).join("");
+  }
+
+  document.getElementById("modalCronogramaDay").classList.add("open");
+}
+
+window.openCronogramaDayItem = function (dayKey, paymentId) {
+  const dayData = cronogramaCalendarDayMap.get(dayKey);
+  const payment = dayData?.items?.find((p) => p.id === paymentId);
+  document.getElementById("modalCronogramaDay").classList.remove("open");
+  if (payment) openPaymentAside(payment, "VIEW");
+};
+
+function renderCronogramaList(days) {
+  const tbody = document.getElementById("cronogramaTableBody");
+  if (!tbody) return;
+
+  const needRows = cronogramaPendingNeeds.map((n) => {
+    const qty = Number(n.quantity) || 0;
+    const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
+    const hours = Number(n.hours) || 1;
+    const totalObra = qty * price * hours;
+    const currency = n.costCenter?.currency || "AOA";
+    return `
+      <tr class="bg-amber-50/30">
+        <td class="text-xs font-bold text-amber-600 w-28">A definir</td>
+        <td class="font-medium text-slate-900 max-w-xs truncate" title="${n.description.replace(/"/g, "&quot;")}">${n.description}</td>
+        <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${n.costCenter?.name || ""}</td>
+        <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, currency)}</td>
+        <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Aguardar parcelamento</span></td>
+        <td class="text-center">
+          <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra}, '${currency}')" title="Definir Cronograma"
+            class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center hover:bg-amber-200 text-amber-600 border border-amber-200">
+            <span class="material-symbols-outlined text-base">calendar_month</span>
+          </button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  const paymentRows = renderGroupedListRows(days);
+
+  if (!needRows && !paymentRows) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><span class="material-symbols-outlined text-3xl">schedule</span><p class="text-sm font-semibold">Nenhum item ou pagamento agendado</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = needRows + paymentRows;
 }
 
 let currentCronogramaTotal = 0;
@@ -1030,154 +995,33 @@ async function submitCronograma(e) {
 // ── Form Cronograma Edition ──────────────────────────────────────────────────
 window.editCronograma = function (pay) {
   if (typeof pay === "string") pay = JSON.parse(pay);
-
-  // Abre o modal de lançamento mas adaptado para o contexto de edição do cronograma
+  openPayModal(pay);
   document.getElementById("modalPayTitle").textContent = "Editar Parcela do Cronograma";
-  document.getElementById("payId").value = pay?.id || "";
-  document.getElementById("payCCId").value = pay?.costCenterId || "";
-  document.getElementById("payCC").value = pay?.costCenterId || "";
-  document.getElementById("payDoc").value = pay?.docNumber || "";
-  document.getElementById("payDate").value = pay?.paymentDate ? pay.paymentDate.substring(0, 10) : new Date().toISOString().substring(0, 10);
-  document.getElementById("paySupplier").value = pay?.supplier || "";
-  document.getElementById("payDesc").value = pay?.description || "";
-  document.getElementById("payCat").value = pay?.category || "MATERIAL";
-  document.getElementById("payType").value = pay?.paymentType || "PRONTO_PAGAMENTO";
-  document.getElementById("payBudgeted").value = pay?.budgetedAmount || "";
-  document.getElementById("payPaid").value = pay?.paidAmount || "";
-  document.getElementById("payMethod").value = pay?.paymentMethod || "";
-  document.getElementById("payWeek").value = pay?.week || "";
-  document.getElementById("payStatus").value = pay?.status || "PENDENTE";
-  document.getElementById("payNotes").value = pay?.notes || "";
-  document.getElementById("modalPay").classList.add("open");
 }
-let currentGanttDate = new Date();
-let currentGanttPayments = [];
 
 window.toggleCronogramaView = function (view) {
+  cronogramaViewMode = view;
   const btnList = document.getElementById("btnViewList");
-  const btnGantt = document.getElementById("btnViewGantt");
+  const btnCalendar = document.getElementById("btnViewCalendar");
   const listContainer = document.getElementById("cronogramaListContainer");
-  const ganttContainer = document.getElementById("cronogramaGanttContainer");
+  const calendarContainer = document.getElementById("cronogramaCalendarContainer");
+
+  const activeClass = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm";
+  const inactiveClass = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900";
 
   if (view === "list") {
-    btnList.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm";
-    btnGantt.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900";
+    btnList.className = activeClass;
+    btnCalendar.className = inactiveClass;
     listContainer.classList.remove("hidden");
-    ganttContainer.classList.add("hidden");
+    calendarContainer.classList.add("hidden");
   } else {
-    btnGantt.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all bg-white text-slate-900 shadow-sm";
-    btnList.className = "flex items-center gap-2 px-4 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-500 hover:text-slate-900";
+    btnCalendar.className = activeClass;
+    btnList.className = inactiveClass;
     listContainer.classList.add("hidden");
-    ganttContainer.classList.remove("hidden");
-    loadGanttData();
+    calendarContainer.classList.remove("hidden");
+    loadCronogramaCalendar();
   }
 };
-
-window.changeGanttMonth = function (delta) {
-  currentGanttDate.setMonth(currentGanttDate.getMonth() + delta);
-  renderGanttChart();
-};
-
-async function loadGanttData() {
-  if (!selectedProject) return;
-  const ganttBody = document.getElementById("ganttChartBody");
-  ganttBody.innerHTML = `<div class="p-8 text-center"><div class="spinner mx-auto mb-2"></div><p class="text-xs text-slate-400 font-bold">A carregar cronograma...</p></div>`;
-
-  try {
-    // Busca todos os pagamentos para construir o gantt (ou podiamos filtrar por mês se tivéssemos essa query)
-    const params = new URLSearchParams({ pageSize: "500" });
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments?${params}`);
-    currentGanttPayments = data.items || [];
-    renderGanttChart();
-  } catch (err) {
-    ganttBody.innerHTML = `<div class="p-8 text-center text-red-500 text-sm font-bold">Erro: ${err.message}</div>`;
-  }
-}
-
-function renderGanttChart() {
-  const ganttBody = document.getElementById("ganttChartBody");
-  const monthLabel = document.getElementById("ganttMonthLabel");
-
-  if (ganttBody) {
-    ganttBody.style.minWidth = "1200px";
-  }
-
-  const year = currentGanttDate.getFullYear();
-  const month = currentGanttDate.getMonth();
-
-  // Nomes dos meses
-  const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  if (monthLabel) monthLabel.textContent = `${monthNames[month]} ${year}`;
-
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  // Filtra pagamentos do mês atual
-  const paymentsThisMonth = currentGanttPayments.filter(p => {
-    const d = new Date(p.paymentDate);
-    return d.getFullYear() === year && d.getMonth() === month;
-  }).sort((a, b) => new Date(a.paymentDate) - new Date(b.paymentDate));
-
-  if (paymentsThisMonth.length === 0) {
-    ganttBody.innerHTML = `<div class="py-16 text-center flex flex-col items-center justify-center bg-slate-50 flex-1"><span class="material-symbols-outlined text-4xl text-slate-300 mb-2">event_busy</span><p class="text-sm font-bold text-slate-500">Sem pagamentos agendados para este mês.</p></div>`;
-    return;
-  }
-
-  // HEADER: Dias do Mês
-  let daysHeaderHtml = `<div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-10 text-[10px] font-bold text-slate-500">`;
-  daysHeaderHtml += `<div class="w-64 shrink-0 px-4 py-2 border-r border-slate-200 flex items-center uppercase tracking-wide">Descrição do Lançamento</div>`;
-  for (let d = 1; d <= daysInMonth; d++) {
-    const isWeekend = [0, 6].includes(new Date(year, month, d).getDay());
-    const bgClass = isWeekend ? 'bg-slate-100' : '';
-    daysHeaderHtml += `<div class="flex-1 min-w-[28px] border-r border-slate-200 py-2 text-center ${bgClass}">${d}</div>`;
-  }
-  daysHeaderHtml += `</div>`;
-
-  // BODY: Linhas de pagamentos
-  let rowsHtml = `<div class="flex-1 overflow-y-auto custom-scroll flex flex-col relative bg-white pb-4">`;
-
-  // Grid Lines (Background)
-  rowsHtml += `<div class="absolute inset-0 flex pointer-events-none">`;
-  rowsHtml += `<div class="w-64 shrink-0 border-r border-slate-200 bg-white z-10"></div>`;
-  for (let d = 1; d <= daysInMonth; d++) {
-    const isWeekend = [0, 6].includes(new Date(year, month, d).getDay());
-    const bgClass = isWeekend ? 'bg-slate-50/50' : 'bg-transparent';
-    rowsHtml += `<div class="flex-1 min-w-[28px] border-r border-slate-100 ${bgClass}"></div>`;
-  }
-  rowsHtml += `</div>`;
-
-  // Rows Content
-  paymentsThisMonth.forEach(p => {
-    const d = new Date(p.paymentDate);
-    const day = d.getDate();
-
-    let colorClass = "bg-blue-400 border-blue-500 shadow-blue-400/20"; // PENDENTE
-    if (p.status === "CONFIRMADO") colorClass = "bg-emerald-400 border-emerald-500 shadow-emerald-400/20";
-    else if (d < new Date() && p.status !== "CONFIRMADO") colorClass = "bg-red-400 border-red-500 shadow-red-400/20"; // ATRASADO
-
-    const pctLeft = ((day - 1) / daysInMonth) * 100;
-
-    rowsHtml += `
-      <div class="flex items-center relative z-20 group hover:bg-slate-50/50 border-b border-slate-50 transition-colors h-12">
-        <div class="w-64 shrink-0 px-4 py-3 flex flex-col justify-center bg-white border-r border-slate-200 z-10">
-          <p class="text-xs font-bold text-slate-800 truncate" title="${p.description}">${p.description}</p>
-          <p class="text-[10px] text-slate-400 font-semibold truncate">${p.supplier || 'Sem fornecedor'} · ${formatCurrency(p.budgetedAmount, "AOA")}</p>
-        </div>
-        <div class="flex-1 relative h-full">
-          <!-- Marker/Barra do Gantt -->
-          <div class="absolute top-1/2 -translate-y-1/2 h-6 rounded-md shadow-sm border text-[10px] font-bold text-white flex items-center justify-center overflow-hidden cursor-pointer hover:-translate-y-2 transition-transform duration-300 z-30 group-hover:z-40 ${colorClass}" 
-               style="left: calc(${pctLeft}% + 4px); width: calc(${100 / daysInMonth}% - 8px); min-width: 20px;" 
-               title="${p.description}\nData: ${d.toLocaleDateString('pt-PT')}\nValor: ${formatCurrency(p.budgetedAmount, "AOA")}"
-               onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(p).replace(/'/g, "&#39;")}' data-type="VIEW">
-               ${p.status === 'CONFIRMADO' ? '<span class="material-symbols-outlined text-[12px]">check</span>' : ''}
-          </div>
-        </div>
-      </div>
-    `;
-  });
-  rowsHtml += `</div>`;
-
-  ganttBody.innerHTML = daysHeaderHtml + rowsHtml;
-}
 
 // ── Send to Cronograma Functions ────────────────────────────────────────────────
 window.sendToCronograma = async function (id, ccId) {
@@ -1244,9 +1088,6 @@ function bindEvents() {
   // New CC button
   document.getElementById("newCCBtn").addEventListener("click", () => openCCModal());
 
-  // Seed default CCs
-  document.getElementById("seedCCBtn").addEventListener("click", seedCCs);
-
   // New Need button
   document.getElementById("newNeedBtn").addEventListener("click", () => openNeedModal());
 
@@ -1256,13 +1097,23 @@ function bindEvents() {
   // New Payment button
   document.getElementById("newPayBtn").addEventListener("click", () => openPayModal());
 
-  ["globalProjFilter", "globalStatusFilter", "globalWeekFilter"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", () => {
-      globalPayPage = 1;
-      loadGlobalPayments();
-      loadGlobalWeeklySummary();
-    });
+  document.getElementById("paySupplier")?.addEventListener("input", resolvePaySupplierFromText);
+
+  document.getElementById("globalProjFilter")?.addEventListener("change", loadGlobalPaymentTimeline);
+
+  let globalTimelineSearchTimer;
+  document.getElementById("globalTimelineSearch")?.addEventListener("input", () => {
+    clearTimeout(globalTimelineSearchTimer);
+    globalTimelineSearchTimer = setTimeout(loadGlobalPaymentTimeline, 300);
   });
+  document.getElementById("globalTimelineStatus")?.addEventListener("change", loadGlobalPaymentTimeline);
+
+  let cronogramaSearchTimer;
+  document.getElementById("cronogramaSearch")?.addEventListener("input", () => {
+    clearTimeout(cronogramaSearchTimer);
+    cronogramaSearchTimer = setTimeout(loadCronograma, 300);
+  });
+  document.getElementById("cronogramaStatusFilter")?.addEventListener("change", loadCronograma);
 
   // Filters
   ["needsCCFilter", "needsStatusFilter"].forEach((id) =>
@@ -1280,10 +1131,40 @@ function bindEvents() {
   document.getElementById("formCC").addEventListener("submit", submitCC);
   document.getElementById("formNeed").addEventListener("submit", submitNeed);
   document.getElementById("formPay").addEventListener("submit", submitPay);
+
+  // Fundo de Maneio
+  document.getElementById("newFundBtn")?.addEventListener("click", () => {
+    document.getElementById("formFund").reset();
+    document.getElementById("fundCurrency").value = "AOA";
+    document.getElementById("modalFund").classList.add("open");
+  });
+  document.getElementById("formFund")?.addEventListener("submit", submitFund);
+  document.getElementById("fundReloadBtn")?.addEventListener("click", () => openFundMovementModal());
+  document.getElementById("formFundMovement")?.addEventListener("submit", submitFundMovement);
+  document.getElementById("fundAddCardBtn")?.addEventListener("click", () => openFundCardModal());
+  document.getElementById("formFundCard")?.addEventListener("submit", submitFundCard);
+
+  // Pedidos Extra
+  document.getElementById("newExtraBtn")?.addEventListener("click", () => openExtraModal("OBRA"));
+  document.getElementById("newGlobalExtraBtn")?.addEventListener("click", () => openExtraModal("GERAL"));
+  document.getElementById("formExtra")?.addEventListener("submit", submitExtra);
+  document.getElementById("extraSource")?.addEventListener("change", toggleExtraFundRow);
+  document.getElementById("extraFundId")?.addEventListener("change", populateExtraCardOptions);
+  document.getElementById("extrasStatusFilter")?.addEventListener("change", loadExtras);
+  document.getElementById("globalExtrasStatusFilter")?.addEventListener("change", loadGlobalExtras);
+  document.getElementById("formAddQuote")?.addEventListener("submit", (e) =>
+    submitQuoteForm(e, {
+      apiRequest,
+      apiUpload,
+      showToast,
+      suppliers: currentSuppliers,
+      openProformaViewer: window.openProformaViewer,
+    })
+  );
   document.getElementById("formCronograma").addEventListener("submit", submitCronograma);
 
   // Close modals on overlay click
-  ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma", "modalImportExcel"].forEach((id) => {
+  ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma", "modalImportExcel", "modalQuote"].forEach((id) => {
     document.getElementById(id).addEventListener("click", (e) => {
       if (e.target === e.currentTarget) e.currentTarget.classList.remove("open");
     });
@@ -1339,18 +1220,6 @@ async function submitCC(e) {
     }
     document.getElementById("modalCC").classList.remove("open");
     await Promise.all([loadCostCenters(), loadSummary()]);
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-}
-
-async function seedCCs() {
-  if (!confirm("Criar centros de custo padrão para esta obra?")) return;
-  try {
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/seed`, { method: "POST" });
-    showToast(`${data.created} centros de custo criados`, "success");
-    await Promise.all([loadCostCenters(), loadSummary()]);
-    switchTab("centros");
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1418,6 +1287,7 @@ window.addNeedRow = function (need = null) {
       <select class="row-status w-full h-8 px-1 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
         <option value="PENDING" ${(!need || need?.status === 'PENDING') ? 'selected' : ''}>Pendente</option>
         <option value="IN_QUOTATION" ${need?.status === 'IN_QUOTATION' ? 'selected' : ''}>Em Cotação</option>
+        <option value="ORDERED" ${need?.status === 'ORDERED' ? 'selected' : ''}>Encomenda</option>
         <option value="APPROVED" ${need?.status === 'APPROVED' ? 'selected' : ''}>Aprovado</option>
         <option value="REJECTED" ${need?.status === 'REJECTED' ? 'selected' : ''}>Rejeitado</option>
         <option value="PAID" ${need?.status === 'PAID' ? 'selected' : ''}>Pago</option>
@@ -1502,20 +1372,71 @@ async function submitNeed(e) {
   }
 }
 
-window.sendToQuotation = async function (id, ccId) {
-  try {
-    showToast("A enviar para cotação...", "info");
-    // Muda o status para IN_QUOTATION
-    await apiRequest(`/cost-centers/${ccId}/needs/${id}`, {
-      method: "PATCH",
-      body: { status: "IN_QUOTATION" }
-    });
-
-    // Redireciona para a página de Cotação com o ID da obra na query string
-    // window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
-  } catch (err) {
-    showToast("Erro ao preparar cotação: " + err.message, "error");
+window.openPrecificarModal = async function (needId, ccId) {
+  let need = cachedNeeds.find((n) => n.id === needId);
+  if (!need) {
+    showToast("Item não encontrado. Recarregue a lista.", "error");
+    return;
   }
+
+  try {
+    if (need.status === "PENDING") {
+      await apiRequest(`/cost-centers/${ccId}/needs/${needId}`, {
+        method: "PATCH",
+        body: { status: "IN_QUOTATION" },
+      });
+      need = { ...need, status: "IN_QUOTATION" };
+      cachedNeeds = cachedNeeds.map((n) => (n.id === needId ? need : n));
+    }
+
+    if (!currentSuppliers.length) {
+      const data = await apiRequest("/suppliers");
+      currentSuppliers = data.items || [];
+    }
+
+    need.project = selectedProject
+      ? { id: selectedProject.id, name: selectedProject.name, code: selectedProject.code }
+      : need.project;
+
+    window.onQuoteApproved = async () => {
+      await loadNeeds();
+      await loadSummary();
+    };
+    window.showQuoteToast = showToast;
+
+    await openQuotePricingModal({
+      need,
+      suppliers: currentSuppliers,
+      apiRequest,
+      openProformaViewer: window.openProformaViewer,
+    });
+  } catch (err) {
+    showToast("Erro ao abrir precificação: " + err.message, "error");
+  }
+};
+
+window.openProformaViewer = function (url) {
+  const iframe = document.getElementById("sideViewerIframe");
+  const loading = document.getElementById("sideViewerLoading");
+  const downloadBtn = document.getElementById("sideViewerDownloadBtn");
+  if (!iframe) return window.open(url, "_blank");
+  iframe.classList.add("hidden");
+  if (loading) loading.style.display = "flex";
+  iframe.src = url;
+  if (downloadBtn) downloadBtn.href = url;
+  document.getElementById("sideViewerOverlay")?.classList.remove("opacity-0", "pointer-events-none");
+  const panel = document.getElementById("sideViewerPanel");
+  if (panel) panel.style.transform = "translateX(0)";
+};
+
+window.closeProformaViewer = function () {
+  document.getElementById("sideViewerOverlay")?.classList.add("opacity-0", "pointer-events-none");
+  const panel = document.getElementById("sideViewerPanel");
+  if (panel) panel.style.transform = "translateX(100%)";
+  setTimeout(() => {
+    const iframe = document.getElementById("sideViewerIframe");
+    if (iframe) iframe.src = "";
+  }, 300);
 };
 
 window.sendAllToQuotation = async function () {
@@ -1547,14 +1468,46 @@ window.sendAllToQuotation = async function () {
 };
 
 // ── Pay Modal ──────────────────────────────────────────────────────────────────
-function openPayModal(pay = null) {
+
+// Fase 4: relação explícita Custo ↔ Pagamento ↔ Fornecedor. O campo de texto
+// "Fornecedor" permanece livre (retrocompatibilidade), mas quando o nome
+// corresponde a um fornecedor registado, associamos o supplierId (FK).
+async function ensureSuppliersLoadedForPay() {
+  if (!currentSuppliers.length) {
+    try {
+      const data = await apiRequest("/suppliers");
+      currentSuppliers = data.items || [];
+    } catch (err) {
+      console.error("Erro ao carregar fornecedores:", err);
+    }
+  }
+  const datalist = document.getElementById("paySupplierDatalist");
+  if (datalist) {
+    datalist.innerHTML = currentSuppliers
+      .map((s) => `<option value="${(s.name || "").replace(/"/g, "&quot;")}"></option>`)
+      .join("");
+  }
+}
+
+function resolvePaySupplierFromText() {
+  const input = document.getElementById("paySupplier");
+  const hiddenId = document.getElementById("paySupplierId");
+  const hint = document.getElementById("paySupplierHint");
+  const name = (input?.value || "").trim().toLowerCase();
+  const match = name ? currentSuppliers.find((s) => (s.name || "").trim().toLowerCase() === name) : null;
+  if (hiddenId) hiddenId.value = match ? match.id : "";
+  if (hint) hint.classList.toggle("hidden", !match);
+}
+
+async function openPayModal(pay = null) {
   document.getElementById("modalPayTitle").textContent = pay ? "Editar Lançamento" : "Novo Lançamento";
   document.getElementById("payId").value = pay?.id || "";
   document.getElementById("payCCId").value = pay?.costCenterId || "";
   document.getElementById("payCC").value = pay?.costCenterId || "";
   document.getElementById("payDoc").value = pay?.docNumber || "";
   document.getElementById("payDate").value = pay?.paymentDate ? pay.paymentDate.substring(0, 10) : new Date().toISOString().substring(0, 10);
-  document.getElementById("paySupplier").value = pay?.supplier || "";
+  document.getElementById("paySupplier").value = pay?.supplierName || pay?.supplier || "";
+  document.getElementById("paySupplierId").value = pay?.supplierId || "";
   document.getElementById("payDesc").value = pay?.description || "";
   document.getElementById("payCat").value = pay?.category || "MATERIAL";
   document.getElementById("payType").value = pay?.paymentType || "PRONTO_PAGAMENTO";
@@ -1565,6 +1518,9 @@ function openPayModal(pay = null) {
   document.getElementById("payStatus").value = pay?.status || "PENDENTE";
   document.getElementById("payNotes").value = pay?.notes || "";
   document.getElementById("modalPay").classList.add("open");
+
+  await ensureSuppliersLoadedForPay();
+  resolvePaySupplierFromText();
 }
 
 window.editPay = function (pay) {
@@ -1626,6 +1582,7 @@ async function submitPay(e) {
     docNumber: document.getElementById("payDoc").value.trim() || null,
     paymentDate: payDateVal ? new Date(payDateVal).toISOString() : new Date().toISOString(),
     supplier: document.getElementById("paySupplier").value.trim() || null,
+    supplierId: document.getElementById("paySupplierId").value || null,
     description: document.getElementById("payDesc").value.trim(),
     category: document.getElementById("payCat").value,
     paymentType: document.getElementById("payType").value,
@@ -1651,6 +1608,388 @@ async function submitPay(e) {
     showToast("Erro: " + err.message, "error");
   }
 }
+
+// ── Fase 7/8: Fundo de Maneio ────────────────────────────────────────────────
+async function loadFunds() {
+  if (!selectedProject) return;
+  const grid = document.getElementById("fundsGrid");
+  grid.innerHTML = `<div class="spinner my-8"></div>`;
+  try {
+    const data = await apiRequest(`/petty-cash/funds?projectId=${selectedProject.id}`);
+    currentFunds = data.items || [];
+    renderFundsGrid();
+    if (currentFunds.length > 0) {
+      const stillExists = currentFunds.find((f) => f.id === selectedFundId);
+      await selectFund(stillExists ? selectedFundId : currentFunds[0].id);
+    } else {
+      selectedFundId = null;
+      document.getElementById("fundDetailPanel").classList.add("hidden");
+    }
+  } catch (err) {
+    grid.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold col-span-full">${err.message}</p>`;
+  }
+}
+
+function renderFundsGrid() {
+  const grid = document.getElementById("fundsGrid");
+  if (currentFunds.length === 0) {
+    grid.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
+      <span class="material-symbols-outlined text-4xl mb-2">account_balance_wallet</span>
+      <p class="text-sm font-semibold">Nenhum Fundo de Maneio criado para esta obra</p>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = currentFunds
+    .map((f) => {
+      const active = f.id === selectedFundId;
+      return `<button onclick="window.selectFundHandler('${f.id}')"
+        class="text-left p-4 rounded-2xl border transition-all ${active ? "border-emerald-500 bg-emerald-50 shadow-md" : "border-slate-100 bg-white hover:border-emerald-200"}">
+        <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">${f.name}</p>
+        <p class="text-2xl font-bold text-slate-900 mt-1">${formatCurrency(f.currentBalance, f.currency)}</p>
+        <p class="text-[11px] text-slate-400 mt-1">${(f.cards || []).length} cartão(ões) · saldo disponível</p>
+      </button>`;
+    })
+    .join("");
+}
+
+window.selectFundHandler = function (id) {
+  selectFund(id);
+};
+
+async function selectFund(fundId) {
+  selectedFundId = fundId;
+  renderFundsGrid();
+  const panel = document.getElementById("fundDetailPanel");
+  panel.classList.remove("hidden");
+  document.getElementById("fundMovementsBody").innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
+  try {
+    const data = await apiRequest(`/petty-cash/funds/${fundId}?pageSize=30`);
+    const fund = data.fund;
+    document.getElementById("fundDetailName").textContent = `${fund.name} · ${formatCurrency(fund.currentBalance, fund.currency)}`;
+
+    const cardsRow = document.getElementById("fundCardsRow");
+    cardsRow.innerHTML =
+      (fund.cards || [])
+        .map(
+          (c) =>
+            `<span class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-sm">credit_card</span>${c.label}${c.lastDigits ? ` •••• ${c.lastDigits}` : ""}
+            </span>`
+        )
+        .join("") || `<span class="text-xs text-slate-400">Sem cartões associados</span>`;
+
+    const movements = data.movements.items || [];
+    document.getElementById("fundMovementsBody").innerHTML =
+      movements
+        .map((m) => {
+          const typeColor = m.type === "DEBITO" ? "text-red-600" : m.type === "CREDITO" ? "text-emerald-600" : "text-amber-600";
+          const sign = m.type === "DEBITO" ? "-" : "+";
+          return `<tr>
+            <td class="text-xs text-slate-500">${formatDateBR(m.createdAt)}</td>
+            <td class="text-xs font-bold ${typeColor}">${m.type}</td>
+            <td class="text-xs text-slate-500">${m.card?.label || "—"}</td>
+            <td class="text-xs text-slate-700">${m.description}</td>
+            <td class="text-xs font-bold ${typeColor} text-right">${sign}${formatCurrency(m.amount, fund.currency)}</td>
+            <td class="text-xs text-slate-500 text-right">${formatCurrency(m.balanceAfter, fund.currency)}</td>
+          </tr>`;
+        })
+        .join("") ||
+      `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">Sem movimentações registadas</td></tr>`;
+  } catch (err) {
+    showToast("Erro ao carregar fundo: " + err.message, "error");
+  }
+}
+
+async function submitFund(e) {
+  e.preventDefault();
+  if (!selectedProject) return;
+  const body = {
+    projectId: selectedProject.id,
+    name: document.getElementById("fundName").value.trim(),
+    initialBalance: parseFloat(document.getElementById("fundInitialBalance").value) || 0,
+    currency: document.getElementById("fundCurrency").value.trim() || "AOA",
+    notes: document.getElementById("fundNotes").value.trim() || null,
+  };
+  try {
+    await apiRequest("/petty-cash/funds", { method: "POST", body });
+    showToast("Fundo de Maneio criado", "success");
+    document.getElementById("modalFund").classList.remove("open");
+    await loadFunds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+function openFundMovementModal() {
+  if (!selectedFundId) {
+    showToast("Seleciona um Fundo de Maneio primeiro", "warning");
+    return;
+  }
+  document.getElementById("formFundMovement").reset();
+  document.getElementById("fundMovementFundId").value = selectedFundId;
+  const fund = currentFunds.find((f) => f.id === selectedFundId);
+  const cardSelect = document.getElementById("fundMovementCard");
+  cardSelect.innerHTML =
+    `<option value="">— Sem cartão —</option>` +
+    (fund?.cards || []).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+  document.getElementById("modalFundMovement").classList.add("open");
+}
+
+async function submitFundMovement(e) {
+  e.preventDefault();
+  const fundId = document.getElementById("fundMovementFundId").value;
+  const body = {
+    type: document.getElementById("fundMovementType").value,
+    cardId: document.getElementById("fundMovementCard").value || null,
+    amount: parseFloat(document.getElementById("fundMovementAmount").value) || 0,
+    description: document.getElementById("fundMovementDesc").value.trim(),
+  };
+  try {
+    await apiRequest(`/petty-cash/funds/${fundId}/movements`, { method: "POST", body });
+    showToast("Movimentação registada", "success");
+    document.getElementById("modalFundMovement").classList.remove("open");
+    await loadFunds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+function openFundCardModal() {
+  if (!selectedFundId) {
+    showToast("Seleciona um Fundo de Maneio primeiro", "warning");
+    return;
+  }
+  document.getElementById("formFundCard").reset();
+  document.getElementById("fundCardFundId").value = selectedFundId;
+  document.getElementById("modalFundCard").classList.add("open");
+}
+
+async function submitFundCard(e) {
+  e.preventDefault();
+  const fundId = document.getElementById("fundCardFundId").value;
+  const body = {
+    label: document.getElementById("fundCardLabel").value.trim(),
+    lastDigits: document.getElementById("fundCardLastDigits").value.trim() || null,
+  };
+  try {
+    await apiRequest(`/petty-cash/funds/${fundId}/cards`, { method: "POST", body });
+    showToast("Cartão adicionado", "success");
+    document.getElementById("modalFundCard").classList.remove("open");
+    await loadFunds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+// ── Fase 7/8: Pedidos Extra (Obra) ───────────────────────────────────────────
+const EXTRA_STATUS_STYLES = {
+  PENDENTE: "bg-amber-100 text-amber-700",
+  APROVADO: "bg-blue-100 text-blue-700",
+  PAGO: "bg-emerald-100 text-emerald-700",
+  REJEITADO: "bg-red-100 text-red-700",
+  CANCELADO: "bg-slate-100 text-slate-500",
+};
+const EXTRA_STATUS_LABELS = {
+  PENDENTE: "Pendente",
+  APROVADO: "Aprovado",
+  PAGO: "Pago",
+  REJEITADO: "Rejeitado",
+  CANCELADO: "Cancelado",
+};
+
+async function loadExtras() {
+  if (!selectedProject) return;
+  const tbody = document.getElementById("extrasTableBody");
+  tbody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
+  const status = document.getElementById("extrasStatusFilter")?.value || "";
+  try {
+    const params = new URLSearchParams({ type: "OBRA", projectId: selectedProject.id, pageSize: "100" });
+    if (status) params.set("status", status);
+    const data = await apiRequest(`/extra-requests?${params.toString()}`);
+    const items = data.items || [];
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400 text-xs">Nenhum pedido extra registado</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map((it) => renderExtraRow(it)).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
+
+// CAIXA/BANCO mantidos apenas para exibir correctamente pedidos antigos já
+// registados; o formulário actual só permite FUNDO_MANEIO/SOLICITACAO_TRANSFERENCIA.
+const EXTRA_SOURCE_LABELS = {
+  CAIXA: "Caixa",
+  BANCO: "Banco",
+  SOLICITACAO_TRANSFERENCIA: "Solicitação de Transferência",
+};
+
+function renderExtraRow(it) {
+  const sourceLabel =
+    it.paymentSource === "FUNDO_MANEIO"
+      ? `Fundo: ${it.fund?.name || "—"}`
+      : EXTRA_SOURCE_LABELS[it.paymentSource] || it.paymentSource;
+  const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${EXTRA_STATUS_STYLES[it.status] || ""}">${EXTRA_STATUS_LABELS[it.status] || it.status}</span>`;
+
+  const actions = [];
+  if (it.status === "PENDENTE") {
+    actions.push(`<button onclick="window.approveExtraHandler('${it.id}')" class="text-xs font-bold text-emerald-600 hover:underline">Aprovar</button>`);
+    actions.push(`<button onclick="window.rejectExtraHandler('${it.id}')" class="text-xs font-bold text-red-600 hover:underline">Rejeitar</button>`);
+  }
+  if (it.status === "APROVADO") {
+    actions.push(`<button onclick="window.payExtraHandler('${it.id}')" class="text-xs font-bold text-indigo-600 hover:underline">Pagar</button>`);
+  }
+  if (it.status === "PENDENTE" || it.status === "APROVADO") {
+    actions.push(`<button onclick="window.cancelExtraHandler('${it.id}')" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
+  }
+
+  return `<tr>
+    <td class="text-xs text-slate-500">${formatDateBR(it.createdAt)}</td>
+    <td class="text-xs font-semibold text-slate-700 max-w-[220px] truncate">${it.description}</td>
+    <td class="text-xs text-slate-500">${sourceLabel}</td>
+    <td class="text-xs font-bold text-slate-900 text-right">${formatCurrency(it.amount, it.currency)}</td>
+    <td class="text-xs text-slate-500">${it.requestedBy || "—"}</td>
+    <td class="text-center">${statusBadge}</td>
+    <td class="text-center"><div class="flex items-center justify-center gap-2">${actions.join("") || "—"}</div></td>
+  </tr>`;
+}
+
+function toggleExtraFundRow() {
+  const source = document.getElementById("extraSource").value;
+  document.getElementById("extraFundRow").classList.toggle("hidden", source !== "FUNDO_MANEIO");
+}
+
+async function ensureFundsLoadedForExtra(type) {
+  try {
+    const query = type === "OBRA" && selectedProject ? `?projectId=${selectedProject.id}` : "";
+    const data = await apiRequest(`/petty-cash/funds${query}`);
+    currentFunds = data.items || [];
+  } catch (err) {
+    console.error("Erro ao carregar fundos:", err);
+  }
+  const fundSelect = document.getElementById("extraFundId");
+  fundSelect.innerHTML =
+    `<option value="">Selecionar...</option>` +
+    currentFunds.map((f) => `<option value="${f.id}">${f.name} (${formatCurrency(f.currentBalance, f.currency)})</option>`).join("");
+  populateExtraCardOptions();
+}
+
+function populateExtraCardOptions() {
+  const fundId = document.getElementById("extraFundId").value;
+  const fund = currentFunds.find((f) => f.id === fundId);
+  const cardSelect = document.getElementById("extraCardId");
+  cardSelect.innerHTML =
+    `<option value="">— Sem cartão —</option>` +
+    (fund?.cards || []).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+}
+
+async function openExtraModal(type = "OBRA") {
+  document.getElementById("formExtra").reset();
+  document.getElementById("extraId").value = "";
+  document.getElementById("extraType").value = type;
+  document.getElementById("extraProjectId").value = type === "OBRA" ? selectedProject?.id || "" : "";
+  document.getElementById("modalExtraTitle").textContent = type === "OBRA" ? "Novo Pedido Extra da Obra" : "Novo Pedido Extra Geral";
+  toggleExtraFundRow();
+  await ensureFundsLoadedForExtra(type);
+  document.getElementById("modalExtra").classList.add("open");
+}
+
+async function submitExtra(e) {
+  e.preventDefault();
+  const source = document.getElementById("extraSource").value;
+  const type = document.getElementById("extraType").value || "OBRA";
+  const body = {
+    type,
+    projectId: document.getElementById("extraProjectId").value || null,
+    description: document.getElementById("extraDesc").value.trim(),
+    amount: parseFloat(document.getElementById("extraAmount").value) || 0,
+    paymentSource: source,
+    fundId: source === "FUNDO_MANEIO" ? document.getElementById("extraFundId").value || null : null,
+    cardId: source === "FUNDO_MANEIO" ? document.getElementById("extraCardId").value || null : null,
+    notes: document.getElementById("extraNotes").value.trim() || null,
+  };
+  try {
+    await apiRequest("/extra-requests", { method: "POST", body });
+    showToast("Pedido Extra criado", "success");
+    document.getElementById("modalExtra").classList.remove("open");
+    if (type === "OBRA") loadExtras();
+    else loadGlobalExtras();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+// ── Fase 7/8: Pedidos Extra Gerais (Visão Global) ────────────────────────────
+async function loadGlobalExtras() {
+  const tbody = document.getElementById("globalExtrasTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
+  const status = document.getElementById("globalExtrasStatusFilter")?.value || "";
+  try {
+    const params = new URLSearchParams({ type: "GERAL", pageSize: "100" });
+    if (status) params.set("status", status);
+    const data = await apiRequest(`/extra-requests?${params.toString()}`);
+    const items = data.items || [];
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400 text-xs">Nenhum pedido extra geral registado</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map((it) => renderExtraRow(it)).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
+
+function refreshExtrasLists() {
+  loadExtras();
+  loadGlobalExtras();
+}
+
+window.approveExtraHandler = async function (id) {
+  if (!confirm("Aprovar este Pedido Extra?")) return;
+  try {
+    await apiRequest(`/extra-requests/${id}/approve`, { method: "PATCH" });
+    showToast("Pedido aprovado", "success");
+    refreshExtrasLists();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+};
+
+window.rejectExtraHandler = async function (id) {
+  const reason = prompt("Motivo da rejeição (opcional):") || "";
+  try {
+    await apiRequest(`/extra-requests/${id}/reject`, { method: "PATCH", body: { reason } });
+    showToast("Pedido rejeitado", "success");
+    refreshExtrasLists();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+};
+
+window.payExtraHandler = async function (id) {
+  if (!confirm("Confirmar execução do pagamento deste Pedido Extra?")) return;
+  try {
+    await apiRequest(`/extra-requests/${id}/pay`, { method: "POST" });
+    showToast("Pedido pago", "success");
+    refreshExtrasLists();
+    if (document.getElementById("tab-fundomaneio")?.classList.contains("active")) loadFunds();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+};
+
+window.cancelExtraHandler = async function (id) {
+  if (!confirm("Cancelar este Pedido Extra?")) return;
+  try {
+    await apiRequest(`/extra-requests/${id}/cancel`, { method: "PATCH" });
+    showToast("Pedido cancelado", "success");
+    refreshExtrasLists();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+};
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
 function showToast(msg, type = "info") {
@@ -1913,10 +2252,68 @@ function updateTxKPIs(items) {
 
 }
 
-window.openLiquidateModal = function (txId, description, amount, ccId) {
-  document.getElementById("liqTxId").value = txId;
-  document.getElementById("liqDesc").textContent = description;
-  document.getElementById("liqCommitted").value = formatCurrency(amount, "AOA");
+// Indica se a liquidação em curso já tinha sido confirmada anteriormente
+// (reabertura do formulário apenas para anexar a fatura/substituir ficheiros).
+let liqAlreadyConfirmed = false;
+
+let _notificationRecipientsCache = null;
+async function fetchNotificationRecipients() {
+  if (_notificationRecipientsCache) return _notificationRecipientsCache;
+  try {
+    const data = await apiRequest("/users/notification-recipients");
+    _notificationRecipientsCache = data.items || [];
+  } catch {
+    _notificationRecipientsCache = [];
+  }
+  return _notificationRecipientsCache;
+}
+
+async function renderLiqRecipients(preSelectedIds) {
+  const list = document.getElementById("liqRecipientsList");
+  if (!list) return;
+  list.innerHTML = `<p class="text-xs text-slate-400 text-center py-3">A carregar utilizadores...</p>`;
+
+  const users = await fetchNotificationRecipients();
+  if (!users.length) {
+    list.innerHTML = `<p class="text-xs text-slate-400 text-center py-3">Sem utilizadores disponíveis.</p>`;
+    return;
+  }
+
+  const preSelected = new Set(preSelectedIds && preSelectedIds.length
+    ? preSelectedIds
+    : users.filter(u => u.isFinancialReceiver).map(u => u.id));
+
+  list.innerHTML = users.map(u => {
+    const checked = preSelected.has(u.id) ? "checked" : "";
+    const label = u.name || u.email || "Utilizador";
+    const badge = u.isFinancialReceiver
+      ? `<span class="text-[9px] font-black uppercase tracking-wide text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Receptor</span>`
+      : "";
+    return `
+      <label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white cursor-pointer transition-colors">
+        <input type="checkbox" class="liq-recipient-checkbox w-4 h-4 rounded accent-emerald-600" value="${u.id}" ${checked} />
+        <span class="text-xs font-semibold text-slate-700 flex-1 truncate">${label}</span>
+        ${badge}
+      </label>`;
+  }).join("");
+}
+
+function getSelectedLiqRecipientIds() {
+  return Array.from(document.querySelectorAll(".liq-recipient-checkbox:checked")).map(el => el.value);
+}
+
+window.openLiquidateModal = function (payment) {
+  // Retrocompatibilidade: aceita também a assinatura antiga (txId, description, amount, ccId).
+  const data = (payment && typeof payment === "object")
+    ? payment
+    : { id: arguments[0], description: arguments[1], budgetedAmount: arguments[2], costCenterId: arguments[3] };
+
+  const amount = data.paidAmount ?? data.budgetedAmount ?? data.amount ?? 0;
+  liqAlreadyConfirmed = data.status === "CONFIRMADO" || data.status === "PAID";
+
+  document.getElementById("liqTxId").value = data.id;
+  document.getElementById("liqDesc").textContent = data.description || "";
+  document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
   document.getElementById("liqAmount").value = amount;
 
   // Create or update a hidden field for ccId
@@ -1927,7 +2324,46 @@ window.openLiquidateModal = function (txId, description, amount, ccId) {
     ccInput.id = "liqCcId";
     document.getElementById("formLiq").appendChild(ccInput);
   }
-  ccInput.value = ccId;
+  ccInput.value = data.costCenterId;
+
+  const compInput = document.getElementById("liqComprovativo");
+  const compLabel = document.getElementById("liqComprovativoLabel");
+  const compHint = document.getElementById("liqComprovativoHint");
+  const title = document.getElementById("liqModalTitle");
+  const subtitle = document.getElementById("liqModalSubtitle");
+  const submitBtn = document.getElementById("liqSubmitBtn");
+
+  if (compInput) compInput.value = "";
+  const fatInput = document.getElementById("liqFatura");
+  if (fatInput) fatInput.value = "";
+
+  const recipientsSection = document.getElementById("liqRecipientsSection");
+
+  if (liqAlreadyConfirmed) {
+    // Já foi liquidado (comprovativo já existe). Reabertura serve tipicamente
+    // para anexar/substituir a fatura final — não obriga a re-enviar o comprovativo
+    // nem repete o envio de notificações (já disparadas na liquidação inicial).
+    compInput?.removeAttribute("required");
+    if (compLabel) compLabel.textContent = "Comprovativo (substituir, opcional)";
+    compHint?.classList.remove("hidden");
+    if (title) title.textContent = data.faturaUrl ? "Editar Liquidação" : "Anexar Fatura";
+    if (subtitle) subtitle.textContent = data.faturaUrl
+      ? "Atualiza documentos da liquidação"
+      : "Ainda não há fatura final — podes anexá-la agora";
+    if (submitBtn) submitBtn.textContent = "Guardar";
+    recipientsSection?.classList.add("hidden");
+    const recipientsList = document.getElementById("liqRecipientsList");
+    if (recipientsList) recipientsList.innerHTML = "";
+  } else {
+    compInput?.setAttribute("required", "required");
+    if (compLabel) compLabel.textContent = "Comprovativo*";
+    compHint?.classList.add("hidden");
+    if (title) title.textContent = "Liquidar Lançamento";
+    if (subtitle) subtitle.textContent = "Confirma o valor final pago";
+    if (submitBtn) submitBtn.textContent = "Confirmar Liquidação";
+    recipientsSection?.classList.remove("hidden");
+    renderLiqRecipients(data.notifiedRecipientIds);
+  }
 
   document.getElementById("modalLiq").classList.add("open");
 };
@@ -1941,24 +2377,27 @@ async function submitLiquidation(e) {
   if (!realizedAmount) return showToast("Valor é obrigatório", "error");
 
   const compInput = document.getElementById("liqComprovativo");
-  if (!compInput || !compInput.files[0]) {
+  if (!liqAlreadyConfirmed && (!compInput || !compInput.files[0])) {
     return showToast("Comprovativo de pagamento é obrigatório", "error");
   }
 
   const fd = new FormData();
   fd.append("paidAmount", realizedAmount);
-  fd.append("status", "CONFIRMADO");
-  fd.append("comprovativo", compInput.files[0]);
+  if (!liqAlreadyConfirmed) fd.append("status", "CONFIRMADO");
+  if (compInput && compInput.files[0]) fd.append("comprovativo", compInput.files[0]);
 
   const fatInput = document.getElementById("liqFatura");
   if (fatInput && fatInput.files[0]) {
     fd.append("fatura", fatInput.files[0]);
   }
 
+  const recipientIds = getSelectedLiqRecipientIds();
+  if (recipientIds.length) fd.append("recipientIds", JSON.stringify(recipientIds));
+
   try {
     const btn = e.target.querySelector("button[type='submit']");
     const oldText = btn.innerHTML;
-    btn.innerHTML = `<span class="spinner w-4 h-4 mr-2 inline-block align-middle border-white"></span> A liquidar...`;
+    btn.innerHTML = `<span class="spinner w-4 h-4 mr-2 inline-block align-middle border-white"></span> A guardar...`;
     btn.disabled = true;
 
     await apiUpload(`/cost-centers/${ccId}/payments/${txId}`, fd, "PATCH");
@@ -1966,7 +2405,7 @@ async function submitLiquidation(e) {
     btn.innerHTML = oldText;
     btn.disabled = false;
 
-    showToast("Lançamento liquidado com sucesso!", "success");
+    showToast(liqAlreadyConfirmed ? "Lançamento atualizado com sucesso!" : "Lançamento liquidado com sucesso!", "success");
     document.getElementById("modalLiq").classList.remove("open");
 
     // Reset inputs
@@ -1977,7 +2416,7 @@ async function submitLiquidation(e) {
     else reloadPaymentsView();
   } catch (err) {
     const btn = e.target.querySelector("button[type='submit']");
-    btn.innerHTML = "Confirmar Liquidação";
+    btn.innerHTML = liqAlreadyConfirmed ? "Guardar" : "Confirmar Liquidação";
     btn.disabled = false;
     showToast("Erro: " + err.message, "error");
   }
@@ -2108,8 +2547,7 @@ window.openPaymentAside = function (data, type) {
     actionBtn.classList.remove("hidden");
     actionBtn.onclick = () => {
       if (type === 'PAYMENT' || type === 'TRANSACTION') {
-        const descStr = data.description ? data.description.replace(/'/g, "\\'").replace(/"/g, "&quot;") : "";
-        openLiquidateModal(data.id, descStr, amount, data.costCenterId);
+        openLiquidateModal(data);
       }
       closePaymentAside();
     };

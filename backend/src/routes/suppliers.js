@@ -3,10 +3,40 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { syncSupplierBankAccounts, supplierInclude } = require("../services/supplierBankAccounts");
+
+const bankAccountInput = z.object({
+  bankName: z.string().min(1),
+  iban: z.string().min(1),
+  isPrimary: z.boolean().optional(),
+});
+
+const supplierBodySchema = z.object({
+  name: z.string().min(1),
+  nif: z.string().optional().nullable(),
+  contact: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  address: z.string().optional().nullable(),
+  category: z.string().optional().nullable(),
+  iban: z.string().optional().nullable(),
+  paymentTerm: z.string().optional().nullable(),
+  bankAccounts: z.array(bankAccountInput).optional(),
+});
 
 const supplierRoutes = express.Router();
 supplierRoutes.use(authRequired);
 supplierRoutes.use(requireRole(["admin", "operador"]));
+
+function resolveBankAccounts(body) {
+  if (Array.isArray(body.bankAccounts) && body.bankAccounts.length) {
+    return body.bankAccounts;
+  }
+  if (body.iban?.trim()) {
+    return [{ bankName: "Principal", iban: body.iban.trim(), isPrimary: true }];
+  }
+  return [];
+}
 
 // --- CRUD FORNECEDORES ---
 
@@ -15,9 +45,7 @@ supplierRoutes.get(
   asyncHandler(async (req, res) => {
     const items = await prisma.supplier.findMany({
       orderBy: { name: "asc" },
-      include: {
-        _count: { select: { products: true } },
-      },
+      include: supplierInclude,
     });
     res.json({ items });
   })
@@ -26,24 +54,23 @@ supplierRoutes.get(
 supplierRoutes.post(
   "/",
   asyncHandler(async (req, res) => {
-    const body = z
-      .object({
-        name: z.string().min(1),
-        nif: z.string().optional().nullable(),
-        contact: z.string().optional().nullable(),
-        phone: z.string().optional().nullable(),
-        email: z.string().email().optional().nullable(),
-        address: z.string().optional().nullable(),
-        category: z.string().optional().nullable(),
-        iban: z.string().optional().nullable(),
-        paymentTerm: z.string().optional().nullable(),
-      })
-      .parse(req.body);
+    const body = supplierBodySchema.parse(req.body);
+    const { bankAccounts, ...supplierData } = body;
 
     const created = await prisma.supplier.create({
-      data: body,
+      data: {
+        ...supplierData,
+        iban: null,
+      },
     });
-    res.status(201).json(created);
+
+    await syncSupplierBankAccounts(created.id, resolveBankAccounts(body));
+
+    const full = await prisma.supplier.findUnique({
+      where: { id: created.id },
+      include: supplierInclude,
+    });
+    res.status(201).json(full);
   })
 );
 
@@ -51,26 +78,28 @@ supplierRoutes.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    const body = z
-      .object({
-        name: z.string().min(1).optional(),
-        nif: z.string().optional().nullable(),
-        contact: z.string().optional().nullable(),
-        phone: z.string().optional().nullable(),
-        email: z.string().email().optional().nullable(),
-        address: z.string().optional().nullable(),
-        category: z.string().optional().nullable(),
-        iban: z.string().optional().nullable(),
-        paymentTerm: z.string().optional().nullable(),
-        active: z.boolean().optional(),
-      })
-      .parse(req.body);
+    const body = supplierBodySchema.partial().extend({
+      active: z.boolean().optional(),
+    }).parse(req.body);
 
-    const updated = await prisma.supplier.update({
+    const { bankAccounts, ...supplierData } = body;
+
+    if (Object.keys(supplierData).length) {
+      await prisma.supplier.update({
+        where: { id },
+        data: supplierData,
+      });
+    }
+
+  if (bankAccounts !== undefined) {
+      await syncSupplierBankAccounts(id, bankAccounts);
+    }
+
+    const full = await prisma.supplier.findUnique({
       where: { id },
-      data: body,
+      include: supplierInclude,
     });
-    res.json(updated);
+    res.json(full);
   })
 );
 

@@ -207,6 +207,16 @@ async function openProfileModal() {
             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Bio</label>
             <textarea id="p_bio" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-[#2afc8d] transition-all resize-none" placeholder="Conte um pouco sobre si...">${displayBio}</textarea>
           </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Telefone</label>
+              <input id="p_phone" type="tel" value="${escapeHtml(user.phone || "")}" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="+244 ..." />
+            </div>
+            <div>
+              <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">WhatsApp</label>
+              <input id="p_whatsapp" type="tel" value="${escapeHtml(user.whatsapp || "")}" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="+244 ..." />
+            </div>
+          </div>
           <div>
             <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Nova Senha (Deixe em branco para manter)</label>
             <input id="p_pass" type="password" class="w-full h-12 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all" placeholder="••••••••" />
@@ -276,8 +286,12 @@ async function openProfileModal() {
           const name = panel.querySelector("#p_name").value.trim();
           const password = panel.querySelector("#p_pass").value.trim();
           const bio = panel.querySelector("#p_bio").value.trim();
+          const phone = panel.querySelector("#p_phone")?.value.trim();
+          const whatsapp = panel.querySelector("#p_whatsapp")?.value.trim();
           patchBody.name = name || null;
           patchBody.bio = bio || null;
+          patchBody.phone = phone || null;
+          patchBody.whatsapp = whatsapp || null;
           if (password) patchBody.password = password;
         }
 
