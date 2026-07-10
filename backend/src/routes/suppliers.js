@@ -11,6 +11,8 @@ const bankAccountInput = z.object({
   isPrimary: z.boolean().optional(),
 });
 
+const percentSchema = z.coerce.number().min(0).max(100).optional().nullable();
+
 const supplierBodySchema = z.object({
   name: z.string().min(1),
   nif: z.string().optional().nullable(),
@@ -21,6 +23,9 @@ const supplierBodySchema = z.object({
   category: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
   paymentTerm: z.string().optional().nullable(),
+  vatPercent: percentSchema,
+  withholdingPercent: percentSchema,
+  discountPercent: percentSchema,
   bankAccounts: z.array(bankAccountInput).optional(),
 });
 

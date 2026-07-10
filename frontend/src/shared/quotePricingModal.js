@@ -1,4 +1,5 @@
 import { apiUpload, getAssetUrl } from "../services/api.js";
+import { renderSupplierFiscalBreakdownHtml } from "./supplierFiscal.js";
 
 import {
 
@@ -475,6 +476,8 @@ function renderPriceRow({
 
   totalLine,
 
+  fiscalBreakdownHtml = "",
+
   actionsHtml,
 
   highlighted = false,
@@ -508,6 +511,8 @@ function renderPriceRow({
         </div>
 
         <div class="text-xs text-slate-500">${detailLine}</div>
+
+        ${fiscalBreakdownHtml}
 
       </div>
 
@@ -789,6 +794,8 @@ export async function loadPresentedPrices({
 
           totalLine: `${total} ${q.currency}`,
 
+          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(q.supplier, totalValue, q.currency || "AOA"),
+
           highlighted: Boolean(q.selected),
 
           actionsHtml: `${selectBtn}${proformaBtn}${orderBtn}${deleteBtn}`,
@@ -830,6 +837,8 @@ export async function loadPresentedPrices({
           detailLine: `${qty} ${need.unit || "uni"} × ${price} ${s.product.currency} / ${s.product.unit || "uni"}`,
 
           totalLine: `${total} ${s.product.currency}`,
+
+          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(s.supplier, totalValue, s.product.currency || "AOA"),
 
           actionsHtml: !isLocked
 

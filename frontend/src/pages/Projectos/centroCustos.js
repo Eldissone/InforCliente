@@ -4,6 +4,7 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 import { renderPaymentTimeline, renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
+import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "/shared/supplierFiscal.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let allProjects = [];
@@ -278,7 +279,7 @@ async function loadSummary() {
   try {
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/summary`);
     dashSummary = data;
-    renderKPIs(data.totals);
+    renderKPIs(data.totals, data.extras);
     renderPrevistoRealTable(data.summary, data.totals);
     // Dashboard extra cards
     loadWeeklyBreakdown();
@@ -289,38 +290,54 @@ async function loadSummary() {
 }
 
 // ── KPIs ───────────────────────────────────────────────────────────────────────
-function renderKPIs(totalsByCurrency) {
+function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
   if (!totalsByCurrency) return;
-  const previstoEl = document.getElementById("kpiPrevisto");
-  const pagoEl = document.getElementById("kpiPago");
-  const saldoEl = document.getElementById("kpiSaldo");
+  const baseEl = document.getElementById("kpiBasePrevisto");
+  const realizadoEl = document.getElementById("kpiRealizado");
+  const extrasEl = document.getElementById("kpiExtrasAprovados");
 
-  previstoEl.innerHTML = "";
-  pagoEl.innerHTML = "";
-  saldoEl.innerHTML = "";
+  baseEl.innerHTML = "";
+  realizadoEl.innerHTML = "";
+  extrasEl.innerHTML = "";
 
   const currencies = Object.keys(totalsByCurrency);
-  if (currencies.length === 0) {
-    previstoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
-    pagoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
-    saldoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
+  const extraCurrencies = Object.keys(extrasByCurrency || {});
+  const allCurrencies = [...new Set([...currencies, ...extraCurrencies])];
+
+  if (allCurrencies.length === 0) {
+    baseEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
+    realizadoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
+    extrasEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     document.getElementById("kpiPct").textContent = "0%";
+    document.getElementById("kpiBar").style.width = "0%";
     return;
   }
 
   let totalPct = 0;
-  currencies.forEach(cur => {
-    const t = totalsByCurrency[cur];
-    previstoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.budgeted, cur)}</p>`;
-    pagoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
+  let pctCount = 0;
 
-    const color = t.saldo < 0 ? "text-red-600" : "text-emerald-600";
-    saldoEl.innerHTML += `<p class="text-xl font-bold tracking-tight ${color}" title="${cur}">${formatCurrency(t.saldo, cur)}</p>`;
+  allCurrencies.forEach((cur) => {
+    const t = totalsByCurrency[cur] || { budgeted: 0, paid: 0, pctExecutado: 0 };
+    const ex = extrasByCurrency[cur] || { approved: 0, requested: 0 };
 
-    totalPct += t.pctExecutado || 0;
+    baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.budgeted, cur)}</p>`;
+    realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
+
+    const requestedHint = ex.requested > ex.approved
+      ? `<p class="text-[10px] font-semibold text-slate-400 mt-0.5" title="${cur}">Total solicitado: ${formatCurrency(ex.requested, cur)}</p>`
+      : "";
+    extrasEl.innerHTML += `<div title="${cur}">
+      <p class="text-xl font-bold text-slate-900 tracking-tight">${formatCurrency(ex.approved, cur)}</p>
+      ${requestedHint}
+    </div>`;
+
+    if (totalsByCurrency[cur]) {
+      totalPct += t.pctExecutado || 0;
+      pctCount += 1;
+    }
   });
 
-  const avgPct = currencies.length > 0 ? (totalPct / currencies.length) : 0;
+  const avgPct = pctCount > 0 ? totalPct / pctCount : 0;
   const pct = Math.min(100, avgPct);
   document.getElementById("kpiPct").textContent = pct.toFixed(1) + "%";
 
@@ -586,7 +603,11 @@ async function loadPayments() {
     if (status) params.set("status", status);
 
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments?${params}`);
-    const items = data.items || [];
+    const items = (data.items || []).slice().sort((a, b) => {
+      const da = new Date(a.paymentDate || 0).getTime();
+      const db = new Date(b.paymentDate || 0).getTime();
+      return da - db || String(a.docNumber || "").localeCompare(String(b.docNumber || ""));
+    });
     const cur = selectedProject?.currency || "AOA";
 
     if (!items.length) {
@@ -1944,6 +1965,7 @@ async function loadGlobalExtras() {
 function refreshExtrasLists() {
   loadExtras();
   loadGlobalExtras();
+  loadSummary();
 }
 
 window.approveExtraHandler = async function (id) {
@@ -2447,6 +2469,35 @@ window.openPaymentAsideHandler = function (btn) {
   }
 };
 
+function renderAsideFiscalSection(data) {
+  const section = document.getElementById("asideFiscalSection");
+  const container = document.getElementById("asideFiscalBreakdown");
+  if (!section || !container) return;
+
+  const supplier = data?.supplierRef || null;
+  const base = Number(data.budgetedAmount ?? data.amount ?? 0);
+  const currency = data.currency || data.costCenter?.currency || "AOA";
+  const { lines } = computeSupplierFiscalBreakdown(supplier, base);
+
+  if (!lines.length) {
+    section.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+
+  section.classList.remove("hidden");
+  container.innerHTML = lines
+    .map((line) => {
+      const sign = line.amount >= 0 ? "+" : "−";
+      const color = line.amount >= 0 ? "text-emerald-600" : "text-red-600";
+      return `<div class="flex justify-between items-center text-xs">
+        <span class="text-slate-500 font-medium">${line.label}</span>
+        <span class="font-bold tabular-nums ${color}">${sign}${formatFiscalAmount(line.amount, currency)}</span>
+      </div>`;
+    })
+    .join("");
+}
+
 window.openPaymentAside = function (data, type) {
   const aside = document.getElementById("paymentAside");
   const overlay = document.getElementById("paymentAsideOverlay");
@@ -2481,6 +2532,7 @@ window.openPaymentAside = function (data, type) {
   const amount = data.budgetedAmount || data.amount || 0;
   const currency = data.currency || (data.costCenter ? data.costCenter.currency : "AOA");
   document.getElementById("asideAmount").textContent = formatCurrency(amount, currency);
+  renderAsideFiscalSection(data);
 
   function renderAsideDocument(url, title = "Documento") {
     if (!url) {

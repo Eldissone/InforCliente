@@ -53,7 +53,7 @@ quoteRoutes.get(
         costCenter: { select: { name: true, code: true } },
         quotes: {
           include: {
-            supplier: { select: { name: true } },
+            supplier: { select: { name: true, vatPercent: true, withholdingPercent: true, discountPercent: true } },
           },
           orderBy: { quotedPrice: "asc" },
         },
@@ -83,6 +83,9 @@ quoteRoutes.get(
             address: true,
             iban: true,
             paymentTerm: true,
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
             bankAccounts: {
               orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
             },

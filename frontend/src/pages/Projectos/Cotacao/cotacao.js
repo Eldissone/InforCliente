@@ -2,6 +2,7 @@ import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
+import { formatSupplierFiscalSummary } from "/shared/supplierFiscal.js";
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -254,7 +255,7 @@ function renderSuppliers() {
   const tbody = document.getElementById("suppliersTableBody");
   
   if (currentSuppliers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
     return;
   }
 
@@ -273,6 +274,7 @@ function renderSuppliers() {
       </td>
       <td class="py-3 px-4 text-sm text-slate-600">${s.category || "—"}</td>
       <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—"}</td>
+      <td class="py-3 px-4 text-center text-[11px] font-semibold text-slate-500">${formatSupplierFiscalSummary(s)}</td>
       <td class="py-3 px-4 text-center font-bold text-slate-700">${s._count?.products || 0}</td>
       <td class="py-3 px-4 text-center">
         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
@@ -360,6 +362,13 @@ function collectSupplierBankAccounts() {
     .filter((a) => a.iban);
 }
 
+function parseOptionalPercentInput(id) {
+  const raw = document.getElementById(id)?.value.trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function openSupplierModal(supplier = null) {
   document.getElementById("modalSupplierTitle").textContent = supplier ? "Editar Fornecedor" : "Novo Fornecedor";
   document.getElementById("supplierId").value = supplier?.id || "";
@@ -369,6 +378,9 @@ function openSupplierModal(supplier = null) {
   document.getElementById("supplierEmail").value = supplier?.email || "";
   document.getElementById("supplierCategory").value = supplier?.category || "";
   document.getElementById("supplierPaymentTerm").value = supplier?.paymentTerm || "";
+  document.getElementById("supplierVatPercent").value = supplier?.vatPercent ?? "";
+  document.getElementById("supplierWithholdingPercent").value = supplier?.withholdingPercent ?? "";
+  document.getElementById("supplierDiscountPercent").value = supplier?.discountPercent ?? "";
 
   const accounts = supplier?.bankAccounts?.length
     ? supplier.bankAccounts.map((a) => ({ bankName: a.bankName, iban: a.iban }))
@@ -409,6 +421,9 @@ async function submitSupplier(e) {
     email: document.getElementById("supplierEmail").value.trim() || null,
     category: document.getElementById("supplierCategory").value.trim() || null,
     paymentTerm: document.getElementById("supplierPaymentTerm").value || null,
+    vatPercent: parseOptionalPercentInput("supplierVatPercent"),
+    withholdingPercent: parseOptionalPercentInput("supplierWithholdingPercent"),
+    discountPercent: parseOptionalPercentInput("supplierDiscountPercent"),
     bankAccounts,
   };
 

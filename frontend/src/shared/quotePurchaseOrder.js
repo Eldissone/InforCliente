@@ -1,5 +1,6 @@
 import { apiUpload, getAssetUrl } from "../services/api.js";
 import { getSessionUser } from "../services/auth.js";
+import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
 
 const PDF_TEMPLATE_VERSION = "v1.1";
 
@@ -280,8 +281,17 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
   };
 
   drawTotalLine("Subtotal:", fmtMoney(total, currency));
-  drawTotalLine("Total IVA:", "—");
-  drawTotalLine("Total:", fmtMoney(total, currency), true);
+  const fiscal = computeSupplierFiscalBreakdown(supplier, total);
+  fiscal.lines.forEach((line) => {
+    const sign = line.amount >= 0 ? "+" : "−";
+    drawTotalLine(`${line.label}:`, `${sign}${formatFiscalAmount(line.amount, currency)}`);
+  });
+  if (fiscal.vat > 0) {
+    drawTotalLine("Total IVA:", fmtMoney(fiscal.vat, currency));
+  } else {
+    drawTotalLine("Total IVA:", "—");
+  }
+  drawTotalLine("Total (base):", fmtMoney(total, currency), true);
   y += 4;
 
   // ── Observações ─────────────────────────────────────────────────────────────

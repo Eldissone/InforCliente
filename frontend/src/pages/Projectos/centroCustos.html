@@ -498,7 +498,7 @@
                         <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">
                             Plano de Pagamentos — Todas as Obras</h1>
                         <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
-                            Cronograma de pagamentos futuros consolidado por obra</p>
+                            Cronograma de pagamentos </p>
                     </div>
                 </header>
 
@@ -507,7 +507,7 @@
                     <div
                         class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div>
-                            <h3 class="font-bold text-slate-900">Cronograma de Pagamentos Futuros</h3>
+                            <h3 class="font-bold text-slate-900">Cronograma de Pagamentos</h3>
                             <p class="text-xs text-slate-400 mt-0.5">Agrupado por dia de vencimento · visível 1 dia
                                 antes</p>
                         </div>
@@ -633,24 +633,23 @@
                 <!-- KPI Row -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpiRow">
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previsão de
-                            Pagamentos
-                        </p>
-                        <div id="kpiPrevisto" class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento Base
+                            Previsto</p>
+                        <div id="kpiBasePrevisto" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pagamentos
-                            Realizados</p>
-                        <div id="kpiPago" class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
+                            Realizado</p>
+                        <div id="kpiRealizado" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Saldo Pendente
-                        </p>
-                        <div id="kpiSaldo" class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pedidos Extras
+                            Aprovados</p>
+                        <div id="kpiExtrasAprovados" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
@@ -705,10 +704,9 @@
                 <div class="cc-tab-panel active" id="tab-dashboard">
                     <!-- Previsto x Real -->
                     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div
-                            class="px-6 py-5 border-b border-slate-50 bg-[#0F172A] text-white flex justify-between items-center">
+                        <div class="px-6 py-5 border-b border-slate-50  text-white flex justify-between items-center">
                             <div>
-                                <h3 class="font-bold">Execução Orçamental</h3>
+                                <h3 class="font-bold text-[#0F172A]">Execução Orçamental</h3>
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-0.5">
                                     Previsto × Real por centro de custo</p>
                             </div>
@@ -1322,8 +1320,16 @@
                         <p id="asideCategory" class="text-sm font-bold text-slate-700"></p>
                     </div>
                     <div class="flex flex-col gap-1">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Previsto</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Previsto (base)
+                        </p>
                         <p id="asideAmount" class="text-lg font-black text-slate-900"></p>
+                    </div>
+                    <div id="asideFiscalSection"
+                        class="hidden col-span-2 flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Componentes fiscais
+                            (informativo)</p>
+                        <div id="asideFiscalBreakdown" class="flex flex-col gap-1.5"></div>
+                        <p class="text-[10px] text-slate-400 font-semibold">Não altera o valor base do orçamento.</p>
                     </div>
                 </div>
             </div>

@@ -66,7 +66,17 @@ function buildGlobalPaymentWhere(query, req) {
 // Fornecedores relacionados via FK explícito (supplierId). Usado como fallback
 // para registos legados que só têm o nome em texto livre (sem supplierId).
 const PAYMENT_SUPPLIER_INCLUDE = {
-  select: { id: true, name: true, nif: true, iban: true, phone: true, paymentTerm: true },
+  select: {
+    id: true,
+    name: true,
+    nif: true,
+    iban: true,
+    phone: true,
+    paymentTerm: true,
+    vatPercent: true,
+    withholdingPercent: true,
+    discountPercent: true,
+  },
 };
 
 async function mapPaymentItems(items) {
@@ -77,7 +87,17 @@ async function mapPaymentItems(items) {
   if (legacyNames.length > 0) {
     const suppliers = await prisma.supplier.findMany({
       where: { name: { in: legacyNames } },
-      select: { id: true, name: true, nif: true, iban: true, phone: true, paymentTerm: true },
+      select: {
+        id: true,
+        name: true,
+        nif: true,
+        iban: true,
+        phone: true,
+        paymentTerm: true,
+        vatPercent: true,
+        withholdingPercent: true,
+        discountPercent: true,
+      },
     });
     suppliers.forEach((s) => {
       supplierMap[s.name] = s;
@@ -420,9 +440,31 @@ costCenterRoutes.get(
       t.pctExecutado = t.budgeted > 0 ? Math.min(100, (t.paid / t.budgeted) * 100) : 0;
     });
 
+    // Pedidos extra da obra — aprovados (inclui já pagos) e total solicitado activo
+    const extraRequests = await prisma.extraRequest.findMany({
+      where: { projectId, type: "OBRA" },
+      select: { amount: true, currency: true, status: true },
+    });
+
+    const extrasByCurrency = {};
+    extraRequests.forEach((er) => {
+      const currency = er.currency || "AOA";
+      if (!extrasByCurrency[currency]) {
+        extrasByCurrency[currency] = { approved: 0, requested: 0 };
+      }
+      const amt = Number(er.amount || 0);
+      if (er.status === "APROVADO" || er.status === "PAGO") {
+        extrasByCurrency[currency].approved += amt;
+      }
+      if (er.status !== "REJEITADO" && er.status !== "CANCELADO") {
+        extrasByCurrency[currency].requested += amt;
+      }
+    });
+
     return res.json({
       summary,
       totals: totalsByCurrency,
+      extras: extrasByCurrency,
     });
   })
 );
@@ -809,7 +851,7 @@ costCenterRoutes.get(
       prisma.costPayment.count({ where }),
       prisma.costPayment.findMany({
         where,
-        orderBy: { paymentDate: "desc" },
+        orderBy: [{ paymentDate: "asc" }, { createdAt: "asc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {

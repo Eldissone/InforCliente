@@ -1,4 +1,5 @@
 import { formatCurrency, formatDateBR } from "./format.js";
+import { renderSupplierFiscalBreakdownHtml } from "./supplierFiscal.js";
 
 export const TIMELINE_STATUS = {
   PENDENTE: { label: "Pendente", dot: "bg-blue-400", badge: "bg-blue-100 text-blue-700", border: "border-blue-200" },
@@ -44,6 +45,7 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
   const meta = TIMELINE_STATUS[timelineStatus] || TIMELINE_STATUS.PENDENTE;
   const cur = p.costCenter?.currency || "AOA";
   const payload = escapeAttr(JSON.stringify(p));
+  const fiscalHtml = renderSupplierFiscalBreakdownHtml(p.supplierRef, p.budgetedAmount, cur);
   const projectLine = showProject && p.project?.name
     ? `<p class="text-[10px] font-bold text-slate-400 truncate">${escapeAttr(p.project.name)}</p>`
     : "";
@@ -56,6 +58,7 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold text-slate-900 truncate">${escapeAttr(p.description)}</p>
           <p class="text-[10px] text-slate-500 truncate">${escapeAttr(p.supplier || "Sem fornecedor")} · ${escapeAttr(p.costCenter?.code || "—")}</p>
+          ${fiscalHtml}
           ${projectLine}
         </div>
         <div class="text-right shrink-0">
@@ -77,6 +80,7 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
           <div class="min-w-0 flex-1">
             <p class="text-sm font-bold text-slate-900 truncate">${escapeAttr(p.description)}</p>
             <p class="text-xs text-slate-500 mt-0.5">${escapeAttr(p.supplier || "Sem fornecedor")} · CC ${escapeAttr(p.costCenter?.code || "—")}</p>
+            ${fiscalHtml}
             ${projectLine}
           </div>
           <div class="text-left sm:text-right shrink-0">

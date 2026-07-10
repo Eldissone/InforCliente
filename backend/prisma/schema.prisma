@@ -1064,6 +1064,9 @@ model Supplier {
   category  String?
   iban      String?
   paymentTerm String?
+  vatPercent         Decimal? @db.Decimal(5, 2) // % IVA — informativo, não altera orçamento base
+  withholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na fonte
+  discountPercent    Decimal? @db.Decimal(5, 2) // % Desconto
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
