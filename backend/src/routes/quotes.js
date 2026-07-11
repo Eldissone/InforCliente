@@ -7,6 +7,11 @@ const { uploadToSupabase } = require("../utils/storage");
 const { createLog } = require("../services/logService");
 const { buildInstallmentPlan } = require("../services/creditPaymentService");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
+const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
+const {
+  fetchDeliveryFieldsByQuoteIds,
+  setQuoteDeliveryPending,
+} = require("../services/deliveryFieldBridge");
 const multer = require("multer");
 const path = require("path");
 
@@ -115,6 +120,92 @@ quoteRoutes.get(
         amount: String(i.amount),
       })),
     });
+  })
+);
+
+// GET /quotes/deliveries/timeline — Calendário de entregas previstas
+quoteRoutes.get(
+  "/deliveries/timeline",
+  requirePermission("logistica", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const search = req.query.search ? String(req.query.search) : "";
+    const statusFilter = req.query.status ? String(req.query.status) : "";
+    const includeReceived = req.query.includeReceived === "true";
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+
+    const quotes = await prisma.needQuote.findMany({
+      where: {
+        orderNumber: { not: null },
+        need: {
+          status: { in: ["ORDERED", "APPROVED", "PAID"] },
+          ...(projectId ? { projectId } : {}),
+        },
+      },
+      include: {
+        supplier: { select: { id: true, name: true } },
+        supplierProduct: { select: { id: true, name: true, unit: true } },
+        need: {
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            unit: true,
+            projectId: true,
+            project: { select: { id: true, name: true, code: true } },
+            costCenter: { select: { code: true, name: true } },
+          },
+        },
+      },
+      orderBy: { expectedReceiptDate: "asc" },
+    });
+
+    const products = await prisma.product.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+    });
+    const warehouses = await prisma.warehouse.findMany({
+      select: { id: true, name: true, projectId: true },
+    });
+
+    const deliveryMap = await fetchDeliveryFieldsByQuoteIds(quotes.map((q) => q.id));
+
+    let mergedQuotes = quotes.map((q) => {
+      const extra = deliveryMap.get(q.id) || {};
+      return {
+        ...q,
+        deliveryStatus: extra.deliveryStatus || "PENDENTE",
+        receivedAt: extra.receivedAt || null,
+        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+      };
+    });
+
+    if (!includeReceived) {
+      mergedQuotes = mergedQuotes.filter(
+        (q) => q.deliveryStatus !== "RECEBIDO" && !q.receivedAt
+      );
+    }
+
+    const enrichedQuotes = mergedQuotes.map((q) => ({
+      ...q,
+      suggestedProductId: suggestProductId(q.supplierProduct?.name || q.need?.description, products),
+      suggestedWarehouseId:
+        warehouses.find((w) => w.projectId === q.need?.projectId)?.id ||
+        warehouses.find((w) => !w.projectId)?.id ||
+        null,
+    }));
+
+    const timeline = buildDeliveryTimeline(enrichedQuotes, {
+      search,
+      statusFilter,
+      includeReceived,
+      projectId,
+      dateFrom,
+      dateTo,
+    });
+
+    return res.json(timeline);
   })
 );
 
@@ -305,6 +396,12 @@ quoteRoutes.patch(
   "/:id/place-order",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    const body = z
+      .object({
+        expectedReceiptDate: z.string().datetime().optional(),
+        leadDays: z.coerce.number().int().min(1).max(365).optional(),
+      })
+      .parse(req.body || {});
 
     const quote = await prisma.needQuote.findUnique({
       where: { id },
@@ -333,9 +430,21 @@ quoteRoutes.patch(
       orderNumber = Number(seqResult[0].val);
     }
 
+    let expectedReceiptDate = quote.expectedReceiptDate;
+    if (body.expectedReceiptDate) {
+      expectedReceiptDate = new Date(body.expectedReceiptDate);
+    } else if (!expectedReceiptDate) {
+      const leadDays = body.leadDays ?? 15;
+      expectedReceiptDate = new Date();
+      expectedReceiptDate.setDate(expectedReceiptDate.getDate() + leadDays);
+    }
+
     const updatedQuote = await prisma.needQuote.update({
       where: { id },
-      data: { orderNumber },
+      data: {
+        orderNumber,
+        expectedReceiptDate,
+      },
       include: {
         supplier: { include: { bankAccounts: true } },
         supplierProduct: true,
@@ -347,6 +456,8 @@ quoteRoutes.patch(
         },
       },
     });
+
+    await setQuoteDeliveryPending(id);
 
     const updatedNeed = await prisma.workNeed.update({
       where: { id: quote.needId },
@@ -572,6 +683,10 @@ quoteRoutes.post(
       data: {
         status: "APPROVED",
         unitPrice: quote.quotedPrice,
+        // Congela o preço previsto (estimativa) na primeira aprovação, para
+        // manter a comparação previsto x real de mercado mesmo depois de
+        // `unitPrice` passar a refletir o preço real da cotação.
+        originalUnitPrice: quote.need.originalUnitPrice ?? quote.need.unitPrice,
       },
       include: {
         costCenter: { select: { name: true, code: true, currency: true } },

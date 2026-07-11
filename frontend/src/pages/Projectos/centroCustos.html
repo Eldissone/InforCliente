@@ -402,31 +402,33 @@
 
     <!-- ══════════════════════════════════════════════════════════ TOP NAV -->
     <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
-        <div class="max-w-[1680px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
-            <div class="flex items-center gap-10">
+        <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-6 min-w-0">
                 <a href="../Projectos/ProjectGeral.html"
-                    class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    class="text-xl font-bold text-white tracking-tight flex items-center gap-2 shrink-0">
                     <span
                         class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
                     <span>Gestor</span>
                 </a>
-                <div class="hidden lg:flex items-center gap-6">
+                <div class="hidden lg:flex items-center gap-4 min-w-0 overflow-x-auto no-scrollbar">
                     <a href="../Dashboard/index.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Dashboard</a>
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Dashboard</a>
                     <a href="../Clientes/clienteLista.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Clientes</a>
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Clientes</a>
                     <a href="../Projectos/ProjectGeral.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Obras</a>
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Obras</a>
                     <a href="../Stock/index.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Logística</a>
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Logística</a>
                     <a href="../Projectos/centroCustos.html"
-                        class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg">Planeamento</a>
+                        class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0">Planeamento</a>
                     <a href="../Projectos/Cotacao/index.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Cotação</a>
+                    <a href="../Financeiro/financeiro.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Financeiro</a>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
+
+            <div class="flex items-center gap-4 shrink-0">
                 <a data-nav-users
                     class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2"
                     href="../Users/index.html">
@@ -440,7 +442,45 @@
                 </button>
                 <button data-logout
                     class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">Sair</button>
+                <button id="mobileMenuBtn" aria-expanded="false"
+                    class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
             </div>
+        </div>
+        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Dashboard/index.html">
+                <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Clientes/clienteLista.html">
+                <span class="material-symbols-outlined text-lg">group</span> Clientes
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/ProjectGeral.html">
+                <span class="material-symbols-outlined text-lg">construction</span> Obras
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Stock/index.html">
+                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/centroCustos.html">
+                <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/Cotacao/index.html">
+                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Financeiro/financeiro.html">
+                <span class="material-symbols-outlined text-lg">payments</span> Financeiro
+            </a>
+            <button data-logout
+                class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
+                <span class="material-symbols-outlined text-lg">logout</span> Sair
+            </button>
         </div>
     </nav>
 
@@ -484,118 +524,11 @@
         <!-- ── MAIN CONTENT ── -->
         <main class="flex-1 min-w-0 flex flex-col gap-6">
 
-            <!-- ── Vista global (sem obra selecionada) ── -->
-            <div id="globalPaymentsView" class="hidden flex flex-col gap-6">
-                <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <nav
-                            class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                            <a href="../Projectos/ProjectGeral.html"
-                                class="hover:text-slate-600 transition-colors">Obras</a>
-                            <span class="material-symbols-outlined text-xs">chevron_right</span>
-                            <span class="text-[#2afc8d]">Planeamento</span>
-                        </nav>
-                        <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">
-                            Plano de Pagamentos — Todas as Obras</h1>
-                        <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
-                            Cronograma de pagamentos </p>
-                    </div>
-                </header>
-
-                <!-- Cronograma de Pagamentos Futuros -->
-                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div
-                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div>
-                            <h3 class="font-bold text-slate-900">Cronograma de Pagamentos</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Agrupado por dia de vencimento · visível 1 dia
-                                antes</p>
-                        </div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <select id="globalProjFilter"
-                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                <option value="">Todas as Obras</option>
-                            </select>
-                            <input id="globalTimelineSearch" type="search" placeholder="Pesquisar..."
-                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 w-40">
-                            <select id="globalTimelineStatus"
-                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                <option value="">Todos visíveis</option>
-                                <option value="PENDENTE">Pendentes</option>
-                                <option value="VENCIDO">Atrasados</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div id="globalTimelineBody"
-                        class="p-4 md:p-6 space-y-6 max-h-[520px] overflow-y-auto custom-scroll">
-                        <div class="spinner my-8"></div>
-                    </div>
-                </div>
-
-                <!-- Pagamentos por Semana -->
-                <!-- <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                    <div class="flex justify-between items-center mb-5">
-                        <div>
-                            <h3 class="font-bold text-slate-900">Pagamentos por Semana</h3>
-                            <p class="text-xs text-slate-400 font-medium mt-0.5">Valor pago por semana em todas as obras
-                            </p>
-                        </div>
-                        <span class="material-symbols-outlined text-slate-300">calendar_month</span>
-                    </div>
-                    <div id="globalWeeklyBreakdownList" class="space-y-2.5">
-                        <div class="spinner my-4"></div>
-                    </div>
-                </div> -->
-
-                <!-- Pedidos Extra Gerais (sem vínculo obrigatório a uma obra) -->
-                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div
-                        class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div>
-                            <h3 class="font-bold text-slate-900">Pedidos Extra Gerais</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Pedidos sem vínculo obrigatório a uma obra
-                                específica</p>
-                        </div>
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <select id="globalExtrasStatusFilter"
-                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                <option value="">Todos os Status</option>
-                                <option value="PENDENTE">Pendente</option>
-                                <option value="APROVADO">Aprovado</option>
-                                <option value="PAGO">Pago</option>
-                                <option value="REJEITADO">Rejeitado</option>
-                                <option value="CANCELADO">Cancelado</option>
-                            </select>
-                            <button id="newGlobalExtraBtn"
-                                class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
-                                <span class="material-symbols-outlined text-base">add</span>
-                                Novo Pedido Geral
-                            </button>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto custom-scroll">
-                        <table class="w-full cc-table">
-                            <thead>
-                                <tr>
-                                    <th class="text-left">Data</th>
-                                    <th class="text-left">Descrição</th>
-                                    <th class="text-left">Origem</th>
-                                    <th class="text-right">Valor</th>
-                                    <th class="text-left">Solicitado por</th>
-                                    <th class="text-center">Status</th>
-                                    <th class="text-center">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="globalExtrasTableBody">
-                                <tr>
-                                    <td colspan="7">
-                                        <div class="spinner my-8"></div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+            <!-- ── Sem obra selecionada ── -->
+            <div id="emptyProjectView" class="hidden flex flex-col items-center justify-center flex-1 min-h-[420px] text-center px-6">
+                <span class="material-symbols-outlined text-5xl text-slate-300 mb-4">construction</span>
+                <h2 class="text-xl font-bold text-slate-800 mb-2">Seleciona uma obra</h2>
+                <p class="text-sm text-slate-500 max-w-md">Escolhe uma obra na lista à esquerda para ver o planeamento, orçamento e pagamentos.</p>
             </div>
 
             <!-- ── Conteúdo da obra selecionada ── -->
@@ -631,11 +564,11 @@
                 </header>
 
                 <!-- KPI Row -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="kpiRow">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="kpiRow">
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento Base
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
                             Previsto</p>
-                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Total do Orçamento Geral (itens aprovados)</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Orçamento Geral aprovados</p>
                         <div id="kpiBasePrevisto" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
@@ -643,14 +576,26 @@
                     <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
                             Realizado</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Pago</p>
+
                         <div id="kpiRealizado" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Pedidos Extras
-                            Aprovados</p>
+                        </p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Aprovados</p>
+
                         <div id="kpiExtrasAprovados" class="flex flex-col gap-1">
+                            <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Desvio
+                        </p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Real vs. Previsto</p>
+                        <div id="kpiDesvioMercado" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
@@ -717,9 +662,13 @@
                                 <thead>
                                     <tr>
                                         <th class="text-left">Tipo</th>
-                                        <th class="text-right">Custo Real</th>
-                                        <th class="text-right">Custo Previsto</th>
-                                        <th class="text-left" style="min-width:200px">Execução Orçamental (%)</th>
+                                        <th class="text-right" title="Estimativa registada antes de ir a cotação">
+                                            Previsto</th>
+                                        <th class="text-right">Realizado</th>
+                                        <th class="text-left" style="min-width:160px">% Execução Orçamental</th>
+                                        <th class="text-right"
+                                            title="Desvio entre a estimativa inicial e o preço real obtido nas cotações">
+                                            Desvio</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dashPrevistoRealBody"></tbody>
@@ -855,7 +804,6 @@
                                         <th class="text-right">P. Unit.</th>
                                         <th class="text-center">Hrs</th>
                                         <th class="text-right">Total Obra</th>
-                                        <th class="text-right">Total / Semana</th>
                                         <th class="text-center">Prioridade</th>
                                         <th class="text-left">Responsável</th>
                                         <th class="text-center">Status</th>
@@ -1051,14 +999,44 @@
                                     class="h-9 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200 transition-all">
                                     <span class="material-symbols-outlined text-sm">credit_card</span>Cartão
                                 </button>
-                                <button id="fundReloadBtn"
+                                <button id="fundReinforcementBtn"
                                     class="h-9 px-3 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 transition-all">
-                                    <span class="material-symbols-outlined text-sm">add_card</span>Reforçar Saldo
+                                    <span class="material-symbols-outlined text-sm">add_card</span>Pedido de Reforço
+                                </button>
+                                <button id="fundAdjustBtn"
+                                    class="h-9 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200 transition-all">
+                                    <span class="material-symbols-outlined text-sm">tune</span>Ajuste Manual
                                 </button>
                             </div>
                         </div>
                         <div id="fundCardsRow"
                             class="px-6 py-3 flex items-center gap-2 flex-wrap border-b border-slate-50"></div>
+
+                        <div class="px-6 py-4 border-b border-slate-50">
+                            <h5 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Pedidos de
+                                Reforço</h5>
+                            <div class="overflow-x-auto custom-scroll">
+                                <table class="w-full cc-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-left">Data</th>
+                                            <th class="text-left">Cartão</th>
+                                            <th class="text-left">Motivo</th>
+                                            <th class="text-right">Valor</th>
+                                            <th class="text-center">Status</th>
+                                            <th class="text-center">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fundReinforcementsBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-6 text-slate-400 text-xs">Seleciona
+                                                um fundo</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
                         <div class="overflow-x-auto custom-scroll">
                             <table class="w-full cc-table">
                                 <thead>
@@ -1754,35 +1732,29 @@
         </div>
     </div>
 
-    <!-- Modal: Reforçar Saldo / Ajuste do Fundo -->
+    <!-- Modal: Ajuste Manual do Fundo -->
     <div class="modal-overlay" id="modalFundMovement">
         <div class="modal-box" style="max-width:440px">
             <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-bold text-slate-900">Reforçar Saldo</h2>
+                <h2 class="text-lg font-bold text-slate-900">Ajuste Manual de Saldo</h2>
                 <button type="button" onclick="document.getElementById('modalFundMovement').classList.remove('open')"
                     aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
             </div>
+            <p class="text-xs text-slate-400 -mt-4 mb-2">Correcção auditada de saldo (ex: divergência encontrada em
+                auditoria). Para reforçar saldo, usa "Pedido de Reforço".</p>
             <form id="formFundMovement" class="flex flex-col gap-4">
                 <input type="hidden" id="fundMovementFundId">
-                <div>
-                    <label for="fundMovementType"
-                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo</label>
-                    <select id="fundMovementType"
-                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                        <option value="CREDITO">Reforço de Saldo (Crédito)</option>
-                        <option value="AJUSTE">Ajuste manual</option>
-                    </select>
-                </div>
+                <input type="hidden" id="fundMovementType" value="AJUSTE">
                 <div>
                     <label for="fundMovementCard"
                         class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Cartão
                         (opcional)</label>
                     <select id="fundMovementCard"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                        <option value="">— Sem cartão —</option>
+                        <option value="">— Sem cartão (ajuste do fundo) —</option>
                     </select>
                 </div>
                 <div>
@@ -1795,7 +1767,7 @@
                     <label for="fundMovementDesc"
                         class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição
                         *</label>
-                    <input id="fundMovementDesc" type="text" required placeholder="Motivo do reforço/ajuste"
+                    <input id="fundMovementDesc" type="text" required placeholder="Motivo do ajuste"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
                 <div class="flex gap-3 justify-end pt-2">
@@ -1809,11 +1781,59 @@
         </div>
     </div>
 
-    <!-- Modal: Novo Cartão do Fundo -->
-    <div class="modal-overlay" id="modalFundCard">
-        <div class="modal-box" style="max-width:400px">
+    <!-- Modal: Pedido de Reforço de Saldo -->
+    <div class="modal-overlay" id="modalReinforcement">
+        <div class="modal-box" style="max-width:440px">
             <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-bold text-slate-900">Novo Cartão</h2>
+                <h2 class="text-lg font-bold text-slate-900">Pedido de Reforço de Saldo</h2>
+                <button type="button" onclick="document.getElementById('modalReinforcement').classList.remove('open')"
+                    aria-label="Fechar"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 -mt-4 mb-2">O saldo só é reforçado depois de o pedido ser aprovado.</p>
+            <form id="formReinforcement" class="flex flex-col gap-4">
+                <input type="hidden" id="reinforcementFundId">
+                <div>
+                    <label for="reinforcementCard"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Cartão
+                        *</label>
+                    <select id="reinforcementCard" required
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">Selecionar cartão...</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="reinforcementAmount"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor *</label>
+                    <input id="reinforcementAmount" type="number" step="0.01" min="0.01" required placeholder="0.00"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div>
+                    <label for="reinforcementReason"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Motivo
+                        *</label>
+                    <input id="reinforcementReason" type="text" required placeholder="Motivo do reforço"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button"
+                        onclick="document.getElementById('modalReinforcement').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-6 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all">Pedir
+                        Reforço</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Novo/Editar Cartão do Fundo -->
+    <div class="modal-overlay" id="modalFundCard">
+        <div class="modal-box" style="max-width:480px">
+            <div class="flex items-center justify-between mb-6">
+                <h2 id="modalFundCardTitle" class="text-lg font-bold text-slate-900">Novo Cartão</h2>
                 <button type="button" onclick="document.getElementById('modalFundCard').classList.remove('open')"
                     aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
@@ -1822,24 +1842,82 @@
             </div>
             <form id="formFundCard" class="flex flex-col gap-4">
                 <input type="hidden" id="fundCardFundId">
-                <div>
-                    <label for="fundCardLabel"
-                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome do Cartão
-                        *</label>
-                    <input id="fundCardLabel" type="text" required placeholder="Ex: Cartão 1"
-                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                <input type="hidden" id="fundCardCardId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="fundCardLabel"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome do
+                            Cartão *</label>
+                        <input id="fundCardLabel" type="text" required placeholder="Ex: Cartão 1"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="fundCardType"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo</label>
+                        <select id="fundCardType"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="PREPAGO">Pré-pago</option>
+                            <option value="DEBITO">Débito</option>
+                            <option value="CREDITO">Crédito</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="fundCardBank"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Banco</label>
+                        <input id="fundCardBank" type="text" placeholder="Ex: BAI"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="fundCardLastDigits"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Últimos 4
+                            dígitos</label>
+                        <input id="fundCardLastDigits" type="text" maxlength="4" placeholder="0000"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
                 </div>
                 <div>
-                    <label for="fundCardLastDigits"
-                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Últimos 4
-                        dígitos</label>
-                    <input id="fundCardLastDigits" type="text" maxlength="4" placeholder="0000"
+                    <label for="fundCardHolderName"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Titular /
+                        Responsável</label>
+                    <input id="fundCardHolderName" type="text" placeholder="Nome de quem detém o cartão"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="fundCardIssuedAt"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Emissão</label>
+                        <input id="fundCardIssuedAt" type="date"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="fundCardExpiresAt"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Validade</label>
+                        <input id="fundCardExpiresAt" type="date"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="fundCardLimitAmount"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Limite
+                            (opcional)</label>
+                        <input id="fundCardLimitAmount" type="number" step="0.01" min="0" placeholder="0.00"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="fundCardInitialBalance"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo
+                            Inicial</label>
+                        <input id="fundCardInitialBalance" type="number" step="0.01" min="0" placeholder="0.00"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
                 </div>
                 <div class="flex gap-3 justify-end pt-2">
                     <button type="button" onclick="document.getElementById('modalFundCard').classList.remove('open')"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
-                    <button type="submit"
+                    <button id="formFundCardSubmitBtn" type="submit"
                         class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Adicionar</button>
                 </div>
             </form>

@@ -11,6 +11,11 @@ const {
   scanDueAndOverduePayments,
   loadPaymentForNotification,
 } = require("../services/paymentNotificationService");
+const {
+  analyzeCertification,
+  certifyPayment,
+  getAuditSummary,
+} = require("../services/certificationService");
 const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
 const multer = require("multer");
 
@@ -29,6 +34,19 @@ function calcApprovedNeedTotal(need) {
   if (!need || !["APPROVED", "PAID"].includes(need.status)) return 0;
   const qty = Number(need.quantity) || 0;
   const price = Number(need.unitPrice) || 0;
+  const hours = Number(need.hours) || 1;
+  return qty * price * hours;
+}
+
+/**
+ * Total previsto (estimativa inicial, antes de ir a mercado) de uma
+ * necessidade aprovada/paga. Usa `originalUnitPrice`; para registos antigos
+ * sem esse campo preenchido, cai para `unitPrice` (não há distinção possível).
+ */
+function calcApprovedNeedEstimateTotal(need) {
+  if (!need || !["APPROVED", "PAID"].includes(need.status)) return 0;
+  const qty = Number(need.quantity) || 0;
+  const price = Number(need.originalUnitPrice ?? need.unitPrice) || 0;
   const hours = Number(need.hours) || 1;
   return qty * price * hours;
 }
@@ -145,8 +163,11 @@ costCenterRoutes.get(
     const search = req.query.search ? String(req.query.search) : "";
     const status = req.query.status ? String(req.query.status) : "";
     const includePaid = req.query.includePaid === "true";
+    const onlyVisible = req.query.onlyVisible !== "false";
     const daysAhead = Math.min(365, Math.max(7, Number(req.query.daysAhead || 120)));
     const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
 
     const payments = await prisma.costPayment.findMany({
       where,
@@ -162,10 +183,12 @@ costCenterRoutes.get(
     const timeline = buildPaymentTimeline(mapped, {
       search,
       statusFilter: status,
-      onlyVisible: true,
+      onlyVisible,
       includePaid,
       daysAhead,
       daysPast,
+      dateFrom,
+      dateTo,
     });
 
     setImmediate(() => {
@@ -195,6 +218,8 @@ costCenterRoutes.get(
     const onlyVisible = req.query.onlyVisible !== "false";
     const daysAhead = Math.min(365, Math.max(7, Number(req.query.daysAhead || 120)));
     const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
 
     const where = {
       projectId,
@@ -219,6 +244,8 @@ costCenterRoutes.get(
       includePaid,
       daysAhead,
       daysPast,
+      dateFrom,
+      dateTo,
     });
 
     setImmediate(() => {
@@ -231,15 +258,81 @@ costCenterRoutes.get(
   })
 );
 
+// GET /cost-centers/payments/audit — Faturas liquidadas para auditoria/contabilidade
+costCenterRoutes.get(
+  "/payments/audit",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const certificationStatus = req.query.certificationStatus
+      ? String(req.query.certificationStatus)
+      : "";
+    const search = req.query.search ? String(req.query.search) : "";
+    const where = {
+      status: "CONFIRMADO",
+      ...buildGlobalPaymentWhere(req.query, req),
+      ...(certificationStatus ? { certificationStatus } : {}),
+      ...(search
+        ? {
+            OR: [
+              { description: { contains: search, mode: "insensitive" } },
+              { supplier: { contains: search, mode: "insensitive" } },
+              { docNumber: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
+
+    const [total, items, summary] = await Promise.all([
+      prisma.costPayment.count({ where }),
+      prisma.costPayment.findMany({
+        where,
+        orderBy: [{ certificationStatus: "asc" }, { paymentDate: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          project: { select: { id: true, name: true, code: true } },
+          costCenter: { select: { code: true, name: true, currency: true } },
+          supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+        },
+      }),
+      getAuditSummary(buildGlobalPaymentWhere(req.query, req)),
+    ]);
+
+    return res.json({
+      page,
+      pageSize,
+      total,
+      summary,
+      items: await mapPaymentItems(items),
+    });
+  })
+);
+
+// GET /cost-centers/payments/audit-summary — KPIs de certificação
+costCenterRoutes.get(
+  "/payments/audit-summary",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const summary = await getAuditSummary(buildGlobalPaymentWhere(req.query, req));
+    return res.json(summary);
+  })
+);
+
 // GET /cost-centers/payments — Lançamentos de todas as obras
 costCenterRoutes.get(
   "/payments",
   requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
     const status = req.query.status ? String(req.query.status) : "";
+    const certificationStatus = req.query.certificationStatus
+      ? String(req.query.certificationStatus)
+      : "";
     const where = {
       ...buildGlobalPaymentWhere(req.query, req),
       ...(status ? { status } : {}),
+      ...(certificationStatus ? { certificationStatus } : {}),
     };
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
@@ -397,17 +490,22 @@ costCenterRoutes.get(
         status: true,
         quantity: true,
         unitPrice: true,
+        originalUnitPrice: true,
         hours: true,
         costCenter: { select: { currency: true } },
       },
     });
 
     const basePrevistoMap = {};
+    const estimadoOriginalMap = {};
     approvedNeeds.forEach((need) => {
       const ccId = need.costCenterId;
       const total = calcApprovedNeedTotal(need);
+      const estimate = calcApprovedNeedEstimateTotal(need);
       if (!basePrevistoMap[ccId]) basePrevistoMap[ccId] = 0;
+      if (!estimadoOriginalMap[ccId]) estimadoOriginalMap[ccId] = 0;
       basePrevistoMap[ccId] += total;
+      estimadoOriginalMap[ccId] += estimate;
     });
 
     // Agrupamento de necessidades por CC e status
@@ -429,10 +527,17 @@ costCenterRoutes.get(
     const summary = centers.map((cc) => {
       const pay = payMap[cc.id] || { budgeted: 0, paid: 0 };
       const basePrevisto = basePrevistoMap[cc.id] || 0;
+      const estimadoOriginal = estimadoOriginalMap[cc.id] || 0;
       const needs = needsMap[cc.id] || {};
       const saldo = basePrevisto - pay.paid;
       const desvio = basePrevisto > 0
         ? ((pay.paid - basePrevisto) / basePrevisto) * 100
+        : 0;
+      // Desvio entre a estimativa inicial (previsto, antes de ir a mercado)
+      // e o preço real obtido nas cotações aprovadas — mostra se o mercado
+      // ficou acima/abaixo do que tinha sido orçamentado.
+      const desvioMercado = estimadoOriginal > 0
+        ? ((basePrevisto - estimadoOriginal) / estimadoOriginal) * 100
         : 0;
       const pctExecutado = basePrevisto > 0
         ? Math.min(100, (pay.paid / basePrevisto) * 100)
@@ -440,9 +545,10 @@ costCenterRoutes.get(
 
       const currency = cc.currency || "AOA";
       if (!totalsByCurrency[currency]) {
-        totalsByCurrency[currency] = { basePrevisto: 0, budgeted: 0, paid: 0 };
+        totalsByCurrency[currency] = { basePrevisto: 0, estimadoOriginal: 0, budgeted: 0, paid: 0 };
       }
       totalsByCurrency[currency].basePrevisto += basePrevisto;
+      totalsByCurrency[currency].estimadoOriginal += estimadoOriginal;
       totalsByCurrency[currency].budgeted += pay.budgeted;
       totalsByCurrency[currency].paid += pay.paid;
 
@@ -452,6 +558,8 @@ costCenterRoutes.get(
         name: cc.name,
         currency,
         basePrevisto,
+        estimadoOriginal,
+        desvioMercado,
         budgeted: pay.budgeted,
         paid: pay.paid,
         saldo,
@@ -471,6 +579,9 @@ costCenterRoutes.get(
       const t = totalsByCurrency[curr];
       t.saldo = (t.basePrevisto || 0) - t.paid;
       t.pctExecutado = t.basePrevisto > 0 ? Math.min(100, (t.paid / t.basePrevisto) * 100) : 0;
+      t.desvioMercado = t.estimadoOriginal > 0
+        ? ((t.basePrevisto - t.estimadoOriginal) / t.estimadoOriginal) * 100
+        : 0;
     });
 
     // Pedidos extra da obra — aprovados (inclui já pagos) e total solicitado activo
@@ -685,6 +796,9 @@ costCenterRoutes.post(
         quantity: body.quantity != null ? String(body.quantity) : null,
         unit: body.unit || null,
         unitPrice: body.unitPrice != null ? String(body.unitPrice) : null,
+        // Preço previsto (estimativa inicial) — congelado aqui; só a cotação
+        // aprovada (preço real de mercado) altera `unitPrice` depois disto.
+        originalUnitPrice: body.unitPrice != null ? String(body.unitPrice) : null,
         hours: body.hours != null ? String(body.hours) : null,
         priority: body.priority || "MEDIA",
         responsible: body.responsible || null,
@@ -714,6 +828,20 @@ costCenterRoutes.patch(
       notes: z.string().optional().nullable(),
     }).parse(req.body);
 
+    // O preço previsto (originalUnitPrice) só acompanha edições manuais
+    // enquanto a necessidade ainda não tem preço real de mercado (cotação
+    // aprovada). A partir de ORDERED/APPROVED/PAID, `unitPrice` passa a
+    // representar o preço real e `originalUnitPrice` fica congelado.
+    let syncOriginalPrice = false;
+    if (body.unitPrice !== undefined) {
+      const current = await prisma.workNeed.findUnique({
+        where: { id: needId },
+        select: { status: true },
+      });
+      const effectiveStatus = body.status || current?.status;
+      syncOriginalPrice = ["PENDING", "IN_QUOTATION"].includes(effectiveStatus);
+    }
+
     const updated = await prisma.workNeed.update({
       where: { id: needId },
       data: {
@@ -721,6 +849,7 @@ costCenterRoutes.patch(
         ...(body.quantity !== undefined ? { quantity: body.quantity != null ? String(body.quantity) : null } : {}),
         ...(body.unit !== undefined ? { unit: body.unit } : {}),
         ...(body.unitPrice !== undefined ? { unitPrice: body.unitPrice != null ? String(body.unitPrice) : null } : {}),
+        ...(syncOriginalPrice ? { originalUnitPrice: body.unitPrice != null ? String(body.unitPrice) : null } : {}),
         ...(body.hours !== undefined ? { hours: body.hours != null ? String(body.hours) : null } : {}),
         ...(body.priority ? { priority: body.priority } : {}),
         ...(body.status ? { status: body.status } : {}),
@@ -1097,6 +1226,68 @@ costCenterRoutes.patch(
     }
 
     return res.json({ id: updated.id, notificationsSent: 0 });
+  })
+);
+
+// GET /cost-centers/:id/payments/:payId/certification-preview — Análise antes de certificar
+costCenterRoutes.get(
+  "/:id/payments/:payId/certification-preview",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const payId = String(req.params.payId);
+    const payment = await prisma.costPayment.findUnique({
+      where: { id: payId },
+      include: {
+        project: { select: { id: true, name: true, code: true } },
+        costCenter: { select: { code: true, name: true, currency: true } },
+        supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+      },
+    });
+    if (!payment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+
+    const mapped = (await mapPaymentItems([payment]))[0];
+    const analysis = await analyzeCertification(payment);
+    return res.json({ payment: mapped, analysis });
+  })
+);
+
+// PATCH /cost-centers/:id/payments/:payId/certify — Certificar fatura de despesa
+costCenterRoutes.patch(
+  "/:id/payments/:payId/certify",
+  requirePermission("financeiro", "certify_expense"),
+  asyncHandler(async (req, res) => {
+    const payId = String(req.params.payId);
+    const body = z
+      .object({
+        status: z.enum(["CONFORME", "DIVERGENTE"]).optional(),
+        notes: z.string().optional().nullable(),
+        useSuggestion: z.boolean().optional().default(false),
+      })
+      .parse(req.body);
+
+    try {
+      const result = await certifyPayment(payId, req.user, body);
+      const mapped = (await mapPaymentItems([result.payment]))[0];
+      return res.json({
+        ok: true,
+        payment: mapped,
+        analysis: result.analysis,
+      });
+    } catch (err) {
+      if (err.code === "PAYMENT_NOT_FOUND") {
+        return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+      }
+      if (err.code === "PAYMENT_NOT_CONFIRMED") {
+        return res.status(400).json({ error: "PAYMENT_NOT_CONFIRMED" });
+      }
+      if (err.code === "INVALID_CERTIFICATION_STATUS") {
+        return res.status(400).json({
+          error: "INVALID_CERTIFICATION_STATUS",
+          analysis: err.analysis,
+        });
+      }
+      throw err;
+    }
   })
 );
 

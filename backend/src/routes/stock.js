@@ -19,6 +19,11 @@ const {
   assertProjectReadableForCliente,
   getAccessibleWarehouseIdsForProject,
 } = require("../utils/warehouseAccess");
+const {
+  getQuoteDeliveryGuard,
+  markQuoteReceived,
+  setMovementSourceQuote,
+} = require("../services/deliveryFieldBridge");
 
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
@@ -389,6 +394,7 @@ stockRoutes.post(
       ownerId: z.string().optional().nullable(),
       reference: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      sourceQuoteId: z.string().optional().nullable(),
     }).parse(req.body);
 
     if (isClienteRole(req)) {
@@ -422,6 +428,21 @@ stockRoutes.post(
 
       const result = await prisma.$transaction(async (tx) => {
         console.log("DEBUG: Starting stock move transaction", body);
+
+        if (body.sourceQuoteId && body.type === "ENTRY") {
+          const linkedQuote = await getQuoteDeliveryGuard(body.sourceQuoteId, tx);
+          if (!linkedQuote || !linkedQuote.orderNumber) {
+            const err = new Error("QUOTE_NOT_FOUND");
+            err.code = "QUOTE_NOT_FOUND";
+            throw err;
+          }
+          if (linkedQuote.deliveryStatus === "RECEBIDO" || linkedQuote.receivedAt) {
+            const err = new Error("DELIVERY_ALREADY_RECEIVED");
+            err.code = "DELIVERY_ALREADY_RECEIVED";
+            throw err;
+          }
+        }
+
         // 1. Criar o movimento
         const movement = await tx.stockMovement.create({
           data: {
@@ -438,6 +459,11 @@ stockRoutes.post(
             vehicleImageUrl: vehicleImageUrl,
           },
         });
+
+        if (body.sourceQuoteId && body.type === "ENTRY") {
+          await markQuoteReceived(body.sourceQuoteId, tx);
+          await setMovementSourceQuote(movement.id, body.sourceQuoteId, tx);
+        }
 
         if (evidenceUrl) {
           await tx.product.update({
@@ -504,6 +530,12 @@ stockRoutes.post(
 
       return res.status(201).json(result);
     } catch (error) {
+      if (error.code === "QUOTE_NOT_FOUND") {
+        return res.status(404).json({ error: "QUOTE_NOT_FOUND" });
+      }
+      if (error.code === "DELIVERY_ALREADY_RECEIVED") {
+        return res.status(400).json({ error: "DELIVERY_ALREADY_RECEIVED" });
+      }
       console.error("ERROR: Failed to move stock:", error);
       return res.status(500).json({ 
         error: "INTERNAL_ERROR", 

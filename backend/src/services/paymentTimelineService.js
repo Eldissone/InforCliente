@@ -84,11 +84,13 @@ function buildPaymentTimeline(payments, options = {}) {
     includeCancelled = false,
     daysAhead = 120,
     daysPast = 30,
+    dateFrom = null,
+    dateTo = null,
   } = options;
 
   const today = startOfDay(now);
-  const rangeStart = addDays(today, -daysPast);
-  const rangeEnd = addDays(today, daysAhead);
+  const rangeStart = dateFrom ? startOfDay(dateFrom) : addDays(today, -daysPast);
+  const rangeEnd = dateTo ? startOfDay(dateTo) : addDays(today, daysAhead);
 
   const enriched = payments
     .map((p) => enrichPaymentForTimeline(p, now))

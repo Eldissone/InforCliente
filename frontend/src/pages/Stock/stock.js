@@ -3,6 +3,12 @@ import { wireUsersNav, wireLogout } from "../../shared/session.js";
 import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb, toast, setButtonLoading } from "../../shared/ui.js";
 import { resolveProductImageUrl } from "../../services/api.js";
 import { can, initPermissionLayer, activateFirstVisibleStockTab, guardPageAccess } from "../../shared/permissions.js";
+import { renderDeliveryCalendar, DELIVERY_STATUS, resolveDeliveryStatus } from "../../shared/deliveryTimeline.js";
+
+let deliveryMonth = new Date();
+deliveryMonth.setDate(1);
+deliveryMonth.setHours(0, 0, 0, 0);
+let deliveryCache = { days: [], noDateItems: [], summary: null };
 
 function canEditTools() {
     return can("stock", "manage") || can("stock", "edit") || can("ferramentas", "edit") || can("ferramentas", "manage");
@@ -66,42 +72,42 @@ document.addEventListener("DOMContentLoaded", async () => {
 let currentTab = "inventory";
 
 function stockOwnershipLabel(item, clientById = {}) {
-  if (item.ownershipLabel) return item.ownershipLabel;
-  if (item.transferFromWarehouse) return `Transf. de ${item.transferFromWarehouse}`;
-  if (item.owner?.name) return item.owner.name;
-  if (item.ownerId && clientById[item.ownerId]?.name) return clientById[item.ownerId].name;
-  return item.warehouse?.name || "—";
+    if (item.ownershipLabel) return item.ownershipLabel;
+    if (item.transferFromWarehouse) return `Transf. de ${item.transferFromWarehouse}`;
+    if (item.owner?.name) return item.owner.name;
+    if (item.ownerId && clientById[item.ownerId]?.name) return clientById[item.ownerId].name;
+    return item.warehouse?.name || "—";
 }
 
 function stockOwnershipBadgeClass(item) {
-  if (item.transferFromWarehouse || (item.ownershipLabel || "").startsWith("Transf.")) {
-    return "bg-violet-50 text-violet-700";
-  }
-  if (item.ownerId) return "bg-indigo-50 text-indigo-700";
-  return "bg-emerald-50 text-emerald-700";
+    if (item.transferFromWarehouse || (item.ownershipLabel || "").startsWith("Transf.")) {
+        return "bg-violet-50 text-violet-700";
+    }
+    if (item.ownerId) return "bg-indigo-50 text-indigo-700";
+    return "bg-emerald-50 text-emerald-700";
 }
 
 function renderWarehouseOwnerOptions(warehouse) {
-  if (!warehouse) {
-    return `<option value="">Empresa</option>`;
-  }
-  const client = warehouse.project?.client;
-  let html = `<option value="">${esc(warehouse.name)}</option>`;
-  if (client?.id && client?.name) {
-    html += `<option value="${esc(client.id)}">${esc(client.name)}</option>`;
-  }
-  return html;
+    if (!warehouse) {
+        return `<option value="">Empresa</option>`;
+    }
+    const client = warehouse.project?.client;
+    let html = `<option value="">${esc(warehouse.name)}</option>`;
+    if (client?.id && client?.name) {
+        html += `<option value="${esc(client.id)}">${esc(client.name)}</option>`;
+    }
+    return html;
 }
 
 function wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehouses) {
-  if (!warehouseSelect || !ownerSelect) return;
-  const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w]));
-  const refresh = () => {
-    const warehouse = warehouseById[warehouseSelect.value];
-    ownerSelect.innerHTML = renderWarehouseOwnerOptions(warehouse);
-  };
-  warehouseSelect.addEventListener("change", refresh);
-  refresh();
+    if (!warehouseSelect || !ownerSelect) return;
+    const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w]));
+    const refresh = () => {
+        const warehouse = warehouseById[warehouseSelect.value];
+        ownerSelect.innerHTML = renderWarehouseOwnerOptions(warehouse);
+    };
+    warehouseSelect.addEventListener("change", refresh);
+    refresh();
 }
 
 /** Extrai quem entregou (utilizador do sistema) e quem recebeu (das notas do movimento). */
@@ -170,6 +176,7 @@ async function loadTabContent(tab) {
         else if (tab === "movements") await renderMovements(container);
         else if (tab === "requests") await renderRequests(container);
         else if (tab === "returns") await renderReturns(container);
+        else if (tab === "deliveries") await renderDeliveries(container);
         else if (tab.startsWith("warehouse_detail_")) {
             const warehouseId = tab.replace("warehouse_detail_", "");
             await renderWarehouseDetail(container, warehouseId);
@@ -914,8 +921,8 @@ async function openProductModal(product = null) {
             <div class="flex items-center gap-4">
                 <div id="productPhotoPreview" class="w-20 h-20 rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 shrink-0 flex items-center justify-center">
                     ${previewUrl
-                        ? `<img src="${esc(previewUrl)}" class="w-full h-full object-cover" alt="Foto do produto" />`
-                        : `<span class="material-symbols-outlined text-slate-300 text-3xl">inventory_2</span>`}
+            ? `<img src="${esc(previewUrl)}" class="w-full h-full object-cover" alt="Foto do produto" />`
+            : `<span class="material-symbols-outlined text-slate-300 text-3xl">inventory_2</span>`}
                 </div>
                 <div class="flex-1 space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Foto do Produto</label>
@@ -1481,7 +1488,7 @@ window.deleteToolGroup = async (itemIdsCsv) => {
             setButtonLoading(btn, true);
             let success = 0;
             let errors = 0;
-            
+
             for (let i = 0; i < qty; i++) {
                 try {
                     await apiRequest(`/items/${units[i].id}`, { method: "DELETE" });
@@ -1490,7 +1497,7 @@ window.deleteToolGroup = async (itemIdsCsv) => {
                     errors++;
                 }
             }
-            
+
             close();
             if (errors > 0) {
                 toast(`Eliminadas ${success} unidades. Ocorreram ${errors} erros (podem ter movimentos associados).`, { type: "warning" });
@@ -2403,7 +2410,7 @@ async function renderWarehouseDetail(container, warehouseId) {
     };
 }
 
-async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
+async function openMovementModal(type = "ENTRY", defaultWarehouseId = null, prefill = null) {
     const productsRes = await apiRequest("/products");
     const warehousesRes = await apiRequest("/warehouses");
 
@@ -2413,6 +2420,8 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
     const contentHtml = `
         <form id="formMovement" class="space-y-6 pt-4">
             <input type="hidden" name="type" value="${type}">
+            ${prefill?.sourceQuoteId ? `<input type="hidden" name="sourceQuoteId" value="${esc(prefill.sourceQuoteId)}">` : ""}
+            <input type="hidden" name="reference" id="movementReference" value="${esc(prefill?.reference || "")}">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Tipo de Entrada</label>
@@ -2446,7 +2455,7 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Quantidade</label>
-                    <input type="number" name="quantity" step="0.01" required placeholder="0.00" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="number" name="quantity" step="0.01" required placeholder="0.00" value="${prefill?.quantity ?? ""}" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Proprietário</label>
@@ -2505,6 +2514,7 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
             try {
                 await apiUpload("/stock/move", formData, "POST");
                 close();
+                toast(prefill?.sourceQuoteId ? "Entrada registada e encomenda marcada como recebida." : "Movimento registado.", { type: "success" });
                 loadTabContent(currentTab);
             } catch (error) {
                 const msg = error.data?.message || error.message;
@@ -2535,6 +2545,16 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null) {
         if (categoryFilter && productSelect) {
             categoryFilter.addEventListener("change", updateProducts);
             updateProducts();
+
+            if (prefill?.productId) {
+                const allProducts = [...materials, ...tools];
+                const match = allProducts.find((p) => p.id === prefill.productId);
+                if (match) {
+                    categoryFilter.value = match.category === "TOOL" || match.category === "EQUIPMENT" ? "TOOL" : "MATERIAL";
+                    updateProducts();
+                    productSelect.value = prefill.productId;
+                }
+            }
 
             productSelect.addEventListener("change", (e) => {
                 const option = e.target.selectedOptions[0];
@@ -3550,4 +3570,200 @@ window.confirmReturnGlobal = async (id, event) => {
         }
     });
 };
+
+async function renderDeliveries(container) {
+    container.innerHTML = `
+        <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+            <div>
+                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Previsão logística</h3>
+                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Calendário de Entregas</h2>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <select id="deliveryProjFilter" class="h-10 max-w-[200px] px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
+                    <option value="">Todas as Obras</option>
+                </select>
+                <select id="deliveryStatusFilter" class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+                    <option value="">Todos os estados</option>
+                    <option value="PENDENTE">Previstas</option>
+                    <option value="ATRASADO">Atrasadas</option>
+                    <option value="RECEBIDO">Recebidas</option>
+                </select>
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-500 cursor-pointer">
+                    <input id="deliveryIncludeReceived" type="checkbox" class="rounded border-slate-300 text-emerald-600">
+                    Incluir recebidas
+                </label>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Previstas</p>
+                <p id="deliveryKpiPending" class="text-2xl font-bold text-blue-600">—</p>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Atrasadas</p>
+                <p id="deliveryKpiOverdue" class="text-2xl font-bold text-red-600">—</p>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Recebidas</p>
+                <p id="deliveryKpiReceived" class="text-2xl font-bold text-emerald-600">—</p>
+            </div>
+            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Total</p>
+                <p id="deliveryKpiTotal" class="text-2xl font-bold text-slate-900">—</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
+                <div class="flex items-center justify-between gap-3 mb-4">
+                    <button id="deliveryPrevMonth" type="button" class="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-base">chevron_left</span>
+                    </button>
+                    <button id="deliveryToday" type="button" class="h-9 px-4 rounded-xl bg-slate-100 text-xs font-bold text-slate-600 hover:bg-slate-200 transition-all">Hoje</button>
+                    <button id="deliveryNextMonth" type="button" class="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-base">chevron_right</span>
+                    </button>
+                </div>
+                <div id="deliveryCalendarGrid"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d] mx-auto my-8"></div></div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
+                <h3 id="deliveryDayTitle" class="font-bold text-slate-900 mb-1">Seleciona um dia</h3>
+                <p class="text-xs text-slate-400 mb-4">Entregas previstas na data seleccionada</p>
+                <div id="deliveryDayBody" class="space-y-2 max-h-[480px] overflow-y-auto custom-scroll">
+                    <p class="text-sm text-slate-400 text-center py-8">Clica num dia do calendário para ver as entregas.</p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    try {
+        const { items: projects } = await apiRequest("/projects?pageSize=100&sort=updatedAt_desc");
+        const sel = document.getElementById("deliveryProjFilter");
+        if (sel) {
+            sel.innerHTML = `<option value="">Todas as Obras</option>` +
+                (projects || []).map((p) => `<option value="${p.id}">${esc(p.name)}${p.code ? ` (${esc(p.code)})` : ""}</option>`).join("");
+        }
+    } catch (_) { /* ignore */ }
+
+    ["deliveryProjFilter", "deliveryStatusFilter", "deliveryIncludeReceived"].forEach((id) => {
+        document.getElementById(id)?.addEventListener("change", () => loadDeliveryTimeline(container));
+    });
+    document.getElementById("deliveryPrevMonth")?.addEventListener("click", () => {
+        deliveryMonth.setMonth(deliveryMonth.getMonth() - 1);
+        renderDeliveryCalendarGrid();
+    });
+    document.getElementById("deliveryNextMonth")?.addEventListener("click", () => {
+        deliveryMonth.setMonth(deliveryMonth.getMonth() + 1);
+        renderDeliveryCalendarGrid();
+    });
+    document.getElementById("deliveryToday")?.addEventListener("click", () => {
+        deliveryMonth = new Date();
+        deliveryMonth.setDate(1);
+        deliveryMonth.setHours(0, 0, 0, 0);
+        renderDeliveryCalendarGrid();
+    });
+
+    await loadDeliveryTimeline(container);
+}
+
+async function loadDeliveryTimeline(container) {
+    const grid = document.getElementById("deliveryCalendarGrid");
+    if (grid) grid.innerHTML = `<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d] mx-auto my-8"></div>`;
+
+    const params = new URLSearchParams();
+    const projectId = document.getElementById("deliveryProjFilter")?.value;
+    const status = document.getElementById("deliveryStatusFilter")?.value;
+    const includeReceived = document.getElementById("deliveryIncludeReceived")?.checked;
+    if (projectId) params.set("projectId", projectId);
+    if (status) params.set("status", status);
+    if (includeReceived) params.set("includeReceived", "true");
+
+    const year = deliveryMonth.getFullYear();
+    const month = deliveryMonth.getMonth();
+    params.set("dateFrom", new Date(year, month, 1).toISOString());
+    params.set("dateTo", new Date(year, month + 1, 0, 23, 59, 59).toISOString());
+
+    try {
+        deliveryCache = await apiRequest(`/quotes/deliveries/timeline?${params}`);
+        document.getElementById("deliveryKpiPending").textContent = String(deliveryCache.summary?.pending ?? 0);
+        document.getElementById("deliveryKpiOverdue").textContent = String(deliveryCache.summary?.overdue ?? 0);
+        document.getElementById("deliveryKpiReceived").textContent = String(deliveryCache.summary?.received ?? 0);
+        document.getElementById("deliveryKpiTotal").textContent = String(deliveryCache.total ?? 0);
+        renderDeliveryCalendarGrid();
+    } catch (err) {
+        if (grid) grid.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold">${esc(err.message)}</p>`;
+    }
+}
+
+function renderDeliveryCalendarGrid() {
+    const grid = document.getElementById("deliveryCalendarGrid");
+    if (!grid) return;
+    grid.innerHTML = renderDeliveryCalendar(deliveryCache.days, {
+        year: deliveryMonth.getFullYear(),
+        month: deliveryMonth.getMonth(),
+        onDayClick: "window.selectDeliveryDay",
+    });
+}
+
+window.selectDeliveryDay = function (isoDate) {
+    const dayData = (deliveryCache.days || []).find(
+        (d) => new Date(d.date).toISOString().slice(0, 10) === isoDate
+    );
+    const title = document.getElementById("deliveryDayTitle");
+    const body = document.getElementById("deliveryDayBody");
+    if (!title || !body) return;
+
+    const d = new Date(isoDate + "T12:00:00");
+    title.textContent = d.toLocaleDateString("pt-PT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+    if (!dayData?.items?.length) {
+        body.innerHTML = `<p class="text-sm text-slate-400 text-center py-8">Sem entregas neste dia.</p>`;
+        return;
+    }
+
+    const canManage = can("stock", "manage");
+
+    body.innerHTML = dayData.items.map((q) => {
+        const st = resolveDeliveryStatus(q);
+        const meta = DELIVERY_STATUS[st] || DELIVERY_STATUS.PENDENTE;
+        const label = q.supplierProduct?.name || q.need?.description || "—";
+        const qty = q.quantity ?? q.need?.quantity ?? "—";
+        const unit = q.supplierProduct?.unit || q.need?.unit || "";
+        const confirmBtn = canManage && st !== "RECEBIDO"
+            ? `<button type="button" data-confirm-delivery="${q.id}" class="mt-2 w-full h-9 rounded-xl bg-slate-900 text-[#2afc8d] text-xs font-bold hover:scale-[1.02] transition-all">Confirmar chegada</button>`
+            : "";
+
+        return `
+            <div class="p-3 rounded-xl border border-slate-100 bg-white" data-delivery-id="${q.id}">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-slate-900 truncate">${esc(label)}</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">${esc(q.orderRef || "—")} · ${esc(q.need?.project?.name || "—")}</p>
+                        <p class="text-[10px] text-slate-400">${esc(q.supplier?.name || "—")} · ${qty} ${esc(unit)}</p>
+                    </div>
+                    <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${meta.badge}">${meta.label}</span>
+                </div>
+                ${confirmBtn}
+            </div>`;
+    }).join("");
+
+    body.querySelectorAll("[data-confirm-delivery]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const item = dayData.items.find((q) => q.id === btn.dataset.confirmDelivery);
+            if (item) confirmDeliveryArrival(item);
+        });
+    });
+};
+
+function confirmDeliveryArrival(quote) {
+    const qty = quote.quantity ?? quote.need?.quantity ?? 1;
+    openMovementModal("ENTRY", quote.suggestedWarehouseId || null, {
+        sourceQuoteId: quote.id,
+        quantity: qty,
+        reference: quote.orderRef || "",
+        productId: quote.suggestedProductId || null,
+        notes: `Entrada encomenda ${quote.orderRef || ""} — ${quote.supplier?.name || ""} — ${quote.need?.project?.name || ""}`,
+    });
+}
 

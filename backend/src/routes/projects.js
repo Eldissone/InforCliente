@@ -1006,8 +1006,18 @@ projectRoutes.get(
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProjectReadable(req, projectId);
+
+    let version = req.query.version ? Number(req.query.version) : null;
+    if (!version || Number.isNaN(version)) {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { budgetVersion: true },
+      });
+      version = project?.budgetVersion || 1;
+    }
+
     const items = await prisma.projectBudgetLine.findMany({
-      where: { projectId },
+      where: { projectId, version },
       include: {
         transactions: {
           select: { amount: true }
@@ -1017,6 +1027,7 @@ projectRoutes.get(
       take: 500,
     });
     return res.json({
+      version,
       items: items.map((l) => {
         const consumed = l.transactions.reduce((acc, t) => acc + Number(t.amount), 0);
         return {
@@ -1027,6 +1038,43 @@ projectRoutes.get(
           consumed: String(consumed),
         };
       }),
+    });
+  })
+);
+
+// GET /projects/:id/budget/versions — Histórico de orçamentos base (uploads)
+// O orçamento base é a previsão: depois de carregado não é alterado; um
+// novo upload cria uma nova versão em vez de substituir a anterior, para
+// preservar a comparação previsto x real ao longo do tempo.
+projectRoutes.get(
+  "/:id/budget/versions",
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+
+    const lines = await prisma.projectBudgetLine.groupBy({
+      by: ["version"],
+      where: { projectId },
+      _sum: { total: true },
+      _count: { id: true },
+      _min: { createdAt: true, sourceFile: true },
+      orderBy: { version: "desc" },
+    });
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { budgetVersion: true },
+    });
+
+    return res.json({
+      currentVersion: project?.budgetVersion || 1,
+      versions: lines.map((v) => ({
+        version: v.version,
+        lineCount: v._count.id,
+        total: String(v._sum.total || 0),
+        sourceFile: v._min.sourceFile,
+        createdAt: v._min.createdAt,
+      })),
     });
   })
 );
@@ -1052,12 +1100,27 @@ projectRoutes.post(
       return res.status(400).json({ error: "NO_LINES_IMPORTED", warnings });
     }
 
-    // Estratégia MVP: substituir orçamento anterior (apaga linhas antigas e insere novas)
+    // O orçamento base é a previsão da obra: uma vez carregado, não é
+    // alterado. Um novo upload cria uma NOVA VERSÃO em vez de substituir as
+    // linhas anteriores, preservando o histórico para comparação previsto x
+    // real (o preço real de mercado é tratado à parte, no Orçamento Geral).
+    const total = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
+
     await prisma.$transaction(async (tx) => {
-      await tx.projectBudgetLine.deleteMany({ where: { projectId } });
+      const [project, existingLineCount] = await Promise.all([
+        tx.project.findUnique({
+          where: { id: projectId },
+          select: { budgetConsumed: true, budgetVersion: true },
+        }),
+        tx.projectBudgetLine.count({ where: { projectId } }),
+      ]);
+      const nextVersion = existingLineCount === 0 ? 1 : (project?.budgetVersion || 1) + 1;
+      const consumed = Number(project?.budgetConsumed || 0);
+
       await tx.projectBudgetLine.createMany({
         data: lines.map((l) => ({
           projectId,
+          version: nextVersion,
           rowNumber: l.rowNumber,
           sourceFile: l.sourceFile,
           category: l.category,
@@ -1069,21 +1132,17 @@ projectRoutes.post(
         })),
       });
 
-      const sum = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
-      const project = await tx.project.findUnique({ where: { id: projectId }, select: { budgetConsumed: true } });
-      const consumed = Number(project?.budgetConsumed || 0);
-
       await tx.project.update({
         where: { id: projectId },
         data: {
-          budgetAllocated: String(sum),
-          budgetTotal: String(sum),
-          budgetAvailable: String(sum - consumed),
+          budgetVersion: nextVersion,
+          budgetAllocated: String(total),
+          budgetTotal: String(total),
+          budgetAvailable: String(total - consumed),
         },
       });
     });
 
-    const total = lines.reduce((acc, l) => acc + (Number(l.total) || 0), 0);
     return res.json({
       imported: lines.length,
       total: String(total.toFixed(5)),

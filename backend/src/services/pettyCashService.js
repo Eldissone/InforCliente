@@ -27,10 +27,24 @@ async function logFundAction(req, { action, fundId, details }) {
   });
 }
 
+class CardRequiredError extends Error {
+  constructor(message = "CARD_REQUIRED") {
+    super(message);
+    this.name = "CardRequiredError";
+    this.statusCode = 422;
+  }
+}
+
 /**
  * Aplica uma movimentação (crédito/débito/ajuste) num Fundo de Maneio de forma
  * transacional e segura contra concorrência. Débitos nunca podem levar o saldo
  * a negativo — a operação falha atomically (nenhuma escrita parcial).
+ *
+ * O saldo "vive" no cartão (Fase 2): quando o fundo tem cartões activos,
+ * CREDITO/DEBITO exigem `cardId` — o saldo do fundo passa a ser apenas o
+ * agregado (soma) dos cartões, mantido em sincronia a cada movimentação.
+ * Fundos sem cartões (uso legado/fundo geral) continuam a operar ao nível do
+ * próprio fundo, sem exigir cartão.
  */
 async function applyFundMovement({
   fundId,
@@ -51,23 +65,38 @@ async function applyFundMovement({
     if (!fund) throw new Error("FUND_NOT_FOUND");
     if (!fund.active) throw new Error("FUND_INACTIVE");
 
+    let card = null;
     if (cardId) {
-      const card = await tx.pettyCashCard.findFirst({ where: { id: cardId, fundId } });
+      card = await tx.pettyCashCard.findFirst({ where: { id: cardId, fundId } });
       if (!card) throw new Error("CARD_NOT_FOUND");
+      if (!card.active) throw new Error("CARD_INACTIVE");
+    } else if (type !== "AJUSTE") {
+      const activeCardsCount = await tx.pettyCashCard.count({ where: { fundId, active: true } });
+      if (activeCardsCount > 0) throw new CardRequiredError();
     }
 
     const delta = type === "DEBITO" ? -amountNum : amountNum;
 
     if (type === "DEBITO") {
       // Actualização condicional atómica: só sucede se o saldo actual comportar o débito.
-      const updateResult = await tx.pettyCashFund.updateMany({
-        where: { id: fundId, currentBalance: { gte: amountNum } },
-        data: { currentBalance: { decrement: amountNum } },
-      });
-      if (updateResult.count === 0) {
-        throw new InsufficientBalanceError();
+      if (card) {
+        const cardUpdateResult = await tx.pettyCashCard.updateMany({
+          where: { id: card.id, currentBalance: { gte: amountNum } },
+          data: { currentBalance: { decrement: amountNum } },
+        });
+        if (cardUpdateResult.count === 0) throw new InsufficientBalanceError();
+        await tx.pettyCashFund.update({ where: { id: fundId }, data: { currentBalance: { decrement: amountNum } } });
+      } else {
+        const updateResult = await tx.pettyCashFund.updateMany({
+          where: { id: fundId, currentBalance: { gte: amountNum } },
+          data: { currentBalance: { decrement: amountNum } },
+        });
+        if (updateResult.count === 0) throw new InsufficientBalanceError();
       }
     } else {
+      if (card) {
+        await tx.pettyCashCard.update({ where: { id: card.id }, data: { currentBalance: { increment: delta } } });
+      }
       await tx.pettyCashFund.update({
         where: { id: fundId },
         data: { currentBalance: { increment: delta } },
@@ -75,6 +104,7 @@ async function applyFundMovement({
     }
 
     const updatedFund = await tx.pettyCashFund.findUnique({ where: { id: fundId } });
+    const updatedCard = card ? await tx.pettyCashCard.findUnique({ where: { id: card.id } }) : null;
 
     const movement = await tx.pettyCashMovement.create({
       data: {
@@ -82,19 +112,20 @@ async function applyFundMovement({
         cardId: cardId || null,
         type,
         amount: String(amountNum),
-        balanceAfter: updatedFund.currentBalance,
+        balanceAfter: updatedCard ? updatedCard.currentBalance : updatedFund.currentBalance,
         description,
         extraRequestId: extraRequestId || null,
         createdBy,
       },
     });
 
-    return { movement, fund: updatedFund };
+    return { movement, fund: updatedFund, card: updatedCard };
   });
 }
 
 module.exports = {
   InsufficientBalanceError,
+  CardRequiredError,
   applyFundMovement,
   logFundAction,
 };

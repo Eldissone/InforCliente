@@ -8,29 +8,29 @@ datasource db {
 }
 
 model User {
-  id               String       @id @default(cuid())
-  email            String       @unique
-  name             String?
-  passwordHash     String
-  role             Role         @default(leitura)
-  createdAt        DateTime     @default(now())
-  clientId         String?
-  profilePic       String?
-  items            Item[]
-  client           Client?      @relation("PrimaryClient", fields: [clientId], references: [id])
-  accounts         UserClient[]
-  assignedProjects Project[]    @relation("AssignedUsers")
-  dailyPlanTasks   DailyPlanTask[]
-  permissions      UserPermission[]
-  systemLogs       SystemLog[]
-  profile          UserProfile?
-  presence         UserPresence?
+  id                       String                    @id @default(cuid())
+  email                    String                    @unique
+  name                     String?
+  passwordHash             String
+  role                     Role                      @default(leitura)
+  createdAt                DateTime                  @default(now())
+  clientId                 String?
+  profilePic               String?
+  items                    Item[]
+  client                   Client?                   @relation("PrimaryClient", fields: [clientId], references: [id])
+  accounts                 UserClient[]
+  assignedProjects         Project[]                 @relation("AssignedUsers")
+  dailyPlanTasks           DailyPlanTask[]
+  permissions              UserPermission[]
+  systemLogs               SystemLog[]
+  profile                  UserProfile?
+  presence                 UserPresence?
   conversationParticipants ConversationParticipant[]
-  sentMessages     Message[]    @relation("MessageSender")
-  messageReads     MessageRead[]
-  mentionsReceived Mention[]    @relation("MentionsReceived")
-  notifications    Notification[]
-  permissionAuditLogs PermissionAuditLog[]
+  sentMessages             Message[]                 @relation("MessageSender")
+  messageReads             MessageRead[]
+  mentionsReceived         Mention[]                 @relation("MentionsReceived")
+  notifications            Notification[]
+  permissionAuditLogs      PermissionAuditLog[]
 
   @@index([clientId])
 }
@@ -234,6 +234,7 @@ model Project {
   budgetConsumed      Decimal                  @db.Decimal(16, 2)
   budgetCommitted     Decimal                  @db.Decimal(16, 2)
   budgetAvailable     Decimal                  @db.Decimal(16, 2)
+  budgetVersion       Int                      @default(1)
   physicalProgressPct Float                    @default(0)
   currency            String?                  @default("AOA")
   phaseLabel          String?
@@ -315,6 +316,7 @@ model ProjectFile {
 model ProjectBudgetLine {
   id           String               @id @default(cuid())
   projectId    String
+  version      Int                  @default(1)
   rowNumber    Int?
   sourceFile   String?
   category     String?
@@ -326,8 +328,10 @@ model ProjectBudgetLine {
   createdAt    DateTime             @default(now())
   project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   transactions ProjectTransaction[]
+  workNeeds    WorkNeed[]
 
   @@index([projectId, createdAt])
+  @@index([projectId, version])
 }
 
 model ProjectTransaction {
@@ -342,15 +346,15 @@ model ProjectTransaction {
   realizedAmount Decimal?            @db.Decimal(16, 2)
   budgetLineId   String?
   currency       String?
-  
-  // Novos campos: Centro de Custo, Fornecedor, Tipo Pagamento
-  costCenterId   String?
-  supplier       String?
-  paymentType    String?             @default("PRONTO_PAGAMENTO")
 
-  budgetLine     ProjectBudgetLine?  @relation(fields: [budgetLineId], references: [id])
-  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter     CostCenter?         @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  // Novos campos: Centro de Custo, Fornecedor, Tipo Pagamento
+  costCenterId String?
+  supplier     String?
+  paymentType  String? @default("PRONTO_PAGAMENTO")
+
+  budgetLine ProjectBudgetLine? @relation(fields: [budgetLineId], references: [id])
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
 
   @@index([projectId, date])
   @@index([costCenterId])
@@ -482,18 +486,18 @@ model Warehouse {
 }
 
 model Product {
-  id                 String              @id @default(cuid())
-  sku                String?             @unique
-  barcode            String?             @unique
+  id                 String                @id @default(cuid())
+  sku                String?               @unique
+  barcode            String?               @unique
   name               String
   description        String?
   image              String?
-  category           ProductCategory     @default(MATERIAL)
-  unit               ProductUnit         @default(UN)
-  minStock           Decimal             @default(0) @db.Decimal(16, 4)
-  active             Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  category           ProductCategory       @default(MATERIAL)
+  unit               ProductUnit           @default(UN)
+  minStock           Decimal               @default(0) @db.Decimal(16, 4)
+  active             Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
   items              Item[]
   movements          StockMovement[]
   stock              WarehouseStock[]
@@ -542,23 +546,27 @@ model Item {
 }
 
 model StockMovement {
-  id          String         @id @default(cuid())
-  projectId   String?
-  type        MovementType
-  quantity    Decimal        @db.Decimal(16, 4)
-  notes       String?
-  createdAt   DateTime       @default(now())
+  id              String         @id @default(cuid())
+  projectId       String?
+  type            MovementType
+  quantity        Decimal        @db.Decimal(16, 4)
+  notes           String?
+  createdAt       DateTime       @default(now())
   evidenceUrl     String?
   vehicleImageUrl String?
   ownerId         String?
-  productId   String
-  reference   String?
-  userId      String
-  warehouseId String
-  photos      ProjectPhoto[]
-  product     Product        @relation(fields: [productId], references: [id])
-  project     Project?       @relation(fields: [projectId], references: [id])
-  warehouse   Warehouse      @relation(fields: [warehouseId], references: [id])
+  productId       String
+  reference       String?
+  sourceQuoteId   String?
+  userId          String
+  warehouseId     String
+  photos          ProjectPhoto[]
+  product         Product        @relation(fields: [productId], references: [id])
+  project         Project?       @relation(fields: [projectId], references: [id])
+  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
+  sourceQuote     NeedQuote?     @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
+
+  @@index([sourceQuoteId])
 }
 
 model ProjectPhoto {
@@ -590,12 +598,12 @@ model RolePermission {
 
 /// Overrides de permissão por utilizador (prevalece sobre o perfil/role)
 model UserPermission {
-  id      String   @id @default(cuid())
+  id      String @id @default(cuid())
   userId  String
   module  String
   action  String
   allowed String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, module, action])
   @@index([userId])
@@ -603,20 +611,20 @@ model UserPermission {
 }
 
 model PermissionAuditLog {
-  id            String   @id @default(cuid())
-  actorUserId   String
-  targetType    String?  // "role" or "user"
-  targetId      String?  // role name or user id
-  role          String?
-  module        String?
-  action        String?
-  beforeValue   String?
-  afterValue    String?
-  reason        String?
-  context       Json?
-  createdAt     DateTime @default(now())
-  
-  actorUser     User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  actorUserId String
+  targetType  String? // "role" or "user"
+  targetId    String? // role name or user id
+  role        String?
+  module      String?
+  action      String?
+  beforeValue String?
+  afterValue  String?
+  reason      String?
+  context     Json?
+  createdAt   DateTime @default(now())
+
+  actorUser User @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
 
   @@index([actorUserId])
   @@index([targetType, targetId])
@@ -758,6 +766,18 @@ enum CostPayStatus {
   CANCELADO
 }
 
+enum DeliveryStatus {
+  PENDENTE
+  RECEBIDO
+  ATRASADO
+}
+
+enum CertificationStatus {
+  PENDENTE
+  CONFORME
+  DIVERGENTE
+}
+
 enum DailyPlanStatus {
   DRAFT
   PENDING_MATERIAL
@@ -768,17 +788,17 @@ enum DailyPlanStatus {
 }
 
 model DailyPlan {
-  id          String          @id @default(cuid())
-  projectId   String
-  date        DateTime
-  status      DailyPlanStatus @default(DRAFT)
-  description String?
-  receivedBy  String?
-  technicianReceived Boolean @default(false)
-  returnedBy  String?
-  returnConfirmedAt DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  projectId          String
+  date               DateTime
+  status             DailyPlanStatus @default(DRAFT)
+  description        String?
+  receivedBy         String?
+  technicianReceived Boolean         @default(false)
+  returnedBy         String?
+  returnConfirmedAt  DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     DailyPlanTask[]
@@ -812,13 +832,13 @@ model DailyPlanMaterial {
 }
 
 model ProjectMaterialPlan {
-  id           String  @id @default(cuid())
-  projectId    String
-  productId    String
-  plannedQty   Decimal @default(0) @db.Decimal(16, 4)
+  id         String  @id @default(cuid())
+  projectId  String
+  productId  String
+  plannedQty Decimal @default(0) @db.Decimal(16, 4)
 
-  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, productId])
 }
@@ -828,17 +848,17 @@ model ProjectMaterialPlan {
 // =============================================
 
 model CostCenter {
-  id        String        @id @default(cuid())
-  projectId String
-  code      String
-  name      String
-  currency  String        @default("AOA")
-  active    Boolean       @default(true)
-  createdAt DateTime      @default(now())
-  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  needs     WorkNeed[]
-  payments  CostPayment[]
-  transactions ProjectTransaction[]
+  id            String               @id @default(cuid())
+  projectId     String
+  code          String
+  name          String
+  currency      String               @default("AOA")
+  active        Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  needs         WorkNeed[]
+  payments      CostPayment[]
+  transactions  ProjectTransaction[]
   extraRequests ExtraRequest[]
 
   @@unique([projectId, code])
@@ -846,63 +866,71 @@ model CostCenter {
 }
 
 model WorkNeed {
-  id           String       @id @default(cuid())
-  projectId    String
-  costCenterId String
-  date         DateTime     @default(now())
-  description  String
-  quantity     Decimal?     @db.Decimal(16, 4)
-  unit         String?
-  unitPrice    Decimal?     @db.Decimal(16, 4)
-  hours        Decimal?     @db.Decimal(16, 4)
-  priority     NeedPriority @default(MEDIA)
-  status       NeedStatus   @default(PENDING)
-  scheduled    Boolean      @default(false)
-  responsible  String?
-  notes        String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter   CostCenter   @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
-  payments     CostPayment[]
-  quotes       NeedQuote[]
-  installments PaymentInstallment[]
+  id                String               @id @default(cuid())
+  projectId         String
+  costCenterId      String
+  budgetLineId      String?
+  date              DateTime             @default(now())
+  description       String
+  quantity          Decimal?             @db.Decimal(16, 4)
+  unit              String?
+  unitPrice         Decimal?             @db.Decimal(16, 4)
+  originalUnitPrice Decimal?             @db.Decimal(16, 4)
+  hours             Decimal?             @db.Decimal(16, 4)
+  priority          NeedPriority         @default(MEDIA)
+  status            NeedStatus           @default(PENDING)
+  scheduled         Boolean              @default(false)
+  responsible       String?
+  notes             String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  project           Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter        CostCenter           @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  budgetLine        ProjectBudgetLine?   @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  payments          CostPayment[]
+  quotes            NeedQuote[]
+  installments      PaymentInstallment[]
 
   @@index([projectId, costCenterId])
+  @@index([budgetLineId])
 }
 
 model CostPayment {
-  id             String          @id @default(cuid())
-  projectId      String
-  costCenterId   String
-  needId         String?
-  supplierId     String?
-  docNumber      String?
-  paymentDate    DateTime
-  supplier       String?
-  category       PaymentCategory @default(MATERIAL)
-  description    String
-  budgetedAmount Decimal         @db.Decimal(16, 2)
-  paidAmount     Decimal         @db.Decimal(16, 2)
-  paymentMethod  String?
-  paymentType    String?         @default("PRONTO_PAGAMENTO")
-  week           String?
-  installment    Int?
-  status         CostPayStatus   @default(PENDENTE)
-  notes          String?
-  comprovativoUrl String?
-  faturaUrl      String?
-  createdAt      DateTime        @default(now())
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter     CostCenter      @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
-  need           WorkNeed?       @relation(fields: [needId], references: [id], onDelete: SetNull)
-  supplierRef    Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  id                 String              @id @default(cuid())
+  projectId          String
+  costCenterId       String
+  needId             String?
+  supplierId         String?
+  docNumber          String?
+  paymentDate        DateTime
+  supplier           String?
+  category           PaymentCategory     @default(MATERIAL)
+  description        String
+  budgetedAmount     Decimal             @db.Decimal(16, 2)
+  paidAmount         Decimal             @db.Decimal(16, 2)
+  paymentMethod      String?
+  paymentType        String?             @default("PRONTO_PAGAMENTO")
+  week               String?
+  installment        Int?
+  status             CostPayStatus       @default(PENDENTE)
+  notes              String?
+  comprovativoUrl    String?
+  faturaUrl          String?
+  certificationStatus CertificationStatus @default(PENDENTE)
+  certifiedBy        String?
+  certifiedAt        DateTime?
+  certificationNotes String?
+  createdAt          DateTime            @default(now())
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter         CostCenter          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  need               WorkNeed?           @relation(fields: [needId], references: [id], onDelete: SetNull)
+  supplierRef        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   paymentInstallment PaymentInstallment?
 
   @@index([supplierId])
-
   @@index([projectId, costCenterId])
   @@index([projectId, paymentDate])
+  @@index([certificationStatus])
 }
 
 // =============================================
@@ -911,12 +939,12 @@ model CostPayment {
 
 enum FundMovementType {
   CREDITO // reforço de saldo
-  DEBITO  // utilização (ex.: Pedido Extra)
-  AJUSTE  // correcção manual auditada
+  DEBITO // utilização (ex.: Pedido Extra)
+  AJUSTE // correcção manual auditada
 }
 
 enum ExtraRequestType {
-  OBRA  // vinculado a uma obra específica
+  OBRA // vinculado a uma obra específica
   GERAL // sem vínculo obrigatório a uma obra
 }
 
@@ -950,26 +978,46 @@ model PettyCashFund {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  project       Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  cards         PettyCashCard[]
-  movements     PettyCashMovement[]
-  extraRequests ExtraRequest[]
+  project               Project?                        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  cards                 PettyCashCard[]
+  movements             PettyCashMovement[]
+  extraRequests         ExtraRequest[]
+  reinforcementRequests PettyCashReinforcementRequest[]
 
   @@index([projectId])
 }
 
-// Cartões associados a um Fundo de Maneio (Cartão 1, Cartão 2...).
-model PettyCashCard {
-  id         String   @id @default(cuid())
-  fundId     String
-  label      String
-  lastDigits String?
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+enum PettyCashCardType {
+  PREPAGO
+  DEBITO
+  CREDITO
+}
 
-  fund          PettyCashFund       @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  movements     PettyCashMovement[]
-  extraRequests ExtraRequest[]
+// Cartões associados a um Fundo de Maneio (Cartão 1, Cartão 2...).
+// Cada cartão tem saldo próprio — o saldo do fundo é o agregado dos cartões.
+model PettyCashCard {
+  id               String            @id @default(cuid())
+  fundId           String
+  label            String
+  lastDigits       String?
+  // Registo completo do cartão.
+  cardNumberMasked String?
+  bank             String?
+  holderName       String?
+  type             PettyCashCardType @default(PREPAGO)
+  issuedAt         DateTime?
+  expiresAt        DateTime?
+  limitAmount      Decimal?          @db.Decimal(16, 2)
+  responsibleName  String?
+  initialBalance   Decimal           @default(0) @db.Decimal(16, 2)
+  currentBalance   Decimal           @default(0) @db.Decimal(16, 2)
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+
+  fund                  PettyCashFund                   @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  movements             PettyCashMovement[]
+  extraRequests         ExtraRequest[]
+  reinforcementRequests PettyCashReinforcementRequest[]
 
   @@index([fundId])
 }
@@ -987,11 +1035,47 @@ model PettyCashMovement {
   createdBy      String?
   createdAt      DateTime         @default(now())
 
-  fund         PettyCashFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
-  card         PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  extraRequest ExtraRequest?  @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
+  fund                 PettyCashFund                  @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  card                 PettyCashCard?                 @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  extraRequest         ExtraRequest?                  @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
+  reinforcementRequest PettyCashReinforcementRequest?
 
   @@index([fundId, createdAt])
+  @@index([cardId])
+}
+
+enum ReinforcementStatus {
+  PENDENTE
+  APROVADO
+  REJEITADO
+  CANCELADO
+}
+
+// Pedido de Reforço de Fundo de Maneio: um reforço só entra em vigor (e só
+// se torna um PettyCashMovement CREDITO real) depois de aprovado. Enquanto
+// pendente, não altera nenhum saldo — espelha o fluxo de ExtraRequest, mas
+// na direção contrária (entrada de fundo, não saída).
+model PettyCashReinforcementRequest {
+  id             String              @id @default(cuid())
+  fundId         String
+  cardId         String?
+  amount         Decimal             @db.Decimal(16, 2)
+  reason         String
+  status         ReinforcementStatus @default(PENDENTE)
+  requestedBy    String?
+  requestedAt    DateTime            @default(now())
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  movementId     String?             @unique
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  fund     PettyCashFund      @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  card     PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  movement PettyCashMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@index([fundId, status])
   @@index([cardId])
 }
 
@@ -1033,19 +1117,19 @@ model ExtraRequest {
 }
 
 model SystemLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  userName    String?
-  userEmail   String?
-  action      String
-  module      String
-  status      String
-  ipAddress   String?
-  userAgent   String?
-  details     Json?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String?
+  userName  String?
+  userEmail String?
+  action    String
+  module    String
+  status    String
+  ipAddress String?
+  userAgent String?
+  details   Json?
+  createdAt DateTime @default(now())
 
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([action])
@@ -1054,23 +1138,23 @@ model SystemLog {
 }
 
 model Supplier {
-  id        String   @id @default(cuid())
-  name      String
-  nif       String?
-  contact   String?
-  phone     String?
-  email     String?
-  address   String?
-  category  String?
-  iban      String?
-  paymentTerm String?
+  id                 String   @id @default(cuid())
+  name               String
+  nif                String?
+  contact            String?
+  phone              String?
+  email              String?
+  address            String?
+  category           String?
+  iban               String?
+  paymentTerm        String?
   vatPercent         Decimal? @db.Decimal(5, 2) // % IVA — informativo, não altera orçamento base
   withholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na fonte
   discountPercent    Decimal? @db.Decimal(5, 2) // % Desconto
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
   products     SupplierProduct[]
   quotes       NeedQuote[]
   bankAccounts SupplierBankAccount[]
@@ -1085,60 +1169,63 @@ model SupplierBankAccount {
   isPrimary  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
-  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@index([supplierId])
 }
 
 model SupplierProduct {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   supplierId  String
   name        String
   description String?
   unit        String?
-  price       Decimal  @db.Decimal(16, 4)
-  currency    String   @default("AOA")
+  price       Decimal   @db.Decimal(16, 4)
+  currency    String    @default("AOA")
   validUntil  DateTime?
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  quotes      NeedQuote[]
+  supplier Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  quotes   NeedQuote[]
 }
 
 model NeedQuote {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   needId            String
   supplierId        String
   supplierProductId String?
-  quotedPrice       Decimal  @db.Decimal(16, 4)
-  quantity          Decimal? @db.Decimal(16, 4)
-  totalValue        Decimal? @db.Decimal(16, 4)
-  currency          String   @default("AOA")
-  selected          Boolean  @default(false)
+  quotedPrice       Decimal   @db.Decimal(16, 4)
+  quantity          Decimal?  @db.Decimal(16, 4)
+  totalValue        Decimal?  @db.Decimal(16, 4)
+  currency          String    @default("AOA")
+  selected          Boolean   @default(false)
   notes             String?
   proformaUrl       String?
   purchaseOrderUrl  String?
-  orderNumber       Int?     @unique
+  orderNumber       Int?      @unique
   poDocumentId      String?
   poIssuedBy        String?
   poIssuedAt        DateTime?
 
   // Crédito — preenchido apenas quando a condição de pagamento do fornecedor é "Crédito"
-  creditTermDays       Int?
-  expectedReceiptDate  DateTime?
-  installmentsPlanned  Int?
-  invoiceConfirmedAt   DateTime?
-  invoiceConfirmedBy   String?
+  creditTermDays      Int?
+  expectedReceiptDate DateTime?
+  installmentsPlanned Int?
+  invoiceConfirmedAt  DateTime?
+  invoiceConfirmedBy  String?
+  receivedAt          DateTime?
+  deliveryStatus      DeliveryStatus @default(PENDENTE)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  need              WorkNeed              @relation(fields: [needId], references: [id], onDelete: Cascade)
-  supplier          Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierProduct   SupplierProduct?      @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
-  installments      PaymentInstallment[]
+  need            WorkNeed             @relation(fields: [needId], references: [id], onDelete: Cascade)
+  supplier        Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierProduct SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  installments    PaymentInstallment[]
+  stockMovements  StockMovement[]
 }
 
 enum InstallmentStatus {
@@ -1167,10 +1254,10 @@ model PaymentInstallment {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
-  quote         NeedQuote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  need          WorkNeed     @relation(fields: [needId], references: [id], onDelete: Cascade)
-  costPayment   CostPayment? @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
-  history       PaymentInstallmentHistory[]
+  quote       NeedQuote                   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  need        WorkNeed                    @relation(fields: [needId], references: [id], onDelete: Cascade)
+  costPayment CostPayment?                @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
+  history     PaymentInstallmentHistory[]
 
   @@index([needId])
   @@index([quoteId])
@@ -1188,7 +1275,7 @@ model PaymentInstallmentHistory {
   userName      String?
   createdAt     DateTime @default(now())
 
-  installment   PaymentInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  installment PaymentInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
 
   @@index([installmentId])
 }

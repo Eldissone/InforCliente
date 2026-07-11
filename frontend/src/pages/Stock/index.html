@@ -143,12 +143,16 @@
                         href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Projectos/ProjectGeral.html">Obras</a>
-                         <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
+                    <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
                         href="./index.html">Logística</a>
                     <a href="../Projectos/centroCustos.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento
-                        </a>
-                   
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Planeamento
+                    </a>
+                    <a href="../Projectos/Cotacao/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Cotação</a>
+                    <a href="../Financeiro/financeiro.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Financeiro</a>
+
                 </div>
             </div>
 
@@ -189,7 +193,7 @@
                 href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-              <a data-nav-logistics
+            <a data-nav-logistics
                 class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
@@ -198,7 +202,15 @@
                 href="../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
             </a>
-          
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/Cotacao/index.html">
+                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Financeiro/financeiro.html">
+                <span class="material-symbols-outlined text-lg">payments</span> Financeiro
+            </a>
+
             <button data-logout
                 class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
                 <span class="material-symbols-outlined text-lg">logout</span> Sair
@@ -272,6 +284,11 @@
                 <span id="returns_badge"
                     class="hidden absolute top-3 right-0 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
             </button>
+            <button data-tab="deliveries" data-perm="logistica:tab_deliveries"
+                class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
+                <span class="material-symbols-outlined text-lg">local_shipping</span>
+                <span class="tab-label">Entregas</span>
+            </button>
             <button data-tab="movements" data-perm="stock:tab_movements"
                 class="tab-btn px-3 py-4 text-sm font-bold text-slate-400 hover:text-slate-600 transition-all flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent">
                 <span class="material-symbols-outlined text-lg">history</span>
@@ -286,6 +303,19 @@
             </div>
         </div>
     </main>
+
+
+    <footer class="border-t border-slate-100 px-4 md:px-8 py-10 bg-white">
+        <div
+            class="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InfoGestor © 2026 - Todos os
+                direitos
+                reservados</p>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> MBT Energia
+            </span>
+        </div>
+    </footer>
 
     <!-- Modals -->
     <div id="modalContainer"></div>
