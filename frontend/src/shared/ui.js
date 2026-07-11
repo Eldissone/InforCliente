@@ -38,7 +38,113 @@ export function renderLoadingRow(colspan = 6) {
   `;
 }
 
-export function toast(message, { type = "info", timeoutMs = 3000 } = {}) {
+function dismissToastElement(el, root, onClose) {
+  el.classList.add("opacity-0");
+  el.style.transform = el.dataset.dismissTransform || "translateY(-8px)";
+  el.addEventListener(
+    "transitionend",
+    () => {
+      el.remove();
+      onClose?.();
+      if (root?.childElementCount === 0) root.remove();
+    },
+    { once: true }
+  );
+}
+
+function showPersistentNotification(message, { type = "info", link = null, onClose = null } = {}) {
+  const rootId = "InfoCliente-notification-root";
+  let root = document.getElementById(rootId);
+  if (!root) {
+    root = document.createElement("div");
+    root.id = rootId;
+    root.className = "fixed top-0 inset-x-0 z-[9999] flex flex-col pointer-events-none";
+    document.body.appendChild(root);
+  }
+
+  const styles =
+    type === "error"
+      ? {
+          bar: "bg-red-600 text-white border-red-700/30",
+          icon: "error",
+          linkBtn: "bg-white/15 hover:bg-white/25 text-white",
+          closeBtn: "text-white/80 hover:text-white hover:bg-white/15",
+        }
+      : type === "success"
+        ? {
+            bar: "bg-emerald-600 text-white border-emerald-700/30",
+            icon: "payments",
+            linkBtn: "bg-white/15 hover:bg-white/25 text-white",
+            closeBtn: "text-white/80 hover:text-white hover:bg-white/15",
+          }
+        : {
+            bar: "bg-slate-900 text-white border-slate-800/30",
+            icon: "info",
+            linkBtn: "bg-white/15 hover:bg-white/25 text-white",
+            closeBtn: "text-white/80 hover:text-white hover:bg-white/15",
+          };
+
+  const el = document.createElement("div");
+  el.dataset.dismissTransform = "-translate-y-full";
+  el.className = `pointer-events-auto border-b ${styles.bar} flex items-start gap-3 px-4 py-3.5 sm:px-6 shadow-lg transform -translate-y-full opacity-0 transition-all duration-300 ease-out`;
+
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-outlined text-[22px] shrink-0 mt-0.5";
+  icon.textContent = styles.icon;
+
+  const body = document.createElement("div");
+  body.className = "flex-1 min-w-0";
+
+  const text = document.createElement("p");
+  text.className = "font-semibold text-sm leading-snug";
+  text.textContent = message;
+  body.appendChild(text);
+
+  const actions = document.createElement("div");
+  actions.className = "flex items-center gap-2 shrink-0";
+
+  if (link) {
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = `h-8 px-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors ${styles.linkBtn}`;
+    openBtn.textContent = "Abrir";
+    openBtn.addEventListener("click", () => {
+      window.location.href = link.startsWith("/") ? link : `/${link}`;
+    });
+    actions.appendChild(openBtn);
+  }
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Fechar notificação");
+  closeBtn.className = `w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${styles.closeBtn}`;
+  closeBtn.innerHTML = `<span class="material-symbols-outlined text-[20px]">close</span>`;
+  closeBtn.addEventListener("click", () => dismissToastElement(el, root, onClose));
+  actions.appendChild(closeBtn);
+
+  el.append(icon, body, actions);
+  root.prepend(el);
+
+  requestAnimationFrame(() => {
+    el.classList.remove("-translate-y-full", "opacity-0");
+  });
+
+  return {
+    close: () => dismissToastElement(el, root, onClose),
+  };
+}
+
+/**
+ * @param {string} message
+ * @param {{ type?: string, timeoutMs?: number|null, persist?: boolean, link?: string|null, onClose?: (() => void)|null }} [options]
+ * - `persist: true` (ou `timeoutMs: 0`) — banner fixo no topo até o utilizador fechar.
+ */
+export function toast(message, { type = "info", timeoutMs = 3000, persist = false, link = null, onClose = null } = {}) {
+  const isPersistent = persist || timeoutMs === 0 || timeoutMs === null;
+  if (isPersistent) {
+    return showPersistentNotification(message, { type, link, onClose });
+  }
+
   const rootId = "InfoCliente-toast-root";
   let root = document.getElementById(rootId);
   if (!root) {
@@ -56,26 +162,22 @@ export function toast(message, { type = "info", timeoutMs = 3000 } = {}) {
         ? "bg-emerald-50 text-emerald-800 border-emerald-100"
         : "bg-white text-slate-800 border-slate-100";
 
+  el.dataset.dismissTransform = "translateY(-20px)";
   el.className = `pointer-events-auto border ${bg} flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg shadow-black/5 min-w-[320px] transform translate-y-[-20px] opacity-0 transition-all duration-300 ease-out`;
   el.innerHTML = `
-    <span class="material-symbols-outlined text-[20px] ${type === 'error' ? 'text-red-500' : type === 'success' ? 'text-emerald-500' : 'text-blue-500'}">
-      ${type === 'error' ? 'error' : type === 'success' ? 'check_circle' : 'info'}
+    <span class="material-symbols-outlined text-[20px] ${type === "error" ? "text-red-500" : type === "success" ? "text-emerald-500" : "text-blue-500"}">
+      ${type === "error" ? "error" : type === "success" ? "check_circle" : "info"}
     </span>
     <span class="font-medium text-sm">${message}</span>
   `;
   root.appendChild(el);
 
-  // Trigger animation
   requestAnimationFrame(() => {
     el.classList.remove("translate-y-[-20px]", "opacity-0");
   });
 
   window.setTimeout(() => {
-    el.classList.add("translate-y-[-20px]", "opacity-0");
-    el.addEventListener("transitionend", () => {
-      el.remove();
-      if (root.childElementCount === 0) root.remove();
-    });
+    dismissToastElement(el, root);
   }, timeoutMs);
 }
 

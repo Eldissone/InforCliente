@@ -12,6 +12,7 @@ import {
   createConversation,
   markConversationRead,
   searchUsers,
+  fetchNotifications,
 } from "../services/chatApi.js";
 import {
   connectSocket,
@@ -24,6 +25,10 @@ import {
   markMessagesRead,
 } from "../services/socketClient.js";
 import { escapeHtml } from "./ui.js";
+import {
+  enqueuePaymentNotification,
+  loadUnreadPaymentNotifications,
+} from "./paymentNotificationBar.js";
 
 let panelEl = null;
 let fabEl = null;
@@ -692,8 +697,11 @@ function wireSocketEvents() {
     if (isOpen && !state.activeId) renderConversationList();
   });
 
-  onSocketEvent("notification:new", () => {
+  onSocketEvent("notification:new", (payload) => {
     setChatUnreadCount(totalUnread() + 1);
+    if (payload?.type === "PAYMENT") {
+      enqueuePaymentNotification(payload);
+    }
   });
 }
 
@@ -740,5 +748,6 @@ export async function initChatFab() {
   createPanel();
   wireSocketEvents();
   await connectSocket().catch(() => { });
+  await loadUnreadPaymentNotifications(fetchNotifications);
   await loadConversations();
 }

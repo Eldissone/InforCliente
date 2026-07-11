@@ -317,10 +317,10 @@ function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
   let pctCount = 0;
 
   allCurrencies.forEach((cur) => {
-    const t = totalsByCurrency[cur] || { budgeted: 0, paid: 0, pctExecutado: 0 };
+    const t = totalsByCurrency[cur] || { basePrevisto: 0, budgeted: 0, paid: 0, pctExecutado: 0 };
     const ex = extrasByCurrency[cur] || { approved: 0, requested: 0 };
 
-    baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.budgeted, cur)}</p>`;
+    baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? t.budgeted ?? 0, cur)}</p>`;
     realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
 
     const requestedHint = ex.requested > ex.approved
@@ -366,7 +366,7 @@ function renderPrevistoRealTable(summary) {
     <tr class="${cc.overflow ? "overflow-row" : ""}">
       <td class="font-semibold text-slate-900">${cc.name}</td>
       <td class="text-right tabular-nums font-bold ${cc.overflow ? "text-red-600" : "text-slate-900"}">${formatCurrency(cc.paid, cur)}</td>
-      <td class="text-right tabular-nums font-medium text-slate-500">${formatCurrency(cc.budgeted, cur)}</td>
+      <td class="text-right tabular-nums font-medium text-slate-500">${formatCurrency(cc.basePrevisto ?? cc.budgeted ?? 0, cur)}</td>
       <td>
         <div class="flex items-center gap-2">
           <div class="prog-bar-wrap flex-1" style="min-width:80px">
@@ -2422,12 +2422,19 @@ async function submitLiquidation(e) {
     btn.innerHTML = `<span class="spinner w-4 h-4 mr-2 inline-block align-middle border-white"></span> A guardar...`;
     btn.disabled = true;
 
-    await apiUpload(`/cost-centers/${ccId}/payments/${txId}`, fd, "PATCH");
+    const result = await apiUpload(`/cost-centers/${ccId}/payments/${txId}`, fd, "PATCH");
 
     btn.innerHTML = oldText;
     btn.disabled = false;
 
-    showToast(liqAlreadyConfirmed ? "Lançamento atualizado com sucesso!" : "Lançamento liquidado com sucesso!", "success");
+    const sent = Number(result?.notificationsSent ?? 0);
+    let toastMsg = liqAlreadyConfirmed ? "Lançamento atualizado com sucesso!" : "Lançamento liquidado com sucesso!";
+    if (!liqAlreadyConfirmed && recipientIds.length) {
+      toastMsg += sent
+        ? ` Notificação enviada a ${sent} destinatário(s) (in-app).`
+        : " Nenhuma notificação foi entregue — confirma que o backend foi reiniciado e que estás com sessão aberta.";
+    }
+    showToast(toastMsg, sent || liqAlreadyConfirmed ? "success" : "info");
     document.getElementById("modalLiq").classList.remove("open");
 
     // Reset inputs

@@ -24,6 +24,15 @@ costCenterRoutes.use(authRequired);
 
 const WEEK_ORDER = Array.from({ length: 26 }, (_, i) => `SEM ${i}`);
 
+/** Total orçamental de uma necessidade aprovada/paga — mesma fórmula do Orçamento Geral no frontend. */
+function calcApprovedNeedTotal(need) {
+  if (!need || !["APPROVED", "PAID"].includes(need.status)) return 0;
+  const qty = Number(need.quantity) || 0;
+  const price = Number(need.unitPrice) || 0;
+  const hours = Number(need.hours) || 1;
+  return qty * price * hours;
+}
+
 function sortWeekEntries(weekMap) {
   const known = WEEK_ORDER.filter((w) => weekMap[w]).map((w) => weekMap[w]);
   const extra = Object.keys(weekMap)
@@ -380,6 +389,27 @@ costCenterRoutes.get(
       }
     });
 
+    // Orçamento Base Previsto = total do Orçamento Geral (itens APPROVED/PAID)
+    const approvedNeeds = await prisma.workNeed.findMany({
+      where: { projectId, status: { in: ["APPROVED", "PAID"] } },
+      select: {
+        costCenterId: true,
+        status: true,
+        quantity: true,
+        unitPrice: true,
+        hours: true,
+        costCenter: { select: { currency: true } },
+      },
+    });
+
+    const basePrevistoMap = {};
+    approvedNeeds.forEach((need) => {
+      const ccId = need.costCenterId;
+      const total = calcApprovedNeedTotal(need);
+      if (!basePrevistoMap[ccId]) basePrevistoMap[ccId] = 0;
+      basePrevistoMap[ccId] += total;
+    });
+
     // Agrupamento de necessidades por CC e status
     const needsAgg = await prisma.workNeed.groupBy({
       by: ["costCenterId", "status"],
@@ -398,19 +428,21 @@ costCenterRoutes.get(
 
     const summary = centers.map((cc) => {
       const pay = payMap[cc.id] || { budgeted: 0, paid: 0 };
+      const basePrevisto = basePrevistoMap[cc.id] || 0;
       const needs = needsMap[cc.id] || {};
-      const saldo = pay.budgeted - pay.paid;
-      const desvio = pay.budgeted > 0
-        ? ((pay.paid - pay.budgeted) / pay.budgeted) * 100
+      const saldo = basePrevisto - pay.paid;
+      const desvio = basePrevisto > 0
+        ? ((pay.paid - basePrevisto) / basePrevisto) * 100
         : 0;
-      const pctExecutado = pay.budgeted > 0
-        ? Math.min(100, (pay.paid / pay.budgeted) * 100)
+      const pctExecutado = basePrevisto > 0
+        ? Math.min(100, (pay.paid / basePrevisto) * 100)
         : 0;
 
       const currency = cc.currency || "AOA";
       if (!totalsByCurrency[currency]) {
-        totalsByCurrency[currency] = { budgeted: 0, paid: 0 };
+        totalsByCurrency[currency] = { basePrevisto: 0, budgeted: 0, paid: 0 };
       }
+      totalsByCurrency[currency].basePrevisto += basePrevisto;
       totalsByCurrency[currency].budgeted += pay.budgeted;
       totalsByCurrency[currency].paid += pay.paid;
 
@@ -419,12 +451,13 @@ costCenterRoutes.get(
         code: cc.code,
         name: cc.name,
         currency,
+        basePrevisto,
         budgeted: pay.budgeted,
         paid: pay.paid,
         saldo,
         desvio,
         pctExecutado,
-        overflow: pay.paid > pay.budgeted,
+        overflow: pay.paid > basePrevisto && basePrevisto > 0,
         needsCounts: {
           pending: needs.PENDING || 0,
           approved: needs.APPROVED || 0,
@@ -436,8 +469,8 @@ costCenterRoutes.get(
 
     Object.keys(totalsByCurrency).forEach(curr => {
       const t = totalsByCurrency[curr];
-      t.saldo = t.budgeted - t.paid;
-      t.pctExecutado = t.budgeted > 0 ? Math.min(100, (t.paid / t.budgeted) * 100) : 0;
+      t.saldo = (t.basePrevisto || 0) - t.paid;
+      t.pctExecutado = t.basePrevisto > 0 ? Math.min(100, (t.paid / t.basePrevisto) * 100) : 0;
     });
 
     // Pedidos extra da obra — aprovados (inclui já pagos) e total solicitado activo
@@ -1050,21 +1083,20 @@ costCenterRoutes.patch(
     });
 
     if (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") {
-      setImmediate(async () => {
-        try {
-          const payment = await loadPaymentForNotification(updated.id);
-          if (payment) {
-            await notifyPaymentEvent(req.app.get("io"), payment, "PAYMENT_CONFIRMED", req.user, {
-              explicitRecipientIds,
-            });
-          }
-        } catch (e) {
-          console.error("notifyPaymentEvent CONFIRMED:", e);
+      try {
+        const payment = await loadPaymentForNotification(updated.id);
+        if (payment) {
+          const notifyResult = await notifyPaymentEvent(req.app.get("io"), payment, "PAYMENT_CONFIRMED", req.user, {
+            explicitRecipientIds,
+          });
+          return res.json({ id: updated.id, notificationsSent: notifyResult.sent || 0 });
         }
-      });
+      } catch (e) {
+        console.error("notifyPaymentEvent CONFIRMED:", e);
+      }
     }
 
-    return res.json({ id: updated.id });
+    return res.json({ id: updated.id, notificationsSent: 0 });
   })
 );
 

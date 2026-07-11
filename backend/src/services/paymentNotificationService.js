@@ -91,10 +91,14 @@ async function notifyPaymentEvent(io, payment, event, actor = {}, options = {}) 
     : [];
   const autoRecipientIds = await resolveRecipientIds(payment, event);
   const recipientIds = [...new Set([...autoRecipientIds, ...explicitRecipientIds])];
-  const filteredIds = recipientIds.filter((userId) => !(actor.sub && userId === actor.sub));
-  if (!filteredIds.length) return { sent: 0 };
-
   const explicitSet = new Set(explicitRecipientIds);
+  // Quem liquida o pagamento não recebe notificações automáticas (evita ruído),
+  // mas se foi explicitamente seleccionado em "Notificar / Enviar comprovativo a"
+  // deve receber — escolheu activamente receber o comprovativo.
+  const filteredIds = recipientIds.filter(
+    (userId) => explicitSet.has(userId) || !(actor.sub && userId === actor.sub)
+  );
+  if (!filteredIds.length) return { sent: 0 };
 
   const dedupeEvents = new Set(["PAYMENT_DUE", "PAYMENT_OVERDUE"]);
   const { title, body } = buildNotificationContent(payment, event);

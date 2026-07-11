@@ -43,3 +43,9 @@ export function fetchNotifications({ unreadOnly = false } = {}) {
 export function fetchUnreadNotificationCount() {
   return apiRequest("/notifications/unread-count");
 }
+
+export function markNotificationRead(notificationId) {
+  return apiRequest(`/notifications/${encodeURIComponent(notificationId)}/read`, {
+    method: "PATCH",
+  });
+}

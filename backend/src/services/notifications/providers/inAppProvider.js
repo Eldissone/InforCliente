@@ -24,6 +24,7 @@ async function send({ io, user, type, title, body, link, metadata }) {
       title: notification.title,
       body: notification.body,
       link: notification.link,
+      metadata: notification.metadata || null,
       createdAt: notification.createdAt,
     });
   }
