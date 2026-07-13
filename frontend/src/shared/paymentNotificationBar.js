@@ -9,6 +9,9 @@ let currentPayload = null;
 
 function resolveStyle(payload) {
   const title = String(payload?.title || "").toLowerCase();
+  if (payload?.metadata?.extraRequestId || title.includes("pedido extra")) {
+    return { bar: "bg-indigo-600 text-white", icon: "request_quote", accent: "text-indigo-100" };
+  }
   if (title.includes("atraso")) {
     return { bar: "bg-red-600 text-white", icon: "warning", accent: "text-red-100" };
   }
@@ -30,7 +33,32 @@ function getComprovativoUrl(payload) {
   return raw ? getAssetUrl(raw) : null;
 }
 
+function buildFinanceiroNotificationUrl(payload) {
+  const extraId = payload?.metadata?.extraRequestId;
+  if (extraId) {
+    const params = new URLSearchParams({ extraRequestId: extraId });
+    if (payload.metadata?.projectId) params.set("projectId", payload.metadata.projectId);
+    return `/Financeiro/financeiro.html?${params}`;
+  }
+  const paymentId = payload?.metadata?.paymentId;
+  if (!paymentId) return null;
+  const params = new URLSearchParams({ paymentId });
+  if (payload.metadata?.projectId) params.set("projectId", payload.metadata.projectId);
+  if (payload.metadata?.event === "PAYMENT_CONFIRMED" && payload.metadata?.comprovativoUrl) {
+    params.set("focus", "comprovativo");
+  }
+  return `/Financeiro/financeiro.html?${params}`;
+}
+
 function openNotificationTarget(payload) {
+  if (payload?.type === "PAYMENT") {
+    const financeiroUrl = buildFinanceiroNotificationUrl(payload);
+    if (financeiroUrl) {
+      window.location.href = financeiroUrl;
+      return;
+    }
+  }
+
   const comprovativo = getComprovativoUrl(payload);
   if (comprovativo) {
     window.open(comprovativo, "_blank", "noopener,noreferrer");
@@ -43,6 +71,9 @@ function openNotificationTarget(payload) {
 }
 
 function canOpenNotification(payload) {
+  if (payload?.type === "PAYMENT" && (payload?.metadata?.paymentId || payload?.metadata?.extraRequestId)) {
+    return true;
+  }
   return Boolean(getComprovativoUrl(payload) || payload?.link);
 }
 
@@ -94,6 +125,7 @@ function renderCurrent() {
   const comprovativoUrl = getComprovativoUrl(currentPayload);
   const pending = totalPending();
   const queueLabel = pending > 1 ? `1 de ${pending}` : "";
+  const openable = canOpenNotification(currentPayload);
 
   ensureShell();
   cardEl.className = `pointer-events-auto rounded-2xl shadow-2xl shadow-black/20 overflow-hidden border border-white/10 opacity-100 scale-100 translate-y-0 transition-all duration-300 ${style.bar}`;
@@ -101,6 +133,22 @@ function renderCurrent() {
 
   const row = document.createElement("div");
   row.className = "flex items-start gap-3 px-4 py-3.5";
+  if (openable) {
+    row.classList.add("cursor-pointer");
+    row.setAttribute("role", "button");
+    row.setAttribute("tabindex", "0");
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      openNotificationTarget(currentPayload);
+      closeCurrent(true);
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      openNotificationTarget(currentPayload);
+      closeCurrent(true);
+    });
+  }
 
   const icon = document.createElement("span");
   icon.className = "material-symbols-outlined text-[22px] shrink-0 mt-0.5";
@@ -136,9 +184,16 @@ function renderCurrent() {
     openBtn.type = "button";
     openBtn.className =
       "h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wide bg-white/15 hover:bg-white/25 transition-colors";
-    openBtn.textContent = comprovativoUrl ? "Comprovativo" : "Abrir";
-    openBtn.addEventListener("click", () => {
+    openBtn.textContent =
+      payload?.metadata?.extraRequestId || String(currentPayload?.title || "").toLowerCase().includes("pedido extra")
+        ? "Liquidar"
+        : String(currentPayload?.metadata?.event || "") === "PAYMENT_CONFIRMED"
+          ? "Ver lançamento"
+          : "Liquidar";
+    openBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
       openNotificationTarget(currentPayload);
+      closeCurrent(true);
     });
     actions.appendChild(openBtn);
   }

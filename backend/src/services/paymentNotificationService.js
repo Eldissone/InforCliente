@@ -63,11 +63,9 @@ async function resolveRecipientIds(payment, event) {
 }
 
 function buildPaymentLink(payment) {
-  const projectId = payment.projectId;
-  if (projectId) {
-    return `/Projectos/centroCustos.html?projectId=${projectId}`;
-  }
-  return "/Projectos/centroCustos.html";
+  const params = new URLSearchParams({ paymentId: payment.id });
+  if (payment.projectId) params.set("projectId", payment.projectId);
+  return `/Financeiro/financeiro.html?${params}`;
 }
 
 function buildNotificationContent(payment, event) {

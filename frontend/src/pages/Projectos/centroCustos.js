@@ -149,7 +149,7 @@ function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}
           </button>`;
 
   return `
-    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${payload}' data-type="${p.status === "PENDENTE" ? "PAYMENT" : "VIEW"}">
+    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${payload}' data-type="VIEW">
       <td class="text-xs font-bold text-slate-500">${p.docNumber || "—"}</td>
       <td class="text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
       ${projectCell}
@@ -163,12 +163,6 @@ function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}
       <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${statusLabels[p.status] || p.status}</span></td>
       <td class="text-center">
         <div class="flex justify-center gap-2">
-          ${p.status === "PENDENTE" ? `
-            <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${payload}' data-type="PAYMENT" title="Pagar lançamento"
-              class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all text-emerald-600">
-              <span class="material-symbols-outlined text-base">check_circle</span>
-            </button>
-          ` : ""}
           ${editActions}
         </div>
       </td>
@@ -1125,9 +1119,11 @@ function bindEvents() {
   });
   document.getElementById("formFund")?.addEventListener("submit", submitFund);
   document.getElementById("fundAdjustBtn")?.addEventListener("click", () => openFundMovementModal());
+  document.getElementById("fundDeleteBtn")?.addEventListener("click", () => deleteFundHandler());
   document.getElementById("formFundMovement")?.addEventListener("submit", submitFundMovement);
   document.getElementById("fundAddCardBtn")?.addEventListener("click", () => openFundCardModal());
   document.getElementById("formFundCard")?.addEventListener("submit", submitFundCard);
+  document.getElementById("fundCardDeleteBtn")?.addEventListener("click", () => deleteFundCardHandler());
   document.getElementById("fundReinforcementBtn")?.addEventListener("click", () => openReinforcementModal());
   document.getElementById("formReinforcement")?.addEventListener("submit", submitReinforcementRequest);
 
@@ -1595,6 +1591,18 @@ async function submitPay(e) {
 }
 
 // ── Fase 7/8: Fundo de Maneio ────────────────────────────────────────────────
+function apiErrorMessage(err) {
+  return err?.data?.message || err?.message || "Erro desconhecido";
+}
+
+function fundDisplayBalance(fund) {
+  const cards = fund.cards || [];
+  if (cards.length === 0) return Number(fund.currentBalance || 0);
+  return cards
+    .filter((c) => c.active !== false)
+    .reduce((sum, c) => sum + Number(c.currentBalance || 0), 0);
+}
+
 async function loadFunds() {
   if (!selectedProject) return;
   const grid = document.getElementById("fundsGrid");
@@ -1627,11 +1635,13 @@ function renderFundsGrid() {
   grid.innerHTML = currentFunds
     .map((f) => {
       const active = f.id === selectedFundId;
+      const balance = fundDisplayBalance(f);
+      const cardCount = (f.cards || []).length;
       return `<button onclick="window.selectFundHandler('${f.id}')"
         class="text-left p-4 rounded-2xl border transition-all ${active ? "border-emerald-500 bg-emerald-50 shadow-md" : "border-slate-100 bg-white hover:border-emerald-200"}">
         <p class="text-xs font-bold text-slate-400 uppercase tracking-wide">${f.name}</p>
-        <p class="text-2xl font-bold text-slate-900 mt-1">${formatCurrency(f.currentBalance, f.currency)}</p>
-        <p class="text-[11px] text-slate-400 mt-1">${(f.cards || []).length} cartão(ões) · saldo disponível</p>
+        <p class="text-2xl font-bold text-slate-900 mt-1">${formatCurrency(balance, f.currency)}</p>
+        <p class="text-[11px] text-slate-400 mt-1">${cardCount} cartão(ões) · saldo dos cartões</p>
       </button>`;
     })
     .join("");
@@ -1666,7 +1676,8 @@ async function selectFund(fundId) {
     const data = await apiRequest(`/petty-cash/funds/${fundId}?pageSize=30`);
     const fund = data.fund;
     currentFundCards = fund.cards || [];
-    document.getElementById("fundDetailName").textContent = `${fund.name} · ${formatCurrency(fund.currentBalance, fund.currency)}`;
+    const fundBalance = fundDisplayBalance(fund);
+    document.getElementById("fundDetailName").textContent = `${fund.name} · ${formatCurrency(fundBalance, fund.currency)}`;
 
     const cardsRow = document.getElementById("fundCardsRow");
     cardsRow.innerHTML =
@@ -1703,7 +1714,6 @@ async function submitFund(e) {
   const body = {
     projectId: selectedProject.id,
     name: document.getElementById("fundName").value.trim(),
-    initialBalance: parseFloat(document.getElementById("fundInitialBalance").value) || 0,
     currency: document.getElementById("fundCurrency").value.trim() || "AOA",
     notes: document.getElementById("fundNotes").value.trim() || null,
   };
@@ -1761,6 +1771,7 @@ function openFundCardModal() {
   document.getElementById("fundCardCardId").value = "";
   document.getElementById("modalFundCardTitle").textContent = "Novo Cartão";
   document.getElementById("formFundCardSubmitBtn").textContent = "Adicionar";
+  document.getElementById("fundCardDeleteBtn")?.classList.add("hidden");
   const initialBalanceInput = document.getElementById("fundCardInitialBalance");
   initialBalanceInput.disabled = false;
   initialBalanceInput.parentElement.classList.remove("opacity-50");
@@ -1775,6 +1786,7 @@ window.editFundCardHandler = function (cardId) {
   document.getElementById("fundCardCardId").value = card.id;
   document.getElementById("modalFundCardTitle").textContent = "Editar Cartão";
   document.getElementById("formFundCardSubmitBtn").textContent = "Guardar";
+  document.getElementById("fundCardDeleteBtn")?.classList.remove("hidden");
   document.getElementById("fundCardLabel").value = card.label || "";
   document.getElementById("fundCardType").value = card.type || "PREPAGO";
   document.getElementById("fundCardBank").value = card.bank || "";
@@ -1825,6 +1837,50 @@ async function submitFundCard(e) {
   }
 }
 
+async function deleteFundHandler() {
+  if (!selectedFundId) return;
+  const fund = currentFunds.find((f) => f.id === selectedFundId);
+  const name = fund?.name || "este fundo";
+  if (
+    !confirm(
+      `Eliminar o fundo "${name}"?\n\nSó é possível se o saldo for zero e não houver movimentações registadas.`
+    )
+  ) {
+    return;
+  }
+  try {
+    await apiRequest(`/petty-cash/funds/${selectedFundId}`, { method: "DELETE" });
+    showToast("Fundo de Maneio eliminado", "success");
+    selectedFundId = null;
+    await loadFunds();
+  } catch (err) {
+    showToast(apiErrorMessage(err), "error");
+  }
+}
+
+async function deleteFundCardHandler() {
+  const fundId = document.getElementById("fundCardFundId").value;
+  const cardId = document.getElementById("fundCardCardId").value;
+  if (!fundId || !cardId) return;
+  const card = currentFundCards.find((c) => c.id === cardId);
+  const label = card?.label || "este cartão";
+  if (
+    !confirm(
+      `Eliminar o cartão "${label}"?\n\nSó é possível se o saldo for zero e não houver movimentações.`
+    )
+  ) {
+    return;
+  }
+  try {
+    await apiRequest(`/petty-cash/funds/${fundId}/cards/${cardId}`, { method: "DELETE" });
+    showToast("Cartão eliminado", "success");
+    document.getElementById("modalFundCard").classList.remove("open");
+    await loadFunds();
+  } catch (err) {
+    showToast(apiErrorMessage(err), "error");
+  }
+}
+
 // ── Fase 2: Pedidos de Reforço de Fundo de Maneio ───────────────────────────
 const REINFORCEMENT_STATUS_STYLES = {
   PENDENTE: "bg-amber-100 text-amber-700",
@@ -1860,8 +1916,7 @@ function renderReinforcementRow(r, currency) {
   const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${REINFORCEMENT_STATUS_STYLES[r.status] || ""}">${REINFORCEMENT_STATUS_LABELS[r.status] || r.status}</span>`;
   const actions = [];
   if (r.status === "PENDENTE") {
-    actions.push(`<button onclick="window.approveReinforcementHandler('${r.id}')" class="text-xs font-bold text-emerald-600 hover:underline">Aprovar</button>`);
-    actions.push(`<button onclick="window.rejectReinforcementHandler('${r.id}')" class="text-xs font-bold text-red-600 hover:underline">Rejeitar</button>`);
+    actions.push(`<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg" title="Aprovação no Perfil Financeiro">Aguarda Financeiro</span>`);
     actions.push(`<button onclick="window.cancelReinforcementHandler('${r.id}')" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
   }
   return `<tr>
@@ -1880,7 +1935,7 @@ function openReinforcementModal() {
     return;
   }
   if (currentFundCards.length === 0) {
-    showToast("Adiciona pelo menos um cartão a este fundo antes de pedir reforço", "warning");
+    showToast("Adiciona pelo menos um cartão a este fundo antes de pedir reforço", "error");
     return;
   }
   document.getElementById("formReinforcement").reset();
@@ -1909,28 +1964,6 @@ async function submitReinforcementRequest(e) {
     showToast("Erro: " + err.message, "error");
   }
 }
-
-window.approveReinforcementHandler = async function (id) {
-  if (!confirm("Aprovar este Pedido de Reforço? O saldo do cartão será creditado.")) return;
-  try {
-    await apiRequest(`/petty-cash/reinforcement-requests/${id}/approve`, { method: "PATCH" });
-    showToast("Pedido de Reforço aprovado", "success");
-    await loadFunds();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
-
-window.rejectReinforcementHandler = async function (id) {
-  const reason = prompt("Motivo da rejeição (opcional):") || null;
-  try {
-    await apiRequest(`/petty-cash/reinforcement-requests/${id}/reject`, { method: "PATCH", body: { reason } });
-    showToast("Pedido de Reforço rejeitado", "success");
-    await loadFunds();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
 
 window.cancelReinforcementHandler = async function (id) {
   if (!confirm("Cancelar este Pedido de Reforço?")) return;
@@ -2000,7 +2033,7 @@ function renderExtraRow(it) {
     actions.push(`<button onclick="window.rejectExtraHandler('${it.id}')" class="text-xs font-bold text-red-600 hover:underline">Rejeitar</button>`);
   }
   if (it.status === "APROVADO") {
-    actions.push(`<button onclick="window.payExtraHandler('${it.id}')" class="text-xs font-bold text-indigo-600 hover:underline">Pagar</button>`);
+    actions.push(`<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg" title="Liquidação no Perfil Financeiro">Aguarda Financeiro</span>`);
   }
   if (it.status === "PENDENTE" || it.status === "APROVADO") {
     actions.push(`<button onclick="window.cancelExtraHandler('${it.id}')" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
@@ -2033,7 +2066,7 @@ async function ensureFundsLoadedForExtra(type) {
   const fundSelect = document.getElementById("extraFundId");
   fundSelect.innerHTML =
     `<option value="">Selecionar...</option>` +
-    currentFunds.map((f) => `<option value="${f.id}">${f.name} (${formatCurrency(f.currentBalance, f.currency)})</option>`).join("");
+    currentFunds.map((f) => `<option value="${f.id}">${f.name} (${formatCurrency(fundDisplayBalance(f), f.currency)})</option>`).join("");
   populateExtraCardOptions();
 }
 
@@ -2110,14 +2143,18 @@ window.rejectExtraHandler = async function (id) {
 };
 
 window.payExtraHandler = async function (id) {
-  if (!confirm("Confirmar execução do pagamento deste Pedido Extra?")) return;
+  if (!confirm("Confirmar débito no Fundo de Maneio deste Pedido Extra?")) return;
   try {
     await apiRequest(`/extra-requests/${id}/pay`, { method: "POST" });
-    showToast("Pedido pago", "success");
+    showToast("Pedido pago via fundo de maneio", "success");
     refreshExtrasLists();
     if (document.getElementById("tab-fundomaneio")?.classList.contains("active")) loadFunds();
   } catch (err) {
-    showToast("Erro: " + err.message, "error");
+    const msg =
+      err.message?.includes("FINANCEIRO") || err.message?.includes("Financeiro")
+        ? "Este pedido deve ser liquidado no Perfil Financeiro."
+        : err.message;
+    showToast("Erro: " + msg, "error");
   }
 };
 
@@ -2214,7 +2251,7 @@ async function loadTransactions() {
       const paymentTypeBadge = `<span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${paymentTypeClass}">${paymentTypeStr}</span>`;
 
       return `
-        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="PAYMENT">
+        <tr class="cursor-pointer hover:bg-slate-50/50 transition-colors" onclick="openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="VIEW">
           <td class="text-xs text-slate-500">${new Date(t.paymentDate).toLocaleDateString("pt-PT")}</td>
           <td class="font-bold text-slate-700 max-w-[200px] truncate" title="${descStr}">${t.description}</td>
           <td class="text-xs text-slate-500">${t.supplier || "-"}</td>
@@ -2230,16 +2267,7 @@ async function loadTransactions() {
           </td>
           <td class="text-center">
             <div class="flex items-center justify-center gap-2">
-              ${!isPaid ? `
-                <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="TRANSACTION" title="Liquidar" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
-                  <span class="material-symbols-outlined text-base">check_circle</span>
-                </button>
-              ` : `
-                <button title="Liquidado" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-300 flex items-center justify-center cursor-not-allowed">
-                  <span class="material-symbols-outlined text-base">done_all</span>
-                </button>
-              `}
-              <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="PAYMENT" title="Ver Detalhes" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d] hover:text-slate-900 transition-all text-slate-500">
+              <button onclick="event.stopPropagation(); openPaymentAsideHandler(this)" data-payload='${JSON.stringify(t).replace(/'/g, "&#39;")}' data-type="VIEW" title="Ver detalhes" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d] hover:text-slate-900 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">visibility</span>
               </button>
             </div>
@@ -2718,17 +2746,13 @@ window.openPaymentAside = function (data, type) {
   }
 
   const actionBtn = document.getElementById("asideActionBtn");
+  const asideFinanceHint = document.getElementById("asideFinanceHint");
 
-  if (type === 'VIEW') {
-    actionBtn.classList.add("hidden");
-  } else {
-    actionBtn.classList.remove("hidden");
-    actionBtn.onclick = () => {
-      if (type === 'PAYMENT' || type === 'TRANSACTION') {
-        openLiquidateModal(data);
-      }
-      closePaymentAside();
-    };
+  actionBtn?.classList.add("hidden");
+  if (asideFinanceHint) {
+    const pending =
+      data.status === "PENDENTE" || data.status === "APROVADO" || data.timelineStatus === "PENDENTE" || data.timelineStatus === "VENCIDO";
+    asideFinanceHint.classList.toggle("hidden", !pending);
   }
 
   overlay.classList.remove("hidden");

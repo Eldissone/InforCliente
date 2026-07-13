@@ -56,6 +56,51 @@ function getSelectedLiqRecipientIds() {
   return Array.from(document.querySelectorAll(".liq-recipient-checkbox:checked")).map((el) => el.value);
 }
 
+function renderAsidePaymentType(data) {
+  const typeEl = document.getElementById("asidePaymentType");
+  const creditSection = document.getElementById("asideCreditTermSection");
+  const creditTermEl = document.getElementById("asideCreditTerm");
+  const creditInstallmentEl = document.getElementById("asideCreditInstallment");
+  if (!typeEl) return;
+
+  const paymentType = data.paymentType || "PRONTO_PAGAMENTO";
+  const isCredit = paymentType === "CREDITO";
+  const badgeClass = isCredit
+    ? "bg-sky-50 text-sky-700 border border-sky-100"
+    : "bg-red-50 text-red-700 border border-red-200";
+  const shortLabel = isCredit ? "C" : "PP";
+  const fullLabel = isCredit ? "Crédito" : "Pronto Pagamento";
+
+  typeEl.innerHTML = `<span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${badgeClass}">${shortLabel} · ${fullLabel}</span>`;
+
+  if (creditSection) {
+    if (isCredit) {
+      creditSection.classList.remove("hidden");
+      const days = data.creditTermDays;
+      if (creditTermEl) {
+        creditTermEl.textContent =
+          days != null && Number.isFinite(Number(days)) ? `${Number(days)} dias` : "—";
+      }
+      if (creditInstallmentEl) {
+        const num = data.installmentNumber;
+        const total = data.installmentsPlanned;
+        const row = document.getElementById("asideCreditInstallmentRow");
+        if (num != null && total != null) {
+          creditInstallmentEl.textContent = `Parcela ${num} de ${total}`;
+          row?.classList.remove("hidden");
+        } else if (num != null) {
+          creditInstallmentEl.textContent = `Parcela ${num}`;
+          row?.classList.remove("hidden");
+        } else {
+          row?.classList.add("hidden");
+        }
+      }
+    } else {
+      creditSection.classList.add("hidden");
+    }
+  }
+}
+
 function renderAsideFiscalSection(data) {
   const section = document.getElementById("asideFiscalSection");
   const container = document.getElementById("asideFiscalBreakdown");
@@ -268,6 +313,7 @@ function openPaymentAside(data, type, options = {}) {
       : "—";
   document.getElementById("asideSupplier").textContent = data.supplier || "—";
   document.getElementById("asideCategory").textContent = data.category || "—";
+  renderAsidePaymentType(data);
   document.getElementById("asideNIF").textContent = data.supplierNif || data.nif || "—";
   document.getElementById("asideIBAN").textContent = data.supplierIban || data.iban || "—";
   document.getElementById("asideSupplierDetails")?.classList.remove("hidden");

@@ -1,5 +1,6 @@
 import { apiRequest } from "../../services/api.js";
 import { setPendingAuthSelection, setSession } from "../../services/auth.js";
+import { resolvePostLoginPath } from "../../shared/postLoginRedirect.js";
 import { toast, setButtonLoading } from "../../shared/ui.js";
 
 function qs(id) {
@@ -64,21 +65,16 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
 
     setSession(res);
 
-    import("../../shared/permissions.js")
-      .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
-      .catch(() => {});
-
     toast(`Bem-vindo, ${res.user.name || res.user.email || "Utilizador"}!`);
 
     const next = getNext();
-    setTimeout(() => {
+    setTimeout(async () => {
       if (next) {
         window.location.href = `/${next}`;
-      } else {
-        const role = (res?.user?.role || "").toLowerCase();
-        window.location.href =
-          role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
+        return;
       }
+      const path = await resolvePostLoginPath(res.user);
+      window.location.href = path;
     }, 800);
   } catch (err) {
     setButtonLoading(submitBtn, false);

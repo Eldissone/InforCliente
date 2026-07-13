@@ -23,6 +23,7 @@ const ROLE_STYLES = {
   supervisor: { cls: "bg-purple-50 text-purple-700 border-purple-100", icon: "manage_accounts" },
   leitura: { cls: "bg-slate-50 text-slate-500 border-slate-200", icon: "visibility" },
   cliente: { cls: "bg-emerald-50 text-emerald-700 border-emerald-100", icon: "business" },
+  financeiro: { cls: "bg-teal-50 text-teal-700 border-teal-100", icon: "payments" },
 };
 function roleBadge(role) {
   const s = ROLE_STYLES[role] || ROLE_STYLES.leitura;
@@ -193,7 +194,7 @@ function renderTable(users) {
 
 // ─── Permissions — catálogo dinâmico (API) ──────────────────────
 
-const ROLES = ["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"];
+const ROLES = ["admin", "operador", "financeiro", "tecnico", "supervisor", "leitura", "cliente"];
 
 /** Fallback se API do catálogo falhar */
 const PERM_DISPLAY_FALLBACK = [
@@ -930,7 +931,7 @@ function wireProjectSelector(panel, roleId, wrapId) {
   const wrapEl = panel.querySelector(`#${wrapId}`);
   const sync = () => {
     const role = roleEl?.value;
-    const isAllowedRole = ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role);
+    const isAllowedRole = ["operador", "financeiro", "leitura", "cliente", "tecnico", "supervisor"].includes(role);
     wrapEl?.classList.toggle("hidden", !isAllowedRole);
   };
   roleEl?.addEventListener("change", sync);
@@ -981,6 +982,7 @@ async function openCreate() {
           <select id="u_role" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 font-semibold">
             <option value="leitura">Leitura</option>
             <option value="operador">Operador</option>
+            <option value="financeiro">Financeiro</option>
             <option value="tecnico">Técnico de Obra</option>
             <option value="supervisor">Supervisor de Obra</option>
             <option value="admin">Administrador</option>
@@ -1016,7 +1018,7 @@ async function openCreate() {
             password: v("u_pass"),
             role,
             clientId,
-            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : []
+            assignedProjectIds: ["operador", "financeiro", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : []
           }
         });
         toast("Utilizador criado com sucesso.", { type: "success" });
@@ -1084,6 +1086,7 @@ async function openEdit(id) {
           <select id="e_role" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 font-semibold">
             <option value="leitura" ${u.role === "leitura" ? "selected" : ""}>Leitura</option>
             <option value="operador" ${u.role === "operador" ? "selected" : ""}>Operador</option>
+            <option value="financeiro" ${u.role === "financeiro" ? "selected" : ""}>Financeiro</option>
             <option value="tecnico" ${u.role === "tecnico" ? "selected" : ""}>Técnico de Obra</option>
             <option value="supervisor" ${u.role === "supervisor" ? "selected" : ""}>Supervisor de Obra</option>
             <option value="admin" ${u.role === "admin" ? "selected" : ""}>Administrador</option>
@@ -1094,7 +1097,7 @@ async function openEdit(id) {
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente Vinculado</label>
           <select id="e_client" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50">${renderClientOptions(clients, u.clientId || "")}</select>
         </div>
-        <div id="e_proj_wrap" class="${["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(u.role) ? "" : "hidden"} md:col-span-2">
+        <div id="e_proj_wrap" class="${["operador", "financeiro", "leitura", "cliente", "tecnico", "supervisor"].includes(u.role) ? "" : "hidden"} md:col-span-2">
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Obras Atribuídas</label>
           <p class="text-[10px] text-slate-400 mb-2 font-medium">Selecione as obras que este utilizador poderá gerir/visualizar.</p>
           ${renderProjectCheckboxes(projects, (u.assignedProjects || []).map(p => p.id))}
@@ -1125,7 +1128,7 @@ async function openEdit(id) {
             name: v("e_name") || null,
             role,
             clientId,
-            assignedProjectIds: ["operador", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : [],
+            assignedProjectIds: ["operador", "financeiro", "leitura", "cliente", "tecnico", "supervisor"].includes(role) ? assignedProjectIds : [],
             phone: v("e_phone") || null,
             whatsapp: v("e_whatsapp") || null,
             isFinancialReceiver: panel.querySelector("#e_fin_receiver")?.checked || false,

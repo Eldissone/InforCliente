@@ -4,6 +4,14 @@ const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { applyFundMovement, InsufficientBalanceError } = require("../services/pettyCashService");
+const {
+  notifyExtraRequestApproved,
+  needsFinanceiroLiquidation,
+} = require("../services/extraRequestNotificationService");
+const {
+  getEffectivePermissionsForUser,
+  resolveAllowedFromMap,
+} = require("../services/permissionResolver");
 const { createLog } = require("../services/logService");
 
 const extraRequestRoutes = express.Router();
@@ -64,6 +72,61 @@ extraRequestRoutes.get(
     ]);
 
     return res.json({ page, pageSize, total, items: items.map(mapExtra) });
+  })
+);
+
+// GET /extra-requests/pending-finance-payment — Fila de pedidos extra a liquidar (Perfil Financeiro)
+extraRequestRoutes.get(
+  "/pending-finance-payment",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const items = await prisma.extraRequest.findMany({
+      where: {
+        status: "APROVADO",
+        ...(projectId ? { projectId } : {}),
+      },
+      orderBy: [{ approvedAt: "desc" }, { createdAt: "desc" }],
+      include: EXTRA_INCLUDE,
+    });
+    return res.json({ total: items.length, items: items.map(mapExtra) });
+  })
+);
+
+async function assertCanPayExtraRequest(req) {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role === "admin") return;
+
+  const userId = req.user?.sub;
+  if (!userId) {
+    const err = new Error("UNAUTHORIZED");
+    err.status = 401;
+    throw err;
+  }
+
+  const perms = await getEffectivePermissionsForUser(userId);
+  const finEdit = resolveAllowedFromMap(perms?.effectiveMap || {}, "financeiro", "edit");
+  const finView = resolveAllowedFromMap(perms?.effectiveMap || {}, "financeiro", "view");
+  if (finEdit === "true" || finView === "true") return;
+
+  const err = new Error("FINANCEIRO_ONLY");
+  err.status = 403;
+  err.message = "Liquidação apenas no Perfil Financeiro.";
+  throw err;
+}
+
+// GET /extra-requests/:id — Detalhe (deep link / notificações)
+extraRequestRoutes.get(
+  "/:id",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const item = await prisma.extraRequest.findUnique({
+      where: { id },
+      include: EXTRA_INCLUDE,
+    });
+    if (!item) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    return res.json(mapExtra(item));
   })
 );
 
@@ -185,6 +248,14 @@ extraRequestRoutes.patch(
     });
 
     await logExtraAction(req, { action: "extra_request_approve", extraRequestId: id });
+
+    const io = req.app.get("io");
+    if (io) {
+      notifyExtraRequestApproved(io, updated, req.user || {}).catch((e) =>
+        console.error("notifyExtraRequestApproved:", e)
+      );
+    }
+
     return res.json(mapExtra(updated));
   })
 );
@@ -236,16 +307,28 @@ extraRequestRoutes.patch(
   })
 );
 
-// POST /extra-requests/:id/pay — Executar pagamento (debita Fundo de Maneio quando aplicável)
+// POST /extra-requests/:id/pay — Liquidar pedido (Fundo de Maneio no CC; transferências só Financeiro)
 extraRequestRoutes.post(
   "/:id/pay",
-  requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
     if (existing.status !== "APROVADO") {
       return res.status(409).json({ error: "ONLY_APPROVED_CAN_BE_PAID" });
+    }
+
+    try {
+      await assertCanPayExtraRequest(req);
+    } catch (err) {
+      if (err.status === 403) {
+        return res.status(403).json({
+          error: err.message === "FINANCEIRO_ONLY" ? "FINANCEIRO_ONLY" : "FORBIDDEN",
+          message: err.message || "Sem permissão para liquidar este pedido.",
+        });
+      }
+      if (err.status === 401) return res.status(401).json({ error: "UNAUTHORIZED" });
+      throw err;
     }
 
     const u = req.user || {};

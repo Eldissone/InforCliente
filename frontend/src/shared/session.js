@@ -1,4 +1,5 @@
 import { getSessionUser, logout as clearSession } from "../services/auth.js";
+import { resolveHomePathByRole } from "./postLoginRedirect.js";
 import { toast } from "./ui.js";
 
 export function wireLogout() {
@@ -116,14 +117,15 @@ export function wireUsersNav() {
 
   // Dynamic Dashboard Link
   document.querySelectorAll("[data-nav-dashboard]").forEach((el) => {
-    const target = role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
+    const target = resolveHomePathByRole(role);
     if (el.tagName === "A") el.href = target;
   });
 
   // Dynamic Brand Text
   const brandText = document.getElementById("navBrandText");
   if (brandText) {
-    brandText.textContent = role === "cliente" ? "Cliente" : "Gestor";
+    brandText.textContent =
+      role === "cliente" ? "Cliente" : role === "financeiro" ? "Financeiro" : "Gestor";
   }
 
   applyRoleVisibility(role);

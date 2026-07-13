@@ -679,6 +679,7 @@ enum MovementType {
 enum Role {
   admin
   operador
+  financeiro
   tecnico
   supervisor
   leitura

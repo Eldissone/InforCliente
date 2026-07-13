@@ -3,11 +3,12 @@
  * Valores allowed: "true" | "own" | "view" | "false"
  */
 
-const ROLES = ["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"];
+const ROLES = ["admin", "operador", "financeiro", "tecnico", "supervisor", "leitura", "cliente"];
 
 const ROLE_LABELS = {
   admin: "Admin",
   operador: "Operador",
+  financeiro: "Financeiro",
   tecnico: "Técnico",
   supervisor: "Supervisor",
   leitura: "Leitura",
@@ -15,7 +16,7 @@ const ROLE_LABELS = {
 };
 
 /** Herança conceptual: perfis baseiam-se nesta ordem de precedência para documentação/UI */
-const ROLE_INHERITANCE_CHAIN = ["leitura", "cliente", "tecnico", "operador", "supervisor", "admin"];
+const ROLE_INHERITANCE_CHAIN = ["leitura", "cliente", "tecnico", "financeiro", "operador", "supervisor", "admin"];
 
 const ALLOWED_LEVELS = ["true", "own", "view", "false"];
 
@@ -271,7 +272,7 @@ const PERMISSION_GROUPS = [
 
 /** Rotas → permissão mínima para aceder à página */
 const PAGE_ROUTE_GUARDS = [
-  { route: "/Dashboard/index.html", module: "dashboard", action: "view", roles: ["admin", "operador", "supervisor", "leitura", "tecnico"] },
+  { route: "/Dashboard/index.html", module: "dashboard", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "leitura", "tecnico"] },
   { route: "/Dashboard/clientDashboard.html", module: "portal", action: "view", roles: ["cliente"] },
   { route: "/Clientes/clienteLista.html", module: "clientes", action: "view" },
   { route: "/ClienteDetalhe/client.html", module: "clientes", action: "view" },
@@ -279,7 +280,7 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Projectos/projectView.html", module: "obras", action: "view" },
   { route: "/Projectos/tecnicoPlanos.html", module: "obras", action: "view", roles: ["tecnico", "admin", "supervisor", "operador"] },
   { route: "/Stock/index.html", module: "stock", action: "view" },
-  { route: "/Financeiro/financeiro.html", module: "financeiro", action: "view" },
+  { route: "/Financeiro/financeiro.html", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
   { route: "/Users/index.html", module: "sistema", action: "view", roles: ["admin"] },
 ];
 
@@ -350,6 +351,39 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "false", pay: "true", delete: "false", full_access: "false" },
+    };
+    return map[module]?.[action] ?? "false";
+  }
+
+  if (role === "financeiro") {
+    const map = {
+      dashboard: { view: "true", export: "true", full_access: "false" },
+      analytics: { view: "true", export: "true" },
+      clientes: { view: "view", create: "false", edit: "false", delete: "false", export: "true", full_access: "false" },
+      interacoes: { view: "false", create: "false", edit: "false", delete: "false" },
+      chat: { view: "true", send: "true", create_group: "false" },
+      obras: {
+        view: "view", read: "view", create: "false", edit: "false", delete: "false",
+        approve: "false", export: "view", manage: "false", financeiro: "true", full_access: "false",
+      },
+      logistica: { view: "false", export: "false", full_access: "false" },
+      stock: {
+        view: "false", create: "false", edit: "false", delete: "false", approve: "false",
+        export: "false", manage: "false", full_access: "false",
+      },
+      materiais: { view: "false", create: "false", edit: "false", delete: "false", export: "false", manage: "false", full_access: "false" },
+      ferramentas: { view: "false", create: "false", edit: "false", delete: "false", manage: "false", export: "false" },
+      financeiro: {
+        view: "true", edit: "true", export: "true", approve: "true",
+        confirm_invoice: "true", certify_expense: "true", full_access: "false",
+      },
+      relatorios: { view: "true", export: "true", full_access: "false" },
+      sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
+      permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
+      configuracoes: { view: "false", edit: "false", full_access: "false" },
+      portal: { view: "false", export: "false", full_access: "false" },
+      fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
+      pedidosExtras: { view: "true", create: "false", approve: "false", pay: "true", delete: "false", full_access: "false" },
     };
     return map[module]?.[action] ?? "false";
   }

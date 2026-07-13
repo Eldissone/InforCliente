@@ -4,7 +4,7 @@ const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
-const { buildPaymentTimeline } = require("../services/paymentTimelineService");
+const { buildPaymentTimeline, enrichPaymentForTimeline } = require("../services/paymentTimelineService");
 const {
   notifyPaymentEvent,
   notifyPaymentBatchCreated,
@@ -17,6 +17,10 @@ const {
   getAuditSummary,
 } = require("../services/certificationService");
 const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
+const {
+  getEffectivePermissionsForUser,
+  resolveAllowedFromMap,
+} = require("../services/permissionResolver");
 const multer = require("multer");
 
 const upload = multer({
@@ -106,6 +110,35 @@ const PAYMENT_SUPPLIER_INCLUDE = {
   },
 };
 
+const PAYMENT_RELATIONS_INCLUDE = {
+  paymentInstallment: {
+    select: {
+      number: true,
+      dueDate: true,
+      quote: {
+        select: {
+          creditTermDays: true,
+          installmentsPlanned: true,
+          invoiceConfirmedAt: true,
+        },
+      },
+    },
+  },
+  need: {
+    select: {
+      description: true,
+      quotes: {
+        where: { selected: true },
+        select: {
+          proformaUrl: true,
+          creditTermDays: true,
+          installmentsPlanned: true,
+        },
+      },
+    },
+  },
+};
+
 async function mapPaymentItems(items) {
   const legacyNames = [
     ...new Set(items.filter((p) => !p.supplierRef && !p.supplierId).map((p) => p.supplier).filter(Boolean)),
@@ -133,24 +166,54 @@ async function mapPaymentItems(items) {
 
   return items.map((p) => {
     const sup = p.supplierRef || supplierMap[p.supplier] || {};
-    let proformaUrl = null;
-    if (p.need && p.need.quotes && p.need.quotes.length > 0) {
-      proformaUrl = p.need.quotes[0].proformaUrl;
-    }
+    const selectedQuote = p.need?.quotes?.[0] || p.paymentInstallment?.quote || null;
+    const proformaUrl = selectedQuote?.proformaUrl || null;
+    const creditTermDays = selectedQuote?.creditTermDays ?? null;
+    const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
+    const installmentNumber = p.installment ?? p.paymentInstallment?.number ?? null;
+
+    const { paymentInstallment, need, ...rest } = p;
 
     return {
-      ...p,
+      ...rest,
       supplierId: p.supplierId || sup.id || null,
       supplierName: sup.name || p.supplier || null,
+      supplierRef: p.supplierRef || (sup.id ? sup : null),
       nif: sup.nif || null,
       iban: sup.iban || null,
       supplierPhone: sup.phone || null,
       supplierPaymentTerm: sup.paymentTerm || null,
       proformaUrl,
+      paymentType: p.paymentType || "PRONTO_PAGAMENTO",
+      creditTermDays,
+      installmentsPlanned,
+      installmentNumber,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
     };
   });
+}
+
+async function assertCanLiquidatePayment(req) {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role === "admin") return;
+
+  const userId = req.user?.sub;
+  if (!userId) {
+    const err = new Error("UNAUTHORIZED");
+    err.status = 401;
+    throw err;
+  }
+
+  const perms = await getEffectivePermissionsForUser(userId);
+  const finEdit = resolveAllowedFromMap(perms?.effectiveMap || {}, "financeiro", "edit");
+  const finView = resolveAllowedFromMap(perms?.effectiveMap || {}, "financeiro", "view");
+  if (finEdit === "true" || finView === "true") return;
+
+  const err = new Error("FINANCEIRO_ONLY");
+  err.status = 403;
+  err.message = "Liquidação apenas no Perfil Financeiro.";
+  throw err;
 }
 
 // GET /cost-centers/payments/timeline — Cronograma agrupado (todas as obras)
@@ -176,6 +239,7 @@ costCenterRoutes.get(
         project: { select: { id: true, name: true, code: true } },
         costCenter: { select: { code: true, name: true, currency: true } },
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+        ...PAYMENT_RELATIONS_INCLUDE,
       },
     });
 
@@ -233,6 +297,7 @@ costCenterRoutes.get(
         project: { select: { id: true, name: true, code: true } },
         costCenter: { select: { code: true, name: true, currency: true } },
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+        ...PAYMENT_RELATIONS_INCLUDE,
       },
     });
 
@@ -295,6 +360,7 @@ costCenterRoutes.get(
           project: { select: { id: true, name: true, code: true } },
           costCenter: { select: { code: true, name: true, currency: true } },
           supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+          ...PAYMENT_RELATIONS_INCLUDE,
         },
       }),
       getAuditSummary(buildGlobalPaymentWhere(req.query, req)),
@@ -348,15 +414,7 @@ costCenterRoutes.get(
           project: { select: { id: true, name: true, code: true } },
           costCenter: { select: { code: true, name: true, currency: true } },
           supplierRef: PAYMENT_SUPPLIER_INCLUDE,
-          need: {
-            select: {
-              description: true,
-              quotes: {
-                where: { selected: true },
-                select: { proformaUrl: true },
-              },
-            },
-          },
+          ...PAYMENT_RELATIONS_INCLUDE,
         },
       }),
     ]);
@@ -415,6 +473,35 @@ costCenterRoutes.get(
     });
 
     return res.json({ weeks });
+  })
+);
+
+const PAYMENT_DETAIL_INCLUDE = {
+  project: { select: { id: true, name: true, code: true } },
+  costCenter: { select: { code: true, name: true, currency: true } },
+  supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+  ...PAYMENT_RELATIONS_INCLUDE,
+};
+
+// GET /cost-centers/payments/:payId — Detalhe de um lançamento (deep link / notificações)
+costCenterRoutes.get(
+  "/payments/:payId",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const payId = String(req.params.payId);
+    const ownProjectCondition = getStaffOwnProjectCondition(req);
+
+    const payment = await prisma.costPayment.findFirst({
+      where: {
+        id: payId,
+        ...(ownProjectCondition ? { project: ownProjectCondition } : {}),
+      },
+      include: PAYMENT_DETAIL_INCLUDE,
+    });
+    if (!payment) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+
+    const mapped = (await mapPaymentItems([payment]))[0];
+    return res.json(enrichPaymentForTimeline(mapped));
   })
 );
 
@@ -1019,15 +1106,7 @@ costCenterRoutes.get(
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
           supplierRef: PAYMENT_SUPPLIER_INCLUDE,
-          need: { 
-            select: { 
-              description: true,
-              quotes: {
-                where: { selected: true },
-                select: { proformaUrl: true }
-              }
-            } 
-          },
+          ...PAYMENT_RELATIONS_INCLUDE,
         },
       }),
     ]);
@@ -1144,6 +1223,26 @@ costCenterRoutes.patch(
       notes: z.string().optional().nullable(),
       recipientIds: z.string().optional().nullable(),
     }).parse(req.body);
+
+    const hasComprovativo = Boolean(req.files?.comprovativo?.length);
+    const isLiquidating =
+      (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") ||
+      (before.status === "PENDENTE" && hasComprovativo);
+
+    if (isLiquidating) {
+      try {
+        await assertCanLiquidatePayment(req);
+      } catch (err) {
+        if (err.status === 403) {
+          return res.status(403).json({
+            error: "FINANCEIRO_ONLY",
+            message: err.message || "Liquidação apenas no Perfil Financeiro.",
+          });
+        }
+        if (err.status === 401) return res.status(401).json({ error: "UNAUTHORIZED" });
+        throw err;
+      }
+    }
 
     // recipientIds chega como JSON (multipart/form-data não suporta arrays nativos):
     // quem liquida o pagamento escolhe explicitamente quem deve receber o comprovativo.

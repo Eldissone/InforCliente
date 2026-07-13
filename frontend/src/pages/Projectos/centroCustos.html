@@ -972,8 +972,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <h3 class="font-bold text-slate-900">Fundo de Maneio da Obra</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Saldo disponível para pequenas despesas e Pedidos
-                                Extra (não é um custo)</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Saldo disponível = soma dos cartões (não é um custo)</p>
                         </div>
                         <button id="newFundBtn"
                             class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
@@ -1006,6 +1005,11 @@
                                 <button id="fundAdjustBtn"
                                     class="h-9 px-3 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200 transition-all">
                                     <span class="material-symbols-outlined text-sm">tune</span>Ajuste Manual
+                                </button>
+                                <button id="fundDeleteBtn" type="button"
+                                    class="h-9 px-3 rounded-xl bg-red-50 text-red-600 text-xs font-bold flex items-center gap-1.5 hover:bg-red-100 transition-all"
+                                    title="Eliminar fundo (apenas se saldo zero e sem movimentações)">
+                                    <span class="material-symbols-outlined text-sm">delete</span>Eliminar
                                 </button>
                             </div>
                         </div>
@@ -1299,6 +1303,21 @@
                         <p id="asideCategory" class="text-sm font-bold text-slate-700"></p>
                     </div>
                     <div class="flex flex-col gap-1">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo de Pagamento</p>
+                        <p id="asidePaymentType" class="text-sm font-bold text-slate-700">—</p>
+                    </div>
+                    <div id="asideCreditTermSection"
+                        class="hidden col-span-2 flex flex-col gap-2 p-4 bg-sky-50 border border-sky-100 rounded-xl">
+                        <div class="flex justify-between items-center gap-4">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-sky-700">Prazo acordado</p>
+                            <p id="asideCreditTerm" class="text-sm font-black text-sky-900">—</p>
+                        </div>
+                        <div id="asideCreditInstallmentRow" class="flex justify-between items-center gap-4">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-sky-700">Parcela</p>
+                            <p id="asideCreditInstallment" class="text-xs font-bold text-sky-800">—</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Previsto (base)
                         </p>
                         <p id="asideAmount" class="text-lg font-black text-slate-900"></p>
@@ -1351,11 +1370,12 @@
                 </div>
             </div>
         </div>
-        <div class="p-6 border-t border-slate-100 bg-white flex items-center justify-end gap-3">
-            <!-- <button type="button" onclick="closePaymentAside()"
-                class="h-11 px-5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button> -->
-            <button id="asideActionBtn" type="button"
-                class="h-11 px-6 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2">
+        <div class="p-6 border-t border-slate-100 bg-white flex flex-col items-end gap-2">
+            <p id="asideFinanceHint" class="hidden text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg">
+                A liquidação deste lançamento é feita exclusivamente no Perfil Financeiro.
+            </p>
+            <button id="asideActionBtn" type="button" hidden
+                class="hidden h-11 px-6 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2">
                 <span class="material-symbols-outlined text-base">payments</span> Confirmar & Pagar
             </button>
         </div>
@@ -1700,21 +1720,13 @@
                     <input id="fundName" type="text" required placeholder="Ex: Fundo de Maneio - Obra X"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label for="fundInitialBalance"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo
-                            Inicial</label>
-                        <input id="fundInitialBalance" type="number" step="0.01" min="0" placeholder="0.00"
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                    </div>
-                    <div>
-                        <label for="fundCurrency"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Moeda</label>
-                        <input id="fundCurrency" type="text" value="AOA"
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                    </div>
+                <div>
+                    <label for="fundCurrency"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Moeda</label>
+                    <input id="fundCurrency" type="text" value="AOA"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
+                <p class="text-xs text-slate-400 -mt-1">O saldo é definido ao criar o cartão associado a este fundo.</p>
                 <div>
                     <label for="fundNotes"
                         class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Observações</label>
@@ -1908,17 +1920,23 @@
                     </div>
                     <div>
                         <label for="fundCardInitialBalance"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo
-                            Inicial</label>
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Saldo do
+                            Cartão</label>
                         <input id="fundCardInitialBalance" type="number" step="0.01" min="0" placeholder="0.00"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                 </div>
-                <div class="flex gap-3 justify-end pt-2">
+                <div class="flex gap-3 justify-between pt-2">
+                    <button id="fundCardDeleteBtn" type="button"
+                        class="hidden h-10 px-5 rounded-xl bg-red-50 text-red-600 text-sm font-bold hover:bg-red-100 transition-all flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-base">delete</span>Eliminar
+                    </button>
+                    <div class="flex gap-3 justify-end flex-1">
                     <button type="button" onclick="document.getElementById('modalFundCard').classList.remove('open')"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
                     <button id="formFundCardSubmitBtn" type="submit"
                         class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Adicionar</button>
+                    </div>
                 </div>
             </form>
         </div>

@@ -99,7 +99,7 @@ function createFab() {
   fabEl.id = "globalChatFab";
   fabEl.type = "button";
   fabEl.setAttribute("aria-label", "Abrir chat");
-  fabEl.setAttribute("data-role-visible", "admin,operador,tecnico,supervisor,leitura,cliente");
+  fabEl.setAttribute("data-role-visible", "admin,operador,financeiro,tecnico,supervisor,leitura,cliente");
   fabEl.className =
     "fixed bottom-8 right-8 w-16 h-16 bg-slate-900 text-[#2afc8d] rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[90] group";
   fabEl.innerHTML = `

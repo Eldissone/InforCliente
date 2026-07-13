@@ -5,6 +5,7 @@ import {
   getPendingAuthUser,
   setSession,
 } from "../../services/auth.js";
+import { resolvePostLoginPath } from "../../shared/postLoginRedirect.js";
 import { toast } from "../../shared/ui.js";
 
 function getNext() {
@@ -96,14 +97,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           localStorage.setItem("selected_project_id", p.id);
 
           const next = getNext();
-          const role = (authRes?.user?.role || "").toLowerCase();
-          setTimeout(() => {
+          setTimeout(async () => {
             if (next) {
               window.location.href = `/${next}`;
-            } else {
-              window.location.href =
-                role === "cliente" ? "../Dashboard/clientDashboard.html" : (role === "tecnico" ? "../Projectos/tecnicoPlanos.html" : "../Dashboard/index.html");
+              return;
             }
+            const path = await resolvePostLoginPath(authRes.user);
+            window.location.href = path;
           }, 1000);
 
         } catch (err) {

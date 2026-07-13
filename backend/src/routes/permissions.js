@@ -266,7 +266,7 @@ permissionsRoutes.put(
   asyncHandler(async (req, res) => {
     const { role, module: mod, action } = z
       .object({
-        role: z.enum(["admin", "operador", "tecnico", "supervisor", "leitura", "cliente"]),
+        role: z.enum(["admin", "operador", "financeiro", "tecnico", "supervisor", "leitura", "cliente"]),
         module: z.string().min(1),
         action: z.string().min(1),
       })
