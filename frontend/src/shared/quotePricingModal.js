@@ -569,6 +569,7 @@ export async function loadPresentedPrices({
     const quotes = dedupeQuotes(quotesData.items || []);
 
     const selectedQuote = quotes.find((q) => q.selected) || null;
+    window.__quoteModalSelectedQuote = selectedQuote;
 
 
 
@@ -1011,6 +1012,20 @@ async function uploadOrderedProforma({
     const form = new FormData();
 
     form.append("proforma", input.files[0]);
+
+    const previsto = Number(need?.originalUnitPrice ?? need?.unitPrice ?? need?.previstoUnitPrice) || 0;
+    const selectedQuote = window.__quoteModalSelectedQuote;
+    const real = Number(selectedQuote?.quotedPrice) || 0;
+    if (real > previsto + 0.000001) {
+      const reason = prompt(
+        `O preço da cotação (${real.toLocaleString("pt-PT")}) excede o previsto (${previsto.toLocaleString("pt-PT")}).\n\nIndique a justificação da excepção:`
+      );
+      if (!reason?.trim()) {
+        showToast?.("Aprovação cancelada — é obrigatória uma justificação quando o preço excede o previsto.", "error");
+        return;
+      }
+      form.append("priceExceptionReason", reason.trim());
+    }
 
     const result = await apiUpload(`/quotes/${quoteId}/proforma`, form, "POST");
 

@@ -525,10 +525,12 @@
         <main class="flex-1 min-w-0 flex flex-col gap-6">
 
             <!-- ── Sem obra selecionada ── -->
-            <div id="emptyProjectView" class="hidden flex flex-col items-center justify-center flex-1 min-h-[420px] text-center px-6">
+            <div id="emptyProjectView"
+                class="hidden flex flex-col items-center justify-center flex-1 min-h-[420px] text-center px-6">
                 <span class="material-symbols-outlined text-5xl text-slate-300 mb-4">construction</span>
                 <h2 class="text-xl font-bold text-slate-800 mb-2">Seleciona uma obra</h2>
-                <p class="text-sm text-slate-500 max-w-md">Escolhe uma obra na lista à esquerda para ver o planeamento, orçamento e pagamentos.</p>
+                <p class="text-sm text-slate-500 max-w-md">Escolhe uma obra na lista à esquerda para ver o planeamento,
+                    orçamento e pagamentos.</p>
             </div>
 
             <!-- ── Conteúdo da obra selecionada ── -->
@@ -746,12 +748,20 @@
                 <div class="cc-tab-panel" id="tab-necessidades">
                     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div
-                            class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div>
-                                <h3 class="font-bold text-slate-900">Orçamento Geral - Custos</h3>
-                                <p class="text-xs text-slate-400 mt-0.5">Orçamentação por centro de custo</p>
+                            class="px-6 py-4 border-b border-slate-50 flex items-center gap-3 overflow-x-auto custom-scroll flex-nowrap">
+                            <div class="shrink-0 min-w-0">
+                                <h3 class="font-bold text-slate-900 whitespace-nowrap">Orçamento Geral - Custos</h3>
+                                <p id="budgetViewHint" class="text-xs text-slate-400 mt-0.5 whitespace-nowrap">Visão prevista — valores do
+                                    upload aprovado</p>
                             </div>
-                            <div class="flex items-center gap-3 flex-wrap">
+                            <div class="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
+                                <div class="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1" role="group"
+                                    aria-label="Visão do orçamento">
+                                    <button type="button" id="budgetViewPrevisto" data-budget-view="previsto"
+                                        class="h-8 px-3 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm">Previsto</button>
+                                    <button type="button" id="budgetViewRealizado" data-budget-view="realizado"
+                                        class="h-8 px-3 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800">Realizado</button>
+                                </div>
                                 <select id="needsCCFilter"
                                     class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
                                     <option value="">Todos CCs</option>
@@ -766,15 +776,15 @@
                                     <option value="REJECTED">Rejeitado</option>
                                     <option value="PAID">Pago</option>
                                 </select>
-                                <button onclick="sendAllToQuotation()"
+                                <button id="btnBudgetPrecificar" onclick="sendAllToQuotation()"
                                     title="Enviar todos os itens pendentes para Cotação"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md hidden">
                                     <span class="material-symbols-outlined text-base">fact_check</span>
                                     Precificar
                                 </button>
-                                <button onclick="sendAllToCronograma()"
+                                <button id="btnBudgetAgendar" onclick="sendAllToCronograma()"
                                     title="Enviar todos os itens aprovados para Cronograma"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
+                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20 hidden">
                                     <span class="material-symbols-outlined text-base">schedule</span>
                                     Agendar
                                 </button>
@@ -782,7 +792,7 @@
                                 <button id="importExcelBtn" title="Importar Orçamento via Planilha Excel"
                                     class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
                                     <span class="material-symbols-outlined text-base">upload_file</span>
-                                    Importar Excel
+                                    Excel
                                 </button>
                                 <button id="newNeedBtn"
                                     class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
@@ -972,7 +982,8 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <h3 class="font-bold text-slate-900">Fundo de Maneio da Obra</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Saldo disponível = soma dos cartões (não é um custo)</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Saldo disponível = soma dos cartões (não é um
+                                custo)</p>
                         </div>
                         <button id="newFundBtn"
                             class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20">
@@ -1371,7 +1382,8 @@
             </div>
         </div>
         <div class="p-6 border-t border-slate-100 bg-white flex flex-col items-end gap-2">
-            <p id="asideFinanceHint" class="hidden text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg">
+            <p id="asideFinanceHint"
+                class="hidden text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg">
                 A liquidação deste lançamento é feita exclusivamente no Perfil Financeiro.
             </p>
             <button id="asideActionBtn" type="button" hidden
@@ -1458,8 +1470,11 @@
     <!-- Modal: Nova / Editar Necessidade -->
     <div class="modal-overlay" id="modalNeed">
         <div class="modal-box" style="max-width: 1100px;">
-            <div class="flex items-center justify-between mb-6">
-                <h2 id="modalNeedTitle" class="text-lg font-bold text-slate-900">Novo Item de Orçamento</h2>
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 id="modalNeedTitle" class="text-lg font-bold text-slate-900">Novo Item de Orçamento</h2>
+                    <p id="modalNeedViewHint" class="text-xs text-slate-400 mt-0.5"></p>
+                </div>
                 <button type="button" onclick="document.getElementById('modalNeed').classList.remove('open')"
                     aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
@@ -1498,10 +1513,10 @@
                                 <th class="py-2 px-1">Descrição *</th>
                                 <th class="py-2 px-1 w-16">UN</th>
                                 <th class="py-2 px-1 w-24">Qtd.</th>
-                                <th class="py-2 px-1 w-28">P. Unit.</th>
+                                <th class="py-2 px-1 w-28" id="needModalPriceColLabel">P. Unit.</th>
                                 <th class="py-2 px-1 w-20">Hrs</th>
                                 <th class="py-2 px-1 w-28">Prioridade</th>
-                                <th class="py-2 px-1 w-28">Status</th>
+                                <th class="py-2 px-1 w-28" id="needModalStatusColLabel">Status</th>
                                 <th class="py-2 px-1 w-32">Obs.</th>
                                 <th class="py-2 px-1 w-8 text-center"></th>
                             </tr>
@@ -1932,10 +1947,11 @@
                         <span class="material-symbols-outlined text-base">delete</span>Eliminar
                     </button>
                     <div class="flex gap-3 justify-end flex-1">
-                    <button type="button" onclick="document.getElementById('modalFundCard').classList.remove('open')"
-                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
-                    <button id="formFundCardSubmitBtn" type="submit"
-                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Adicionar</button>
+                        <button type="button"
+                            onclick="document.getElementById('modalFundCard').classList.remove('open')"
+                            class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                        <button id="formFundCardSubmitBtn" type="submit"
+                            class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Adicionar</button>
                     </div>
                 </div>
             </form>

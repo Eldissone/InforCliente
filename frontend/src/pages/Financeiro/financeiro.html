@@ -758,7 +758,7 @@
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
 
-                <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Calendário, Plano & Auditoria
+                <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos & Auditoria
                 </h2>
                 <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Todas as obras · visão
                     transversal</p>
@@ -777,17 +777,16 @@
         <!-- Tabs -->
         <div class="flex border-b border-slate-200 mb-6 -mb-px">
             <button class="fin-tab-btn active" data-tab="calendario">
-                <span class="material-symbols-outlined text-base align-middle mr-1">calendar_month</span>Calendário
-            </button>
-            <button class="fin-tab-btn" data-tab="plano">
-                <span class="material-symbols-outlined text-base align-middle mr-1">list_alt</span>Plano de Pagamentos
+                <span class="material-symbols-outlined text-base align-middle mr-1">calendar_month</span>Plano de
+                Pagamentos
             </button>
             <button class="fin-tab-btn" data-tab="auditoria">
-                <span class="material-symbols-outlined text-base align-middle mr-1">fact_check</span>Auditoria
+                <span class="material-symbols-outlined text-base align-middle mr-1">fact_check</span>Auditoria de
+                Faturas
             </button>
         </div>
 
-        <!-- Tab: Calendário (Gantt) -->
+        <!-- Tab: Plano de Pagamentos (Gantt) -->
         <div class="fin-tab-panel active" id="tab-calendario">
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
                 <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
@@ -810,41 +809,6 @@
                 </div>
                 <div id="calendarGrid">
                     <div class="spinner my-8"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tab: Plano de Pagamentos -->
-        <div class="fin-tab-panel" id="tab-plano">
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div class="px-6 py-5 border-b border-slate-50 flex justify-between items-center">
-                    <div>
-                        <h3 class="font-bold text-slate-900">Plano de Pagamentos</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Todos os pedidos de pagamento · agrupados por dia de
-                            vencimento</p>
-                    </div>
-                </div>
-                <div class="overflow-x-auto custom-scroll">
-                    <table class="w-full fin-table">
-                        <thead>
-                            <tr>
-                                <th class="text-left w-28">Vencimento</th>
-                                <th class="text-left">Obra</th>
-                                <th class="text-left min-w-[180px]">Descrição</th>
-                                <th class="text-left">Centro de Custo</th>
-                                <th class="text-right w-36">Valor</th>
-                                <th class="text-center w-32">Estado</th>
-                                <th class="text-center w-20">Acções</th>
-                            </tr>
-                        </thead>
-                        <tbody id="planTableBody">
-                            <tr>
-                                <td colspan="7">
-                                    <div class="spinner my-8"></div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>

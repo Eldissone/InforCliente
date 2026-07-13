@@ -27,6 +27,10 @@ const {
   resolveDisplayDescription,
   shouldShowInstallmentLabel,
 } = require("../utils/installmentLabels");
+const {
+  assertPriceWithinPrevistoOrException,
+  mapNeedBudgetFields,
+} = require("../services/needBudgetService");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -809,10 +813,7 @@ costCenterRoutes.get(
 
     return res.json({
       page, pageSize, total,
-      items: items.map((n) => ({
-        ...n,
-        quantity: n.quantity != null ? String(n.quantity) : null,
-      })),
+      items: items.map(mapNeedBudgetFields),
     });
   })
 );
@@ -848,17 +849,14 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
-          _count: { select: { payments: true } },
+          _count: { select: { payments: true, quotes: true } },
         },
       }),
     ]);
 
     return res.json({
       page, pageSize, total,
-      items: items.map((n) => ({
-        ...n,
-        quantity: n.quantity != null ? String(n.quantity) : null,
-      })),
+      items: items.map(mapNeedBudgetFields),
     });
   })
 );
@@ -883,9 +881,13 @@ costCenterRoutes.post(
       unitPrice: z.union([z.number(), z.string()]).optional().nullable(),
       hours: z.union([z.number(), z.string()]).optional().nullable(),
       priority: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
+      status: z.enum(["PENDING", "APPROVED", "REJECTED"]).optional(),
       responsible: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
     }).parse(req.body);
+
+    const defaultStatus =
+      body.unitPrice != null && String(body.unitPrice).trim() !== "" ? "APPROVED" : "PENDING";
 
     const created = await prisma.workNeed.create({
       data: {
@@ -901,6 +903,7 @@ costCenterRoutes.post(
         originalUnitPrice: body.unitPrice != null ? String(body.unitPrice) : null,
         hours: body.hours != null ? String(body.hours) : null,
         priority: body.priority || "MEDIA",
+        status: body.status ?? defaultStatus,
         responsible: body.responsible || null,
         notes: body.notes || null,
       },
@@ -926,7 +929,31 @@ costCenterRoutes.patch(
       status: z.enum(["PENDING", "IN_QUOTATION", "ORDERED", "APPROVED", "REJECTED", "PAID"]).optional(),
       responsible: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      priceExceptionReason: z.string().optional().nullable(),
     }).parse(req.body);
+
+    let priceExceptionPatch = {};
+    if (body.unitPrice !== undefined) {
+      const current = await prisma.workNeed.findUnique({
+        where: { id: needId },
+      });
+      if (!current) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+      const effectiveStatus = body.status || current.status;
+      if (["ORDERED", "APPROVED", "PAID"].includes(effectiveStatus) && body.unitPrice != null) {
+        const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
+        priceExceptionPatch = assertPriceWithinPrevistoOrException(current, body.unitPrice, {
+          priceExceptionReason: body.priceExceptionReason,
+          actorName,
+        }) || {};
+        if (!priceExceptionPatch.priceExceptionReason) {
+          priceExceptionPatch = {
+            priceExceptionReason: null,
+            priceExceptionBy: null,
+            priceExceptionAt: null,
+          };
+        }
+      }
+    }
 
     // O preço previsto (originalUnitPrice) só acompanha edições manuais
     // enquanto a necessidade ainda não tem preço real de mercado (cotação
@@ -955,6 +982,7 @@ costCenterRoutes.patch(
         ...(body.status ? { status: body.status } : {}),
         ...(body.responsible !== undefined ? { responsible: body.responsible } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...priceExceptionPatch,
       },
       select: { id: true },
     });

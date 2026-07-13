@@ -877,6 +877,9 @@ model WorkNeed {
   unit              String?
   unitPrice         Decimal?             @db.Decimal(16, 4)
   originalUnitPrice Decimal?             @db.Decimal(16, 4)
+  priceExceptionReason String?
+  priceExceptionBy     String?
+  priceExceptionAt     DateTime?
   hours             Decimal?             @db.Decimal(16, 4)
   priority          NeedPriority         @default(MEDIA)
   status            NeedStatus           @default(PENDING)

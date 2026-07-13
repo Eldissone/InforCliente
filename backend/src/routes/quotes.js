@@ -9,6 +9,9 @@ const { buildInstallmentPlan } = require("../services/creditPaymentService");
 const {
   buildInstallmentDescription,
 } = require("../utils/installmentLabels");
+const {
+  assertPriceWithinPrevistoOrException,
+} = require("../services/needBudgetService");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const {
@@ -685,15 +688,23 @@ quoteRoutes.post(
       },
     });
 
+    const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
+    const exceptionPatch = assertPriceWithinPrevistoOrException(quote.need, quote.quotedPrice, {
+      priceExceptionReason: req.body?.priceExceptionReason,
+      actorName,
+    }) || {
+      priceExceptionReason: null,
+      priceExceptionBy: null,
+      priceExceptionAt: null,
+    };
+
     const updatedNeed = await prisma.workNeed.update({
       where: { id: quote.needId },
       data: {
         status: "APPROVED",
         unitPrice: quote.quotedPrice,
-        // Congela o preço previsto (estimativa) na primeira aprovação, para
-        // manter a comparação previsto x real de mercado mesmo depois de
-        // `unitPrice` passar a refletir o preço real da cotação.
         originalUnitPrice: quote.need.originalUnitPrice ?? quote.need.unitPrice,
+        ...exceptionPatch,
       },
       include: {
         costCenter: { select: { name: true, code: true, currency: true } },

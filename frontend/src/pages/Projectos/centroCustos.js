@@ -15,6 +15,9 @@ let currentCC = null;
 let currentTxStatus = "PENDING"; // Add variable to keep track of segmented tab
 let dashSummary = null;
 let cachedNeeds = [];
+let budgetViewMode = "previsto";
+const PREVISTO_NEED_STATUSES = ["PENDING", "APPROVED", "REJECTED"];
+const WORKFLOW_APPROVED_STATUSES = ["APPROVED", "IN_QUOTATION", "ORDERED", "PAID"];
 let currentSuppliers = [];
 
 // ── Fase 7/8: Fundo de Maneio + Pedidos Extra ───────────────────────────────
@@ -194,7 +197,202 @@ async function selectProject(project) {
   switchTab("dashboard");
 }
 
+// ── Orçamento Geral: Previsto vs Realizado ─────────────────────────────────────
+function setBudgetViewMode(mode) {
+  budgetViewMode = mode === "realizado" ? "realizado" : "previsto";
+  const previstoBtn = document.getElementById("budgetViewPrevisto");
+  const realizadoBtn = document.getElementById("budgetViewRealizado");
+  const hint = document.getElementById("budgetViewHint");
+  const activeCls = ["bg-white", "text-slate-900", "shadow-sm"];
+  const idleCls = ["text-slate-500"];
+
+  if (previstoBtn && realizadoBtn) {
+    [previstoBtn, realizadoBtn].forEach((btn) => {
+      btn.classList.remove(...activeCls, ...idleCls);
+      btn.classList.add("h-8", "px-3", "rounded-lg", "text-xs", "font-bold");
+    });
+    const active = budgetViewMode === "previsto" ? previstoBtn : realizadoBtn;
+    const idle = budgetViewMode === "previsto" ? realizadoBtn : previstoBtn;
+    active.classList.add(...activeCls);
+    idle.classList.add(...idleCls);
+  }
+
+  if (hint) {
+    hint.textContent =
+      budgetViewMode === "previsto"
+        ? "Visão prevista — valores do upload aprovado (baseline congelado)"
+        : "Visão realizada — preços de mercado; não pode exceder o previsto sem excepção justificada";
+  }
+
+  updateBudgetWorkflowButtonsVisibility();
+  updateNeedsStatusFilterOptions();
+  loadNeeds({ preserveScroll: true });
+}
+
+function needPrevistoDisplayStatus(n) {
+  if (!n) return "PENDING";
+  if (n.status === "PENDING" || n.status === "REJECTED") return n.status;
+  return "APPROVED";
+}
+
+function needPrevistoStatusForEdit(n) {
+  return needPrevistoDisplayStatus(n);
+}
+
+function needRealizadoDisplayStatus(n) {
+  if (!n) return "PENDING";
+  if (n.realizadoDisplayStatus) return n.realizadoDisplayStatus;
+  if (n.status === "APPROVED" && !n.marketWorkflowStarted) return "PENDING";
+  return n.status;
+}
+
+function needBudgetDisplayStatus(n) {
+  return budgetViewMode === "previsto" ? needPrevistoDisplayStatus(n) : needRealizadoDisplayStatus(n);
+}
+
+function canRealizadoPrecificar(n) {
+  const display = needRealizadoDisplayStatus(n);
+  return display === "PENDING" || n.status === "IN_QUOTATION" || n.status === "ORDERED"
+    || (n.status === "APPROVED" && n.marketWorkflowStarted);
+}
+
+function canRealizadoAgendar(n) {
+  return n.status === "APPROVED" && n.marketWorkflowStarted && !n.scheduled;
+}
+
+function resolvePrevistoStatusSave(selected, currentStatus) {
+  if (!PREVISTO_NEED_STATUSES.includes(selected)) return null;
+  if (selected === "APPROVED" && WORKFLOW_APPROVED_STATUSES.includes(currentStatus)) return null;
+  return selected;
+}
+
+function canPrevistoApprove(n) {
+  return n?.status === "PENDING";
+}
+
+function canPrevistoReject(n) {
+  return n?.status === "PENDING";
+}
+
+function updateNeedsStatusFilterOptions() {
+  const el = document.getElementById("needsStatusFilter");
+  if (!el) return;
+
+  const current = el.value;
+  const previstoOpts = [
+    { value: "", label: "Todos Status" },
+    { value: "PENDING", label: "Pendente" },
+    { value: "APPROVED", label: "Aprovado" },
+    { value: "REJECTED", label: "Rejeitado" },
+  ];
+  const realizadoOpts = [
+    { value: "", label: "Todos Status" },
+    { value: "PENDING", label: "Pendente" },
+    { value: "IN_QUOTATION", label: "Em Cotação" },
+    { value: "ORDERED", label: "Encomenda" },
+    { value: "APPROVED", label: "Aprovado" },
+    { value: "REJECTED", label: "Rejeitado" },
+    { value: "PAID", label: "Pago" },
+  ];
+  const opts = budgetViewMode === "previsto" ? previstoOpts : realizadoOpts;
+  el.innerHTML = opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
+
+  const validValues = opts.map((o) => o.value);
+  if (validValues.includes(current)) {
+    el.value = current;
+  } else {
+    el.value = "";
+  }
+}
+
+function updateBudgetWorkflowButtonsVisibility() {
+  const showWorkflow = budgetViewMode === "realizado";
+  document.getElementById("btnBudgetPrecificar")?.classList.toggle("hidden", !showWorkflow);
+  document.getElementById("btnBudgetAgendar")?.classList.toggle("hidden", !showWorkflow);
+}
+
+function needDisplayUnitPrice(n) {
+  if (budgetViewMode === "realizado") {
+    return n.realizadoUnitPrice != null ? Number(n.realizadoUnitPrice) : null;
+  }
+  return Number(n.previstoUnitPrice ?? n.originalUnitPrice ?? n.unitPrice) || 0;
+}
+
+function needDisplayLineTotal(n) {
+  if (budgetViewMode === "realizado") {
+    return n.realizadoTotal != null ? Number(n.realizadoTotal) : null;
+  }
+  return Number(n.previstoTotal) || 0;
+}
+
+function renderBudgetExceptionBadge(n) {
+  if (budgetViewMode !== "realizado" || !n.exceedsPrevisto) return "";
+  if (n.hasPriceException) {
+    const title = (n.priceExceptionReason || "Excepção justificada").replace(/"/g, "&quot;");
+    return `<span class="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700" title="${title}">Excepção</span>`;
+  }
+  return `<span class="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Acima previsto</span>`;
+}
+
 // ── Toggle Group (Orçamento Geral) ─────────────────────────────────────────────
+function captureNeedsTableUiState() {
+  return {
+    scrollY: window.scrollY,
+    collapsedGroups: Array.from(document.querySelectorAll('[id$="-icon"]'))
+      .filter((icon) => icon.style.transform === "rotate(-90deg)")
+      .map((icon) => icon.id.replace("-icon", "")),
+  };
+}
+
+function restoreNeedsTableUiState(state) {
+  if (!state) return;
+  requestAnimationFrame(() => {
+    window.scrollTo(0, state.scrollY);
+    state.collapsedGroups?.forEach((groupId) => {
+      document.querySelectorAll(`.${groupId}-item`).forEach((item) => item.classList.add("hidden"));
+      const icon = document.getElementById(`${groupId}-icon`);
+      if (icon) icon.style.transform = "rotate(-90deg)";
+    });
+  });
+}
+
+function removeCachedNeed(id) {
+  cachedNeeds = cachedNeeds.filter((n) => n.id !== id);
+}
+
+function patchCachedNeed(id, patch) {
+  const idx = cachedNeeds.findIndex((n) => n.id === id);
+  if (idx !== -1) cachedNeeds[idx] = { ...cachedNeeds[idx], ...patch };
+}
+
+function patchCachedNeeds(ids, patch) {
+  const idSet = new Set(ids);
+  cachedNeeds = cachedNeeds.map((n) => (idSet.has(n.id) ? { ...n, ...patch } : n));
+}
+
+async function reloadNeedsPreservingUi() {
+  return loadNeeds({ preserveScroll: true });
+}
+
+function refreshNeedsTableFromCache(options = {}) {
+  const { preserveUi = false } = options;
+  const uiState = preserveUi ? captureNeedsTableUiState() : null;
+
+  let items = cachedNeeds.slice();
+  const status = document.getElementById("needsStatusFilter")?.value;
+  if (status) {
+    items = items.filter((n) => needBudgetDisplayStatus(n) === status);
+  }
+  items = items.map((item, index) => ({ ...item, _orderNumber: index + 1 }));
+
+  renderNeedsTable(items);
+
+  document.getElementById("needsPagination").textContent =
+    `${items.length} itens no Orçamento Geral · visão ${budgetViewMode === "previsto" ? "Previsto" : "Realizado"}`;
+
+  restoreNeedsTableUiState(uiState);
+}
+
 window.toggleCCGroup = function (groupId) {
   const items = document.querySelectorAll(`.${groupId}-item`);
   const icon = document.getElementById(`${groupId}-icon`);
@@ -411,120 +609,149 @@ function populateCCSelects() {
   });
 }
 
-async function loadNeeds() {
+async function loadNeeds(options = {}) {
   if (!selectedProject) return;
+  const { preserveScroll = false } = options;
+  const uiState = preserveScroll ? captureNeedsTableUiState() : null;
+
   const ccId = document.getElementById("needsCCFilter").value;
   const status = document.getElementById("needsStatusFilter").value;
   const tbody = document.getElementById("needsTableBody");
-  tbody.innerHTML = `<tr><td colspan="11"><div class="spinner my-8"></div></td></tr>`;
+  if (!preserveScroll) {
+    tbody.innerHTML = `<tr><td colspan="11"><div class="spinner my-8"></div></td></tr>`;
+  }
 
   try {
     const params = new URLSearchParams({ pageSize: "1000" });
     if (ccId) params.set("costCenterId", ccId);
-    if (status) params.set("status", status);
 
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
-    const items = (data.items || [])
+    let items = (data.items || [])
       .slice()
-      .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0))
-      .map((item, index) => ({ ...item, _orderNumber: index + 1 }));
+      .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0));
 
-    cachedNeeds = items;
-
-    if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
-      return;
+    if (status) {
+      items = items.filter((n) => needBudgetDisplayStatus(n) === status);
     }
 
-    const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
-    const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
-    const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
-    const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
+    items = items.map((item, index) => ({ ...item, _orderNumber: index + 1 }));
 
-    // Grouping
-    const grouped = {};
-    let totalObraGeral = 0;
-    let totalSemanaGeral = 0;
+    cachedNeeds = items;
+    renderNeedsTable(items);
 
-    items.forEach(n => {
-      const ccName = n.costCenter?.name || "Sem Centro";
-      if (!grouped[ccName]) {
-        grouped[ccName] = { name: ccName, items: [], totalObra: 0, totalSemana: 0, currency: n.costCenter?.currency || "AOA" };
-      }
+    document.getElementById("needsPagination").textContent =
+      `${items.length} itens no Orçamento Geral · visão ${budgetViewMode === "previsto" ? "Previsto" : "Realizado"}`;
 
-      const qty = Number(n.quantity) || 0;
-      const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
-      const hours = Number(n.hours) || 1;
+    restoreNeedsTableUiState(uiState);
 
-      const totalObra = qty * price * hours;
-      const totalSemana = totalObra / hours;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
 
-      n._calcTotalObra = totalObra;
-      n._calcTotalSemana = totalSemana;
+function renderNeedsTable(items) {
+  const tbody = document.getElementById("needsTableBody");
+  if (!tbody) return;
 
-      grouped[ccName].totalObra += totalObra;
-      grouped[ccName].totalSemana += totalSemana;
-      grouped[ccName].items.push(n);
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
+    return;
+  }
 
-      totalObraGeral += totalObra;
-      totalSemanaGeral += totalSemana;
-    });
+  const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
+  const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
+  const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+  const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
+  const unitColLabel = budgetViewMode === "previsto" ? "P. Previsto" : "P. Realizado";
+  const totalColLabel = budgetViewMode === "previsto" ? "Total Previsto" : "Total Realizado";
 
-    const currency = items.length > 0 ? (items[0].costCenter?.currency || "AOA") : "AOA";
+  const grouped = {};
+  let totalObraGeral = 0;
 
-    let html = `
-      <tr class="bg-emerald-600" style="background-color: #0f172a !important;">
-        <td class="font-bold text-white text-sm" colspan="2">Total Geral</td>
-        <td colspan="4"></td>
-        <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
-        <td colspan="4"></td>
-        <td colspan="4"></td>
+  items.forEach((n) => {
+    const ccName = n.costCenter?.name || "Sem Centro";
+    if (!grouped[ccName]) {
+      grouped[ccName] = { name: ccName, items: [], totalObra: 0, currency: n.costCenter?.currency || "AOA" };
+    }
+    const lineTotal = needDisplayLineTotal(n);
+    const totalObra = lineTotal != null ? lineTotal : 0;
+    n._calcTotalObra = totalObra;
+    grouped[ccName].totalObra += totalObra;
+    grouped[ccName].items.push(n);
+    totalObraGeral += totalObra;
+  });
+
+  const currency = items[0]?.costCenter?.currency || "AOA";
+
+  let html = `
+    <tr style="background-color: #0f172a !important;">
+      <td class="font-bold text-white text-sm" colspan="2">Total Geral (${budgetViewMode === "previsto" ? "Previsto" : "Realizado"})</td>
+      <td colspan="4"></td>
+      <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
+      <td colspan="5"></td>
+    </tr>
+  `;
+
+  let groupIndex = 0;
+  for (const [ccName, group] of Object.entries(grouped)) {
+    const groupId = `cc-group-${groupIndex++}`;
+    html += `
+      <tr class="bg-slate-100 border-t border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors" onclick="toggleCCGroup('${groupId}')">
+        <td colspan="2" class="pl-4">
+          <span id="${groupId}-icon" class="material-symbols-outlined text-slate-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
+        </td>
+        <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
+        <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalObra, group.currency)}</td>
+        <td colspan="5"></td>
       </tr>
     `;
 
-    let groupIndex = 0;
-    for (const [ccName, group] of Object.entries(grouped)) {
-      const groupId = `cc-group-${groupIndex++}`;
-      html += `
-        <tr class="bg-slate-100 border-t border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors" onclick="toggleCCGroup('${groupId}')">
-          <td colspan="2" class="pl-4">
-            <span id="${groupId}-icon" class="material-symbols-outlined text-slate-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
-          </td>
-          <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
-          <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalObra, group.currency)}</td>
-          <td colspan="4"></td>
-        </tr>
-      `;
+    html += group.items.map((n) => {
+      const unitPrice = needDisplayUnitPrice(n);
+      const lineTotal = needDisplayLineTotal(n);
+      const displayStatus = needBudgetDisplayStatus(n);
+      const unitClass =
+        budgetViewMode === "realizado" && n.exceedsPrevisto && !n.hasPriceException
+          ? "text-red-600 font-bold"
+          : "text-slate-700";
+      const totalClass =
+        budgetViewMode === "realizado" && n.exceedsPrevisto && !n.hasPriceException
+          ? "text-red-600"
+          : "text-slate-900";
 
-      html += group.items.map((n) => {
-        const qty = Number(n.quantity) || 0;
-        const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
-        const hours = Number(n.hours) || 1;
-        const totalObra = qty * price * hours;
-
-        return `
+      return `
         <tr class="${groupId}-item">
-          <!--<td class="text-xs text-slate-500">${formatDateBR(n.date)}</td>
-          <td><span class="text-xs font-bold text-slate-600">${n.costCenter?.code || "—"}</span> <span class="text-xs text-slate-400">${n.costCenter?.name || ""}</span></td>-->
           <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg text-xs font-black text-slate-600 tabular-nums">${n._orderNumber}</span></td>
-          <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}</td>
+          <td class="font-medium text-slate-900 max-w-xs truncate">${n.description}${renderBudgetExceptionBadge(n)}</td>
           <td class="text-center text-sm font-medium text-slate-700">${n.unit || "—"}</td>
           <td class="text-center text-sm font-medium text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
-          <td class="text-right text-sm font-medium text-slate-700">${n.unitPrice ? Number(n.unitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+          <td class="text-right text-sm font-medium ${unitClass}">${unitPrice != null ? Number(unitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
           <td class="text-center text-sm font-medium text-slate-700">${n.hours ? Number(n.hours).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, n.costCenter?.currency || "AOA")}</td>
+          <td class="text-right text-sm font-bold ${totalClass}">${lineTotal != null ? formatCurrency(lineTotal, n.costCenter?.currency || "AOA") : "—"}</td>
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${prioClasses[n.priority] || ""}">${priorityLabels[n.priority] || n.priority}</span></td>
           <td class="text-sm text-slate-500">${n.responsible || "—"}</td>
-          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[n.status] || "badge-pending"}">${statusLabels[n.status] || n.status}</span></td>
+          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[displayStatus] || "badge-pending"}">${statusLabels[displayStatus] || displayStatus}</span></td>
           <td class="text-center">
             <div class="flex justify-center gap-2">
-              ${n.status === "PENDING" || n.status === "IN_QUOTATION" || n.status === "ORDERED" || n.status === "APPROVED" ? `
+              ${budgetViewMode === "previsto" && canPrevistoApprove(n) ? `
+              <button onclick="setNeedPrevistoStatus('${n.id}', '${n.costCenterId}', 'APPROVED', '${n.description.substring(0, 40).replace(/'/g, "\\'")}')" title="Aprovar"
+                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">check_circle</span>
+              </button>
+              ` : ""}
+              ${budgetViewMode === "previsto" && canPrevistoReject(n) ? `
+              <button onclick="setNeedPrevistoStatus('${n.id}', '${n.costCenterId}', 'REJECTED', '${n.description.substring(0, 40).replace(/'/g, "\\'")}')" title="Rejeitar"
+                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">cancel</span>
+              </button>
+              ` : ""}
+              ${budgetViewMode === "realizado" && canRealizadoPrecificar(n) ? `
               <button onclick="openPrecificarModal('${n.id}', '${n.costCenterId}')" title="${n.status === "ORDERED" ? "Carregar proforma" : "Precificar / Selecionar fornecedor"}"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">fact_check</span>
               </button>
               ` : ""}
-              ${n.status === "APPROVED" && !n.scheduled ? `
+              ${budgetViewMode === "realizado" && canRealizadoAgendar(n) ? `
               <button onclick="sendToCronograma('${n.id}', '${n.costCenterId}')" title="Enviar para Cronograma"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-amber-100 hover:text-amber-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">schedule</span>
@@ -542,18 +769,10 @@ async function loadNeeds() {
           </td>
         </tr>
       `;
-      }).join("");
-    }
-
-    tbody.innerHTML = html;
-
-    // pagination
-    document.getElementById("needsPagination").textContent =
-      `${items.length} itens no Orçamento Geral`;
-
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    }).join("");
   }
+
+  tbody.innerHTML = html;
 }
 
 // ── Payments Table ─────────────────────────────────────────────────────────────
@@ -1016,8 +1235,9 @@ window.sendToCronograma = async function (id, ccId) {
   try {
     showToast("A enviar para cronograma...", "info");
     await apiRequest(`/cost-centers/${ccId}/needs/${id}/schedule`, { method: "POST" });
+    patchCachedNeed(id, { scheduled: true });
     showToast("Item enviado para cronograma!", "success");
-    loadNeeds();
+    refreshNeedsTableFromCache({ preserveUi: true });
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1027,21 +1247,16 @@ window.sendAllToCronograma = async function () {
   if (!selectedProject) return;
   try {
     // First load all approved needs to get their IDs
-    const params = new URLSearchParams({ pageSize: "100", status: "APPROVED" });
+    const params = new URLSearchParams({ pageSize: "1000" });
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
-    const items = data.items || [];
+    const items = (data.items || []).filter((n) => canRealizadoAgendar(n));
 
     if (!items.length) {
-      showToast("Nenhum item aprovado para enviar", "info");
+      showToast("Nenhum item aprovado no realizado para enviar", "info");
       return;
     }
 
-    const needIds = items.filter(n => !n.scheduled).map(n => n.id);
-
-    if (needIds.length === 0) {
-      showToast("Todos os itens aprovados já estão no cronograma", "info");
-      return;
-    }
+    const needIds = items.map((n) => n.id);
 
     if (!confirm(`Enviar ${needIds.length} item(ns) para o cronograma?`)) return;
 
@@ -1052,7 +1267,8 @@ window.sendAllToCronograma = async function () {
     });
 
     showToast(`${needIds.length} item(ns) enviados para cronograma!`, "success");
-    loadNeeds();
+    patchCachedNeeds(needIds, { scheduled: true });
+    refreshNeedsTableFromCache({ preserveUi: true });
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1096,8 +1312,12 @@ function bindEvents() {
 
   // Filters
   ["needsCCFilter", "needsStatusFilter"].forEach((id) =>
-    document.getElementById(id).addEventListener("change", loadNeeds)
+    document.getElementById(id).addEventListener("change", reloadNeedsPreservingUi)
   );
+  document.getElementById("budgetViewPrevisto")?.addEventListener("click", () => setBudgetViewMode("previsto"));
+  document.getElementById("budgetViewRealizado")?.addEventListener("click", () => setBudgetViewMode("realizado"));
+  updateBudgetWorkflowButtonsVisibility();
+  updateNeedsStatusFilterOptions();
   ["paysCCFilter", "paysStatusFilter"].forEach((id) =>
     document.getElementById(id).addEventListener("change", loadPayments)
   );
@@ -1206,11 +1426,56 @@ async function submitCC(e) {
   }
 }
 
-// ── Need Modal ─────────────────────────────────────────────────────────────────
+function needFormUnitPrice(need) {
+  if (!need) return "";
+  if (budgetViewMode === "realizado") {
+    const v = need.realizadoUnitPrice;
+    return v != null && v !== "" ? v : "";
+  }
+  const v = need.previstoUnitPrice ?? need.originalUnitPrice ?? need.unitPrice;
+  return v != null && v !== "" ? v : "";
+}
+
+function updateNeedModalViewContext(isEdit) {
+  const viewLabel = budgetViewMode === "previsto" ? "Previsto" : "Realizado";
+  const titleEl = document.getElementById("modalNeedTitle");
+  const hintEl = document.getElementById("modalNeedViewHint");
+  const priceCol = document.getElementById("needModalPriceColLabel");
+  const statusCol = document.getElementById("needModalStatusColLabel");
+
+  if (titleEl) {
+    titleEl.textContent = isEdit
+      ? `Editar Itens — Orçamento ${viewLabel}`
+      : `Novo Item — Orçamento ${viewLabel}`;
+  }
+  if (hintEl) {
+    hintEl.textContent = budgetViewMode === "previsto"
+      ? "Baseline congelado: preço previsto e aprovação do orçamento"
+      : "Fluxo realizado: cotação, encomenda e preços de mercado";
+  }
+  if (priceCol) {
+    priceCol.textContent = budgetViewMode === "previsto" ? "P. Previsto" : "P. Realizado";
+  }
+  if (statusCol) {
+    statusCol.textContent = budgetViewMode === "previsto" ? "Status Previsto" : "Status Realizado";
+  }
+}
+
+async function fetchNeedsByCostCenter(ccId) {
+  const params = new URLSearchParams({ pageSize: "1000", costCenterId: ccId });
+  const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?${params}`);
+  return (data.items || [])
+    .slice()
+    .sort((a, b) => new Date(a.createdAt || a.date || 0) - new Date(b.createdAt || b.date || 0));
+}
+
 async function openNeedModal(need = null) {
-  document.getElementById("modalNeedTitle").textContent = need ? "Editar Item de Orçamento" : "Novo Item de Orçamento";
+  const isEdit = !!need?.id;
+  const ccSelect = document.getElementById("needCC");
+  updateNeedModalViewContext(isEdit);
   document.getElementById("needId").value = need?.id || "";
-  document.getElementById("needCC").value = need?.costCenterId || "";
+  ccSelect.value = need?.costCenterId || "";
+  ccSelect.disabled = isEdit && !!need?.costCenterId;
 
   // Carregar lista de operadores/admins
   const respSel = document.getElementById("needResponsibleId");
@@ -1231,7 +1496,18 @@ async function openNeedModal(need = null) {
   const tbody = document.getElementById("needItemsBody");
   tbody.innerHTML = "";
 
-  addNeedRow(need || null);
+  if (isEdit && need.costCenterId) {
+    let ccItems = [];
+    try {
+      ccItems = await fetchNeedsByCostCenter(need.costCenterId);
+    } catch {
+      ccItems = cachedNeeds.filter((n) => n.costCenterId === need.costCenterId);
+    }
+    if (!ccItems.length) ccItems = [need];
+    ccItems.forEach((item) => addNeedRow(item));
+  } else {
+    addNeedRow(need || null);
+  }
 
   document.getElementById("modalNeed").classList.add("open");
 }
@@ -1240,6 +1516,25 @@ window.addNeedRow = function (need = null) {
   const tbody = document.getElementById("needItemsBody");
   const tr = document.createElement("tr");
   tr.className = "border-b border-slate-100 need-item-row";
+  if (need?.id) tr.dataset.needId = need.id;
+
+  const editStatus = budgetViewMode === "previsto"
+    ? needPrevistoStatusForEdit(need)
+    : needRealizadoDisplayStatus(need);
+  const statusOptionsHtml = budgetViewMode === "previsto"
+    ? `
+        <option value="PENDING" ${editStatus === "PENDING" ? "selected" : ""}>Pendente</option>
+        <option value="APPROVED" ${editStatus === "APPROVED" ? "selected" : ""}>Aprovado</option>
+        <option value="REJECTED" ${editStatus === "REJECTED" ? "selected" : ""}>Rejeitado</option>
+      `
+    : `
+        <option value="PENDING" ${(!need || need?.status === "PENDING") ? "selected" : ""}>Pendente</option>
+        <option value="IN_QUOTATION" ${need?.status === "IN_QUOTATION" ? "selected" : ""}>Em Cotação</option>
+        <option value="ORDERED" ${need?.status === "ORDERED" ? "selected" : ""}>Encomenda</option>
+        <option value="APPROVED" ${need?.status === "APPROVED" ? "selected" : ""}>Aprovado</option>
+        <option value="REJECTED" ${need?.status === "REJECTED" ? "selected" : ""}>Rejeitado</option>
+        <option value="PAID" ${need?.status === "PAID" ? "selected" : ""}>Pago</option>
+      `;
 
   tr.innerHTML = `
     <td class="py-2 px-1">
@@ -1252,7 +1547,7 @@ window.addNeedRow = function (need = null) {
       <input type="number" step="0.01" placeholder="0.00" value="${need?.quantity || ""}" class="row-qty w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
     </td>
     <td class="py-2 px-1">
-      <input type="number" step="0.01" placeholder="0.00" value="${need?.unitPrice || ""}" class="row-price w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
+      <input type="number" step="0.01" placeholder="0.00" value="${needFormUnitPrice(need)}" class="row-price w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
     </td>
     <td class="py-2 px-1">
       <input type="number" step="0.01" placeholder="1.0" value="${need?.hours || ""}" class="row-hours w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
@@ -1266,12 +1561,7 @@ window.addNeedRow = function (need = null) {
     </td>
     <td class="py-2 px-1">
       <select class="row-status w-full h-8 px-1 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
-        <option value="PENDING" ${(!need || need?.status === 'PENDING') ? 'selected' : ''}>Pendente</option>
-        <option value="IN_QUOTATION" ${need?.status === 'IN_QUOTATION' ? 'selected' : ''}>Em Cotação</option>
-        <option value="ORDERED" ${need?.status === 'ORDERED' ? 'selected' : ''}>Encomenda</option>
-        <option value="APPROVED" ${need?.status === 'APPROVED' ? 'selected' : ''}>Aprovado</option>
-        <option value="REJECTED" ${need?.status === 'REJECTED' ? 'selected' : ''}>Rejeitado</option>
-        <option value="PAID" ${need?.status === 'PAID' ? 'selected' : ''}>Pago</option>
+        ${statusOptionsHtml}
       </select>
     </td>
     <td class="py-2 px-1">
@@ -1300,8 +1590,44 @@ window.deleteNeed = async function (id, desc) {
   if (!confirm(`Eliminar necessidade "${desc}..."?`)) return;
   try {
     await apiRequest(`/cost-centers/X/needs/${id}`, { method: "DELETE" });
+    removeCachedNeed(id);
     showToast("Item eliminado", "success");
-    loadNeeds();
+    refreshNeedsTableFromCache({ preserveUi: true });
+    loadSummary();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+};
+
+window.setNeedPrevistoStatus = async function (id, ccId, status, desc) {
+  if (budgetViewMode !== "previsto") return;
+  if (!PREVISTO_NEED_STATUSES.includes(status) || status === "PENDING") return;
+
+  const need = cachedNeeds.find((n) => n.id === id);
+  if (!need) {
+    showToast("Item não encontrado. Recarregue a lista.", "error");
+    return;
+  }
+
+  if (status === "APPROVED" && !canPrevistoApprove(need)) return;
+  if (status === "REJECTED" && !canPrevistoReject(need)) return;
+
+  if (status === "REJECTED" && !confirm(`Rejeitar o item "${desc}..."?`)) return;
+
+  try {
+    await apiRequest(`/cost-centers/${ccId}/needs/${id}`, {
+      method: "PATCH",
+      body: { status },
+    });
+
+    const idx = cachedNeeds.findIndex((n) => n.id === id);
+    if (idx !== -1) {
+      cachedNeeds[idx] = { ...cachedNeeds[idx], status };
+    }
+
+    showToast(status === "APPROVED" ? "Item aprovado" : "Item rejeitado", "success");
+    refreshNeedsTableFromCache({ preserveUi: true });
+    loadSummary();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1309,7 +1635,6 @@ window.deleteNeed = async function (id, desc) {
 
 async function submitNeed(e) {
   e.preventDefault();
-  const id = document.getElementById("needId").value;
   const ccId = document.getElementById("needCC").value;
   if (!ccId) { showToast("Seleciona um Centro de Custo", "error"); return; }
 
@@ -1321,7 +1646,9 @@ async function submitNeed(e) {
   if (rows.length === 0) { showToast("Adiciona pelo menos um item", "error"); return; }
 
   try {
-    const promises = Array.from(rows).map(row => {
+    const promises = Array.from(rows).map((row) => {
+      const rowNeedId = row.dataset.needId || "";
+      const selectedStatus = row.querySelector(".row-status").value;
       const body = {
         costCenterId: ccId,
         description: row.querySelector(".row-desc").value.trim(),
@@ -1330,23 +1657,48 @@ async function submitNeed(e) {
         unitPrice: row.querySelector(".row-price").value || null,
         hours: row.querySelector(".row-hours").value || null,
         priority: row.querySelector(".row-priority").value,
-        status: row.querySelector(".row-status").value,
         responsible: responsibleName,
         notes: row.querySelector(".row-notes").value.trim() || null,
       };
 
-      if (id && rows.length === 1) {
-        return apiRequest(`/cost-centers/${ccId}/needs/${id}`, { method: "PATCH", body });
+      if (budgetViewMode === "previsto") {
+        if (rowNeedId) {
+          const current = cachedNeeds.find((n) => n.id === rowNeedId);
+          const resolved = resolvePrevistoStatusSave(selectedStatus, current?.status);
+          if (resolved) body.status = resolved;
+        } else {
+          body.status = PREVISTO_NEED_STATUSES.includes(selectedStatus) ? selectedStatus : "APPROVED";
+        }
+      } else if (rowNeedId) {
+        const current = cachedNeeds.find((n) => n.id === rowNeedId);
+        if (selectedStatus === "PENDING" && current?.status === "APPROVED" && !current?.marketWorkflowStarted) {
+          // Pendente na visão realizado = baseline aprovado ainda sem cotação
+        } else {
+          body.status = selectedStatus;
+        }
       } else {
-        return apiRequest(`/cost-centers/${ccId}/needs`, { method: "POST", body });
+        body.status = selectedStatus;
       }
+
+      if (rowNeedId) {
+        return apiRequest(`/cost-centers/${ccId}/needs/${rowNeedId}`, { method: "PATCH", body });
+      }
+      return apiRequest(`/cost-centers/${ccId}/needs`, { method: "POST", body });
     });
 
     await Promise.all(promises);
 
-    showToast(id && rows.length === 1 ? "Item actualizado" : `${rows.length} item(ns) adicionado(s)`, "success");
+    const updatedCount = Array.from(rows).filter((row) => row.dataset.needId).length;
+    const createdCount = rows.length - updatedCount;
+    let toastMsg = "Orçamento guardado";
+    if (updatedCount && createdCount) toastMsg = `${updatedCount} item(ns) actualizado(s), ${createdCount} criado(s)`;
+    else if (updatedCount) toastMsg = `${updatedCount} item(ns) actualizado(s)`;
+    else toastMsg = `${createdCount} item(ns) adicionado(s)`;
+
+    showToast(toastMsg, "success");
     document.getElementById("modalNeed").classList.remove("open");
-    loadNeeds();
+    document.getElementById("needCC").disabled = false;
+    await reloadNeedsPreservingUi();
     loadSummary();
   } catch (err) {
     showToast("Erro: " + err.message, "error");
@@ -1361,13 +1713,14 @@ window.openPrecificarModal = async function (needId, ccId) {
   }
 
   try {
-    if (need.status === "PENDING") {
+    if (need.status === "PENDING" || (need.status === "APPROVED" && !need.marketWorkflowStarted)) {
       await apiRequest(`/cost-centers/${ccId}/needs/${needId}`, {
         method: "PATCH",
         body: { status: "IN_QUOTATION" },
       });
-      need = { ...need, status: "IN_QUOTATION" };
+      need = { ...need, status: "IN_QUOTATION", marketWorkflowStarted: true, realizadoDisplayStatus: "IN_QUOTATION" };
       cachedNeeds = cachedNeeds.map((n) => (n.id === needId ? need : n));
+      refreshNeedsTableFromCache({ preserveUi: true });
     }
 
     if (!currentSuppliers.length) {
@@ -1380,7 +1733,7 @@ window.openPrecificarModal = async function (needId, ccId) {
       : need.project;
 
     window.onQuoteApproved = async () => {
-      await loadNeeds();
+      await reloadNeedsPreservingUi();
       await loadSummary();
     };
     window.showQuoteToast = showToast;
@@ -1425,7 +1778,7 @@ window.sendAllToQuotation = async function () {
   try {
     showToast("A carregar itens...", "info");
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=1000`);
-    const pendingItems = (data.items || []).filter(n => n.status === "PENDING");
+    const pendingItems = (data.items || []).filter((n) => needRealizadoDisplayStatus(n) === "PENDING");
 
     if (pendingItems.length === 0) {
       showToast("Não há itens pendentes.", "warning");
@@ -2932,6 +3285,12 @@ window.handleImportFile = function (file) {
   reader.readAsArrayBuffer(file);
 };
 
+function resolveImportPrevistoStatus(unitPrice) {
+  if (unitPrice == null || unitPrice === "") return "PENDING";
+  const n = Number(unitPrice);
+  return Number.isFinite(n) ? "APPROVED" : "PENDING";
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 function parseSheetRows(rows) {
   if (!rows || rows.length < 2) return [];
@@ -2972,7 +3331,9 @@ function parseSheetRows(rows) {
     const hoursRaw = row[colIdx.hours] ?? "";
 
     const qty = parseFloat(String(qtyRaw).replace(",", ".")) || 0;
-    const price = parseFloat(String(priceRaw).replace(",", ".")) || 0;
+    const priceStr = String(priceRaw ?? "").trim();
+    const hasUnitPrice = priceStr !== "" && Number.isFinite(parseFloat(priceStr.replace(",", ".")));
+    const price = hasUnitPrice ? parseFloat(priceStr.replace(",", ".")) : null;
     const hours = parseFloat(String(hoursRaw).replace(",", ".")) || 1;
 
     if (tipo) {
@@ -2983,7 +3344,7 @@ function parseSheetRows(rows) {
     if (!desc) continue;
 
     // Ignore summary or empty-ish rows that might be mistaken as items
-    if (desc.toLowerCase().includes("total") && qty === 0 && price === 0) continue;
+    if (desc.toLowerCase().includes("total") && qty === 0 && !hasUnitPrice) continue;
 
     if (!groups[currentGroup]) {
       groups[currentGroup] = { sheetGroupName: currentGroup, items: [] };
@@ -2993,11 +3354,11 @@ function parseSheetRows(rows) {
       description: desc,
       unit: unit || null,
       quantity: qty || null,
-      unitPrice: price || null,
+      unitPrice: price,
       hours: hours !== 1 ? hours : null,
       priority: "MEDIA",
-      status: "PENDING",
-      _totalObra: qty * price * hours,
+      status: resolveImportPrevistoStatus(price),
+      _totalObra: qty * (price ?? 0) * hours,
     });
   }
 
@@ -3355,10 +3716,10 @@ async function runImport() {
         description: item.description,
         unit: item.unit || null,
         quantity: item.quantity || null,
-        unitPrice: item.unitPrice || null,
+        unitPrice: item.unitPrice != null ? item.unitPrice : null,
         hours: item.hours || null,
         priority: item.priority || "MEDIA",
-        status: item.status || "PENDING",
+        status: resolveImportPrevistoStatus(item.unitPrice),
         responsible: responsibleName || null,
       };
       await apiRequest(`/cost-centers/${item.ccId}/needs`, { method: "POST", body });
