@@ -6,6 +6,9 @@ const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const { createLog } = require("../services/logService");
 const { buildInstallmentPlan } = require("../services/creditPaymentService");
+const {
+  buildInstallmentDescription,
+} = require("../utils/installmentLabels");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const {
@@ -563,7 +566,11 @@ quoteRoutes.patch(
             paymentDate: item.dueDate,
             supplier: quote.supplier?.name || null,
             category: "MATERIAL",
-            description: `Parcela ${item.number}/${plan.length} - ${quote.need.description}`,
+            description: buildInstallmentDescription({
+              installment: item.number,
+              total: plan.length,
+              baseDescription: quote.need.description,
+            }),
             budgetedAmount: String(item.amount),
             paidAmount: "0",
             paymentMethod: null,

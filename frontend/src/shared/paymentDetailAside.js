@@ -85,11 +85,8 @@ function renderAsidePaymentType(data) {
         const num = data.installmentNumber;
         const total = data.installmentsPlanned;
         const row = document.getElementById("asideCreditInstallmentRow");
-        if (num != null && total != null) {
+        if (num != null && total != null && Number(total) > 1) {
           creditInstallmentEl.textContent = `Parcela ${num} de ${total}`;
-          row?.classList.remove("hidden");
-        } else if (num != null) {
-          creditInstallmentEl.textContent = `Parcela ${num}`;
           row?.classList.remove("hidden");
         } else {
           row?.classList.add("hidden");

@@ -22,6 +22,11 @@ const {
   resolveAllowedFromMap,
 } = require("../services/permissionResolver");
 const multer = require("multer");
+const {
+  buildInstallmentDescription,
+  resolveDisplayDescription,
+  shouldShowInstallmentLabel,
+} = require("../utils/installmentLabels");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -171,11 +176,19 @@ async function mapPaymentItems(items) {
     const creditTermDays = selectedQuote?.creditTermDays ?? null;
     const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
     const installmentNumber = p.installment ?? p.paymentInstallment?.number ?? null;
+    let effectivePlanned = installmentsPlanned;
+    if (effectivePlanned == null) {
+      const match = String(p.description || "").match(/^Parcela\s+\d+\/(\d+)\s*-/i);
+      if (match) effectivePlanned = Number(match[1]);
+    }
+    const showInstallment = shouldShowInstallmentLabel(effectivePlanned);
+    const description = resolveDisplayDescription(p.description, installmentsPlanned);
 
     const { paymentInstallment, need, ...rest } = p;
 
     return {
       ...rest,
+      description,
       supplierId: p.supplierId || sup.id || null,
       supplierName: sup.name || p.supplier || null,
       supplierRef: p.supplierRef || (sup.id ? sup : null),
@@ -187,7 +200,7 @@ async function mapPaymentItems(items) {
       paymentType: p.paymentType || "PRONTO_PAGAMENTO",
       creditTermDays,
       installmentsPlanned,
-      installmentNumber,
+      installmentNumber: showInstallment ? installmentNumber : null,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
     };
@@ -1031,6 +1044,15 @@ costCenterRoutes.post(
       supplierId = need.quotes[0].supplier.id;
     }
 
+    const totalInstallments = body.installments.length;
+
+    if (need.quotes?.[0]?.id) {
+      await prisma.needQuote.update({
+        where: { id: need.quotes[0].id },
+        data: { installmentsPlanned: totalInstallments },
+      });
+    }
+
     // Create the installments
     const createdPayments = [];
     for (const inst of body.installments) {
@@ -1044,7 +1066,11 @@ costCenterRoutes.post(
           paymentDate: new Date(inst.paymentDate),
           supplier: supplierName,
           category: "OUTRO",
-          description: `Parcela ${inst.installment} - ${need.description}`,
+          description: buildInstallmentDescription({
+            installment: inst.installment,
+            total: totalInstallments,
+            baseDescription: need.description,
+          }),
           budgetedAmount: String(inst.amount),
           paidAmount: "0",
           paymentMethod: null,
