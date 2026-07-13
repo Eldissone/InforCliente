@@ -37,8 +37,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const res = await apiRequest("/auth/available-projects", { headers: selectionHeaders });
     const projects = res.items || [];
+    const role = (user.role || "").toLowerCase();
 
     if (projects.length === 0) {
+      if (role === "financeiro") {
+        try {
+          const authRes = await apiRequest("/auth/select-account", {
+            method: "POST",
+            headers: selectionHeaders,
+            body: { clientId: null },
+          });
+          clearPendingAuthSelection();
+          setSession(authRes);
+          const next = getNext();
+          const path = next ? `/${next}` : await resolvePostLoginPath(authRes.user);
+          window.location.href = path;
+          return;
+        } catch (err) {
+          toast(err.message || "Erro ao iniciar sessão financeira", { type: "error" });
+        }
+      }
       listEl.innerHTML = `<div class="text-slate-500 font-bold">Nenhuma obra vinculada a esta conta.</div>`;
       return;
     }

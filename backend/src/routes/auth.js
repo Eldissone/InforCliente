@@ -81,9 +81,9 @@ authRoutes.post(
       }
     });
 
-    // Verificar se é um perfil interno com login directo (admin, operador, técnico ou supervisor)
+    // Perfis internos com login directo (sem ecrã de selecção de obra)
     const userRole = (user.role || "").toUpperCase();
-    const isDirectLoginRole = ['ADMIN', 'OPERADOR', 'TECNICO', 'SUPERVISOR'].includes(userRole);
+    const isDirectLoginRole = ["ADMIN", "OPERADOR", "FINANCEIRO", "TECNICO", "SUPERVISOR"].includes(userRole);
     
     let projectsCount = 0;
     if (isDirectLoginRole) {
@@ -130,7 +130,12 @@ authRoutes.post(
 
     // Se tiver apenas uma ou nenhuma (caso de admin sem client)
     const activeClientId = accounts.length === 1 ? accounts[0].clientId : (user.clientId || null);
-    const activeRole = accounts.length === 1 ? (accounts[0].role || "").toUpperCase() : userRole;
+    const activeRole =
+      userRole === "FINANCEIRO"
+        ? userRole
+        : accounts.length === 1
+          ? (accounts[0].role || "").toUpperCase()
+          : userRole;
 
     const token = buildSessionToken(user, activeRole, activeClientId);
 
@@ -158,8 +163,10 @@ authRoutes.post(
     const userRole = (user.role || "").toUpperCase();
     let activeRole = userRole;
 
-    // Se não for admin, validar se tem acesso a este cliente
-    if (userRole !== 'ADMIN' && userRole !== 'OPERADOR') {
+    const INTERNAL_ROLES = ["ADMIN", "OPERADOR", "FINANCEIRO"];
+
+    // Se não for perfil interno, validar se tem acesso a este cliente
+    if (!INTERNAL_ROLES.includes(userRole)) {
         if (clientId) {
             const link = await prisma.userClient.findUnique({
               where: {
@@ -217,7 +224,7 @@ authRoutes.get(
 
     let where = {};
 
-    if (user.role !== 'admin' && user.role !== 'operador') {
+    if (!["admin", "operador", "financeiro"].includes(user.role)) {
         const links = await prisma.userClient.findMany({
             where: { userId },
             select: { clientId: true }
