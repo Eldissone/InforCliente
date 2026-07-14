@@ -210,6 +210,7 @@ const PERMISSION_GROUPS = [
     icon: "payments",
     pages: [
       { id: "financeiro.perfil", label: "Perfil Financeiro", route: "/Financeiro/financeiro.html" },
+      { id: "financeiro.centrosGerais", label: "Centros Gerais e Pedidos Extra", route: "/Financeiro/centrosGerais.html" },
       { id: "financeiro.obras", label: "Financeiro por obra", route: "/Projectos/projectView.html" },
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
@@ -265,7 +266,7 @@ const PERMISSION_GROUPS = [
     id: "pedidosExtras",
     label: "Pedidos Extras",
     icon: "request_quote",
-    pages: [{ id: "pedidosExtras.main", label: "Pedidos Extras (Obra e Geral)", route: "/Projectos/centroCustos.html" }],
+    pages: [{ id: "pedidosExtras.main", label: "Centros Gerais e Pedidos Extra", route: "/Financeiro/centrosGerais.html" }],
     actions: ["view", "create", "approve", "pay", "delete", "full_access"],
   },
 ];
@@ -281,6 +282,7 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Projectos/tecnicoPlanos.html", module: "obras", action: "view", roles: ["tecnico", "admin", "supervisor", "operador"] },
   { route: "/Stock/index.html", module: "stock", action: "view" },
   { route: "/Financeiro/financeiro.html", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
+  { route: "/Financeiro/centrosGerais.html", module: "pedidosExtras", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "tecnico"] },
   { route: "/Users/index.html", module: "sistema", action: "view", roles: ["admin"] },
 ];
 

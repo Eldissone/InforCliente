@@ -1083,13 +1083,28 @@ model PettyCashReinforcementRequest {
   @@index([cardId])
 }
 
+// Centros de custo gerais (fora do planeamento de obra).
+model GeneralCostCenter {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  extraRequests ExtraRequest[]
+
+  @@index([active])
+}
+
 // Pedido Extra: da Obra (vinculado) ou Geral (sem vínculo obrigatório).
 // Pode ser pago via Caixa, Banco ou débito num Fundo de Maneio.
 model ExtraRequest {
-  id             String             @id @default(cuid())
-  type           ExtraRequestType   @default(OBRA)
-  projectId      String?
-  costCenterId   String?
+  id                  String             @id @default(cuid())
+  type                ExtraRequestType   @default(OBRA)
+  projectId           String?
+  costCenterId        String?
+  generalCostCenterId String?
   description    String
   amount         Decimal            @db.Decimal(16, 2)
   currency       String             @default("AOA")
@@ -1105,19 +1120,23 @@ model ExtraRequest {
   paidBy         String?
   paidAt         DateTime?
   notes          String?
+  proformaUrl    String?
+  comprovativoUrl String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  project    Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  costCenter CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  fund       PettyCashFund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
-  card       PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
-  movement   PettyCashMovement?
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter        CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  generalCostCenter GeneralCostCenter? @relation(fields: [generalCostCenterId], references: [id], onDelete: SetNull)
+  fund              PettyCashFund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
+  card              PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  movement          PettyCashMovement?
 
   @@index([projectId])
   @@index([status])
   @@index([type])
   @@index([fundId])
+  @@index([generalCostCenterId])
 }
 
 model SystemLog {

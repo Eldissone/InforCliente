@@ -1,6 +1,7 @@
 const { prisma } = require("../db");
 const bcrypt = require("bcryptjs");
 require("dotenv").config();
+const { ensureGeneralCostCenters } = require("../services/generalCostCenterService");
 
 /**
  * Testa conexão com banco
@@ -85,6 +86,7 @@ async function initialize() {
     await testConnection();
     await checkTables();
     await ensureAdminUser();
+    await ensureGeneralCostCenters();
 
     console.log("====================================");
     console.log("✅ SISTEMA INICIALIZADO COM SUCESSO");

@@ -20,11 +20,10 @@ const PREVISTO_NEED_STATUSES = ["PENDING", "APPROVED", "REJECTED"];
 const WORKFLOW_APPROVED_STATUSES = ["APPROVED", "IN_QUOTATION", "ORDERED", "PAID"];
 let currentSuppliers = [];
 
-// ── Fase 7/8: Fundo de Maneio + Pedidos Extra ───────────────────────────────
+// ── Fase 7/8: Fundo de Maneio ───────────────────────────────────────────────
 let currentFunds = [];
 let selectedFundId = null;
 let currentFundCards = [];
-let currentFundReinforcements = [];
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 (async () => {
@@ -442,7 +441,7 @@ async function loadSummary() {
   try {
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/summary`);
     dashSummary = data;
-    renderKPIs(data.totals, data.extras);
+    renderKPIs(data.totals);
     renderPrevistoRealTable(data.summary, data.totals);
     // Dashboard extra cards
     loadWeeklyBreakdown();
@@ -453,26 +452,21 @@ async function loadSummary() {
 }
 
 // ── KPIs ───────────────────────────────────────────────────────────────────────
-function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
+function renderKPIs(totalsByCurrency) {
   if (!totalsByCurrency) return;
   const baseEl = document.getElementById("kpiBasePrevisto");
   const realizadoEl = document.getElementById("kpiRealizado");
-  const extrasEl = document.getElementById("kpiExtrasAprovados");
   const desvioEl = document.getElementById("kpiDesvioMercado");
 
   baseEl.innerHTML = "";
   realizadoEl.innerHTML = "";
-  extrasEl.innerHTML = "";
   if (desvioEl) desvioEl.innerHTML = "";
 
   const currencies = Object.keys(totalsByCurrency);
-  const extraCurrencies = Object.keys(extrasByCurrency || {});
-  const allCurrencies = [...new Set([...currencies, ...extraCurrencies])];
 
-  if (allCurrencies.length === 0) {
+  if (currencies.length === 0) {
     baseEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     realizadoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
-    extrasEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     if (desvioEl) desvioEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     document.getElementById("kpiPct").textContent = "0%";
     document.getElementById("kpiBar").style.width = "0%";
@@ -482,20 +476,11 @@ function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
   let totalPct = 0;
   let pctCount = 0;
 
-  allCurrencies.forEach((cur) => {
+  currencies.forEach((cur) => {
     const t = totalsByCurrency[cur] || { basePrevisto: 0, budgeted: 0, paid: 0, pctExecutado: 0 };
-    const ex = extrasByCurrency[cur] || { approved: 0, requested: 0 };
 
     baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? 0, cur)}</p>`;
     realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
-
-    const requestedHint = ex.requested > ex.approved
-      ? `<p class="text-[10px] font-semibold text-slate-400 mt-0.5" title="${cur}">Total solicitado: ${formatCurrency(ex.requested, cur)}</p>`
-      : "";
-    extrasEl.innerHTML += `<div title="${cur}">
-      <p class="text-xl font-bold text-slate-900 tracking-tight">${formatCurrency(ex.approved, cur)}</p>
-      ${requestedHint}
-    </div>`;
 
     if (desvioEl) {
       const hasEstimate = Number(t.estimadoOriginal || 0) > 0;
@@ -504,10 +489,8 @@ function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
       desvioEl.innerHTML += `<p class="text-xl font-bold ${desvioClass} tracking-tight" title="${cur}">${hasEstimate ? `${desvio > 0 ? "+" : ""}${desvio.toFixed(1)}%` : "—"}</p>`;
     }
 
-    if (totalsByCurrency[cur]) {
-      totalPct += t.pctExecutado || 0;
-      pctCount += 1;
-    }
+    totalPct += t.pctExecutado || 0;
+    pctCount += 1;
   });
 
   const avgPct = pctCount > 0 ? totalPct / pctCount : 0;
@@ -834,7 +817,6 @@ function switchTab(tabName) {
   if (tabName === "lancamentos") loadPayments();
   if (tabName === "cronograma") loadCronograma();
   if (tabName === "fundomaneio") loadFunds();
-  if (tabName === "extras") loadExtras();
   if (tabName === "pendentes") {
     currentTxStatus = "PENDING";
     txPage = 1;
@@ -1355,15 +1337,7 @@ function bindEvents() {
   document.getElementById("fundAddCardBtn")?.addEventListener("click", () => openFundCardModal());
   document.getElementById("formFundCard")?.addEventListener("submit", submitFundCard);
   document.getElementById("fundCardDeleteBtn")?.addEventListener("click", () => deleteFundCardHandler());
-  document.getElementById("fundReinforcementBtn")?.addEventListener("click", () => openReinforcementModal());
-  document.getElementById("formReinforcement")?.addEventListener("submit", submitReinforcementRequest);
 
-  // Pedidos Extra
-  document.getElementById("newExtraBtn")?.addEventListener("click", () => openExtraModal("OBRA"));
-  document.getElementById("formExtra")?.addEventListener("submit", submitExtra);
-  document.getElementById("extraSource")?.addEventListener("change", toggleExtraFundRow);
-  document.getElementById("extraFundId")?.addEventListener("change", populateExtraCardOptions);
-  document.getElementById("extrasStatusFilter")?.addEventListener("change", loadExtras);
   document.getElementById("formAddQuote")?.addEventListener("submit", (e) =>
     submitQuoteForm(e, {
       apiRequest,
@@ -2081,8 +2055,6 @@ async function selectFund(fundId) {
         })
         .join("") ||
       `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">Sem movimentações registadas</td></tr>`;
-
-    await loadFundReinforcements(fundId, fund.currency);
   } catch (err) {
     showToast("Erro ao carregar fundo: " + err.message, "error");
   }
@@ -2260,294 +2232,6 @@ async function deleteFundCardHandler() {
     showToast(apiErrorMessage(err), "error");
   }
 }
-
-// ── Fase 2: Pedidos de Reforço de Fundo de Maneio ───────────────────────────
-const REINFORCEMENT_STATUS_STYLES = {
-  PENDENTE: "bg-amber-100 text-amber-700",
-  APROVADO: "bg-emerald-100 text-emerald-700",
-  REJEITADO: "bg-red-100 text-red-700",
-  CANCELADO: "bg-slate-100 text-slate-500",
-};
-const REINFORCEMENT_STATUS_LABELS = {
-  PENDENTE: "Pendente",
-  APROVADO: "Aprovado",
-  REJEITADO: "Rejeitado",
-  CANCELADO: "Cancelado",
-};
-
-async function loadFundReinforcements(fundId, currency) {
-  const tbody = document.getElementById("fundReinforcementsBody");
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-6"></div></td></tr>`;
-  try {
-    const data = await apiRequest(`/petty-cash/funds/${fundId}/reinforcement-requests`);
-    currentFundReinforcements = data.items || [];
-    if (currentFundReinforcements.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-400 text-xs">Nenhum pedido de reforço registado</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = currentFundReinforcements.map((r) => renderReinforcementRow(r, currency)).join("");
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
-  }
-}
-
-function renderReinforcementRow(r, currency) {
-  const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${REINFORCEMENT_STATUS_STYLES[r.status] || ""}">${REINFORCEMENT_STATUS_LABELS[r.status] || r.status}</span>`;
-  const actions = [];
-  if (r.status === "PENDENTE") {
-    actions.push(`<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg" title="Aprovação no Perfil Financeiro">Aguarda Financeiro</span>`);
-    actions.push(`<button onclick="window.cancelReinforcementHandler('${r.id}')" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
-  }
-  return `<tr>
-    <td class="text-xs text-slate-500">${formatDateBR(r.requestedAt)}</td>
-    <td class="text-xs text-slate-500">${r.card?.label || "—"}</td>
-    <td class="text-xs text-slate-700 max-w-[220px] truncate">${r.reason}</td>
-    <td class="text-xs font-bold text-slate-900 text-right">${formatCurrency(r.amount, currency)}</td>
-    <td class="text-center">${statusBadge}</td>
-    <td class="text-center"><div class="flex items-center justify-center gap-2">${actions.join("") || "—"}</div></td>
-  </tr>`;
-}
-
-function openReinforcementModal() {
-  if (!selectedFundId) {
-    showToast("Seleciona um Fundo de Maneio primeiro", "warning");
-    return;
-  }
-  if (currentFundCards.length === 0) {
-    showToast("Adiciona pelo menos um cartão a este fundo antes de pedir reforço", "error");
-    return;
-  }
-  document.getElementById("formReinforcement").reset();
-  document.getElementById("reinforcementFundId").value = selectedFundId;
-  const cardSelect = document.getElementById("reinforcementCard");
-  cardSelect.innerHTML =
-    `<option value="">Selecionar cartão...</option>` +
-    currentFundCards.filter((c) => c.active).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
-  document.getElementById("modalReinforcement").classList.add("open");
-}
-
-async function submitReinforcementRequest(e) {
-  e.preventDefault();
-  const fundId = document.getElementById("reinforcementFundId").value;
-  const body = {
-    cardId: document.getElementById("reinforcementCard").value || null,
-    amount: parseFloat(document.getElementById("reinforcementAmount").value) || 0,
-    reason: document.getElementById("reinforcementReason").value.trim(),
-  };
-  try {
-    await apiRequest(`/petty-cash/funds/${fundId}/reinforcement-requests`, { method: "POST", body });
-    showToast("Pedido de Reforço criado", "success");
-    document.getElementById("modalReinforcement").classList.remove("open");
-    await loadFunds();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-}
-
-window.cancelReinforcementHandler = async function (id) {
-  if (!confirm("Cancelar este Pedido de Reforço?")) return;
-  try {
-    await apiRequest(`/petty-cash/reinforcement-requests/${id}/cancel`, { method: "PATCH" });
-    showToast("Pedido de Reforço cancelado", "success");
-    await loadFunds();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
-
-// ── Fase 7/8: Pedidos Extra (Obra) ───────────────────────────────────────────
-const EXTRA_STATUS_STYLES = {
-  PENDENTE: "bg-amber-100 text-amber-700",
-  APROVADO: "bg-blue-100 text-blue-700",
-  PAGO: "bg-emerald-100 text-emerald-700",
-  REJEITADO: "bg-red-100 text-red-700",
-  CANCELADO: "bg-slate-100 text-slate-500",
-};
-const EXTRA_STATUS_LABELS = {
-  PENDENTE: "Pendente",
-  APROVADO: "Aprovado",
-  PAGO: "Pago",
-  REJEITADO: "Rejeitado",
-  CANCELADO: "Cancelado",
-};
-
-async function loadExtras() {
-  if (!selectedProject) return;
-  const tbody = document.getElementById("extrasTableBody");
-  tbody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
-  const status = document.getElementById("extrasStatusFilter")?.value || "";
-  try {
-    const params = new URLSearchParams({ type: "OBRA", projectId: selectedProject.id, pageSize: "100" });
-    if (status) params.set("status", status);
-    const data = await apiRequest(`/extra-requests?${params.toString()}`);
-    const items = data.items || [];
-    if (items.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400 text-xs">Nenhum pedido extra registado</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = items.map((it) => renderExtraRow(it)).join("");
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
-  }
-}
-
-// CAIXA/BANCO mantidos apenas para exibir correctamente pedidos antigos já
-// registados; o formulário actual só permite FUNDO_MANEIO/SOLICITACAO_TRANSFERENCIA.
-const EXTRA_SOURCE_LABELS = {
-  CAIXA: "Caixa",
-  BANCO: "Banco",
-  SOLICITACAO_TRANSFERENCIA: "Solicitação de Transferência",
-};
-
-function renderExtraRow(it) {
-  const sourceLabel =
-    it.paymentSource === "FUNDO_MANEIO"
-      ? `Fundo: ${it.fund?.name || "—"}`
-      : EXTRA_SOURCE_LABELS[it.paymentSource] || it.paymentSource;
-  const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${EXTRA_STATUS_STYLES[it.status] || ""}">${EXTRA_STATUS_LABELS[it.status] || it.status}</span>`;
-
-  const actions = [];
-  if (it.status === "PENDENTE") {
-    actions.push(`<button onclick="window.approveExtraHandler('${it.id}')" class="text-xs font-bold text-emerald-600 hover:underline">Aprovar</button>`);
-    actions.push(`<button onclick="window.rejectExtraHandler('${it.id}')" class="text-xs font-bold text-red-600 hover:underline">Rejeitar</button>`);
-  }
-  if (it.status === "APROVADO") {
-    actions.push(`<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg" title="Liquidação no Perfil Financeiro">Aguarda Financeiro</span>`);
-  }
-  if (it.status === "PENDENTE" || it.status === "APROVADO") {
-    actions.push(`<button onclick="window.cancelExtraHandler('${it.id}')" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
-  }
-
-  return `<tr>
-    <td class="text-xs text-slate-500">${formatDateBR(it.createdAt)}</td>
-    <td class="text-xs font-semibold text-slate-700 max-w-[220px] truncate">${it.description}</td>
-    <td class="text-xs text-slate-500">${sourceLabel}</td>
-    <td class="text-xs font-bold text-slate-900 text-right">${formatCurrency(it.amount, it.currency)}</td>
-    <td class="text-xs text-slate-500">${it.requestedBy || "—"}</td>
-    <td class="text-center">${statusBadge}</td>
-    <td class="text-center"><div class="flex items-center justify-center gap-2">${actions.join("") || "—"}</div></td>
-  </tr>`;
-}
-
-function toggleExtraFundRow() {
-  const source = document.getElementById("extraSource").value;
-  document.getElementById("extraFundRow").classList.toggle("hidden", source !== "FUNDO_MANEIO");
-}
-
-async function ensureFundsLoadedForExtra(type) {
-  try {
-    const query = type === "OBRA" && selectedProject ? `?projectId=${selectedProject.id}` : "";
-    const data = await apiRequest(`/petty-cash/funds${query}`);
-    currentFunds = data.items || [];
-  } catch (err) {
-    console.error("Erro ao carregar fundos:", err);
-  }
-  const fundSelect = document.getElementById("extraFundId");
-  fundSelect.innerHTML =
-    `<option value="">Selecionar...</option>` +
-    currentFunds.map((f) => `<option value="${f.id}">${f.name} (${formatCurrency(fundDisplayBalance(f), f.currency)})</option>`).join("");
-  populateExtraCardOptions();
-}
-
-function populateExtraCardOptions() {
-  const fundId = document.getElementById("extraFundId").value;
-  const fund = currentFunds.find((f) => f.id === fundId);
-  const cardSelect = document.getElementById("extraCardId");
-  cardSelect.innerHTML =
-    `<option value="">— Sem cartão —</option>` +
-    (fund?.cards || []).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
-}
-
-async function openExtraModal(type = "OBRA") {
-  document.getElementById("formExtra").reset();
-  document.getElementById("extraId").value = "";
-  document.getElementById("extraType").value = type;
-  document.getElementById("extraProjectId").value = type === "OBRA" ? selectedProject?.id || "" : "";
-  document.getElementById("modalExtraTitle").textContent = type === "OBRA" ? "Novo Pedido Extra da Obra" : "Novo Pedido Extra Geral";
-  toggleExtraFundRow();
-  await ensureFundsLoadedForExtra(type);
-  document.getElementById("modalExtra").classList.add("open");
-}
-
-async function submitExtra(e) {
-  e.preventDefault();
-  const source = document.getElementById("extraSource").value;
-  const type = document.getElementById("extraType").value || "OBRA";
-  const body = {
-    type,
-    projectId: document.getElementById("extraProjectId").value || null,
-    description: document.getElementById("extraDesc").value.trim(),
-    amount: parseFloat(document.getElementById("extraAmount").value) || 0,
-    paymentSource: source,
-    fundId: source === "FUNDO_MANEIO" ? document.getElementById("extraFundId").value || null : null,
-    cardId: source === "FUNDO_MANEIO" ? document.getElementById("extraCardId").value || null : null,
-    notes: document.getElementById("extraNotes").value.trim() || null,
-  };
-  try {
-    await apiRequest("/extra-requests", { method: "POST", body });
-    showToast("Pedido Extra criado", "success");
-    document.getElementById("modalExtra").classList.remove("open");
-    if (type === "OBRA") loadExtras();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-}
-
-// ── Pedidos Extra (por obra) ─────────────────────────────────────────────────
-function refreshExtrasLists() {
-  loadExtras();
-  loadSummary();
-}
-
-window.approveExtraHandler = async function (id) {
-  if (!confirm("Aprovar este Pedido Extra?")) return;
-  try {
-    await apiRequest(`/extra-requests/${id}/approve`, { method: "PATCH" });
-    showToast("Pedido aprovado", "success");
-    refreshExtrasLists();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
-
-window.rejectExtraHandler = async function (id) {
-  const reason = prompt("Motivo da rejeição (opcional):") || "";
-  try {
-    await apiRequest(`/extra-requests/${id}/reject`, { method: "PATCH", body: { reason } });
-    showToast("Pedido rejeitado", "success");
-    refreshExtrasLists();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
-
-window.payExtraHandler = async function (id) {
-  if (!confirm("Confirmar débito no Fundo de Maneio deste Pedido Extra?")) return;
-  try {
-    await apiRequest(`/extra-requests/${id}/pay`, { method: "POST" });
-    showToast("Pedido pago via fundo de maneio", "success");
-    refreshExtrasLists();
-    if (document.getElementById("tab-fundomaneio")?.classList.contains("active")) loadFunds();
-  } catch (err) {
-    const msg =
-      err.message?.includes("FINANCEIRO") || err.message?.includes("Financeiro")
-        ? "Este pedido deve ser liquidado no Perfil Financeiro."
-        : err.message;
-    showToast("Erro: " + msg, "error");
-  }
-};
-
-window.cancelExtraHandler = async function (id) {
-  if (!confirm("Cancelar este Pedido Extra?")) return;
-  try {
-    await apiRequest(`/extra-requests/${id}/cancel`, { method: "PATCH" });
-    showToast("Pedido cancelado", "success");
-    refreshExtrasLists();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-};
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
 function showToast(msg, type = "info") {

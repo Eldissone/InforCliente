@@ -22,6 +22,7 @@ const { conversationRoutes } = require("./routes/conversations");
 const { notificationRoutes } = require("./routes/notifications");
 const { pettyCashRoutes } = require("./routes/pettyCash");
 const { extraRequestRoutes } = require("./routes/extraRequests");
+const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
 const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 const { createSocketServer } = require("./socket");
@@ -109,6 +110,7 @@ app.use("/conversations", conversationRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/petty-cash", pettyCashRoutes);
 app.use("/extra-requests", extraRequestRoutes);
+app.use("/general-cost-centers", generalCostCenterRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

@@ -1,4 +1,4 @@
-import { apiRequest } from "/services/api.js";
+import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
@@ -112,6 +112,190 @@ function escapeAttr(value) {
   return String(value || "").replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function extraRequestReference(extra) {
+  if (extra.type === "GERAL") {
+    const name = extra.generalCostCenter?.name || "Centro geral";
+    const desc = extra.generalCostCenter?.description;
+    return desc ? `${name} — ${desc}` : name;
+  }
+  if (extra.project) {
+    return `${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`;
+  }
+  return "—";
+}
+
+function extraRequestPaymentLabel(extra) {
+  const src = EXTRA_SOURCE_LABELS[extra.paymentSource] || extra.paymentSource || "—";
+  if (extra.paymentSource === "FUNDO_MANEIO") {
+    const parts = [src];
+    if (extra.fund?.name) parts.push(extra.fund.name);
+    if (extra.card?.label) parts.push(`Cartão: ${extra.card.label}`);
+    return parts.join(" · ");
+  }
+  return src;
+}
+
+function renderExtraDocumentLink(url, label) {
+  if (!url) return "—";
+  const href = getAssetUrl(url);
+  return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer"
+    class="text-emerald-600 font-bold hover:underline inline-flex items-center gap-1">
+    <span class="material-symbols-outlined text-sm">open_in_new</span>Ver ${escapeHtml(label)}
+  </a>`;
+}
+
+function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) {
+  const cur = extra.currency || "AOA";
+  const fields = [
+    { label: "Tipo", value: extra.type === "GERAL" ? "Geral" : "Obra", wide: false },
+    { label: "Referência", value: extraRequestReference(extra), wide: false },
+    { label: "Descrição", value: extra.description || "—", wide: true },
+    { label: "Valor", value: formatCurrency(extra.amount, cur), wide: false, highlight: true },
+    { label: "Moeda", value: cur, wide: false },
+    { label: "Origem do pagamento", value: extraRequestPaymentLabel(extra), wide: false },
+    { label: "Solicitante", value: extra.requestedBy || "—", wide: false },
+    { label: "Data do pedido", value: formatDateBR(extra.requestedAt || extra.createdAt), wide: false },
+    { label: "Aprovado por", value: extra.approvedBy || "—", wide: false },
+    { label: "Data de aprovação", value: extra.approvedAt ? formatDateBR(extra.approvedAt) : "—", wide: false },
+  ];
+
+  if (extra.paymentSource === "SOLICITACAO_TRANSFERENCIA") {
+    fields.push({
+      label: "Proforma",
+      value: extra.proformaUrl ? renderExtraDocumentLink(extra.proformaUrl, "proforma") : "Não anexada",
+      wide: false,
+      isHtml: Boolean(extra.proformaUrl),
+    });
+  }
+  if (extra.comprovativoUrl) {
+    fields.push({
+      label: "Comprovativo",
+      value: renderExtraDocumentLink(extra.comprovativoUrl, "comprovativo"),
+      wide: false,
+      isHtml: true,
+    });
+  }
+
+  if (showNotes) {
+    fields.push({ label: "Observações", value: extra.notes?.trim() || "—", wide: true });
+  }
+
+  const pad = dense ? "p-2" : "p-3";
+  const gap = dense ? "gap-2" : "gap-3";
+  const labelClass = dense ? "text-[9px]" : "text-[10px]";
+  const valueClass = dense
+    ? "text-xs font-semibold text-slate-800 break-words"
+    : "text-sm font-semibold text-slate-800 break-words";
+
+  return `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${gap}">
+      ${fields
+        .map(
+          ({ label, value, wide, highlight, isHtml }) => `
+        <div class="${pad} rounded-xl border border-slate-100 ${wide ? "sm:col-span-2 lg:col-span-3" : ""} ${highlight ? "bg-emerald-50/60" : "bg-slate-50"}">
+          <p class="${labelClass} font-black uppercase tracking-widest text-slate-400 mb-0.5">${label}</p>
+          <div class="${valueClass} ${highlight ? "!text-base font-black text-emerald-700" : ""}">${isHtml ? value : escapeHtml(value)}</div>
+        </div>`
+        )
+        .join("")}
+    </div>`;
+}
+
+function renderExtraPayComprovativoSection() {
+  return `
+    <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/60">
+      <label for="extraPayComprovativo"
+        class="block text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">
+        Comprovativo da transferência *
+      </label>
+      <input id="extraPayComprovativo" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" required
+        class="w-full text-sm font-semibold text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-emerald-700 file:font-bold hover:file:bg-emerald-50">
+      <p class="text-[11px] text-amber-700/80 mt-2">Anexe o comprovativo bancário para concluir a liquidação.</p>
+    </div>`;
+}
+
+function renderPendingExtraCard(extra, index, total) {
+  const cur = extra.currency || "AOA";
+  const typeBadge =
+    extra.type === "GERAL"
+      ? `<span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-100 text-violet-700">Geral</span>`
+      : `<span class="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-700">Obra</span>`;
+
+  if (total <= 1) {
+    return `
+    <article class="border border-slate-100 rounded-xl p-4 bg-white shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          ${renderExtraDetailGrid(extra)}
+        </div>
+        <div class="shrink-0 flex lg:flex-col justify-end">
+          <button type="button" onclick="openPendingExtraPay('${extra.id}')"
+            class="h-9 px-4 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-all inline-flex items-center justify-center gap-1.5">
+            <span class="material-symbols-outlined text-base">payments</span>
+            Liquidar
+          </button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  const detailId = `extra-detail-${extra.id}`;
+  const refShort = extra.type === "GERAL"
+    ? (extra.generalCostCenter?.name || "Centro geral")
+    : (extra.project?.name || "Obra");
+
+  return `
+    <article class="border border-slate-100 rounded-xl bg-white shadow-sm overflow-hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 p-3">
+        <div class="flex items-start gap-2 flex-1 min-w-0">
+          <span class="text-[10px] font-black text-slate-300 mt-1 w-4 shrink-0">${index + 1}.</span>
+          ${typeBadge}
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold text-slate-900 truncate" title="${escapeAttr(extra.description)}">${escapeHtml(extra.description || "—")}</p>
+            <p class="text-[11px] text-slate-500 truncate mt-0.5" title="${escapeAttr(extraRequestReference(extra))}">
+              ${escapeHtml(refShort)} · ${escapeHtml(extraRequestPaymentLabel(extra))} · ${escapeHtml(extra.requestedBy || "—")}
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0 pl-6 sm:pl-0">
+          <p class="text-sm font-black text-emerald-700 tabular-nums">${formatCurrency(extra.amount, cur)}</p>
+          <button type="button" onclick="togglePendingExtraDetail('${detailId}', this)"
+            class="h-8 px-2.5 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-bold hover:bg-slate-50 transition-all inline-flex items-center gap-1"
+            data-expanded="false" aria-expanded="false" aria-controls="${detailId}">
+            <span class="material-symbols-outlined text-sm">expand_more</span>
+            Detalhes
+          </button>
+          <button type="button" onclick="openPendingExtraPay('${extra.id}')"
+            class="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition-all inline-flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm">payments</span>
+            Liquidar
+          </button>
+        </div>
+      </div>
+      <div id="${detailId}" class="hidden border-t border-slate-100 bg-slate-50/50 px-3 py-3">
+        ${renderExtraDetailGrid(extra, { dense: true })}
+      </div>
+    </article>`;
+}
+
+window.togglePendingExtraDetail = function (detailId, btn) {
+  const panel = document.getElementById(detailId);
+  if (!panel || !btn) return;
+  const open = panel.classList.toggle("hidden") === false;
+  btn.dataset.expanded = open ? "true" : "false";
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  const icon = btn.querySelector(".material-symbols-outlined");
+  if (icon) icon.textContent = open ? "expand_less" : "expand_more";
+};
+
 function renderStatusBadge(label, badgeClass, icon) {
   return `
     <span class="fin-status-badge ${badgeClass}">
@@ -184,16 +368,9 @@ async function handleExtraDeepLink() {
 }
 
 function openExtraPayModal(extra) {
-  document.getElementById("extraPayRequester").textContent = extra.requestedBy || "—";
-  document.getElementById("extraPayDesc").textContent = extra.description || "—";
-  document.getElementById("extraPayAmount").textContent = formatCurrency(extra.amount, extra.currency || "AOA");
-  document.getElementById("extraPaySource").textContent =
-    EXTRA_SOURCE_LABELS[extra.paymentSource] || extra.paymentSource || "—";
-  document.getElementById("extraPayProject").textContent = extra.project?.name
-    ? `Obra: ${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`
-    : extra.type === "GERAL"
-      ? "Pedido Extra Geral"
-      : "—";
+  const needsComprovativo = extra.paymentSource === "SOLICITACAO_TRANSFERENCIA";
+  document.getElementById("extraPayBody").innerHTML =
+    renderExtraDetailGrid(extra) + (needsComprovativo ? renderExtraPayComprovativoSection() : "");
 
   const btn = document.getElementById("extraPayConfirmBtn");
   const canPay = extra.status === "APROVADO";
@@ -204,7 +381,18 @@ function openExtraPayModal(extra) {
     ? async () => {
         if (!confirm(`Confirmar liquidação de ${formatCurrency(extra.amount, extra.currency || "AOA")}?`)) return;
         try {
-          await apiRequest(`/extra-requests/${extra.id}/pay`, { method: "POST" });
+          if (needsComprovativo) {
+            const file = document.getElementById("extraPayComprovativo")?.files?.[0];
+            if (!file) {
+              toast("Anexe o comprovativo da transferência bancária.", { type: "error" });
+              return;
+            }
+            const fd = new FormData();
+            fd.append("comprovativo", file);
+            await apiUpload(`/extra-requests/${extra.id}/pay`, fd, "POST");
+          } else {
+            await apiRequest(`/extra-requests/${extra.id}/pay`, { method: "POST" });
+          }
           toast("Pedido Extra liquidado com sucesso.", { type: "success" });
           document.getElementById("modalExtraPay").classList.remove("open");
           await loadPendingPaymentsQueue();
@@ -306,39 +494,11 @@ function renderPendingPaymentsList() {
       <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
         <span class="material-symbols-outlined text-base text-emerald-600">payments</span>
         Pedidos extra a liquidar
+        <span class="text-[10px] font-bold text-slate-400 normal-case tracking-normal">(${pendingPaymentsCache.length})</span>
       </h3>
-      <table class="w-full fin-table">
-        <thead>
-          <tr>
-            <th class="text-left">Obra</th>
-            <th class="text-left min-w-[140px]">Solicitante</th>
-            <th class="text-left min-w-[160px]">Descrição</th>
-            <th class="text-right w-28">Valor</th>
-            <th class="text-center w-24">Acção</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${pendingPaymentsCache
-            .map((e) => {
-              const cur = e.currency || "AOA";
-              const obra = e.project?.name || (e.type === "GERAL" ? "Geral" : "—");
-              return `
-          <tr class="hover:bg-slate-50/80">
-            <td class="text-xs font-bold text-slate-700 max-w-[120px] truncate" title="${escapeAttr(obra)}">${obra}</td>
-            <td class="text-xs text-slate-600">${escapeAttr(e.requestedBy || "—")}</td>
-            <td class="text-sm font-medium text-slate-900 max-w-[200px] truncate" title="${escapeAttr(e.description)}">${escapeAttr(e.description)}</td>
-            <td class="text-right text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(e.amount, cur)}</td>
-            <td class="text-center">
-              <button type="button" onclick="openPendingExtraPay('${e.id}')"
-                class="h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition-all inline-flex items-center gap-1">
-                <span class="material-symbols-outlined text-sm">check_circle</span>Pagar
-              </button>
-            </td>
-          </tr>`;
-            })
-            .join("")}
-        </tbody>
-      </table>
+      <div class="flex flex-col gap-2">
+        ${pendingPaymentsCache.map((e, i) => renderPendingExtraCard(e, i, pendingPaymentsCache.length)).join("")}
+      </div>
     </section>`
     : "";
 
@@ -1106,7 +1266,7 @@ function renderExtrasPlanTable(extras) {
           return `
         <tr class="group">
           <td class="fin-empty-cell">—</td>
-          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(extra?.project?.name)}">${extra?.project?.name || (extra?.type === "GERAL" ? "Geral" : "—")}</td>
+          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(extra?.project?.name || extra?.generalCostCenter?.name)}">${extra?.project?.name || (extra?.type === "GERAL" ? (extra?.generalCostCenter?.name || "Geral") : "—")}</td>
           <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
             <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${extra?.description || "—"}
           </td>

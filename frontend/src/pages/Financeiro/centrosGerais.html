@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html class="light" lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Info Gestor — Centros Gerais e Pedidos Extra</title>
+    <meta name="description" content="Centros de custo gerais e pedidos extra fora do planeamento de obra.">
+    <link rel="icon" href="../../assets/icon/favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+    <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .gcc-card {
+            background: white;
+            border: 1px solid #f1f5f9;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .gcc-card:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+        }
+
+        .gcc-card--active {
+            border-color: #059669;
+            box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+        }
+
+        .type-toggle-btn {
+            padding: 0.5rem 1rem;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 0.75rem;
+            color: #64748b;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .type-toggle-btn.active {
+            background: #0f172a;
+            color: white;
+            border-color: #0f172a;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 min-h-screen font-inter text-slate-900">
+
+    <nav class="fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
+        <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-10">
+                <a href="../Dashboard/index.html"
+                    class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <span
+                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
+                    <span>Gestor</span>
+                </a>
+                <div class="hidden lg:flex items-center gap-4">
+                    <a href="../Dashboard/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Dashboard</a>
+                    <a href="../Clientes/clienteLista.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Clientes</a>
+                    <a href="../Projectos/ProjectGeral.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Obras</a>
+                    <a href="../Stock/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Logística</a>
+                    <a href="../Projectos/centroCustos.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Planeamento</a>
+                    <a href="../Projectos/Cotacao/index.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Cotação</a>
+                    <a href="financeiro.html"
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Financeiro</a>
+                    <a href="centrosGerais.html"
+                        class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg whitespace-nowrap">Centros
+                        Gerais</a>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 shrink-0">
+                <a data-nav-users
+                    class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2"
+                    href="../Users/index.html">
+                    <span class="material-symbols-outlined text-lg">manage_accounts</span>
+                    Gestão
+                </a>
+                <button data-user-profile
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all">
+                    <span class="material-symbols-outlined text-sm">person</span>
+                    <span data-user-role></span>
+                </button>
+                <button data-logout
+                    class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">Sair</button>
+                <button id="mobileMenuBtn" aria-expanded="false"
+                    class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+            </div>
+        </div>
+        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Dashboard/index.html">
+                <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/ProjectGeral.html">
+                <span class="material-symbols-outlined text-lg">construction</span> Obras
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="financeiro.html">
+                <span class="material-symbols-outlined text-lg">payments</span> Financeiro
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="centrosGerais.html">
+                <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
+            </a>
+            <button data-logout
+                class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
+                <span class="material-symbols-outlined text-lg">logout</span> Sair
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-16">
+        <section class="mb-8">
+            <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mb-6">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#059669] mb-2">Financeiro</p>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Centros Gerais e Pedidos
+                        Extra</h1>
+                    <p class="text-xs font-semibold text-slate-400 mt-1 max-w-2xl">
+                        Custos fora do planeamento de obra. Crie pedidos extra do tipo <strong>Geral</strong> (centro de
+                        custo geral)
+                        ou <strong>Obra</strong> (vinculado a uma obra específica).
+                    </p>
+                </div>
+                <button id="btnNewExtra" type="button"
+                    class="h-11 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 shrink-0">
+                    <span class="material-symbols-outlined text-base">add_circle</span>
+                    Novo Pedido Extra
+                </button>
+            </div>
+
+            <h2 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Tipos de Custos Gerais</h2>
+            <div id="gccGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+                <div class="gcc-card animate-pulse h-28"></div>
+                <div class="gcc-card animate-pulse h-28"></div>
+                <div class="gcc-card animate-pulse h-28"></div>
+            </div>
+        </section>
+
+        <section class="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+            <div
+                class="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 class="text-sm font-bold text-slate-900">Pedidos Extra</h2>
+                <div class="flex flex-wrap items-center gap-2">
+                    <select id="filterType"
+                        class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                        <option value="">Todos os tipos</option>
+                        <option value="GERAL">Geral</option>
+                        <option value="OBRA">Obra</option>
+                    </select>
+                    <select id="filterStatus"
+                        class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                        <option value="">Todos os estados</option>
+                        <option value="PENDENTE">Pendentes</option>
+                        <option value="APROVADO">A liquidar</option>
+                        <option value="PAGO">Pagos</option>
+                        <option value="REJEITADO">Rejeitados</option>
+                        <option value="CANCELADO">Cancelados</option>
+                    </select>
+                    <select id="filterGeneralCc"
+                        class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
+                        <option value="">Todos os centros gerais</option>
+                    </select>
+                    <select id="filterProject"
+                        class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
+                        <option value="">Todas as obras</option>
+                    </select>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            <th class="px-5 py-3">Data</th>
+                            <th class="px-5 py-3">Tipo</th>
+                            <th class="px-5 py-3">Referência</th>
+                            <th class="px-5 py-3">Descrição</th>
+                            <th class="px-5 py-3">Origem</th>
+                            <th class="px-5 py-3 text-right">Valor</th>
+                            <th class="px-5 py-3">Estado</th>
+                            <th class="px-5 py-3 text-center">Acções</th>
+                        </tr>
+                    </thead>
+                    <tbody id="extrasTableBody">
+                        <tr>
+                            <td colspan="8" class="text-center py-12 text-slate-400 text-xs">A carregar...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-100 px-4 mt-10 md:px-8 py-10 bg-white">
+        <div
+            class="max-w-[1500px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">InfoGestor © 2026 - Todos os
+                direitos
+                reservados</p>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> MBT Energia
+            </span>
+        </div>
+    </footer>
+
+    <!-- Modal: Novo Pedido Extra -->
+    <div class="modal-overlay" id="modalExtra">
+        <div class="modal-box" style="max-width:560px">
+            <div class="flex items-center justify-between mb-6">
+                <h2 id="modalExtraTitle" class="text-lg font-bold text-slate-900">Novo Pedido Extra</h2>
+                <button type="button" id="btnCloseExtraModal" aria-label="Fechar"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formExtra" class="flex flex-col gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tipo *</label>
+                    <div class="flex gap-2">
+                        <button type="button" id="btnTypeGeral" class="type-toggle-btn active flex-1">Geral</button>
+                        <button type="button" id="btnTypeObra" class="type-toggle-btn flex-1">Obra</button>
+                    </div>
+                    <input type="hidden" id="extraType" value="GERAL">
+                </div>
+
+                <div id="rowGeneralCc">
+                    <label for="extraGeneralCcId"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de Custo
+                        Geral *</label>
+                    <select id="extraGeneralCcId" required
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">Selecionar centro geral...</option>
+                    </select>
+                </div>
+
+                <div id="rowProject" class="hidden">
+                    <label for="extraProjectId"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Obra *</label>
+                    <select id="extraProjectId"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">Selecionar obra...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="extraDesc"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição
+                        *</label>
+                    <input id="extraDesc" type="text" required placeholder="Motivo do pedido extra"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="extraAmount"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor
+                            *</label>
+                        <input id="extraAmount" type="number" step="0.01" min="0.01" required placeholder="0.00"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="extraSource"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Origem do
+                            Pagamento</label>
+                        <select id="extraSource"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="FUNDO_MANEIO">Fundo de Maneio</option>
+                            <option value="SOLICITACAO_TRANSFERENCIA">Solicitação de Transferência</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="extraFundRow" class="grid grid-cols-2 gap-4 hidden">
+                    <div>
+                        <label for="extraFundId"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fundo de
+                            Maneio</label>
+                        <select id="extraFundId"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="">Selecionar...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="extraCardId"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Cartão
+                            (opcional)</label>
+                        <select id="extraCardId"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="">— Sem cartão —</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="extraProformaRow" class="hidden">
+                    <label for="extraProforma"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Proforma
+                        *</label>
+                    <input id="extraProforma" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"
+                        class="w-full text-sm font-semibold text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-bold hover:file:bg-emerald-100">
+                    <p class="text-[11px] text-slate-400 mt-1">Obrigatório para solicitação de transferência bancária (PDF ou imagem).</p>
+                </div>
+                <div>
+                    <label for="extraNotes"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Observações</label>
+                    <textarea id="extraNotes" rows="2"
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none resize-none"></textarea>
+                </div>
+                <div class="flex gap-3 justify-end pt-2">
+                    <button type="button" id="btnCancelExtra"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Guardar
+                        Pedido</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-20 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+    <script type="module" src="centrosGerais.js"></script>
+</body>
+
+</html>

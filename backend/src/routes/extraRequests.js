@@ -13,6 +13,13 @@ const {
   resolveAllowedFromMap,
 } = require("../services/permissionResolver");
 const { createLog } = require("../services/logService");
+const { uploadToSupabase } = require("../utils/storage");
+const multer = require("multer");
+
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const extraRequestRoutes = express.Router();
 extraRequestRoutes.use(authRequired);
@@ -39,6 +46,7 @@ function mapExtra(item) {
 const EXTRA_INCLUDE = {
   project: { select: { id: true, name: true, code: true } },
   costCenter: { select: { id: true, code: true, name: true } },
+  generalCostCenter: { select: { id: true, code: true, name: true, description: true } },
   fund: { select: { id: true, name: true, currentBalance: true, currency: true } },
   card: { select: { id: true, label: true } },
 };
@@ -46,10 +54,11 @@ const EXTRA_INCLUDE = {
 // GET /extra-requests — Listar pedidos extra (Obra ou Geral)
 extraRequestRoutes.get(
   "/",
-  requirePermission("obras", "view"),
+  requirePermission("pedidosExtras", "view"),
   asyncHandler(async (req, res) => {
     const type = req.query.type ? String(req.query.type) : "";
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const generalCostCenterId = req.query.generalCostCenterId ? String(req.query.generalCostCenterId) : "";
     const status = req.query.status ? String(req.query.status) : "";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
@@ -57,6 +66,7 @@ extraRequestRoutes.get(
     const where = {
       ...(type ? { type } : {}),
       ...(projectId ? { projectId } : {}),
+      ...(generalCostCenterId ? { generalCostCenterId } : {}),
       ...(status ? { status } : {}),
     };
 
@@ -118,7 +128,7 @@ async function assertCanPayExtraRequest(req) {
 // GET /extra-requests/:id — Detalhe (deep link / notificações)
 extraRequestRoutes.get(
   "/:id",
-  requirePermission("obras", "view"),
+  requirePermission("pedidosExtras", "view"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const item = await prisma.extraRequest.findUnique({
@@ -140,6 +150,7 @@ extraRequestRoutes.post(
         type: z.enum(["OBRA", "GERAL"]).optional().default("OBRA"),
         projectId: z.string().optional().nullable(),
         costCenterId: z.string().optional().nullable(),
+        generalCostCenterId: z.string().optional().nullable(),
         description: z.string().min(2),
         amount: z.union([z.number(), z.string()]),
         currency: z.string().optional().default("AOA"),
@@ -155,6 +166,12 @@ extraRequestRoutes.post(
     if (body.type === "OBRA" && !body.projectId) {
       return res.status(400).json({ error: "PROJECT_REQUIRED_FOR_OBRA" });
     }
+    if (body.type === "GERAL" && !body.generalCostCenterId) {
+      return res.status(400).json({ error: "GENERAL_COST_CENTER_REQUIRED" });
+    }
+    if (body.type === "GERAL" && body.projectId) {
+      return res.status(400).json({ error: "PROJECT_NOT_ALLOWED_FOR_GERAL" });
+    }
     if (body.paymentSource === "FUNDO_MANEIO" && !body.fundId) {
       return res.status(400).json({ error: "FUND_REQUIRED_FOR_FUNDO_MANEIO" });
     }
@@ -163,8 +180,9 @@ extraRequestRoutes.post(
     const created = await prisma.extraRequest.create({
       data: {
         type: body.type,
-        projectId: body.projectId || null,
+        projectId: body.type === "OBRA" ? body.projectId || null : null,
         costCenterId: body.costCenterId || null,
+        generalCostCenterId: body.type === "GERAL" ? body.generalCostCenterId || null : null,
         description: body.description,
         amount: String(body.amount),
         currency: body.currency || "AOA",
@@ -239,6 +257,9 @@ extraRequestRoutes.patch(
     if (existing.status !== "PENDENTE") {
       return res.status(409).json({ error: "ONLY_PENDING_CAN_BE_APPROVED" });
     }
+    if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !existing.proformaUrl) {
+      return res.status(409).json({ error: "PROFORMA_REQUIRED" });
+    }
 
     const u = req.user || {};
     const updated = await prisma.extraRequest.update({
@@ -307,9 +328,47 @@ extraRequestRoutes.patch(
   })
 );
 
+// POST /extra-requests/:id/proforma — Anexar proforma (transferência bancária, enquanto PENDENTE)
+extraRequestRoutes.post(
+  "/:id/proforma",
+  requireRole(["admin", "operador", "supervisor", "tecnico"]),
+  fileUpload.single("proforma"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const existing = await prisma.extraRequest.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    if (existing.paymentSource !== "SOLICITACAO_TRANSFERENCIA") {
+      return res.status(400).json({ error: "PROFORMA_ONLY_FOR_TRANSFER" });
+    }
+    if (existing.status !== "PENDENTE") {
+      return res.status(409).json({ error: "ONLY_PENDING_CAN_UPLOAD_PROFORMA" });
+    }
+    if (!req.file) return res.status(400).json({ error: "PROFORMA_REQUIRED" });
+
+    const ext = (req.file.originalname || "").split(".").pop() || "pdf";
+    const storagePath = `extra-requests/${id}/proforma-${Date.now()}.${ext}`;
+    const proformaUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
+    const updated = await prisma.extraRequest.update({
+      where: { id },
+      data: { proformaUrl },
+      include: EXTRA_INCLUDE,
+    });
+
+    await logExtraAction(req, {
+      action: "extra_request_proforma_upload",
+      extraRequestId: id,
+      details: { proformaUrl },
+    });
+
+    return res.json(mapExtra(updated));
+  })
+);
+
 // POST /extra-requests/:id/pay — Liquidar pedido (Fundo de Maneio no CC; transferências só Financeiro)
 extraRequestRoutes.post(
   "/:id/pay",
+  fileUpload.single("comprovativo"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
@@ -334,6 +393,17 @@ extraRequestRoutes.post(
     const u = req.user || {};
 
     try {
+      if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !req.file) {
+        return res.status(400).json({ error: "COMPROVATIVO_REQUIRED" });
+      }
+
+      let comprovativoUrl = null;
+      if (req.file) {
+        const ext = (req.file.originalname || "").split(".").pop() || "pdf";
+        const storagePath = `extra-requests/${id}/comprovativo-${Date.now()}.${ext}`;
+        comprovativoUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+      }
+
       if (existing.paymentSource === "FUNDO_MANEIO") {
         if (!existing.fundId) return res.status(400).json({ error: "FUND_REQUIRED" });
         await applyFundMovement({
@@ -349,7 +419,12 @@ extraRequestRoutes.post(
 
       const updated = await prisma.extraRequest.update({
         where: { id },
-        data: { status: "PAGO", paidBy: u.name || u.email || u.sub || null, paidAt: new Date() },
+        data: {
+          status: "PAGO",
+          paidBy: u.name || u.email || u.sub || null,
+          paidAt: new Date(),
+          ...(comprovativoUrl ? { comprovativoUrl } : {}),
+        },
         include: EXTRA_INCLUDE,
       });
 
@@ -365,6 +440,24 @@ extraRequestRoutes.post(
       if (err.message === "FUND_NOT_FOUND") return res.status(404).json({ error: "FUND_NOT_FOUND" });
       throw err;
     }
+  })
+);
+
+// DELETE /extra-requests/:id — Eliminar pedido (apenas estados finais ou pendentes não liquidados)
+extraRequestRoutes.delete(
+  "/:id",
+  requirePermission("pedidosExtras", "delete"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const existing = await prisma.extraRequest.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    if (existing.status === "PAGO" || existing.status === "APROVADO") {
+      return res.status(409).json({ error: "CANNOT_DELETE_IN_CURRENT_STATUS" });
+    }
+
+    await prisma.extraRequest.delete({ where: { id } });
+    await logExtraAction(req, { action: "extra_request_delete", extraRequestId: id });
+    return res.json({ ok: true });
   })
 );
 
