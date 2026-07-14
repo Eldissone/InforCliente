@@ -359,6 +359,17 @@ async function submitExtra(e) {
 }
 
 function bindEvents() {
+  document.getElementById("btnNewGcc")?.addEventListener("click", () => {
+    if (!can("pedidosExtras", "create")) {
+      showToast("Sem permissão para criar centros gerais", "error");
+      return;
+    }
+    openGccModal();
+  });
+  document.getElementById("formGcc")?.addEventListener("submit", submitGcc);
+  document.getElementById("btnCloseGccModal")?.addEventListener("click", closeGccModal);
+  document.getElementById("btnCancelGcc")?.addEventListener("click", closeGccModal);
+
   document.getElementById("btnNewExtra")?.addEventListener("click", () => {
     if (!can("pedidosExtras", "create")) {
       showToast("Sem permissão para criar pedidos extra", "error");
@@ -390,16 +401,52 @@ function bindEvents() {
   });
 }
 
-async function loadInitialData() {
-  const [gccData, projectsData] = await Promise.all([
-    apiRequest("/general-cost-centers"),
-    apiRequest("/projects?pageSize=200"),
-  ]);
+async function loadGeneralCenters() {
+  const gccData = await apiRequest("/general-cost-centers");
   generalCenters = gccData.items || [];
-  allProjects = projectsData.items || projectsData.projects || [];
   populateGeneralCcSelects();
-  populateProjectSelects();
   renderGeneralCentersGrid();
+}
+
+function openGccModal() {
+  document.getElementById("formGcc").reset();
+  document.getElementById("modalGcc").classList.add("open");
+}
+
+function closeGccModal() {
+  document.getElementById("modalGcc").classList.remove("open");
+}
+
+async function submitGcc(e) {
+  e.preventDefault();
+  const name = document.getElementById("gccName").value.trim();
+  const description = document.getElementById("gccDescription").value.trim();
+  if (!name) {
+    showToast("Indique o nome do centro geral", "error");
+    return;
+  }
+  try {
+    const created = await apiRequest("/general-cost-centers", {
+      method: "POST",
+      body: { name, description: description || null },
+    });
+    showToast(`Centro "${created.name}" criado`, "success");
+    closeGccModal();
+    await loadGeneralCenters();
+    selectedGccFilter = created.id;
+    document.getElementById("filterGeneralCc").value = created.id;
+    renderGeneralCentersGrid();
+    loadExtras();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
+async function loadInitialData() {
+  const projectsData = await apiRequest("/projects?pageSize=200");
+  allProjects = projectsData.items || projectsData.projects || [];
+  populateProjectSelects();
+  await loadGeneralCenters();
   await loadExtras();
 }
 
@@ -414,6 +461,7 @@ async function loadInitialData() {
 
   if (!can("pedidosExtras", "create")) {
     document.getElementById("btnNewExtra")?.classList.add("hidden");
+    document.getElementById("btnNewGcc")?.classList.add("hidden");
   }
 
   try {

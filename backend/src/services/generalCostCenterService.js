@@ -39,6 +39,29 @@ const GENERAL_COST_CENTER_SEEDS = [
   },
 ];
 
+function slugifyCode(name) {
+  return (
+    String(name)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48) || "CENTRO"
+  );
+}
+
+async function generateUniqueCode(name) {
+  let base = slugifyCode(name);
+  let code = base;
+  let n = 2;
+  while (await prisma.generalCostCenter.findUnique({ where: { code } })) {
+    code = `${base}_${n}`;
+    n += 1;
+  }
+  return code;
+}
+
 async function ensureGeneralCostCenters() {
   try {
     for (const seed of GENERAL_COST_CENTER_SEEDS) {
@@ -58,4 +81,8 @@ async function ensureGeneralCostCenters() {
   }
 }
 
-module.exports = { ensureGeneralCostCenters, GENERAL_COST_CENTER_SEEDS };
+module.exports = {
+  ensureGeneralCostCenters,
+  GENERAL_COST_CENTER_SEEDS,
+  generateUniqueCode,
+};
