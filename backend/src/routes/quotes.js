@@ -52,13 +52,26 @@ quoteRoutes.get(
     const projectId = String(req.params.projectId);
     const { status } = req.query;
     
-    // Default: mostrar PENDING, IN_QUOTATION e ORDERED (aguardam proforma)
-    const statuses = status ? [status] : ["PENDING", "IN_QUOTATION", "ORDERED"];
+    // Realizado: itens em cotação/encomenda ou já no fluxo de mercado
+    const statuses = status ? [status] : null;
 
     const items = await prisma.workNeed.findMany({
       where: {
         projectId,
-        status: { in: statuses },
+        ...(statuses
+          ? { status: { in: statuses } }
+          : {
+              OR: [
+                { status: { in: ["IN_QUOTATION", "ORDERED"] } },
+                {
+                  status: "APPROVED",
+                  OR: [
+                    { scheduled: true },
+                    { quotes: { some: {} } },
+                  ],
+                },
+              ],
+            }),
       },
       include: {
         costCenter: { select: { name: true, code: true } },

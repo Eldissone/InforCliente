@@ -30,6 +30,8 @@ const {
 const {
   assertPriceWithinPrevistoOrException,
   mapNeedBudgetFields,
+  needLineTotal,
+  needRealizadoUnitPrice,
 } = require("../services/needBudgetService");
 
 const upload = multer({
@@ -42,13 +44,27 @@ costCenterRoutes.use(authRequired);
 
 const WEEK_ORDER = Array.from({ length: 26 }, (_, i) => `SEM ${i}`);
 
-/** Total orçamental de uma necessidade aprovada/paga — mesma fórmula do Orçamento Geral no frontend. */
+/** Item aprovado no orçamento previsto (baseline), independente do fluxo realizado. */
+function isPrevistoBaselineApproved(need) {
+  if (!need) return false;
+  return need.status !== "PENDING" && need.status !== "REJECTED";
+}
+
+/** Total previsto aprovado — alinhado com Total Geral (Previsto) no frontend. */
+function calcPrevistoApprovedNeedTotal(need) {
+  if (!isPrevistoBaselineApproved(need)) return 0;
+  return needLineTotal(need, "previsto");
+}
+
+/** Total realizado (preço de mercado) quando já existe cotação/encomenda aprovada. */
+function calcRealizadoNeedTotal(need) {
+  if (!need || needRealizadoUnitPrice(need) == null) return 0;
+  return needLineTotal(need, "realizado");
+}
+
+/** @deprecated Usar calcPrevistoApprovedNeedTotal — mantido para compatibilidade interna. */
 function calcApprovedNeedTotal(need) {
-  if (!need || !["APPROVED", "PAID"].includes(need.status)) return 0;
-  const qty = Number(need.quantity) || 0;
-  const price = Number(need.unitPrice) || 0;
-  const hours = Number(need.hours) || 1;
-  return qty * price * hours;
+  return calcPrevistoApprovedNeedTotal(need);
 }
 
 /**
@@ -57,11 +73,7 @@ function calcApprovedNeedTotal(need) {
  * sem esse campo preenchido, cai para `unitPrice` (não há distinção possível).
  */
 function calcApprovedNeedEstimateTotal(need) {
-  if (!need || !["APPROVED", "PAID"].includes(need.status)) return 0;
-  const qty = Number(need.quantity) || 0;
-  const price = Number(need.originalUnitPrice ?? need.unitPrice) || 0;
-  const hours = Number(need.hours) || 1;
-  return qty * price * hours;
+  return calcPrevistoApprovedNeedTotal(need);
 }
 
 function sortWeekEntries(weekMap) {
@@ -586,9 +598,9 @@ costCenterRoutes.get(
       }
     });
 
-    // Orçamento Base Previsto = total do Orçamento Geral (itens APPROVED/PAID)
+    // Orçamento Previsto aprovado = baseline (originalUnitPrice) dos itens não pendentes/rejeitados
     const approvedNeeds = await prisma.workNeed.findMany({
-      where: { projectId, status: { in: ["APPROVED", "PAID"] } },
+      where: { projectId, status: { notIn: ["PENDING", "REJECTED"] } },
       select: {
         costCenterId: true,
         status: true,
@@ -602,14 +614,17 @@ costCenterRoutes.get(
 
     const basePrevistoMap = {};
     const estimadoOriginalMap = {};
+    const realizadoOrcamentoMap = {};
     approvedNeeds.forEach((need) => {
       const ccId = need.costCenterId;
-      const total = calcApprovedNeedTotal(need);
-      const estimate = calcApprovedNeedEstimateTotal(need);
+      const previstoTotal = calcPrevistoApprovedNeedTotal(need);
+      const realizadoTotal = calcRealizadoNeedTotal(need);
       if (!basePrevistoMap[ccId]) basePrevistoMap[ccId] = 0;
       if (!estimadoOriginalMap[ccId]) estimadoOriginalMap[ccId] = 0;
-      basePrevistoMap[ccId] += total;
-      estimadoOriginalMap[ccId] += estimate;
+      if (!realizadoOrcamentoMap[ccId]) realizadoOrcamentoMap[ccId] = 0;
+      basePrevistoMap[ccId] += previstoTotal;
+      estimadoOriginalMap[ccId] += previstoTotal;
+      realizadoOrcamentoMap[ccId] += realizadoTotal;
     });
 
     // Agrupamento de necessidades por CC e status
@@ -640,19 +655,21 @@ costCenterRoutes.get(
       // Desvio entre a estimativa inicial (previsto, antes de ir a mercado)
       // e o preço real obtido nas cotações aprovadas — mostra se o mercado
       // ficou acima/abaixo do que tinha sido orçamentado.
-      const desvioMercado = estimadoOriginal > 0
-        ? ((basePrevisto - estimadoOriginal) / estimadoOriginal) * 100
+      const desvioMercado = estimadoOriginal > 0 && realizadoOrcamentoMap[cc.id] > 0
+        ? ((realizadoOrcamentoMap[cc.id] - estimadoOriginal) / estimadoOriginal) * 100
         : 0;
       const pctExecutado = basePrevisto > 0
         ? Math.min(100, (pay.paid / basePrevisto) * 100)
         : 0;
 
+      const realizadoOrcamento = realizadoOrcamentoMap[cc.id] || 0;
       const currency = cc.currency || "AOA";
       if (!totalsByCurrency[currency]) {
-        totalsByCurrency[currency] = { basePrevisto: 0, estimadoOriginal: 0, budgeted: 0, paid: 0 };
+        totalsByCurrency[currency] = { basePrevisto: 0, estimadoOriginal: 0, realizadoOrcamento: 0, budgeted: 0, paid: 0 };
       }
       totalsByCurrency[currency].basePrevisto += basePrevisto;
       totalsByCurrency[currency].estimadoOriginal += estimadoOriginal;
+      totalsByCurrency[currency].realizadoOrcamento += realizadoOrcamento;
       totalsByCurrency[currency].budgeted += pay.budgeted;
       totalsByCurrency[currency].paid += pay.paid;
 
@@ -683,8 +700,8 @@ costCenterRoutes.get(
       const t = totalsByCurrency[curr];
       t.saldo = (t.basePrevisto || 0) - t.paid;
       t.pctExecutado = t.basePrevisto > 0 ? Math.min(100, (t.paid / t.basePrevisto) * 100) : 0;
-      t.desvioMercado = t.estimadoOriginal > 0
-        ? ((t.basePrevisto - t.estimadoOriginal) / t.estimadoOriginal) * 100
+      t.desvioMercado = t.estimadoOriginal > 0 && (t.realizadoOrcamento || 0) > 0
+        ? (((t.realizadoOrcamento || 0) - t.estimadoOriginal) / t.estimadoOriginal) * 100
         : 0;
     });
 

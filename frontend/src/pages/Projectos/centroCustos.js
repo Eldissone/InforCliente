@@ -220,8 +220,8 @@ function setBudgetViewMode(mode) {
   if (hint) {
     hint.textContent =
       budgetViewMode === "previsto"
-        ? "Visão prevista — valores do upload aprovado (baseline congelado)"
-        : "Visão realizada — preços de mercado; não pode exceder o previsto sem excepção justificada";
+        ? "Visão prevista - Orçamentados"
+        : "Visão realizada - Preços de mercado";
   }
 
   updateBudgetWorkflowButtonsVisibility();
@@ -250,14 +250,24 @@ function needBudgetDisplayStatus(n) {
   return budgetViewMode === "previsto" ? needPrevistoDisplayStatus(n) : needRealizadoDisplayStatus(n);
 }
 
-function canRealizadoPrecificar(n) {
-  const display = needRealizadoDisplayStatus(n);
-  return display === "PENDING" || n.status === "IN_QUOTATION" || n.status === "ORDERED"
-    || (n.status === "APPROVED" && n.marketWorkflowStarted);
-}
-
 function canRealizadoAgendar(n) {
   return n.status === "APPROVED" && n.marketWorkflowStarted && !n.scheduled;
+}
+
+function isPrevistoBaselineApproved(n) {
+  return needPrevistoDisplayStatus(n) === "APPROVED";
+}
+
+function isEligibleForRealizadoQuotation(n) {
+  if (!isPrevistoBaselineApproved(n)) return false;
+  return needRealizadoDisplayStatus(n) === "PENDING";
+}
+
+function canRealizadoPrecificar(n) {
+  if (!isPrevistoBaselineApproved(n)) return false;
+  if (n.status === "IN_QUOTATION" || n.status === "ORDERED") return true;
+  if (n.status === "APPROVED" && n.marketWorkflowStarted) return true;
+  return needRealizadoDisplayStatus(n) === "PENDING";
 }
 
 function resolvePrevistoStatusSave(selected, currentStatus) {
@@ -476,7 +486,7 @@ function renderKPIs(totalsByCurrency, extrasByCurrency = {}) {
     const t = totalsByCurrency[cur] || { basePrevisto: 0, budgeted: 0, paid: 0, pctExecutado: 0 };
     const ex = extrasByCurrency[cur] || { approved: 0, requested: 0 };
 
-    baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? t.budgeted ?? 0, cur)}</p>`;
+    baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? 0, cur)}</p>`;
     realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
 
     const requestedHint = ex.requested > ex.approved
@@ -675,17 +685,18 @@ function renderNeedsTable(items) {
     }
     const lineTotal = needDisplayLineTotal(n);
     const totalObra = lineTotal != null ? lineTotal : 0;
+    const countsTowardTotal = budgetViewMode !== "previsto" || needPrevistoDisplayStatus(n) === "APPROVED";
     n._calcTotalObra = totalObra;
-    grouped[ccName].totalObra += totalObra;
+    grouped[ccName].totalObra += countsTowardTotal ? totalObra : 0;
     grouped[ccName].items.push(n);
-    totalObraGeral += totalObra;
+    if (countsTowardTotal) totalObraGeral += totalObra;
   });
 
   const currency = items[0]?.costCenter?.currency || "AOA";
 
   let html = `
     <tr style="background-color: #0f172a !important;">
-      <td class="font-bold text-white text-sm" colspan="2">Total Geral (${budgetViewMode === "previsto" ? "Previsto" : "Realizado"})</td>
+      <td class="font-bold text-white text-sm" colspan="2">Total Geral (${budgetViewMode === "previsto" ? "Previsto Aprovado" : "Realizado"})</td>
       <td colspan="4"></td>
       <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
       <td colspan="5"></td>
@@ -1706,9 +1717,19 @@ async function submitNeed(e) {
 }
 
 window.openPrecificarModal = async function (needId, ccId) {
+  if (budgetViewMode !== "realizado") {
+    showToast("A precificação só está disponível na visão Realizado.", "warning");
+    return;
+  }
+
   let need = cachedNeeds.find((n) => n.id === needId);
   if (!need) {
     showToast("Item não encontrado. Recarregue a lista.", "error");
+    return;
+  }
+
+  if (!isPrevistoBaselineApproved(need)) {
+    showToast("Aprove o item no orçamento previsto antes de precificar.", "warning");
     return;
   }
 
@@ -1774,16 +1795,22 @@ window.closeProformaViewer = function () {
 };
 
 window.sendAllToQuotation = async function () {
-  if (!confirm("Enviar todos os itens pendentes para Cotação?")) return;
+  if (budgetViewMode !== "realizado") {
+    showToast("Mude para a visão Realizado para enviar à cotação.", "warning");
+    return;
+  }
+
   try {
     showToast("A carregar itens...", "info");
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=1000`);
-    const pendingItems = (data.items || []).filter((n) => needRealizadoDisplayStatus(n) === "PENDING");
+    const pendingItems = (data.items || []).filter(isEligibleForRealizadoQuotation);
 
     if (pendingItems.length === 0) {
-      showToast("Não há itens pendentes.", "warning");
+      showToast("Não há itens aprovados no previsto pendentes de precificação.", "warning");
       return;
     }
+
+    if (!confirm(`Enviar ${pendingItems.length} item(ns) do realizado para cotação?`)) return;
 
     showToast(`A enviar ${pendingItems.length} itens...`, "info");
     const promises = pendingItems.map(n =>
