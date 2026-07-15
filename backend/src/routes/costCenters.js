@@ -33,6 +33,8 @@ const {
   needLineTotal,
   needRealizadoUnitPrice,
 } = require("../services/needBudgetService");
+const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
+const { fetchDeliveryFieldsByQuoteIds } = require("../services/deliveryFieldBridge");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -288,6 +290,92 @@ costCenterRoutes.get(
       scanDueAndOverduePayments(req.app.get("io")).catch((e) =>
         console.error("scanDueAndOverduePayments:", e)
       );
+    });
+
+    return res.json(timeline);
+  })
+);
+
+// GET /cost-centers/orders/timeline — Plano de pedidos/encomendas (Perfil Financeiro)
+costCenterRoutes.get(
+  "/orders/timeline",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const search = req.query.search ? String(req.query.search) : "";
+    const statusFilter = req.query.status ? String(req.query.status) : "";
+    const includeReceived = req.query.includeReceived === "true";
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+
+    const quotes = await prisma.needQuote.findMany({
+      where: {
+        orderNumber: { not: null },
+        need: {
+          status: { in: ["ORDERED", "APPROVED", "PAID"] },
+          ...(projectId ? { projectId } : {}),
+        },
+      },
+      include: {
+        supplier: { select: { id: true, name: true } },
+        supplierProduct: { select: { id: true, name: true, unit: true } },
+        need: {
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            unit: true,
+            projectId: true,
+            project: { select: { id: true, name: true, code: true } },
+            costCenter: { select: { code: true, name: true } },
+          },
+        },
+      },
+      orderBy: { expectedReceiptDate: "asc" },
+    });
+
+    const products = await prisma.product.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+    });
+    const warehouses = await prisma.warehouse.findMany({
+      select: { id: true, name: true, projectId: true },
+    });
+
+    const deliveryMap = await fetchDeliveryFieldsByQuoteIds(quotes.map((q) => q.id));
+
+    let mergedQuotes = quotes.map((q) => {
+      const extra = deliveryMap.get(q.id) || {};
+      return {
+        ...q,
+        deliveryStatus: extra.deliveryStatus || "PENDENTE",
+        receivedAt: extra.receivedAt || null,
+        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+      };
+    });
+
+    if (!includeReceived) {
+      mergedQuotes = mergedQuotes.filter(
+        (q) => q.deliveryStatus !== "RECEBIDO" && !q.receivedAt
+      );
+    }
+
+    const enrichedQuotes = mergedQuotes.map((q) => ({
+      ...q,
+      suggestedProductId: suggestProductId(q.supplierProduct?.name || q.need?.description, products),
+      suggestedWarehouseId:
+        warehouses.find((w) => w.projectId === q.need?.projectId)?.id ||
+        warehouses.find((w) => !w.projectId)?.id ||
+        null,
+    }));
+
+    const timeline = buildDeliveryTimeline(enrichedQuotes, {
+      search,
+      statusFilter,
+      includeReceived,
+      projectId,
+      dateFrom,
+      dateTo,
     });
 
     return res.json(timeline);

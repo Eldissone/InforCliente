@@ -8,6 +8,7 @@ let generalCenters = [];
 let allProjects = [];
 let currentFunds = [];
 let selectedGccFilter = "";
+let extrasCache = [];
 
 const EXTRA_STATUS_LABELS = {
   PENDENTE: "Pendente",
@@ -107,6 +108,29 @@ function populateProjectSelects() {
     `<option value="">Todas as obras</option>${opts}`;
 }
 
+function escapeAttr(value) {
+  return String(value || "").replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+}
+
+function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = false } = {}) {
+  const disabledAttr = disabled ? "disabled" : "";
+  const mutedClass = disabled ? " fin-icon-btn--muted" : "";
+  return `
+    <button type="button" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}"
+      class="fin-icon-btn fin-icon-btn--${variant}${mutedClass}" ${disabledAttr} ${attrs}>
+      <span class="material-symbols-outlined text-base">${icon}</span>
+    </button>`;
+}
+
+function toDateInputValue(value) {
+  if (!value) return "";
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
 function extraReferenceLabel(it) {
   if (it.type === "GERAL") {
     return it.generalCostCenter?.name || "Centro geral";
@@ -132,22 +156,46 @@ function renderExtraRow(it) {
   const canApprove = can("pedidosExtras", "approve");
   const canCreate = can("pedidosExtras", "create");
   const canDelete = can("pedidosExtras", "delete");
+  const canEdit = canCreate && (it.status === "PENDENTE" || it.status === "APROVADO");
 
-  if (it.status === "PENDENTE" && canApprove) {
-    actions.push(`<button data-action="approve" data-id="${it.id}" class="text-xs font-bold text-emerald-600 hover:underline">Aprovar</button>`);
-    actions.push(`<button data-action="reject" data-id="${it.id}" class="text-xs font-bold text-red-600 hover:underline">Rejeitar</button>`);
+  if (canEdit) {
+    actions.push(
+      renderIconBtn("edit", "Editar pedido extra", "blue", {
+        attrs: `data-action="edit" data-id="${it.id}"`,
+      })
+    );
   }
-  if (it.status === "APROVADO") {
-    actions.push(`<span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">Aguarda Financeiro</span>`);
+  if (it.status === "PENDENTE" && canApprove) {
+    actions.push(
+      renderIconBtn("check_circle", "Aprovar", "emerald", {
+        attrs: `data-action="approve" data-id="${it.id}"`,
+      }),
+      renderIconBtn("block", "Rejeitar", "red", {
+        attrs: `data-action="reject" data-id="${it.id}"`,
+      })
+    );
   }
   if ((it.status === "PENDENTE" || it.status === "APROVADO") && canCreate) {
-    actions.push(`<button data-action="cancel" data-id="${it.id}" class="text-xs font-bold text-slate-500 hover:underline">Cancelar</button>`);
+    actions.push(
+      renderIconBtn("cancel", "Cancelar pedido", "amber", {
+        attrs: `data-action="cancel" data-id="${it.id}"`,
+      })
+    );
   }
   if (canDelete && it.status !== "PAGO" && it.status !== "APROVADO") {
-    actions.push(`<button data-action="delete" data-id="${it.id}" class="text-xs font-bold text-red-600 hover:underline">Eliminar</button>`);
+    actions.push(
+      renderIconBtn("delete", "Eliminar", "red", {
+        attrs: `data-action="delete" data-id="${it.id}"`,
+      })
+    );
   }
 
+  const actionsHtml = actions.length
+    ? `<div class="fin-actions">${actions.join("")}</div>`
+    : `<span class="text-slate-300">—</span>`;
+
   return `<tr class="border-t border-slate-50 hover:bg-slate-50/50">
+    <td class="px-5 py-3 text-xs font-bold text-slate-800">${it.paymentDueDate ? formatDateBR(it.paymentDueDate) : "—"}</td>
     <td class="px-5 py-3 text-xs text-slate-500">${formatDateBR(it.createdAt)}</td>
     <td class="px-5 py-3">${typeBadge}</td>
     <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[180px] truncate">${extraReferenceLabel(it)}</td>
@@ -155,13 +203,13 @@ function renderExtraRow(it) {
     <td class="px-5 py-3 text-xs text-slate-500">${sourceLabel}</td>
     <td class="px-5 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(it.amount, it.currency)}</td>
     <td class="px-5 py-3">${statusBadge}</td>
-    <td class="px-5 py-3 text-center"><div class="flex items-center justify-center gap-2 flex-wrap">${actions.join("") || "—"}</div></td>
+    <td class="px-5 py-3 text-center">${actionsHtml}</td>
   </tr>`;
 }
 
 async function loadExtras() {
   const tbody = document.getElementById("extrasTableBody");
-  tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12"><div class="spinner mx-auto"></div></td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" class="text-center py-12"><div class="spinner mx-auto"></div></td></tr>`;
 
   const type = document.getElementById("filterType")?.value || "";
   const status = document.getElementById("filterStatus")?.value || "";
@@ -177,14 +225,15 @@ async function loadExtras() {
   try {
     const data = await apiRequest(`/extra-requests?${params.toString()}`);
     const items = data.items || [];
+    extrasCache = items;
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 text-xs">Nenhum pedido extra encontrado</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-slate-400 text-xs">Nenhum pedido extra encontrado</td></tr>`;
       return;
     }
     tbody.innerHTML = items.map(renderExtraRow).join("");
     bindTableActions();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
 }
 
@@ -193,7 +242,9 @@ function bindTableActions() {
     btn.addEventListener("click", async () => {
       const id = btn.dataset.id;
       const action = btn.dataset.action;
-      if (action === "approve") {
+      if (action === "edit") {
+        openExtraModalForEdit(id);
+      } else if (action === "approve") {
         if (!confirm("Aprovar este Pedido Extra?")) return;
         try {
           await apiRequest(`/extra-requests/${id}/approve`, { method: "PATCH" });
@@ -251,12 +302,21 @@ function setExtraType(type) {
 
 function toggleExtraPaymentFields() {
   const source = document.getElementById("extraSource").value;
+  const isEdit = Boolean(document.getElementById("extraEditId").value);
+  const editing = isEdit ? extrasCache.find((e) => e.id === document.getElementById("extraEditId").value) : null;
   document.getElementById("extraFundRow").classList.toggle("hidden", source !== "FUNDO_MANEIO");
   document.getElementById("extraProformaRow").classList.toggle("hidden", source !== "SOLICITACAO_TRANSFERENCIA");
   const proformaInput = document.getElementById("extraProforma");
   if (proformaInput) {
-    proformaInput.required = source === "SOLICITACAO_TRANSFERENCIA";
+    proformaInput.required = source === "SOLICITACAO_TRANSFERENCIA" && !isEdit && !editing?.proformaUrl;
     if (source !== "SOLICITACAO_TRANSFERENCIA") proformaInput.value = "";
+  }
+  const proformaHint = document.getElementById("extraProformaHint");
+  if (proformaHint) {
+    proformaHint.classList.toggle(
+      "hidden",
+      !(source === "SOLICITACAO_TRANSFERENCIA" && editing?.proformaUrl)
+    );
   }
 }
 
@@ -295,22 +355,91 @@ function populateExtraCardOptions() {
     (fund?.cards || []).map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
 }
 
+function setExtraFormLocked(locked) {
+  document.getElementById("btnTypeGeral").disabled = locked;
+  document.getElementById("btnTypeObra").disabled = locked;
+  document.getElementById("extraGeneralCcId").disabled = locked;
+  document.getElementById("extraProjectId").disabled = locked;
+  document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
+}
+
+function resetExtraFormState() {
+  document.getElementById("extraEditId").value = "";
+  document.getElementById("modalExtraTitle").textContent = "Novo Pedido Extra";
+  document.getElementById("extraSubmitBtn").textContent = "Guardar Pedido";
+  document.getElementById("extraProformaHint")?.classList.add("hidden");
+  setExtraFormLocked(false);
+}
+
+async function openExtraModalForEdit(id) {
+  const item = extrasCache.find((e) => e.id === id);
+  if (!item) {
+    showToast("Pedido extra não encontrado", "error");
+    return;
+  }
+  if (item.status !== "PENDENTE" && item.status !== "APROVADO") {
+    showToast("Só é possível editar pedidos não liquidados", "error");
+    return;
+  }
+
+  document.getElementById("formExtra").reset();
+  document.getElementById("extraEditId").value = item.id;
+  document.getElementById("modalExtraTitle").textContent = "Editar Pedido Extra";
+  document.getElementById("extraSubmitBtn").textContent = "Guardar alterações";
+
+  setExtraType(item.type);
+  setExtraFormLocked(true);
+
+  if (item.type === "GERAL") {
+    document.getElementById("extraGeneralCcId").value = item.generalCostCenterId || "";
+  } else {
+    document.getElementById("extraProjectId").value = item.projectId || "";
+    await ensureFundsLoadedForExtra("OBRA");
+  }
+
+  document.getElementById("extraDesc").value = item.description || "";
+  document.getElementById("extraAmount").value = item.amount || "";
+  document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
+  document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
+  toggleExtraPaymentFields();
+
+  if (item.fundId) document.getElementById("extraFundId").value = item.fundId;
+  populateExtraCardOptions();
+  if (item.cardId) document.getElementById("extraCardId").value = item.cardId;
+
+  document.getElementById("extraNotes").value = item.notes || "";
+
+  const proformaInput = document.getElementById("extraProforma");
+  if (proformaInput) proformaInput.required = false;
+  const proformaHint = document.getElementById("extraProformaHint");
+  if (proformaHint) {
+    proformaHint.classList.toggle("hidden", !(item.paymentSource === "SOLICITACAO_TRANSFERENCIA" && item.proformaUrl));
+  }
+
+  document.getElementById("modalExtra").classList.add("open");
+}
+
 async function openExtraModal(prefillType = "GERAL", prefillGccId = "") {
   document.getElementById("formExtra").reset();
+  resetExtraFormState();
   setExtraType(prefillType);
   if (prefillGccId) {
     document.getElementById("extraGeneralCcId").value = prefillGccId;
   }
+  const dueInput = document.getElementById("extraPaymentDueDate");
+  if (dueInput) dueInput.value = new Date().toISOString().slice(0, 10);
   toggleExtraPaymentFields();
   document.getElementById("modalExtra").classList.add("open");
 }
 
 function closeExtraModal() {
   document.getElementById("modalExtra").classList.remove("open");
+  resetExtraFormState();
 }
 
 async function submitExtra(e) {
   e.preventDefault();
+  const editId = document.getElementById("extraEditId").value;
   const type = document.getElementById("extraType").value || "GERAL";
   const source = document.getElementById("extraSource").value;
   const body = {
@@ -320,37 +449,70 @@ async function submitExtra(e) {
       type === "GERAL" ? document.getElementById("extraGeneralCcId").value || null : null,
     description: document.getElementById("extraDesc").value.trim(),
     amount: parseFloat(document.getElementById("extraAmount").value) || 0,
+    paymentDueDate: document.getElementById("extraPaymentDueDate").value,
     paymentSource: source,
     fundId: source === "FUNDO_MANEIO" ? document.getElementById("extraFundId").value || null : null,
     cardId: source === "FUNDO_MANEIO" ? document.getElementById("extraCardId").value || null : null,
     notes: document.getElementById("extraNotes").value.trim() || null,
   };
 
-  if (type === "GERAL" && !body.generalCostCenterId) {
-    showToast("Seleccione o centro de custo geral", "error");
-    return;
-  }
-  if (type === "OBRA" && !body.projectId) {
-    showToast("Seleccione a obra", "error");
-    return;
-  }
-  if (source === "SOLICITACAO_TRANSFERENCIA") {
-    const proformaFile = document.getElementById("extraProforma")?.files?.[0];
-    if (!proformaFile) {
-      showToast("Anexe a proforma para transferência bancária", "error");
+  if (!editId) {
+    if (type === "GERAL" && !body.generalCostCenterId) {
+      showToast("Seleccione o centro de custo geral", "error");
+      return;
+    }
+    if (type === "OBRA" && !body.projectId) {
+      showToast("Seleccione a obra", "error");
       return;
     }
   }
 
+  if (!body.paymentDueDate) {
+    showToast("Indique a data prevista de liquidação", "error");
+    return;
+  }
+
+  const editing = extrasCache.find((item) => item.id === editId);
+  const proformaFile = document.getElementById("extraProforma")?.files?.[0];
+  const needsProforma = source === "SOLICITACAO_TRANSFERENCIA";
+  const hasExistingProforma = Boolean(editing?.proformaUrl);
+
+  if (needsProforma && !editId && !proformaFile) {
+    showToast("Anexe a proforma para transferência bancária", "error");
+    return;
+  }
+  if (needsProforma && editId && !hasExistingProforma && !proformaFile) {
+    showToast("Anexe a proforma para transferência bancária", "error");
+    return;
+  }
+
   try {
-    const created = await apiRequest("/extra-requests", { method: "POST", body });
-    if (source === "SOLICITACAO_TRANSFERENCIA") {
-      const proformaFile = document.getElementById("extraProforma").files[0];
-      const fd = new FormData();
-      fd.append("proforma", proformaFile);
-      await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
+    if (editId) {
+      const patchBody = {
+        description: body.description,
+        amount: body.amount,
+        paymentDueDate: body.paymentDueDate,
+        paymentSource: body.paymentSource,
+        fundId: body.fundId,
+        cardId: body.cardId,
+        notes: body.notes,
+      };
+      await apiRequest(`/extra-requests/${editId}`, { method: "PATCH", body: patchBody });
+      if (needsProforma && proformaFile) {
+        const fd = new FormData();
+        fd.append("proforma", proformaFile);
+        await apiUpload(`/extra-requests/${editId}/proforma`, fd);
+      }
+      showToast("Pedido Extra actualizado", "success");
+    } else {
+      const created = await apiRequest("/extra-requests", { method: "POST", body });
+      if (needsProforma && proformaFile) {
+        const fd = new FormData();
+        fd.append("proforma", proformaFile);
+        await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
+      }
+      showToast("Pedido Extra criado", "success");
     }
-    showToast("Pedido Extra criado", "success");
     closeExtraModal();
     loadExtras();
   } catch (err) {

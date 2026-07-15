@@ -649,18 +649,27 @@
                     </button>
                     <div class="flex items-center gap-2 flex-wrap w-full sm:justify-end">
                         <select id="finProjFilter"
-                            class="h-10 flex-1 sm:flex-none sm:max-w-[200px] min-w-[140px] px-3 bg-white/80 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
+                            class="h-10 flex-1 sm:flex-none sm:max-w-[220px] min-w-[140px] px-3 bg-white/80 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
+                            title="Filtrar por obra ou centros gerais">
                             <option value="">Todas as Obras</option>
                         </select>
                         <select id="finStatusFilter"
-                            class="h-10 px-3 bg-white/80 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                            class="h-10 px-3 bg-white/80 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                            title="Filtrar pagamentos planeados e pedidos extra">
                             <option value="">Todos os estados</option>
-                            <option value="PENDENTE">Pendentes</option>
-                            <option value="VENCIDO">Atrasados</option>
-                            <option value="CONFIRMADO">Liquidados</option>
-                            <option value="EXTRA">Pedidos Extra</option>
+                            <optgroup label="Pagamentos">
+                                <option value="PENDENTE">Pendentes</option>
+                                <option value="VENCIDO">Atrasados</option>
+                                <option value="CONFIRMADO">Liquidados</option>
+                            </optgroup>
+                            <optgroup label="Pedidos Extra">
+                                <option value="EXTRA">Todos os pedidos extra</option>
+                                <option value="EXTRA_PENDENTE">Extra — Pendente aprovação</option>
+                                <option value="EXTRA_A_LIQUIDAR">Extra — A liquidar</option>
+                                <option value="EXTRA_PAGO">Extra — Liquidados</option>
+                            </optgroup>
                         </select>
-                        <input id="finSearch" type="search" placeholder="Pesquisar..."
+                        <input id="finSearch" type="search" placeholder="Pagamentos, extras, obras..."
                             class="h-10 flex-1 sm:flex-none px-3 bg-white/80 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 sm:w-44 min-w-[120px]">
                     </div>
                 </div>
@@ -787,6 +796,10 @@
                 <span class="material-symbols-outlined text-base align-middle mr-1">calendar_month</span>Plano de
                 Pagamentos
             </button>
+            <button class="fin-tab-btn" data-tab="pedidos">
+                <span class="material-symbols-outlined text-base align-middle mr-1">local_shipping</span>Plano de
+                Pedidos
+            </button>
             <button class="fin-tab-btn" data-tab="auditoria">
                 <span class="material-symbols-outlined text-base align-middle mr-1">fact_check</span>Auditoria de
                 Faturas
@@ -815,6 +828,35 @@
                     </div>
                 </div>
                 <div id="calendarGrid">
+                    <div class="spinner my-8"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Plano de Pedidos (Gantt) -->
+        <div class="fin-tab-panel" id="tab-pedidos">
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
+                    <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
+                        aria-label="Visualização do plano de pedidos">
+                        <button type="button" class="gantt-view-btn" data-orders-gantt-view="day">Dia</button>
+                        <button type="button" class="gantt-view-btn" data-orders-gantt-view="week">Semana</button>
+                        <button type="button" class="gantt-view-btn active" data-orders-gantt-view="month">Mês</button>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5 items-center" role="group"
+                            aria-label="Navegação do plano de pedidos">
+                            <button id="ordersCalPrev" type="button" aria-label="Período anterior" class="gantt-nav-btn">
+                                <span class="material-symbols-outlined text-base">chevron_left</span>
+                            </button>
+                            <button id="ordersCalToday" type="button" class="gantt-nav-today">Hoje</button>
+                            <button id="ordersCalNext" type="button" aria-label="Período seguinte" class="gantt-nav-btn">
+                                <span class="material-symbols-outlined text-base">chevron_right</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="ordersCalendarGrid">
                     <div class="spinner my-8"></div>
                 </div>
             </div>

@@ -43,6 +43,22 @@ function mapExtra(item) {
   return { ...item, amount: String(item.amount) };
 }
 
+function parsePaymentDueDate(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? new Date(`${raw}T12:00:00`)
+    : new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+const paymentDueDateSchema = z
+  .string()
+  .min(1, "PAYMENT_DUE_DATE_REQUIRED")
+  .refine((value) => Boolean(parsePaymentDueDate(value)), "INVALID_PAYMENT_DUE_DATE");
+
 const EXTRA_INCLUDE = {
   project: { select: { id: true, name: true, code: true } },
   costCenter: { select: { id: true, code: true, name: true } },
@@ -160,6 +176,7 @@ extraRequestRoutes.post(
         fundId: z.string().optional().nullable(),
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
+        paymentDueDate: paymentDueDateSchema,
       })
       .parse(req.body);
 
@@ -190,6 +207,7 @@ extraRequestRoutes.post(
         fundId: body.fundId || null,
         cardId: body.cardId || null,
         notes: body.notes || null,
+        paymentDueDate: parsePaymentDueDate(body.paymentDueDate),
         requestedBy: u.name || u.email || u.sub || null,
       },
       include: EXTRA_INCLUDE,
@@ -205,7 +223,7 @@ extraRequestRoutes.post(
   })
 );
 
-// PATCH /extra-requests/:id — Editar pedido enquanto PENDENTE
+// PATCH /extra-requests/:id — Editar pedido não liquidado (PENDENTE ou A liquidar)
 extraRequestRoutes.patch(
   "/:id",
   requireRole(["admin", "operador", "supervisor", "tecnico"]),
@@ -213,8 +231,8 @@ extraRequestRoutes.patch(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
-    if (existing.status !== "PENDENTE") {
-      return res.status(409).json({ error: "ONLY_PENDING_CAN_BE_EDITED" });
+    if (existing.status !== "PENDENTE" && existing.status !== "APROVADO") {
+      return res.status(409).json({ error: "ONLY_UNLIQUIDATED_CAN_BE_EDITED" });
     }
 
     const body = z
@@ -225,8 +243,12 @@ extraRequestRoutes.patch(
         fundId: z.string().optional().nullable(),
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
+        paymentDueDate: paymentDueDateSchema.optional(),
       })
       .parse(req.body);
+
+    const paymentDueDate =
+      body.paymentDueDate !== undefined ? parsePaymentDueDate(body.paymentDueDate) : undefined;
 
     const updated = await prisma.extraRequest.update({
       where: { id },
@@ -237,6 +259,7 @@ extraRequestRoutes.patch(
         ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),
         ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(paymentDueDate !== undefined ? { paymentDueDate } : {}),
       },
       include: EXTRA_INCLUDE,
     });
@@ -340,8 +363,8 @@ extraRequestRoutes.post(
     if (existing.paymentSource !== "SOLICITACAO_TRANSFERENCIA") {
       return res.status(400).json({ error: "PROFORMA_ONLY_FOR_TRANSFER" });
     }
-    if (existing.status !== "PENDENTE") {
-      return res.status(409).json({ error: "ONLY_PENDING_CAN_UPLOAD_PROFORMA" });
+    if (existing.status !== "PENDENTE" && existing.status !== "APROVADO") {
+      return res.status(409).json({ error: "ONLY_UNLIQUIDATED_CAN_UPLOAD_PROFORMA" });
     }
     if (!req.file) return res.status(400).json({ error: "PROFORMA_REQUIRED" });
 

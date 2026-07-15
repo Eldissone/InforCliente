@@ -56,6 +56,58 @@
             color: white;
             border-color: #0f172a;
         }
+
+        .fin-actions {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+        }
+
+        .fin-icon-btn {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            cursor: pointer;
+            border: none;
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .fin-icon-btn:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .fin-icon-btn--emerald:hover {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .fin-icon-btn--blue:hover {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .fin-icon-btn--amber:hover {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .fin-icon-btn--red:hover {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .fin-icon-btn:disabled,
+        .fin-icon-btn.fin-icon-btn--muted {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -203,7 +255,8 @@
                 <table class="w-full text-left">
                     <thead>
                         <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            <th class="px-5 py-3">Data</th>
+                            <th class="px-5 py-3">Previsto</th>
+                            <th class="px-5 py-3">Criado</th>
                             <th class="px-5 py-3">Tipo</th>
                             <th class="px-5 py-3">Referência</th>
                             <th class="px-5 py-3">Descrição</th>
@@ -215,7 +268,7 @@
                     </thead>
                     <tbody id="extrasTableBody">
                         <tr>
-                            <td colspan="8" class="text-center py-12 text-slate-400 text-xs">A carregar...</td>
+                            <td colspan="9" class="text-center py-12 text-slate-400 text-xs">A carregar...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -246,7 +299,8 @@
                 </button>
             </div>
             <form id="formExtra" class="flex flex-col gap-4">
-                <div>
+                <input type="hidden" id="extraEditId" value="">
+                <div id="extraTypeRow">
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tipo *</label>
                     <div class="flex gap-2">
                         <button type="button" id="btnTypeGeral" class="type-toggle-btn active flex-1">Geral</button>
@@ -290,6 +344,15 @@
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                     </div>
                     <div>
+                        <label for="extraPaymentDueDate"
+                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Data
+                            Prevista*</label>
+                        <input id="extraPaymentDueDate" type="date" required
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
                         <label for="extraSource"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Origem do
                             Pagamento</label>
@@ -326,7 +389,9 @@
                         *</label>
                     <input id="extraProforma" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"
                         class="w-full text-sm font-semibold text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-bold hover:file:bg-emerald-100">
-                    <p class="text-[11px] text-slate-400 mt-1">Obrigatório para solicitação de transferência bancária (PDF ou imagem).</p>
+                    <p class="text-[11px] text-slate-400 mt-1">Obrigatório para solicitação de transferência bancária
+                        (PDF ou imagem).</p>
+                    <p id="extraProformaHint" class="hidden text-[11px] text-emerald-600 mt-1 font-semibold">Proforma já anexada. Envie um novo ficheiro apenas para substituir.</p>
                 </div>
                 <div>
                     <label for="extraNotes"
@@ -337,7 +402,7 @@
                 <div class="flex gap-3 justify-end pt-2">
                     <button type="button" id="btnCancelExtra"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
-                    <button type="submit"
+                    <button type="submit" id="extraSubmitBtn"
                         class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Guardar
                         Pedido</button>
                 </div>

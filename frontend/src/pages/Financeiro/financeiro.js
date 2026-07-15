@@ -8,12 +8,19 @@ import {
   TIMELINE_STATUS,
 } from "/shared/paymentTimeline.js";
 import { renderPaymentGantt, getDateRangeForView } from "/shared/paymentGantt.js";
+import { renderOrderGantt, mergeOrdersGanttDays, resolveGanttPlacementDate } from "/shared/orderGantt.js";
+import { DELIVERY_STATUS, resolveDeliveryStatus } from "/shared/deliveryTimeline.js";
 import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
 
 let allProjects = [];
 let ganttViewMode = "month";
 let calendarAnchor = new Date();
 calendarAnchor.setHours(0, 0, 0, 0);
+let ordersGanttViewMode = "month";
+let ordersCalendarAnchor = new Date();
+ordersCalendarAnchor.setHours(0, 0, 0, 0);
+let ordersTimelineCache = { days: [], total: 0, noDateItems: [] };
+let activeFinTab = "calendario";
 let timelineCache = { days: [], total: 0 };
 let dashboardCache = { days: [], total: 0 };
 let extrasDashboardCache = [];
@@ -50,19 +57,38 @@ const EXTRA_STATUS_META = {
   CANCELADO: { label: "Cancelado", badge: "bg-slate-100 text-slate-600", icon: "block" },
 };
 
+const FIN_GENERAL_CENTERS = "__geral__";
+
+function getFinStatusFilter() {
+  return document.getElementById("finStatusFilter")?.value || "";
+}
+
+function getProjectFilterValue() {
+  return document.getElementById("finProjFilter")?.value || "";
+}
+
+function isGeneralCentersFilter() {
+  return getProjectFilterValue() === FIN_GENERAL_CENTERS;
+}
+
 function isExtraOnlyFilter() {
-  return document.getElementById("finStatusFilter")?.value === "EXTRA";
+  const status = getFinStatusFilter();
+  return status === "EXTRA" || status.startsWith("EXTRA_");
+}
+
+function shouldShowPayments() {
+  return !isExtraOnlyFilter() && !isGeneralCentersFilter();
 }
 
 function extraReferenceDate(extra) {
-  const raw = extra.approvedAt || extra.requestedAt || extra.createdAt;
+  const raw = extra.paymentDueDate || extra.approvedAt || extra.requestedAt || extra.createdAt;
   const d = new Date(raw);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
 function mapExtraToTimelineItem(extra) {
-  const refDate = extra.approvedAt || extra.requestedAt || extra.createdAt;
+  const refDate = extra.paymentDueDate || extra.approvedAt || extra.requestedAt || extra.createdAt;
   const timelineStatus =
     extra.status === "PAGO"
       ? "PAGO"
@@ -106,6 +132,46 @@ function buildExtrasTimelineDays(extras) {
   });
 
   return [...dayMap.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function mergeTimelineDays(paymentDays, extras) {
+  const extraDays = buildExtrasTimelineDays(extras);
+  const dayMap = new Map();
+
+  (paymentDays || []).forEach((day) => {
+    const key = new Date(day.date).toISOString();
+    dayMap.set(key, {
+      date: day.date,
+      items: [...(day.items || [])],
+      count: day.count || (day.items || []).length,
+      totalBudgeted: Number(day.totalBudgeted || 0),
+    });
+  });
+
+  extraDays.forEach((day) => {
+    const key = new Date(day.date).toISOString();
+    if (!dayMap.has(key)) {
+      dayMap.set(key, { date: day.date, items: [], count: 0, totalBudgeted: 0 });
+    }
+    const bucket = dayMap.get(key);
+    (day.items || []).forEach((item) => {
+      bucket.items.push(item);
+      bucket.count += 1;
+      bucket.totalBudgeted += Number(item.budgetedAmount || 0);
+    });
+  });
+
+  return [...dayMap.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function extraMatchesStatusFilter(extra) {
+  const status = getFinStatusFilter();
+  if (!status || status === "EXTRA") return true;
+  if (status === "PENDENTE") return extra.status === "PENDENTE";
+  if (status === "VENCIDO" || status === "EXTRA_A_LIQUIDAR") return extra.status === "APROVADO";
+  if (status === "CONFIRMADO" || status === "EXTRA_PAGO") return extra.status === "PAGO";
+  if (status === "EXTRA_PENDENTE") return extra.status === "PENDENTE";
+  return true;
 }
 
 function escapeAttr(value) {
@@ -163,6 +229,12 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
     { label: "Origem do pagamento", value: extraRequestPaymentLabel(extra), wide: false },
     { label: "Solicitante", value: extra.requestedBy || "—", wide: false },
     { label: "Data do pedido", value: formatDateBR(extra.requestedAt || extra.createdAt), wide: false },
+    {
+      label: "Liquidação prevista",
+      value: extra.paymentDueDate ? formatDateBR(extra.paymentDueDate) : "—",
+      wide: false,
+      highlight: Boolean(extra.paymentDueDate),
+    },
     { label: "Aprovado por", value: extra.approvedBy || "—", wide: false },
     { label: "Data de aprovação", value: extra.approvedAt ? formatDateBR(extra.approvedAt) : "—", wide: false },
   ];
@@ -328,6 +400,7 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
   });
   bindEvents();
   syncGanttViewButtons();
+  syncOrdersGanttViewButtons();
   updateDashboardDate();
   await loadProjects();
   await reloadAll();
@@ -397,6 +470,7 @@ function openExtraPayModal(extra) {
           document.getElementById("modalExtraPay").classList.remove("open");
           await loadPendingPaymentsQueue();
           await reloadAll();
+          if (activeFinTab === "pedidos") await reloadOrdersTimeline();
         } catch (err) {
           toast(err.message || "Erro ao liquidar pedido extra.", { type: "error" });
         }
@@ -444,14 +518,22 @@ async function handlePaymentDeepLink() {
 }
 
 async function loadPendingPaymentsQueue() {
-  const projectId = document.getElementById("finProjFilter")?.value;
-  const params = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+  const projectId = getProjectFilterValue();
+  const params =
+    projectId && projectId !== FIN_GENERAL_CENTERS
+      ? `?projectId=${encodeURIComponent(projectId)}`
+      : "";
   const [extrasResult, reinforcementsResult] = await Promise.allSettled([
     apiRequest(`/extra-requests/pending-finance-payment${params}`),
-    apiRequest(`/petty-cash/reinforcement-requests/pending-finance-approval${params}`),
+    isGeneralCentersFilter()
+      ? Promise.resolve({ items: [] })
+      : apiRequest(`/petty-cash/reinforcement-requests/pending-finance-approval${params}`),
   ]);
   pendingPaymentsCache =
     extrasResult.status === "fulfilled" ? extrasResult.value.items || [] : [];
+  if (projectId === FIN_GENERAL_CENTERS) {
+    pendingPaymentsCache = pendingPaymentsCache.filter((e) => e.type === "GERAL");
+  }
   pendingReinforcementsCache =
     reinforcementsResult.status === "fulfilled" ? reinforcementsResult.value.items || [] : [];
   updatePendingPaymentsBadge();
@@ -580,6 +662,7 @@ window.approveReinforcementFinance = async function (id) {
     await loadPendingPaymentsQueue();
     renderPendingPaymentsList();
     await reloadAll();
+    if (activeFinTab === "pedidos") await reloadOrdersTimeline();
   } catch (err) {
     toast(err.message || "Não foi possível aprovar o reforço.", { type: "error" });
   }
@@ -595,6 +678,7 @@ window.rejectReinforcementFinance = async function (id) {
     toast("Pedido de Reforço rejeitado", { type: "success" });
     await loadPendingPaymentsQueue();
     renderPendingPaymentsList();
+    if (activeFinTab === "pedidos") await reloadOrdersTimeline();
   } catch (err) {
     toast(err.message || "Não foi possível rejeitar o reforço.", { type: "error" });
   }
@@ -607,13 +691,45 @@ function bindEvents() {
       document.querySelectorAll(".fin-tab-panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById(`tab-${btn.dataset.tab}`)?.classList.add("active");
+      activeFinTab = btn.dataset.tab || "calendario";
       if (btn.dataset.tab === "auditoria") loadAuditList();
+      if (btn.dataset.tab === "pedidos") reloadOrdersTimeline();
     });
   });
 
   ["finProjFilter", "finStatusFilter", "finSearch", "finIncludePaid"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", reloadAll);
-    document.getElementById(id)?.addEventListener("input", debounce(reloadAll, 350));
+    document.getElementById(id)?.addEventListener("change", () => {
+      reloadAll();
+      if (activeFinTab === "pedidos") reloadOrdersTimeline();
+    });
+    document.getElementById(id)?.addEventListener("input", debounce(() => {
+      reloadAll();
+      if (activeFinTab === "pedidos") reloadOrdersTimeline();
+    }, 350));
+  });
+
+  document.querySelectorAll("[data-orders-gantt-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.ordersGanttView;
+      if (mode === ordersGanttViewMode) return;
+      ordersGanttViewMode = mode;
+      if (mode === "month") {
+        ordersCalendarAnchor.setDate(1);
+      }
+      syncOrdersGanttViewButtons();
+      reloadOrdersTimeline();
+    });
+  });
+
+  document.getElementById("ordersCalPrev")?.addEventListener("click", () => navigateOrdersCalendar(-1));
+  document.getElementById("ordersCalNext")?.addEventListener("click", () => navigateOrdersCalendar(1));
+  document.getElementById("ordersCalToday")?.addEventListener("click", () => {
+    ordersCalendarAnchor = new Date();
+    ordersCalendarAnchor.setHours(0, 0, 0, 0);
+    if (ordersGanttViewMode === "month") {
+      ordersCalendarAnchor.setDate(1);
+    }
+    reloadOrdersTimeline();
   });
 
   ["auditProjFilter", "auditStatusFilter", "auditSearch"].forEach((id) => {
@@ -736,7 +852,9 @@ async function loadProjects() {
     allProjects = data.items || [];
     const sel = document.getElementById("finProjFilter");
     if (sel) {
-      sel.innerHTML = `<option value="">Todas as Obras</option>` +
+      sel.innerHTML =
+        `<option value="">Todas as Obras</option>` +
+        `<option value="${FIN_GENERAL_CENTERS}">Centros Gerais</option>` +
         allProjects.map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`).join("");
     }
     const auditSel = document.getElementById("auditProjFilter");
@@ -752,13 +870,13 @@ async function loadProjects() {
 
 function getDashboardFilterParams() {
   const params = new URLSearchParams();
-  const projectId = document.getElementById("finProjFilter")?.value;
-  const status = document.getElementById("finStatusFilter")?.value;
+  const projectId = getProjectFilterValue();
+  const status = getFinStatusFilter();
   const search = document.getElementById("finSearch")?.value?.trim();
   const includePaid = document.getElementById("finIncludePaid")?.checked;
 
-  if (projectId) params.set("projectId", projectId);
-  if (status && status !== "EXTRA") params.set("status", status);
+  if (projectId && projectId !== FIN_GENERAL_CENTERS) params.set("projectId", projectId);
+  if (status && !status.startsWith("EXTRA")) params.set("status", status);
   if (search) params.set("search", search);
   params.set("onlyVisible", "false");
   params.set("includePaid", includePaid ? "true" : "false");
@@ -782,25 +900,33 @@ function flattenTimelineItems(days) {
 
 async function loadDashboard() {
   await loadDashboardExtras();
+  const extras = extrasDashboardCache;
 
   if (isExtraOnlyFilter()) {
     dashboardCache = { days: [], total: 0 };
-    updateDashboardKPIsFromExtras(extrasDashboardCache);
-    renderDashboardChartsFromExtras(extrasDashboardCache);
+    updateDashboardKPIsFromExtras(extras);
+    renderDashboardChartsFromExtras(extras);
     return;
   }
 
-  const data = await apiRequest(`/cost-centers/payments/timeline?${getDashboardFilterParams()}`);
-  dashboardCache = data;
-  updateDashboardKPIs(data);
-  renderDashboardCharts(data);
+  let paymentData = { days: [], total: 0 };
+  if (shouldShowPayments()) {
+    paymentData = await apiRequest(`/cost-centers/payments/timeline?${getDashboardFilterParams()}`);
+  }
+  dashboardCache = paymentData;
+  updateDashboardKPIsCombined(paymentData, extras);
+  renderDashboardChartsCombined(paymentData, extras);
 }
 
 async function loadDashboardExtras() {
   const params = new URLSearchParams();
-  const projectId = document.getElementById("finProjFilter")?.value;
-  if (projectId) params.set("projectId", projectId);
-  params.set("pageSize", "500");
+  const projectId = getProjectFilterValue();
+  if (projectId === FIN_GENERAL_CENTERS) {
+    params.set("type", "GERAL");
+  } else if (projectId) {
+    params.set("projectId", projectId);
+  }
+  params.set("pageSize", "100");
   try {
     const data = await apiRequest(`/extra-requests?${params}`);
     extrasDashboardCache = filterDashboardExtras(data.items || []);
@@ -810,21 +936,27 @@ async function loadDashboardExtras() {
 }
 
 function filterDashboardExtras(items) {
-  const status = document.getElementById("finStatusFilter")?.value;
   const search = document.getElementById("finSearch")?.value?.trim().toLowerCase();
   const includePaid = document.getElementById("finIncludePaid")?.checked;
 
   return items.filter((e) => {
+    if (!extraMatchesStatusFilter(e)) return false;
     if (search) {
-      const hay = [e.description, e.requestedBy, e.project?.name, e.project?.code]
+      const hay = [
+        e.description,
+        e.requestedBy,
+        e.project?.name,
+        e.project?.code,
+        e.generalCostCenter?.name,
+        e.generalCostCenter?.code,
+        extraRequestPaymentLabel(e),
+        extraRequestReference(e),
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       if (!hay.includes(search)) return false;
     }
-    if (status === "PENDENTE" && e.status !== "PENDENTE") return false;
-    if (status === "VENCIDO" && e.status !== "APROVADO") return false;
-    if (status === "CONFIRMADO" && e.status !== "PAGO") return false;
     if (!includePaid && e.status === "PAGO") return false;
     if (!includePaid && (e.status === "REJEITADO" || e.status === "CANCELADO")) return false;
     return true;
@@ -882,8 +1014,81 @@ function updateDashboardKPIsFromExtras(extras) {
   setKpiText("kpiTotal", String(extras.length));
 }
 
-function updateDashboardKPIs(data) {
-  const items = flattenTimelineItems(data.days);
+function updateDashboardKPIsCombined(paymentData, extras) {
+  const paymentItems = flattenTimelineItems(paymentData.days);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { from: weekFrom, to: weekTo } = getDateRangeForView("week", today);
+  const { from: monthFrom, to: monthTo } = getDateRangeForView("month", today);
+
+  let dailyAmount = 0;
+  let dailyCount = 0;
+  let weeklyAmount = 0;
+  let weeklyCount = 0;
+  let monthlyAmount = 0;
+  let monthlyCount = 0;
+  let pending = 0;
+  let overdue = 0;
+
+  paymentItems.forEach((p) => {
+    const due = paymentDueDate(p);
+    const amount = Number(p.budgetedAmount || 0);
+    const st = p.timelineStatus || resolveTimelineStatus(p);
+
+    if (due.getTime() === today.getTime()) {
+      dailyAmount += amount;
+      dailyCount += 1;
+    }
+    if (due >= weekFrom && due <= weekTo) {
+      weeklyAmount += amount;
+      weeklyCount += 1;
+    }
+    if (due >= monthFrom && due <= monthTo) {
+      monthlyAmount += amount;
+      monthlyCount += 1;
+    }
+    if (st === "PENDENTE") pending += 1;
+    if (st === "VENCIDO") overdue += 1;
+  });
+
+  extras.forEach((e) => {
+    const due = extraReferenceDate(e);
+    const amount = Number(e.amount || 0);
+
+    if (due.getTime() === today.getTime()) {
+      dailyAmount += amount;
+      dailyCount += 1;
+    }
+    if (due >= weekFrom && due <= weekTo) {
+      weeklyAmount += amount;
+      weeklyCount += 1;
+    }
+    if (due >= monthFrom && due <= monthTo) {
+      monthlyAmount += amount;
+      monthlyCount += 1;
+    }
+    if (e.status === "APROVADO") pending += 1;
+    else if (e.status === "PENDENTE") overdue += 1;
+  });
+
+  const totalRecords = (paymentData.total || paymentItems.length) + extras.length;
+
+  setKpiText("kpiMonthly", formatCurrency(monthlyAmount, "AOA"));
+  setKpiText(
+    "kpiMonthlySub",
+    `${monthlyCount} registo${monthlyCount === 1 ? "" : "s"} este mês`
+  );
+  setKpiText("kpiDaily", formatCurrency(dailyAmount, "AOA"));
+  setKpiText("kpiDailySub", `${dailyCount} registo${dailyCount === 1 ? "" : "s"}`);
+  setKpiText("kpiWeekly", formatCurrency(weeklyAmount, "AOA"));
+  setKpiText("kpiWeeklySub", `${weeklyCount} registo${weeklyCount === 1 ? "" : "s"}`);
+  setKpiText("kpiPending", String(pending));
+  setKpiText("kpiOverdue", String(overdue));
+  setKpiText("kpiTotal", String(totalRecords));
+}
+
+function updateDashboardKPIs(paymentData) {
+  const items = flattenTimelineItems(paymentData.days);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const { from: weekFrom, to: weekTo } = getDateRangeForView("week", today);
@@ -927,7 +1132,7 @@ function updateDashboardKPIs(data) {
   setKpiText("kpiWeeklySub", `${weeklyCount} pagamento${weeklyCount === 1 ? "" : "s"}`);
   setKpiText("kpiPending", String(pending));
   setKpiText("kpiOverdue", String(overdue));
-  setKpiText("kpiTotal", String(data.total || items.length));
+  setKpiText("kpiTotal", String(paymentData.total || items.length));
 }
 
 function renderDashboardChartsFromExtras(extras) {
@@ -943,11 +1148,18 @@ function renderDashboardChartsFromExtras(extras) {
   }
 }
 
-function renderDashboardCharts(data) {
-  renderBarChart(data.days || []);
-  renderPaymentDonut(flattenTimelineItems(data.days));
+function renderDashboardChartsCombined(paymentData, extras) {
+  renderBarChartCombined(paymentData.days || [], extras);
+  renderPaymentDonut(flattenTimelineItems(paymentData.days));
+  renderExtrasDonut(extras);
+  updateDonutSubtitle(paymentData, extras);
+}
+
+function renderDashboardCharts(paymentData) {
+  renderBarChart(paymentData.days || []);
+  renderPaymentDonut(flattenTimelineItems(paymentData.days));
   renderExtrasDonut(extrasDashboardCache);
-  updateDonutSubtitle(data, extrasDashboardCache);
+  updateDonutSubtitle(paymentData, extrasDashboardCache);
 }
 
 function renderStatusDonut(containerId, segments, emptyMessage) {
@@ -1091,6 +1303,58 @@ function renderBarChartFromExtras(extras) {
     .join("");
 }
 
+function renderBarChartCombined(paymentDays, extras) {
+  const container = document.getElementById("finBarChart");
+  if (!container) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const buckets = [];
+  const chartMaxHeight = 112;
+
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    buckets.push({
+      date: d,
+      total: 0,
+      label: d.toLocaleDateString("pt-AO", { weekday: "short" }).replace(".", ""),
+    });
+  }
+
+  flattenTimelineItems(paymentDays).forEach((p) => {
+    const due = paymentDueDate(p);
+    const bucket = buckets.find((b) => b.date.getTime() === due.getTime());
+    if (bucket) bucket.total += Number(p.budgetedAmount || 0);
+  });
+
+  extras.forEach((e) => {
+    const due = extraReferenceDate(e);
+    const bucket = buckets.find((b) => b.date.getTime() === due.getTime());
+    if (bucket) bucket.total += Number(e.amount || 0);
+  });
+
+  const max = Math.max(...buckets.map((b) => b.total), 0);
+  if (max === 0) {
+    container.innerHTML = `
+      <p class="text-xs text-slate-400 w-full text-center py-10">
+        Sem pagamentos nem pedidos extra nos últimos 7 dias.
+      </p>`;
+    return;
+  }
+
+  container.innerHTML = buckets
+    .map((b) => {
+      const heightPx = b.total > 0 ? Math.max(Math.round((b.total / max) * chartMaxHeight), 12) : 0;
+      return `
+        <div class="fin-bar-col">
+          <div class="fin-bar" style="height:${heightPx}px" title="${formatCurrency(b.total, "AOA")}"></div>
+          <span class="fin-bar-label">${b.label}</span>
+        </div>`;
+    })
+    .join("");
+}
+
 function renderBarChart(days) {
   const container = document.getElementById("finBarChart");
   if (!container) return;
@@ -1139,13 +1403,13 @@ function renderBarChart(days) {
 
 function getFilters() {
   const params = new URLSearchParams();
-  const projectId = document.getElementById("finProjFilter")?.value;
-  const status = document.getElementById("finStatusFilter")?.value;
+  const projectId = getProjectFilterValue();
+  const status = getFinStatusFilter();
   const search = document.getElementById("finSearch")?.value?.trim();
   const includePaid = document.getElementById("finIncludePaid")?.checked;
 
-  if (projectId) params.set("projectId", projectId);
-  if (status && status !== "EXTRA") params.set("status", status);
+  if (projectId && projectId !== FIN_GENERAL_CENTERS) params.set("projectId", projectId);
+  if (status && !status.startsWith("EXTRA")) params.set("status", status);
   if (search) params.set("search", search);
   params.set("onlyVisible", "false");
   if (includePaid) params.set("includePaid", "true");
@@ -1169,21 +1433,34 @@ async function reloadAll() {
   if (planBody) planBody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
 
   try {
+    await loadDashboardExtras();
+    const extrasForView = extrasDashboardCache;
+
     if (isExtraOnlyFilter()) {
       await loadDashboard();
       await loadPendingPaymentsQueue();
       timelineCache = {
-        days: buildExtrasTimelineDays(extrasDashboardCache),
-        total: extrasDashboardCache.length,
+        days: buildExtrasTimelineDays(extrasForView),
+        total: extrasForView.length,
       };
       renderCalendar();
-      renderExtrasPlanTable(extrasDashboardCache);
+      renderExtrasPlanTable(extrasForView);
       syncTodayButton();
       return;
     }
 
-    const [timeline] = await Promise.all([fetchTimeline(), loadDashboard(), loadPendingPaymentsQueue()]);
-    timelineCache = timeline;
+    let paymentTimeline = { days: [], total: 0 };
+    if (shouldShowPayments()) {
+      paymentTimeline = await fetchTimeline();
+    }
+
+    const mergedDays = mergeTimelineDays(paymentTimeline.days, extrasForView);
+    timelineCache = {
+      days: mergedDays,
+      total: mergedDays.reduce((sum, day) => sum + day.count, 0),
+    };
+
+    await Promise.all([loadDashboard(), loadPendingPaymentsQueue()]);
     renderCalendar();
     renderPlanTable(timelineCache.days);
     syncTodayButton();
@@ -1202,6 +1479,327 @@ function renderCalendar() {
     periodFrom: from,
     periodTo: to,
     onPaymentClick: "window.openGanttPayment",
+  });
+}
+
+function mapExtraToGanttItem(extra, periodFrom, periodTo) {
+  const placement = resolveGanttPlacementDate(
+    extra.paymentDueDate || extra.approvedAt || extra.createdAt,
+    periodFrom,
+    periodTo
+  );
+  const project =
+    extra.type === "OBRA" && extra.project
+      ? extra.project
+      : {
+          id: `gcc-${extra.generalCostCenterId || extra.generalCostCenter?.id || "geral"}`,
+          name: extra.generalCostCenter?.name || "Centros Gerais",
+          code: extra.type === "GERAL" ? "EXTRA" : "",
+        };
+  return {
+    id: `extra-${extra.id}`,
+    _ganttKind: "extra",
+    _extraId: extra.id,
+    timelineStatus: "EXTRA_A_LIQUIDAR",
+    orderRef: extra.type === "GERAL" ? "Pedido Extra · Geral" : "Pedido Extra · Obra",
+    supplier: { name: extraRequestPaymentLabel(extra) },
+    need: {
+      description: extra.description,
+      project,
+      costCenter: extra.costCenter,
+    },
+    expectedReceiptDate: placement,
+    totalValue: extra.amount,
+    quotedPrice: extra.amount,
+    quantity: 1,
+  };
+}
+
+function mapReinforcementToGanttItem(reinforcement, periodFrom, periodTo) {
+  const placement = resolveGanttPlacementDate(reinforcement.requestedAt, periodFrom, periodTo);
+  const project = reinforcement.fund?.project || { id: "fundo-maneio", name: "Fundo de Maneio", code: "FM" };
+  const fundLabel = [reinforcement.fund?.name, reinforcement.card?.label].filter(Boolean).join(" · ") || "Fundo de Maneio";
+  return {
+    id: `reinf-${reinforcement.id}`,
+    _ganttKind: "reinforcement",
+    _reinforcementId: reinforcement.id,
+    timelineStatus: "REFORCO_PENDENTE",
+    orderRef: "Reforço FM",
+    supplier: { name: fundLabel },
+    need: {
+      description: reinforcement.reason,
+      project,
+    },
+    expectedReceiptDate: placement,
+    totalValue: reinforcement.amount,
+    quotedPrice: reinforcement.amount,
+    quantity: 1,
+    requestedBy: reinforcement.requestedBy,
+  };
+}
+
+
+async function reloadOrdersTimeline() {
+  const grid = document.getElementById("ordersCalendarGrid");
+  if (!grid) return;
+  grid.innerHTML = `<div class="spinner my-8"></div>`;
+  try {
+    const { from, to } = getDateRangeForView(ordersGanttViewMode, ordersCalendarAnchor);
+    const projectId = getProjectFilterValue();
+    const search = document.getElementById("finSearch")?.value?.trim();
+    const pendingParams =
+      projectId && projectId !== FIN_GENERAL_CENTERS
+        ? `?projectId=${encodeURIComponent(projectId)}`
+        : "";
+
+    const [extrasResult, reinforcementsResult] = await Promise.allSettled([
+      apiRequest(`/extra-requests/pending-finance-payment${pendingParams}`),
+      isGeneralCentersFilter()
+        ? Promise.resolve({ items: [] })
+        : apiRequest(`/petty-cash/reinforcement-requests/pending-finance-approval${pendingParams}`),
+    ]);
+
+    let extras = extrasResult.status === "fulfilled" ? extrasResult.value.items || [] : [];
+    if (projectId === FIN_GENERAL_CENTERS) {
+      extras = extras.filter((e) => e.type === "GERAL");
+    }
+    const reinforcements = reinforcementsResult.status === "fulfilled" ? reinforcementsResult.value.items || [] : [];
+
+    pendingPaymentsCache = extras;
+    pendingReinforcementsCache = reinforcements;
+    updatePendingPaymentsBadge();
+
+    const extraGantt = extras.map((e) => mapExtraToGanttItem(e, from, to));
+    const reinfGantt = reinforcements.map((r) => mapReinforcementToGanttItem(r, from, to));
+    const mergedDays = mergeOrdersGanttDays([], extraGantt, reinfGantt, { search });
+
+    ordersTimelineCache = {
+      days: mergedDays,
+      noDateItems: [],
+      total: mergedDays.reduce((sum, day) => sum + day.count, 0),
+    };
+    renderOrdersCalendar();
+    syncOrdersTodayButton();
+  } catch (err) {
+    grid.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p>`;
+  }
+}
+
+function renderOrdersCalendar() {
+  const grid = document.getElementById("ordersCalendarGrid");
+  if (!grid) return;
+  const { from, to } = getDateRangeForView(ordersGanttViewMode, ordersCalendarAnchor);
+  let html = renderOrderGantt(ordersTimelineCache.days, {
+    viewMode: ordersGanttViewMode,
+    periodFrom: from,
+    periodTo: to,
+    onOrderClick: "window.openGanttOrder",
+    pendingQueueOnly: true,
+  });
+  const noDate = ordersTimelineCache.noDateItems || [];
+  if (noDate.length) {
+    html += `
+      <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+        <p class="text-xs font-black uppercase tracking-widest text-amber-700 mb-3">Sem data prevista (${noDate.length})</p>
+        <div class="flex flex-col gap-2">
+          ${noDate.map((o) => {
+            const payload = escapeAttr(JSON.stringify(o));
+            return `<button type="button" onclick="window.openGanttOrder(this)" data-payload='${payload}'
+              class="text-left px-3 py-2 rounded-lg bg-white border border-amber-100 hover:border-amber-300 transition-colors">
+              <span class="text-xs font-bold text-slate-800">${escapeHtml(o.need?.description || "—")}</span>
+              <span class="text-[10px] text-slate-500 block mt-0.5">${escapeHtml(o.orderRef || "—")} · ${escapeHtml(o.supplier?.name || "—")}</span>
+            </button>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function syncOrdersGanttViewButtons() {
+  document.querySelectorAll("[data-orders-gantt-view]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.ordersGanttView === ordersGanttViewMode);
+  });
+}
+
+function isOrdersViewingCurrentPeriod() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { from, to } = getDateRangeForView(ordersGanttViewMode, ordersCalendarAnchor);
+  if (ordersGanttViewMode === "day") {
+    return ordersCalendarAnchor.getTime() === today.getTime();
+  }
+  if (ordersGanttViewMode === "week") {
+    const fromDay = new Date(from);
+    fromDay.setHours(0, 0, 0, 0);
+    const toDay = new Date(to);
+    toDay.setHours(0, 0, 0, 0);
+    return today >= fromDay && today <= toDay;
+  }
+  return (
+    ordersCalendarAnchor.getFullYear() === today.getFullYear()
+    && ordersCalendarAnchor.getMonth() === today.getMonth()
+  );
+}
+
+function syncOrdersTodayButton() {
+  const btn = document.getElementById("ordersCalToday");
+  if (!btn) return;
+  btn.classList.toggle("active", isOrdersViewingCurrentPeriod());
+}
+
+function navigateOrdersCalendar(direction) {
+  const next = new Date(ordersCalendarAnchor);
+  if (ordersGanttViewMode === "day") {
+    next.setDate(next.getDate() + direction);
+  } else if (ordersGanttViewMode === "week") {
+    next.setDate(next.getDate() + direction * 7);
+  } else {
+    next.setMonth(next.getMonth() + direction);
+    next.setDate(1);
+  }
+  ordersCalendarAnchor = next;
+  ordersCalendarAnchor.setHours(0, 0, 0, 0);
+  syncOrdersTodayButton();
+  reloadOrdersTimeline();
+}
+
+window.openGanttOrder = function (btn) {
+  try {
+    const order = JSON.parse(btn.getAttribute("data-payload"));
+
+    if (order._ganttKind === "extra") {
+      const extra = pendingPaymentsCache.find((e) => e.id === order._extraId);
+      if (extra) {
+        openExtraPayModal(extra);
+        return;
+      }
+      toast("Pedido extra não encontrado.", { type: "error" });
+      return;
+    }
+
+    if (order._ganttKind === "reinforcement") {
+      openReinforcementGanttModal(order);
+      return;
+    }
+
+    const st = resolveDeliveryStatus(order);
+    const meta = DELIVERY_STATUS[st] || DELIVERY_STATUS.PENDENTE;
+    const qty = Number(order.quantity) || Number(order.need?.quantity) || 0;
+    const unit = order.need?.unit || order.supplierProduct?.unit || "";
+    const amount = Number(order.totalValue) || (Number(order.quotedPrice) || 0) * qty;
+    const receiptDate = order.expectedReceiptDate || order.dueDate;
+    const projectName = order.need?.project?.name || "—";
+    const projectId = order.need?.project?.id;
+
+    openModal({
+      title: order.orderRef || "Pedido",
+      content: `
+        <div class="flex flex-col gap-4 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-bold uppercase px-2.5 py-1 rounded-full ${meta.badge}">${meta.label}</span>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Descrição</p>
+            <p class="font-semibold text-slate-900">${escapeHtml(order.need?.description || "—")}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Obra</p>
+              <p class="font-semibold text-slate-800">${escapeHtml(projectName)}</p>
+            </div>
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fornecedor</p>
+              <p class="font-semibold text-slate-800">${escapeHtml(order.supplier?.name || "—")}</p>
+            </div>
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Quantidade</p>
+              <p class="font-semibold text-slate-800">${qty.toLocaleString("pt-PT")} ${escapeHtml(unit)}</p>
+            </div>
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor</p>
+              <p class="font-semibold text-slate-800">${formatCurrency(amount, "AOA")}</p>
+            </div>
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Receção prevista</p>
+              <p class="font-semibold text-slate-800">${receiptDate ? formatDateBR(receiptDate) : "—"}</p>
+            </div>
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Centro de custo</p>
+              <p class="font-semibold text-slate-800">${escapeHtml(order.need?.costCenter?.code || "—")}</p>
+            </div>
+          </div>
+        </div>`,
+      primaryLabel: projectId ? "Abrir cotação da obra" : "Fechar",
+      secondaryLabel: projectId ? "Fechar" : null,
+      onPrimary: async ({ close }) => {
+        if (projectId) {
+          window.location.href = `../Projectos/Cotacao/index.html?project=${projectId}`;
+          return;
+        }
+        close();
+      },
+      onSecondary: ({ close }) => close(),
+    });
+  } catch (err) {
+    toast("Erro ao abrir pedido: " + err.message, { type: "error" });
+  }
+};
+
+function openReinforcementGanttModal(order) {
+  const reinforcement = pendingReinforcementsCache.find((r) => r.id === order._reinforcementId);
+  if (!reinforcement) {
+    toast("Pedido de reforço não encontrado.", { type: "error" });
+    return;
+  }
+  const cur = reinforcement.fund?.currency || "AOA";
+  const obra = reinforcement.fund?.project?.name || "—";
+  const fundLabel = [reinforcement.fund?.name, reinforcement.card?.label].filter(Boolean).join(" · ") || "—";
+
+  openModal({
+    title: "Reforço de Fundo de Maneio",
+    content: `
+      <div class="flex flex-col gap-4 text-sm">
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-bold uppercase px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Reforço pendente</span>
+        </div>
+        <div>
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Motivo</p>
+          <p class="font-semibold text-slate-900">${escapeHtml(reinforcement.reason || "—")}</p>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Obra</p>
+            <p class="font-semibold text-slate-800">${escapeHtml(obra)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Fundo / Cartão</p>
+            <p class="font-semibold text-slate-800">${escapeHtml(fundLabel)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Solicitante</p>
+            <p class="font-semibold text-slate-800">${escapeHtml(reinforcement.requestedBy || "—")}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor</p>
+            <p class="font-semibold text-slate-800">${formatCurrency(reinforcement.amount, cur)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data do pedido</p>
+            <p class="font-semibold text-slate-800">${reinforcement.requestedAt ? formatDateBR(reinforcement.requestedAt) : "—"}</p>
+          </div>
+        </div>
+      </div>`,
+    primaryLabel: "Aprovar",
+    secondaryLabel: "Rejeitar",
+    onPrimary: async ({ close }) => {
+      close();
+      await window.approveReinforcementFinance(reinforcement.id);
+    },
+    onSecondary: async ({ close }) => {
+      close();
+      await window.rejectReinforcementFinance(reinforcement.id);
+    },
   });
 }
 
@@ -1308,7 +1906,7 @@ function renderPlanTable(days) {
         <td colspan="7">
           <div class="py-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">event_busy</span>
-            <p class="text-sm font-semibold">Sem pagamentos no período seleccionado.</p>
+            <p class="text-sm font-semibold">Sem pagamentos nem pedidos extra no período seleccionado.</p>
           </div>
         </td>
       </tr>`;
@@ -1316,18 +1914,54 @@ function renderPlanTable(days) {
   }
 
   tbody.innerHTML = days.map((day) => {
+    const extraCount = (day.items || []).filter((item) => item._isExtra).length;
+    const paymentCount = day.count - extraCount;
+    const countLabel = [
+      paymentCount ? `${paymentCount} pagamento${paymentCount === 1 ? "" : "s"}` : "",
+      extraCount ? `${extraCount} extra${extraCount === 1 ? "" : "s"}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
     const dayHeader = `
       <tr class="fin-day-header">
         <td colspan="7">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-base text-slate-400">calendar_today</span>
             <span class="text-xs font-black uppercase tracking-wide text-slate-600">${formatDateBR(day.date)}</span>
-            <span class="text-[10px] font-bold text-slate-400">${day.count} pagamento(s)</span>
+            <span class="text-[10px] font-bold text-slate-400">${countLabel || `${day.count} registo(s)`}</span>
           </div>
         </td>
       </tr>`;
 
     const rows = day.items.map((p) => {
+      if (p._isExtra) {
+        const extra = extrasDashboardCache.find((e) => e.id === p._extraId);
+        const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
+        const cur = extra?.currency || "AOA";
+        const canPay = extra?.status === "APROVADO";
+        const refLabel = extra?.project?.name || (extra?.type === "GERAL" ? extra?.generalCostCenter?.name || "Geral" : "—");
+
+        return `
+        <tr class="group">
+          <td class="fin-empty-cell">—</td>
+          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(refLabel)}">${escapeHtml(refLabel)}</td>
+          <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
+            <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
+          </td>
+          <td class="text-xs text-slate-500 max-w-[160px] truncate">${escapeHtml(extra?.requestedBy || "—")}</td>
+          <td class="text-right text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(extra?.amount, cur)}</td>
+          <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
+          <td class="text-center">
+            <div class="fin-actions">
+              ${renderIconBtn(canPay ? "payments" : "visibility", canPay ? "Liquidar pedido extra" : "Ver pedido extra", canPay ? "emerald" : "blue", {
+                attrs: `onclick="openExtraFromPlan('${extra?.id || p._extraId}')"`,
+              })}
+            </div>
+          </td>
+        </tr>`;
+      }
+
       const st = p.timelineStatus || resolveTimelineStatus(p);
       const meta = TIMELINE_STATUS[st] || TIMELINE_STATUS.PENDENTE;
       const icon = TIMELINE_ICONS[st] || TIMELINE_ICONS.PENDENTE;

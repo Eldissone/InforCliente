@@ -1114,6 +1114,7 @@ model ExtraRequest {
   status         ExtraRequestStatus @default(PENDENTE)
   requestedBy    String?
   requestedAt    DateTime           @default(now())
+  paymentDueDate DateTime?
   approvedBy     String?
   approvedAt     DateTime?
   rejectedReason String?
