@@ -1,8 +1,8 @@
 # Plano de Evolução Financeira e Logística — InforCliente
 
 > **Origem:** notas de requisitos ("ideia colhida") sobre orçamento previsto/real, fundo de maneio por cartão, perfil financeiro (calendário/plano de pagamentos, contabilidade/auditoria) e calendário de entregas para logística.
-> **Estado:** plano técnico para discussão — nenhuma alteração de código foi feita.
-> **Base:** análise do código atual em `backend/prisma/schema.prisma`, `backend/src/routes/{costCenters,quotes,pettyCash,extraRequests,stock,projects}.js`, `backend/src/services/{paymentNotificationService,pettyCashService}.js`, `frontend/src/pages/Projectos/centroCustos.*`, `frontend/src/pages/Stock/*`.
+> **Estado:** plano técnico em evolução — **várias fases já implementadas** (orçamento previsto/real, fundo de maneio por cartão, perfil financeiro, centros gerais, notificações in-app de pagamentos). Ver secção **2.5** e roadmap actualizado.
+> **Base:** análise do código actual em `backend/prisma/schema.prisma`, `backend/src/routes/{costCenters,quotes,pettyCash,extraRequests,stock,projects}.js`, `backend/src/services/{paymentNotificationService,paymentTimelineService,pettyCashService}.js`, `frontend/src/pages/Projectos/centroCustos.*`, `frontend/src/pages/Financeiro/*`, `frontend/src/shared/paymentNotificationBar.js`.
 
 ---
 
@@ -46,10 +46,37 @@ Modelos existentes: `PettyCashFund`, `PettyCashCard`, `PettyCashMovement`, `Extr
 
 ### 2.3 Perfil financeiro, calendário/plano de pagamentos e auditoria
 
-- Não existe página dedicada "Perfil Financeiro". O que existe é a página **`centroCustos.html`**, com uma vista global (sem obra selecionada) que já mostra um cronograma de pagamentos multi-obra e pedidos extra tipo `GERAL`.
-- O "calendário" de pagamentos é hoje uma **timeline/lista** (via `paymentTimelineService`), não um calendário mensal visual.
-- Não existe conceito de certificação/auditoria de faturas: `CostPayment.faturaUrl` é apenas um upload de ficheiro, sem estado de conferência, sem comparação com transferências ou fundo de maneio gasto.
-- `UserProfile.isFinancialReceiver/isApprover/isProjectResponsible` já modelam "papéis" financeiros como flags de perfil (não como `Role` do enum) — é o padrão que o sistema já usa para direcionar notificações.
+- Existe página dedicada **`frontend/src/pages/Financeiro/financeiro.html`** (Perfil Financeiro), fora do contexto de uma obra específica, com calendário mensal, timeline de pagamentos multi-obra, fila de pedidos extra/reforços e separador de auditoria.
+- O cronograma por obra vive em **`centroCustos.html`** (separador Cronograma), com parcelas manuais e parcelas geradas automaticamente na confirmação de fatura da cotação.
+- Regra de visibilidade D-1 no cronograma (`paymentTimelineService`): pagamentos passam a ser acionáveis 1 dia antes do vencimento; a lista do cronograma pode mostrar também parcelas **Planeadas** com data futura.
+- Auditoria parcial: `GET /cost-centers/payments/audit` e UI de faturas liquidadas; certificação formal contra histórico financeiro ainda em evolução.
+- `UserProfile.isFinancialReceiver/isApprover/isProjectResponsible` modelam papéis financeiros como flags de perfil — usados para direccionar notificações.
+
+### 2.5 Notificações in-app de pagamentos **(implementado)**
+
+Sistema já operacional, alinhado com a Fase 6 do roadmap (parte de pagamentos concluída).
+
+| Evento | Quando dispara | Destinatários | UI in-app |
+|---|---|---|---|
+| `PAYMENT_CREATED` | Criação de parcelas (`generate-installments`, `confirm-invoice`) | `isFinancialReceiver`, `isApprover`, `isProjectResponsible`, utilizadores atribuídos à obra | Barra superior (`paymentNotificationBar.js`) + registo em `Notification` |
+| `PAYMENT_CONFIRMED` | Liquidação de `CostPayment` (com opção de notificar destinatários explícitos) | Idem + destinatário escolhido na liquidação | Barra + deep link para `financeiro.html?paymentId=…` (comprovativo se aplicável) |
+| `PAYMENT_DUE` | Vencimento amanhã (scan D-1) | Idem | Barra âmbar «Pagamento a vencer amanhã» |
+| `PAYMENT_OVERDUE` | Vencimento ultrapassado | Idem | Barra vermelha «Pagamento em atraso» |
+
+**Backend:** `paymentNotificationService.js` → `dispatchNotification` (`dispatcher.js`) → `inAppProvider` (canal activo). WhatsApp/e-mail ficam `SKIPPED` até haver credenciais em `config.notifications`.
+
+**Disparo automático:**
+- `scanDueAndOverduePayments` no arranque do servidor (`server.js`) e ao abrir timeline/cronograma (`costCenters.js`).
+- Deduplicação por `(userId, paymentId, event)` para `PAYMENT_DUE` e `PAYMENT_OVERDUE`.
+
+**Frontend:**
+- `paymentNotificationBar.js` — fila de toasts no topo, acção «Abrir» leva ao Perfil Financeiro ou comprovativo.
+- `chatFab.js` — escuta Socket.IO `notification:new` e alimenta a barra; lista de notificações no FAB de chat.
+- Deep links: `financeiro.html?paymentId=…&projectId=…`; pedidos extra usam `extraRequestId`.
+
+**Relacionado (fora de `CostPayment`):** notificações de pedidos extra aprovados (`notifyExtraRequestApproved`) e reforços de fundo de maneio na fila financeira — mesmo padrão in-app, tipo/metadata distintos.
+
+**Pendente (resto da Fase 6):** `REINFORCEMENT_REQUESTED`, `CERTIFICATION_PENDING`, `DELIVERY_DUE`, `DELIVERY_OVERDUE`.
 
 ### 2.4 Logística — calendário de entrega e entrada em armazém
 
@@ -135,10 +162,12 @@ Princípio geral: **evoluir o que já existe**, sem recriar `WorkNeed`/`NeedQuot
 
 **Fase 6 — Notificações direcionadas (financeiro + logística)**
 - Objetivo: reaproveitar o dispatcher de notificações já existente para avisos de reforço pendente, certificação pendente e entregas previstas/atrasadas.
-- Alterações: novos tipos de evento (`REINFORCEMENT_REQUESTED`, `CERTIFICATION_PENDING`, `DELIVERY_DUE`, `DELIVERY_OVERDUE`) no padrão de `paymentNotificationService.js`.
-- Dependências: Fases 2, 4 e 5.
-- Riscos: volume de notificações — reaproveitar a regra "D-1"/dedupe já usada em pagamentos.
-- Critério de conclusão: utilizadores relevantes recebem notificação in-app (e, quando configurado, e-mail/WhatsApp) para cada novo evento.
+- **Já implementado (pagamentos):** `PAYMENT_CREATED`, `PAYMENT_CONFIRMED`, `PAYMENT_DUE`, `PAYMENT_OVERDUE` em `paymentNotificationService.js`, barra in-app `paymentNotificationBar.js`, deep links para `financeiro.html`. Ver secção **2.5**.
+- **Pendente:** novos tipos `REINFORCEMENT_REQUESTED`, `CERTIFICATION_PENDING`, `DELIVERY_DUE`, `DELIVERY_OVERDUE`.
+- Alterações restantes: eventos de reforço, certificação e logística no mesmo padrão do dispatcher.
+- Dependências: Fases 2, 4 e 5 (para os eventos ainda não cobertos).
+- Riscos: volume de notificações — reaproveitar a regra D-1/dedupe já usada em pagamentos.
+- Critério de conclusão: utilizadores relevantes recebem notificação in-app (e, quando configurado, e-mail/WhatsApp) para **todos** os eventos financeiros e logísticos — pagamentos já cumprem este critério.
 
 ---
 
@@ -154,4 +183,4 @@ Princípio geral: **evoluir o que já existe**, sem recriar `WorkNeed`/`NeedQuot
 
 ## 6. Conclusão
 
-Todas as seis ideias descritas já têm fundação parcial no código (orçamento em `ProjectBudgetLine`/`WorkNeed`/`NeedQuote`, fundo de maneio em `PettyCash*`, pagamentos em `CostPayment`, entrada de stock em `StockMovement`). Não é necessário reconstruir nenhum destes módulos — o caminho é: **congelar/versionar o orçamento base**, **mover o saldo do fundo de maneio para o nível de cartão com workflow de pedido de reforço**, **criar uma página financeira transversal a obras com auditoria de faturas**, e **ligar a encomenda à entrada física em armazém através de um calendário de entregas**. A ordem de fases acima minimiza risco: cada fase é independente o suficiente para ser entregue e validada isoladamente antes de avançar para a seguinte.
+Todas as seis ideias descritas já têm fundação parcial no código (orçamento em `ProjectBudgetLine`/`WorkNeed`/`NeedQuote`, fundo de maneio em `PettyCash*`, pagamentos em `CostPayment`, entrada de stock em `StockMovement`). Várias peças já foram entregues — incluindo **notificações in-app de pagamentos** (secção 2.5), Perfil Financeiro, orçamento previsto/real e centros gerais. O caminho que falta concentra-se em: **auditoria formal de faturas**, **calendário de entregas ligado ao stock**, e **notificações de reforço/certificação/logística**. A ordem de fases acima minimiza risco: cada fase é independente o suficiente para ser entregue e validada isoladamente antes de avançar para a seguinte.
