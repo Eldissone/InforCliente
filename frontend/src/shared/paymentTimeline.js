@@ -143,6 +143,10 @@ export function renderGroupedListRows(days, { showProject = false, onEdit = null
       const timelineStatus = item.timelineStatus || resolveTimelineStatus(item);
       const meta = TIMELINE_STATUS[timelineStatus] || TIMELINE_STATUS.PENDENTE;
       const isPaid = timelineStatus === "PAGO";
+      const isPlanned = item.isVisible === false && timelineStatus === "PENDENTE";
+      const statusBadge = isPlanned
+        ? `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-violet-100 text-violet-700">Planeado</span>`
+        : `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${meta.badge}">${meta.label}</span>`;
       const payload = escapeAttr(JSON.stringify(item));
       const projectCol = showProject
         ? `<td class="text-xs font-bold text-slate-600 max-w-[100px] truncate">${escapeAttr(item.project?.name || "—")}</td>`
@@ -155,7 +159,7 @@ export function renderGroupedListRows(days, { showProject = false, onEdit = null
           <td class="font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(item.description)}">${escapeAttr(item.description)}</td>
           <td class="text-sm text-slate-500">${escapeAttr(item.costCenter?.code || "—")} · ${escapeAttr(item.costCenter?.name || "")}</td>
           <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.budgetedAmount, item.costCenter?.currency || "AOA")}</td>
-          <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${meta.badge}">${meta.label}</span></td>
+          <td class="text-center">${statusBadge}</td>
           <td class="text-center">
             <div class="flex justify-center gap-2">
               ${!isPaid && timelineStatus !== "CANCELADO" ? `

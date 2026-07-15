@@ -627,6 +627,11 @@ quoteRoutes.patch(
       return { updatedQuote, installments };
     });
 
+    await prisma.workNeed.update({
+      where: { id: quote.needId },
+      data: { scheduled: true },
+    });
+
     await logQuoteAction(req, {
       action: "quote_confirm_invoice",
       needId: quote.needId,

@@ -250,7 +250,26 @@ function needBudgetDisplayStatus(n) {
 }
 
 function canRealizadoAgendar(n) {
-  return n.status === "APPROVED" && n.marketWorkflowStarted && !n.scheduled;
+  return ["APPROVED", "ORDERED"].includes(n.status) && n.marketWorkflowStarted && !n.scheduled;
+}
+
+function needCronogramaTotal(n) {
+  if (n.realizadoTotal != null) return Number(n.realizadoTotal) || 0;
+  const qty = Number(n.quantity) || 0;
+  const price = Number(n.realizadoUnitPrice ?? n.unitPrice) || 0;
+  const hours = Number(n.hours) || 1;
+  return qty * price * hours;
+}
+
+async function goToCronogramaAfterSchedule(count = 1) {
+  switchTab("cronograma");
+  await loadCronograma();
+  showToast(
+    count === 1
+      ? "Item no cronograma — defina as parcelas na linha «A definir»"
+      : `${count} itens no cronograma — defina as parcelas nas linhas «A definir»`,
+    "success"
+  );
 }
 
 function isPrevistoBaselineApproved(n) {
@@ -839,6 +858,8 @@ function getCronogramaFilters() {
   if (status) params.set("status", status);
   if (search) params.set("search", search);
   if (status === "CONFIRMADO") params.set("includePaid", "true");
+  // Mostrar todos os pagamentos planeados (cotação/fatura ou cronograma manual), não só 1 dia antes do vencimento
+  params.set("onlyVisible", "false");
   return params;
 }
 
@@ -849,12 +870,13 @@ async function loadCronograma() {
 
   try {
     const [needsData, timelineData] = await Promise.all([
-      apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=500&scheduled=true`),
+      apiRequest(
+        `/cost-centers/project/${selectedProject.id}/needs?pageSize=500&awaitingInstallments=true`
+      ),
       apiRequest(`/cost-centers/project/${selectedProject.id}/payments/timeline?${getCronogramaFilters()}`),
     ]);
 
-    const items = needsData.items || [];
-    cronogramaPendingNeeds = items.filter((n) => !n._count || n._count.payments === 0);
+    cronogramaPendingNeeds = needsData.items || [];
 
     renderCronogramaList(timelineData.days);
 
@@ -1057,10 +1079,7 @@ function renderCronogramaList(days) {
   if (!tbody) return;
 
   const needRows = cronogramaPendingNeeds.map((n) => {
-    const qty = Number(n.quantity) || 0;
-    const price = (n.status === "APPROVED" || n.status === "PAID") ? (Number(n.unitPrice) || 0) : 0;
-    const hours = Number(n.hours) || 1;
-    const totalObra = qty * price * hours;
+    const totalObra = needCronogramaTotal(n);
     const currency = n.costCenter?.currency || "AOA";
     return `
       <tr class="bg-amber-50/30">
@@ -1229,8 +1248,8 @@ window.sendToCronograma = async function (id, ccId) {
     showToast("A enviar para cronograma...", "info");
     await apiRequest(`/cost-centers/${ccId}/needs/${id}/schedule`, { method: "POST" });
     patchCachedNeed(id, { scheduled: true });
-    showToast("Item enviado para cronograma!", "success");
     refreshNeedsTableFromCache({ preserveUi: true });
+    await goToCronogramaAfterSchedule(1);
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1259,9 +1278,9 @@ window.sendAllToCronograma = async function () {
       body: { needIds }
     });
 
-    showToast(`${needIds.length} item(ns) enviados para cronograma!`, "success");
     patchCachedNeeds(needIds, { scheduled: true });
     refreshNeedsTableFromCache({ preserveUi: true });
+    await goToCronogramaAfterSchedule(needIds.length);
   } catch (err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1730,6 +1749,8 @@ window.openPrecificarModal = async function (needId, ccId) {
     window.onQuoteApproved = async () => {
       await reloadNeedsPreservingUi();
       await loadSummary();
+      await loadCronograma();
+      showToast("Parcelas adicionadas ao Cronograma de Pagamentos", "success");
     };
     window.showQuoteToast = showToast;
 

@@ -846,6 +846,7 @@ costCenterRoutes.get(
     const priority = req.query.priority ? String(req.query.priority) : "";
     const ccId = req.query.costCenterId ? String(req.query.costCenterId) : "";
     const scheduled = req.query.scheduled ? (req.query.scheduled === "true") : undefined;
+    const awaitingInstallments = req.query.awaitingInstallments === "true";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
@@ -854,7 +855,11 @@ costCenterRoutes.get(
       ...(status ? { status } : {}),
       ...(priority ? { priority } : {}),
       ...(ccId ? { costCenterId: ccId } : {}),
-      ...(scheduled !== undefined ? { scheduled } : {}),
+      ...(awaitingInstallments
+        ? { scheduled: true, payments: { none: {} } }
+        : scheduled !== undefined
+          ? { scheduled }
+          : {}),
     };
 
     const [total, items] = await Promise.all([
