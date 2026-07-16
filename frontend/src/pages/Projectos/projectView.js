@@ -26,7 +26,7 @@ import { exportMeasurementExcel, exportMeasurementPdf } from "../../shared/measu
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "cliente"] });
+checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "financeiro", "tecnico", "cliente"] });
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return "0 Bytes";

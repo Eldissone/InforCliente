@@ -1,8 +1,10 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "user"] });
+// Verifica se tem sessão — roles são geridas pelas permissões do servidor
+checkAuth();
 import { formatCompactNumber, formatPercent, formatCurrency } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -569,9 +571,14 @@ function loadSessionGreeting() {
 }
 
 async function init() {
+  // Verificar permissão dinâmica — qualquer perfil com acesso ao dashboard pode entrar
+  const ok = await guardPageAccess("navlinks", "nav_dashboard");
+  if (!ok) return;
+
   initMobileMenu();
   wireLogout();
   wireUsersNav();
+  await initPermissionLayer();
   loadSessionGreeting();
   await refreshClientsGrid();
   wireClientMatrixActions();

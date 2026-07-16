@@ -1,8 +1,9 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, initMobileMenu, setButtonLoading } from "../../shared/ui.js";
+import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
+checkAuth(); // apenas verifica sessão válida
 import { formatCurrencyKZ } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -329,9 +330,13 @@ async function openEdit(id) {
 }
 
 async function init() {
+  const ok = await guardPageAccess("navlinks", "nav_clientes");
+  if (!ok) return;
+
   initMobileMenu();
   wireLogout();
   wireUsersNav();
+  await initPermissionLayer();
   wireFilters();
   wireActions();
   await load();

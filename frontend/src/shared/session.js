@@ -121,11 +121,10 @@ export function wireUsersNav() {
     if (el.tagName === "A") el.href = target;
   });
 
-  // Dynamic Brand Text
+  // Dynamic Brand Text — o nome da app é sempre "Gestor" exceto no portal do cliente
   const brandText = document.getElementById("navBrandText");
   if (brandText) {
-    brandText.textContent =
-      role === "cliente" ? "Cliente" : role === "financeiro" ? "Financeiro" : "Gestor";
+    brandText.textContent = role === "cliente" ? "Cliente" : "Gestor";
   }
 
   applyRoleVisibility(role);
@@ -151,17 +150,19 @@ export function wireUsersNav() {
  * ocultos até confirmação da permissão no servidor.
  */
 async function wireNavLinks(role) {
+  const allNavSelectors = "[data-nav-dashboard], [data-nav-clientes], [data-nav-obras], [data-nav-logistica], [data-nav-logistics], [data-nav-planeamento], [data-nav-cotacao], [data-nav-financeiro], [data-nav-centros], [data-nav-users]";
+
   // Admin sempre vê tudo
   if (role === "admin") {
-    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+    document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.remove("hidden");
     });
     return;
   }
 
-  // Cliente não vê links de gestão
+  // Cliente não vê links de gestão no header normal
   if (role === "cliente") {
-    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+    document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.add("hidden");
     });
     return;
@@ -172,22 +173,29 @@ async function wireNavLinks(role) {
     const data = await apiRequest("/permissions/me");
     const map = data?.map || {};
 
-    const showCotacao = map["navlinks:nav_cotacao"] === "true";
-    const showFinanceiro = map["navlinks:nav_financeiro"] === "true";
-    const showCentros = map["navlinks:nav_centros_gerais"] === "true";
+    const toggles = [
+      { sel: "[data-nav-dashboard]", key: "navlinks:nav_dashboard" },
+      { sel: "[data-nav-clientes]", key: "navlinks:nav_clientes" },
+      { sel: "[data-nav-obras]", key: "navlinks:nav_obras" },
+      { sel: "[data-nav-logistica], [data-nav-logistics]", key: "navlinks:nav_logistica" },
+      { sel: "[data-nav-planeamento]", key: "navlinks:nav_planeamento" },
+      { sel: "[data-nav-cotacao]", key: "navlinks:nav_cotacao" },
+      { sel: "[data-nav-financeiro]", key: "navlinks:nav_financeiro" },
+      { sel: "[data-nav-centros]", key: "navlinks:nav_centros_gerais" },
+      { sel: "[data-nav-users]", key: "navlinks:nav_users" }
+    ];
 
-    document.querySelectorAll("[data-nav-cotacao]").forEach(el => {
-      el.classList.toggle("hidden", !showCotacao);
+    toggles.forEach(({ sel, key }) => {
+      const val = map[key];
+      const show = val === "true" || val === true;
+      document.querySelectorAll(sel).forEach(el => {
+        el.classList.toggle("hidden", !show);
+      });
     });
-    document.querySelectorAll("[data-nav-financeiro]").forEach(el => {
-      el.classList.toggle("hidden", !showFinanceiro);
-    });
-    document.querySelectorAll("[data-nav-centros]").forEach(el => {
-      el.classList.toggle("hidden", !showCentros);
-    });
+
   } catch {
     // Em caso de erro, ocultar os links por segurança
-    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+    document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.add("hidden");
     });
   }

@@ -334,20 +334,25 @@
                     <span id="navBrandText">Gestor</span>
                 </span>
                 <div class="hidden lg:flex items-center gap-6">
-                    <a data-nav-dashboard class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Dashboard/index.html">Dashboard</a>
+                    <a
+                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
+                        data-nav-dashboard href="../Dashboard/index.html">Dashboard</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Clientes/clienteLista.html">Clientes</a>
+                        data-nav-clientes href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Projectos/ProjectGeral.html">Obras</a>
-                           <a data-nav-logistics
+                        data-nav-obras href="../Projectos/ProjectGeral.html">Obras</a>
+                    <a data-nav-logistics
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Stock/index.html">Logística</a>
-                    <a href="../Projectos/centroCustos.html"
+                    <a data-nav-planeamento href="../Projectos/centroCustos.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
-                    <a data-nav-cotacao href="../Projectos/Cotacao/index.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-                    <a data-nav-financeiro href="../Financeiro/financeiro.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Financeiro</a>
-                    <a data-nav-centros href="../Financeiro/centrosGerais.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centros Gerais</a>
+                    <a data-nav-cotacao href="../Projectos/Cotacao/index.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
+                    <a data-nav-financeiro href="../Financeiro/financeiro.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Financeiro</a>
+                    <a data-nav-centros href="../Financeiro/centrosGerais.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centros
+                        Gerais</a>
                 </div>
             </div>
             <div class="flex items-center gap-4">
@@ -372,34 +377,41 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a data-nav-dashboard class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Dashboard/index.html">
+            <a
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                data-nav-dashboard href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Clientes/clienteLista.html">
+                data-nav-clientes href="../Clientes/clienteLista.html">
                 <span class="material-symbols-outlined text-lg">group</span> Clientes
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Projectos/ProjectGeral.html">
+                data-nav-obras href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-                  <a data-nav-logistics
+            <a data-nav-logistics
                 class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Projectos/centroCustos.html">
+                data-nav-planeamento href="../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
             </a>
-            <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/Cotacao/index.html">
+            <a data-nav-cotacao
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/Cotacao/index.html">
                 <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
             </a>
-            <a data-nav-financeiro class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Financeiro/financeiro.html">
+            <a data-nav-financeiro
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Financeiro/financeiro.html">
                 <span class="material-symbols-outlined text-lg">payments</span> Financeiro
             </a>
-            <a data-nav-centros class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Financeiro/centrosGerais.html">
+            <a data-nav-centros
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Financeiro/centrosGerais.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
             </a>
             <button data-logout
@@ -517,7 +529,7 @@
             <div
                 class="border-b mt-4 border-slate-100 bg-white px-6 py-3.5 flex flex-row items-center justify-between gap-4">
                 <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <a href="../Dashboard/index.html" class="hover:text-slate-600 transition-colors">Dashboard</a>
+                    <a data-nav-dashboard href="../Dashboard/index.html" class="hover:text-slate-600 transition-colors">Dashboard</a>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
                     <span class="text-[#0d3fd1]" id="breadcrumb-label">Visão Geral</span>
                 </div>
@@ -713,19 +725,11 @@
                                     Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para
                                     expandir ou ocultar blocos.
                                 </p>
-                                <p class="text-[11px] font-medium text-slate-500 mt-2 max-w-3xl">
-                                    Expanda um módulo (<strong>Stock</strong>, <strong>Materiais</strong>,
-                                    <strong>Ferramentas</strong>, <strong>Obras</strong> ou <strong>Portal</strong>)
-                                    para ver
-                                    <strong>Abas visíveis na interface</strong> — Logística &amp; Stock, Vista da obra,
-                                    Portal do cliente e sub-abas de armazém.
-                                    Use <strong>Sincronizar</strong> uma vez após actualizar o sistema para criar as
-                                    novas permissões de abas na base de dados.
-                                </p>
+
                             </div>
                             <div class="flex flex-wrap gap-2 shrink-0">
                                 <button id="syncPermsBtn" type="button"
-                                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-[#0d3fd1] hover:border-[#0d3fd1]/30 hover:bg-blue-50 transition-all">
+                                    class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-900 hover:border-[#0d3fd1]/30 hover:bg-blue-50 transition-all">
                                     <span class="material-symbols-outlined text-base">sync</span>
                                     Sincronizar
                                 </button>

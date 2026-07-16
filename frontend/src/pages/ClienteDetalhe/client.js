@@ -1,8 +1,9 @@
 import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { guardPageAccess } from "../../shared/permissions.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "leitura"] });
+checkAuth(); // apenas verifica sessão válida
 import { formatCurrency, formatPercent, formatDateBR, getExchangeRate } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -161,6 +162,10 @@ function wireProjectLinks() {
 }
 
 async function init() {
+  // Detalhe do cliente requer acesso ao módulo de clientes
+  const ok = await guardPageAccess("navlinks", "nav_clientes");
+  if (!ok) return;
+
   initMobileMenu();
   wireLogout();
   wireUsersNav();

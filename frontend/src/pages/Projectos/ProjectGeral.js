@@ -1,8 +1,9 @@
 import { apiRequest, apiUpload, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
-checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura"] });
+checkAuth(); // apenas verifica sessão válida
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
@@ -1011,9 +1012,13 @@ async function openCreate() {
 }
 
 async function init() {
+  const ok = await guardPageAccess("navlinks", "nav_obras");
+  if (!ok) return;
+
   initMobileMenu();
   wireLogout();
   wireUsersNav();
+  await initPermissionLayer();
   wireFilters();
   wireActions();
   await load();

@@ -71,7 +71,7 @@ export async function loadUserPermissions({ force = false } = {}) {
 }
 
 function evaluateAllowedValue(val, method = "GET") {
-  if (val === "true") return true;
+  if (val === "true" || val === true) return true;
   if (val === "own") return true;
   if (val === "view" && method === "GET") return true;
   return false;
@@ -82,7 +82,7 @@ export function canPermission(map, module, action, { method = "GET" } = {}) {
   if (role === "admin") return true;
 
   const full = map[`${module}:full_access`];
-  if (full === "true") return true;
+  if (full === "true" || full === true) return true;
 
   const mapKey = `${module}:${action}`;
 
@@ -101,16 +101,16 @@ export function canPermission(map, module, action, { method = "GET" } = {}) {
   if (evaluateAllowedValue(val, method)) return true;
 
   const manage = map[`${module}:manage`];
-  if (manage === "true" && ["create", "edit", "delete", "approve", "manage"].includes(action)) return true;
+  if ((manage === "true" || manage === true) && ["create", "edit", "delete", "approve", "manage"].includes(action)) return true;
 
   if (action === "read") {
     const view = map[`${module}:view`];
-    if (view === "true" || view === "own" || (view === "view" && method === "GET")) return true;
+    if (view === "true" || view === true || view === "own" || (view === "view" && method === "GET")) return true;
   }
 
   if (action === "financeiro") {
     const fin = map[`${module}:financeiro`];
-    if (fin === "true" || fin === "own") return true;
+    if (fin === "true" || fin === true || fin === "own") return true;
     if (fin === "view" && method === "GET") return true;
   }
 
@@ -256,10 +256,35 @@ export async function guardPageAccess(module, action = "view") {
   if (canPermission(map, module, action)) return true;
 
   const here = window.location.pathname;
-  let target = "/Dashboard/index.html";
   const role = (user.role || "").toLowerCase();
-  if (role === "cliente") target = "/Dashboard/clientDashboard.html";
-  else if (role === "tecnico") target = "/Projectos/tecnicoPlanos.html";
+
+  // Percorre a lista de rotas por prioridade para encontrar a primeira acessível
+  const priorityRoutes = [
+    { key: "navlinks:nav_dashboard", path: "/Dashboard/index.html" },
+    { key: "navlinks:nav_clientes", path: "/Clientes/clienteLista.html" },
+    { key: "navlinks:nav_obras", path: "/Projectos/ProjectGeral.html" },
+    { key: "navlinks:nav_logistica", path: "/Stock/index.html" },
+    { key: "navlinks:nav_planeamento", path: "/Projectos/centroCustos.html" },
+    { key: "navlinks:nav_financeiro", path: "/Financeiro/financeiro.html" },
+    { key: "navlinks:nav_cotacao", path: "/Projectos/Cotacao/index.html" },
+    { key: "navlinks:nav_centros_gerais", path: "/Financeiro/centrosGerais.html" },
+    { key: "navlinks:nav_users", path: "/Users/index.html" },
+  ];
+
+  let target = "/Dashboard/index.html";
+  if (role === "cliente") {
+    target = "/Dashboard/clientDashboard.html";
+  } else if (role === "tecnico") {
+    target = "/Projectos/tecnicoPlanos.html";
+  } else {
+    for (const route of priorityRoutes) {
+      const val = map[route.key];
+      if (val === "true" || val === true) {
+        target = route.path;
+        break;
+      }
+    }
+  }
 
   if (!here.includes(target)) {
     window.location.href = `${target}?msg=access_denied`;

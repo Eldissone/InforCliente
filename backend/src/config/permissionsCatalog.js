@@ -278,11 +278,17 @@ const PERMISSION_GROUPS = [
     label: "Links de Navegação (Header)",
     icon: "link",
     pages: [
-      { id: "navlinks.cotacao", label: "Link: Cotação", route: "*" },
+      { id: "navlinks.dashboard", label: "Link: Dashboard", route: "/Dashboard/index.html" },
+      { id: "navlinks.clientes", label: "Link: Clientes", route: "/Clientes/clienteLista.html" },
+      { id: "navlinks.obras", label: "Link: Obras", route: "/Projectos/ProjectGeral.html" },
+      { id: "navlinks.logistica", label: "Link: Logística", route: "/Stock/index.html" },
+      { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/centroCustos.html" },
+      { id: "navlinks.cotacao", label: "Link: Cotação", route: "/Projectos/Cotacao/index.html" },
       { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
       { id: "navlinks.centros_gerais", label: "Link: Centros Gerais", route: "/Financeiro/centrosGerais.html" },
+      { id: "navlinks.users", label: "Link: Gestão", route: "/Users/index.html" },
     ],
-    actions: ["nav_cotacao", "nav_financeiro", "nav_centros_gerais"],
+    actions: ["nav_dashboard", "nav_clientes", "nav_obras", "nav_logistica", "nav_planeamento", "nav_cotacao", "nav_financeiro", "nav_centros_gerais", "nav_users"],
   },
 ];
 
@@ -338,7 +344,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "true", pay: "false", delete: "true", full_access: "false" },
-      navlinks: { nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -369,7 +375,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "false", pay: "true", delete: "false", full_access: "false" },
-      navlinks: { nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -403,7 +409,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "false", approve: "false", pay: "true", delete: "false", full_access: "false" },
-      navlinks: { nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -434,7 +440,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "false", pay: "false", delete: "false", full_access: "false" },
-      navlinks: { nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "false" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -443,6 +449,10 @@ function defaultAllowedFor(role, module, action) {
     const readOnly = ["view", "read", "export"];
     if (module === "portal") return "false";
     if (module === "sistema" || module === "permissoes" || module === "configuracoes") return "false";
+    if (module === "navlinks") {
+      if (["nav_dashboard", "nav_obras"].includes(action)) return "true";
+      return "false";
+    }
     if (module === "chat") {
       if (action === "view") return "true";
       return "false";
@@ -464,6 +474,7 @@ function defaultAllowedFor(role, module, action) {
     if (module === "portal") {
       if (["view", "export", "full_access"].includes(action)) return action === "full_access" ? "false" : "true";
     }
+    if (module === "navlinks") return "false";
     const ownModules = ["clientes", "obras", "stock", "logistica", "interacoes", "relatorios"];
     if (ownModules.includes(module)) {
       if (["view", "read", "export"].includes(action)) return "own";

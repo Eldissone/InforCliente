@@ -110,17 +110,17 @@
                     <span id="navBrandText">Gestor</span>
                 </span>
                 <div class="hidden lg:flex items-center gap-6">
-                    <a data-nav-dashboard
+                    <a
                         class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
-                        href="../Dashboard/index.html">Dashboard</a>
+                        data-nav-dashboard href="../Dashboard/index.html">Dashboard</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Clientes/clienteLista.html">Clientes</a>
+                        data-nav-clientes href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Projectos/ProjectGeral.html">Obras</a>
+                        data-nav-obras href="../Projectos/ProjectGeral.html">Obras</a>
                     <a data-nav-logistics
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
                         href="../Stock/index.html">Logística</a>
-                    <a href="../Projectos/centroCustos.html"
+                    <a data-nav-planeamento href="../Projectos/centroCustos.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
                     <a data-nav-cotacao href="../Projectos/Cotacao/index.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
                     <a data-nav-financeiro href="../Financeiro/financeiro.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Financeiro</a>
@@ -151,17 +151,17 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a data-nav-dashboard
+            <a
                 class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Dashboard/index.html">
+                data-nav-dashboard href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Clientes/clienteLista.html">
+                data-nav-clientes href="../Clientes/clienteLista.html">
                 <span class="material-symbols-outlined text-lg">group</span> Clientes
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Projectos/ProjectGeral.html">
+                data-nav-obras href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
             <a data-nav-logistics
@@ -170,7 +170,7 @@
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Projectos/centroCustos.html">
+                data-nav-planeamento href="../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
             </a>
             <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/Cotacao/index.html">
