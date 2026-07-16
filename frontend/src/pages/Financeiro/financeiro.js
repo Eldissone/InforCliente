@@ -407,7 +407,6 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
   await loadPendingPaymentsQueue();
   const hadExtraDeepLink = new URLSearchParams(window.location.search).get("extraRequestId");
   await handleFinanceiroDeepLink();
-  if (!hadExtraDeepLink) await maybeAutoOpenPendingPaymentsModal();
 })();
 
 async function handleFinanceiroDeepLink() {

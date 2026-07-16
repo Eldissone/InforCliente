@@ -134,12 +134,63 @@ export function wireUsersNav() {
     .then(({ initPermissionLayer }) => initPermissionLayer())
     .catch(() => { });
 
+  // Apply nav link visibility based on permissions
+  wireNavLinks(role);
+
   wireUserProfile();
   processUrlMessages();
 
   import("./chatFab.js")
     .then(({ initChatFab }) => initChatFab())
     .catch(() => { });
+}
+
+/**
+ * Controla a visibilidade dos links de navegação do header com base em permissões.
+ * Por padrão, links data-nav-cotacao, data-nav-financeiro, data-nav-centros ficam
+ * ocultos até confirmação da permissão no servidor.
+ */
+async function wireNavLinks(role) {
+  // Admin sempre vê tudo
+  if (role === "admin") {
+    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+      el.classList.remove("hidden");
+    });
+    return;
+  }
+
+  // Cliente não vê links de gestão
+  if (role === "cliente") {
+    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+      el.classList.add("hidden");
+    });
+    return;
+  }
+
+  try {
+    const { apiRequest } = await import("../services/api.js");
+    const data = await apiRequest("/permissions/me");
+    const map = data?.map || {};
+
+    const showCotacao = map["navlinks:nav_cotacao"] === "true";
+    const showFinanceiro = map["navlinks:nav_financeiro"] === "true";
+    const showCentros = map["navlinks:nav_centros_gerais"] === "true";
+
+    document.querySelectorAll("[data-nav-cotacao]").forEach(el => {
+      el.classList.toggle("hidden", !showCotacao);
+    });
+    document.querySelectorAll("[data-nav-financeiro]").forEach(el => {
+      el.classList.toggle("hidden", !showFinanceiro);
+    });
+    document.querySelectorAll("[data-nav-centros]").forEach(el => {
+      el.classList.toggle("hidden", !showCentros);
+    });
+  } catch {
+    // Em caso de erro, ocultar os links por segurança
+    document.querySelectorAll("[data-nav-cotacao], [data-nav-financeiro], [data-nav-centros]").forEach(el => {
+      el.classList.add("hidden");
+    });
+  }
 }
 
 function processUrlMessages() {

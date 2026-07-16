@@ -46,9 +46,9 @@
             href="../Stock/index.html">Logística</a>
           <a href="../Projectos/centroCustos.html"
             class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
-          <a href="../Projectos/Cotacao/index.html"
-            class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-
+          <a data-nav-cotacao href="../Projectos/Cotacao/index.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
+          <a data-nav-financeiro href="../Financeiro/financeiro.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Financeiro</a>
+          <a data-nav-centros href="../Financeiro/centrosGerais.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centros Gerais</a>
         </div>
       </div>
 
@@ -88,18 +88,23 @@
         href="../Projectos/ProjectGeral.html">
         <span class="material-symbols-outlined text-lg">construction</span> Obras
       </a>
-      <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-        href="../Projectos/centroCustos.html">
-        <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
-      </a>
-      <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-        href="../Projectos/Cotacao/index.html">
-        <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
-      </a>
       <a data-nav-logistics
         class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
         href="../Stock/index.html">
         <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+      </a>
+      <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+        href="../Projectos/centroCustos.html">
+        <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
+      </a>
+      <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Projectos/Cotacao/index.html">
+          <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
+      </a>
+      <a data-nav-financeiro class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Financeiro/financeiro.html">
+          <span class="material-symbols-outlined text-lg">payments</span> Financeiro
+      </a>
+      <a data-nav-centros class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Financeiro/centrosGerais.html">
+          <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
       </a>
       <button data-logout
         class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">

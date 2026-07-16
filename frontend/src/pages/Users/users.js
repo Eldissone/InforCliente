@@ -368,7 +368,7 @@ function filterDisplayCatalog(catalog) {
 async function loadPermissions() {
   const tbody = el("permTableBody");
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="7" class="px-7 py-10 text-center">
+  tbody.innerHTML = `<tr><td colspan="8" class="px-7 py-10 text-center">
     <div class="inline-flex items-center gap-3 text-sm text-slate-400 font-medium">
       <span class="material-symbols-outlined animate-spin text-lg">progress_activity</span>A carregar permissões…
     </div></td></tr>`;
@@ -381,7 +381,7 @@ async function loadPermissions() {
     initDefaultPermCollapse(permDisplayCatalog);
     populatePermModuleFilter(permDisplayCatalog);
   } catch {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar permissões.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-7 py-8 text-center text-sm text-red-400">Erro ao carregar permissões.</td></tr>`;
     permDisplayCatalog = PERM_DISPLAY_FALLBACK;
     return;
   }
@@ -456,7 +456,7 @@ function renderPermissionsTable() {
   if (!tbody) return;
   const catalog = filterDisplayCatalog(permDisplayCatalog);
   if (!catalog.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-7 py-8 text-center text-sm text-slate-400">Nenhuma permissão corresponde ao filtro.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-7 py-8 text-center text-sm text-slate-400">Nenhuma permissão corresponde ao filtro.</td></tr>`;
     return;
   }
 
@@ -472,7 +472,7 @@ function renderPermissionsTable() {
     const actionCount = group.rows.length;
 
     html += `<tr class="bg-slate-50/40 border-b border-slate-100 perm-module-row${collapsedCls}" data-module="${esc(group.module)}">
-      <td colspan="7">
+      <td colspan="8">
         <button type="button" class="perm-module-toggle" data-perm-toggle="${esc(group.module)}"
           aria-expanded="${expanded ? "true" : "false"}"
           aria-controls="perm-block-${esc(group.module)}">
@@ -486,7 +486,7 @@ function renderPermissionsTable() {
 
     if ((group.pages || []).length) {
       html += `<tr class="perm-pages-panel${hiddenCls}" data-parent-module="${esc(group.module)}" id="perm-pages-${esc(group.module)}">
-        <td colspan="7">
+        <td colspan="8">
           ${(group.pages || []).map((p) => `
             <span class="perm-page-chip" title="${esc(p.route || "")}">
               <span class="material-symbols-outlined text-[14px]">web</span>${esc(p.label)}
@@ -497,7 +497,7 @@ function renderPermissionsTable() {
 
     if ((group.tabs || []).length) {
       html += `<tr class="perm-tabs-header${hiddenCls}" data-parent-module="${esc(group.module)}">
-        <td colspan="7" class="px-7 py-2 pl-12 bg-violet-50/40 border-b border-violet-100">
+        <td colspan="8" class="px-7 py-2 pl-12 bg-violet-50/40 border-b border-violet-100">
           <span class="text-[9px] font-black uppercase tracking-widest text-violet-700">Abas visíveis na interface</span>
           <span class="text-[9px] font-medium text-violet-500/80 ml-2">— clique nas células para mostrar ou ocultar cada aba</span>
         </td>

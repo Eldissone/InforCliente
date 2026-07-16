@@ -61,6 +61,10 @@ const ACTION_LABELS = {
   tab_portal_contactos: "Aba: Contactos (portal)",
   tab_portal_stock_inventory: "Sub-aba: Inventário (portal)",
   tab_portal_stock_history: "Sub-aba: Diário (portal)",
+  // Navlinks
+  nav_cotacao: "Link nav: Cotação",
+  nav_financeiro: "Link nav: Financeiro",
+  nav_centros_gerais: "Link nav: Centros Gerais",
 };
 
 /**
@@ -269,6 +273,17 @@ const PERMISSION_GROUPS = [
     pages: [{ id: "pedidosExtras.main", label: "Centros Gerais e Pedidos Extra", route: "/Financeiro/centrosGerais.html" }],
     actions: ["view", "create", "approve", "pay", "delete", "full_access"],
   },
+  {
+    id: "navlinks",
+    label: "Links de Navegação (Header)",
+    icon: "link",
+    pages: [
+      { id: "navlinks.cotacao", label: "Link: Cotação", route: "*" },
+      { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
+      { id: "navlinks.centros_gerais", label: "Link: Centros Gerais", route: "/Financeiro/centrosGerais.html" },
+    ],
+    actions: ["nav_cotacao", "nav_financeiro", "nav_centros_gerais"],
+  },
 ];
 
 /** Rotas → permissão mínima para aceder à página */
@@ -323,6 +338,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "true", pay: "false", delete: "true", full_access: "false" },
+      navlinks: { nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -353,6 +369,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "false", pay: "true", delete: "false", full_access: "false" },
+      navlinks: { nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -386,6 +403,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "false", approve: "false", pay: "true", delete: "false", full_access: "false" },
+      navlinks: { nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -416,6 +434,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", approve: "false", pay: "false", delete: "false", full_access: "false" },
+      navlinks: { nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "false" },
     };
     return map[module]?.[action] ?? "false";
   }

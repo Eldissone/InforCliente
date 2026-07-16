@@ -123,21 +123,21 @@
                     <span>Gestor</span>
                 </a>
                 <div class="hidden lg:flex items-center gap-4">
-                    <a href="../Dashboard/index.html"
+                    <a data-nav-dashboard href="../Dashboard/index.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Dashboard</a>
                     <a href="../Clientes/clienteLista.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Clientes</a>
                     <a href="../Projectos/ProjectGeral.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Obras</a>
-                    <a href="../Stock/index.html"
+                    <a data-nav-logistics href="../Stock/index.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Logística</a>
                     <a href="../Projectos/centroCustos.html"
                         class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Planeamento</a>
-                    <a href="../Projectos/Cotacao/index.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Cotação</a>
-                    <a href="financeiro.html"
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Financeiro</a>
-                    <a href="centrosGerais.html"
+                    <a data-nav-cotacao href="../Projectos/Cotacao/index.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Cotação</a>
+                    <a data-nav-financeiro href="financeiro.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap">Financeiro</a>
+                    <a data-nav-centros href="centrosGerais.html"
                         class="text-sm font-semibold text-[#2afc8d] bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg whitespace-nowrap">Centros
                         Gerais</a>
                 </div>
@@ -163,19 +163,35 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-dashboard class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
+            </a>
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Clientes/clienteLista.html">
+                <span class="material-symbols-outlined text-lg">group</span> Clientes
             </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
+            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Stock/index.html">
+                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
+            </a>
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/centroCustos.html">
+                <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
+            </a>
+            <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Projectos/Cotacao/index.html">
+                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
+            </a>
+            <a data-nav-financeiro class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="financeiro.html">
                 <span class="material-symbols-outlined text-lg">payments</span> Financeiro
             </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-centros class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="centrosGerais.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
             </a>
