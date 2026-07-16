@@ -31,7 +31,7 @@ async function loadClients() {
 
 let state = {
   page: 1,
-  pageSize: 10,
+  pageSize: 12,
   total: 0,
   search: "",
   status: "",
@@ -39,6 +39,114 @@ let state = {
   dateFrom: "",
   view: localStorage.getItem("ProjectGeral.view") || "list",
 };
+
+function renderPagination() {
+  const effectivePageSize = state.view === "grid" ? 12 : state.pageSize;
+  const totalPages = Math.ceil(state.total / effectivePageSize);
+
+  // Remove existing pagination
+  const existing = document.getElementById("projectsPagination");
+  if (existing) existing.remove();
+
+  if (totalPages <= 1) return;
+
+  const container = document.createElement("div");
+  container.id = "projectsPagination";
+  container.className = "flex items-center justify-center gap-2 mb-12";
+
+  const buildBtn = (label, page, disabled, isActive = false) => {
+    const btn = document.createElement("button");
+    btn.innerHTML = label;
+    btn.disabled = disabled;
+    if (isActive) {
+      btn.className = "w-10 h-10 rounded-xl bg-slate-900 text-[#2afc8d] font-black text-sm shadow-lg flex items-center justify-center";
+    } else if (disabled) {
+      btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-sm flex items-center justify-center cursor-not-allowed";
+    } else {
+      btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-50 hover:border-slate-200 transition-all flex items-center justify-center shadow-sm";
+    }
+    if (!disabled && !isActive) {
+      btn.addEventListener("click", () => {
+        state.page = page;
+        load().catch((err) => toast(err.message || "Erro", { type: "error" }));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+    return btn;
+  };
+
+  // Prev button
+  const prevBtn = document.createElement("button");
+  prevBtn.disabled = state.page === 1;
+  prevBtn.className = state.page === 1
+    ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+    : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+  prevBtn.innerHTML = `<span class="material-symbols-outlined text-sm">chevron_left</span> Anterior`;
+  if (state.page > 1) {
+    prevBtn.addEventListener("click", () => {
+      state.page--;
+      load().catch((err) => toast(err.message || "Erro", { type: "error" }));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+  container.appendChild(prevBtn);
+
+  // Page number buttons (show max 5)
+  const delta = 2;
+  const range = [];
+  for (let i = Math.max(1, state.page - delta); i <= Math.min(totalPages, state.page + delta); i++) {
+    range.push(i);
+  }
+  if (range[0] > 1) {
+    container.appendChild(buildBtn("1", 1, false, false));
+    if (range[0] > 2) {
+      const dots = document.createElement("span");
+      dots.textContent = "...";
+      dots.className = "text-slate-400 font-bold text-sm px-1";
+      container.appendChild(dots);
+    }
+  }
+  range.forEach(p => container.appendChild(buildBtn(String(p), p, false, p === state.page)));
+  if (range[range.length - 1] < totalPages) {
+    if (range[range.length - 1] < totalPages - 1) {
+      const dots = document.createElement("span");
+      dots.textContent = "...";
+      dots.className = "text-slate-400 font-bold text-sm px-1";
+      container.appendChild(dots);
+    }
+    container.appendChild(buildBtn(String(totalPages), totalPages, false, false));
+  }
+
+  // Next button
+  const nextBtn = document.createElement("button");
+  nextBtn.disabled = state.page === totalPages;
+  nextBtn.className = state.page === totalPages
+    ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+    : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+  nextBtn.innerHTML = `Próximo <span class="material-symbols-outlined text-sm">chevron_right</span>`;
+  if (state.page < totalPages) {
+    nextBtn.addEventListener("click", () => {
+      state.page++;
+      load().catch((err) => toast(err.message || "Erro", { type: "error" }));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
+  container.appendChild(nextBtn);
+
+  // Info label
+  const info = document.createElement("span");
+  info.className = "text-xs font-bold text-slate-400 ml-2 hidden md:inline";
+  const from = (state.page - 1) * effectivePageSize + 1;
+  const to = Math.min(state.page * effectivePageSize, state.total);
+  info.textContent = `${from}–${to} de ${state.total}`;
+  container.appendChild(info);
+
+  // Insert after the table section or grid
+  const tableContainer = document.getElementById("projectsTableContainer");
+  const grid = document.getElementById("projectsGrid");
+  const anchor = state.view === "grid" ? grid : tableContainer;
+  anchor.parentNode.insertBefore(container, anchor.nextSibling);
+}
 
 function renderStatusPill(status) {
   if (status === "ON_HOLD") {
@@ -226,7 +334,7 @@ async function load() {
     region: state.region,
     ...(state.dateFrom ? { dateFrom: new Date(state.dateFrom).toISOString() } : {}),
     page: String(state.page),
-    pageSize: isGrid ? "12" : String(state.pageSize),
+    pageSize: String(state.pageSize),
     sort: "created_asc"
   });
 
@@ -250,10 +358,12 @@ async function load() {
   }
 
   if (isGrid) {
-    grid.innerHTML = data.items.map((p, i) => renderGridItem(p, (state.page - 1) * 12 + i + 1)).join("");
+    grid.innerHTML = data.items.map((p, i) => renderGridItem(p, (state.page - 1) * state.pageSize + i + 1)).join("");
   } else {
     tbody.innerHTML = data.items.map((p, i) => renderRow(p, (state.page - 1) * state.pageSize + i + 1)).join("");
   }
+
+  renderPagination();
 
   // --- Recycle Bin ---
   const recycleContainerId = "projectsRecycleBin";

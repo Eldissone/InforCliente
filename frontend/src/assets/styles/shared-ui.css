@@ -1,5 +1,7 @@
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spinner {
@@ -13,12 +15,17 @@
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, rgba(0,0,0,0.05) 25%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.05) 75%);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.05) 25%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.05) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
@@ -48,8 +55,15 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .btn-text-long {
@@ -60,7 +74,7 @@
   .btn-text-long {
     display: none !important;
   }
-  
+
   .btn-with-long-text {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -72,6 +86,7 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -87,7 +102,7 @@
 
 .overflow-x-auto:has(> table) {
   overflow-y: auto;
-  max-height: 65vh;
+  max-height: 75vh;
 }
 
 .table-responsive thead th,
@@ -100,7 +115,8 @@
 
 
 .table-responsive table {
-  min-width: 600px; /* Force minimum width to enable scrolling */
+  min-width: 600px;
+  /* Force minimum width to enable scrolling */
 }
 
 @media (max-width: 768px) {
@@ -158,4 +174,3 @@
 .modal-overlay.open .modal-box {
   transform: scale(1);
 }
-
