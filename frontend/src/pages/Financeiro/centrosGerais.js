@@ -135,10 +135,42 @@ function extraReferenceLabel(it) {
   if (it.type === "GERAL") {
     return it.generalCostCenter?.name || "Centro geral";
   }
-  if (it.project) {
-    return `${it.project.name}${it.project.code ? ` (${it.project.code})` : ""}`;
+  const obra = it.project
+    ? `${it.project.name}${it.project.code ? ` (${it.project.code})` : ""}`
+    : "";
+  const cc = it.costCenter
+    ? `${it.costCenter.code ? `${it.costCenter.code} — ` : ""}${it.costCenter.name}`
+    : "";
+  if (obra && cc) return `${obra} · ${cc}`;
+  return obra || cc || "—";
+}
+
+async function loadCostCentersForExtra(projectId, selectedId = "") {
+  const select = document.getElementById("extraCostCenterId");
+  if (!select) return;
+  if (!projectId) {
+    select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
+    select.value = "";
+    return;
   }
-  return "—";
+  select.innerHTML = `<option value="">A carregar...</option>`;
+  try {
+    const data = await apiRequest(`/cost-centers/project/${projectId}`);
+    const items = (data.items || []).filter((cc) => cc.active !== false);
+    select.innerHTML =
+      `<option value="">Selecionar centro de custo...</option>` +
+      items
+        .map(
+          (cc) =>
+            `<option value="${cc.id}">${cc.code} — ${cc.name}${cc.currency ? ` (${cc.currency})` : ""}</option>`
+        )
+        .join("");
+    if (selectedId) select.value = selectedId;
+  } catch (err) {
+    console.error("Erro ao carregar centros de custo:", err);
+    select.innerHTML = `<option value="">Erro ao carregar centros</option>`;
+    showToast("Erro ao carregar centros de custo: " + err.message, "error");
+  }
 }
 
 function renderExtraRow(it) {
@@ -292,8 +324,13 @@ function setExtraType(type) {
   document.getElementById("btnTypeObra").classList.toggle("active", !isGeral);
   document.getElementById("rowGeneralCc").classList.toggle("hidden", !isGeral);
   document.getElementById("rowProject").classList.toggle("hidden", isGeral);
+  document.getElementById("rowObraCostCenter").classList.toggle("hidden", isGeral);
   document.getElementById("extraGeneralCcId").required = isGeral;
   document.getElementById("extraProjectId").required = !isGeral;
+  document.getElementById("extraCostCenterId").required = !isGeral;
+  if (isGeral) {
+    document.getElementById("extraCostCenterId").value = "";
+  }
   document.getElementById("modalExtraTitle").textContent = isGeral
     ? "Novo Pedido Extra Geral"
     : "Novo Pedido Extra da Obra";
@@ -360,6 +397,7 @@ function setExtraFormLocked(locked) {
   document.getElementById("btnTypeObra").disabled = locked;
   document.getElementById("extraGeneralCcId").disabled = locked;
   document.getElementById("extraProjectId").disabled = locked;
+  document.getElementById("extraCostCenterId").disabled = locked;
   document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
 }
 
@@ -394,6 +432,7 @@ async function openExtraModalForEdit(id) {
     document.getElementById("extraGeneralCcId").value = item.generalCostCenterId || "";
   } else {
     document.getElementById("extraProjectId").value = item.projectId || "";
+    await loadCostCentersForExtra(item.projectId, item.costCenterId || "");
     await ensureFundsLoadedForExtra("OBRA");
   }
 
@@ -445,6 +484,7 @@ async function submitExtra(e) {
   const body = {
     type,
     projectId: type === "OBRA" ? document.getElementById("extraProjectId").value || null : null,
+    costCenterId: type === "OBRA" ? document.getElementById("extraCostCenterId").value || null : null,
     generalCostCenterId:
       type === "GERAL" ? document.getElementById("extraGeneralCcId").value || null : null,
     description: document.getElementById("extraDesc").value.trim(),
@@ -463,6 +503,10 @@ async function submitExtra(e) {
     }
     if (type === "OBRA" && !body.projectId) {
       showToast("Seleccione a obra", "error");
+      return;
+    }
+    if (type === "OBRA" && !body.costCenterId) {
+      showToast("Seleccione o centro de custo da obra", "error");
       return;
     }
   }
@@ -543,9 +587,11 @@ function bindEvents() {
   document.getElementById("btnTypeObra")?.addEventListener("click", () => setExtraType("OBRA"));
   document.getElementById("extraSource")?.addEventListener("change", toggleExtraFundRow);
   document.getElementById("extraFundId")?.addEventListener("change", populateExtraCardOptions);
-  document.getElementById("extraProjectId")?.addEventListener("change", () => {
+  document.getElementById("extraProjectId")?.addEventListener("change", async () => {
     if (document.getElementById("extraType").value === "OBRA") {
-      ensureFundsLoadedForExtra("OBRA");
+      const projectId = document.getElementById("extraProjectId").value;
+      await loadCostCentersForExtra(projectId);
+      await ensureFundsLoadedForExtra("OBRA");
     }
   });
   document.getElementById("formExtra")?.addEventListener("submit", submitExtra);

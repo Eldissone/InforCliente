@@ -225,7 +225,11 @@ function setBudgetViewMode(mode) {
 
   updateBudgetWorkflowButtonsVisibility();
   updateNeedsStatusFilterOptions();
-  loadNeeds({ preserveScroll: true });
+  if (budgetViewMode === "realizado") {
+    loadSummary().then(() => loadNeeds({ preserveScroll: true }));
+  } else {
+    loadNeeds({ preserveScroll: true });
+  }
 }
 
 function needPrevistoDisplayStatus(n) {
@@ -398,6 +402,14 @@ function patchCachedNeeds(ids, patch) {
   cachedNeeds = cachedNeeds.map((n) => (idSet.has(n.id) ? { ...n, ...patch } : n));
 }
 
+function needsPaginationLabel(itemCount) {
+  const extraCount =
+    budgetViewMode === "realizado"
+      ? (dashSummary?.extrasByCostCenter || []).reduce((s, g) => s + (g.items?.length || 0), 0)
+      : 0;
+  return `${itemCount} itens no Orçamento Geral${extraCount ? ` · ${extraCount} pedido(s) extra` : ""} · visão ${budgetViewMode === "previsto" ? "Previsto" : "Realizado"}`;
+}
+
 async function reloadNeedsPreservingUi() {
   return loadNeeds({ preserveScroll: true });
 }
@@ -415,8 +427,7 @@ function refreshNeedsTableFromCache(options = {}) {
 
   renderNeedsTable(items);
 
-  document.getElementById("needsPagination").textContent =
-    `${items.length} itens no Orçamento Geral · visão ${budgetViewMode === "previsto" ? "Previsto" : "Realizado"}`;
+  document.getElementById("needsPagination").textContent = needsPaginationLabel(items.length);
 
   restoreNeedsTableUiState(uiState);
 }
@@ -465,6 +476,10 @@ async function loadSummary() {
     // Dashboard extra cards
     loadWeeklyBreakdown();
     loadTopExpenses();
+    const needsTabActive = document.getElementById("tab-necessidades")?.classList.contains("active");
+    if (needsTabActive && budgetViewMode === "realizado") {
+      refreshNeedsTableFromCache({ preserveUi: true });
+    }
   } catch (err) {
     showToast("Erro ao carregar resumo: " + err.message, "error");
   }
@@ -651,8 +666,7 @@ async function loadNeeds(options = {}) {
     cachedNeeds = items;
     renderNeedsTable(items);
 
-    document.getElementById("needsPagination").textContent =
-      `${items.length} itens no Orçamento Geral · visão ${budgetViewMode === "previsto" ? "Previsto" : "Realizado"}`;
+    document.getElementById("needsPagination").textContent = needsPaginationLabel(items.length);
 
     restoreNeedsTableUiState(uiState);
 
@@ -665,7 +679,11 @@ function renderNeedsTable(items) {
   const tbody = document.getElementById("needsTableBody");
   if (!tbody) return;
 
-  if (!items.length) {
+  const extrasGroups =
+    budgetViewMode === "realizado" ? dashSummary?.extrasByCostCenter || [] : [];
+  const hasExtras = extrasGroups.some((g) => (g.items || []).length > 0);
+
+  if (!items.length && !hasExtras) {
     tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
     return;
   }
@@ -673,9 +691,15 @@ function renderNeedsTable(items) {
   const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
   const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
   const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+  const extraStatusLabels = { PENDENTE: "Pendente", APROVADO: "A liquidar", PAGO: "Pago", REJEITADO: "Rejeitado", CANCELADO: "Cancelado" };
+  const extraStatusClasses = {
+    PENDENTE: "badge-pending",
+    APROVADO: "badge-in-quotation",
+    PAGO: "badge-paid",
+    REJEITADO: "badge-rejected",
+    CANCELADO: "badge-rejected",
+  };
   const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
-  const unitColLabel = budgetViewMode === "previsto" ? "P. Previsto" : "P. Realizado";
-  const totalColLabel = budgetViewMode === "previsto" ? "Total Previsto" : "Total Realizado";
 
   const grouped = {};
   let totalObraGeral = 0;
@@ -694,7 +718,14 @@ function renderNeedsTable(items) {
     if (countsTowardTotal) totalObraGeral += totalObra;
   });
 
-  const currency = items[0]?.costCenter?.currency || "AOA";
+  if (budgetViewMode === "realizado") {
+    extrasGroups.forEach((g) => {
+      totalObraGeral += Number(g.totalPaid || 0);
+    });
+  }
+
+  const currency =
+    items[0]?.costCenter?.currency || extrasGroups[0]?.currency || "AOA";
 
   let html = `
     <tr style="background-color: #0f172a !important;">
@@ -783,6 +814,57 @@ function renderNeedsTable(items) {
         </tr>
       `;
     }).join("");
+  }
+
+  if (budgetViewMode === "realizado" && hasExtras) {
+    html += `
+      <tr style="background-color: #1e3a5f !important;">
+        <td class="font-bold text-white text-xs uppercase tracking-widest py-3" colspan="12">
+          <span class="material-symbols-outlined text-sm align-middle mr-1">add_shopping_cart</span>
+          Pedidos Extra
+        </td>
+      </tr>
+    `;
+
+    extrasGroups.forEach((group) => {
+      if (!group.items?.length) return;
+      const groupId = `extra-cc-group-${groupIndex++}`;
+      const ccLabel = group.code && group.name ? `${group.code} — ${group.name}` : group.name || "Sem centro";
+      const cur = group.currency || currency;
+      const paidTotal = Number(group.totalPaid || 0);
+
+      html += `
+        <tr class="bg-indigo-50 border-t border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors" onclick="toggleCCGroup('${groupId}')">
+          <td colspan="2" class="pl-4">
+            <span id="${groupId}-icon" class="material-symbols-outlined text-indigo-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
+          </td>
+          <td class="font-bold text-indigo-900 uppercase text-xs" colspan="4">${ccLabel}</td>
+          <td class="text-right font-bold text-indigo-900 text-xs" title="Total pago">${formatCurrency(paidTotal, cur)}</td>
+          <td colspan="5"></td>
+        </tr>
+      `;
+
+      html += group.items
+        .map((er, idx) => {
+          const amt = Number(er.amount || 0);
+          const countsPaid = er.status === "PAGO";
+          const totalClass = countsPaid ? "text-emerald-700" : "text-slate-500";
+          const dueLabel = er.paymentDueDate ? formatDateBR(er.paymentDueDate) : "—";
+          return `
+        <tr class="${groupId}-item">
+          <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg text-xs font-black text-indigo-600 tabular-nums">${idx + 1}</span></td>
+          <td class="font-medium text-slate-900 max-w-xs truncate" title="${er.description || ""}">${er.description || "—"}</td>
+          <td class="text-center text-xs text-slate-400" colspan="3">Pedido extra</td>
+          <td class="text-center text-xs text-slate-500">${dueLabel}</td>
+          <td class="text-right text-sm font-bold ${totalClass}">${formatCurrency(amt, er.currency || cur)}</td>
+          <td colspan="2" class="text-xs text-slate-400">${er.requestedBy || "—"}</td>
+          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${extraStatusClasses[er.status] || "badge-pending"}">${extraStatusLabels[er.status] || er.status}</span></td>
+          <td class="text-center text-slate-300">—</td>
+        </tr>
+      `;
+        })
+        .join("");
+    });
   }
 
   tbody.innerHTML = html;

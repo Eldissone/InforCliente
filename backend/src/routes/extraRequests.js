@@ -183,6 +183,9 @@ extraRequestRoutes.post(
     if (body.type === "OBRA" && !body.projectId) {
       return res.status(400).json({ error: "PROJECT_REQUIRED_FOR_OBRA" });
     }
+    if (body.type === "OBRA" && !body.costCenterId) {
+      return res.status(400).json({ error: "COST_CENTER_REQUIRED_FOR_OBRA" });
+    }
     if (body.type === "GERAL" && !body.generalCostCenterId) {
       return res.status(400).json({ error: "GENERAL_COST_CENTER_REQUIRED" });
     }
@@ -192,13 +195,19 @@ extraRequestRoutes.post(
     if (body.paymentSource === "FUNDO_MANEIO" && !body.fundId) {
       return res.status(400).json({ error: "FUND_REQUIRED_FOR_FUNDO_MANEIO" });
     }
+    if (body.type === "OBRA") {
+      const cc = await prisma.costCenter.findFirst({
+        where: { id: body.costCenterId, projectId: body.projectId },
+      });
+      if (!cc) return res.status(400).json({ error: "COST_CENTER_NOT_IN_PROJECT" });
+    }
 
     const u = req.user || {};
     const created = await prisma.extraRequest.create({
       data: {
         type: body.type,
         projectId: body.type === "OBRA" ? body.projectId || null : null,
-        costCenterId: body.costCenterId || null,
+        costCenterId: body.type === "OBRA" ? body.costCenterId || null : null,
         generalCostCenterId: body.type === "GERAL" ? body.generalCostCenterId || null : null,
         description: body.description,
         amount: String(body.amount),

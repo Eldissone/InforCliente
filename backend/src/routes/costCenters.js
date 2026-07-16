@@ -679,11 +679,39 @@ costCenterRoutes.get(
     txAgg.forEach((t) => {
       const ccId = t.costCenterId;
       if (!payMap[ccId]) payMap[ccId] = { budgeted: 0, paid: 0 };
-      
+
       payMap[ccId].budgeted += Number(t.amount || 0);
       if (t.status === "PAID") {
         payMap[ccId].paid += Number(t.realizedAmount || t.amount || 0);
       }
+    });
+
+    const extraRequests = await prisma.extraRequest.findMany({
+      where: {
+        projectId,
+        type: "OBRA",
+        status: { notIn: ["REJEITADO", "CANCELADO"] },
+      },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        currency: true,
+        status: true,
+        costCenterId: true,
+        requestedBy: true,
+        paymentDueDate: true,
+        paidAt: true,
+        createdAt: true,
+        costCenter: { select: { id: true, code: true, name: true, currency: true } },
+      },
+      orderBy: [{ costCenterId: "asc" }, { createdAt: "desc" }],
+    });
+
+    extraRequests.forEach((er) => {
+      if (er.status !== "PAGO" || !er.costCenterId) return;
+      if (!payMap[er.costCenterId]) payMap[er.costCenterId] = { budgeted: 0, paid: 0 };
+      payMap[er.costCenterId].paid += Number(er.amount || 0);
     });
 
     // Orçamento Previsto aprovado = baseline (originalUnitPrice) dos itens não pendentes/rejeitados
@@ -793,31 +821,57 @@ costCenterRoutes.get(
         : 0;
     });
 
-    // Pedidos extra da obra — aprovados (inclui já pagos) e total solicitado activo
-    const extraRequests = await prisma.extraRequest.findMany({
-      where: { projectId, type: "OBRA" },
-      select: { amount: true, currency: true, status: true },
+    const extrasByCostCenter = {};
+    extraRequests.forEach((er) => {
+      const ccKey = er.costCenterId || "__none__";
+      if (!extrasByCostCenter[ccKey]) {
+        extrasByCostCenter[ccKey] = {
+          costCenterId: er.costCenterId,
+          code: er.costCenter?.code || "—",
+          name: er.costCenter?.name || "Sem centro de custo",
+          currency: er.costCenter?.currency || er.currency || "AOA",
+          items: [],
+          totalPaid: 0,
+          totalActive: 0,
+        };
+      }
+      const amt = Number(er.amount || 0);
+      extrasByCostCenter[ccKey].items.push({
+        id: er.id,
+        description: er.description,
+        amount: amt,
+        currency: er.currency || "AOA",
+        status: er.status,
+        requestedBy: er.requestedBy,
+        paymentDueDate: er.paymentDueDate,
+        paidAt: er.paidAt,
+        createdAt: er.createdAt,
+      });
+      extrasByCostCenter[ccKey].totalActive += amt;
+      if (er.status === "PAGO") extrasByCostCenter[ccKey].totalPaid += amt;
     });
 
     const extrasByCurrency = {};
     extraRequests.forEach((er) => {
-      const currency = er.currency || "AOA";
+      const currency = er.costCenter?.currency || er.currency || "AOA";
       if (!extrasByCurrency[currency]) {
-        extrasByCurrency[currency] = { approved: 0, requested: 0 };
+        extrasByCurrency[currency] = { approved: 0, requested: 0, paid: 0 };
       }
       const amt = Number(er.amount || 0);
       if (er.status === "APROVADO" || er.status === "PAGO") {
         extrasByCurrency[currency].approved += amt;
       }
-      if (er.status !== "REJEITADO" && er.status !== "CANCELADO") {
-        extrasByCurrency[currency].requested += amt;
+      if (er.status === "PAGO") {
+        extrasByCurrency[currency].paid += amt;
       }
+      extrasByCurrency[currency].requested += amt;
     });
 
     return res.json({
       summary,
       totals: totalsByCurrency,
       extras: extrasByCurrency,
+      extrasByCostCenter: Object.values(extrasByCostCenter),
     });
   })
 );
