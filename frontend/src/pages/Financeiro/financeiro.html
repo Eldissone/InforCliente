@@ -774,7 +774,7 @@
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
 
-                <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos & Auditoria
+                <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos
                 </h2>
                 <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Todas as obras · visão
                     transversal</p>
@@ -799,10 +799,6 @@
             <button class="fin-tab-btn" data-tab="pedidos">
                 <span class="material-symbols-outlined text-base align-middle mr-1">local_shipping</span>Plano de
                 Pedidos
-            </button>
-            <button class="fin-tab-btn" data-tab="auditoria">
-                <span class="material-symbols-outlined text-base align-middle mr-1">fact_check</span>Auditoria de
-                Faturas
             </button>
         </div>
 
@@ -862,76 +858,6 @@
             </div>
         </div>
 
-        <!-- Tab: Auditoria / Contabilidade -->
-        <div class="fin-tab-panel" id="tab-auditoria">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="kpi-card">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Por certificar</p>
-                    <p id="auditKpiPending" class="text-2xl font-bold text-amber-600">—</p>
-                </div>
-                <div class="kpi-card">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Conformes</p>
-                    <p id="auditKpiConforme" class="text-2xl font-bold text-emerald-600">—</p>
-                </div>
-                <div class="kpi-card">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Divergentes</p>
-                    <p id="auditKpiDivergente" class="text-2xl font-bold text-red-600">—</p>
-                </div>
-                <div class="kpi-card">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Total liquidado</p>
-                    <p id="auditKpiTotal" class="text-2xl font-bold text-slate-900">—</p>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div
-                    class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h3 class="font-bold text-slate-900">Auditoria de Faturas</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Certificação de despesas liquidadas contra
-                            transferências e fundo de maneio</p>
-                    </div>
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <select id="auditProjFilter"
-                            class="h-10 max-w-[200px]  px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
-                            <option value="">Todas as Obras</option>
-                        </select>
-                        <select id="auditStatusFilter"
-                            class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                            <option value="">Todos os estados</option>
-                            <option value="PENDENTE">Por certificar</option>
-                            <option value="CONFORME">Conformes</option>
-                            <option value="DIVERGENTE">Divergentes</option>
-                        </select>
-                        <input id="auditSearch" type="search" placeholder="Pesquisar..."
-                            class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 w-44">
-                    </div>
-                </div>
-                <div class="overflow-x-auto custom-scroll">
-                    <table class="w-full fin-table">
-                        <thead>
-                            <tr>
-                                <th class="text-left w-28">Data</th>
-                                <th class="text-left">Obra</th>
-                                <th class="text-left min-w-[180px]">Descrição</th>
-                                <th class="text-left">Fornecedor</th>
-                                <th class="text-right w-36">Valor</th>
-                                <th class="text-center w-16">Fatura</th>
-                                <th class="text-center w-36">Certificação</th>
-                                <th class="text-center w-24">Acções</th>
-                            </tr>
-                        </thead>
-                        <tbody id="auditTableBody">
-                            <tr>
-                                <td colspan="8">
-                                    <div class="spinner my-8"></div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </main>
 
 
