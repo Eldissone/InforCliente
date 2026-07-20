@@ -21,7 +21,8 @@ function needWorkflowState(need) {
     isApproved: status === "APPROVED",
     isInAnalysis: status === "EM_ANALISE",
     isOrdered: status === "ORDERED",
-    isLocked: ["APPROVED", "EM_ANALISE"].includes(status) || status === "ORDERED",
+    isPaid: status === "PAID",
+    isLocked: status === "PAID" || ["APPROVED", "EM_ANALISE", "ORDERED"].includes(status),
   };
 }
 
@@ -1176,15 +1177,24 @@ async function sendNeedToFinanceFromModal({ needId, need, ccId, apiRequest, show
 }
 
 async function approveNeedAnalysis({ needId, need, apiRequest, showToast, onApproved, suppliers, openProformaViewer }) {
-  if (!confirm("Confirmar aprovação desta análise? O item ficará aprovado (pagamento continua pendente até ir ao cronograma).")) return;
+  if (need?.status === "APPROVED") {
+    showToast?.("Análise já aprovada — pode enviar ao financeiro.", "info");
+    return;
+  }
+  if (need?.status !== "EM_ANALISE") {
+    showToast?.("Este item não está em análise.", "error");
+    return;
+  }
+  if (!confirm("Confirmar aprovação desta análise? O item ficará pronto para envio ao financeiro (pagamento continua pendente).")) return;
   try {
     const result = await apiRequest(`/quotes/need/${needId}/approve-analysis`, { method: "PATCH" });
+    const updated = { ...need, ...result.need, status: result.need?.status || "APPROVED" };
     showToast?.("Análise aprovada — item pronto para envio ao financeiro.", "success");
-    window.__quoteModalNeed = { ...need, ...result.need, status: "APPROVED" };
+    window.__quoteModalNeed = updated;
     await onApproved?.();
     await loadPresentedPrices({
       needId,
-      need: { ...need, ...result.need, status: "APPROVED" },
+      need: updated,
       suppliers,
       apiRequest,
       openProformaViewer,
@@ -1498,18 +1508,18 @@ export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast
 
 
 export async function openQuotePricingModal({
-
   need,
-
   suppliers,
-
   apiRequest,
-
   openProformaViewer,
-
+  showToast,
 }) {
-
   if (!need) return;
+
+  if (need.status === "PAID") {
+    showToast?.("Item pago — cotação bloqueada.", { type: "info" });
+    return;
+  }
 
 
 

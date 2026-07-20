@@ -341,6 +341,9 @@ quoteRoutes.post(
 
     // Se é a primeira cotação, mudar o status do need para IN_QUOTATION se estiver PENDING
     const need = await prisma.workNeed.findUnique({ where: { id: needId } });
+    if (need && isNeedWorkflowLocked(need.status)) {
+      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
+    }
     if (need && need.status === "PENDING") {
       await prisma.workNeed.update({
         where: { id: needId },
@@ -782,7 +785,7 @@ quoteRoutes.post(
   })
 );
 
-// Aprovar item em análise — passa a APPROVED (ainda sem pagamento)
+// Aprovar item em análise — passa a APPROVED (pagamento continua pendente; exibe-se como «Em Análise» no orçamento)
 quoteRoutes.patch(
   "/need/:needId/approve-analysis",
   asyncHandler(async (req, res) => {
@@ -797,11 +800,17 @@ quoteRoutes.patch(
     });
     if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
     if (need.status !== "EM_ANALISE") {
-      return res.status(400).json({ error: "NEED_NOT_IN_ANALYSIS" });
+      return res.status(400).json({
+        error: "NEED_NOT_IN_ANALYSIS",
+        message: "Só é possível aprovar análise de itens com estado «Em Análise».",
+      });
     }
     const selectedQuote = need.quotes[0];
     if (!selectedQuote?.proformaUrl) {
-      return res.status(400).json({ error: "PROPOSAL_REQUIRED" });
+      return res.status(400).json({
+        error: "PROPOSAL_REQUIRED",
+        message: "Carregue a proposta/proforma antes de aprovar a análise.",
+      });
     }
 
     const updatedNeed = await prisma.workNeed.update({

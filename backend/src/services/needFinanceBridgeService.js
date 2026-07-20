@@ -1,5 +1,7 @@
 const { prisma } = require("../db");
+const { activeProjectRelationFilter } = require("./projectLifecycleService");
 const { mapNeedBudgetFields, needLineTotal } = require("./needBudgetService");
+const { needReadyForFinance } = require("./needPaymentStatusService");
 
 function httpError(code, message, status = 400) {
   const err = new Error(message);
@@ -37,8 +39,12 @@ async function loadNeedForFinanceSend(needId, ccId) {
   if (need.costCenterId !== ccId) {
     throw httpError("COST_CENTER_MISMATCH", "Centro de custos inválido para esta necessidade", 400);
   }
-  if (need.status !== "APPROVED") {
-    throw httpError("NEED_NOT_APPROVED", "O item tem de estar aprovado antes de enviar ao financeiro", 400);
+  if (!needReadyForFinance(need)) {
+    throw httpError(
+      "NEED_NOT_APPROVED",
+      "O item tem de estar em análise (com preço) antes de enviar ao financeiro",
+      400
+    );
   }
   if (need.scheduled) {
     throw httpError("ALREADY_SENT_TO_FINANCE", "Item já enviado ao financeiro", 400);
@@ -89,10 +95,10 @@ async function sendNeedToFinance({ needId, ccId }) {
 
 async function listPendingFinanceScheduling({ projectId } = {}) {
   const where = {
-    status: "APPROVED",
+    status: { in: ["EM_ANALISE", "APPROVED"] },
     scheduled: true,
     payments: { none: {} },
-    ...(projectId ? { projectId } : {}),
+    ...(projectId ? { projectId } : { project: activeProjectRelationFilter() }),
   };
 
   const items = await prisma.workNeed.findMany({

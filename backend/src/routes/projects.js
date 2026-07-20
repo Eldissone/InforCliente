@@ -9,6 +9,11 @@ const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
 const { getStaffOwnProjectCondition } = require("../services/scopeService");
+const {
+  softDeleteProject,
+  restoreProject,
+  permanentDeleteProject,
+} = require("../services/projectLifecycleService");
 const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
@@ -607,12 +612,7 @@ projectRoutes.delete(
   requirePermission("obras", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    
-    // Soft delete
-    await prisma.project.update({
-      where: { id },
-      data: { active: false }
-    });
+    await softDeleteProject(id);
 
     return res.json({ ok: true });
   })
@@ -624,10 +624,7 @@ projectRoutes.post(
   requirePermission("obras", "manage"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    await prisma.project.update({
-      where: { id },
-      data: { active: true }
-    });
+    await restoreProject(id);
     return res.json({ ok: true });
   })
 );
@@ -638,32 +635,7 @@ projectRoutes.delete(
   requirePermission("obras", "delete"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-
-    // Encontrar armazéns ligados a esta obra
-    const projectWarehouses = await prisma.warehouse.findMany({
-      where: { projectId: id },
-      select: { id: true }
-    });
-    const warehouseIds = projectWarehouses.map(w => w.id);
-
-    const txOps = [];
-
-    // Limpar armazéns ligados à obra
-    if (warehouseIds.length > 0) {
-      txOps.push(prisma.warehouseStock.deleteMany({ where: { warehouseId: { in: warehouseIds } } }));
-      txOps.push(prisma.stockMovement.deleteMany({ where: { warehouseId: { in: warehouseIds } } }));
-      txOps.push(prisma.item.updateMany({ where: { targetWarehouseId: { in: warehouseIds } }, data: { targetWarehouseId: null } }));
-      txOps.push(prisma.warehouse.deleteMany({ where: { projectId: id } }));
-    }
-
-    // Limpar movimentos de stock e outros ligados diretamente à obra
-    txOps.push(prisma.stockMovement.deleteMany({ where: { projectId: id } }));
-    txOps.push(prisma.alert.deleteMany({ where: { projectId: id } }));
-
-    // Finalmente, apagar a obra
-    txOps.push(prisma.project.delete({ where: { id } }));
-
-    await prisma.$transaction(txOps);
+    await permanentDeleteProject(id);
 
     return res.json({ ok: true });
   })

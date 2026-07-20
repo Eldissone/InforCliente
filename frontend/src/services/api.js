@@ -57,6 +57,9 @@ const API_ERROR_MESSAGES = {
   COMPROVATIVO_REQUIRED: "Comprovativo de pagamento é obrigatório para liquidar.",
   FINANCEIRO_ONLY: "Liquidação apenas no Perfil Financeiro.",
   PAYMENT_NOT_FOUND: "Lançamento não encontrado.",
+  NEED_PAID_LOCKED: "Item pago — alteração apenas com permissão de gestão de obras.",
+  NEED_NOT_IN_ANALYSIS: "Só é possível aprovar análise de itens com estado «Em Análise».",
+  PROPOSAL_REQUIRED: "Carregue a proposta/proforma antes de continuar.",
 };
 
 function resolveApiErrorMessage(data, status) {

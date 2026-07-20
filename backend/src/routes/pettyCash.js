@@ -70,7 +70,9 @@ pettyCashRoutes.get(
     const includeInactive = req.query.includeInactive === "true";
 
     const where = {
-      ...(projectId ? { projectId } : {}),
+      ...(projectId
+        ? { projectId }
+        : { OR: [{ projectId: null }, { project: { active: true } }] }),
       ...(includeInactive ? {} : { active: true }),
     };
 

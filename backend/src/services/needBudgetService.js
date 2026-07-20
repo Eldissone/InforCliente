@@ -15,6 +15,9 @@ function isMarketWorkflowStarted(need) {
 
 function needRealizadoDisplayStatus(need) {
   if (!need) return "PENDING";
+  if (need.status === "PAID") return "PAID";
+  const realUnit = needRealizadoUnitPrice(need);
+  if (realUnit != null && realUnit > 0) return "EM_ANALISE";
   if (need.status === "APPROVED" && !isMarketWorkflowStarted(need)) return "PENDING";
   return need.status;
 }
@@ -90,6 +93,7 @@ function mapNeedBudgetFields(need) {
     withinPrevisto: !exceedsPrevisto || Boolean(need.priceExceptionReason),
     marketWorkflowStarted: isMarketWorkflowStarted(need),
     realizadoDisplayStatus: needRealizadoDisplayStatus(need),
+    isPaidLocked: need.status === "PAID",
   };
 }
 

@@ -13,6 +13,7 @@ const {
   resolveAllowedFromMap,
 } = require("../services/permissionResolver");
 const { createLog } = require("../services/logService");
+const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
 
@@ -84,6 +85,7 @@ extraRequestRoutes.get(
       ...(projectId ? { projectId } : {}),
       ...(generalCostCenterId ? { generalCostCenterId } : {}),
       ...(status ? { status } : {}),
+      ...(!projectId ? { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] } : {}),
     };
 
     const [total, items] = await Promise.all([
@@ -110,7 +112,7 @@ extraRequestRoutes.get(
     const items = await prisma.extraRequest.findMany({
       where: {
         status: "APROVADO",
-        ...(projectId ? { projectId } : {}),
+        ...(projectId ? { projectId } : { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] }),
       },
       orderBy: [{ approvedAt: "desc" }, { createdAt: "desc" }],
       include: EXTRA_INCLUDE,

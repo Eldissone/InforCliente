@@ -1,6 +1,7 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { formatCurrency, formatDateBR } from "./format.js";
 import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
+import { openDocumentViewer, closeDocumentViewer } from "./documentViewer.js";
 
 let liqAlreadyConfirmed = false;
 let _notificationRecipientsCache = null;
@@ -150,31 +151,11 @@ function renderAsideDocument(url, title = "Documento") {
 }
 
 function openDocumentAside(url, title = "Documento") {
-  const aside = document.getElementById("docAside");
-  const overlay = document.getElementById("docAsideOverlay");
-  const container = document.getElementById("docAsideContainer");
-  const titleEl = document.getElementById("docAsideTitle");
-  if (!aside || !overlay || !container) {
-    window.open(getAssetUrl(url), "_blank", "noopener,noreferrer");
-    return;
-  }
-  if (titleEl) titleEl.textContent = title;
-  container.innerHTML = renderAsideDocument(url, title);
-  document.body.classList.add("doc-viewer-open");
-  overlay.classList.remove("hidden");
-  requestAnimationFrame(() => {
-    overlay.classList.remove("opacity-0");
-    aside.classList.remove("translate-x-full");
-  });
+  openDocumentViewer(url, title);
 }
 
 function closeDocumentAside() {
-  const aside = document.getElementById("docAside");
-  const overlay = document.getElementById("docAsideOverlay");
-  document.body.classList.remove("doc-viewer-open");
-  aside?.classList.add("translate-x-full");
-  overlay?.classList.add("opacity-0");
-  setTimeout(() => overlay?.classList.add("hidden"), 300);
+  closeDocumentViewer();
 }
 
 function renderLiqDocRow({ kind = "comprovativo", required = false, removable = true } = {}) {

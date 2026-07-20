@@ -1,5 +1,6 @@
 import { markNotificationRead } from "../services/chatApi.js";
 import { apiRequest, getAssetUrl } from "../services/api.js";
+import { openDocumentViewer } from "./documentViewer.js";
 
 const queue = [];
 const seenIds = new Set();
@@ -50,8 +51,26 @@ function buildFinanceiroNotificationUrl(payload) {
   return `/Financeiro/financeiro.html?${params}`;
 }
 
+function isComprovativoNotification(payload) {
+  return (
+    String(payload?.metadata?.event || "") === "PAYMENT_CONFIRMED" &&
+    Boolean(payload?.metadata?.comprovativoUrl)
+  );
+}
+
 function openNotificationTarget(payload) {
   if (payload?.type === "PAYMENT") {
+    if (isComprovativoNotification(payload)) {
+      openDocumentViewer(payload.metadata.comprovativoUrl, "Comprovativo de pagamento");
+      return;
+    }
+
+    const event = String(payload?.metadata?.event || "");
+    if (event === "NEED_SENT_TO_FINANCE" && payload?.link) {
+      window.location.href = payload.link.startsWith("/") ? payload.link : `/${payload.link}`;
+      return;
+    }
+
     const financeiroUrl = buildFinanceiroNotificationUrl(payload);
     if (financeiroUrl) {
       window.location.href = financeiroUrl;
@@ -59,9 +78,9 @@ function openNotificationTarget(payload) {
     }
   }
 
-  const comprovativo = getComprovativoUrl(payload);
-  if (comprovativo) {
-    window.open(comprovativo, "_blank", "noopener,noreferrer");
+  const rawComprovativo = payload?.metadata?.comprovativoUrl;
+  if (rawComprovativo) {
+    openDocumentViewer(rawComprovativo, "Comprovativo de pagamento");
     return;
   }
   const link = payload?.link;
@@ -71,6 +90,7 @@ function openNotificationTarget(payload) {
 }
 
 function canOpenNotification(payload) {
+  if (isComprovativoNotification(payload)) return true;
   if (payload?.type === "PAYMENT" && (payload?.metadata?.paymentId || payload?.metadata?.extraRequestId)) {
     return true;
   }

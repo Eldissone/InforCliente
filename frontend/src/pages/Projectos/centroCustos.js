@@ -1,5 +1,6 @@
 import { apiRequest, getAssetUrl, apiUpload } from "/services/api.js";
-import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
+import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
+import { getSessionUser } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
@@ -126,7 +127,6 @@ function clearProjectSelection() {
 
 function reloadPaymentsView() {
   if (selectedProject) {
-    loadPayments();
     loadSummary();
     loadCronograma();
   }
@@ -255,6 +255,9 @@ function needPrevistoStatusForEdit(n) {
 function needRealizadoDisplayStatus(n) {
   if (!n) return "PENDING";
   if (n.realizadoDisplayStatus) return n.realizadoDisplayStatus;
+  if (n.status === "PAID") return "PAID";
+  const realUnit = n.realizadoUnitPrice ?? n.unitPrice;
+  if (realUnit != null && Number(realUnit) > 0) return "EM_ANALISE";
   if (n.status === "APPROVED" && !n.marketWorkflowStarted) return "PENDING";
   return n.status;
 }
@@ -263,8 +266,25 @@ function needBudgetDisplayStatus(n) {
   return budgetViewMode === "previsto" ? needPrevistoDisplayStatus(n) : needRealizadoDisplayStatus(n);
 }
 
+function isNeedPaidLocked(n) {
+  return n?.status === "PAID";
+}
+
+function canModifyPaidNeed() {
+  const role = (getSessionUser()?.role || "").toLowerCase();
+  if (role === "admin") return true;
+  return can("obras", "manage") || can("obras", "full_access");
+}
+
+function needIsLockedForEdit(n) {
+  return isNeedPaidLocked(n) && !canModifyPaidNeed();
+}
+
 function canRealizadoAgendar(n) {
-  return n.status === "APPROVED" && n.marketWorkflowStarted && !n.scheduled;
+  if (needIsLockedForEdit(n)) return false;
+  const st = n.status;
+  const hasPrice = Number(n.realizadoUnitPrice ?? n.unitPrice) > 0;
+  return (st === "EM_ANALISE" || st === "APPROVED") && n.marketWorkflowStarted && !n.scheduled && hasPrice;
 }
 
 function needCronogramaTotal(n) {
@@ -296,6 +316,7 @@ function isEligibleForRealizadoQuotation(n) {
 }
 
 function canRealizadoPrecificar(n) {
+  if (needIsLockedForEdit(n)) return false;
   if (!isPrevistoBaselineApproved(n)) return false;
   if (n.status === "IN_QUOTATION" || n.status === "ORDERED" || n.status === "EM_ANALISE") return true;
   if (n.status === "APPROVED" && n.marketWorkflowStarted) return true;
@@ -641,7 +662,7 @@ function populateCCSelects() {
   // Filter dropdowns
   const filterOpts = `<option value="">Todos os CCs</option>` + costCenters.map((cc) =>
     `<option value="${cc.id}">${cc.code} — ${cc.name}</option>`).join("");
-  ["needsCCFilter", "paysCCFilter"].forEach((id) => {
+  ["needsCCFilter"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = filterOpts;
   });
@@ -812,6 +833,7 @@ function renderNeedsTable(items) {
                 <span class="material-symbols-outlined text-base">schedule</span>
               </button>
               ` : ""}
+              ${!needIsLockedForEdit(n) ? `
               <button onclick="editNeed('${n.id}')" data-need-raw='${JSON.stringify(n).replace(/'/g, "&#39;")}'
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-amber-100 hover:text-amber-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">edit</span>
@@ -820,6 +842,11 @@ function renderNeedsTable(items) {
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">delete</span>
               </button>
+              ` : `
+              <span class="text-[10px] font-bold uppercase tracking-wide text-emerald-600 px-2 py-1 rounded-lg bg-emerald-50" title="Item pago — bloqueado">
+                Pago
+              </span>
+              `}
             </div>
           </td>
         </tr>
@@ -881,42 +908,6 @@ function renderNeedsTable(items) {
   tbody.innerHTML = html;
 }
 
-// ── Payments Table ─────────────────────────────────────────────────────────────
-async function loadPayments() {
-  if (!selectedProject) return;
-  const ccId = document.getElementById("paysCCFilter").value;
-  const status = document.getElementById("paysStatusFilter").value;
-  const tbody = document.getElementById("paysTableBody");
-  tbody.innerHTML = `<tr><td colspan="11"><div class="spinner my-8"></div></td></tr>`;
-
-  try {
-    const params = new URLSearchParams({ pageSize: "30" });
-    if (ccId) params.set("costCenterId", ccId);
-    if (status) params.set("status", status);
-
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/payments?${params}`);
-    const items = (data.items || []).slice().sort((a, b) => {
-      const da = new Date(a.paymentDate || 0).getTime();
-      const db = new Date(b.paymentDate || 0).getTime();
-      return da - db || String(a.docNumber || "").localeCompare(String(b.docNumber || ""));
-    });
-    const cur = selectedProject?.currency || "AOA";
-
-    if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><span class="material-symbols-outlined text-3xl">receipt_long</span><p class="text-sm font-semibold">Sem lançamentos registados</p></div></td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = items.map((p) => renderPaymentRowHtml(p, { allowEdit: true })).join("");
-
-    document.getElementById("paysPagination").textContent =
-      `${items.length} de ${data.total || items.length} lançamentos`;
-
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
-  }
-}
-
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 function switchTab(tabName) {
   document.querySelectorAll(".cc-tab-btn").forEach((btn) => {
@@ -926,7 +917,6 @@ function switchTab(tabName) {
     panel.classList.toggle("active", panel.id === `tab-${tabName}`);
   });
   if (tabName === "necessidades") loadNeeds();
-  if (tabName === "lancamentos") loadPayments();
   if (tabName === "cronograma") loadCronograma();
   if (tabName === "fundomaneio") loadFunds();
   if (tabName === "pendentes") {
@@ -1306,7 +1296,7 @@ async function submitCronograma(e) {
 
     showToast("Lançamentos gerados com sucesso!", "success");
     document.getElementById("modalCronograma").classList.remove("open");
-    await Promise.all([loadCronograma(), loadPayments(), loadSummary()]);
+    await Promise.all([loadCronograma(), loadSummary()]);
     switchTab("pendentes");
   } catch (err) {
     showToast("Erro: " + err.message, "error");
@@ -1414,9 +1404,6 @@ function bindEvents() {
   // Import Excel button
   document.getElementById("importExcelBtn").addEventListener("click", () => openImportModal());
 
-  // New Payment button
-  document.getElementById("newPayBtn").addEventListener("click", () => openPayModal());
-
   document.getElementById("paySupplier")?.addEventListener("input", resolvePaySupplierFromText);
 
   let cronogramaSearchTimer;
@@ -1434,9 +1421,6 @@ function bindEvents() {
   document.getElementById("budgetViewRealizado")?.addEventListener("click", () => setBudgetViewMode("realizado"));
   updateBudgetWorkflowButtonsVisibility();
   updateNeedsStatusFilterOptions();
-  ["paysCCFilter", "paysStatusFilter"].forEach((id) =>
-    document.getElementById(id).addEventListener("change", loadPayments)
-  );
 
   // Transaction filters (tabs are now separate — no segmented controls needed)
   document.getElementById("txCategoryFilter")?.addEventListener("change", () => { txPage = 1; loadTransactions(); });
@@ -1826,6 +1810,11 @@ window.openPrecificarModal = async function (needId, ccId) {
     return;
   }
 
+  if (needIsLockedForEdit(need)) {
+    showToast("Item pago — cotação bloqueada.", "info");
+    return;
+  }
+
   if (!isPrevistoBaselineApproved(need)) {
     showToast("Aprove o item no orçamento previsto antes de precificar.", "warning");
     return;
@@ -1864,6 +1853,7 @@ window.openPrecificarModal = async function (needId, ccId) {
       suppliers: currentSuppliers,
       apiRequest,
       openProformaViewer: window.openProformaViewer,
+      showToast,
     });
   } catch (err) {
     showToast("Erro ao abrir precificação: " + err.message, "error");

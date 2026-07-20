@@ -22,6 +22,7 @@ const {
   getAuditSummary,
 } = require("../services/certificationService");
 const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
+const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const {
   getEffectivePermissionsForUser,
   resolveAllowedFromMap,
@@ -38,6 +39,11 @@ const {
   needLineTotal,
   needRealizadoUnitPrice,
 } = require("../services/needBudgetService");
+const {
+  assertCanModifyPaidNeed,
+  syncNeedPaymentStatus,
+  isNeedPaidLocked,
+} = require("../services/needPaymentStatusService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const { fetchDeliveryFieldsByQuoteIds } = require("../services/deliveryFieldBridge");
 
@@ -114,11 +120,17 @@ function buildGlobalPaymentWhere(query, req) {
   // (comportamento atual da generalidade dos perfis) nada muda.
   const ownProjectCondition = req ? getStaffOwnProjectCondition(req) : null;
 
+  const projectScope = projectId
+    ? ownProjectCondition
+      ? { project: ownProjectCondition }
+      : {}
+    : { project: activeProjectRelationFilter(ownProjectCondition || {}) };
+
   return {
     ...(projectId ? { projectId } : {}),
     ...(ccId ? { costCenterId: ccId } : {}),
     ...(week ? { week } : {}),
-    ...(ownProjectCondition ? { project: ownProjectCondition } : {}),
+    ...projectScope,
   };
 }
 
@@ -1129,6 +1141,9 @@ costCenterRoutes.patch(
         where: { id: needId },
       });
       if (!current) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+      if (isNeedPaidLocked(current)) {
+        await assertCanModifyPaidNeed(req);
+      }
       const effectiveStatus = body.status || current.status;
       if (["ORDERED", "EM_ANALISE", "APPROVED", "PAID"].includes(effectiveStatus) && body.unitPrice != null) {
         const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
@@ -1160,6 +1175,15 @@ costCenterRoutes.patch(
       syncOriginalPrice = ["PENDING", "IN_QUOTATION"].includes(effectiveStatus);
     }
 
+    const currentForLock = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      select: { status: true },
+    });
+    if (!currentForLock) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+    if (isNeedPaidLocked(currentForLock)) {
+      await assertCanModifyPaidNeed(req);
+    }
+
     const updated = await prisma.workNeed.update({
       where: { id: needId },
       data: {
@@ -1187,6 +1211,14 @@ costCenterRoutes.delete(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const needId = String(req.params.needId);
+    const existing = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      select: { status: true },
+    });
+    if (!existing) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+    if (isNeedPaidLocked(existing)) {
+      await assertCanModifyPaidNeed(req);
+    }
     await prisma.workNeed.delete({ where: { id: needId } });
     return res.json({ ok: true });
   })
@@ -1358,10 +1390,10 @@ costCenterRoutes.post(
       createdPayments.push(payment);
     }
 
-    // Scheduling creates pending payments; it should not mark the need as paid.
+    // Agendamento cria parcelas pendentes; o item passa a PAID só após liquidação total.
     await prisma.workNeed.update({
       where: { id: needId },
-      data: { status: "APPROVED", scheduled: true },
+      data: { scheduled: true },
     });
 
     setImmediate(() => {
@@ -1645,8 +1677,16 @@ costCenterRoutes.patch(
         ...(comprovativoUrl !== undefined ? { comprovativoUrl } : {}),
         ...(faturaUrl !== undefined ? { faturaUrl } : {}),
       },
-      select: { id: true },
+      select: { id: true, needId: true },
     });
+
+    if (updated.needId) {
+      try {
+        await syncNeedPaymentStatus(updated.needId);
+      } catch (e) {
+        console.error("syncNeedPaymentStatus:", e);
+      }
+    }
 
     if (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") {
       try {
@@ -1734,7 +1774,19 @@ costCenterRoutes.delete(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
+    const existing = await prisma.costPayment.findUnique({
+      where: { id: payId },
+      select: { needId: true },
+    });
+    if (!existing) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
     await prisma.costPayment.delete({ where: { id: payId } });
+    if (existing.needId) {
+      try {
+        await syncNeedPaymentStatus(existing.needId);
+      } catch (e) {
+        console.error("syncNeedPaymentStatus:", e);
+      }
+    }
     return res.json({ ok: true });
   })
 );

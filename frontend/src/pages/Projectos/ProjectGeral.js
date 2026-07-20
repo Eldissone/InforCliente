@@ -431,7 +431,7 @@ window.restoreProject = async (id) => {
 };
 
 window.permanentDeleteProject = async (id, name) => {
-  if (!confirm(`ATENÇÃO: Deseja eliminar DEFINITIVAMENTE a obra "${name}"? Esta ação não pode ser desfeita e todos os dados financeiros e de stock associados serão perdidos.`)) return;
+  if (!confirm(`ATENÇÃO: Deseja eliminar DEFINITIVAMENTE a obra "${name}"?\n\nEsta ação não pode ser desfeita. Serão apagados permanentemente: orçamento, planeamento, pagamentos, stock, armazéns, fundos de maneio e pedidos extra associados.`)) return;
   try {
     await apiRequest(`/projects/${encodeURIComponent(id)}/permanent`, { method: "DELETE" });
     toast("Obra eliminada permanentemente", { type: "info" });
@@ -492,7 +492,7 @@ function wireActions() {
     if (deleteBtn) {
       const id = deleteBtn.getAttribute("data-delete-project");
       const name = deleteBtn.getAttribute("data-name");
-      if (confirm(`Deseja enviar a obra "${name}" para a reciclagem?`)) {
+      if (confirm(`Deseja enviar a obra "${name}" para a reciclagem?\n\nCentros de custo, armazéns, fundos de maneio e pedidos extra pendentes desta obra também serão reciclados ou cancelados.`)) {
         setButtonLoading(deleteBtn, true);
         apiRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" })
           .then(() => {
@@ -553,7 +553,7 @@ async function openEdit(id) {
     primaryLabel: "Salvar Alterações",
     dangerLabel: "Excluir Obra",
     onDanger: async ({ close }) => {
-      if (!confirm(`Tem certeza que deseja enviar a obra "${p.name}" para a reciclagem?`)) return;
+      if (!confirm(`Tem certeza que deseja enviar a obra "${p.name}" para a reciclagem?\n\nCentros de custo, armazéns, fundos de maneio e pedidos extra pendentes desta obra também serão reciclados ou cancelados.`)) return;
       await apiRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
       toast("Obra movida para a reciclagem", { type: "info" });
       close();
