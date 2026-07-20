@@ -11,6 +11,7 @@ const {
 } = require("../utils/installmentLabels");
 const {
   assertPriceWithinPrevistoOrException,
+  LOCKED_WORKFLOW_STATUSES,
 } = require("../services/needBudgetService");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
@@ -34,6 +35,65 @@ async function logQuoteAction(req, { action, needId, quoteId, details }) {
     userAgent: String(req.headers["user-agent"] || ""),
     details: { needId, quoteId, ...(details || null) },
   });
+}
+
+function isNeedWorkflowLocked(status) {
+  return LOCKED_WORKFLOW_STATUSES.has(status);
+}
+
+function serializeNeed(need) {
+  if (!need) return null;
+  return {
+    ...need,
+    quantity: need.quantity != null ? String(need.quantity) : null,
+    unitPrice: need.unitPrice != null ? String(need.unitPrice) : null,
+    originalUnitPrice: need.originalUnitPrice != null ? String(need.originalUnitPrice) : null,
+  };
+}
+
+function serializeQuote(quote) {
+  if (!quote) return null;
+  return {
+    ...quote,
+    quotedPrice: String(quote.quotedPrice),
+    quantity: quote.quantity != null ? String(quote.quantity) : null,
+    totalValue: quote.totalValue != null ? String(quote.totalValue) : null,
+  };
+}
+
+async function applyProposalToNeed({ quote, need, req, proformaUrl }) {
+  const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
+  const exceptionPatch = assertPriceWithinPrevistoOrException(quote.need || need, quote.quotedPrice, {
+    priceExceptionReason: req.body?.priceExceptionReason,
+    actorName,
+  }) || {
+    priceExceptionReason: null,
+    priceExceptionBy: null,
+    priceExceptionAt: null,
+  };
+
+  const updatedNeed = await prisma.workNeed.update({
+    where: { id: quote.needId },
+    data: {
+      status: "EM_ANALISE",
+      unitPrice: quote.quotedPrice,
+      originalUnitPrice: need.originalUnitPrice ?? need.unitPrice,
+      ...exceptionPatch,
+    },
+    include: {
+      costCenter: { select: { name: true, code: true, currency: true } },
+      project: { select: { id: true, name: true, code: true, location: true, region: true } },
+    },
+  });
+
+  await logQuoteAction(req, {
+    action: "quote_proposal_submitted",
+    needId: quote.needId,
+    quoteId: quote.id,
+    details: { proformaUrl, status: "EM_ANALISE" },
+  });
+
+  return updatedNeed;
 }
 
 const fileUpload = multer({ 
@@ -62,7 +122,7 @@ quoteRoutes.get(
           ? { status: { in: statuses } }
           : {
               OR: [
-                { status: { in: ["IN_QUOTATION", "ORDERED"] } },
+                { status: { in: ["IN_QUOTATION", "ORDERED", "EM_ANALISE"] } },
                 {
                   status: "APPROVED",
                   OR: [
@@ -158,7 +218,7 @@ quoteRoutes.get(
       where: {
         orderNumber: { not: null },
         need: {
-          status: { in: ["ORDERED", "APPROVED", "PAID"] },
+          status: { in: ["ORDERED", "EM_ANALISE", "APPROVED", "PAID"] },
           ...(projectId ? { projectId } : {}),
         },
       },
@@ -328,8 +388,8 @@ quoteRoutes.patch(
       include: { need: { select: { id: true, status: true } } },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
-    if (quote.need.status === "ORDERED" || quote.need.status === "APPROVED") {
-      return res.status(400).json({ error: "NEED_ALREADY_ORDERED" });
+    if (isNeedWorkflowLocked(quote.need.status)) {
+      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
     }
 
     await prisma.needQuote.updateMany({
@@ -382,8 +442,8 @@ quoteRoutes.patch(
       include: { need: { select: { id: true, status: true } } },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
-    if (quote.need.status === "ORDERED" || quote.need.status === "APPROVED") {
-      return res.status(400).json({ error: "NEED_ALREADY_ORDERED" });
+    if (isNeedWorkflowLocked(quote.need.status)) {
+      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
     }
 
     const updatedQuote = await prisma.needQuote.update({
@@ -437,7 +497,7 @@ quoteRoutes.patch(
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
     if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
-    if (quote.need.status === "ORDERED" || quote.need.status === "APPROVED") {
+    if (["ORDERED", "EM_ANALISE", "APPROVED", "PAID"].includes(quote.need.status)) {
       return res.status(400).json({ error: "NEED_ALREADY_ORDERED" });
     }
 
@@ -668,7 +728,7 @@ quoteRoutes.patch(
   })
 );
 
-// Upload proforma da cotação seleccionada — aprova o item no orçamento se estiver em encomenda
+// Upload proposta/proforma — regista preço realizado e passa item para «Em análise»
 quoteRoutes.post(
   "/:id/proforma",
   fileUpload.single("proforma"),
@@ -689,8 +749,8 @@ quoteRoutes.post(
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
     if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
-    if (quote.need.status !== "ORDERED") {
-      return res.status(400).json({ error: "NEED_NOT_ORDERED" });
+    if (!["IN_QUOTATION", "ORDERED"].includes(quote.need.status)) {
+      return res.status(400).json({ error: "INVALID_NEED_STATUS_FOR_PROPOSAL" });
     }
 
     const extension = path.extname(req.file.originalname).toLowerCase();
@@ -706,23 +766,85 @@ quoteRoutes.post(
       },
     });
 
-    const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
-    const exceptionPatch = assertPriceWithinPrevistoOrException(quote.need, quote.quotedPrice, {
-      priceExceptionReason: req.body?.priceExceptionReason,
-      actorName,
-    }) || {
-      priceExceptionReason: null,
-      priceExceptionBy: null,
-      priceExceptionAt: null,
-    };
+    const updatedNeed = await applyProposalToNeed({
+      quote,
+      need: quote.need,
+      req,
+      proformaUrl,
+    });
+
+    res.json({
+      ok: true,
+      inAnalysis: true,
+      quote: serializeQuote(updatedQuote),
+      need: serializeNeed(updatedNeed),
+    });
+  })
+);
+
+// Aprovar item em análise — passa a APPROVED (ainda sem pagamento)
+quoteRoutes.patch(
+  "/need/:needId/approve-analysis",
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const need = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      include: {
+        quotes: { where: { selected: true }, take: 1 },
+        costCenter: { select: { name: true, code: true, currency: true } },
+        project: { select: { id: true, name: true, code: true, location: true, region: true } },
+      },
+    });
+    if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+    if (need.status !== "EM_ANALISE") {
+      return res.status(400).json({ error: "NEED_NOT_IN_ANALYSIS" });
+    }
+    const selectedQuote = need.quotes[0];
+    if (!selectedQuote?.proformaUrl) {
+      return res.status(400).json({ error: "PROPOSAL_REQUIRED" });
+    }
 
     const updatedNeed = await prisma.workNeed.update({
-      where: { id: quote.needId },
+      where: { id: needId },
+      data: { status: "APPROVED" },
+      include: {
+        costCenter: { select: { name: true, code: true, currency: true } },
+        project: { select: { id: true, name: true, code: true, location: true, region: true } },
+      },
+    });
+
+    await logQuoteAction(req, {
+      action: "need_analysis_approved",
+      needId,
+      quoteId: selectedQuote.id,
+    });
+
+    res.json({ ok: true, need: serializeNeed(updatedNeed) });
+  })
+);
+
+// Rejeitar análise — volta a cotação aberta
+quoteRoutes.patch(
+  "/need/:needId/reject-analysis",
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const body = z.object({ reason: z.string().optional() }).parse(req.body || {});
+
+    const need = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      include: { quotes: { where: { selected: true }, take: 1 } },
+    });
+    if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+    if (need.status !== "EM_ANALISE") {
+      return res.status(400).json({ error: "NEED_NOT_IN_ANALYSIS" });
+    }
+
+    const updatedNeed = await prisma.workNeed.update({
+      where: { id: needId },
       data: {
-        status: "APPROVED",
-        unitPrice: quote.quotedPrice,
-        originalUnitPrice: quote.need.originalUnitPrice ?? quote.need.unitPrice,
-        ...exceptionPatch,
+        status: "IN_QUOTATION",
+        unitPrice: need.originalUnitPrice ?? need.unitPrice,
+        priceExceptionReason: body.reason?.trim() || need.priceExceptionReason,
       },
       include: {
         costCenter: { select: { name: true, code: true, currency: true } },
@@ -731,27 +853,13 @@ quoteRoutes.post(
     });
 
     await logQuoteAction(req, {
-      action: "quote_proforma_upload",
-      needId: quote.needId,
-      quoteId: id,
-      details: { proformaUrl },
+      action: "need_analysis_rejected",
+      needId,
+      quoteId: need.quotes[0]?.id || null,
+      details: { reason: body.reason || null },
     });
 
-    res.json({
-      ok: true,
-      approved: true,
-      quote: {
-        ...updatedQuote,
-        quotedPrice: String(updatedQuote.quotedPrice),
-        quantity: updatedQuote.quantity != null ? String(updatedQuote.quantity) : null,
-        totalValue: updatedQuote.totalValue != null ? String(updatedQuote.totalValue) : null,
-      },
-      need: {
-        ...updatedNeed,
-        quantity: updatedNeed.quantity != null ? String(updatedNeed.quantity) : null,
-        unitPrice: updatedNeed.unitPrice != null ? String(updatedNeed.unitPrice) : null,
-      },
-    });
+    res.json({ ok: true, need: serializeNeed(updatedNeed) });
   })
 );
 

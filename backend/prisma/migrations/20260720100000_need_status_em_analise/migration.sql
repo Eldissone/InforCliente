@@ -1,0 +1,1 @@
+ALTER TYPE "NeedStatus" ADD VALUE 'EM_ANALISE';

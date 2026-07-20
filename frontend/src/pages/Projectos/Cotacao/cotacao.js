@@ -188,6 +188,7 @@ function renderNeeds() {
     "PENDING": "Pendente",
     "IN_QUOTATION": "Em Cotação",
     "ORDERED": "Encomenda",
+    "EM_ANALISE": "Em Análise",
     "APPROVED": "Aprovado",
     "REJECTED": "Rejeitado"
   };
@@ -196,6 +197,7 @@ function renderNeeds() {
     "PENDING": "bg-slate-100 text-slate-600",
     "IN_QUOTATION": "bg-blue-100 text-blue-600",
     "ORDERED": "bg-amber-100 text-amber-700",
+    "EM_ANALISE": "bg-sky-100 text-sky-700",
     "APPROVED": "bg-[#2afc8d]/20 text-green-700",
     "REJECTED": "bg-red-100 text-red-600"
   };

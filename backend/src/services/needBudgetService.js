@@ -1,8 +1,10 @@
-const PRICED_STATUSES = new Set(["ORDERED", "APPROVED", "PAID"]);
+const PRICED_STATUSES = new Set(["ORDERED", "EM_ANALISE", "APPROVED", "PAID"]);
+
+const LOCKED_WORKFLOW_STATUSES = new Set(["ORDERED", "EM_ANALISE", "APPROVED", "PAID"]);
 
 function isMarketWorkflowStarted(need) {
   if (!need) return false;
-  if (["IN_QUOTATION", "ORDERED", "PAID"].includes(need.status)) return true;
+  if (["IN_QUOTATION", "ORDERED", "EM_ANALISE", "PAID"].includes(need.status)) return true;
   if (need.status === "APPROVED") {
     return Boolean(need.scheduled)
       || Boolean(need.priceExceptionReason)
@@ -24,6 +26,7 @@ function needPrevistoUnitPrice(need) {
 function needRealizadoUnitPrice(need) {
   if (!need || !PRICED_STATUSES.has(need.status)) return null;
   if (need.status === "APPROVED" && !isMarketWorkflowStarted(need)) return null;
+  if (need.status === "ORDERED" && !need.unitPrice) return null;
   return Number(need.unitPrice) || 0;
 }
 
@@ -92,6 +95,7 @@ function mapNeedBudgetFields(need) {
 
 module.exports = {
   PRICED_STATUSES,
+  LOCKED_WORKFLOW_STATUSES,
   isMarketWorkflowStarted,
   needRealizadoDisplayStatus,
   needPrevistoUnitPrice,

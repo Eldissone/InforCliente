@@ -19,8 +19,9 @@ function needWorkflowState(need) {
   const status = need?.status || "PENDING";
   return {
     isApproved: status === "APPROVED",
+    isInAnalysis: status === "EM_ANALISE",
     isOrdered: status === "ORDERED",
-    isLocked: status === "APPROVED" || status === "ORDERED",
+    isLocked: ["APPROVED", "EM_ANALISE"].includes(status) || status === "ORDERED",
   };
 }
 
@@ -139,7 +140,7 @@ function renderOrderedBanner(selectedQuote) {
 
           Fornecedor <strong>${selectedQuote.supplier?.name || "—"}</strong> seleccionado.
 
-          Carregue a proforma para aprovar este item no orçamento.
+          Carregue a proposta/proforma para submeter o item à análise (preço realizado, pagamento pendente).
 
         </p>
 
@@ -157,7 +158,7 @@ function renderOrderedBanner(selectedQuote) {
 
           <span class="material-symbols-outlined text-base">upload_file</span>
 
-          Enviar Proforma e Aprovar
+          Submeter Proposta
 
         </button>
 
@@ -208,13 +209,29 @@ function renderReadyToOrderBanner(selectedQuote) {
 
           <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${total} ${selectedQuote.currency || "AOA"}.
 
-          Pode trocar de fornecedor ou confirmar a encomenda.
+          Pode trocar de fornecedor, submeter proposta ou confirmar encomenda.
 
         </p>
 
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex flex-col gap-2 shrink-0 sm:min-w-[280px]">
+
+        <input type="file" id="readyProposalInput" accept="image/*,.pdf"
+
+          class="w-full h-10 px-3 bg-white border border-emerald-200 rounded-lg text-xs font-semibold file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-100 file:text-emerald-800">
+
+        <button type="button" id="btnSubmitProposal"
+
+          class="h-10 w-full rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-all flex items-center justify-center gap-2">
+
+          <span class="material-symbols-outlined text-base">upload_file</span>
+
+          Submeter Proposta p/ Análise
+
+        </button>
+
+        <div class="flex items-center gap-2">
 
         <button type="button" id="btnCancelSelection"
 
@@ -230,9 +247,11 @@ function renderReadyToOrderBanner(selectedQuote) {
 
           <span class="material-symbols-outlined text-base">local_shipping</span>
 
-          Encomendar ao Fornecedor
+          Encomendar
 
         </button>
+
+        </div>
 
       </div>
 
@@ -254,9 +273,78 @@ function clearOrderedBanner() {
 
   document.getElementById("quoteReadyBanner")?.remove();
 
+  document.getElementById("quoteAnalysisBanner")?.remove();
+
   document.getElementById("quoteInvoiceBanner")?.remove();
 
   document.getElementById("quoteCreditInfo")?.remove();
+
+}
+
+
+
+function renderInAnalysisBanner(selectedQuote, need) {
+
+  const existing = document.getElementById("quoteAnalysisBanner");
+
+  if (existing) existing.remove();
+
+  if (!selectedQuote) return;
+
+  const total = Number(selectedQuote.totalValue ?? selectedQuote.quotedPrice ?? 0)
+    .toLocaleString("pt-PT", { minimumFractionDigits: 2 });
+
+  const banner = document.createElement("div");
+
+  banner.id = "quoteAnalysisBanner";
+
+  banner.className = "mb-4 p-4 rounded-xl border border-sky-200 bg-sky-50";
+
+  banner.innerHTML = `
+
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+
+      <div class="flex-1">
+
+        <p class="text-xs font-black uppercase tracking-widest text-sky-700 mb-1">Em análise</p>
+
+        <p class="text-sm text-sky-900 font-medium">
+
+          Proposta de <strong>${selectedQuote.supplier?.name || "—"}</strong> (${total} ${selectedQuote.currency || "AOA"})
+
+          registada no orçamento realizado. Pagamento ainda <strong>pendente</strong> — confirme ou rejeite a análise.
+
+        </p>
+
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+
+        <button type="button" id="btnRejectAnalysis"
+
+          class="h-10 px-4 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-all">
+
+          Rejeitar
+
+        </button>
+
+        <button type="button" id="btnApproveAnalysis"
+
+          class="h-10 px-4 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-2">
+
+          <span class="material-symbols-outlined text-base">check_circle</span>
+
+          Aprovar Análise
+
+        </button>
+
+      </div>
+
+    </div>`;
+
+  const panel = document.getElementById("quotePresentedPanel");
+
+  panel?.insertBefore(banner, panel.firstChild);
 
 }
 
@@ -548,7 +636,7 @@ export async function loadPresentedPrices({
 
 
 
-  const { isApproved, isOrdered, isLocked } = needWorkflowState(need);
+  const { isApproved, isInAnalysis, isOrdered, isLocked } = needWorkflowState(need);
 
   clearOrderedBanner();
 
@@ -573,7 +661,23 @@ export async function loadPresentedPrices({
 
 
 
-    if (isOrdered && selectedQuote && !selectedQuote.proformaUrl) {
+    if (isInAnalysis && selectedQuote) {
+
+      renderInAnalysisBanner(selectedQuote, need);
+
+      document.getElementById("btnApproveAnalysis")?.addEventListener("click", async () => {
+
+        await approveNeedAnalysis({ needId, need, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+
+      });
+
+      document.getElementById("btnRejectAnalysis")?.addEventListener("click", async () => {
+
+        await rejectNeedAnalysis({ needId, need, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+
+      });
+
+    } else if (isOrdered && selectedQuote && !selectedQuote.proformaUrl) {
 
       renderOrderedBanner(selectedQuote);
 
@@ -604,6 +708,42 @@ export async function loadPresentedPrices({
     } else if (!isLocked && selectedQuote) {
 
       renderReadyToOrderBanner(selectedQuote);
+
+      document.getElementById("btnSubmitProposal")?.addEventListener("click", async () => {
+
+        const input = document.getElementById("readyProposalInput");
+
+        if (!input?.files?.[0]) {
+
+          window.showQuoteToast?.("Seleccione o ficheiro da proposta.", "error");
+
+          return;
+
+        }
+
+        await uploadOrderedProforma({
+
+          quoteId: selectedQuote.id,
+
+          needId,
+
+          need,
+
+          suppliers,
+
+          apiRequest,
+
+          openProformaViewer,
+
+          showToast: window.showQuoteToast,
+
+          onApproved: window.onQuoteApproved,
+
+          fileInput: input,
+
+        });
+
+      });
 
       document.getElementById("btnPlaceOrder")?.addEventListener("click", async () => {
 
@@ -740,6 +880,10 @@ export async function loadPresentedPrices({
       if (q.selected && isApproved) {
 
         winnerBadge = `<span class="bg-[#2afc8d]/20 text-green-700 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">verified</span>Aprovado</span>`;
+
+      } else if (q.selected && need?.status === "EM_ANALISE") {
+
+        winnerBadge = `<span class="bg-sky-100 text-sky-700 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">fact_check</span>Em Análise</span>`;
 
       } else if (q.selected && isOrdered) {
 
@@ -975,6 +1119,48 @@ export async function loadPresentedPrices({
 
 
 
+async function approveNeedAnalysis({ needId, need, apiRequest, showToast, onApproved, suppliers, openProformaViewer }) {
+  if (!confirm("Confirmar aprovação desta análise? O item ficará aprovado (pagamento continua pendente até ir ao cronograma).")) return;
+  try {
+    const result = await apiRequest(`/quotes/need/${needId}/approve-analysis`, { method: "PATCH" });
+    showToast?.("Análise aprovada — item pronto para envio ao financeiro.", "success");
+    window.__quoteModalNeed = { ...need, ...result.need, status: "APPROVED" };
+    await onApproved?.();
+    await loadPresentedPrices({
+      needId,
+      need: { ...need, ...result.need, status: "APPROVED" },
+      suppliers,
+      apiRequest,
+      openProformaViewer,
+    });
+  } catch (err) {
+    showToast?.("Erro: " + err.message, "error");
+  }
+}
+
+async function rejectNeedAnalysis({ needId, need, apiRequest, showToast, onApproved, suppliers, openProformaViewer }) {
+  const reason = prompt("Motivo da rejeição (opcional):") || "";
+  if (reason === null) return;
+  try {
+    const result = await apiRequest(`/quotes/need/${needId}/reject-analysis`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason: reason.trim() || undefined }),
+    });
+    showToast?.("Análise rejeitada — item voltou a cotação.", "info");
+    window.__quoteModalNeed = { ...need, ...result.need, status: "IN_QUOTATION" };
+    await onApproved?.();
+    await loadPresentedPrices({
+      needId,
+      need: { ...need, ...result.need, status: "IN_QUOTATION" },
+      suppliers,
+      apiRequest,
+      openProformaViewer,
+    });
+  } catch (err) {
+    showToast?.("Erro: " + err.message, "error");
+  }
+}
+
 async function uploadOrderedProforma({
 
   quoteId,
@@ -993,13 +1179,15 @@ async function uploadOrderedProforma({
 
   onApproved,
 
+  fileInput,
+
 }) {
 
-  const input = document.getElementById("orderedProformaInput");
+  const input = fileInput || document.getElementById("orderedProformaInput");
 
   if (!input?.files?.[0]) {
 
-    showToast?.("Seleccione o ficheiro da proforma.", "error");
+    showToast?.("Seleccione o ficheiro da proposta.", "error");
 
     return;
 
@@ -1021,7 +1209,7 @@ async function uploadOrderedProforma({
         `O preço da cotação (${real.toLocaleString("pt-PT")}) excede o previsto (${previsto.toLocaleString("pt-PT")}).\n\nIndique a justificação da excepção:`
       );
       if (!reason?.trim()) {
-        showToast?.("Aprovação cancelada — é obrigatória uma justificação quando o preço excede o previsto.", "error");
+        showToast?.("Submissão cancelada — é obrigatória uma justificação quando o preço excede o previsto.", "error");
         return;
       }
       form.append("priceExceptionReason", reason.trim());
@@ -1031,13 +1219,13 @@ async function uploadOrderedProforma({
 
 
 
-    showToast?.("Proforma carregada. Item aprovado no orçamento.", "success");
+    showToast?.("Proposta submetida — item em análise (realizado registado, pagamento pendente).", "success");
 
 
 
     if (result.need) {
 
-      window.__quoteModalNeed = { ...need, ...result.need, status: "APPROVED" };
+      window.__quoteModalNeed = { ...need, ...result.need, status: "EM_ANALISE" };
 
     }
 
@@ -1070,8 +1258,6 @@ async function uploadOrderedProforma({
   }
 
 }
-
-
 
 export async function selectSuggestionWithOrder({
 

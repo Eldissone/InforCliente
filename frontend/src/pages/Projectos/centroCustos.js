@@ -17,7 +17,7 @@ let dashSummary = null;
 let cachedNeeds = [];
 let budgetViewMode = "previsto";
 const PREVISTO_NEED_STATUSES = ["PENDING", "APPROVED", "REJECTED"];
-const WORKFLOW_APPROVED_STATUSES = ["APPROVED", "IN_QUOTATION", "ORDERED", "PAID"];
+const WORKFLOW_APPROVED_STATUSES = ["APPROVED", "IN_QUOTATION", "ORDERED", "EM_ANALISE", "PAID"];
 let currentSuppliers = [];
 
 // ── Fase 7/8: Fundo de Maneio ───────────────────────────────────────────────
@@ -254,7 +254,7 @@ function needBudgetDisplayStatus(n) {
 }
 
 function canRealizadoAgendar(n) {
-  return ["APPROVED", "ORDERED"].includes(n.status) && n.marketWorkflowStarted && !n.scheduled;
+  return n.status === "APPROVED" && n.marketWorkflowStarted && !n.scheduled;
 }
 
 function needCronogramaTotal(n) {
@@ -287,7 +287,7 @@ function isEligibleForRealizadoQuotation(n) {
 
 function canRealizadoPrecificar(n) {
   if (!isPrevistoBaselineApproved(n)) return false;
-  if (n.status === "IN_QUOTATION" || n.status === "ORDERED") return true;
+  if (n.status === "IN_QUOTATION" || n.status === "ORDERED" || n.status === "EM_ANALISE") return true;
   if (n.status === "APPROVED" && n.marketWorkflowStarted) return true;
   return needRealizadoDisplayStatus(n) === "PENDING";
 }
@@ -322,6 +322,7 @@ function updateNeedsStatusFilterOptions() {
     { value: "PENDING", label: "Pendente" },
     { value: "IN_QUOTATION", label: "Em Cotação" },
     { value: "ORDERED", label: "Encomenda" },
+    { value: "EM_ANALISE", label: "Em Análise" },
     { value: "APPROVED", label: "Aprovado" },
     { value: "REJECTED", label: "Rejeitado" },
     { value: "PAID", label: "Pago" },
@@ -689,8 +690,8 @@ function renderNeedsTable(items) {
   }
 
   const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
-  const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
-  const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
+  const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", EM_ANALISE: "Em Análise", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
+  const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", EM_ANALISE: "badge-in-analysis", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
   const extraStatusLabels = { PENDENTE: "Pendente", APROVADO: "A liquidar", PAGO: "Pago", REJEITADO: "Rejeitado", CANCELADO: "Cancelado" };
   const extraStatusClasses = {
     PENDENTE: "badge-pending",
@@ -790,7 +791,7 @@ function renderNeedsTable(items) {
               </button>
               ` : ""}
               ${budgetViewMode === "realizado" && canRealizadoPrecificar(n) ? `
-              <button onclick="openPrecificarModal('${n.id}', '${n.costCenterId}')" title="${n.status === "ORDERED" ? "Carregar proforma" : "Precificar / Selecionar fornecedor"}"
+              <button onclick="openPrecificarModal('${n.id}', '${n.costCenterId}')" title="${n.status === "ORDERED" ? "Carregar proposta" : n.status === "EM_ANALISE" ? "Ver análise / aprovar" : "Precificar / Selecionar fornecedor"}"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-[#2afc8d]/20 hover:text-green-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">fact_check</span>
               </button>
@@ -1617,6 +1618,7 @@ window.addNeedRow = function (need = null) {
         <option value="PENDING" ${(!need || need?.status === "PENDING") ? "selected" : ""}>Pendente</option>
         <option value="IN_QUOTATION" ${need?.status === "IN_QUOTATION" ? "selected" : ""}>Em Cotação</option>
         <option value="ORDERED" ${need?.status === "ORDERED" ? "selected" : ""}>Encomenda</option>
+        <option value="EM_ANALISE" ${need?.status === "EM_ANALISE" ? "selected" : ""}>Em Análise</option>
         <option value="APPROVED" ${need?.status === "APPROVED" ? "selected" : ""}>Aprovado</option>
         <option value="REJECTED" ${need?.status === "REJECTED" ? "selected" : ""}>Rejeitado</option>
         <option value="PAID" ${need?.status === "PAID" ? "selected" : ""}>Pago</option>

@@ -312,7 +312,7 @@ costCenterRoutes.get(
       where: {
         orderNumber: { not: null },
         need: {
-          status: { in: ["ORDERED", "APPROVED", "PAID"] },
+          status: { in: ["ORDERED", "EM_ANALISE", "APPROVED", "PAID"] },
           ...(projectId ? { projectId } : {}),
         },
       },
@@ -1090,7 +1090,7 @@ costCenterRoutes.patch(
       unitPrice: z.union([z.number(), z.string()]).optional().nullable(),
       hours: z.union([z.number(), z.string()]).optional().nullable(),
       priority: z.enum(["ALTA", "MEDIA", "BAIXA"]).optional(),
-      status: z.enum(["PENDING", "IN_QUOTATION", "ORDERED", "APPROVED", "REJECTED", "PAID"]).optional(),
+      status: z.enum(["PENDING", "IN_QUOTATION", "ORDERED", "EM_ANALISE", "APPROVED", "REJECTED", "PAID"]).optional(),
       responsible: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       priceExceptionReason: z.string().optional().nullable(),
@@ -1103,7 +1103,7 @@ costCenterRoutes.patch(
       });
       if (!current) return res.status(404).json({ error: "NEED_NOT_FOUND" });
       const effectiveStatus = body.status || current.status;
-      if (["ORDERED", "APPROVED", "PAID"].includes(effectiveStatus) && body.unitPrice != null) {
+      if (["ORDERED", "EM_ANALISE", "APPROVED", "PAID"].includes(effectiveStatus) && body.unitPrice != null) {
         const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
         priceExceptionPatch = assertPriceWithinPrevistoOrException(current, body.unitPrice, {
           priceExceptionReason: body.priceExceptionReason,
