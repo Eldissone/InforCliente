@@ -14,6 +14,7 @@ import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
 
 let allProjects = [];
 let ganttViewMode = "month";
+let paymentViewMode = "gantt";
 let calendarAnchor = new Date();
 calendarAnchor.setHours(0, 0, 0, 0);
 let ordersGanttViewMode = "month";
@@ -26,6 +27,7 @@ let dashboardCache = { days: [], total: 0 };
 let extrasDashboardCache = [];
 let pendingPaymentsCache = [];
 let pendingReinforcementsCache = [];
+let pendingFinanceNeedsCache = [];
 
 const EXTRA_SOURCE_LABELS = {
   CAIXA: "Caixa",
@@ -210,6 +212,103 @@ function renderExtraDocumentLink(url, label) {
   </a>`;
 }
 
+function renderProformaCell(url, title = "Proforma") {
+  if (!url) return `<span class="text-slate-300">—</span>`;
+  return `<button type="button" title="Ver ${escapeAttr(title)}"
+    class="fin-icon-btn fin-icon-btn--emerald" onclick="event.stopPropagation(); openDocumentAside('${escapeAttr(url)}', '${escapeAttr(title)}')">
+    <span class="material-symbols-outlined text-base">description</span>
+  </button>`;
+}
+
+function formatIbanCell(iban) {
+  if (!iban) return `<span class="text-slate-300">—</span>`;
+  return `<span class="text-xs font-mono text-slate-600 truncate max-w-[140px] inline-block align-middle" title="${escapeAttr(iban)}">${escapeHtml(iban)}</span>`;
+}
+
+function flattenPlanRows(days) {
+  const rows = [];
+  (days || []).forEach((day) => {
+    (day.items || []).forEach((item) => {
+      rows.push({ item, dayDate: day.date });
+    });
+  });
+  rows.sort((a, b) => {
+    const da = new Date(a.item.dueDate || a.item.paymentDate || a.dayDate);
+    const db = new Date(b.item.dueDate || b.item.paymentDate || b.dayDate);
+    return da - db;
+  });
+  return rows;
+}
+
+function renderPlanPaymentRow(p) {
+  const st = p.timelineStatus || resolveTimelineStatus(p);
+  const meta = TIMELINE_STATUS[st] || TIMELINE_STATUS.PENDENTE;
+  const icon = TIMELINE_ICONS[st] || TIMELINE_ICONS.PENDENTE;
+  const cur = p.costCenter?.currency || "AOA";
+  const isPending = st === "PENDENTE" || st === "VENCIDO";
+  const supplier = p.supplierName || p.supplier || "—";
+
+  return `
+    <tr class="group">
+      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(p.description)}">${escapeHtml(p.description || "—")}</td>
+      <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
+      <td>${formatIbanCell(p.iban)}</td>
+      <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(p.budgetedAmount, cur)}</td>
+      <td class="text-center">${renderProformaCell(p.proformaUrl)}</td>
+      <td class="text-center">${renderPaymentTypeBadge(p.paymentType)}</td>
+      <td class="text-center">${renderStatusBadge(meta.label, meta.badge, icon)}</td>
+      <td class="text-center">
+        <div class="fin-actions">
+          ${isPending
+            ? renderIconBtn("done_all", "Liquidar pagamento", "emerald", {
+                attrs: `onclick="liquidateFromPlan('${escapeAttr(p.id)}')"`,
+              })
+            : `<span class="text-slate-300 text-xs">—</span>`}
+        </div>
+      </td>
+    </tr>`;
+}
+
+function renderPlanExtraRow(extra, p) {
+  const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
+  const cur = extra?.currency || "AOA";
+  const canPay = extra?.status === "APROVADO";
+  const supplier = extraRequestPaymentLabel(extra);
+
+  return `
+    <tr class="group">
+      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
+        <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
+      </td>
+      <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
+      <td>${formatIbanCell(null)}</td>
+      <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(extra?.amount, cur)}</td>
+      <td class="text-center">${renderProformaCell(extra?.proformaUrl)}</td>
+      <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">Extra</span></td>
+      <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
+      <td class="text-center">
+        <div class="fin-actions">
+          ${canPay
+            ? renderIconBtn("done_all", "Liquidar pedido extra", "emerald", {
+                attrs: `onclick="openExtraFromPlan('${extra?.id || p._extraId}')"`,
+              })
+            : `<span class="text-slate-300 text-xs">—</span>`}
+        </div>
+      </td>
+    </tr>`;
+}
+
+function renderPaymentTypeBadge(paymentType) {
+  const isCredit = paymentType === "CREDITO";
+  const label = isCredit ? "C" : "PP";
+  const cls = isCredit
+    ? "bg-amber-100 text-amber-700"
+    : "bg-red-50 text-red-700 border border-red-200";
+  return `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${cls}">${label}</span>`;
+}
+
+const PLAN_TABLE_COLSPAN = 8;
+
 function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) {
   const cur = extra.currency || "AOA";
   const fields = [
@@ -285,6 +384,45 @@ function renderExtraPayComprovativoSection() {
       <p class="text-[11px] text-amber-700/80 mt-2">Anexe o comprovativo bancário para concluir a liquidação.</p>
     </div>`;
 }
+
+function renderPendingFinanceNeedCard(need) {
+  const cur = need.currency || "AOA";
+  const proformaBtn = need.proformaUrl
+    ? `<a href="${getAssetUrl(need.proformaUrl)}" target="_blank" rel="noopener"
+        class="h-8 px-3 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-bold hover:bg-slate-50 inline-flex items-center gap-1">
+        <span class="material-symbols-outlined text-sm">description</span> Proposta
+      </a>`
+    : "";
+  return `
+    <article class="border border-amber-100 rounded-xl p-4 bg-amber-50/40">
+      <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-bold text-slate-900">${escapeHtml(need.description || "—")}</p>
+          <p class="text-[11px] text-slate-500 mt-1">
+            ${escapeHtml(need.project?.name || "—")} · ${escapeHtml(need.costCenter?.code || "—")}
+            · ${escapeHtml(need.supplier?.name || "—")}
+          </p>
+          <p class="text-sm font-bold text-slate-900 mt-2 tabular-nums">${formatCurrency(need.amount, cur)}</p>
+        </div>
+        <div class="shrink-0 flex flex-wrap items-center gap-2 justify-end">
+          ${proformaBtn}
+          <button type="button" onclick="openPendingFinanceNeed('${need.id}', '${need.projectId}', '${need.costCenterId}')"
+            class="h-8 px-4 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition-all inline-flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm">calendar_month</span>
+            Definir parcelas
+          </button>
+        </div>
+      </div>
+    </article>`;
+}
+
+window.openPendingFinanceNeed = function (needId, projectId, costCenterId) {
+  const url = new URL("../Projectos/centroCustos.html", window.location.href);
+  url.searchParams.set("projectId", projectId);
+  url.searchParams.set("tab", "cronograma");
+  url.searchParams.set("needId", needId);
+  window.location.href = url.pathname + url.search;
+};
 
 function renderPendingExtraCard(extra, index, total) {
   const cur = extra.currency || "AOA";
@@ -391,6 +529,7 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
   });
   bindEvents();
   syncGanttViewButtons();
+  syncPaymentViewMode();
   syncOrdersGanttViewButtons();
   updateDashboardDate();
   await loadProjects();
@@ -495,13 +634,26 @@ async function handlePaymentDeepLink() {
 
   try {
     const payment = await apiRequest(`/cost-centers/payments/${encodeURIComponent(paymentId)}`);
-    const st = payment.timelineStatus || resolveTimelineStatus(payment);
-    const isPending = st === "PENDENTE" || st === "VENCIDO";
-
     window.history.replaceState({}, "", window.location.pathname);
 
-    activateFinTab("plano");
-    openPaymentAside(payment, isPending ? "PAYMENT" : "VIEW", focus ? { focus } : {});
+    activateFinTab("calendario");
+
+    if (focus === "comprovativo" && payment.comprovativoUrl) {
+      openDocumentAside(payment.comprovativoUrl, "Comprovativo de pagamento");
+      return;
+    }
+
+    const st = payment.timelineStatus || resolveTimelineStatus(payment);
+    const isPending = st === "PENDENTE" || st === "VENCIDO";
+    if (isPending) {
+      openLiquidateModal({
+        ...payment,
+        costCenterId: payment.costCenterId || payment.costCenter?.id,
+      });
+      return;
+    }
+
+    openPaymentAside(payment, "VIEW", focus ? { focus } : {});
   } catch (err) {
     toast(err.message || "Não foi possível abrir o lançamento.", { type: "error" });
   }
@@ -513,11 +665,14 @@ async function loadPendingPaymentsQueue() {
     projectId && projectId !== FIN_GENERAL_CENTERS
       ? `?projectId=${encodeURIComponent(projectId)}`
       : "";
-  const [extrasResult, reinforcementsResult] = await Promise.allSettled([
+  const [extrasResult, reinforcementsResult, needsResult] = await Promise.allSettled([
     apiRequest(`/extra-requests/pending-finance-payment${params}`),
     isGeneralCentersFilter()
       ? Promise.resolve({ items: [] })
       : apiRequest(`/petty-cash/reinforcement-requests/pending-finance-approval${params}`),
+    isGeneralCentersFilter()
+      ? Promise.resolve({ items: [] })
+      : apiRequest(`/cost-centers/pending-finance-scheduling${params}`),
   ]);
   pendingPaymentsCache =
     extrasResult.status === "fulfilled" ? extrasResult.value.items || [] : [];
@@ -526,13 +681,18 @@ async function loadPendingPaymentsQueue() {
   }
   pendingReinforcementsCache =
     reinforcementsResult.status === "fulfilled" ? reinforcementsResult.value.items || [] : [];
+  pendingFinanceNeedsCache =
+    needsResult.status === "fulfilled" ? needsResult.value.items || [] : [];
   updatePendingPaymentsBadge();
 }
 
 function updatePendingPaymentsBadge() {
   const badge = document.getElementById("pendingPaymentsBadge");
   const btn = document.getElementById("btnPendingPayments");
-  const count = pendingPaymentsCache.length + pendingReinforcementsCache.length;
+  const count =
+    pendingPaymentsCache.length +
+    pendingReinforcementsCache.length +
+    pendingFinanceNeedsCache.length;
   if (!badge || !btn) return;
   if (count > 0) {
     badge.textContent = String(count);
@@ -550,15 +710,30 @@ function renderPendingPaymentsList() {
 
   const hasExtras = pendingPaymentsCache.length > 0;
   const hasReinforcements = pendingReinforcementsCache.length > 0;
+  const hasFinanceNeeds = pendingFinanceNeedsCache.length > 0;
 
-  if (!hasExtras && !hasReinforcements) {
+  if (!hasExtras && !hasReinforcements && !hasFinanceNeeds) {
     container.innerHTML = `
       <div class="py-12 text-center text-slate-400">
         <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">check_circle</span>
-        <p class="text-sm font-semibold">Sem pedidos extra nem reforços aguardando acção.</p>
+        <p class="text-sm font-semibold">Sem pedidos extra, reforços ou itens a agendar.</p>
       </div>`;
     return;
   }
+
+  const financeNeedsSection = hasFinanceNeeds
+    ? `
+    <section class="mb-6">
+      <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
+        <span class="material-symbols-outlined text-base text-amber-600">calendar_month</span>
+        Itens a agendar (cronograma)
+        <span class="text-[10px] font-bold text-slate-400 normal-case tracking-normal">(${pendingFinanceNeedsCache.length})</span>
+      </h3>
+      <div class="flex flex-col gap-2">
+        ${pendingFinanceNeedsCache.map((n) => renderPendingFinanceNeedCard(n)).join("")}
+      </div>
+    </section>`
+    : "";
 
   const extrasSection = hasExtras
     ? `
@@ -623,7 +798,7 @@ function renderPendingPaymentsList() {
     </section>`
     : "";
 
-  container.innerHTML = extrasSection + reinforcementsSection;
+  container.innerHTML = financeNeedsSection + extrasSection + reinforcementsSection;
 }
 
 function openPendingPaymentsModal() {
@@ -745,6 +920,15 @@ function bindEvents() {
     reloadAll();
   });
 
+  document.querySelectorAll("[data-payment-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.paymentView;
+      if (mode === paymentViewMode) return;
+      paymentViewMode = mode;
+      syncPaymentViewMode();
+    });
+  });
+
   document.getElementById("btnPendingPayments")?.addEventListener("click", () => {
     openPendingPaymentsModal();
   });
@@ -782,6 +966,16 @@ function syncGanttViewButtons() {
     btn.classList.toggle("active", btn.dataset.ganttView === ganttViewMode);
   });
   syncTodayButton();
+}
+
+function syncPaymentViewMode() {
+  document.querySelectorAll("[data-payment-view]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.paymentView === paymentViewMode);
+  });
+  const ganttEl = document.getElementById("planGanttView");
+  const listEl = document.getElementById("planListView");
+  if (ganttEl) ganttEl.classList.toggle("hidden", paymentViewMode !== "gantt");
+  if (listEl) listEl.classList.toggle("hidden", paymentViewMode !== "list");
 }
 
 function updateDashboardDate() {
@@ -1204,7 +1398,7 @@ function renderPaymentDonut(items) {
     [
       { label: "Pendentes", value: pending, color: "#3b82f6" },
       { label: "Atrasados", value: overdue, color: "#ef4444" },
-      { label: "Liquidados", value: paid, color: "#10b981" },
+      { label: "Pagos", value: paid, color: "#10b981" },
       { label: "Outros", value: other, color: "#cbd5e1" },
     ],
     "Sem pagamentos no período."
@@ -1409,7 +1603,7 @@ async function reloadAll() {
   const grid = document.getElementById("calendarGrid");
   const planBody = document.getElementById("planTableBody");
   if (grid) grid.innerHTML = `<div class="spinner my-8"></div>`;
-  if (planBody) planBody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
+  if (planBody) planBody.innerHTML = `<tr><td colspan="${PLAN_TABLE_COLSPAN}"><div class="spinner my-8"></div></td></tr>`;
 
   try {
     await loadDashboardExtras();
@@ -1445,7 +1639,7 @@ async function reloadAll() {
     syncTodayButton();
   } catch (err) {
     if (grid) grid.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p>`;
-    if (planBody) planBody.innerHTML = `<tr><td colspan="7"><p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p></td></tr>`;
+    if (planBody) planBody.innerHTML = `<tr><td colspan="${PLAN_TABLE_COLSPAN}"><p class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</p></td></tr>`;
   }
 }
 
@@ -1546,6 +1740,16 @@ async function reloadOrdersTimeline() {
 
     pendingPaymentsCache = extras;
     pendingReinforcementsCache = reinforcements;
+    if (!isGeneralCentersFilter()) {
+      try {
+        const needsData = await apiRequest(`/cost-centers/pending-finance-scheduling${pendingParams}`);
+        pendingFinanceNeedsCache = needsData.items || [];
+      } catch {
+        pendingFinanceNeedsCache = [];
+      }
+    } else {
+      pendingFinanceNeedsCache = [];
+    }
     updatePendingPaymentsBadge();
 
     const extraGantt = extras.map((e) => mapExtraToGanttItem(e, from, to));
@@ -1810,7 +2014,7 @@ function renderExtrasPlanTable(extras) {
   if (!days.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="${PLAN_TABLE_COLSPAN}">
           <div class="py-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">inventory_2</span>
             <p class="text-sm font-semibold">Sem pedidos extra no período seleccionado.</p>
@@ -1820,54 +2024,14 @@ function renderExtrasPlanTable(extras) {
     return;
   }
 
-  tbody.innerHTML = days
-    .map((day) => {
-      const dayHeader = `
-      <tr class="fin-day-header">
-        <td colspan="7">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-base text-indigo-400">request_quote</span>
-            <span class="text-xs font-black uppercase tracking-wide text-slate-600">${formatDateBR(day.date)}</span>
-            <span class="text-[10px] font-bold text-slate-400">${day.count} pedido(s) extra</span>
-          </div>
-        </td>
-      </tr>`;
-
-      const rows = day.items
-        .map((item) => {
-          const extra = extras.find((e) => e.id === item._extraId);
-          const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
-          const cur = extra?.currency || "AOA";
-          const canPay = extra?.status === "APROVADO";
-
-          return `
-        <tr class="group">
-          <td class="fin-empty-cell">—</td>
-          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(extra?.project?.name || extra?.generalCostCenter?.name)}">${extra?.project?.name || (extra?.type === "GERAL" ? (extra?.generalCostCenter?.name || "Geral") : "—")}</td>
-          <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
-            <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${extra?.description || "—"}
-          </td>
-          <td class="text-xs text-slate-500 max-w-[160px] truncate">${extra?.requestedBy || "—"}</td>
-          <td class="text-right text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(extra?.amount, cur)}</td>
-          <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
-          <td class="text-center">
-            <div class="fin-actions">
-              ${canPay
-                ? renderIconBtn("payments", "Liquidar pedido extra", "emerald", {
-                    attrs: `onclick="openExtraFromPlan('${extra.id}')"`,
-                  })
-                : renderIconBtn("visibility", "Ver pedido extra", "blue", {
-                    attrs: `onclick="openExtraFromPlan('${extra.id}')"`,
-                  })}
-            </div>
-          </td>
-        </tr>`;
-        })
-        .join("");
-
-      return dayHeader + rows;
+  const rows = flattenPlanRows(days)
+    .map(({ item }) => {
+      const extra = extras.find((e) => e.id === item._extraId);
+      return renderPlanExtraRow(extra, item);
     })
     .join("");
+
+  tbody.innerHTML = rows;
 }
 
 window.openExtraFromPlan = function (extraId) {
@@ -1875,14 +2039,30 @@ window.openExtraFromPlan = function (extraId) {
   if (extra) openExtraPayModal(extra);
 };
 
+window.liquidateFromPlan = function (paymentId) {
+  for (const day of timelineCache.days || []) {
+    const payment = day.items.find((item) => item.id === paymentId && !item._isExtra);
+    if (payment) {
+      openLiquidateModal({
+        ...payment,
+        costCenterId: payment.costCenterId || payment.costCenter?.id,
+      });
+      return;
+    }
+  }
+  toast("Não foi possível localizar o lançamento.", { type: "error" });
+};
+
 function renderPlanTable(days) {
   const tbody = document.getElementById("planTableBody");
   if (!tbody) return;
 
-  if (!days?.length) {
+  const flatRows = flattenPlanRows(days);
+
+  if (!flatRows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="${PLAN_TABLE_COLSPAN}">
           <div class="py-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">event_busy</span>
             <p class="text-sm font-semibold">Sem pagamentos nem pedidos extra no período seleccionado.</p>
@@ -1892,82 +2072,14 @@ function renderPlanTable(days) {
     return;
   }
 
-  tbody.innerHTML = days.map((day) => {
-    const extraCount = (day.items || []).filter((item) => item._isExtra).length;
-    const paymentCount = day.count - extraCount;
-    const countLabel = [
-      paymentCount ? `${paymentCount} pagamento${paymentCount === 1 ? "" : "s"}` : "",
-      extraCount ? `${extraCount} extra${extraCount === 1 ? "" : "s"}` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-
-    const dayHeader = `
-      <tr class="fin-day-header">
-        <td colspan="7">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-base text-slate-400">calendar_today</span>
-            <span class="text-xs font-black uppercase tracking-wide text-slate-600">${formatDateBR(day.date)}</span>
-            <span class="text-[10px] font-bold text-slate-400">${countLabel || `${day.count} registo(s)`}</span>
-          </div>
-        </td>
-      </tr>`;
-
-    const rows = day.items.map((p) => {
-      if (p._isExtra) {
-        const extra = extrasDashboardCache.find((e) => e.id === p._extraId);
-        const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
-        const cur = extra?.currency || "AOA";
-        const canPay = extra?.status === "APROVADO";
-        const refLabel = extra?.project?.name || (extra?.type === "GERAL" ? extra?.generalCostCenter?.name || "Geral" : "—");
-
-        return `
-        <tr class="group">
-          <td class="fin-empty-cell">—</td>
-          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(refLabel)}">${escapeHtml(refLabel)}</td>
-          <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
-            <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
-          </td>
-          <td class="text-xs text-slate-500 max-w-[160px] truncate">${escapeHtml(extra?.requestedBy || "—")}</td>
-          <td class="text-right text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(extra?.amount, cur)}</td>
-          <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
-          <td class="text-center">
-            <div class="fin-actions">
-              ${renderIconBtn(canPay ? "payments" : "visibility", canPay ? "Liquidar pedido extra" : "Ver pedido extra", canPay ? "emerald" : "blue", {
-                attrs: `onclick="openExtraFromPlan('${extra?.id || p._extraId}')"`,
-              })}
-            </div>
-          </td>
-        </tr>`;
+  tbody.innerHTML = flatRows
+    .map(({ item }) => {
+      if (item._isExtra) {
+        const extra = extrasDashboardCache.find((e) => e.id === item._extraId);
+        return renderPlanExtraRow(extra, item);
       }
-
-      const st = p.timelineStatus || resolveTimelineStatus(p);
-      const meta = TIMELINE_STATUS[st] || TIMELINE_STATUS.PENDENTE;
-      const icon = TIMELINE_ICONS[st] || TIMELINE_ICONS.PENDENTE;
-      const cur = p.costCenter?.currency || "AOA";
-      const payload = escapeAttr(JSON.stringify(p));
-      const isPending = st === "PENDENTE" || st === "VENCIDO";
-      const viewType = isPending ? "PAYMENT" : "VIEW";
-
-      return `
-        <tr class="group">
-          <td class="fin-empty-cell">—</td>
-          <td class="text-xs font-bold text-slate-700 max-w-[140px] truncate" title="${escapeAttr(p.project?.name)}">${p.project?.name || "—"}</td>
-          <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(p.description)}">${p.description || "—"}</td>
-          <td class="text-xs text-slate-500 max-w-[160px] truncate">${p.costCenter?.code || "—"} · ${p.costCenter?.name || ""}</td>
-          <td class="text-right text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(p.budgetedAmount, cur)}</td>
-          <td class="text-center">${renderStatusBadge(meta.label, meta.badge, icon)}</td>
-          <td class="text-center">
-            <div class="fin-actions">
-              ${renderIconBtn("visibility", "Ver detalhes", "blue", {
-                attrs: `onclick="openPaymentAsideHandler(this)" data-payload='${payload}' data-type="${viewType}"`,
-              })}
-            </div>
-          </td>
-        </tr>`;
-    }).join("");
-
-    return dayHeader + rows;
-  }).join("");
+      return renderPlanPaymentRow(item);
+    })
+    .join("");
 }
 

@@ -142,6 +142,10 @@ export function wireUsersNav() {
   import("./chatFab.js")
     .then(({ initChatFab }) => initChatFab())
     .catch(() => { });
+
+  import("./paymentNotificationBar.js")
+    .then(({ initPaymentNotifications }) => initPaymentNotifications())
+    .catch(() => { });
 }
 
 /**

@@ -38,11 +38,21 @@ let currentFundCards = [];
   bindEvents();
 
   // Se veio URL com ?projectId=xxx, selecionar automaticamente
-  const urlPid = new URLSearchParams(window.location.search).get("projectId");
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlPid = urlParams.get("projectId");
+  const urlTab = urlParams.get("tab");
+  const urlNeedId = urlParams.get("needId");
   if (urlPid) {
     const p = allProjects.find((x) => x.id === urlPid);
-    if (p) selectProject(p);
-    else showEmptyProjectView();
+    if (p) {
+      await selectProject(p);
+      if (urlTab) {
+        switchTab(urlTab);
+        if (urlNeedId && urlTab === "cronograma") {
+          window.__pendingOpenCronogramaNeedId = urlNeedId;
+        }
+      }
+    } else showEmptyProjectView();
   } else {
     showEmptyProjectView();
   }
@@ -270,8 +280,8 @@ async function goToCronogramaAfterSchedule(count = 1) {
   await loadCronograma();
   showToast(
     count === 1
-      ? "Item no cronograma — defina as parcelas na linha «A definir»"
-      : `${count} itens no cronograma — defina as parcelas nas linhas «A definir»`,
+      ? "Item enviado ao financeiro — defina as parcelas na linha «A definir»"
+      : `${count} itens enviados ao financeiro — defina as parcelas nas linhas «A definir»`,
     "success"
   );
 }
@@ -797,7 +807,7 @@ function renderNeedsTable(items) {
               </button>
               ` : ""}
               ${budgetViewMode === "realizado" && canRealizadoAgendar(n) ? `
-              <button onclick="sendToCronograma('${n.id}', '${n.costCenterId}')" title="Enviar para Cronograma"
+              <button onclick="sendToCronograma('${n.id}', '${n.costCenterId}')" title="Enviar ao Financeiro"
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-amber-100 hover:text-amber-600 transition-all text-slate-500">
                 <span class="material-symbols-outlined text-base">schedule</span>
               </button>
@@ -962,6 +972,17 @@ async function loadCronograma() {
     cronogramaPendingNeeds = needsData.items || [];
 
     renderCronogramaList(timelineData.days);
+
+    const pendingNeedId = window.__pendingOpenCronogramaNeedId;
+    if (pendingNeedId) {
+      window.__pendingOpenCronogramaNeedId = null;
+      const n = cronogramaPendingNeeds.find((item) => item.id === pendingNeedId);
+      if (n) {
+        const total = needCronogramaTotal(n);
+        const currency = n.costCenter?.currency || "AOA";
+        setTimeout(() => openCronogramaModal(n.id, n.costCenterId, n.description, total, currency), 150);
+      }
+    }
 
     if (cronogramaViewMode === "calendar") loadCronogramaCalendar();
   } catch (err) {
@@ -1328,13 +1349,13 @@ window.toggleCronogramaView = function (view) {
 // ── Send to Cronograma Functions ────────────────────────────────────────────────
 window.sendToCronograma = async function (id, ccId) {
   try {
-    showToast("A enviar para cronograma...", "info");
-    await apiRequest(`/cost-centers/${ccId}/needs/${id}/schedule`, { method: "POST" });
+    showToast("A enviar ao financeiro...", "info");
+    await apiRequest(`/cost-centers/${ccId}/needs/${id}/send-to-finance`, { method: "POST" });
     patchCachedNeed(id, { scheduled: true });
     refreshNeedsTableFromCache({ preserveUi: true });
     await goToCronogramaAfterSchedule(1);
   } catch (err) {
-    showToast("Erro: " + err.message, "error");
+    showToast(err.message || "Erro ao enviar ao financeiro.", "error");
   }
 }
 
@@ -1353,9 +1374,9 @@ window.sendAllToCronograma = async function () {
 
     const needIds = items.map((n) => n.id);
 
-    if (!confirm(`Enviar ${needIds.length} item(ns) para o cronograma?`)) return;
+    if (!confirm(`Enviar ${needIds.length} item(ns) ao financeiro para agendamento?`)) return;
 
-    showToast("A enviar items para cronograma...", "info");
+    showToast("A enviar items ao financeiro...", "info");
     await apiRequest(`/cost-centers/project/${selectedProject.id}/needs/schedule-bulk`, {
       method: "POST",
       body: { needIds }

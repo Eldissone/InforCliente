@@ -698,7 +698,6 @@ function wireSocketEvents() {
   });
 
   onSocketEvent("notification:new", (payload) => {
-    setChatUnreadCount(totalUnread() + 1);
     if (payload?.type === "PAYMENT") {
       enqueuePaymentNotification(payload);
     }

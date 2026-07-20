@@ -4,7 +4,7 @@ import { renderSupplierFiscalBreakdownHtml } from "./supplierFiscal.js";
 export const TIMELINE_STATUS = {
   PENDENTE: { label: "Pendente", dot: "bg-blue-400", badge: "bg-blue-100 text-blue-700", border: "border-blue-200" },
   VENCIDO: { label: "Atrasado", dot: "bg-red-400", badge: "bg-red-100 text-red-700", border: "border-red-200" },
-  PAGO: { label: "Liquidado", dot: "bg-emerald-400", badge: "bg-emerald-100 text-emerald-700", border: "border-emerald-200" },
+  PAGO: { label: "Pago", dot: "bg-emerald-400", badge: "bg-emerald-100 text-emerald-700", border: "border-emerald-200" },
   CANCELADO: { label: "Cancelado", dot: "bg-slate-300", badge: "bg-slate-100 text-slate-500", border: "border-slate-200" },
 };
 

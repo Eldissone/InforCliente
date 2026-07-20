@@ -40,10 +40,10 @@ A reunião definiu um fluxo mais claro em três camadas financeiras:
 | 3 | Estado «Em análise» | Proforma → `APPROVED` directo | Novo estado `EM_ANALISE` / label UI |
 | 4 | Envio ao cronograma após decisão | Manual (`schedule`) ou auto só em crédito | Acção explícita «Enviar ao Financeiro» + auto opcional |
 | 5 | Previsto / realizado / liquidado por linha | Previsto×real no CC; liquidado via pagamentos | 3.ª coluna liquidado integrada na vista orçamental |
-| 6 | Vista tabular no Perfil Financeiro | Gantt OK; `renderPlanTable()` órfão no JS | Tab «Lista» com colunas pedidas |
+| 6 | Vista tabular no Perfil Financeiro | ✅ Toggle Calendário/Lista com colunas operacionais | — |
 | 7 | Transportador + rateio frete | Só categoria `TRANSPORTE` manual | Modelo de frete partilhado |
 | 8 | IVA/retenção → bruto automático | Percentagens informativas no fornecedor | Cálculo bidireccional no pagamento |
-| 9 | Comprovativo obrigatório | Frontend valida; backend não rejeita | Validação server-side |
+| 9 | Comprovativo obrigatório | ✅ Frontend + backend rejeitam liquidação sem ficheiro | — |
 | 10 | Transferências bypass logística | ✅ `POST /stock/transfer` | — |
 | 11 | Auditoria de faturas | Backend completo; UI removida | Decidir se reactivar ou manter só backend |
 | 12 | Data recepção em obra | Não implementado | **Fase posterior** (reunião disse «não agora») |
@@ -218,9 +218,9 @@ Ordem optimizada: **quick wins de UX e estados primeiro**, depois fluxo logísti
 
 #### Critério de conclusão
 
-- [ ] Utilizador alterna entre Gantt e tabela no Perfil Financeiro.
-- [ ] Tabela mostra colunas acordadas na reunião.
-- [ ] Liquidação possível a partir da linha.
+- [x] Utilizador alterna entre Gantt e tabela no Perfil Financeiro.
+- [x] Tabela mostra colunas acordadas na reunião.
+- [x] Liquidação possível a partir da linha.
 
 ---
 
@@ -247,8 +247,8 @@ Ordem optimizada: **quick wins de UX e estados primeiro**, depois fluxo logísti
 
 #### Critério de conclusão
 
-- [ ] API recusa liquidação sem comprovativo.
-- [ ] Destinatário recebe notificação in-app com link ao comprovativo.
+- [x] API recusa liquidação sem comprovativo.
+- [x] Destinatário recebe notificação in-app com link ao comprovativo.
 
 ---
 
@@ -460,8 +460,9 @@ Prioridade imediata recomendada: **Fases C → D** — envio ao financeiro e vis
 |---|---|---|
 | **A — Estados e linguagem** | ✅ Entregue | `EM_ANALISE` no Prisma; labels «Em Análise»; agendar só após `APPROVED` |
 | **B — Proposta na cotação** | ✅ Entregue | Upload proposta → realizado + `EM_ANALISE`; aprovar/rejeitar análise |
-| **C — Ponte → Financeiro** | ⏳ Pendente | Botão «Enviar ao Financeiro», fila unificada |
-| **D — Vista tabular** | ⏳ Pendente | Tab «Lista» no Perfil Financeiro |
-| **E–I** | ⏳ Pendente | Ver roadmap acima |
+| **C — Ponte → Financeiro** | ✅ Entregue | `send-to-finance`, fila no Perfil Financeiro, notificações |
+| **D — Vista tabular** | ✅ Entregue | Toggle Calendário/Lista; colunas operacionais; liquidar inline |
+| **E — Liquidação robusta** | ✅ Entregue | Comprovativo obrigatório no backend; notificações a receivers |
+| **E–I** | ⏳ Pendente | Próximo: **F — IVA/retenção** |
 
 **Migration:** `backend/prisma/migrations/20260720100000_need_status_em_analise/` — executar `npx prisma migrate deploy` no backend antes de testar.

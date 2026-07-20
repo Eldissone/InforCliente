@@ -30,41 +30,50 @@ async function alreadyNotified(userId, paymentId, event) {
   return Boolean(existing);
 }
 
-async function resolveRecipientIds(payment, event) {
-  const projectId = payment.projectId;
-  const ids = new Set();
-
-  const flagged = await prisma.userProfile.findMany({
-    where: {
-      OR: [
-        { isFinancialReceiver: true },
-        ...(event === "PAYMENT_CREATED" ? [{ isApprover: true }] : []),
-        { isProjectResponsible: true },
-      ],
-    },
-    select: { userId: true, isFinancialReceiver: true, isApprover: true, isProjectResponsible: true },
+async function resolveFinancialReceiverIds() {
+  const profiles = await prisma.userProfile.findMany({
+    where: { isFinancialReceiver: true },
+    select: { userId: true },
   });
-
-  flagged.forEach((p) => {
-    if (p.isFinancialReceiver) ids.add(p.userId);
-    if (event === "PAYMENT_CREATED" && p.isApprover) ids.add(p.userId);
-    if (p.isProjectResponsible) ids.add(p.userId);
-  });
-
-  if (projectId) {
-    const assigned = await prisma.user.findMany({
-      where: { assignedProjects: { some: { id: projectId } } },
-      select: { id: true },
-    });
-    assigned.forEach((u) => ids.add(u.id));
-  }
-
-  return [...ids];
+  return profiles.map((p) => p.userId).filter(Boolean);
 }
 
-function buildPaymentLink(payment) {
+/** Admin e perfil Financeiro — recebem todas as notificações operacionais. */
+async function resolveFinanceStaffIds() {
+  const users = await prisma.user.findMany({
+    where: { role: { in: ["admin", "financeiro"] } },
+    select: { id: true },
+  });
+  return users.map((u) => u.id).filter(Boolean);
+}
+
+/** Receptores externos: só liquidados (comprovativo) e itens aprovados para pagamento. */
+const RECEIVER_PAYMENT_EVENTS = new Set(["PAYMENT_CONFIRMED"]);
+
+async function resolvePaymentNotificationRecipients(event, { explicitRecipientIds = [] } = {}) {
+  const financeStaff = await resolveFinanceStaffIds();
+  const explicit = explicitRecipientIds.filter(Boolean);
+
+  if (RECEIVER_PAYMENT_EVENTS.has(event)) {
+    const receivers = await resolveFinancialReceiverIds();
+    return [...new Set([...financeStaff, ...receivers, ...explicit])];
+  }
+
+  return [...new Set([...financeStaff, ...explicit])];
+}
+
+async function resolveApprovedForPaymentRecipients({ explicitRecipientIds = [] } = {}) {
+  const financeStaff = await resolveFinanceStaffIds();
+  const receivers = await resolveFinancialReceiverIds();
+  return [...new Set([...financeStaff, ...receivers, ...explicitRecipientIds.filter(Boolean)])];
+}
+
+function buildPaymentLink(payment, event) {
   const params = new URLSearchParams({ paymentId: payment.id });
   if (payment.projectId) params.set("projectId", payment.projectId);
+  if (event === "PAYMENT_CONFIRMED" && payment.comprovativoUrl) {
+    params.set("focus", "comprovativo");
+  }
   return `/Financeiro/financeiro.html?${params}`;
 }
 
@@ -87,8 +96,7 @@ async function notifyPaymentEvent(io, payment, event, actor = {}, options = {}) 
   const explicitRecipientIds = Array.isArray(options.explicitRecipientIds)
     ? options.explicitRecipientIds.filter(Boolean)
     : [];
-  const autoRecipientIds = await resolveRecipientIds(payment, event);
-  const recipientIds = [...new Set([...autoRecipientIds, ...explicitRecipientIds])];
+  const recipientIds = await resolvePaymentNotificationRecipients(event, { explicitRecipientIds });
   const explicitSet = new Set(explicitRecipientIds);
   // Quem liquida o pagamento não recebe notificações automáticas (evita ruído),
   // mas se foi explicitamente seleccionado em "Notificar / Enviar comprovativo a"
@@ -100,7 +108,7 @@ async function notifyPaymentEvent(io, payment, event, actor = {}, options = {}) 
 
   const dedupeEvents = new Set(["PAYMENT_DUE", "PAYMENT_OVERDUE"]);
   const { title, body } = buildNotificationContent(payment, event);
-  const link = buildPaymentLink(payment);
+  const link = buildPaymentLink(payment, event);
   const metadata = {
     paymentId: payment.id,
     event,
@@ -176,13 +184,13 @@ async function notifyPaymentBatchCreated(io, payments, actor = {}) {
   });
   if (!full) return;
 
-  const recipientIds = await resolveRecipientIds(full, "PAYMENT_CREATED");
+  const recipientIds = await resolveFinanceStaffIds();
   const filteredIds = recipientIds.filter((userId) => !(actor.sub && userId === actor.sub));
   if (!filteredIds.length) return;
 
   const { title, body } = buildNotificationContent(full, "PAYMENT_CREATED");
   const batchTitle = `${title} (${payments.length} parcela(s))`;
-  const link = buildPaymentLink(full);
+  const link = buildPaymentLink(full, "PAYMENT_CREATED");
   const metadata = {
     paymentId: full.id,
     event: "PAYMENT_CREATED",
@@ -207,6 +215,62 @@ async function notifyPaymentBatchCreated(io, payments, actor = {}) {
       channels: [CHANNELS.IN_APP],
     });
   }
+}
+
+function buildNeedFinanceLink(need) {
+  const params = new URLSearchParams({
+    projectId: need.projectId,
+    tab: "cronograma",
+    needId: need.id,
+  });
+  return `/Projectos/centroCustos.html?${params}`;
+}
+
+async function notifyNeedSentToFinance(io, payload, actor = {}) {
+  const { need, quote, amount, currency } = payload;
+  if (!need?.id) return { sent: 0 };
+
+  const recipientIds = await resolveFinanceStaffIds();
+  const filteredIds = recipientIds.filter((userId) => !(actor.sub && userId === actor.sub));
+  if (!filteredIds.length) return { sent: 0 };
+
+  const projectName = need.project?.name || "Obra";
+  const supplier = quote?.supplier?.name || "—";
+  const money = formatMoney(amount, currency);
+  const title = `Agendar pagamento · ${projectName}`;
+  const body = `${need.description} · ${supplier} · ${money} — aguarda cronograma`;
+  const link = buildNeedFinanceLink(need);
+  const metadata = {
+    event: "NEED_SENT_TO_FINANCE",
+    needId: need.id,
+    projectId: need.projectId,
+    costCenterId: need.costCenterId,
+    quoteId: quote?.id || null,
+    proformaUrl: quote?.proformaUrl || null,
+    amount: String(amount),
+    supplier,
+  };
+
+  const recipients = await prisma.user.findMany({
+    where: { id: { in: filteredIds } },
+    select: { id: true, email: true, profile: { select: { whatsapp: true } } },
+  });
+
+  let sent = 0;
+  for (const recipient of recipients) {
+    await dispatchNotification({
+      io,
+      user: recipient,
+      type: "PAYMENT",
+      title,
+      body,
+      link,
+      metadata,
+      channels: [CHANNELS.IN_APP],
+    });
+    sent += 1;
+  }
+  return { sent };
 }
 
 async function scanDueAndOverduePayments(io) {
@@ -248,6 +312,10 @@ async function loadPaymentForNotification(paymentId) {
 module.exports = {
   notifyPaymentEvent,
   notifyPaymentBatchCreated,
+  notifyNeedSentToFinance,
   scanDueAndOverduePayments,
   loadPaymentForNotification,
+  resolveFinanceStaffIds,
+  resolveFinancialReceiverIds,
+  resolveApprovedForPaymentRecipients,
 };

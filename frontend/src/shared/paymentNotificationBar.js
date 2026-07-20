@@ -185,11 +185,11 @@ function renderCurrent() {
     openBtn.className =
       "h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wide bg-white/15 hover:bg-white/25 transition-colors";
     openBtn.textContent =
-      payload?.metadata?.extraRequestId || String(currentPayload?.title || "").toLowerCase().includes("pedido extra")
+      currentPayload?.metadata?.extraRequestId || String(currentPayload?.title || "").toLowerCase().includes("pedido extra")
         ? "Liquidar"
         : String(currentPayload?.metadata?.event || "") === "PAYMENT_CONFIRMED"
-          ? "Ver lançamento"
-          : "Liquidar";
+          ? "Ver comprovativo"
+          : "Abrir";
     openBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openNotificationTarget(currentPayload);
@@ -278,19 +278,19 @@ export async function loadUnreadPaymentNotifications(fetchNotifications) {
   try {
     const data = await fetchNotifications({ unreadOnly: true });
     const items = (data.items || [])
-      .filter((n) => n.type === "PAYMENT" && n.id && !seenIds.has(n.id))
+      .filter((n) => n.type === "PAYMENT" && n.id)
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
     for (const item of items) {
-      if (!currentPayload) {
-        currentPayload = item;
-      } else {
-        queue.push(item);
-      }
+      enqueuePaymentNotification(item);
     }
-
-    if (currentPayload) renderCurrent();
   } catch {
     /* offline */
   }
+}
+
+/** Carrega notificações de pagamento pendentes (login / refresh). */
+export async function initPaymentNotifications() {
+  const { fetchNotifications } = await import("../services/chatApi.js");
+  await loadUnreadPaymentNotifications(fetchNotifications);
 }

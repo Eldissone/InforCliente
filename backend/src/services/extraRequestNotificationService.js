@@ -1,5 +1,6 @@
 const { prisma } = require("../db");
 const { dispatchNotification, CHANNELS } = require("./notifications/dispatcher");
+const { resolveApprovedForPaymentRecipients } = require("./paymentNotificationService");
 
 function formatMoney(value, currency = "AOA") {
   const n = Number(value);
@@ -10,14 +11,6 @@ function formatMoney(value, currency = "AOA") {
 /** Todos os pedidos extra aprovados liquidam-se no Perfil Financeiro. */
 function needsFinanceiroLiquidation(extra) {
   return Boolean(extra?.id);
-}
-
-async function resolveFinanceRecipientIds() {
-  const flagged = await prisma.userProfile.findMany({
-    where: { isFinancialReceiver: true },
-    select: { userId: true },
-  });
-  return flagged.map((p) => p.userId);
 }
 
 function buildExtraLink(extra) {
@@ -40,7 +33,7 @@ async function notifyExtraRequestApproved(io, extra, actor = {}) {
   if (!extra?.id || extra.status !== "APROVADO") return { sent: 0 };
   if (!needsFinanceiroLiquidation(extra)) return { sent: 0 };
 
-  const recipientIds = await resolveFinanceRecipientIds();
+  const recipientIds = await resolveApprovedForPaymentRecipients();
   const filteredIds = recipientIds.filter((userId) => !(actor.sub && userId === actor.sub));
   if (!filteredIds.length) return { sent: 0 };
 

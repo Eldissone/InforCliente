@@ -343,7 +343,7 @@ export function renderPaymentGantt(
         <div class="flex items-center gap-3 text-[10px] font-bold text-slate-500">
           <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>Pendente</span>
           <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Atrasado</span>
-          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Liquidado</span>
+          <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>Pago</span>
         </div>
       </div>
       <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">

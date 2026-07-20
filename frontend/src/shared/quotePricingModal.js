@@ -267,6 +267,37 @@ function renderReadyToOrderBanner(selectedQuote) {
 
 
 
+function renderApprovedBanner(selectedQuote, need) {
+  const existing = document.getElementById("quoteApprovedBanner");
+  if (existing) existing.remove();
+  if (!selectedQuote || need?.scheduled) return;
+
+  const total = Number(selectedQuote.totalValue ?? selectedQuote.quotedPrice ?? 0)
+    .toLocaleString("pt-PT", { minimumFractionDigits: 2 });
+
+  const banner = document.createElement("div");
+  banner.id = "quoteApprovedBanner";
+  banner.className = "mb-4 p-4 rounded-xl border border-emerald-200 bg-emerald-50";
+  banner.innerHTML = `
+    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div class="flex-1">
+        <p class="text-xs font-black uppercase tracking-widest text-emerald-700 mb-1">Aprovado</p>
+        <p class="text-sm text-emerald-900 font-medium">
+          <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${total} ${selectedQuote.currency || "AOA"}.
+          Envie ao financeiro para agendar o pagamento.
+        </p>
+      </div>
+      <button type="button" id="btnSendToFinance"
+        class="h-10 px-4 rounded-lg bg-[#0f172a] text-white text-xs font-bold hover:bg-slate-800 transition-all inline-flex items-center gap-2 shrink-0">
+        <span class="material-symbols-outlined text-base">forward_to_inbox</span>
+        Enviar ao Financeiro
+      </button>
+    </div>`;
+
+  const panel = document.getElementById("quotePresentedPanel");
+  panel?.insertBefore(banner, panel.firstChild);
+}
+
 function clearOrderedBanner() {
 
   document.getElementById("quoteOrderedBanner")?.remove();
@@ -274,6 +305,8 @@ function clearOrderedBanner() {
   document.getElementById("quoteReadyBanner")?.remove();
 
   document.getElementById("quoteAnalysisBanner")?.remove();
+
+  document.getElementById("quoteApprovedBanner")?.remove();
 
   document.getElementById("quoteInvoiceBanner")?.remove();
 
@@ -674,6 +707,16 @@ export async function loadPresentedPrices({
       document.getElementById("btnRejectAnalysis")?.addEventListener("click", async () => {
 
         await rejectNeedAnalysis({ needId, need, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+
+      });
+
+    } else if (isApproved && selectedQuote && !need.scheduled) {
+
+      renderApprovedBanner(selectedQuote, need);
+
+      document.getElementById("btnSendToFinance")?.addEventListener("click", async () => {
+
+        await sendNeedToFinanceFromModal({ needId, need, ccId: need.costCenterId, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
 
       });
 
@@ -1118,6 +1161,19 @@ export async function loadPresentedPrices({
 }
 
 
+
+async function sendNeedToFinanceFromModal({ needId, need, ccId, apiRequest, showToast, onApproved, suppliers, openProformaViewer }) {
+  if (!confirm("Enviar este item ao financeiro para agendamento de pagamento?")) return;
+  try {
+    await apiRequest(`/cost-centers/${ccId}/needs/${needId}/send-to-finance`, { method: "POST" });
+    showToast?.("Item enviado ao financeiro.", "success");
+    window.__quoteModalNeed = { ...need, scheduled: true };
+    await onApproved?.();
+    document.getElementById("modalQuote")?.classList.remove("open");
+  } catch (err) {
+    showToast?.("Erro: " + err.message, "error");
+  }
+}
 
 async function approveNeedAnalysis({ needId, need, apiRequest, showToast, onApproved, suppliers, openProformaViewer }) {
   if (!confirm("Confirmar aprovação desta análise? O item ficará aprovado (pagamento continua pendente até ir ao cronograma).")) return;

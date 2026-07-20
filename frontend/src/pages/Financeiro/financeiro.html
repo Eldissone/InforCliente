@@ -241,6 +241,21 @@
             font-size: 11px;
         }
 
+        /* Cabeçalho sticky da tabela (shared-ui.css) não pode sobrepor o viewer de documentos */
+        body.doc-viewer-open .overflow-x-auto thead th,
+        body.doc-viewer-open .table-responsive thead th {
+            position: static;
+            z-index: auto;
+        }
+
+        #docAsideOverlay {
+            z-index: 120;
+        }
+
+        #docAside {
+            z-index: 130;
+        }
+
         /* ── Dashboard financeiro ── */
         .fin-dashboard {
             background: linear-gradient(145deg, #f8fafc 0%, #ecfdf5 42%, #f8fafc 100%);
@@ -589,7 +604,8 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a data-nav-dashboard class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-dashboard
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
@@ -601,7 +617,8 @@
                 data-nav-obras href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
@@ -609,15 +626,18 @@
                 data-nav-planeamento href="../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
             </a>
-            <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-cotacao
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Projectos/Cotacao/index.html">
                 <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
             </a>
-            <a data-nav-financeiro class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-financeiro
+                class="flex items-center gap-3 text-sm font-semibold text-[#2afc8d] py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="financeiro.html">
                 <span class="material-symbols-outlined text-lg">payments</span> Financeiro
             </a>
-            <a data-nav-centros class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-centros
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="centrosGerais.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
             </a>
@@ -660,13 +680,13 @@
                             <optgroup label="Pagamentos">
                                 <option value="PENDENTE">Pendentes</option>
                                 <option value="VENCIDO">Atrasados</option>
-                                <option value="CONFIRMADO">Liquidados</option>
+                                <option value="CONFIRMADO">Pagos</option>
                             </optgroup>
                             <optgroup label="Pedidos Extra">
                                 <option value="EXTRA">Todos os pedidos extra</option>
                                 <option value="EXTRA_PENDENTE">Extra — Pendente aprovação</option>
                                 <option value="EXTRA_A_LIQUIDAR">Extra — A liquidar</option>
-                                <option value="EXTRA_PAGO">Extra — Liquidados</option>
+                                <option value="EXTRA_PAGO">Extra — Pagos</option>
                             </optgroup>
                         </select>
                         <input id="finSearch" type="search" placeholder="Pagamentos, extras, obras..."
@@ -802,15 +822,27 @@
             </button>
         </div>
 
-        <!-- Tab: Plano de Pagamentos (Gantt) -->
+        <!-- Tab: Plano de Pagamentos (Gantt + Lista) -->
         <div class="fin-tab-panel active" id="tab-calendario">
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
-                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
-                    <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
-                        aria-label="Visualização do calendário">
-                        <button type="button" class="gantt-view-btn" data-gantt-view="day">Dia</button>
-                        <button type="button" class="gantt-view-btn" data-gantt-view="week">Semana</button>
-                        <button type="button" class="gantt-view-btn active" data-gantt-view="month">Mês</button>
+                <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
+                            aria-label="Modo de visualização">
+                            <button type="button" class="gantt-view-btn active" data-payment-view="gantt">
+                                <span
+                                    class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span>Calendário
+                            </button>
+                            <button type="button" class="gantt-view-btn" data-payment-view="list">
+                                <span class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span>Lista
+                            </button>
+                        </div>
+                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
+                            aria-label="Período do plano">
+                            <button type="button" class="gantt-view-btn" data-gantt-view="day">Dia</button>
+                            <button type="button" class="gantt-view-btn" data-gantt-view="week">Semana</button>
+                            <button type="button" class="gantt-view-btn active" data-gantt-view="month">Mês</button>
+                        </div>
                     </div>
                     <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5 items-center" role="group"
                         aria-label="Navegação do calendário">
@@ -823,8 +855,35 @@
                         </button>
                     </div>
                 </div>
-                <div id="calendarGrid">
-                    <div class="spinner my-8"></div>
+                <div id="planGanttView">
+                    <div id="calendarGrid">
+                        <div class="spinner my-8"></div>
+                    </div>
+                </div>
+                <div id="planListView" class="hidden">
+                    <div class="overflow-x-auto -mx-2 md:mx-0">
+                        <table class="fin-table w-full min-w-[960px]">
+                            <thead>
+                                <tr>
+                                    <th>Material / Descrição</th>
+                                    <th>Fornecedor</th>
+                                    <th>IBAN</th>
+                                    <th class="text-right">Valor</th>
+                                    <th class="text-center">Doc.</th>
+                                    <th class="text-center">Tipo</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Acções</th>
+                                </tr>
+                            </thead>
+                            <tbody id="planTableBody">
+                                <tr>
+                                    <td colspan="8">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -842,11 +901,13 @@
                     <div class="flex items-center gap-3 flex-wrap">
                         <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5 items-center" role="group"
                             aria-label="Navegação do plano de pedidos">
-                            <button id="ordersCalPrev" type="button" aria-label="Período anterior" class="gantt-nav-btn">
+                            <button id="ordersCalPrev" type="button" aria-label="Período anterior"
+                                class="gantt-nav-btn">
                                 <span class="material-symbols-outlined text-base">chevron_left</span>
                             </button>
                             <button id="ordersCalToday" type="button" class="gantt-nav-today">Hoje</button>
-                            <button id="ordersCalNext" type="button" aria-label="Período seguinte" class="gantt-nav-btn">
+                            <button id="ordersCalNext" type="button" aria-label="Período seguinte"
+                                class="gantt-nav-btn">
                                 <span class="material-symbols-outlined text-base">chevron_right</span>
                             </button>
                         </div>
@@ -872,6 +933,23 @@
             </span>
         </div>
     </footer>
+
+    <!-- Aside: Visualizador de Documento -->
+    <div id="docAsideOverlay" class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm hidden transition-opacity opacity-0"
+        onclick="closeDocumentAside()"></div>
+    <aside id="docAside"
+        class="fixed right-0 top-0 h-full w-full max-w-[640px] bg-white shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-200">
+        <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div>
+                <h2 id="docAsideTitle" class="text-lg font-bold text-slate-900 tracking-tight">Documento</h2>
+            </div>
+            <button type="button" onclick="closeDocumentAside()" aria-label="Fechar documento"
+                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 transition-colors">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <div id="docAsideContainer" class="flex-1 overflow-auto p-4 bg-slate-50 custom-scroll min-h-[300px]"></div>
+    </aside>
 
     <!-- Aside: Detalhes do Lançamento -->
     <div id="paymentAsideOverlay"
@@ -1021,23 +1099,18 @@
                     <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Ajusta o valor se o montante final pago
                         foi diferente do previsto.</p>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label for="liqComprovativo" id="liqComprovativoLabel"
-                            class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Comprovativo*</label>
-                        <input id="liqComprovativo" type="file" accept="image/*,.pdf" required
-                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" />
-                        <p id="liqComprovativoHint" class="text-[10px] text-slate-400 mt-1.5 font-semibold hidden">Já
-                            existe um comprovativo anexado. Só precisas de escolher um ficheiro se quiseres
-                            substituí-lo.</p>
+                <div id="liqDocsBlock" class="flex flex-col gap-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label
+                            class="block text-xs font-black uppercase tracking-widest text-slate-400">Documentos</label>
+                        <button type="button" id="liqAddDocBtn"
+                            class="h-9 px-3 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] hover:bg-slate-200 transition-all inline-flex items-center gap-1">
+                            <span class="material-symbols-outlined text-base">add</span> Adicionar
+                        </button>
                     </div>
-                    <div>
-                        <label for="liqFatura" id="liqFaturaLabel"
-                            class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Fatura /
-                            Recibo (Opcional)</label>
-                        <input id="liqFatura" type="file" accept="image/*,.pdf"
-                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 transition-all cursor-pointer" />
-                    </div>
+                    <div id="liqDocsList" class="flex flex-col gap-3"></div>
+                    <p id="liqDocsHint" class="text-[10px] text-slate-400 font-semibold">Inclua pelo menos um
+                        comprovativo. Pode anexar faturas e outros documentos com descrição opcional.</p>
                 </div>
                 <div id="liqRecipientsSection">
                     <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Notificar /

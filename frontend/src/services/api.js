@@ -53,6 +53,21 @@ async function parseJsonSafe(res) {
   }
 }
 
+const API_ERROR_MESSAGES = {
+  COMPROVATIVO_REQUIRED: "Comprovativo de pagamento é obrigatório para liquidar.",
+  FINANCEIRO_ONLY: "Liquidação apenas no Perfil Financeiro.",
+  PAYMENT_NOT_FOUND: "Lançamento não encontrado.",
+};
+
+function resolveApiErrorMessage(data, status) {
+  if (data?.message) return data.message;
+  if (data?.error && API_ERROR_MESSAGES[data.error]) return API_ERROR_MESSAGES[data.error];
+  if (status === 403 || String(data?.error || "").includes("FORBIDDEN")) {
+    return "Acesso negado: você não tem permissão para realizar esta ação.";
+  }
+  return data?.error || `HTTP_${status}`;
+}
+
 export async function apiRequest(path, { method = "GET", body, headers } = {}) {
   const token = getToken();
   const baseUrl = getApiBaseUrl();
@@ -79,10 +94,7 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    let errorMsg = data?.error || `HTTP_${res.status}`;
-    if (res.status === 403 || errorMsg.includes("FORBIDDEN")) {
-      errorMsg = "Acesso negado: você não tem permissão para realizar esta ação.";
-    }
+    const errorMsg = resolveApiErrorMessage(data, res.status);
     const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
@@ -104,7 +116,7 @@ export async function apiUpload(path, dataOrOptions, method = "POST") {
   } else {
     const { file, fieldName = "file", extraFields, method: optionsMethod } = dataOrOptions || {};
     if (optionsMethod) finalMethod = optionsMethod;
-    
+
     form = new FormData();
     if (file) form.append(fieldName, file);
     if (extraFields) {
@@ -130,10 +142,7 @@ export async function apiUpload(path, dataOrOptions, method = "POST") {
 
   const data = await parseJsonSafe(res);
   if (!res.ok) {
-    let errorMsg = data?.error || `HTTP_${res.status}`;
-    if (res.status === 403 || errorMsg.includes("FORBIDDEN")) {
-      errorMsg = "Acesso negado: você não tem permissão para realizar esta ação.";
-    }
+    const errorMsg = resolveApiErrorMessage(data, res.status);
     const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
@@ -141,4 +150,3 @@ export async function apiUpload(path, dataOrOptions, method = "POST") {
   }
   return data;
 }
-

@@ -140,19 +140,75 @@ function renderAsideDocument(url, title = "Documento") {
   if (isImage) {
     return `
       <div class="relative w-full h-full flex flex-col items-center justify-center">
-        <img src="${assetUrl}" alt="${title}" class="w-full h-auto object-contain max-h-full rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${assetUrl}','_blank')">
-        <button type="button" onclick="window.open('${assetUrl}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Imagem">
-          <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-        </button>
+        <img src="${assetUrl}" alt="${title}" class="w-full h-auto object-contain max-h-full rounded-lg shadow-sm border border-slate-200">
       </div>`;
   }
   return `
     <div class="relative w-full h-full min-h-[300px]">
-      <iframe src="${assetUrl}" class="w-full h-full rounded-lg shadow-sm border border-slate-200"></iframe>
-      <button type="button" onclick="window.open('${assetUrl}','_blank')" class="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-md border border-slate-200 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-emerald-600 transition-all shadow-sm" title="Expandir Documento">
-        <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-      </button>
+      <iframe src="${assetUrl}" class="w-full h-full min-h-[70vh] rounded-lg shadow-sm border border-slate-200" title="${title}"></iframe>
     </div>`;
+}
+
+function openDocumentAside(url, title = "Documento") {
+  const aside = document.getElementById("docAside");
+  const overlay = document.getElementById("docAsideOverlay");
+  const container = document.getElementById("docAsideContainer");
+  const titleEl = document.getElementById("docAsideTitle");
+  if (!aside || !overlay || !container) {
+    window.open(getAssetUrl(url), "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (titleEl) titleEl.textContent = title;
+  container.innerHTML = renderAsideDocument(url, title);
+  document.body.classList.add("doc-viewer-open");
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    overlay.classList.remove("opacity-0");
+    aside.classList.remove("translate-x-full");
+  });
+}
+
+function closeDocumentAside() {
+  const aside = document.getElementById("docAside");
+  const overlay = document.getElementById("docAsideOverlay");
+  document.body.classList.remove("doc-viewer-open");
+  aside?.classList.add("translate-x-full");
+  overlay?.classList.add("opacity-0");
+  setTimeout(() => overlay?.classList.add("hidden"), 300);
+}
+
+function renderLiqDocRow({ kind = "comprovativo", required = false, removable = true } = {}) {
+  const removeBtn = removable
+    ? `<button type="button" class="liq-doc-remove w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors flex items-center justify-center" title="Remover">
+        <span class="material-symbols-outlined text-base">delete</span>
+      </button>`
+    : "";
+  return `
+    <div class="liq-doc-row p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <select class="liq-doc-kind flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+          <option value="comprovativo" ${kind === "comprovativo" ? "selected" : ""}>Comprovativo</option>
+          <option value="fatura" ${kind === "fatura" ? "selected" : ""}>Fatura / Recibo</option>
+          <option value="outro" ${kind === "outro" ? "selected" : ""}>Outro documento</option>
+        </select>
+        ${removeBtn}
+      </div>
+      <input type="file" class="liq-doc-file w-full h-11 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" accept="image/*,.pdf" ${required ? "required" : ""} />
+      <input type="text" class="liq-doc-desc w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700" placeholder="Descrição (opcional)" />
+    </div>`;
+}
+
+function resetLiqDocuments() {
+  const list = document.getElementById("liqDocsList");
+  if (!list) return;
+  list.innerHTML = renderLiqDocRow({ kind: "comprovativo", required: !liqAlreadyConfirmed, removable: false });
+  bindLiqDocRowEvents(list);
+}
+
+function bindLiqDocRowEvents(scope = document) {
+  scope.querySelectorAll(".liq-doc-remove").forEach((btn) => {
+    btn.onclick = () => btn.closest(".liq-doc-row")?.remove();
+  });
 }
 
 function openLiquidateModal(payment) {
@@ -178,41 +234,35 @@ function openLiquidateModal(payment) {
   }
   ccInput.value = data.costCenterId;
 
-  const compInput = document.getElementById("liqComprovativo");
-  const compLabel = document.getElementById("liqComprovativoLabel");
-  const compHint = document.getElementById("liqComprovativoHint");
   const title = document.getElementById("liqModalTitle");
   const subtitle = document.getElementById("liqModalSubtitle");
   const submitBtn = document.getElementById("liqSubmitBtn");
   const recipientsSection = document.getElementById("liqRecipientsSection");
-
-  if (compInput) compInput.value = "";
-  const fatInput = document.getElementById("liqFatura");
-  if (fatInput) fatInput.value = "";
+  const docsHint = document.getElementById("liqDocsHint");
 
   if (liqAlreadyConfirmed) {
-    compInput?.removeAttribute("required");
-    if (compLabel) compLabel.textContent = "Comprovativo (substituir, opcional)";
-    compHint?.classList.remove("hidden");
-    if (title) title.textContent = data.faturaUrl ? "Editar Liquidação" : "Anexar Fatura";
+    if (title) title.textContent = data.faturaUrl ? "Editar documentos" : "Anexar documentos";
     if (subtitle) {
       subtitle.textContent = data.faturaUrl
-        ? "Atualiza documentos da liquidação"
-        : "Ainda não há fatura final — podes anexá-la agora";
+        ? "Actualiza os documentos da liquidação"
+        : "Anexe fatura ou outros documentos complementares";
     }
     if (submitBtn) submitBtn.textContent = "Guardar";
     recipientsSection?.classList.add("hidden");
     const recipientsList = document.getElementById("liqRecipientsList");
     if (recipientsList) recipientsList.innerHTML = "";
+    docsHint?.classList.remove("hidden");
+    resetLiqDocuments();
+    const firstRow = document.querySelector("#liqDocsList .liq-doc-row");
+    firstRow?.querySelector(".liq-doc-file")?.removeAttribute("required");
   } else {
-    compInput?.setAttribute("required", "required");
-    if (compLabel) compLabel.textContent = "Comprovativo*";
-    compHint?.classList.add("hidden");
-    if (title) title.textContent = "Liquidar Lançamento";
-    if (subtitle) subtitle.textContent = "Confirma o valor final pago";
-    if (submitBtn) submitBtn.textContent = "Confirmar Liquidação";
+    if (title) title.textContent = "Liquidar lançamento";
+    if (subtitle) subtitle.textContent = "Anexe o comprovativo e outros documentos";
+    if (submitBtn) submitBtn.textContent = "Confirmar liquidação";
     recipientsSection?.classList.remove("hidden");
     renderLiqRecipients(data.notifiedRecipientIds);
+    docsHint?.classList.remove("hidden");
+    resetLiqDocuments();
   }
 
   document.getElementById("modalLiq").classList.add("open");
@@ -226,21 +276,51 @@ async function submitLiquidation(e) {
 
   if (!realizedAmount) return _showToast?.("Valor é obrigatório", "error");
 
-  const compInput = document.getElementById("liqComprovativo");
-  if (!liqAlreadyConfirmed && (!compInput || !compInput.files[0])) {
-    return _showToast?.("Comprovativo de pagamento é obrigatório", "error");
-  }
-
+  const docRows = Array.from(document.querySelectorAll("#liqDocsList .liq-doc-row"));
   const fd = new FormData();
   fd.append("paidAmount", realizedAmount);
   if (!liqAlreadyConfirmed) fd.append("status", "CONFIRMADO");
-  if (compInput?.files[0]) fd.append("comprovativo", compInput.files[0]);
 
-  const fatInput = document.getElementById("liqFatura");
-  if (fatInput?.files[0]) fd.append("fatura", fatInput.files[0]);
+  let hasComprovativo = liqAlreadyConfirmed;
+  const anexoDescricoes = [];
+
+  docRows.forEach((row) => {
+    const file = row.querySelector(".liq-doc-file")?.files?.[0];
+    if (!file) return;
+    const kind = row.querySelector(".liq-doc-kind")?.value || "outro";
+    const desc = row.querySelector(".liq-doc-desc")?.value?.trim() || file.name;
+
+    if (kind === "comprovativo" && !fd.has("comprovativo")) {
+      fd.append("comprovativo", file);
+      hasComprovativo = true;
+      return;
+    }
+    if (kind === "fatura" && !fd.has("fatura")) {
+      fd.append("fatura", file);
+      return;
+    }
+    fd.append("anexos", file);
+    anexoDescricoes.push(desc);
+  });
+
+  if (!liqAlreadyConfirmed && !hasComprovativo) {
+    return _showToast?.("Comprovativo de pagamento é obrigatório", "error");
+  }
+
+  if (anexoDescricoes.length) {
+    fd.append("anexoDescricoes", JSON.stringify(anexoDescricoes));
+  }
 
   const recipientIds = getSelectedLiqRecipientIds();
-  if (recipientIds.length) fd.append("recipientIds", JSON.stringify(recipientIds));
+  if (!liqAlreadyConfirmed && !recipientIds.length) {
+    const users = await fetchNotificationRecipients();
+    const fallbackIds = users.filter((u) => u.isFinancialReceiver).map((u) => u.id);
+    if (fallbackIds.length) {
+      fd.append("recipientIds", JSON.stringify(fallbackIds));
+    }
+  } else if (recipientIds.length) {
+    fd.append("recipientIds", JSON.stringify(recipientIds));
+  }
 
   try {
     const btn = e.target.querySelector("button[type='submit']");
@@ -262,16 +342,14 @@ async function submitLiquidation(e) {
     }
     _showToast?.(toastMsg, sent || liqAlreadyConfirmed ? "success" : "info");
     document.getElementById("modalLiq").classList.remove("open");
-
-    if (compInput) compInput.value = "";
-    if (fatInput) fatInput.value = "";
+    resetLiqDocuments();
 
     await _onLiquidated?.();
   } catch (err) {
     const btn = e.target.querySelector("button[type='submit']");
-    btn.innerHTML = liqAlreadyConfirmed ? "Guardar" : "Confirmar Liquidação";
+    btn.innerHTML = liqAlreadyConfirmed ? "Guardar" : "Confirmar liquidação";
     btn.disabled = false;
-    _showToast?.("Erro: " + err.message, "error");
+    _showToast?.(err.message || "Erro ao liquidar lançamento.", "error");
   }
 }
 
@@ -291,7 +369,7 @@ function openPaymentAside(data, type, options = {}) {
       "text-red-700"
     );
     if (data.status === "CONFIRMADO" || data.status === "PAID") {
-      badge.textContent = "Liquidado";
+      badge.textContent = "Pago";
       badge.classList.add("bg-emerald-100", "text-emerald-700");
     } else if (data.status === "CANCELADO") {
       badge.textContent = "Cancelado";
@@ -406,6 +484,14 @@ export function initPaymentDetailAside({ onLiquidated, showToast } = {}) {
   window.openPaymentAside = openPaymentAside;
   window.closePaymentAside = closePaymentAside;
   window.openLiquidateModal = openLiquidateModal;
+  window.openDocumentAside = openDocumentAside;
+  window.closeDocumentAside = closeDocumentAside;
 
   document.getElementById("formLiq")?.addEventListener("submit", submitLiquidation);
+  document.getElementById("liqAddDocBtn")?.addEventListener("click", () => {
+    const list = document.getElementById("liqDocsList");
+    if (!list) return;
+    list.insertAdjacentHTML("beforeend", renderLiqDocRow({ kind: "outro", removable: true }));
+    bindLiqDocRowEvents(list);
+  });
 }

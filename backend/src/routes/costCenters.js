@@ -8,9 +8,14 @@ const { buildPaymentTimeline, enrichPaymentForTimeline } = require("../services/
 const {
   notifyPaymentEvent,
   notifyPaymentBatchCreated,
+  notifyNeedSentToFinance,
   scanDueAndOverduePayments,
   loadPaymentForNotification,
 } = require("../services/paymentNotificationService");
+const {
+  sendNeedToFinance,
+  listPendingFinanceScheduling,
+} = require("../services/needFinanceBridgeService");
 const {
   analyzeCertification,
   certifyPayment,
@@ -132,6 +137,28 @@ const PAYMENT_SUPPLIER_INCLUDE = {
     discountPercent: true,
   },
 };
+
+const EXTRA_DOCS_RE = /<!--EXTRA_DOCS:(.*?)-->/s;
+
+function parsePaymentNotes(notes) {
+  if (!notes) return { text: "", extraDocs: [] };
+  const match = notes.match(EXTRA_DOCS_RE);
+  if (!match) return { text: notes.trim(), extraDocs: [] };
+  try {
+    const extraDocs = JSON.parse(match[1]);
+    const text = notes.replace(EXTRA_DOCS_RE, "").trim();
+    return { text, extraDocs: Array.isArray(extraDocs) ? extraDocs : [] };
+  } catch {
+    return { text: notes.trim(), extraDocs: [] };
+  }
+}
+
+function buildPaymentNotes(text, extraDocs) {
+  const base = (text || "").trim();
+  if (!extraDocs?.length) return base || null;
+  const marker = `<!--EXTRA_DOCS:${JSON.stringify(extraDocs)}-->`;
+  return base ? `${base}\n${marker}` : marker;
+}
 
 const PAYMENT_RELATIONS_INCLUDE = {
   paymentInstallment: {
@@ -1167,36 +1194,91 @@ costCenterRoutes.delete(
 
 // ─── Cronograma de Pagamentos ──────────────────────────────────────────────────
 
-// POST /cost-centers/project/:projectId/needs/schedule-bulk — Marcar múltiplas necessidades como agendadas
+// GET /cost-centers/pending-finance-scheduling — Itens enviados ao financeiro (aguardam parcelamento)
+costCenterRoutes.get(
+  "/pending-finance-scheduling",
+  requirePermission("financeiro", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+    const items = await listPendingFinanceScheduling({ projectId });
+    return res.json({ items });
+  })
+);
+
+// POST /cost-centers/project/:projectId/needs/schedule-bulk — Enviar múltiplas necessidades ao financeiro
 costCenterRoutes.post(
   "/project/:projectId/needs/schedule-bulk",
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const body = z.object({
-      needIds: z.array(z.string()),
+      needIds: z.array(z.string()).min(1),
     }).parse(req.body);
 
-    await prisma.workNeed.updateMany({
-      where: { id: { in: body.needIds }, projectId },
-      data: { scheduled: true },
-    });
+    const results = [];
+    const errors = [];
 
-    return res.json({ ok: true });
+    for (const needId of body.needIds) {
+      try {
+        const need = await prisma.workNeed.findUnique({
+          where: { id: needId },
+          select: { costCenterId: true, projectId: true },
+        });
+        if (!need || need.projectId !== projectId) {
+          errors.push({ needId, code: "NEED_NOT_FOUND" });
+          continue;
+        }
+        const payload = await sendNeedToFinance({ needId, ccId: need.costCenterId });
+        setImmediate(() => {
+          notifyNeedSentToFinance(req.app.get("io"), payload, req.user).catch((e) =>
+            console.error("notifyNeedSentToFinance:", e)
+          );
+        });
+        results.push({ needId, ok: true });
+      } catch (err) {
+        errors.push({ needId, code: err.code || "ERROR", message: err.message });
+      }
+    }
+
+    return res.json({ ok: true, scheduled: results.length, results, errors });
   })
 );
 
-// POST /cost-centers/:ccId/needs/:needId/schedule — Marcar uma necessidade como agendada
+// POST /cost-centers/:ccId/needs/:needId/schedule — Enviar ao financeiro (legado)
 costCenterRoutes.post(
   "/:ccId/needs/:needId/schedule",
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const needId = String(req.params.needId);
-    await prisma.workNeed.update({
-      where: { id: needId },
-      data: { scheduled: true },
+    const ccId = String(req.params.ccId);
+    const payload = await sendNeedToFinance({ needId, ccId });
+
+    setImmediate(() => {
+      notifyNeedSentToFinance(req.app.get("io"), payload, req.user).catch((e) =>
+        console.error("notifyNeedSentToFinance:", e)
+      );
     });
-    return res.json({ ok: true });
+
+    return res.json({ ok: true, ...payload });
+  })
+);
+
+// POST /cost-centers/:ccId/needs/:needId/send-to-finance — Enviar item aprovado ao financeiro
+costCenterRoutes.post(
+  "/:ccId/needs/:needId/send-to-finance",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const ccId = String(req.params.ccId);
+    const payload = await sendNeedToFinance({ needId, ccId });
+
+    setImmediate(() => {
+      notifyNeedSentToFinance(req.app.get("io"), payload, req.user).catch((e) =>
+        console.error("notifyNeedSentToFinance:", e)
+      );
+    });
+
+    return res.json({ ok: true, ...payload });
   })
 );
 
@@ -1415,12 +1497,12 @@ costCenterRoutes.post(
 costCenterRoutes.patch(
   "/:id/payments/:payId",
   requireRole(["admin", "operador"]),
-  upload.fields([{ name: "comprovativo", maxCount: 1 }, { name: "fatura", maxCount: 1 }]),
+  upload.fields([{ name: "comprovativo", maxCount: 1 }, { name: "fatura", maxCount: 1 }, { name: "anexos", maxCount: 10 }]),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
     const before = await prisma.costPayment.findUnique({
       where: { id: payId },
-      select: { status: true },
+      select: { status: true, comprovativoUrl: true },
     });
     if (!before) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
 
@@ -1440,12 +1522,21 @@ costCenterRoutes.patch(
       needId: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       recipientIds: z.string().optional().nullable(),
+      anexoDescricoes: z.string().optional().nullable(),
     }).parse(req.body);
 
     const hasComprovativo = Boolean(req.files?.comprovativo?.length);
+    const isFirstConfirmation = body.status === "CONFIRMADO" && before.status !== "CONFIRMADO";
     const isLiquidating =
-      (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") ||
+      isFirstConfirmation ||
       (before.status === "PENDENTE" && hasComprovativo);
+
+    if (isFirstConfirmation && !hasComprovativo && !before.comprovativoUrl) {
+      return res.status(400).json({
+        error: "COMPROVATIVO_REQUIRED",
+        message: "Comprovativo de pagamento é obrigatório para liquidar.",
+      });
+    }
 
     if (isLiquidating) {
       try {
@@ -1489,6 +1580,7 @@ costCenterRoutes.patch(
 
     let comprovativoUrl = undefined;
     let faturaUrl = undefined;
+    let mergedNotes = body.notes;
 
     if (req.files) {
       if (req.files.comprovativo && req.files.comprovativo.length > 0) {
@@ -1502,6 +1594,34 @@ costCenterRoutes.patch(
         const ext = file.originalname.split(".").pop();
         const filename = `fatura-${Date.now()}.${ext}`;
         faturaUrl = await uploadToSupabase(filename, file.buffer, file.mimetype);
+      }
+      if (req.files.anexos?.length) {
+        let descriptions = [];
+        if (body.anexoDescricoes) {
+          try {
+            const parsed = JSON.parse(body.anexoDescricoes);
+            if (Array.isArray(parsed)) descriptions = parsed;
+          } catch {
+            descriptions = [];
+          }
+        }
+        const existingPayment = await prisma.costPayment.findUnique({
+          where: { id: payId },
+          select: { notes: true },
+        });
+        const { text, extraDocs } = parsePaymentNotes(existingPayment?.notes);
+        for (let i = 0; i < req.files.anexos.length; i++) {
+          const file = req.files.anexos[i];
+          const ext = file.originalname.split(".").pop();
+          const filename = `anexo-${Date.now()}-${i}.${ext}`;
+          const url = await uploadToSupabase(filename, file.buffer, file.mimetype);
+          extraDocs.push({
+            url,
+            description: descriptions[i] || file.originalname,
+            uploadedAt: new Date().toISOString(),
+          });
+        }
+        mergedNotes = buildPaymentNotes(text, extraDocs);
       }
     }
 
@@ -1521,7 +1641,7 @@ costCenterRoutes.patch(
         ...(body.week !== undefined ? { week: body.week } : {}),
         ...(body.status ? { status: body.status } : {}),
         ...(body.needId !== undefined ? { needId: body.needId } : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(mergedNotes !== undefined ? { notes: mergedNotes } : body.notes !== undefined ? { notes: body.notes } : {}),
         ...(comprovativoUrl !== undefined ? { comprovativoUrl } : {}),
         ...(faturaUrl !== undefined ? { faturaUrl } : {}),
       },
