@@ -4,6 +4,7 @@ import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb, 
 import { resolveProductImageUrl } from "../../services/api.js";
 import { can, initPermissionLayer, activateFirstVisibleStockTab, guardPageAccess } from "../../shared/permissions.js";
 import { renderDeliveryCalendar, DELIVERY_STATUS, resolveDeliveryStatus } from "../../shared/deliveryTimeline.js";
+import { renderFreightTab } from "../../shared/freightOrders.js";
 
 let deliveryMonth = new Date();
 deliveryMonth.setDate(1);
@@ -177,6 +178,7 @@ async function loadTabContent(tab) {
         else if (tab === "requests") await renderRequests(container);
         else if (tab === "returns") await renderReturns(container);
         else if (tab === "deliveries") await renderDeliveries(container);
+        else if (tab === "freight") await renderFreightTab(container);
         else if (tab.startsWith("warehouse_detail_")) {
             const warehouseId = tab.replace("warehouse_detail_", "");
             await renderWarehouseDetail(container, warehouseId);

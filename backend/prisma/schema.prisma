@@ -278,6 +278,7 @@ model Project {
   costPayments        CostPayment[]
   pettyCashFunds      PettyCashFund[]
   extraRequests       ExtraRequest[]
+  freightAllocations  FreightAllocation[]
 
   @@index([name])
   @@index([status])
@@ -862,6 +863,7 @@ model CostCenter {
   payments      CostPayment[]
   transactions  ProjectTransaction[]
   extraRequests ExtraRequest[]
+  freightAllocations FreightAllocation[]
 
   @@unique([projectId, code])
   @@index([projectId])
@@ -913,6 +915,14 @@ model CostPayment {
   description        String
   budgetedAmount     Decimal             @db.Decimal(16, 2)
   paidAmount         Decimal             @db.Decimal(16, 2)
+  grossAmount        Decimal?            @db.Decimal(16, 2)
+  vatAmount          Decimal?            @db.Decimal(16, 2)
+  withholdingAmount  Decimal?            @db.Decimal(16, 2)
+  netAmount          Decimal?            @db.Decimal(16, 2)
+  fiscalApplyVat         Boolean         @default(false)
+  fiscalApplyWithholding Boolean         @default(false)
+  fiscalApplyDiscount    Boolean         @default(false)
+  fiscalInputMode        String?         // "base" | "gross"
   paymentMethod      String?
   paymentType        String?             @default("PRONTO_PAGAMENTO")
   week               String?
@@ -931,6 +941,7 @@ model CostPayment {
   need               WorkNeed?           @relation(fields: [needId], references: [id], onDelete: SetNull)
   supplierRef        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   paymentInstallment PaymentInstallment?
+  freightOrder       FreightOrder?
 
   @@index([supplierId])
   @@index([projectId, costCenterId])
@@ -1163,8 +1174,9 @@ model SystemLog {
 }
 
 model Supplier {
-  id                 String   @id @default(cuid())
+  id                 String       @id @default(cuid())
   name               String
+  type               SupplierType @default(MATERIAL)
   nif                String?
   contact            String?
   phone              String?
@@ -1184,6 +1196,61 @@ model Supplier {
   quotes       NeedQuote[]
   bankAccounts SupplierBankAccount[]
   payments     CostPayment[]
+  freightOrders FreightOrder[]
+}
+
+enum SupplierType {
+  MATERIAL
+  SERVICO
+  TRANSPORTADOR
+}
+
+enum FreightStatus {
+  PENDENTE
+  EM_ANALISE
+  APPROVED
+  PAGO
+  CANCELADO
+}
+
+model FreightOrder {
+  id            String         @id @default(cuid())
+  supplierId    String
+  totalAmount   Decimal        @db.Decimal(16, 2)
+  currency      String         @default("AOA")
+  status        FreightStatus  @default(PENDENTE)
+  notes         String?
+  costPaymentId String?        @unique
+  createdBy     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  costPayment  CostPayment?        @relation(fields: [costPaymentId], references: [id], onDelete: SetNull)
+  allocations  FreightAllocation[]
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+model FreightAllocation {
+  id             String   @id @default(cuid())
+  freightOrderId String
+  needQuoteId    String?
+  projectId      String
+  costCenterId   String?
+  description    String
+  amount         Decimal  @db.Decimal(16, 2)
+  createdAt      DateTime @default(now())
+
+  freightOrder FreightOrder @relation(fields: [freightOrderId], references: [id], onDelete: Cascade)
+  needQuote    NeedQuote?   @relation(fields: [needQuoteId], references: [id], onDelete: SetNull)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter   CostCenter?  @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+
+  @@index([freightOrderId])
+  @@index([projectId])
+  @@index([needQuoteId])
 }
 
 model SupplierBankAccount {
@@ -1251,6 +1318,7 @@ model NeedQuote {
   supplierProduct SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   installments    PaymentInstallment[]
   stockMovements  StockMovement[]
+  freightAllocations FreightAllocation[]
 }
 
 enum InstallmentStatus {

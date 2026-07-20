@@ -5,7 +5,13 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
-import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "/shared/supplierFiscal.js";
+import { appendFiscalFieldsToFormData } from "/shared/supplierFiscal.js";
+import {
+  initLiquidationFiscalHandlers,
+  setupLiquidationFiscalModal,
+  getLiquidationFiscalFormDataExtras,
+  renderAsideFiscalFromPayment,
+} from "/shared/liquidationFiscal.js";
 import { initMobileMenu } from "/shared/ui.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -1465,6 +1471,7 @@ function bindEvents() {
 
   // Transaction form
   document.getElementById("formLiq").addEventListener("submit", submitLiquidation);
+  initLiquidationFiscalHandlers();
 }
 
 // ── CC Modal ───────────────────────────────────────────────────────────────────
@@ -2663,7 +2670,8 @@ window.openLiquidateModal = function (payment) {
   document.getElementById("liqTxId").value = data.id;
   document.getElementById("liqDesc").textContent = data.description || "";
   document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
-  document.getElementById("liqAmount").value = amount;
+  document.getElementById("liqAmount").value = data.netAmount ?? amount;
+  setupLiquidationFiscalModal(data);
 
   // Create or update a hidden field for ccId
   let ccInput = document.getElementById("liqCcId");
@@ -2740,6 +2748,11 @@ async function submitLiquidation(e) {
     fd.append("fatura", fatInput.files[0]);
   }
 
+  const fiscalExtras = getLiquidationFiscalFormDataExtras();
+  if (fiscalExtras) {
+    appendFiscalFieldsToFormData(fd, fiscalExtras);
+  }
+
   const recipientIds = getSelectedLiqRecipientIds();
   if (recipientIds.length) fd.append("recipientIds", JSON.stringify(recipientIds));
 
@@ -2804,32 +2817,7 @@ window.openPaymentAsideHandler = function (btn) {
 };
 
 function renderAsideFiscalSection(data) {
-  const section = document.getElementById("asideFiscalSection");
-  const container = document.getElementById("asideFiscalBreakdown");
-  if (!section || !container) return;
-
-  const supplier = data?.supplierRef || null;
-  const base = Number(data.budgetedAmount ?? data.amount ?? 0);
-  const currency = data.currency || data.costCenter?.currency || "AOA";
-  const { lines } = computeSupplierFiscalBreakdown(supplier, base);
-
-  if (!lines.length) {
-    section.classList.add("hidden");
-    container.innerHTML = "";
-    return;
-  }
-
-  section.classList.remove("hidden");
-  container.innerHTML = lines
-    .map((line) => {
-      const sign = line.amount >= 0 ? "+" : "−";
-      const color = line.amount >= 0 ? "text-emerald-600" : "text-red-600";
-      return `<div class="flex justify-between items-center text-xs">
-        <span class="text-slate-500 font-medium">${line.label}</span>
-        <span class="font-bold tabular-nums ${color}">${sign}${formatFiscalAmount(line.amount, currency)}</span>
-      </div>`;
-    })
-    .join("");
+  renderAsideFiscalFromPayment(data);
 }
 
 window.openPaymentAside = function (data, type) {

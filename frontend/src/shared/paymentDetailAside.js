@@ -1,6 +1,12 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { formatCurrency, formatDateBR } from "./format.js";
-import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
+import { appendFiscalFieldsToFormData } from "./supplierFiscal.js";
+import {
+  initLiquidationFiscalHandlers,
+  setupLiquidationFiscalModal,
+  getLiquidationFiscalFormDataExtras,
+  renderAsideFiscalFromPayment,
+} from "./liquidationFiscal.js";
 import { openDocumentViewer, closeDocumentViewer } from "./documentViewer.js";
 
 let liqAlreadyConfirmed = false;
@@ -100,32 +106,7 @@ function renderAsidePaymentType(data) {
 }
 
 function renderAsideFiscalSection(data) {
-  const section = document.getElementById("asideFiscalSection");
-  const container = document.getElementById("asideFiscalBreakdown");
-  if (!section || !container) return;
-
-  const supplier = data?.supplierRef || null;
-  const base = Number(data.budgetedAmount ?? data.amount ?? 0);
-  const currency = data.currency || data.costCenter?.currency || "AOA";
-  const { lines } = computeSupplierFiscalBreakdown(supplier, base);
-
-  if (!lines.length) {
-    section.classList.add("hidden");
-    container.innerHTML = "";
-    return;
-  }
-
-  section.classList.remove("hidden");
-  container.innerHTML = lines
-    .map((line) => {
-      const sign = line.amount >= 0 ? "+" : "−";
-      const color = line.amount >= 0 ? "text-emerald-600" : "text-red-600";
-      return `<div class="flex justify-between items-center text-xs">
-        <span class="text-slate-500 font-medium">${line.label}</span>
-        <span class="font-bold tabular-nums ${color}">${sign}${formatFiscalAmount(line.amount, currency)}</span>
-      </div>`;
-    })
-    .join("");
+  renderAsideFiscalFromPayment(data);
 }
 
 function renderAsideDocument(url, title = "Documento") {
@@ -204,7 +185,8 @@ function openLiquidateModal(payment) {
   document.getElementById("liqTxId").value = data.id;
   document.getElementById("liqDesc").textContent = data.description || "";
   document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
-  document.getElementById("liqAmount").value = amount;
+  document.getElementById("liqAmount").value = data.netAmount ?? amount;
+  setupLiquidationFiscalModal(data);
 
   let ccInput = document.getElementById("liqCcId");
   if (!ccInput) {
@@ -290,6 +272,11 @@ async function submitLiquidation(e) {
 
   if (anexoDescricoes.length) {
     fd.append("anexoDescricoes", JSON.stringify(anexoDescricoes));
+  }
+
+  const fiscalExtras = getLiquidationFiscalFormDataExtras();
+  if (fiscalExtras) {
+    appendFiscalFieldsToFormData(fd, fiscalExtras);
   }
 
   const recipientIds = getSelectedLiqRecipientIds();
@@ -469,6 +456,7 @@ export function initPaymentDetailAside({ onLiquidated, showToast } = {}) {
   window.closeDocumentAside = closeDocumentAside;
 
   document.getElementById("formLiq")?.addEventListener("submit", submitLiquidation);
+  initLiquidationFiscalHandlers();
   document.getElementById("liqAddDocBtn")?.addEventListener("click", () => {
     const list = document.getElementById("liqDocsList");
     if (!list) return;

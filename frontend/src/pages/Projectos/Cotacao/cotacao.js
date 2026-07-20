@@ -379,6 +379,7 @@ function openSupplierModal(supplier = null) {
   document.getElementById("supplierPhone").value = supplier?.phone || "";
   document.getElementById("supplierEmail").value = supplier?.email || "";
   document.getElementById("supplierCategory").value = supplier?.category || "";
+  document.getElementById("supplierType").value = supplier?.type || "MATERIAL";
   document.getElementById("supplierPaymentTerm").value = supplier?.paymentTerm || "";
   document.getElementById("supplierVatPercent").value = supplier?.vatPercent ?? "";
   document.getElementById("supplierWithholdingPercent").value = supplier?.withholdingPercent ?? "";
@@ -422,6 +423,7 @@ async function submitSupplier(e) {
     phone: document.getElementById("supplierPhone").value.trim() || null,
     email: document.getElementById("supplierEmail").value.trim() || null,
     category: document.getElementById("supplierCategory").value.trim() || null,
+    type: document.getElementById("supplierType").value || "MATERIAL",
     paymentTerm: document.getElementById("supplierPaymentTerm").value || null,
     vatPercent: parseOptionalPercentInput("supplierVatPercent"),
     withholdingPercent: parseOptionalPercentInput("supplierWithholdingPercent"),

@@ -1,6 +1,6 @@
 # Plano de Implementação — Reunião BG / Plano de Pagamentos
 
-> **Estado (Jul 2026):** Fases **A + B (núcleo)** implementadas no código — ver secção **10**.
+> **Estado (Jul 2026):** Fases **A–G** implementadas no código — ver secção **10**.
 
 > **Origem:** transcrição da reunião `reunia BG PP.mp4` (~40 min, Jul 2026) + estado actual do código InforCliente.  
 > **Complementa:** `Plano de Evolução Financeira e Logística InforCliente.md` (fases 1–6 já parcialmente entregues).  
@@ -41,8 +41,8 @@ A reunião definiu um fluxo mais claro em três camadas financeiras:
 | 4 | Envio ao cronograma após decisão | Manual (`schedule`) ou auto só em crédito | Acção explícita «Enviar ao Financeiro» + auto opcional |
 | 5 | Previsto / realizado / liquidado por linha | Previsto×real no CC; liquidado via pagamentos | 3.ª coluna liquidado integrada na vista orçamental |
 | 6 | Vista tabular no Perfil Financeiro | ✅ Toggle Calendário/Lista com colunas operacionais | — |
-| 7 | Transportador + rateio frete | Só categoria `TRANSPORTE` manual | Modelo de frete partilhado |
-| 8 | IVA/retenção → bruto automático | Percentagens informativas no fornecedor | Cálculo bidireccional no pagamento |
+| 7 | Transportador + rateio frete | ✅ `FreightOrder` + tab Frete na Logística | — |
+| 8 | IVA/retenção → bruto automático | ✅ Cálculo bidireccional base/bruto na liquidação | — |
 | 9 | Comprovativo obrigatório | ✅ Frontend + backend rejeitam liquidação sem ficheiro | — |
 | 10 | Transferências bypass logística | ✅ `POST /stock/transfer` | — |
 | 11 | Auditoria de faturas | Backend completo; UI removida | Decidir se reactivar ou manter só backend |
@@ -276,9 +276,9 @@ Ordem optimizada: **quick wins de UX e estados primeiro**, depois fluxo logísti
 
 #### Critério de conclusão
 
-- [ ] Utilizador introduz valor bruto e sistema calcula IVA/retenção.
-- [ ] Orçamento realizado compara base com base (sem fiscal).
-- [ ] Liquidação regista valor pago líquido + breakdown.
+- [x] Utilizador introduz valor bruto e sistema calcula IVA/retenção.
+- [x] Orçamento realizado compara base com base (sem fiscal).
+- [x] Liquidação regista valor pago líquido + breakdown.
 
 ---
 
@@ -328,9 +328,9 @@ model FreightAllocation {
 
 #### Critério de conclusão
 
-- [ ] Um único frete pode cobrir material de 2+ obras.
-- [ ] Valor rateado por linha/produto.
-- [ ] Transportador registado como fornecedor tipo transportador.
+- [x] Um único frete pode cobrir material de 2+ obras.
+- [x] Valor rateado por linha/produto.
+- [x] Transportador registado como fornecedor tipo transportador.
 
 ---
 
@@ -463,6 +463,10 @@ Prioridade imediata recomendada: **Fases C → D** — envio ao financeiro e vis
 | **C — Ponte → Financeiro** | ✅ Entregue | `send-to-finance`, fila no Perfil Financeiro, notificações |
 | **D — Vista tabular** | ✅ Entregue | Toggle Calendário/Lista; colunas operacionais; liquidar inline |
 | **E — Liquidação robusta** | ✅ Entregue | Comprovativo obrigatório no backend; notificações a receivers |
-| **E–I** | ⏳ Pendente | Próximo: **F — IVA/retenção** |
+| **F — IVA/retenção e valor bruto** | ✅ Entregue | Campos fiscais em `CostPayment`; cálculo bidireccional base/bruto; UI na liquidação |
+| **G — Transportador e rateio de frete** | ✅ Entregue | `FreightOrder`/`FreightAllocation`; tab Frete; envio ao financeiro |
+| **H–I** | ⏳ Pendente | Próximo: **H — Orçamento consolidado** |
 
-**Migration:** `backend/prisma/migrations/20260720100000_need_status_em_analise/` — executar `npx prisma migrate deploy` no backend antes de testar.
+**Migration (Fase F):** `backend/prisma/migrations/20260720120000_cost_payment_fiscal_fields/`
+
+**Migration (Fase G):** `backend/prisma/migrations/20260720140000_freight_orders/`

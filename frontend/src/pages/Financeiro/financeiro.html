@@ -1088,18 +1088,47 @@
                 </div>
                 <div>
                     <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor
-                        Comprometido</label>
+                        Comprometido (base orçamental)</label>
                     <input type="text" id="liqCommitted" disabled
                         class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed" />
                 </div>
+                <div id="liqFiscalSection" class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-xs font-black uppercase tracking-widest text-slate-500">Cálculo fiscal</p>
+                        <div class="flex items-center gap-3 text-[11px] font-bold text-slate-600">
+                            <label class="inline-flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeBase" value="base" checked class="accent-emerald-600" />
+                                Base
+                            </label>
+                            <label class="inline-flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeGross" value="gross" class="accent-emerald-600" />
+                                Bruto
+                            </label>
+                        </div>
+                    </div>
+                    <p id="liqFiscalSupplierHint" class="text-[10px] text-slate-400 font-semibold"></p>
+                    <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-700">
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyVat" class="accent-emerald-600" /> Tem IVA</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyWithholding" class="accent-emerald-600" /> Retenção na fonte</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyDiscount" class="accent-emerald-600" /> Desconto</label>
+                    </div>
+                    <div id="liqBaseInputWrap">
+                        <label for="liqBaseAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor base</label>
+                        <input id="liqBaseAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                    </div>
+                    <div id="liqGrossInputWrap" class="hidden">
+                        <label for="liqGrossAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor bruto (fatura)</label>
+                        <input id="liqGrossAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                    </div>
+                    <div id="liqFiscalBreakdown" class="pt-1"></div>
+                </div>
                 <div>
                     <label for="liqAmount"
-                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor Realizado /
-                        Pago *</label>
+                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor líquido
+                        pago *</label>
                     <input id="liqAmount" type="number" min="0" step="0.01" required
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
-                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Ajusta o valor se o montante final pago
-                        foi diferente do previsto.</p>
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula automaticamente. O orçamento realizado usa sempre a base.</p>
                 </div>
                 <div id="liqDocsBlock" class="flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-3">

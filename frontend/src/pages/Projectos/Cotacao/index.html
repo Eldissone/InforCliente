@@ -425,12 +425,23 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo</label>
+                        <select id="supplierType"
+                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                            <option value="MATERIAL">Material</option>
+                            <option value="SERVICO">Serviço</option>
+                            <option value="TRANSPORTADOR">Transportador</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria
                             (Ex:
                             Materiais)</label>
                         <input type="text" id="supplierCategory"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
                     </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Modalidade
                             Pag.</label>

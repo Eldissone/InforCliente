@@ -24,6 +24,10 @@ const {
 const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
 const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const {
+  computeFiscalFromPaymentInput,
+  mapStoredFiscalFields,
+} = require("../services/fiscalCalculationService");
+const {
   getEffectivePermissionsForUser,
   resolveAllowedFromMap,
 } = require("../services/permissionResolver");
@@ -201,6 +205,34 @@ const PAYMENT_RELATIONS_INCLUDE = {
   },
 };
 
+async function resolvePaymentFiscalPatch({ body, paymentBefore, supplierRef }) {
+  const budgeted =
+    body.budgetedAmount !== undefined ? body.budgetedAmount : paymentBefore.budgetedAmount;
+  const paid = body.paidAmount !== undefined ? body.paidAmount : paymentBefore.paidAmount;
+
+  const fiscal = computeFiscalFromPaymentInput({
+    supplier: supplierRef,
+    budgetedAmount: budgeted,
+    paidAmount: paid,
+    body,
+  });
+
+  if (!fiscal) return {};
+
+  return {
+    budgetedAmount: fiscal.budgetedAmount,
+    paidAmount: fiscal.paidAmount,
+    grossAmount: fiscal.grossAmount,
+    vatAmount: fiscal.vatAmount,
+    withholdingAmount: fiscal.withholdingAmount,
+    netAmount: fiscal.netAmount,
+    fiscalApplyVat: fiscal.fiscalApplyVat,
+    fiscalApplyWithholding: fiscal.fiscalApplyWithholding,
+    fiscalApplyDiscount: fiscal.fiscalApplyDiscount,
+    fiscalInputMode: fiscal.fiscalInputMode,
+  };
+}
+
 async function mapPaymentItems(items) {
   const legacyNames = [
     ...new Set(items.filter((p) => !p.supplierRef && !p.supplierId).map((p) => p.supplier).filter(Boolean)),
@@ -260,6 +292,7 @@ async function mapPaymentItems(items) {
       installmentNumber: showInstallment ? installmentNumber : null,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
+      ...mapStoredFiscalFields(p),
     };
   });
 }
@@ -1534,7 +1567,18 @@ costCenterRoutes.patch(
     const payId = String(req.params.payId);
     const before = await prisma.costPayment.findUnique({
       where: { id: payId },
-      select: { status: true, comprovativoUrl: true },
+      select: {
+        status: true,
+        comprovativoUrl: true,
+        budgetedAmount: true,
+        paidAmount: true,
+        supplierId: true,
+        fiscalApplyVat: true,
+        fiscalApplyWithholding: true,
+        fiscalApplyDiscount: true,
+        fiscalInputMode: true,
+        supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+      },
     });
     if (!before) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
 
@@ -1555,6 +1599,11 @@ costCenterRoutes.patch(
       notes: z.string().optional().nullable(),
       recipientIds: z.string().optional().nullable(),
       anexoDescricoes: z.string().optional().nullable(),
+      grossAmount: z.union([z.number(), z.string()]).optional(),
+      fiscalApplyVat: z.union([z.boolean(), z.string()]).optional(),
+      fiscalApplyWithholding: z.union([z.boolean(), z.string()]).optional(),
+      fiscalApplyDiscount: z.union([z.boolean(), z.string()]).optional(),
+      fiscalInputMode: z.enum(["base", "gross"]).optional(),
     }).parse(req.body);
 
     const hasComprovativo = Boolean(req.files?.comprovativo?.length);
@@ -1600,15 +1649,32 @@ costCenterRoutes.patch(
     // Mantém o texto livre "supplier" sincronizado quando um fornecedor
     // registado é seleccionado explicitamente via supplierId.
     let resolvedSupplierName = body.supplier;
+    let supplierRef = before.supplierRef;
     if (body.supplierId) {
       const sup = await prisma.supplier.findUnique({
         where: { id: body.supplierId },
-        select: { name: true },
+        select: {
+          id: true,
+          name: true,
+          vatPercent: true,
+          withholdingPercent: true,
+          discountPercent: true,
+        },
       });
-      if (sup) resolvedSupplierName = sup.name;
+      if (sup) {
+        resolvedSupplierName = sup.name;
+        supplierRef = sup;
+      }
     } else if (body.supplierId === null) {
       resolvedSupplierName = body.supplier !== undefined ? body.supplier : null;
+      supplierRef = null;
     }
+
+    const fiscalData = await resolvePaymentFiscalPatch({
+      body,
+      paymentBefore: before,
+      supplierRef,
+    });
 
     let comprovativoUrl = undefined;
     let faturaUrl = undefined;
@@ -1666,8 +1732,32 @@ costCenterRoutes.patch(
         ...(body.supplierId !== undefined ? { supplierId: body.supplierId || null } : {}),
         ...(body.category ? { category: body.category } : {}),
         ...(body.description ? { description: body.description } : {}),
-        ...(body.budgetedAmount !== undefined ? { budgetedAmount: String(body.budgetedAmount) } : {}),
-        ...(body.paidAmount !== undefined ? { paidAmount: String(body.paidAmount) } : {}),
+        ...(body.budgetedAmount !== undefined && !fiscalData.budgetedAmount
+          ? { budgetedAmount: String(body.budgetedAmount) }
+          : {}),
+        ...(body.paidAmount !== undefined && !fiscalData.paidAmount
+          ? { paidAmount: String(body.paidAmount) }
+          : {}),
+        ...(fiscalData.budgetedAmount ? { budgetedAmount: fiscalData.budgetedAmount } : {}),
+        ...(fiscalData.paidAmount ? { paidAmount: fiscalData.paidAmount } : {}),
+        ...(fiscalData.grossAmount !== undefined ? { grossAmount: fiscalData.grossAmount } : {}),
+        ...(fiscalData.vatAmount !== undefined ? { vatAmount: fiscalData.vatAmount } : {}),
+        ...(fiscalData.withholdingAmount !== undefined
+          ? { withholdingAmount: fiscalData.withholdingAmount }
+          : {}),
+        ...(fiscalData.netAmount !== undefined ? { netAmount: fiscalData.netAmount } : {}),
+        ...(fiscalData.fiscalApplyVat !== undefined
+          ? { fiscalApplyVat: fiscalData.fiscalApplyVat }
+          : {}),
+        ...(fiscalData.fiscalApplyWithholding !== undefined
+          ? { fiscalApplyWithholding: fiscalData.fiscalApplyWithholding }
+          : {}),
+        ...(fiscalData.fiscalApplyDiscount !== undefined
+          ? { fiscalApplyDiscount: fiscalData.fiscalApplyDiscount }
+          : {}),
+        ...(fiscalData.fiscalInputMode !== undefined
+          ? { fiscalInputMode: fiscalData.fiscalInputMode }
+          : {}),
         ...(body.paymentMethod !== undefined ? { paymentMethod: body.paymentMethod } : {}),
         ...(body.paymentType !== undefined ? { paymentType: body.paymentType } : {}),
         ...(body.week !== undefined ? { week: body.week } : {}),
@@ -1689,6 +1779,14 @@ costCenterRoutes.patch(
     }
 
     if (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") {
+      try {
+        await prisma.freightOrder.updateMany({
+          where: { costPaymentId: payId },
+          data: { status: "PAGO" },
+        });
+      } catch (e) {
+        console.error("freightOrder PAGO sync:", e);
+      }
       try {
         const payment = await loadPaymentForNotification(updated.id);
         if (payment) {

@@ -26,6 +26,7 @@ const supplierBodySchema = z.object({
   vatPercent: percentSchema,
   withholdingPercent: percentSchema,
   discountPercent: percentSchema,
+  type: z.enum(["MATERIAL", "SERVICO", "TRANSPORTADOR"]).optional(),
   bankAccounts: z.array(bankAccountInput).optional(),
 });
 
@@ -48,7 +49,11 @@ function resolveBankAccounts(body) {
 supplierRoutes.get(
   "/",
   asyncHandler(async (req, res) => {
+    const type = req.query.type ? String(req.query.type) : "";
     const items = await prisma.supplier.findMany({
+      where: {
+        ...(type ? { type } : {}),
+      },
       orderBy: { name: "asc" },
       include: supplierInclude,
     });
