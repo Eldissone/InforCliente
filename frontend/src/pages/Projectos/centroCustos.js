@@ -326,14 +326,88 @@ function isPrevistoBaselineApproved(n) {
   return needPrevistoDisplayStatus(n) === "APPROVED";
 }
 
+function ccRequiresQuotation(ccOrNeed) {
+  if (!ccOrNeed) return true;
+  if (ccOrNeed.requiresQuotation === false) return false;
+  if (ccOrNeed.costCenter?.requiresQuotation === false) return false;
+  const fromCache = costCenters.find((c) => c.id === (ccOrNeed.costCenterId || ccOrNeed.id));
+  return fromCache?.requiresQuotation !== false;
+}
+
 function isEligibleForRealizadoQuotation(n) {
   if (!isPrevistoBaselineApproved(n)) return false;
+  if (!ccRequiresQuotation(n)) return false;
   return needRealizadoDisplayStatus(n) === "PENDING";
 }
+
+function groupItemsByCostCenter(items) {
+  const groups = {};
+  items.forEach((n) => {
+    const ccId = n.costCenterId;
+    if (!ccId) return;
+    if (!groups[ccId]) {
+      groups[ccId] = {
+        costCenterId: ccId,
+        code: n.costCenter?.code || "—",
+        name: n.costCenter?.name || "Sem centro",
+        requiresQuotation: ccRequiresQuotation(n),
+        items: [],
+      };
+    }
+    groups[ccId].items.push(n);
+  });
+  return Object.values(groups).sort((a, b) =>
+    `${a.code} ${a.name}`.localeCompare(`${b.code} ${b.name}`, "pt")
+  );
+}
+
+function updateBulkQuotationSummary() {
+  const summaryEl = document.getElementById("bulkQuotationSummary");
+  const confirmBtn = document.getElementById("bulkQuotationConfirmBtn");
+  if (!summaryEl) return;
+
+  const checks = document.querySelectorAll(".bulk-quotation-cc:checked");
+  let itemCount = 0;
+  checks.forEach((cb) => {
+    itemCount += Number(cb.dataset.itemCount || 0);
+  });
+
+  summaryEl.textContent =
+    checks.length === 0
+      ? "Nenhum centro seleccionado."
+      : `${checks.length} centro(s) · ${itemCount} item(ns) a enviar`;
+
+  if (confirmBtn) confirmBtn.disabled = checks.length === 0;
+}
+
+function renderBulkQuotationModal(groups) {
+  const listEl = document.getElementById("bulkQuotationCCList");
+  if (!listEl) return;
+
+  listEl.innerHTML = groups.map((g) => `
+    <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 cursor-pointer transition-all">
+      <input type="checkbox" class="bulk-quotation-cc mt-0.5 rounded border-slate-300 text-emerald-600 accent-emerald-600"
+        value="${g.costCenterId}" data-item-count="${g.items.length}" checked>
+      <span class="flex-1 min-w-0">
+        <span class="block text-sm font-bold text-slate-900">${g.code} — ${g.name}</span>
+        <span class="block text-xs text-slate-500 mt-0.5">${g.items.length} item${g.items.length !== 1 ? "s" : ""} pendente${g.items.length !== 1 ? "s" : ""} de precificação</span>
+      </span>
+    </label>
+  `).join("");
+
+  listEl.querySelectorAll(".bulk-quotation-cc").forEach((cb) => {
+    cb.addEventListener("change", updateBulkQuotationSummary);
+  });
+
+  updateBulkQuotationSummary();
+}
+
+let bulkQuotationPendingItems = [];
 
 function canRealizadoPrecificar(n) {
   if (needIsLockedForEdit(n)) return false;
   if (!isPrevistoBaselineApproved(n)) return false;
+  if (!ccRequiresQuotation(n)) return false;
   if (n.status === "IN_QUOTATION" || n.status === "ORDERED" || n.status === "EM_ANALISE") return true;
   if (n.status === "APPROVED" && n.marketWorkflowStarted) return true;
   return needRealizadoDisplayStatus(n) === "PENDING";
@@ -658,7 +732,7 @@ function renderCCTable() {
   tbody.innerHTML = costCenters.map((cc) => `
     <tr>
       <td class="font-bold text-slate-700">${cc.code}</td>
-      <td class="font-semibold text-slate-900">${cc.name} <span class="text-xs text-slate-400 ml-1">(${cc.currency || "AOA"})</span></td>
+      <td class="font-semibold text-slate-900">${cc.name} <span class="text-xs text-slate-400 ml-1">(${cc.currency || "AOA"})</span>${cc.requiresQuotation === false ? `<span class="ml-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full" title="Excluído da cotação em lote">Sem cotação</span>` : ""}</td>
       <td class="text-center">
         <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700">${cc._count?.needs ?? 0}</span>
       </td>
@@ -1532,6 +1606,16 @@ function bindEvents() {
   );
   document.getElementById("budgetViewPrevisto")?.addEventListener("click", () => setBudgetViewMode("previsto"));
   document.getElementById("budgetViewRealizado")?.addEventListener("click", () => setBudgetViewMode("realizado"));
+
+  document.getElementById("bulkQuotationConfirmBtn")?.addEventListener("click", confirmBulkQuotation);
+  document.getElementById("bulkQuotationSelectAll")?.addEventListener("click", () => {
+    document.querySelectorAll(".bulk-quotation-cc").forEach((cb) => { cb.checked = true; });
+    updateBulkQuotationSummary();
+  });
+  document.getElementById("bulkQuotationSelectNone")?.addEventListener("click", () => {
+    document.querySelectorAll(".bulk-quotation-cc").forEach((cb) => { cb.checked = false; });
+    updateBulkQuotationSummary();
+  });
   updateBudgetWorkflowButtonsVisibility();
   updateNeedsStatusFilterOptions();
 
@@ -1590,6 +1674,7 @@ function openCCModal(cc = null) {
   document.getElementById("ccName").value = cc?.name || "";
   document.getElementById("ccCurrency").value = cc?.currency || "AOA";
   document.getElementById("ccActive").value = cc?.active !== false ? "true" : "false";
+  document.getElementById("ccRequiresQuotation").checked = cc?.requiresQuotation !== false;
   document.getElementById("modalCC").classList.add("open");
 }
 
@@ -1617,6 +1702,7 @@ async function submitCC(e) {
     name: document.getElementById("ccName").value.trim(),
     currency: document.getElementById("ccCurrency").value,
     active: document.getElementById("ccActive").value === "true",
+    requiresQuotation: document.getElementById("ccRequiresQuotation").checked,
   };
   try {
     if (id) {
@@ -1935,6 +2021,11 @@ window.openPrecificarModal = async function (needId, ccId) {
     return;
   }
 
+  if (!ccRequiresQuotation(need)) {
+    showToast("Este centro de custo está marcado como «sem cotação». Defina o preço directamente no item.", "info");
+    return;
+  }
+
   try {
     if (need.status === "PENDING" || (need.status === "APPROVED" && !need.marketWorkflowStarted)) {
       await apiRequest(`/cost-centers/${ccId}/needs/${needId}`, {
@@ -2008,30 +2099,88 @@ window.sendAllToQuotation = async function () {
   try {
     showToast("A carregar itens...", "info");
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/needs?pageSize=1000`);
-    const pendingItems = (data.items || []).filter(isEligibleForRealizadoQuotation);
+    const baselinePending = (data.items || []).filter(
+      (n) => isPrevistoBaselineApproved(n) && needRealizadoDisplayStatus(n) === "PENDING"
+    );
+    const skippedNoQuotation = baselinePending.filter((n) => !ccRequiresQuotation(n));
+    const pendingItems = baselinePending.filter(isEligibleForRealizadoQuotation);
 
     if (pendingItems.length === 0) {
-      showToast("Não há itens aprovados no previsto pendentes de precificação.", "warning");
+      if (skippedNoQuotation.length > 0) {
+        showToast(
+          `${skippedNoQuotation.length} item(ns) estão em CCs marcados como «sem cotação». Edite o centro de custo ou precifique manualmente.`,
+          "warning"
+        );
+      } else {
+        showToast("Não há itens aprovados no previsto pendentes de precificação.", "warning");
+      }
       return;
     }
 
-    if (!confirm(`Enviar ${pendingItems.length} item(ns) do realizado para cotação?`)) return;
+    if (skippedNoQuotation.length > 0) {
+      showToast(
+        `${skippedNoQuotation.length} item(ns) ignorado(s) — CCs sem cotação.`,
+        "info"
+      );
+    }
 
-    showToast(`A enviar ${pendingItems.length} itens...`, "info");
-    const promises = pendingItems.map(n =>
-      apiRequest(`/cost-centers/${n.costCenterId}/needs/${n.id}`, {
-        method: "PATCH",
-        body: { status: "IN_QUOTATION" }
-      })
-    );
-
-    await Promise.all(promises);
-
-    window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
+    bulkQuotationPendingItems = pendingItems;
+    const groups = groupItemsByCostCenter(pendingItems);
+    renderBulkQuotationModal(groups);
+    document.getElementById("modalBulkQuotation")?.classList.add("open");
   } catch (err) {
     showToast("Erro ao preparar cotações em lote: " + err.message, "error");
   }
 };
+
+async function confirmBulkQuotation() {
+  const selectedCcIds = new Set(
+    [...document.querySelectorAll(".bulk-quotation-cc:checked")].map((cb) => cb.value)
+  );
+
+  if (!selectedCcIds.size) {
+    showToast("Seleccione pelo menos um centro de custo.", "warning");
+    return;
+  }
+
+  const toSend = bulkQuotationPendingItems.filter((n) => selectedCcIds.has(n.costCenterId));
+  if (!toSend.length) {
+    showToast("Nenhum item nos centros seleccionados.", "warning");
+    return;
+  }
+
+  const btn = document.getElementById("bulkQuotationConfirmBtn");
+  const oldHtml = btn?.innerHTML;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="material-symbols-outlined text-base animate-spin">progress_activity</span> A enviar...`;
+  }
+
+  try {
+    await Promise.all(
+      toSend.map((n) =>
+        apiRequest(`/cost-centers/${n.costCenterId}/needs/${n.id}`, {
+          method: "PATCH",
+          body: { status: "IN_QUOTATION" },
+        })
+      )
+    );
+
+    document.getElementById("modalBulkQuotation")?.classList.remove("open");
+    bulkQuotationPendingItems = [];
+    showToast(`${toSend.length} item(ns) enviado(s) para cotação.`, "success");
+    window.location.href = `../Projectos/Cotacao/index.html?project=${selectedProject.id}`;
+  } catch (err) {
+    showToast("Erro ao enviar para cotação: " + err.message, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
+    }
+  }
+}
+
+window.confirmBulkQuotation = confirmBulkQuotation;
 
 // ── Pay Modal ──────────────────────────────────────────────────────────────────
 

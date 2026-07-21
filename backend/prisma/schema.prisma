@@ -857,6 +857,7 @@ model CostCenter {
   name          String
   currency      String               @default("AOA")
   active        Boolean              @default(true)
+  requiresQuotation Boolean          @default(true)
   createdAt     DateTime             @default(now())
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   needs         WorkNeed[]

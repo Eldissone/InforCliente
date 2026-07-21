@@ -869,90 +869,91 @@
         </div>
 
         <div id="fin-panel-pagamentos">
-        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
+            <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div>
 
-                <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos
-                </h2>
-                <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Todas as obras · visão
-                    transversal</p>
-            </div>
-            <div class="flex items-center gap-3 flex-wrap">
+                    <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos
+                    </h2>
+                    <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Todas as obras · visão
+                        transversal</p>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
 
-                <label
-                    class="flex items-center gap-2 text-xs font-semibold text-slate-500 cursor-pointer bg-white px-3 h-10 rounded-xl border border-slate-200">
-                    <input id="finIncludePaid" type="checkbox" checked
-                        class="rounded border-slate-300 text-emerald-600">
-                    Incluir liquidados
-                </label>
-            </div>
-        </header>
+                    <label
+                        class="flex items-center gap-2 text-xs font-semibold text-slate-500 cursor-pointer bg-white px-3 h-10 rounded-xl border border-slate-200">
+                        <input id="finIncludePaid" type="checkbox" checked
+                            class="rounded border-slate-300 text-emerald-600">
+                        Incluir liquidados
+                    </label>
+                </div>
+            </header>
 
-        <!-- Plano de Pagamentos (Gantt + Lista) -->
-        <div id="tab-calendario">
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
-                <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-4">
-                    <div class="flex flex-wrap items-center gap-3">
-                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
-                            aria-label="Modo de visualização">
-                            <button type="button" class="gantt-view-btn active" data-payment-view="gantt">
-                                <span
-                                    class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span>Calendário
+            <!-- Plano de Pagamentos (Gantt + Lista) -->
+            <div id="tab-calendario">
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
+                    <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-4">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
+                                aria-label="Modo de visualização">
+                                <button type="button" class="gantt-view-btn active" data-payment-view="gantt">
+                                    <span
+                                        class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span>Calendário
+                                </button>
+                                <button type="button" class="gantt-view-btn" data-payment-view="list">
+                                    <span
+                                        class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span>Lista
+                                </button>
+                            </div>
+                            <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
+                                aria-label="Período do plano">
+                                <button type="button" class="gantt-view-btn" data-gantt-view="day">Dia</button>
+                                <button type="button" class="gantt-view-btn" data-gantt-view="week">Semana</button>
+                                <button type="button" class="gantt-view-btn active" data-gantt-view="month">Mês</button>
+                            </div>
+                        </div>
+                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5 items-center" role="group"
+                            aria-label="Navegação do calendário">
+                            <button id="calPrev" type="button" aria-label="Período anterior" class="gantt-nav-btn">
+                                <span class="material-symbols-outlined text-base">chevron_left</span>
                             </button>
-                            <button type="button" class="gantt-view-btn" data-payment-view="list">
-                                <span class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span>Lista
+                            <button id="calToday" type="button" class="gantt-nav-today">Hoje</button>
+                            <button id="calNext" type="button" aria-label="Período seguinte" class="gantt-nav-btn">
+                                <span class="material-symbols-outlined text-base">chevron_right</span>
                             </button>
                         </div>
-                        <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5" role="group"
-                            aria-label="Período do plano">
-                            <button type="button" class="gantt-view-btn" data-gantt-view="day">Dia</button>
-                            <button type="button" class="gantt-view-btn" data-gantt-view="week">Semana</button>
-                            <button type="button" class="gantt-view-btn active" data-gantt-view="month">Mês</button>
+                    </div>
+                    <div id="planGanttView">
+                        <div id="calendarGrid">
+                            <div class="spinner my-8"></div>
                         </div>
                     </div>
-                    <div class="flex rounded-xl bg-slate-100 p-1 gap-0.5 items-center" role="group"
-                        aria-label="Navegação do calendário">
-                        <button id="calPrev" type="button" aria-label="Período anterior" class="gantt-nav-btn">
-                            <span class="material-symbols-outlined text-base">chevron_left</span>
-                        </button>
-                        <button id="calToday" type="button" class="gantt-nav-today">Hoje</button>
-                        <button id="calNext" type="button" aria-label="Período seguinte" class="gantt-nav-btn">
-                            <span class="material-symbols-outlined text-base">chevron_right</span>
-                        </button>
-                    </div>
-                </div>
-                <div id="planGanttView">
-                    <div id="calendarGrid">
-                        <div class="spinner my-8"></div>
-                    </div>
-                </div>
-                <div id="planListView" class="hidden">
-                    <div class="overflow-x-auto -mx-2 md:mx-0">
-                        <table class="fin-table w-full min-w-[960px]">
-                            <thead>
-                                <tr>
-                                    <th>Material / Descrição</th>
-                                    <th>Fornecedor</th>
-                                    <th>IBAN</th>
-                                    <th class="text-right">Valor</th>
-                                    <th class="text-center">Doc.</th>
-                                    <th class="text-center">Tipo</th>
-                                    <th class="text-center">Estado</th>
-                                    <th class="text-center">Acções</th>
-                                </tr>
-                            </thead>
-                            <tbody id="planTableBody">
-                                <tr>
-                                    <td colspan="8">
-                                        <div class="spinner my-8"></div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div id="planListView" class="hidden">
+                        <div class="overflow-x-auto -mx-2 md:mx-0">
+                            <table class="fin-table w-full min-w-[960px]">
+                                <thead>
+                                    <tr>
+                                        <th>Material / Descrição</th>
+                                        <th>Fornecedor</th>
+                                        <th>IBAN</th>
+                                        <th class="text-right">Valor</th>
+                                        <th class="text-center">Doc.</th>
+                                        <th class="text-center">Tipo</th>
+                                        <th class="text-center">Estado</th>
+                                        <th class="text-center">Acções</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="planTableBody">
+                                    <tr>
+                                        <td colspan="8">
+                                            <div class="spinner my-8"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
         </div><!-- /fin-panel-pagamentos -->
 
         <!-- Auditoria de Faturas (Fase I) -->
@@ -960,7 +961,8 @@
             <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
                     <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Auditoria de Faturas</h2>
-                    <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Certificação de despesas liquidadas</p>
+                    <p class="text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">Certificação de
+                        despesas liquidadas</p>
                 </div>
             </header>
 
@@ -1012,7 +1014,11 @@
                             </tr>
                         </thead>
                         <tbody id="auditTableBody">
-                            <tr><td colspan="7"><div class="spinner my-8"></div></td></tr>
+                            <tr>
+                                <td colspan="7">
+                                    <div class="spinner my-8"></div>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -1190,33 +1196,45 @@
                     <input type="text" id="liqCommitted" disabled
                         class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed" />
                 </div>
-                <div id="liqFiscalSection" class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+                <div id="liqFiscalSection"
+                    class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-xs font-black uppercase tracking-widest text-slate-500">Cálculo fiscal</p>
                         <div class="flex items-center gap-3 text-[11px] font-bold text-slate-600">
                             <label class="inline-flex items-center gap-1 cursor-pointer">
-                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeBase" value="base" checked class="accent-emerald-600" />
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeBase" value="base" checked
+                                    class="accent-emerald-600" />
                                 Base
                             </label>
                             <label class="inline-flex items-center gap-1 cursor-pointer">
-                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeGross" value="gross" class="accent-emerald-600" />
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeGross" value="gross"
+                                    class="accent-emerald-600" />
                                 Bruto
                             </label>
                         </div>
                     </div>
                     <p id="liqFiscalSupplierHint" class="text-[10px] text-slate-400 font-semibold"></p>
                     <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-700">
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyVat" class="accent-emerald-600" /> Tem IVA</label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyWithholding" class="accent-emerald-600" /> Retenção na fonte</label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyDiscount" class="accent-emerald-600" /> Desconto</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyVat" class="accent-emerald-600" /> Tem IVA</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyWithholding" class="accent-emerald-600" /> Retenção na fonte</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyDiscount" class="accent-emerald-600" /> Desconto</label>
                     </div>
                     <div id="liqBaseInputWrap">
-                        <label for="liqBaseAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor base</label>
-                        <input id="liqBaseAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                        <label for="liqBaseAmount"
+                            class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                            base</label>
+                        <input id="liqBaseAmount" type="number" min="0" step="0.01"
+                            class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
                     </div>
                     <div id="liqGrossInputWrap" class="hidden">
-                        <label for="liqGrossAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor bruto (fatura)</label>
-                        <input id="liqGrossAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                        <label for="liqGrossAmount"
+                            class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                            bruto (fatura)</label>
+                        <input id="liqGrossAmount" type="number" min="0" step="0.01"
+                            class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
                     </div>
                     <div id="liqFiscalBreakdown" class="pt-1"></div>
                 </div>
@@ -1226,7 +1244,8 @@
                         pago *</label>
                     <input id="liqAmount" type="number" min="0" step="0.01" required
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
-                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula automaticamente. O orçamento realizado usa sempre a base.</p>
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula
+                        automaticamente. O orçamento realizado usa sempre a base.</p>
                 </div>
                 <div id="liqDocsBlock" class="flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-3">
@@ -1313,39 +1332,6 @@
                     <span class="material-symbols-outlined text-base">payments</span>
                     Confirmar Liquidação
                 </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Certificação de fatura -->
-    <div id="modalAuditCert" class="modal">
-        <div class="modal-content max-w-lg">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-bold text-slate-900">Certificar fatura</h3>
-                <button type="button" onclick="document.getElementById('modalAuditCert').classList.remove('open')"
-                    class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">
-                    <span class="material-symbols-outlined">close</span>
-                </button>
-            </div>
-            <div id="auditCertPreview" class="text-sm text-slate-600 mb-4 max-h-48 overflow-y-auto custom-scroll"></div>
-            <div class="flex flex-col gap-3">
-                <label class="text-xs font-bold text-slate-500">Estado</label>
-                <select id="auditCertStatus" class="h-10 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
-                    <option value="CONFORME">Conforme</option>
-                    <option value="DIVERGENTE">Divergente</option>
-                </select>
-                <label class="text-xs font-bold text-slate-500">Notas (opcional)</label>
-                <textarea id="auditCertNotes" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm"></textarea>
-                <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
-                    <input type="checkbox" id="auditUseSuggestion" class="accent-emerald-600" checked />
-                    Usar sugestão automática
-                </label>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button type="button" onclick="document.getElementById('modalAuditCert').classList.remove('open')"
-                    class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
-                <button type="button" id="auditCertConfirmBtn"
-                    class="h-10 px-6 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700">Certificar</button>
             </div>
         </div>
     </div>

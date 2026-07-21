@@ -793,7 +793,7 @@
                                     <option value="PAID">Pago</option>
                                 </select>
                                 <button id="btnBudgetPrecificar" onclick="sendAllToQuotation()"
-                                    title="Enviar todos os itens pendentes para Cotação"
+                                    title="Seleccionar centros de custo e enviar itens pendentes para cotação"
                                     class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md hidden">
                                     <span class="material-symbols-outlined text-base">fact_check</span>
                                     Precificar
@@ -1358,6 +1358,13 @@
                         </select>
                     </div>
                 </div>
+                <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+                    <input type="checkbox" id="ccRequiresQuotation" class="mt-0.5 rounded border-slate-300 text-emerald-600 accent-emerald-600" checked>
+                    <span>
+                        <span class="block text-sm font-bold text-slate-800">Requer pesquisa de fornecedor (cotação)</span>
+                        <span class="block text-xs text-slate-500 mt-0.5">Desmarque para CCs com preços fixos ou sem ida a mercado — não entram no envio em lote para cotação.</span>
+                    </span>
+                </label>
                 <div class="flex gap-3 justify-end pt-2">
                     <button type="button" onclick="document.getElementById('modalCC').classList.remove('open')"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
@@ -2260,6 +2267,41 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- Modal: Seleccionar CCs para cotação em lote -->
+    <div class="modal-overlay" id="modalBulkQuotation">
+        <div class="modal-box" style="max-width:560px">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 tracking-tight">Enviar para cotação</h2>
+                    <p class="text-xs font-semibold text-slate-400 mt-0.5">Seleccione os centros de custo que necessitam pesquisa de fornecedor</p>
+                </div>
+                <button type="button" onclick="document.getElementById('modalBulkQuotation').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <p id="bulkQuotationSummary" class="text-xs font-semibold text-slate-500 mb-3">—</p>
+            <div class="flex items-center gap-2 mb-3">
+                <button type="button" id="bulkQuotationSelectAll"
+                    class="text-[10px] font-bold uppercase tracking-wide text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded-lg hover:bg-emerald-50">Seleccionar todos</button>
+                <button type="button" id="bulkQuotationSelectNone"
+                    class="text-[10px] font-bold uppercase tracking-wide text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg hover:bg-slate-100">Limpar</button>
+            </div>
+            <div id="bulkQuotationCCList"
+                class="flex flex-col gap-2 max-h-[min(50vh,360px)] overflow-y-auto custom-scroll pr-1 mb-5">
+            </div>
+            <div class="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button type="button" onclick="document.getElementById('modalBulkQuotation').classList.remove('open')"
+                    class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
+                <button type="button" id="bulkQuotationConfirmBtn"
+                    class="h-10 px-6 rounded-xl bg-[#0f172a] text-white font-bold text-xs hover:bg-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base">fact_check</span>
+                    Enviar seleccionados
+                </button>
+            </div>
         </div>
     </div>
 

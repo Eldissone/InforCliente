@@ -1092,6 +1092,7 @@ costCenterRoutes.post(
       code: z.string().min(1).max(20),
       name: z.string().min(2),
       currency: z.string().optional(),
+      requiresQuotation: z.boolean().optional(),
     }).parse(req.body);
 
     const existing = await prisma.costCenter.findUnique({
@@ -1102,7 +1103,13 @@ costCenterRoutes.post(
     }
 
     const created = await prisma.costCenter.create({
-      data: { projectId, code: body.code, name: body.name, currency: body.currency || "AOA" },
+      data: {
+        projectId,
+        code: body.code,
+        name: body.name,
+        currency: body.currency || "AOA",
+        requiresQuotation: body.requiresQuotation !== false,
+      },
     });
     return res.status(201).json({ id: created.id });
   })
@@ -1119,6 +1126,7 @@ costCenterRoutes.patch(
       code: z.string().min(1).max(20).optional(),
       currency: z.string().optional(),
       active: z.boolean().optional(),
+      requiresQuotation: z.boolean().optional(),
     }).parse(req.body);
 
     const updated = await prisma.costCenter.update({
@@ -1218,7 +1226,7 @@ costCenterRoutes.get(
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          costCenter: { select: { code: true, name: true, currency: true } },
+          costCenter: { select: { code: true, name: true, currency: true, requiresQuotation: true } },
           _count: { select: { payments: true, quotes: true } },
         },
       }),
