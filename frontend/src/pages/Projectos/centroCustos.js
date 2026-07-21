@@ -528,10 +528,12 @@ function renderKPIs(totalsByCurrency) {
   if (!totalsByCurrency) return;
   const baseEl = document.getElementById("kpiBasePrevisto");
   const realizadoEl = document.getElementById("kpiRealizado");
+  const liquidadoEl = document.getElementById("kpiLiquidado");
   const desvioEl = document.getElementById("kpiDesvioMercado");
 
   baseEl.innerHTML = "";
   realizadoEl.innerHTML = "";
+  if (liquidadoEl) liquidadoEl.innerHTML = "";
   if (desvioEl) desvioEl.innerHTML = "";
 
   const currencies = Object.keys(totalsByCurrency);
@@ -539,6 +541,7 @@ function renderKPIs(totalsByCurrency) {
   if (currencies.length === 0) {
     baseEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     realizadoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
+    if (liquidadoEl) liquidadoEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     if (desvioEl) desvioEl.innerHTML = `<p class="text-xl font-bold text-slate-900 tracking-tight">—</p>`;
     document.getElementById("kpiPct").textContent = "0%";
     document.getElementById("kpiBar").style.width = "0%";
@@ -549,16 +552,25 @@ function renderKPIs(totalsByCurrency) {
   let pctCount = 0;
 
   currencies.forEach((cur) => {
-    const t = totalsByCurrency[cur] || { basePrevisto: 0, budgeted: 0, paid: 0, pctExecutado: 0 };
+    const t = totalsByCurrency[cur] || {
+      basePrevisto: 0,
+      realizadoOrcamento: 0,
+      liquidado: 0,
+      pctExecutado: 0,
+      desvioPrevistoRealizado: 0,
+    };
 
     baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? 0, cur)}</p>`;
-    realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.paid, cur)}</p>`;
+    realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.realizadoOrcamento ?? 0, cur)}</p>`;
+    if (liquidadoEl) {
+      liquidadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.liquidado ?? 0, cur)}</p>`;
+    }
 
     if (desvioEl) {
-      const hasEstimate = Number(t.estimadoOriginal || 0) > 0;
-      const desvio = t.desvioMercado || 0;
+      const hasPrevisto = Number(t.basePrevisto || 0) > 0;
+      const desvio = t.desvioPrevistoRealizado ?? t.desvio ?? 0;
       const desvioClass = desvio > 0 ? "text-red-600" : desvio < 0 ? "text-emerald-600" : "text-slate-900";
-      desvioEl.innerHTML += `<p class="text-xl font-bold ${desvioClass} tracking-tight" title="${cur}">${hasEstimate ? `${desvio > 0 ? "+" : ""}${desvio.toFixed(1)}%` : "—"}</p>`;
+      desvioEl.innerHTML += `<p class="text-xl font-bold ${desvioClass} tracking-tight" title="${cur}">${hasPrevisto ? `${desvio > 0 ? "+" : ""}${desvio.toFixed(1)}%` : "—"}</p>`;
     }
 
     totalPct += t.pctExecutado || 0;
@@ -582,7 +594,7 @@ function renderPrevistoRealTable(summary) {
   if (!tbody) return;
 
   if (!summary?.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p class="text-xs">Sem dados</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><p class="text-xs">Sem dados</p></div></td></tr>`;
     return;
   }
 
@@ -590,15 +602,20 @@ function renderPrevistoRealTable(summary) {
     const cur = cc.currency || "AOA";
     const pct = Math.min(100, Math.max(0, cc.pctExecutado || 0));
     const barColor = cc.overflow ? "bg-red-500" : pct >= 80 ? "bg-amber-400" : "bg-emerald-500";
-    const desvioMercado = cc.desvioMercado || 0;
-    const hasEstimate = Number(cc.estimadoOriginal || 0) > 0;
-    const desvioClass = desvioMercado > 0 ? "text-red-600" : desvioMercado < 0 ? "text-emerald-600" : "text-slate-500";
-    const desvioLabel = hasEstimate ? `${desvioMercado > 0 ? "+" : ""}${desvioMercado.toFixed(1)}%` : "—";
+    const desvioPR = cc.desvioPrevistoRealizado ?? cc.desvio ?? 0;
+    const desvioRL = cc.desvioRealizadoLiquidado ?? 0;
+    const hasPrevisto = Number(cc.basePrevisto || 0) > 0;
+    const hasRealizado = Number(cc.realizadoOrcamento || 0) > 0;
+    const desvioClassPR = desvioPR > 0 ? "text-red-600" : desvioPR < 0 ? "text-emerald-600" : "text-slate-500";
+    const desvioClassRL = desvioRL > 0 ? "text-red-600" : desvioRL < 0 ? "text-emerald-600" : "text-slate-500";
+    const desvioLabelPR = hasPrevisto ? `${desvioPR > 0 ? "+" : ""}${desvioPR.toFixed(1)}%` : "—";
+    const desvioLabelRL = hasRealizado ? `${desvioRL > 0 ? "+" : ""}${desvioRL.toFixed(1)}%` : "—";
     return `
     <tr class="${cc.overflow ? "overflow-row" : ""}">
       <td class="font-semibold text-slate-900">${cc.name}</td>
-      <td class="text-right tabular-nums font-medium text-slate-400">${hasEstimate ? formatCurrency(cc.estimadoOriginal, cur) : "—"}</td>
-      <td class="text-right tabular-nums font-bold ${cc.overflow ? "text-red-600" : "text-slate-900"}">${formatCurrency(cc.paid, cur)}</td>
+      <td class="text-right tabular-nums font-medium text-slate-700">${formatCurrency(cc.basePrevisto ?? 0, cur)}</td>
+      <td class="text-right tabular-nums font-bold ${cc.overflow ? "text-red-600" : "text-slate-900"}">${formatCurrency(cc.realizadoOrcamento ?? 0, cur)}</td>
+      <td class="text-right tabular-nums font-medium text-slate-600">${formatCurrency(cc.liquidado ?? 0, cur)}</td>
       <td>
         <div class="flex items-center gap-2">
           <div class="prog-bar-wrap flex-1" style="min-width:80px">
@@ -607,7 +624,8 @@ function renderPrevistoRealTable(summary) {
           <span class="text-xs font-bold text-slate-600 w-12 text-right">${pct.toFixed(1)}%</span>
         </div>
       </td>
-      <td class="text-right tabular-nums font-bold ${desvioClass}" title="Preço de mercado vs. estimativa inicial">${desvioLabel}</td>
+      <td class="text-right tabular-nums font-bold ${desvioClassPR}" title="Previsto → Realizado">${desvioLabelPR}</td>
+      <td class="text-right tabular-nums font-bold ${desvioClassRL}" title="Realizado → Liquidado">${desvioLabelRL}</td>
     </tr>`;
   }).join("");
 }

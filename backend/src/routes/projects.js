@@ -8,12 +8,13 @@ const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
-const { getStaffOwnProjectCondition } = require("../services/scopeService");
+const { getStaffOwnProjectCondition, enforceOwnProjectScope } = require("../services/scopeService");
 const {
   softDeleteProject,
   restoreProject,
   permanentDeleteProject,
 } = require("../services/projectLifecycleService");
+const { computeProjectBudgetSummary } = require("../services/projectBudgetSummaryService");
 const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
@@ -347,6 +348,18 @@ projectRoutes.post(
     });
 
     return res.status(201).json({ id: created.id });
+  })
+);
+
+projectRoutes.get(
+  "/:id/budget-summary",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
+    const summary = await computeProjectBudgetSummary(projectId);
+    return res.json(summary);
   })
 );
 

@@ -32,3 +32,6 @@ Thumbs.db
 
 # Uploads (imagens e ficheiros gerados pelo utilizador)
 backend/uploads/
+
+#planos
+.plans

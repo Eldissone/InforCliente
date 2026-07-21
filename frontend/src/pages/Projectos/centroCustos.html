@@ -430,7 +430,9 @@
                         class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Cotação</a>
                     <a data-nav-financeiro href="../Financeiro/financeiro.html"
                         class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Financeiro</a>
-                    <a data-nav-centros href="../Financeiro/centrosGerais.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Centros Gerais</a>
+                    <a data-nav-centros href="../Financeiro/centrosGerais.html"
+                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors whitespace-nowrap shrink-0">Centros
+                        Gerais</a>
                 </div>
             </div>
 
@@ -467,7 +469,8 @@
                 data-nav-obras href="../Projectos/ProjectGeral.html">
                 <span class="material-symbols-outlined text-lg">construction</span> Obras
             </a>
-            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-logistics
+                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Stock/index.html">
                 <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
             </a>
@@ -475,15 +478,19 @@
                 data-nav-planeamento href="../Projectos/centroCustos.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
             </a>
-            <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-cotacao
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Projectos/Cotacao/index.html">
                 <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
             </a>
-            <a data-nav-financeiro class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a data-nav-financeiro
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 href="../Financeiro/financeiro.html">
                 <span class="material-symbols-outlined text-lg">payments</span> Financeiro
             </a>
-            <a data-nav-centros class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../Financeiro/centrosGerais.html">
+            <a data-nav-centros
+                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+                href="../Financeiro/centrosGerais.html">
                 <span class="material-symbols-outlined text-lg">account_balance</span> Centros Gerais
             </a>
             <button data-logout
@@ -575,34 +582,42 @@
                 </header>
 
                 <!-- KPI Row -->
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="kpiRow">
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4" id="kpiRow">
                     <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
                             Previsto</p>
-                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Orçamento Geral aprovados</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Baseline aprovado</p>
                         <div id="kpiBasePrevisto" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
-                            Realizado</p>
-                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Pago</p>
+                            Em Análise</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Comprometido (incl. em análise)</p>
 
                         <div id="kpiRealizado" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Liquidado</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Pagamentos confirmados</p>
+                        <div id="kpiLiquidado" class="flex flex-col gap-1">
+                            <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Desvio
                         </p>
-                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Real vs. Previsto</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Realizado vs. Previsto</p>
                         <div id="kpiDesvioMercado" class="flex flex-col gap-1">
                             <p class="text-xl font-bold text-slate-900 tracking-tight">—</p>
                         </div>
                     </div>
                     <div class="kpi-card">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">% Executado</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">% Liquidado</p>
+                        <p class="text-[9px] font-semibold text-slate-400 mb-1">Sobre previsto</p>
                         <div class="prog-bar-wrap mb-1">
                             <div id="kpiBar" class="prog-bar bg-[#2afc8d]" style="width:0%"></div>
                         </div>
@@ -648,7 +663,7 @@
                             <div>
                                 <h3 class="font-bold text-[#0F172A]">Execução Orçamental</h3>
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-0.5">
-                                    Previsto × Real por centro de custo</p>
+                                    Previsto × Realizado × Liquidado por centro de custo</p>
                             </div>
                         </div>
                         <div class="overflow-x-auto custom-scroll">
@@ -656,13 +671,19 @@
                                 <thead>
                                     <tr>
                                         <th class="text-left">Tipo</th>
-                                        <th class="text-right" title="Estimativa registada antes de ir a cotação">
+                                        <th class="text-right" title="Baseline aprovado (originalUnitPrice)">
                                             Previsto</th>
-                                        <th class="text-right">Realizado</th>
-                                        <th class="text-left" style="min-width:160px">% Execução Orçamental</th>
                                         <th class="text-right"
-                                            title="Desvio entre a estimativa inicial e o preço real obtido nas cotações">
-                                            Desvio</th>
+                                            title="Preço comprometido — inclui em análise com proposta">
+                                            Realizado</th>
+                                        <th class="text-right" title="Apenas pagamentos confirmados">
+                                            Liquidado</th>
+                                        <th class="text-left" style="min-width:160px">% Liquidado</th>
+                                        <th class="text-right"
+                                            title="Desvio entre previsto e realizado (preço comprometido)">
+                                            Desvio P→R</th>
+                                        <th class="text-right" title="Desvio entre realizado e liquidado">
+                                            Desvio R→L</th>
                                     </tr>
                                 </thead>
                                 <tbody id="dashPrevistoRealBody"></tbody>
@@ -743,7 +764,8 @@
                             class="px-6 py-4 border-b border-slate-50 flex items-center gap-3 overflow-x-auto custom-scroll flex-nowrap">
                             <div class="shrink-0 min-w-0">
                                 <h3 class="font-bold text-slate-900 whitespace-nowrap">Orçamento Geral - Custos</h3>
-                                <p id="budgetViewHint" class="text-xs text-slate-400 mt-0.5 whitespace-nowrap">Visão prevista — valores do
+                                <p id="budgetViewHint" class="text-xs text-slate-400 mt-0.5 whitespace-nowrap">Visão
+                                    prevista — valores do
                                     upload aprovado</p>
                             </div>
                             <div class="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
@@ -837,7 +859,8 @@
                             <div>
                                 <h3 class="font-bold text-slate-900">Cronograma de Pagamentos</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Linhas «A definir» aguardam parcelamento ·
-                                    parcelas da cotação e do cronograma aparecem com data (estado «Planeado» até 1 dia antes do vencimento)</p>
+                                    parcelas da cotação e do cronograma aparecem com data (estado «Planeado» até 1 dia
+                                    antes do vencimento)</p>
                             </div>
                             <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 <input id="cronogramaSearch" type="search" placeholder="Pesquisar..."
@@ -1893,33 +1916,45 @@
                         class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed" />
                 </div>
 
-                <div id="liqFiscalSection" class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+                <div id="liqFiscalSection"
+                    class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-xs font-black uppercase tracking-widest text-slate-500">Cálculo fiscal</p>
                         <div class="flex items-center gap-3 text-[11px] font-bold text-slate-600">
                             <label class="inline-flex items-center gap-1 cursor-pointer">
-                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeBase" value="base" checked class="accent-emerald-600" />
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeBase" value="base" checked
+                                    class="accent-emerald-600" />
                                 Base
                             </label>
                             <label class="inline-flex items-center gap-1 cursor-pointer">
-                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeGross" value="gross" class="accent-emerald-600" />
+                                <input type="radio" name="liqFiscalMode" id="liqFiscalModeGross" value="gross"
+                                    class="accent-emerald-600" />
                                 Bruto
                             </label>
                         </div>
                     </div>
                     <p id="liqFiscalSupplierHint" class="text-[10px] text-slate-400 font-semibold"></p>
                     <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-700">
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyVat" class="accent-emerald-600" /> Tem IVA</label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyWithholding" class="accent-emerald-600" /> Retenção na fonte</label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="liqApplyDiscount" class="accent-emerald-600" /> Desconto</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyVat" class="accent-emerald-600" /> Tem IVA</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyWithholding" class="accent-emerald-600" /> Retenção na fonte</label>
+                        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox"
+                                id="liqApplyDiscount" class="accent-emerald-600" /> Desconto</label>
                     </div>
                     <div id="liqBaseInputWrap">
-                        <label for="liqBaseAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor base</label>
-                        <input id="liqBaseAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                        <label for="liqBaseAmount"
+                            class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                            base</label>
+                        <input id="liqBaseAmount" type="number" min="0" step="0.01"
+                            class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
                     </div>
                     <div id="liqGrossInputWrap" class="hidden">
-                        <label for="liqGrossAmount" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor bruto (fatura)</label>
-                        <input id="liqGrossAmount" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+                        <label for="liqGrossAmount"
+                            class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor
+                            bruto (fatura)</label>
+                        <input id="liqGrossAmount" type="number" min="0" step="0.01"
+                            class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
                     </div>
                     <div id="liqFiscalBreakdown" class="pt-1"></div>
                 </div>
@@ -1930,7 +1965,8 @@
                         pago *</label>
                     <input id="liqAmount" type="number" min="0" step="0.01" required
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
-                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula automaticamente. O orçamento realizado usa sempre a base.</p>
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula
+                        automaticamente. O orçamento realizado usa sempre a base.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

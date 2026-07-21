@@ -727,7 +727,19 @@ costCenterRoutes.get(
       orderBy: { code: "asc" },
     });
 
-    // Agrupamento de pagamentos por costCenterId
+    // Liquidado = apenas pagamentos confirmados (comprovativo)
+    const liquidadoAgg = await prisma.costPayment.groupBy({
+      by: ["costCenterId"],
+      where: { projectId, status: "CONFIRMADO" },
+      _sum: { paidAmount: true, budgetedAmount: true },
+    });
+
+    const liquidadoMap = {};
+    liquidadoAgg.forEach((p) => {
+      liquidadoMap[p.costCenterId] =
+        Number(p._sum?.paidAmount || 0) || Number(p._sum?.budgetedAmount || 0);
+    });
+
     const payAgg = await prisma.costPayment.groupBy({
       by: ["costCenterId"],
       where: { projectId },
@@ -784,6 +796,8 @@ costCenterRoutes.get(
       if (er.status !== "PAGO" || !er.costCenterId) return;
       if (!payMap[er.costCenterId]) payMap[er.costCenterId] = { budgeted: 0, paid: 0 };
       payMap[er.costCenterId].paid += Number(er.amount || 0);
+      if (!liquidadoMap[er.costCenterId]) liquidadoMap[er.costCenterId] = 0;
+      liquidadoMap[er.costCenterId] += Number(er.amount || 0);
     });
 
     // Orçamento Previsto aprovado = baseline (originalUnitPrice) dos itens não pendentes/rejeitados
@@ -835,29 +849,39 @@ costCenterRoutes.get(
       const pay = payMap[cc.id] || { budgeted: 0, paid: 0 };
       const basePrevisto = basePrevistoMap[cc.id] || 0;
       const estimadoOriginal = estimadoOriginalMap[cc.id] || 0;
+      const realizadoOrcamento = realizadoOrcamentoMap[cc.id] || 0;
+      const liquidado = liquidadoMap[cc.id] || 0;
       const needs = needsMap[cc.id] || {};
-      const saldo = basePrevisto - pay.paid;
-      const desvio = basePrevisto > 0
-        ? ((pay.paid - basePrevisto) / basePrevisto) * 100
+      const saldo = basePrevisto - liquidado;
+      const desvioPrevistoRealizado = basePrevisto > 0
+        ? ((realizadoOrcamento - basePrevisto) / basePrevisto) * 100
         : 0;
-      // Desvio entre a estimativa inicial (previsto, antes de ir a mercado)
-      // e o preço real obtido nas cotações aprovadas — mostra se o mercado
-      // ficou acima/abaixo do que tinha sido orçamentado.
-      const desvioMercado = estimadoOriginal > 0 && realizadoOrcamentoMap[cc.id] > 0
-        ? ((realizadoOrcamentoMap[cc.id] - estimadoOriginal) / estimadoOriginal) * 100
+      const desvioRealizadoLiquidado = realizadoOrcamento > 0
+        ? ((liquidado - realizadoOrcamento) / realizadoOrcamento) * 100
+        : 0;
+      const desvio = desvioPrevistoRealizado;
+      const desvioMercado = estimadoOriginal > 0 && realizadoOrcamento > 0
+        ? ((realizadoOrcamento - estimadoOriginal) / estimadoOriginal) * 100
         : 0;
       const pctExecutado = basePrevisto > 0
-        ? Math.min(100, (pay.paid / basePrevisto) * 100)
+        ? Math.min(100, (liquidado / basePrevisto) * 100)
         : 0;
 
-      const realizadoOrcamento = realizadoOrcamentoMap[cc.id] || 0;
       const currency = cc.currency || "AOA";
       if (!totalsByCurrency[currency]) {
-        totalsByCurrency[currency] = { basePrevisto: 0, estimadoOriginal: 0, realizadoOrcamento: 0, budgeted: 0, paid: 0 };
+        totalsByCurrency[currency] = {
+          basePrevisto: 0,
+          estimadoOriginal: 0,
+          realizadoOrcamento: 0,
+          liquidado: 0,
+          budgeted: 0,
+          paid: 0,
+        };
       }
       totalsByCurrency[currency].basePrevisto += basePrevisto;
       totalsByCurrency[currency].estimadoOriginal += estimadoOriginal;
       totalsByCurrency[currency].realizadoOrcamento += realizadoOrcamento;
+      totalsByCurrency[currency].liquidado += liquidado;
       totalsByCurrency[currency].budgeted += pay.budgeted;
       totalsByCurrency[currency].paid += pay.paid;
 
@@ -868,13 +892,17 @@ costCenterRoutes.get(
         currency,
         basePrevisto,
         estimadoOriginal,
+        realizadoOrcamento,
+        liquidado,
+        desvioPrevistoRealizado,
+        desvioRealizadoLiquidado,
         desvioMercado,
         budgeted: pay.budgeted,
         paid: pay.paid,
         saldo,
         desvio,
         pctExecutado,
-        overflow: pay.paid > basePrevisto && basePrevisto > 0,
+        overflow: realizadoOrcamento > basePrevisto && basePrevisto > 0,
         needsCounts: {
           pending: needs.PENDING || 0,
           approved: needs.APPROVED || 0,
@@ -886,11 +914,18 @@ costCenterRoutes.get(
 
     Object.keys(totalsByCurrency).forEach(curr => {
       const t = totalsByCurrency[curr];
-      t.saldo = (t.basePrevisto || 0) - t.paid;
-      t.pctExecutado = t.basePrevisto > 0 ? Math.min(100, (t.paid / t.basePrevisto) * 100) : 0;
+      t.saldo = (t.basePrevisto || 0) - (t.liquidado || 0);
+      t.pctExecutado = t.basePrevisto > 0 ? Math.min(100, ((t.liquidado || 0) / t.basePrevisto) * 100) : 0;
+      t.desvioPrevistoRealizado = t.basePrevisto > 0
+        ? (((t.realizadoOrcamento || 0) - t.basePrevisto) / t.basePrevisto) * 100
+        : 0;
+      t.desvioRealizadoLiquidado = (t.realizadoOrcamento || 0) > 0
+        ? (((t.liquidado || 0) - (t.realizadoOrcamento || 0)) / t.realizadoOrcamento) * 100
+        : 0;
       t.desvioMercado = t.estimadoOriginal > 0 && (t.realizadoOrcamento || 0) > 0
         ? (((t.realizadoOrcamento || 0) - t.estimadoOriginal) / t.estimadoOriginal) * 100
         : 0;
+      t.desvio = t.desvioPrevistoRealizado;
     });
 
     const extrasByCostCenter = {};
