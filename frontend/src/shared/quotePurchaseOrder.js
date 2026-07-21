@@ -152,7 +152,8 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
   const orderNo = formatOrderNumber(quote.orderNumber);
   const orderDate = new Date();
   const deliveryDate = deliveryEstimate(orderDate);
-  const deliverySite = [project?.location, project?.region].filter(Boolean).join(" - ")
+  const deliverySite = need.siteReceptionLocation?.trim()
+    || [project?.location, project?.region].filter(Boolean).join(" - ")
     || project?.name
     || "—";
   const paymentTerm = supplier?.paymentTerm === "CREDITO" ? "Crédito" : "Pronto Pagamento";

@@ -18,6 +18,12 @@ const {
   listPendingFinanceScheduling,
 } = require("../services/needFinanceBridgeService");
 const {
+  quoteLineTotal,
+  listQuotesAwaitingInstallments,
+  mapPendingInstallmentRow,
+  quoteHasPaymentPlan,
+} = require("../services/needInstallmentSchedulingService");
+const {
   analyzeCertification,
   certifyPayment,
   getAuditSummary,
@@ -184,6 +190,7 @@ const PAYMENT_RELATIONS_INCLUDE = {
       dueDate: true,
       quote: {
         select: {
+          proformaUrl: true,
           creditTermDays: true,
           installmentsPlanned: true,
           invoiceConfirmedAt: true,
@@ -276,7 +283,7 @@ async function mapPaymentItems(items) {
 
   return items.map((p) => {
     const sup = p.supplierRef || supplierMap[p.supplier] || {};
-    const selectedQuote = p.need?.quotes?.[0] || p.paymentInstallment?.quote || null;
+    const selectedQuote = p.paymentInstallment?.quote || p.need?.quotes?.[0] || null;
     const proformaUrl = selectedQuote?.proformaUrl || null;
     const creditTermDays = selectedQuote?.creditTermDays ?? null;
     const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
@@ -1223,16 +1230,25 @@ costCenterRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
+    if (awaitingInstallments) {
+      const pendingRows = await listQuotesAwaitingInstallments({ projectId });
+      const mapped = pendingRows.map(mapPendingInstallmentRow);
+      const start = (page - 1) * pageSize;
+      const items = mapped.slice(start, start + pageSize);
+      return res.json({
+        page,
+        pageSize,
+        total: mapped.length,
+        items,
+      });
+    }
+
     const where = {
       projectId,
       ...(status ? { status } : {}),
       ...(priority ? { priority } : {}),
       ...(ccId ? { costCenterId: ccId } : {}),
-      ...(awaitingInstallments
-        ? { scheduled: true, payments: { none: {} } }
-        : scheduled !== undefined
-          ? { scheduled }
-          : {}),
+      ...(scheduled !== undefined ? { scheduled } : {}),
     };
 
     const [total, items] = await Promise.all([
@@ -1346,6 +1362,8 @@ costCenterRoutes.patch(
       responsible: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       priceExceptionReason: z.string().optional().nullable(),
+      siteReceptionPlannedAt: z.string().datetime().optional().nullable(),
+      siteReceptionLocation: z.string().max(200).optional().nullable(),
     }).parse(req.body);
 
     let priceExceptionPatch = {};
@@ -1410,6 +1428,16 @@ costCenterRoutes.patch(
         ...(body.status ? { status: body.status } : {}),
         ...(body.responsible !== undefined ? { responsible: body.responsible } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.siteReceptionPlannedAt !== undefined
+          ? {
+              siteReceptionPlannedAt: body.siteReceptionPlannedAt
+                ? new Date(body.siteReceptionPlannedAt)
+                : null,
+            }
+          : {}),
+        ...(body.siteReceptionLocation !== undefined
+          ? { siteReceptionLocation: body.siteReceptionLocation?.trim() || null }
+          : {}),
         ...priceExceptionPatch,
       },
       select: { id: true },
@@ -1580,6 +1608,7 @@ costCenterRoutes.post(
     const ccId = String(req.params.ccId);
     
     const body = z.object({
+      quoteId: z.string().optional(),
       paymentType: z.string().optional().default("PRONTO_PAGAMENTO"),
       installments: z.array(z.object({
         paymentDate: z.string(),
@@ -1599,58 +1628,127 @@ costCenterRoutes.post(
       },
     });
     if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+    if (need.costCenterId !== ccId) {
+      return res.status(400).json({ error: "COST_CENTER_MISMATCH" });
+    }
 
-    let supplierName = null;
-    let supplierId = null;
-    if (need.quotes && need.quotes.length > 0 && need.quotes[0].supplier) {
-      supplierName = need.quotes[0].supplier.name;
-      supplierId = need.quotes[0].supplier.id;
+    const selectedQuotes = need.quotes || [];
+    let targetQuote = null;
+    if (body.quoteId) {
+      targetQuote = selectedQuotes.find((q) => q.id === body.quoteId) || null;
+      if (!targetQuote) return res.status(404).json({ error: "QUOTE_NOT_FOUND" });
+    } else if (selectedQuotes.length === 1) {
+      targetQuote = selectedQuotes[0];
+    } else if (selectedQuotes.length > 1) {
+      return res.status(400).json({
+        error: "QUOTE_ID_REQUIRED",
+        message: "Seleccione o fornecedor — indique quoteId ao definir parcelas.",
+      });
+    }
+
+    const supplierName = targetQuote?.supplier?.name || null;
+    const supplierId = targetQuote?.supplier?.id || targetQuote?.supplierId || null;
+
+    if (targetQuote) {
+      const alreadyPlanned = await quoteHasPaymentPlan({
+        quoteId: targetQuote.id,
+        needId,
+        supplierId,
+      });
+      if (alreadyPlanned) {
+        return res.status(400).json({
+          error: "INSTALLMENTS_ALREADY_DEFINED",
+          message: "Este fornecedor já tem parcelas definidas.",
+        });
+      }
+    } else {
+      const existingPayments = await prisma.costPayment.count({
+        where: { needId, status: { not: "CANCELADO" } },
+      });
+      if (existingPayments > 0) {
+        return res.status(400).json({
+          error: "INSTALLMENTS_ALREADY_DEFINED",
+          message: "Este item já tem parcelas definidas.",
+        });
+      }
     }
 
     const totalInstallments = body.installments.length;
-
-    if (need.quotes?.[0]?.id) {
-      await prisma.needQuote.update({
-        where: { id: need.quotes[0].id },
-        data: { installmentsPlanned: totalInstallments },
-      });
+    const quoteTotal = targetQuote ? quoteLineTotal(targetQuote, need) : null;
+    if (quoteTotal != null) {
+      const sum = body.installments.reduce((acc, inst) => acc + Number(inst.amount), 0);
+      if (Math.abs(sum - quoteTotal) > 0.05) {
+        return res.status(400).json({
+          error: "INSTALLMENT_TOTAL_MISMATCH",
+          message: `A soma das parcelas (${sum.toFixed(2)}) deve corresponder ao total do fornecedor (${quoteTotal.toFixed(2)}).`,
+        });
+      }
     }
 
-    // Create the installments
-    const createdPayments = [];
-    for (const inst of body.installments) {
-      const payment = await prisma.costPayment.create({
-        data: {
-          projectId: need.projectId,
-          costCenterId: ccId,
-          needId,
-          supplierId,
-          docNumber: null,
-          paymentDate: new Date(inst.paymentDate),
-          supplier: supplierName,
-          category: "OUTRO",
-          description: buildInstallmentDescription({
+    const createdPayments = await prisma.$transaction(async (tx) => {
+      if (targetQuote?.id) {
+        await tx.needQuote.update({
+          where: { id: targetQuote.id },
+          data: { installmentsPlanned: totalInstallments },
+        });
+      }
+
+      const payments = [];
+      for (const inst of body.installments) {
+        const payment = await tx.costPayment.create({
+          data: {
+            projectId: need.projectId,
+            costCenterId: ccId,
+            needId,
+            supplierId,
+            docNumber: targetQuote?.orderNumber
+              ? `EF${String(targetQuote.orderNumber).padStart(3, "0")}`
+              : null,
+            paymentDate: new Date(inst.paymentDate),
+            supplier: supplierName,
+            category: "MATERIAL",
+            description: buildInstallmentDescription({
+              installment: inst.installment,
+              total: totalInstallments,
+              baseDescription: targetQuote?.supplier?.name
+                ? `${need.description} — ${targetQuote.supplier.name}`
+                : need.description,
+            }),
+            budgetedAmount: String(inst.amount),
+            paidAmount: "0",
+            paymentMethod: null,
+            paymentType: body.paymentType,
+            week: null,
             installment: inst.installment,
-            total: totalInstallments,
-            baseDescription: need.description,
-          }),
-          budgetedAmount: String(inst.amount),
-          paidAmount: "0",
-          paymentMethod: null,
-          paymentType: body.paymentType,
-          week: null,
-          installment: inst.installment,
-          status: "PENDENTE",
-          notes: null,
-        },
-      });
-      createdPayments.push(payment);
-    }
+            status: "PENDENTE",
+            notes: null,
+          },
+        });
 
-    // Agendamento cria parcelas pendentes; o item passa a PAID só após liquidação total.
-    await prisma.workNeed.update({
-      where: { id: needId },
-      data: { scheduled: true },
+        if (targetQuote?.id) {
+          await tx.paymentInstallment.create({
+            data: {
+              quoteId: targetQuote.id,
+              needId,
+              costPaymentId: payment.id,
+              number: inst.installment,
+              amount: String(inst.amount),
+              currency: targetQuote.currency || need.costCenter?.currency || "AOA",
+              dueDate: new Date(inst.paymentDate),
+              status: "PENDENTE",
+            },
+          });
+        }
+
+        payments.push(payment);
+      }
+
+      await tx.workNeed.update({
+        where: { id: needId },
+        data: { scheduled: true },
+      });
+
+      return payments;
     });
 
     setImmediate(() => {
@@ -1659,7 +1757,7 @@ costCenterRoutes.post(
       );
     });
 
-    return res.json({ ok: true, payments: createdPayments.map(p => p.id) });
+    return res.json({ ok: true, payments: createdPayments.map((p) => p.id) });
   })
 );
 

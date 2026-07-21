@@ -59,7 +59,10 @@ const API_ERROR_MESSAGES = {
   PAYMENT_NOT_FOUND: "Lançamento não encontrado.",
   NEED_PAID_LOCKED: "Item pago — alteração apenas com permissão de gestão de obras.",
   NEED_NOT_IN_ANALYSIS: "Só é possível aprovar análise de itens com estado «Em Análise».",
-  PROPOSAL_REQUIRED: "Carregue a proposta/proforma antes de continuar.",
+  PROPOSAL_REQUIRED: "Carregue a proforma de todos os fornecedores antes de continuar.",
+  QUOTE_ID_REQUIRED: "Seleccione o fornecedor ao definir parcelas.",
+  INSTALLMENTS_ALREADY_DEFINED: "Este fornecedor já tem parcelas definidas.",
+  INSTALLMENT_TOTAL_MISMATCH: "A soma das parcelas deve corresponder ao total do fornecedor.",
 };
 
 function resolveApiErrorMessage(data, status) {

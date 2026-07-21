@@ -16,6 +16,12 @@ const {
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const {
+  computeQuoteAllocation,
+  validateQuoteQuantity,
+  syncNeedFromSelectedQuotes,
+  syncNeedOrderStatus,
+} = require("../services/quoteAllocationService");
+const {
   fetchDeliveryFieldsByQuoteIds,
   setQuoteDeliveryPending,
 } = require("../services/deliveryFieldBridge");
@@ -61,23 +67,38 @@ function serializeQuote(quote) {
   };
 }
 
-async function applyProposalToNeed({ quote, need, req, proformaUrl }) {
+async function applyProformaToNeed({ quote, need, req }) {
   const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
-  const exceptionPatch = assertPriceWithinPrevistoOrException(quote.need || need, quote.quotedPrice, {
-    priceExceptionReason: req.body?.priceExceptionReason,
-    actorName,
-  }) || {
-    priceExceptionReason: null,
-    priceExceptionBy: null,
-    priceExceptionAt: null,
-  };
+  const exceptionPatch =
+    assertPriceWithinPrevistoOrException(need, quote.quotedPrice, {
+      priceExceptionReason: req.body?.priceExceptionReason,
+      actorName,
+    }) || {
+      priceExceptionReason: null,
+      priceExceptionBy: null,
+      priceExceptionAt: null,
+    };
+
+  await syncNeedFromSelectedQuotes(prisma, quote.needId);
+
+  const selectedQuotes = await prisma.needQuote.findMany({
+    where: { needId: quote.needId, selected: true },
+  });
+  const allHaveProforma = selectedQuotes.every((q) => q.proformaUrl);
+  const allOrdered =
+    selectedQuotes.length > 0 && selectedQuotes.every((q) => q.orderNumber != null);
+
+  let nextStatus = need.status;
+  if (allHaveProforma && selectedQuotes.length > 0) {
+    if (allOrdered || ["IN_QUOTATION", "ORDERED", "PENDING"].includes(need.status)) {
+      nextStatus = "EM_ANALISE";
+    }
+  }
 
   const updatedNeed = await prisma.workNeed.update({
     where: { id: quote.needId },
     data: {
-      status: "EM_ANALISE",
-      unitPrice: quote.quotedPrice,
-      originalUnitPrice: need.originalUnitPrice ?? need.unitPrice,
+      ...(nextStatus !== need.status ? { status: nextStatus } : {}),
       ...exceptionPatch,
     },
     include: {
@@ -90,7 +111,7 @@ async function applyProposalToNeed({ quote, need, req, proformaUrl }) {
     action: "quote_proposal_submitted",
     needId: quote.needId,
     quoteId: quote.id,
-    details: { proformaUrl, status: "EM_ANALISE" },
+    details: { status: updatedNeed.status, allHaveProforma },
   });
 
   return updatedNeed;
@@ -134,7 +155,7 @@ quoteRoutes.get(
             }),
       },
       include: {
-        costCenter: { select: { name: true, code: true } },
+        costCenter: { select: { id: true, name: true, code: true } },
         quotes: {
           include: {
             supplier: { select: { name: true, vatPercent: true, withholdingPercent: true, discountPercent: true } },
@@ -154,6 +175,19 @@ quoteRoutes.get(
   "/need/:needId",
   asyncHandler(async (req, res) => {
     const needId = String(req.params.needId);
+    const need = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      select: {
+        id: true,
+        quantity: true,
+        unit: true,
+        costCenterId: true,
+        status: true,
+        siteReceptionPlannedAt: true,
+        siteReceptionLocation: true,
+        siteReceivedAt: true,
+      },
+    });
     const items = await prisma.needQuote.findMany({
       where: { needId },
       include: {
@@ -187,7 +221,20 @@ quoteRoutes.get(
       },
       orderBy: { quotedPrice: "asc" },
     });
-    res.json({ items });
+    const allocation = computeQuoteAllocation(
+      need ? { ...need, quantity: need.quantity != null ? String(need.quantity) : null } : null,
+      items
+    );
+    res.json({
+      items,
+      need: need
+        ? {
+            ...need,
+            quantity: need.quantity != null ? String(need.quantity) : null,
+          }
+        : null,
+      allocation,
+    });
   })
 );
 
@@ -402,24 +449,43 @@ quoteRoutes.patch(
   "/:id/select",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    const body = z
+      .object({
+        quantity: z.coerce.number().positive().optional(),
+      })
+      .parse(req.body || {});
 
     const quote = await prisma.needQuote.findUnique({
       where: { id },
-      include: { need: { select: { id: true, status: true } } },
+      include: { need: true },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
     if (isNeedWorkflowLocked(quote.need.status)) {
       return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
     }
 
-    await prisma.needQuote.updateMany({
-      where: { needId: quote.needId },
-      data: { selected: false },
+    const allQuotes = await prisma.needQuote.findMany({ where: { needId: quote.needId } });
+    const needQty = Number(quote.need.quantity) || 0;
+    const defaultQty = body.quantity ?? (quote.quantity != null ? Number(quote.quantity) : null);
+    const allocation = computeQuoteAllocation(quote.need, allQuotes.filter((q) => q.selected && q.id !== id));
+    const qty =
+      defaultQty ??
+      (needQty > 0 ? allocation.remaining || needQty : needQty || 1);
+
+    const { quantity, totalValue } = validateQuoteQuantity({
+      need: quote.need,
+      quotes: allQuotes,
+      quoteId: id,
+      quantity: qty,
     });
 
     const updatedQuote = await prisma.needQuote.update({
       where: { id },
-      data: { selected: true },
+      data: {
+        selected: true,
+        quantity,
+        totalValue,
+      },
       include: {
         supplier: { include: { bankAccounts: true } },
         supplierProduct: true,
@@ -432,21 +498,63 @@ quoteRoutes.patch(
       },
     });
 
+    await syncNeedFromSelectedQuotes(prisma, quote.needId);
+
     await logQuoteAction(req, {
       action: "quote_select",
       needId: quote.needId,
       quoteId: id,
-      details: { supplierId: updatedQuote.supplierId, quotedPrice: String(updatedQuote.quotedPrice) },
+      details: {
+        supplierId: updatedQuote.supplierId,
+        quotedPrice: String(updatedQuote.quotedPrice),
+        quantity: String(quantity),
+      },
     });
 
     res.json({
       ok: true,
-      quote: {
-        ...updatedQuote,
-        quotedPrice: String(updatedQuote.quotedPrice),
-        quantity: updatedQuote.quantity != null ? String(updatedQuote.quantity) : null,
-        totalValue: updatedQuote.totalValue != null ? String(updatedQuote.totalValue) : null,
-      },
+      quote: serializeQuote(updatedQuote),
+      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? updatedQuote : q))),
+    });
+  })
+);
+
+// Actualizar quantidade alocada de uma cotação seleccionada
+quoteRoutes.patch(
+  "/:id/quantity",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const body = z.object({ quantity: z.coerce.number().positive() }).parse(req.body);
+
+    const quote = await prisma.needQuote.findUnique({
+      where: { id },
+      include: { need: true },
+    });
+    if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
+    if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
+    if (isNeedWorkflowLocked(quote.need.status)) {
+      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
+    }
+
+    const allQuotes = await prisma.needQuote.findMany({ where: { needId: quote.needId } });
+    const { quantity, totalValue } = validateQuoteQuantity({
+      need: quote.need,
+      quotes: allQuotes,
+      quoteId: id,
+      quantity: body.quantity,
+    });
+
+    const updatedQuote = await prisma.needQuote.update({
+      where: { id },
+      data: { quantity, totalValue },
+    });
+
+    await syncNeedFromSelectedQuotes(prisma, quote.needId);
+
+    res.json({
+      ok: true,
+      quote: serializeQuote(updatedQuote),
+      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? updatedQuote : q))),
     });
   })
 );
@@ -462,6 +570,9 @@ quoteRoutes.patch(
       include: { need: { select: { id: true, status: true } } },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
+    if (quote.orderNumber != null) {
+      return res.status(400).json({ error: "QUOTE_ALREADY_ORDERED" });
+    }
     if (isNeedWorkflowLocked(quote.need.status)) {
       return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
     }
@@ -470,6 +581,8 @@ quoteRoutes.patch(
       where: { id },
       data: { selected: false },
     });
+
+    await syncNeedFromSelectedQuotes(prisma, quote.needId);
 
     await logQuoteAction(req, {
       action: "quote_deselect",
@@ -517,7 +630,13 @@ quoteRoutes.patch(
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
     if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
-    if (["ORDERED", "EM_ANALISE", "APPROVED", "PAID"].includes(quote.need.status)) {
+    if (quote.orderNumber != null) {
+      return res.status(400).json({ error: "QUOTE_ALREADY_ORDERED" });
+    }
+    if (["PAID", "APPROVED"].includes(quote.need.status)) {
+      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
+    }
+    if (!["IN_QUOTATION", "EM_ANALISE", "ORDERED", "PENDING"].includes(quote.need.status)) {
       return res.status(400).json({ error: "NEED_ALREADY_ORDERED" });
     }
 
@@ -532,6 +651,8 @@ quoteRoutes.patch(
     let expectedReceiptDate = quote.expectedReceiptDate;
     if (body.expectedReceiptDate) {
       expectedReceiptDate = new Date(body.expectedReceiptDate);
+    } else if (!expectedReceiptDate && quote.need?.siteReceptionPlannedAt) {
+      expectedReceiptDate = new Date(quote.need.siteReceptionPlannedAt);
     } else if (!expectedReceiptDate) {
       const leadDays = body.leadDays ?? 15;
       expectedReceiptDate = new Date();
@@ -558,11 +679,10 @@ quoteRoutes.patch(
 
     await setQuoteDeliveryPending(id);
 
-    const updatedNeed = await prisma.workNeed.update({
+    await syncNeedOrderStatus(prisma, quote.needId);
+
+    const updatedNeed = await prisma.workNeed.findUnique({
       where: { id: quote.needId },
-      data: {
-        status: "ORDERED",
-      },
       include: {
         costCenter: { select: { name: true, code: true, currency: true } },
         project: { select: { id: true, name: true, code: true, location: true, region: true } },
@@ -768,8 +888,10 @@ quoteRoutes.post(
       },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
-    if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
-    if (!["IN_QUOTATION", "ORDERED"].includes(quote.need.status)) {
+    if (!quote.selected && quote.orderNumber == null) {
+      return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
+    }
+    if (!["IN_QUOTATION", "ORDERED", "EM_ANALISE"].includes(quote.need.status)) {
       return res.status(400).json({ error: "INVALID_NEED_STATUS_FOR_PROPOSAL" });
     }
 
@@ -794,11 +916,10 @@ quoteRoutes.post(
       },
     });
 
-    const updatedNeed = await applyProposalToNeed({
-      quote,
+    const updatedNeed = await applyProformaToNeed({
+      quote: updatedQuote,
       need: quote.need,
       req,
-      proformaUrl,
     });
 
     res.json({
@@ -818,7 +939,7 @@ quoteRoutes.patch(
     const need = await prisma.workNeed.findUnique({
       where: { id: needId },
       include: {
-        quotes: { where: { selected: true }, take: 1 },
+        quotes: { where: { selected: true } },
         costCenter: { select: { name: true, code: true, currency: true } },
         project: { select: { id: true, name: true, code: true, location: true, region: true } },
       },
@@ -830,13 +951,14 @@ quoteRoutes.patch(
         message: "Só é possível aprovar análise de itens com estado «Em Análise».",
       });
     }
-    const selectedQuote = need.quotes[0];
-    if (!selectedQuote?.proformaUrl) {
+    const missingProforma = (need.quotes || []).filter((q) => !q.proformaUrl);
+    if (missingProforma.length > 0) {
       return res.status(400).json({
         error: "PROPOSAL_REQUIRED",
-        message: "Carregue a proposta/proforma antes de aprovar a análise.",
+        message: `Carregue a proforma de todos os fornecedores (${missingProforma.length} em falta).`,
       });
     }
+    const selectedQuote = need.quotes[0];
 
     const updatedNeed = await prisma.workNeed.update({
       where: { id: needId },

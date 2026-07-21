@@ -103,10 +103,15 @@ function mapNeedBudgetFields(need) {
   };
 }
 
-/** Cotação seleccionada → produto → fornecedor. */
+/** Cotação seleccionada → produto → fornecedor (maior quantidade alocada). */
 function resolveNeedFiscalPercents(need) {
-  const quotes = need?.quotes || [];
-  const quote = quotes.find((q) => q.selected) || quotes[0] || null;
+  const quotes = (need?.quotes || []).filter((q) => q.selected);
+  const sorted = quotes.slice().sort((a, b) => {
+    const qa = Number(a.quantity) || 0;
+    const qb = Number(b.quantity) || 0;
+    return qb - qa;
+  });
+  const quote = sorted[0] || quotes[0] || need?.quotes?.[0] || null;
   if (!quote) {
     return { vatPercent: null, withholdingPercent: null, discountPercent: null };
   }

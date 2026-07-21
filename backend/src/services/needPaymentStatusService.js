@@ -61,29 +61,71 @@ async function assertCanModifyPaidNeed(req) {
 async function syncNeedPaymentStatus(needId) {
   if (!needId) return null;
 
-  const [need, payments] = await Promise.all([
-    prisma.workNeed.findUnique({
-      where: { id: needId },
-      select: {
-        id: true,
-        status: true,
-        unitPrice: true,
-        originalUnitPrice: true,
-        quantity: true,
-        hours: true,
-        scheduled: true,
-        priceExceptionReason: true,
-        _count: { select: { quotes: true } },
+  const need = await prisma.workNeed.findUnique({
+    where: { id: needId },
+    select: {
+      id: true,
+      status: true,
+      unitPrice: true,
+      originalUnitPrice: true,
+      quantity: true,
+      hours: true,
+      scheduled: true,
+      priceExceptionReason: true,
+      quotes: {
+        where: { selected: true },
+        select: { id: true, supplierId: true },
       },
-    }),
-    prisma.costPayment.findMany({
-      where: { needId, status: { not: "CANCELADO" } },
-      select: { id: true, status: true },
-    }),
-  ]);
+    },
+  });
 
   if (!need) return null;
-  if (!payments.length) return need;
+
+  const selectedQuotes = need.quotes || [];
+  let payments = [];
+
+  if (selectedQuotes.length > 0) {
+    const installments = await prisma.paymentInstallment.findMany({
+      where: { needId, quoteId: { in: selectedQuotes.map((q) => q.id) } },
+      include: { costPayment: { select: { id: true, status: true } } },
+    });
+
+    const installmentsByQuote = new Map();
+    installments.forEach((inst) => {
+      if (!installmentsByQuote.has(inst.quoteId)) installmentsByQuote.set(inst.quoteId, []);
+      installmentsByQuote.get(inst.quoteId).push(inst);
+    });
+
+    let allQuotesScheduled = true;
+    for (const quote of selectedQuotes) {
+      const quoteInst = installmentsByQuote.get(quote.id) || [];
+      if (quoteInst.length > 0) {
+        payments.push(...quoteInst.map((i) => i.costPayment).filter(Boolean));
+        continue;
+      }
+      const legacy = await prisma.costPayment.findMany({
+        where: {
+          needId,
+          supplierId: quote.supplierId,
+          status: { not: "CANCELADO" },
+        },
+        select: { id: true, status: true },
+      });
+      if (!legacy.length) {
+        allQuotesScheduled = false;
+        break;
+      }
+      payments.push(...legacy);
+    }
+
+    if (!allQuotesScheduled || !payments.length) return need;
+  } else {
+    payments = await prisma.costPayment.findMany({
+      where: { needId, status: { not: "CANCELADO" } },
+      select: { id: true, status: true },
+    });
+    if (!payments.length) return need;
+  }
 
   const allConfirmed = payments.every((p) => p.status === "CONFIRMADO");
   if (allConfirmed) {

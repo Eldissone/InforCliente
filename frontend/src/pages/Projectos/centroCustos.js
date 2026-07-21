@@ -57,6 +57,7 @@ let currentFundCards = [];
         switchTab(urlTab);
         if (urlNeedId && urlTab === "cronograma") {
           window.__pendingOpenCronogramaNeedId = urlNeedId;
+          window.__pendingOpenCronogramaQuoteId = urlParams.get("quoteId");
         }
       }
     } else showEmptyProjectView();
@@ -398,6 +399,7 @@ function siteReceptionLabel(n) {
 }
 
 function needCronogramaTotal(n) {
+  if (n.amount != null) return Number(n.amount) || 0;
   if (n.realizadoTotal != null) return Number(n.realizadoTotal) || 0;
   const qty = Number(n.quantity) || 0;
   const price = Number(n.realizadoUnitPrice ?? n.unitPrice) || 0;
@@ -410,8 +412,8 @@ async function goToCronogramaAfterSchedule(count = 1) {
   await loadCronograma();
   showToast(
     count === 1
-      ? "Item enviado ao financeiro — defina as parcelas na linha «A definir»"
-      : `${count} itens enviados ao financeiro — defina as parcelas nas linhas «A definir»`,
+      ? "Item enviado ao financeiro — defina as parcelas por fornecedor na linha «A definir»"
+      : `${count} itens enviados ao financeiro — defina as parcelas por fornecedor nas linhas «A definir»`,
     "success"
   );
 }
@@ -1185,13 +1187,27 @@ async function loadCronograma() {
     renderCronogramaList(timelineData.days);
 
     const pendingNeedId = window.__pendingOpenCronogramaNeedId;
+    const pendingQuoteId = window.__pendingOpenCronogramaQuoteId;
     if (pendingNeedId) {
       window.__pendingOpenCronogramaNeedId = null;
-      const n = cronogramaPendingNeeds.find((item) => item.id === pendingNeedId);
+      window.__pendingOpenCronogramaQuoteId = null;
+      const n = cronogramaPendingNeeds.find((item) => item.id === pendingNeedId && (!pendingQuoteId || item.quoteId === pendingQuoteId));
       if (n) {
         const total = needCronogramaTotal(n);
-        const currency = n.costCenter?.currency || "AOA";
-        setTimeout(() => openCronogramaModal(n.id, n.costCenterId, n.description, total, currency), 150);
+        const currency = n.currency || n.costCenter?.currency || "AOA";
+        setTimeout(
+          () =>
+            openCronogramaModal(
+              n.id,
+              n.costCenterId,
+              n.displayDescription || n.description,
+              total,
+              currency,
+              n.quoteId,
+              n.supplierLabel || n.supplier?.name
+            ),
+          150
+        );
       }
     }
 
@@ -1428,16 +1444,20 @@ function renderCronogramaList(days) {
 
   const needRows = cronogramaPendingNeeds.map((n) => {
     const totalObra = needCronogramaTotal(n);
-    const currency = n.costCenter?.currency || "AOA";
+    const currency = n.currency || n.costCenter?.currency || "AOA";
+    const supplierLabel = n.supplierLabel || n.supplier?.name;
+    const desc = (n.displayDescription || n.description || "").replace(/'/g, "\\'");
+    const quoteArg = n.quoteId ? `'${n.quoteId}'` : "null";
+    const supplierArg = supplierLabel ? `'${supplierLabel.replace(/'/g, "\\'")}'` : "null";
     return `
       <tr class="bg-amber-50/30">
         <td class="text-xs font-bold text-amber-600 w-28">A definir</td>
-        <td class="font-medium text-slate-900 max-w-xs truncate" title="${n.description.replace(/"/g, "&quot;")}">${n.description}</td>
-        <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${n.costCenter?.name || ""}</td>
+        <td class="font-medium text-slate-900 max-w-xs truncate" title="${(n.displayDescription || n.description || "").replace(/"/g, "&quot;")}">${n.displayDescription || n.description}</td>
+        <td class="text-sm text-slate-500">${n.costCenter?.code || "—"} · ${supplierLabel || n.costCenter?.name || ""}</td>
         <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, currency)}</td>
         <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Aguardar parcelamento</span></td>
         <td class="text-center">
-          <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${n.description.replace(/'/g, "\\'")}', ${totalObra}, '${currency}')" title="Definir Cronograma"
+          <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${desc}', ${totalObra}, '${currency}', ${quoteArg}, ${supplierArg})" title="Definir Cronograma"
             class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center hover:bg-amber-200 text-amber-600 border border-amber-200">
             <span class="material-symbols-outlined text-base">calendar_month</span>
           </button>
@@ -1492,17 +1512,23 @@ async function submitSiteReception(e) {
   }
 }
 
-window.openCronogramaModal = function (needId, ccId, description, total, currency = "AOA") {
+window.openCronogramaModal = function (needId, ccId, description, total, currency = "AOA", quoteId = null, supplierName = null) {
   currentCronogramaTotal = total;
   document.getElementById("cronogramaNeedId").value = needId;
   document.getElementById("cronogramaCCId").value = ccId;
+  document.getElementById("cronogramaQuoteId").value = quoteId || "";
+  const supplierEl = document.getElementById("cronogramaSupplierLabel");
+  if (supplierEl) {
+    supplierEl.textContent = supplierName ? `Fornecedor: ${supplierName}` : "";
+    supplierEl.classList.toggle("hidden", !supplierName);
+  }
   document.getElementById("cronogramaItemDesc").textContent = description;
   document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, currency);
   document.getElementById("cronogramaNumParcelas").value = 1;
   document.getElementById("cronogramaParcelasBody").innerHTML = "";
   gerarParcelasAutomaticas();
   document.getElementById("modalCronograma").classList.add("open");
-}
+};
 
 window.gerarParcelasAutomaticas = function () {
   const numParcelas = parseInt(document.getElementById("cronogramaNumParcelas").value) || 1;
@@ -1559,6 +1585,7 @@ async function submitCronograma(e) {
   e.preventDefault();
   const needId = document.getElementById("cronogramaNeedId").value;
   const ccId = document.getElementById("cronogramaCCId").value;
+  const quoteId = document.getElementById("cronogramaQuoteId")?.value?.trim() || null;
   const paymentType = document.getElementById("cronogramaPaymentType").value;
   const parcelasRows = document.querySelectorAll("#cronogramaParcelasBody tr");
 
@@ -1580,7 +1607,7 @@ async function submitCronograma(e) {
 
     await apiRequest(`/cost-centers/${ccId}/needs/${needId}/generate-installments`, {
       method: "POST",
-      body: { paymentType, installments }
+      body: { paymentType, installments, ...(quoteId ? { quoteId } : {}) },
     });
 
     showToast("Lançamentos gerados com sucesso!", "success");

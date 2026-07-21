@@ -26,6 +26,194 @@ function needWorkflowState(need) {
   };
 }
 
+function needCostCenterId(need) {
+  return need?.costCenterId || need?.costCenter?.id || null;
+}
+
+function renderAllocationSummary(allocation, need) {
+  const el = document.getElementById("quoteAllocationSummary");
+  if (!el) return;
+  const required = Number(allocation?.required ?? need?.quantity) || 0;
+  if (!required) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  const unit = need?.unit || "un";
+  const remClass = (allocation?.remaining ?? 0) > 0 ? "text-amber-700" : "text-emerald-700";
+  el.innerHTML =
+    `Necessário: <strong>${required.toLocaleString("pt-PT")} ${unit}</strong>` +
+    ` · Alocado: <strong>${Number(allocation?.allocated || 0).toLocaleString("pt-PT")} ${unit}</strong>` +
+    ` · Restante: <strong class="${remClass}">${Number(allocation?.remaining || 0).toLocaleString("pt-PT")} ${unit}</strong>` +
+    (allocation?.weightedUnitPrice
+      ? ` · P. médio: <strong>${Number(allocation.weightedUnitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</strong>`
+      : "");
+}
+
+function updateQuoteQuantityHint(allocation, need) {
+  const hint = document.getElementById("quoteQuantityHint");
+  if (!hint) return;
+  const req = Number(need?.quantity) || 0;
+  if (!req) {
+    hint.textContent = "Quantidade oferecida por este fornecedor.";
+    return;
+  }
+  const rem = allocation?.remaining ?? req;
+  hint.textContent =
+    rem > 0
+      ? `Restam ${rem.toLocaleString("pt-PT")} ${need.unit || "un"} por alocar.`
+      : "Quantidade total alocada — ajuste nas linhas abaixo.";
+}
+
+function loadSiteReceptionFields(needMeta) {
+  const dateEl = document.getElementById("quoteSiteReceptionDate");
+  const locEl = document.getElementById("quoteSiteReceptionLocation");
+  const savedEl = document.getElementById("quoteSiteReceptionSaved");
+  if (!dateEl || !locEl) return;
+  const planned = needMeta?.siteReceptionPlannedAt;
+  dateEl.value = planned ? String(planned).substring(0, 10) : "";
+  locEl.value = needMeta?.siteReceptionLocation || "";
+  if (savedEl) savedEl.classList.add("hidden");
+}
+
+function canPlaceOrderOnQuote(need, quote) {
+  if (!quote?.selected || quote.orderNumber != null) return false;
+  if (["PAID", "APPROVED"].includes(need?.status)) return false;
+  return ["IN_QUOTATION", "EM_ANALISE", "ORDERED", "PENDING"].includes(need?.status);
+}
+
+function formatOrderRef(orderNumber) {
+  const n = Number(orderNumber);
+  if (!Number.isFinite(n)) return "—";
+  return `EF${String(n).padStart(3, "0")}`;
+}
+
+function quoteHasProforma(quote) {
+  const url = quote?.proformaUrl;
+  return typeof url === "string" && url.trim().length > 0;
+}
+
+function isQuoteActive(quote) {
+  if (!quote) return false;
+  if (quote.orderNumber != null) return true;
+  return quote.selected === true || quote.selected === 1;
+}
+
+function buildQuoteProformaUpload(quote) {
+  if (quoteHasProforma(quote) || !isQuoteActive(quote)) return "";
+  return `
+    <label class="inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 cursor-pointer shadow-sm w-full"
+      title="Carregar proforma — suporte à selecção e consulta do financeiro">
+      <input type="file" class="hidden" data-proforma-input="${quote.id}" accept="image/*,.pdf,.png,.jpg,.jpeg,.webp">
+      <span class="material-symbols-outlined text-base leading-none">upload_file</span>
+      <span>Carregar Proforma</span>
+    </label>`;
+}
+
+function buildQuoteProformaStatus(quote) {
+  if (!isQuoteActive(quote)) return "";
+  if (!quoteHasProforma(quote)) return buildQuoteProformaUpload(quote);
+  return `<button type="button" data-view-proforma="${getAssetUrl(quote.proformaUrl)}" title="Ver proforma"
+    class="inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold hover:bg-emerald-100 w-full border border-emerald-200">
+    <span class="material-symbols-outlined text-base leading-none">description</span>
+    <span>Ver Proforma</span>
+  </button>`;
+}
+
+function getSiteReceptionDateStr() {
+  return document.getElementById("quoteSiteReceptionDate")?.value?.trim() || "";
+}
+
+function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
+  if (quote.orderNumber != null) {
+    const ref = formatOrderRef(quote.orderNumber);
+    const pdfLink = quote.purchaseOrderUrl
+      ? `<a href="${getAssetUrl(quote.purchaseOrderUrl)}" target="_blank" class="text-[10px] font-bold text-emerald-600 hover:underline">PDF</a>`
+      : "";
+    const proformaAction = buildQuoteProformaStatus(quote);
+    return `
+      <div class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
+        <span class="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded whitespace-nowrap text-center">${ref}</span>
+        ${proformaAction}
+        ${pdfLink ? `<div class="text-center">${pdfLink}</div>` : ""}
+      </div>`;
+  }
+
+  const required = Number(need?.quantity) || 0;
+  const suggested = quote.selected
+    ? Number(quote.quantity) || required || 1
+    : allocation?.remaining > 0
+      ? allocation.remaining
+      : required || 1;
+
+  const canOrder = canPlaceOrderOnQuote(need, quote);
+  const canEditQty = quote.selected && !isLocked;
+
+  if (quote.selected) {
+    const proformaAction = buildQuoteProformaStatus(quote);
+    const orderBtn = canOrder
+      ? `<button type="button" data-place-order="${quote.id}" title="Gerar encomenda só para este fornecedor"
+          class="h-8 px-2 rounded-lg bg-[#0f172a] text-white text-[10px] font-bold hover:bg-[#2afc8d] hover:text-[#0f172a] transition-all whitespace-nowrap flex items-center gap-1">
+          <span class="material-symbols-outlined text-sm">local_shipping</span>Encomendar</button>`
+      : "";
+    const removeBtn = canEditQty
+      ? `<button type="button" data-deselect-quote="${quote.id}" title="Remover alocação"
+          class="h-8 px-2 rounded-lg bg-red-50 text-red-600 text-[10px] font-bold hover:bg-red-100 whitespace-nowrap">Remover</button>`
+      : "";
+    return `
+      <div class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
+        ${proformaAction}
+        ${canEditQty ? `<input type="number" step="0.01" min="0.01" data-update-quote-qty="${quote.id}" value="${suggested}"
+          class="w-full h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade alocada">` : `<span class="text-xs font-bold text-slate-600 text-center">${suggested} un</span>`}
+        <div class="flex items-center gap-1.5 flex-wrap justify-end">${orderBtn}${removeBtn}</div>
+      </div>`;
+  }
+
+  if (isLocked) return "";
+
+  return `
+    <div class="flex items-center gap-1.5">
+      <input type="number" step="0.01" min="0.01" data-for-quote="${quote.id}" value="${suggested}"
+        class="w-20 h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade a alocar">
+      <button type="button" data-select-quote="${quote.id}"
+        class="h-8 px-3 bg-[#0f172a] text-white text-[10px] font-bold rounded-lg hover:bg-[#2afc8d] hover:text-[#0f172a] transition-all whitespace-nowrap">Alocar</button>
+    </div>`;
+}
+
+async function saveQuoteSiteReception({ need, apiRequest, showToast }) {
+  const ccId = needCostCenterId(need);
+  if (!ccId || !need?.id) {
+    showToast?.("Centro de custo não encontrado.", "error");
+    return;
+  }
+  const dateStr = document.getElementById("quoteSiteReceptionDate")?.value;
+  const location = document.getElementById("quoteSiteReceptionLocation")?.value?.trim() || null;
+  const body = {
+    siteReceptionLocation: location,
+    siteReceptionPlannedAt: dateStr ? new Date(dateStr + "T12:00:00").toISOString() : null,
+  };
+  try {
+    await apiRequest(`/cost-centers/${ccId}/needs/${need.id}`, { method: "PATCH", body });
+    const savedEl = document.getElementById("quoteSiteReceptionSaved");
+    if (savedEl) {
+      savedEl.textContent = "Recepção planeadas guardada.";
+      savedEl.classList.remove("hidden");
+    }
+    showToast?.("Recepção em obra guardada.", "success");
+  } catch (err) {
+    showToast?.("Erro: " + err.message, "error");
+  }
+}
+
+function quoteRank(q) {
+  return (
+    (q.orderNumber != null ? 8 : 0) +
+    (q.selected ? 4 : 0) +
+    (quoteHasProforma(q) ? 2 : 0) +
+    (q.purchaseOrderUrl ? 1 : 0)
+  );
+}
+
 function dedupeQuotes(quotes) {
   const map = new Map();
   for (const q of quotes) {
@@ -35,14 +223,7 @@ function dedupeQuotes(quotes) {
       map.set(key, q);
       continue;
     }
-    if (q.selected && !existing.selected) {
-      map.set(key, q);
-      continue;
-    }
-    if (!q.selected && existing.selected) continue;
-    const qTime = new Date(q.createdAt || 0).getTime();
-    const eTime = new Date(existing.createdAt || 0).getTime();
-    if (qTime >= eTime) map.set(key, q);
+    map.set(key, quoteRank(q) >= quoteRank(existing) ? q : existing);
   }
   return Array.from(map.values());
 }
@@ -141,7 +322,7 @@ function renderOrderedBanner(selectedQuote) {
 
           Fornecedor <strong>${selectedQuote.supplier?.name || "—"}</strong> seleccionado.
 
-          Carregue a proposta/proforma para submeter o item à análise (preço realizado, pagamento pendente).
+          Carregue a proforma de cada fornecedor — documento de suporte à selecção e consulta do financeiro.
 
         </p>
 
@@ -210,30 +391,14 @@ function renderReadyToOrderBanner(selectedQuote) {
 
           <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${total} ${selectedQuote.currency || "AOA"}.
 
-          Pode trocar de fornecedor, submeter proposta ou confirmar encomenda.
+          Pode trocar de fornecedor, carregar proforma ou confirmar encomenda.
 
         </p>
 
       </div>
 
-      <div class="flex flex-col gap-2 shrink-0 sm:min-w-[280px]">
-
-        <input type="file" id="readyProposalInput" accept="image/*,.pdf"
-
-          class="w-full h-10 px-3 bg-white border border-emerald-200 rounded-lg text-xs font-semibold file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-100 file:text-emerald-800">
-
-        <button type="button" id="btnSubmitProposal"
-
-          class="h-10 w-full rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-all flex items-center justify-center gap-2">
-
-          <span class="material-symbols-outlined text-base">upload_file</span>
-
-          Submeter Proposta p/ Análise
-
-        </button>
-
+      <div class="flex flex-col gap-2 shrink-0 sm:min-w-[200px]">
         <div class="flex items-center gap-2">
-
         <button type="button" id="btnCancelSelection"
 
           class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-all">
@@ -309,9 +474,7 @@ function clearOrderedBanner() {
 
   document.getElementById("quoteApprovedBanner")?.remove();
 
-  document.getElementById("quoteInvoiceBanner")?.remove();
-
-  document.getElementById("quoteCreditInfo")?.remove();
+  document.getElementById("quoteMultiOrderBanner")?.remove();
 
 }
 
@@ -379,186 +542,6 @@ function renderInAnalysisBanner(selectedQuote, need) {
   const panel = document.getElementById("quotePresentedPanel");
 
   panel?.insertBefore(banner, panel.firstChild);
-
-}
-
-
-
-// Fornecedor a Crédito: só depois de confirmar a fatura o prazo começa a
-// contar e o plano de parcelas é gerado automaticamente (ver Fase 3 do plano).
-function renderInvoiceConfirmationBanner(selectedQuote) {
-
-  const existing = document.getElementById("quoteInvoiceBanner");
-
-  if (existing) existing.remove();
-
-  if (!selectedQuote) return;
-
-
-
-  const banner = document.createElement("div");
-
-  banner.id = "quoteInvoiceBanner";
-
-  banner.className = "mb-4 p-4 rounded-xl border border-sky-200 bg-sky-50";
-
-  banner.innerHTML = `
-
-    <p class="text-xs font-black uppercase tracking-widest text-sky-700 mb-2">Fornecedor a Crédito — Confirmar Fatura</p>
-
-    <p class="text-xs text-sky-900 mb-3">O prazo de crédito só começa a contar após a confirmação da fatura. Ao confirmar, o plano de parcelas é gerado automaticamente.</p>
-
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-
-      <label class="text-[10px] font-bold text-sky-800 uppercase block">
-
-        Prazo de crédito (dias)
-
-        <input type="number" min="0" id="invoiceCreditTermDays" placeholder="Ex: 30"
-
-          class="mt-1 w-full h-9 px-2 bg-white border border-sky-200 rounded-lg text-xs font-semibold text-slate-800">
-
-      </label>
-
-      <label class="text-[10px] font-bold text-sky-800 uppercase block">
-
-        Receção prevista do material
-
-        <input type="date" id="invoiceExpectedReceiptDate" required
-
-          class="mt-1 w-full h-9 px-2 bg-white border border-sky-200 rounded-lg text-xs font-semibold text-slate-800">
-
-      </label>
-
-      <label class="text-[10px] font-bold text-sky-800 uppercase block">
-
-        Nº de parcelas
-
-        <input type="number" min="1" max="60" value="1" id="invoiceInstallmentsCount"
-
-          class="mt-1 w-full h-9 px-2 bg-white border border-sky-200 rounded-lg text-xs font-semibold text-slate-800">
-
-      </label>
-
-    </div>
-
-    <button type="button" id="btnConfirmInvoice"
-
-      class="h-9 px-4 rounded-lg bg-sky-700 text-white text-xs font-bold hover:bg-sky-800 transition-all flex items-center justify-center gap-2">
-
-      <span class="material-symbols-outlined text-base">fact_check</span>
-
-      Confirmar Fatura
-
-    </button>`;
-
-
-
-  const panel = document.getElementById("quotePresentedPanel");
-
-  panel?.insertBefore(banner, panel.firstChild);
-
-}
-
-
-
-function renderCreditScheduleInfo(selectedQuote) {
-
-  const existing = document.getElementById("quoteCreditInfo");
-
-  if (existing) existing.remove();
-
-  if (!selectedQuote?.invoiceConfirmedAt) return;
-
-
-
-  const confirmedDate = new Date(selectedQuote.invoiceConfirmedAt).toLocaleDateString("pt-PT");
-
-  const receiptDate = selectedQuote.expectedReceiptDate
-
-    ? new Date(selectedQuote.expectedReceiptDate).toLocaleDateString("pt-PT")
-
-    : "—";
-
-
-
-  const banner = document.createElement("div");
-
-  banner.id = "quoteCreditInfo";
-
-  banner.className = "mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600";
-
-  banner.innerHTML = `
-
-    <span class="material-symbols-outlined text-sm align-middle mr-1 text-emerald-600">verified</span>
-
-    Fatura confirmada em <strong>${confirmedDate}</strong> por <strong>${selectedQuote.invoiceConfirmedBy || "—"}</strong>.
-
-    Receção prevista: <strong>${receiptDate}</strong> · Plano gerado em <strong>${selectedQuote.installmentsPlanned || 1}</strong> parcela(s).`;
-
-
-
-  const panel = document.getElementById("quotePresentedPanel");
-
-  panel?.insertBefore(banner, panel.firstChild);
-
-}
-
-
-
-async function confirmInvoiceAction(quoteId, needId, ctx) {
-
-  const { apiRequest, showToast, onApproved, need, suppliers, openProformaViewer } = ctx;
-
-  const creditTermDaysRaw = document.getElementById("invoiceCreditTermDays")?.value;
-
-  const expectedReceiptDate = document.getElementById("invoiceExpectedReceiptDate")?.value;
-
-  const installmentsCount = document.getElementById("invoiceInstallmentsCount")?.value || "1";
-
-
-
-  if (!expectedReceiptDate) {
-
-    showToast?.("Indique a data prevista de receção do material.", "error");
-
-    return;
-
-  }
-
-  if (!confirm(`Confirmar a fatura? Será gerado um plano de ${installmentsCount} parcela(s) a partir de ${expectedReceiptDate}.`)) return;
-
-
-
-  try {
-
-    await apiRequest(`/quotes/${quoteId}/confirm-invoice`, {
-
-      method: "PATCH",
-
-      body: {
-
-        creditTermDays: creditTermDaysRaw ? Number(creditTermDaysRaw) : null,
-
-        expectedReceiptDate: new Date(expectedReceiptDate).toISOString(),
-
-        installmentsCount: Number(installmentsCount),
-
-      },
-
-    });
-
-    showToast?.("Fatura confirmada — plano de pagamento gerado automaticamente.", "success");
-
-    await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
-
-    onApproved?.();
-
-  } catch (err) {
-
-    showToast?.("Erro: " + err.message, "error");
-
-  }
 
 }
 
@@ -640,7 +623,7 @@ function renderPriceRow({
 
       <div class="sm:text-right sm:w-44 shrink-0">${totalHtml}</div>
 
-      <div class="flex items-center gap-2 sm:w-48 sm:justify-end">${actionsHtml}</div>
+      <div class="flex flex-col gap-1.5 sm:w-40 shrink-0">${actionsHtml}</div>
 
     </div>`;
 
@@ -689,11 +672,18 @@ export async function loadPresentedPrices({
 
 
     const quotes = dedupeQuotes(quotesData.items || []);
+    const needMeta = quotesData.need || need;
+    const allocation = quotesData.allocation || null;
+    window.__quoteModalAllocation = allocation;
 
-    const selectedQuote = quotes.find((q) => q.selected) || null;
+    renderAllocationSummary(allocation, needMeta);
+    updateQuoteQuantityHint(allocation, needMeta);
+    loadSiteReceptionFields(needMeta);
+
+    const selectedQuotes = quotes.filter((q) => q.selected);
+    const selectedQuote = selectedQuotes[0] || null;
     window.__quoteModalSelectedQuote = selectedQuote;
-
-
+    window.__quoteModalSelectedQuotes = selectedQuotes;
 
     if (isInAnalysis && selectedQuote) {
 
@@ -721,73 +711,9 @@ export async function loadPresentedPrices({
 
       });
 
-    } else if (isOrdered && selectedQuote && !selectedQuote.proformaUrl) {
-
-      renderOrderedBanner(selectedQuote);
-
-      document.getElementById("btnUploadOrderedProforma")?.addEventListener("click", async () => {
-
-        await uploadOrderedProforma({
-
-          quoteId: selectedQuote.id,
-
-          needId,
-
-          need,
-
-          suppliers,
-
-          apiRequest,
-
-          openProformaViewer,
-
-          showToast: window.showQuoteToast,
-
-          onApproved: window.onQuoteApproved,
-
-        });
-
-      });
-
-    } else if (!isLocked && selectedQuote) {
+    } else if (!isLocked && selectedQuote && selectedQuotes.length === 1) {
 
       renderReadyToOrderBanner(selectedQuote);
-
-      document.getElementById("btnSubmitProposal")?.addEventListener("click", async () => {
-
-        const input = document.getElementById("readyProposalInput");
-
-        if (!input?.files?.[0]) {
-
-          window.showQuoteToast?.("Seleccione o ficheiro da proposta.", "error");
-
-          return;
-
-        }
-
-        await uploadOrderedProforma({
-
-          quoteId: selectedQuote.id,
-
-          needId,
-
-          need,
-
-          suppliers,
-
-          apiRequest,
-
-          openProformaViewer,
-
-          showToast: window.showQuoteToast,
-
-          onApproved: window.onQuoteApproved,
-
-          fileInput: input,
-
-        });
-
-      });
 
       document.getElementById("btnPlaceOrder")?.addEventListener("click", async () => {
 
@@ -827,44 +753,6 @@ export async function loadPresentedPrices({
 
 
 
-    const isCreditSupplier = selectedQuote?.supplier?.paymentTerm === "CREDITO";
-
-    if (selectedQuote && (isOrdered || isApproved) && isCreditSupplier) {
-
-      if (!selectedQuote.invoiceConfirmedAt) {
-
-        renderInvoiceConfirmationBanner(selectedQuote);
-
-        document.getElementById("btnConfirmInvoice")?.addEventListener("click", () => {
-
-          confirmInvoiceAction(selectedQuote.id, needId, {
-
-            apiRequest,
-
-            showToast: window.showQuoteToast,
-
-            onApproved: window.onQuoteApproved,
-
-            need,
-
-            suppliers,
-
-            openProformaViewer,
-
-          });
-
-        });
-
-      } else {
-
-        renderCreditScheduleInfo(selectedQuote);
-
-      }
-
-    }
-
-
-
     const quotedKeys = new Set(
 
       quotes.map((q) => `${q.supplierId}:${q.supplierProductId || ""}:${Number(q.quotedPrice)}`)
@@ -884,6 +772,10 @@ export async function loadPresentedPrices({
 
 
     if (!quotes.length && !filteredSuggestions.length) {
+
+      renderAllocationSummary(allocation, needMeta);
+      updateQuoteQuantityHint(allocation, needMeta);
+      loadSiteReceptionFields(needMeta);
 
       list.innerHTML = `<div class="p-8 text-center text-slate-400 text-sm font-medium">Nenhum preço apresentado. Adicione uma cotação ou aguarde sugestões do catálogo.</div>`;
 
@@ -911,13 +803,7 @@ export async function loadPresentedPrices({
 
 
 
-      const selectBtn = !isLocked && !q.selected
-
-        ? `<button type="button" data-select-quote="${q.id}" class="h-8 px-3 bg-[#0f172a] text-white text-[10px] font-bold rounded-lg hover:bg-[#2afc8d] hover:text-[#0f172a] transition-all whitespace-nowrap">Selecionar Fornecedor</button>`
-
-        : "";
-
-
+      const allocActions = buildQuoteAllocActions({ quote: q, need: needMeta, allocation, isLocked });
 
       let winnerBadge = "";
 
@@ -929,7 +815,7 @@ export async function loadPresentedPrices({
 
         winnerBadge = `<span class="bg-sky-100 text-sky-700 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">fact_check</span>Em Análise</span>`;
 
-      } else if (q.selected && isOrdered) {
+      } else if (q.selected && isOrdered && !q.orderNumber) {
 
         winnerBadge = `<span class="bg-amber-100 text-amber-800 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">local_shipping</span>Encomenda</span>`;
 
@@ -947,23 +833,10 @@ export async function loadPresentedPrices({
 
         : "";
 
-
-
-      const proformaBtn = q.proformaUrl
-
-        ? `<button type="button" data-view-proforma="${getAssetUrl(q.proformaUrl)}" class="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Proforma"><span class="material-symbols-outlined text-sm">description</span></button>`
-
-        : "";
-
-
-
-      const orderBtn = q.purchaseOrderUrl
-
-        ? `<a href="${getAssetUrl(q.purchaseOrderUrl)}" target="_blank" class="text-emerald-600 hover:text-emerald-800 transition-colors" title="PDF Encomenda"><span class="material-symbols-outlined text-sm">picture_as_pdf</span></a>`
-
-        : "";
-
-
+      const orderBtn =
+        q.purchaseOrderUrl && q.orderNumber == null
+          ? `<a href="${getAssetUrl(q.purchaseOrderUrl)}" target="_blank" class="text-emerald-600 hover:text-emerald-800 transition-colors" title="PDF Encomenda"><span class="material-symbols-outlined text-sm">picture_as_pdf</span></a>`
+          : "";
 
       entries.push({
 
@@ -987,7 +860,7 @@ export async function loadPresentedPrices({
 
           highlighted: Boolean(q.selected),
 
-          actionsHtml: `${selectBtn}${proformaBtn}${orderBtn}${deleteBtn}`,
+          actionsHtml: `${allocActions}${orderBtn}${deleteBtn}`,
 
         }),
 
@@ -999,16 +872,18 @@ export async function loadPresentedPrices({
 
     filteredSuggestions.forEach((s) => {
 
-      const qty = Number(need.quantity || 1);
-
+      const suggestedQty =
+        allocation?.remaining > 0
+          ? allocation.remaining
+          : Number(needMeta.quantity || need.quantity || 1);
+      const qty = suggestedQty;
       const totalValue = Number(s.product.price) * qty;
 
       const price = Number(s.product.price).toLocaleString("pt-PT", { minimumFractionDigits: 2 });
 
       const currency = s.product.currency || "AOA";
       const priceTotals = renderQuotePriceTotalsHtml(s.supplier, totalValue, currency, s.product);
-
-
+      const sugKey = `${s.supplier.id}|${s.product.id}|${s.product.price}|${currency}`;
 
       entries.push({
 
@@ -1031,9 +906,12 @@ export async function loadPresentedPrices({
           fiscalBreakdownHtml: priceTotals.fiscalBreakdownHtml,
 
           actionsHtml: !isLocked
-
-            ? `<button type="button" data-select-suggestion="${s.supplier.id}|${s.product.id}|${s.product.price}|${s.product.currency}" class="h-8 px-3 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition-all whitespace-nowrap">Selecionar Fornecedor</button>`
-
+            ? `<div class="flex items-center gap-1.5">
+                <input type="number" step="0.01" min="0.01" data-for-suggestion="${sugKey}" value="${qty}"
+                  class="w-20 h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center">
+                <button type="button" data-select-suggestion="${sugKey}"
+                  class="h-8 px-3 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition-all whitespace-nowrap">Alocar</button>
+              </div>`
             : "",
 
         }),
@@ -1048,7 +926,39 @@ export async function loadPresentedPrices({
 
 
 
-    list.innerHTML = `<div class="flex flex-col divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">${entries.map((e) => e.html).join("")}</div>`;
+    list.innerHTML = `<div class="flex flex-col divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white">${entries.map((e) => e.html).join("")}</div>`;
+
+
+
+    list.querySelectorAll("[data-place-order]").forEach((btn) => {
+
+      btn.addEventListener("click", async (e) => {
+
+        e.stopPropagation();
+
+        const pendingCount = quotes.filter((q) => q.selected && !q.orderNumber).length;
+
+        await placeOrderWithPdf(btn.dataset.placeOrder, needId, {
+
+          apiRequest,
+
+          showToast: window.showQuoteToast,
+
+          onApproved: window.onQuoteApproved,
+
+          need,
+
+          suppliers,
+
+          openProformaViewer,
+
+          keepModalOpen: pendingCount > 1,
+
+        });
+
+      });
+
+    });
 
 
 
@@ -1057,6 +967,9 @@ export async function loadPresentedPrices({
       btn.addEventListener("click", async (e) => {
 
         e.stopPropagation();
+
+        const qtyInput = list.querySelector(`[data-for-quote="${btn.dataset.selectQuote}"]`);
+        const quantity = qtyInput ? Number(qtyInput.value) : undefined;
 
         await selectQuoteWithOrder(btn.dataset.selectQuote, needId, {
 
@@ -1072,7 +985,67 @@ export async function loadPresentedPrices({
 
           suppliers,
 
+          quantity,
+
         });
+
+      });
+
+    });
+
+    list.querySelectorAll("[data-deselect-quote]").forEach((btn) => {
+
+      btn.addEventListener("click", async (e) => {
+
+        e.stopPropagation();
+
+        await apiRequest(`/quotes/${btn.dataset.deselectQuote}/deselect`, { method: "PATCH" });
+
+        window.showQuoteToast?.("Alocação removida", "success");
+
+        await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
+
+        window.onQuoteApproved?.();
+
+      });
+
+    });
+
+    list.querySelectorAll("[data-update-quote-qty]").forEach((input) => {
+
+      let timer;
+
+      input.addEventListener("change", async () => {
+
+        clearTimeout(timer);
+
+        timer = setTimeout(async () => {
+
+          const qty = Number(input.value);
+
+          if (!Number.isFinite(qty) || qty <= 0) return;
+
+          try {
+
+            await apiRequest(`/quotes/${input.dataset.updateQuoteQty}/quantity`, {
+
+              method: "PATCH",
+
+              body: { quantity: qty },
+
+            });
+
+            await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
+
+            window.onQuoteApproved?.();
+
+          } catch (err) {
+
+            window.showQuoteToast?.("Erro: " + err.message, "error");
+
+          }
+
+        }, 400);
 
       });
 
@@ -1103,18 +1076,32 @@ export async function loadPresentedPrices({
 
 
     list.querySelectorAll("[data-view-proforma]").forEach((btn) => {
-
       btn.addEventListener("click", (e) => {
-
         e.stopPropagation();
-
         openProformaViewer?.(btn.dataset.viewProforma);
-
       });
-
     });
 
-
+    list.querySelectorAll("[data-proforma-input]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        if (!input.files?.[0]) return;
+        const quoteId = input.dataset.proformaInput;
+        const quoteRow = quotes.find((q) => q.id === quoteId);
+        await uploadOrderedProforma({
+          quoteId,
+          quote: quoteRow,
+          needId,
+          need: needMeta,
+          suppliers,
+          apiRequest,
+          openProformaViewer,
+          showToast: window.showQuoteToast,
+          onApproved: window.onQuoteApproved,
+          fileInput: input,
+          keepModalOpen: true,
+        });
+      });
+    });
 
     list.querySelectorAll("[data-select-suggestion]").forEach((btn) => {
 
@@ -1123,6 +1110,10 @@ export async function loadPresentedPrices({
         e.stopPropagation();
 
         const [supplierId, productId, price, currency] = btn.dataset.selectSuggestion.split("|");
+
+        const qtyInput = list.querySelector(`[data-for-suggestion="${btn.dataset.selectSuggestion}"]`);
+
+        const quantity = qtyInput ? Number(qtyInput.value) : undefined;
 
         await selectSuggestionWithOrder({
 
@@ -1137,6 +1128,8 @@ export async function loadPresentedPrices({
           price,
 
           currency,
+
+          quantity,
 
           apiRequest,
 
@@ -1229,48 +1222,34 @@ async function rejectNeedAnalysis({ needId, need, apiRequest, showToast, onAppro
 }
 
 async function uploadOrderedProforma({
-
   quoteId,
-
+  quote,
   needId,
-
   need,
-
   suppliers,
-
   apiRequest,
-
   openProformaViewer,
-
   showToast,
-
   onApproved,
-
   fileInput,
-
+  keepModalOpen = true,
 }) {
-
   const input = fileInput || document.getElementById("orderedProformaInput");
-
   if (!input?.files?.[0]) {
-
     showToast?.("Seleccione o ficheiro da proposta.", "error");
-
     return;
-
   }
 
-
-
   try {
-
     const form = new FormData();
-
     form.append("proforma", input.files[0]);
 
     const previsto = Number(need?.originalUnitPrice ?? need?.unitPrice ?? need?.previstoUnitPrice) || 0;
-    const selectedQuote = window.__quoteModalSelectedQuote;
-    const real = Number(selectedQuote?.quotedPrice) || 0;
+    const quoteForPrice =
+      quote ||
+      window.__quoteModalSelectedQuotes?.find((q) => q.id === quoteId) ||
+      window.__quoteModalSelectedQuote;
+    const real = Number(quoteForPrice?.quotedPrice) || 0;
     if (real > previsto + 0.000001) {
       const reason = prompt(
         `O preço da cotação (${real.toLocaleString("pt-PT")}) excede o previsto (${previsto.toLocaleString("pt-PT")}).\n\nIndique a justificação da excepção:`
@@ -1283,47 +1262,51 @@ async function uploadOrderedProforma({
     }
 
     const result = await apiUpload(`/quotes/${quoteId}/proforma`, form, "POST");
+    input.value = "";
 
+    const updatedNeed = result.need ? { ...need, ...result.need } : need;
+    const selectedQuotes = window.__quoteModalSelectedQuotes || [];
+    const allHaveProforma =
+      selectedQuotes.length > 0 &&
+      selectedQuotes.every((q) => (q.id === quoteId ? true : Boolean(q.proformaUrl)));
+    const wentToAnalysis = result.need?.status === "EM_ANALISE";
 
-
-    showToast?.("Proposta submetida — item em análise (realizado registado, pagamento pendente).", "success");
-
-
+    showToast?.(
+      wentToAnalysis
+        ? "Proformas completas — item em análise. O financeiro consultará estes documentos."
+        : "Proforma carregada — documento disponível para o financeiro.",
+      "success"
+    );
 
     if (result.need) {
-
-      window.__quoteModalNeed = { ...need, ...result.need, status: "EM_ANALISE" };
-
+      window.__quoteModalNeed = updatedNeed;
     }
-
-
 
     if (result.quote?.proformaUrl) {
-
       setTimeout(() => {
-
         if (confirm("Proforma carregada com sucesso. Deseja visualizar agora?")) {
-
           openProformaViewer?.(getAssetUrl(result.quote.proformaUrl));
-
         }
-
       }, 200);
-
     }
 
-
-
-    document.getElementById("modalQuote")?.classList.remove("open");
-
-    await onApproved?.();
-
+    const shouldKeepOpen = keepModalOpen || !allHaveProforma || !wentToAnalysis;
+    if (shouldKeepOpen) {
+      await loadPresentedPrices({
+        needId,
+        need: updatedNeed,
+        suppliers,
+        apiRequest,
+        openProformaViewer,
+      });
+      await onApproved?.();
+    } else {
+      document.getElementById("modalQuote")?.classList.remove("open");
+      await onApproved?.();
+    }
   } catch (err) {
-
     showToast?.("Erro: " + err.message, "error");
-
   }
-
 }
 
 export async function selectSuggestionWithOrder({
@@ -1339,6 +1322,8 @@ export async function selectSuggestionWithOrder({
   price,
 
   currency,
+
+  quantity,
 
   apiRequest,
 
@@ -1367,7 +1352,8 @@ export async function selectSuggestionWithOrder({
       form.append("supplierId", supplierId);
       form.append("supplierProductId", productId);
       form.append("quotedPrice", price);
-      if (need.quantity) form.append("quantity", String(need.quantity));
+      const qty = quantity ?? need.quantity;
+      if (qty) form.append("quantity", String(qty));
       form.append("currency", currency);
       const created = await apiUpload(`/quotes/need/${needId}`, form, "POST");
       quoteId = created.id;
@@ -1389,6 +1375,8 @@ export async function selectSuggestionWithOrder({
 
       skipConfirm: true,
 
+      quantity,
+
     });
 
   } catch (err) {
@@ -1404,21 +1392,23 @@ export async function selectSuggestionWithOrder({
 // Marca apenas o fornecedor vencedor da cotação. Não gera PDF nem avança
 // o estado do item — isso só acontece em placeOrderWithPdf(), quando o
 // utilizador confirma explicitamente a encomenda.
-export async function selectQuoteWithOrder(quoteId, needId, { apiRequest, showToast, onApproved, openProformaViewer, need, suppliers = [], skipConfirm = false }) {
+export async function selectQuoteWithOrder(quoteId, needId, { apiRequest, showToast, onApproved, openProformaViewer, need, suppliers = [], skipConfirm = false, quantity }) {
 
   if (!quoteId) return;
 
-  if (!skipConfirm && !confirm("Selecionar este fornecedor para o item? Pode confirmar a encomenda a seguir.")) return;
+  if (!skipConfirm && !confirm("Alocar quantidade deste fornecedor ao item? Pode adicionar outros fornecedores para o remanescente.")) return;
 
 
 
   try {
 
-    await apiRequest(`/quotes/${quoteId}/select`, { method: "PATCH" });
+    const body = quantity != null && Number.isFinite(Number(quantity)) ? { quantity: Number(quantity) } : {};
+
+    await apiRequest(`/quotes/${quoteId}/select`, { method: "PATCH", body });
 
 
 
-    showToast?.("Fornecedor seleccionado. Confirme para gerar a encomenda.", "success");
+    showToast?.("Fornecedor alocado. Ajuste quantidades ou confirme a encomenda.", "success");
 
 
 
@@ -1438,17 +1428,26 @@ export async function selectQuoteWithOrder(quoteId, needId, { apiRequest, showTo
 
 // Confirma a encomenda ao fornecedor já seleccionado: atribui o número de
 // encomenda, gera o PDF, faz upload e só então o item passa a "Encomenda".
-export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast, onApproved, need }) {
+export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast, onApproved, need, suppliers = [], openProformaViewer, keepModalOpen = false }) {
 
   if (!quoteId) return;
 
-  if (!confirm("Confirmar encomenda a este fornecedor? Será gerado o PDF e o item passará a 'Encomenda' até carregar a proforma.")) return;
+  const confirmMsg = keepModalOpen
+    ? "Confirmar encomenda a este fornecedor? Será gerado o PDF. Pode encomendar os restantes fornecedores a seguir."
+    : "Confirmar encomenda a este fornecedor? Será gerado o PDF e o item passará a 'Encomenda' quando todos estiverem encomendados.";
+
+  if (!confirm(confirmMsg)) return;
 
 
 
   try {
 
-    const result = await apiRequest(`/quotes/${quoteId}/place-order`, { method: "PATCH" });
+    const siteDate = getSiteReceptionDateStr();
+    const orderBody = siteDate
+      ? { expectedReceiptDate: new Date(siteDate + "T12:00:00").toISOString() }
+      : {};
+
+    const result = await apiRequest(`/quotes/${quoteId}/place-order`, { method: "PATCH", body: orderBody });
 
     const quote = result.quote;
 
@@ -1490,13 +1489,20 @@ export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast
 
 
 
-    showToast?.("Encomenda gerada — carregue a proforma para aprovar no orçamento.", "success");
+    showToast?.(
+      keepModalOpen
+        ? "Encomenda gerada. Encomende os restantes fornecedores ou carregue as proformas."
+        : "Encomenda gerada — carregue a proforma para aprovar no orçamento.",
+      "success"
+    );
 
-    document.getElementById("modalQuote")?.classList.remove("open");
-
-
-
-    await onApproved?.();
+    if (keepModalOpen) {
+      await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
+      window.onQuoteApproved?.();
+    } else {
+      document.getElementById("modalQuote")?.classList.remove("open");
+      await onApproved?.();
+    }
 
   } catch (err) {
 
@@ -1569,6 +1575,11 @@ export async function openQuotePricingModal({
   document.getElementById("quotePrice").value = "";
 
   document.getElementById("quoteQuantity").value = need.quantity || "";
+
+  const saveSiteBtn = document.getElementById("btnSaveQuoteSiteReception");
+  if (saveSiteBtn) {
+    saveSiteBtn.onclick = () => saveQuoteSiteReception({ need, apiRequest, showToast });
+  }
 
   const proformaInput = document.getElementById("quoteProforma");
 

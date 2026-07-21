@@ -891,6 +891,8 @@ model WorkNeed {
   siteReceivedAt    DateTime?
   siteReceivedBy    String?
   siteReceivedNotes String?
+  siteReceptionPlannedAt DateTime?
+  siteReceptionLocation  String?
   responsible       String?
   notes             String?
   createdAt         DateTime             @default(now())

@@ -381,26 +381,29 @@ function renderExtraPayComprovativoSection() {
 
 function renderPendingFinanceNeedCard(need) {
   const cur = need.currency || "AOA";
+  const label = need.displayDescription || need.description || "—";
+  const supplierName = need.supplierLabel || need.supplier?.name || "—";
   const proformaBtn = need.proformaUrl
     ? `<a href="${getAssetUrl(need.proformaUrl)}" target="_blank" rel="noopener"
         class="h-8 px-3 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-bold hover:bg-slate-50 inline-flex items-center gap-1">
-        <span class="material-symbols-outlined text-sm">description</span> Proposta
+        <span class="material-symbols-outlined text-sm">description</span> Proforma
       </a>`
     : "";
+  const quoteParam = need.quoteId ? `, '${need.quoteId}'` : "";
   return `
     <article class="border border-amber-100 rounded-xl p-4 bg-amber-50/40">
       <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-bold text-slate-900">${escapeHtml(need.description || "—")}</p>
+          <p class="text-sm font-bold text-slate-900">${escapeHtml(label)}</p>
           <p class="text-[11px] text-slate-500 mt-1">
             ${escapeHtml(need.project?.name || "—")} · ${escapeHtml(need.costCenter?.code || "—")}
-            · ${escapeHtml(need.supplier?.name || "—")}
+            · <strong>${escapeHtml(supplierName)}</strong>
           </p>
           <p class="text-sm font-bold text-slate-900 mt-2 tabular-nums">${formatCurrency(need.amount, cur)}</p>
         </div>
         <div class="shrink-0 flex flex-wrap items-center gap-2 justify-end">
           ${proformaBtn}
-          <button type="button" onclick="openPendingFinanceNeed('${need.id}', '${need.projectId}', '${need.costCenterId}')"
+          <button type="button" onclick="openPendingFinanceNeed('${need.id}', '${need.projectId}', '${need.costCenterId}'${quoteParam})"
             class="h-8 px-4 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 transition-all inline-flex items-center gap-1">
             <span class="material-symbols-outlined text-sm">calendar_month</span>
             Definir parcelas
@@ -410,11 +413,12 @@ function renderPendingFinanceNeedCard(need) {
     </article>`;
 }
 
-window.openPendingFinanceNeed = function (needId, projectId, costCenterId) {
+window.openPendingFinanceNeed = function (needId, projectId, costCenterId, quoteId) {
   const url = new URL("../Projectos/centroCustos.html", window.location.href);
   url.searchParams.set("projectId", projectId);
   url.searchParams.set("tab", "cronograma");
   url.searchParams.set("needId", needId);
+  if (quoteId) url.searchParams.set("quoteId", quoteId);
   window.location.href = url.pathname + url.search;
 };
 
