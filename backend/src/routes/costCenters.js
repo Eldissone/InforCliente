@@ -23,6 +23,7 @@ const {
   mapPendingInstallmentRow,
   quoteHasPaymentPlan,
 } = require("../services/needInstallmentSchedulingService");
+const { quoteAllocatedQty } = require("../services/quoteAllocationService");
 const {
   analyzeCertification,
   certifyPayment,
@@ -194,8 +195,14 @@ const PAYMENT_RELATIONS_INCLUDE = {
           creditTermDays: true,
           installmentsPlanned: true,
           invoiceConfirmedAt: true,
+          quantity: true,
+          quotedPrice: true,
+          totalValue: true,
+          currency: true,
           supplierProduct: {
             select: {
+              name: true,
+              unit: true,
               vatPercent: true,
               withholdingPercent: true,
               discountPercent: true,
@@ -208,14 +215,23 @@ const PAYMENT_RELATIONS_INCLUDE = {
   need: {
     select: {
       description: true,
+      quantity: true,
+      unit: true,
+      hours: true,
       quotes: {
         where: { selected: true },
         select: {
           proformaUrl: true,
           creditTermDays: true,
           installmentsPlanned: true,
+          quantity: true,
+          quotedPrice: true,
+          totalValue: true,
+          currency: true,
           supplierProduct: {
             select: {
+              name: true,
+              unit: true,
               vatPercent: true,
               withholdingPercent: true,
               discountPercent: true,
@@ -288,6 +304,17 @@ async function mapPaymentItems(items) {
     const creditTermDays = selectedQuote?.creditTermDays ?? null;
     const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
     const fiscalProductRef = selectedQuote?.supplierProduct || null;
+    const needMeta = p.need || null;
+    const needQty = needMeta?.quantity != null ? Number(needMeta.quantity) : null;
+    const quoteQty =
+      selectedQuote != null
+        ? quoteAllocatedQty(selectedQuote, needQty || 0)
+        : needQty;
+    const productName = selectedQuote?.supplierProduct?.name || null;
+    const needUnit =
+      needMeta?.unit || selectedQuote?.supplierProduct?.unit || "un";
+    const quoteCurrency =
+      selectedQuote?.currency || p.costCenter?.currency || "AOA";
     const installmentNumber = p.installment ?? p.paymentInstallment?.number ?? null;
     let effectivePlanned = installmentsPlanned;
     if (effectivePlanned == null) {
@@ -315,6 +342,14 @@ async function mapPaymentItems(items) {
       creditTermDays,
       installmentsPlanned,
       installmentNumber: showInstallment ? installmentNumber : null,
+      productName,
+      quoteQuantity: quoteQty != null && quoteQty > 0 ? String(quoteQty) : null,
+      quoteUnitPrice:
+        selectedQuote?.quotedPrice != null ? String(selectedQuote.quotedPrice) : null,
+      quoteTotalValue:
+        selectedQuote?.totalValue != null ? String(selectedQuote.totalValue) : null,
+      needUnit,
+      quoteCurrency,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
       ...mapStoredFiscalFields(p),

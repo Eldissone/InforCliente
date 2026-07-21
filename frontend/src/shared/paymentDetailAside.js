@@ -1,11 +1,10 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { formatCurrency, formatDateBR } from "./format.js";
-import { appendFiscalFieldsToFormData } from "./supplierFiscal.js";
+import { appendFiscalFieldsToFormData, computeFiscalBreakdown, resolveFiscalPercents } from "./supplierFiscal.js";
 import {
   initLiquidationFiscalHandlers,
   setupLiquidationFiscalModal,
   getLiquidationFiscalFormDataExtras,
-  renderAsideFiscalFromPayment,
 } from "./liquidationFiscal.js";
 import { openDocumentViewer, closeDocumentViewer } from "./documentViewer.js";
 
@@ -105,8 +104,97 @@ function renderAsidePaymentType(data) {
   }
 }
 
-function renderAsideFiscalSection(data) {
-  renderAsideFiscalFromPayment(data);
+
+function formatAsideQuantity(value, unit = "un", { compact = false } = {}) {
+  const num = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(num) || num <= 0) return "—";
+  const formatted = Number.isInteger(num)
+    ? String(num)
+    : num.toLocaleString("pt-AO", { maximumFractionDigits: 4 });
+  if (compact) return formatted;
+  return unit ? `${formatted} ${unit}`.trim() : formatted;
+}
+
+function formatAsideSignedAmount(value, currency, { positive = true } = {}) {
+  const num = Math.abs(Number(value));
+  if (!Number.isFinite(num) || num <= 0) return "—";
+  const fmt = formatCurrency(num, currency);
+  return positive ? `+${fmt}` : `−${fmt}`;
+}
+
+function resolveAsideFiscalBreakdown(data) {
+  const supplier = data.supplierRef || null;
+  const product = data.fiscalProductRef || null;
+  const baseAmount = Number(data.budgetedAmount ?? data.amount ?? 0);
+  const pct = resolveFiscalPercents({ product, supplier });
+  const hasStored =
+    data.fiscalApplyVat || data.fiscalApplyWithholding || data.fiscalApplyDiscount || data.netAmount;
+
+  return computeFiscalBreakdown({
+    supplier,
+    product,
+    baseAmount,
+    grossAmount: data.grossAmount,
+    inputMode: data.fiscalInputMode || "base",
+    applyVat: hasStored ? Boolean(data.fiscalApplyVat) : pct.vatPercent > 0,
+    applyWithholding: hasStored ? Boolean(data.fiscalApplyWithholding) : pct.withholdingPercent > 0,
+    applyDiscount: hasStored ? Boolean(data.fiscalApplyDiscount) : pct.discountPercent > 0,
+  });
+}
+
+export function renderAsideProductSection(data) {
+  const section = document.getElementById("asideProductSection");
+  if (!section) return;
+
+  const productName = data.productName;
+  if (!productName) {
+    section.classList.add("hidden");
+    return;
+  }
+
+  section.classList.remove("hidden");
+  const nameEl = document.getElementById("asideProductName");
+  if (nameEl) nameEl.textContent = productName;
+}
+
+export function renderAsideAccountingLine(data) {
+  const section = document.getElementById("asideAccountingSection");
+  if (!section) return;
+
+  const currency = data.quoteCurrency || data.currency || data.costCenter?.currency || "AOA";
+  const unit = data.needUnit || "un";
+  const qty = data.quoteQuantity;
+  const unitPrice = data.quoteUnitPrice;
+  const baseAmount = Number(data.budgetedAmount ?? data.paidAmount ?? data.amount ?? 0);
+  const breakdown = resolveAsideFiscalBreakdown(data);
+
+  const qtyEl = document.getElementById("asideAcctQty");
+  if (qtyEl) {
+    const hasQty = qty != null && qty !== "" && Number(qty) > 0;
+    qtyEl.textContent = hasQty ? formatAsideQuantity(qty, unit, { compact: true }) : "—";
+  }
+
+  const unitPriceEl = document.getElementById("asideAcctUnitPrice");
+  if (unitPriceEl) {
+    const hasUnitPrice = unitPrice != null && unitPrice !== "" && Number(unitPrice) > 0;
+    unitPriceEl.textContent = hasUnitPrice ? formatCurrency(unitPrice, currency) : "—";
+  }
+
+  const vatEl = document.getElementById("asideAcctVat");
+  if (vatEl) vatEl.textContent = formatAsideSignedAmount(breakdown.vat, currency, { positive: true });
+
+  const descEl = document.getElementById("asideAcctDesc");
+  if (descEl) descEl.textContent = formatAsideSignedAmount(breakdown.discount, currency, { positive: false });
+
+  const retEl = document.getElementById("asideAcctRet");
+  if (retEl) retEl.textContent = formatAsideSignedAmount(breakdown.withholding, currency, { positive: false });
+
+  const baseEl = document.getElementById("asideAcctBase");
+  if (baseEl) {
+    baseEl.textContent = Number.isFinite(baseAmount) && baseAmount > 0 ? formatCurrency(baseAmount, currency) : "—";
+  }
+
+  section.classList.remove("hidden");
 }
 
 function renderAsideDocument(url, title = "Documento") {
@@ -349,6 +437,7 @@ function openPaymentAside(data, type, options = {}) {
   }
 
   document.getElementById("asideDesc").textContent = data.description || "—";
+  renderAsideProductSection(data);
   document.getElementById("asideDate").textContent = data.paymentDate
     ? formatDateBR(data.paymentDate)
     : data.date
@@ -361,10 +450,7 @@ function openPaymentAside(data, type, options = {}) {
   document.getElementById("asideIBAN").textContent = data.supplierIban || data.iban || "—";
   document.getElementById("asideSupplierDetails")?.classList.remove("hidden");
 
-  const amount = data.paidAmount ?? data.budgetedAmount ?? data.amount ?? 0;
-  const currency = data.currency || data.costCenter?.currency || "AOA";
-  document.getElementById("asideAmount").textContent = formatCurrency(amount, currency);
-  renderAsideFiscalSection(data);
+  renderAsideAccountingLine(data);
 
   document.getElementById("asideProformaContainer").innerHTML = renderAsideDocument(
     data.proformaUrl,

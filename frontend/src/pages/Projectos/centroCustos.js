@@ -10,8 +10,8 @@ import {
   initLiquidationFiscalHandlers,
   setupLiquidationFiscalModal,
   getLiquidationFiscalFormDataExtras,
-  renderAsideFiscalFromPayment,
 } from "/shared/liquidationFiscal.js";
+import { renderAsideProductSection, renderAsideAccountingLine } from "/shared/paymentDetailAside.js";
 import { initMobileMenu } from "/shared/ui.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -3178,10 +3178,6 @@ window.openPaymentAsideHandler = function (btn) {
   }
 };
 
-function renderAsideFiscalSection(data) {
-  renderAsideFiscalFromPayment(data);
-}
-
 window.openPaymentAside = function (data, type) {
   const aside = document.getElementById("paymentAside");
   const overlay = document.getElementById("paymentAsideOverlay");
@@ -3202,6 +3198,7 @@ window.openPaymentAside = function (data, type) {
   }
 
   document.getElementById("asideDesc").textContent = data.description || "—";
+  renderAsideProductSection(data);
   document.getElementById("asideDate").textContent = data.paymentDate ? formatDateBR(data.paymentDate) : (data.date ? formatDateBR(data.date) : "—");
   document.getElementById("asideSupplier").textContent = data.supplier || "—";
   document.getElementById("asideCategory").textContent = data.category || "—";
@@ -3210,13 +3207,9 @@ window.openPaymentAside = function (data, type) {
   document.getElementById("asideIBAN").textContent = data.supplierIban || data.iban || "—";
 
   const supplierDetails = document.getElementById("asideSupplierDetails");
-  // Mostra sempre o bloco de detalhes (NIF/IBAN)
   supplierDetails.classList.remove("hidden");
 
-  const amount = data.budgetedAmount || data.amount || 0;
-  const currency = data.currency || (data.costCenter ? data.costCenter.currency : "AOA");
-  document.getElementById("asideAmount").textContent = formatCurrency(amount, currency);
-  renderAsideFiscalSection(data);
+  renderAsideAccountingLine(data);
 
   function renderAsideDocument(url, title = "Documento") {
     if (!url) {

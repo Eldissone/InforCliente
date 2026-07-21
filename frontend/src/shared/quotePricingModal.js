@@ -102,11 +102,11 @@ function isQuoteActive(quote) {
 function buildQuoteProformaUpload(quote) {
   if (quoteHasProforma(quote) || !isQuoteActive(quote)) return "";
   return `
-    <label class="inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg bg-amber-600 text-white text-[11px] font-bold hover:bg-amber-700 cursor-pointer shadow-sm w-full"
-      title="Carregar proforma — suporte à selecção e consulta do financeiro">
+    <label class="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer shrink-0"
+      style="background:#d97706; color:#fff;"
+      title="Carregar proforma">
       <input type="file" class="hidden" data-proforma-input="${quote.id}" accept="image/*,.pdf,.png,.jpg,.jpeg,.webp">
-      <span class="material-symbols-outlined text-base leading-none">upload_file</span>
-      <span>Carregar Proforma</span>
+      <span class="material-symbols-outlined text-[22px] leading-none">upload_file</span>
     </label>`;
 }
 
@@ -114,10 +114,20 @@ function buildQuoteProformaStatus(quote) {
   if (!isQuoteActive(quote)) return "";
   if (!quoteHasProforma(quote)) return buildQuoteProformaUpload(quote);
   return `<button type="button" data-view-proforma="${getAssetUrl(quote.proformaUrl)}" title="Ver proforma"
-    class="inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold hover:bg-emerald-100 w-full border border-emerald-200">
-    <span class="material-symbols-outlined text-base leading-none">description</span>
-    <span>Ver Proforma</span>
+    class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-emerald-300"
+    style="background:#059669;color:#fff">
+    <span class="material-symbols-outlined text-[22px] leading-none">description</span>
   </button>`;
+}
+
+function buildQuotePdfIcon(quote) {
+  if (!quote?.purchaseOrderUrl) return "";
+  return `<a href="${getAssetUrl(quote.purchaseOrderUrl)}" target="_blank" rel="noopener"
+    class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+    style="background:#0f172a;color:#2afc8d"
+    title="PDF encomenda">
+    <span class="material-symbols-outlined text-[22px] leading-none">picture_as_pdf</span>
+  </a>`;
 }
 
 function getSiteReceptionDateStr() {
@@ -127,15 +137,12 @@ function getSiteReceptionDateStr() {
 function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
   if (quote.orderNumber != null) {
     const ref = formatOrderRef(quote.orderNumber);
-    const pdfLink = quote.purchaseOrderUrl
-      ? `<a href="${getAssetUrl(quote.purchaseOrderUrl)}" target="_blank" class="text-[10px] font-bold text-emerald-600 hover:underline">PDF</a>`
-      : "";
     const proformaAction = buildQuoteProformaStatus(quote);
+    const pdfIcon = buildQuotePdfIcon(quote);
     return `
-      <div class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
-        <span class="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded whitespace-nowrap text-center">${ref}</span>
-        ${proformaAction}
-        ${pdfLink ? `<div class="text-center">${pdfLink}</div>` : ""}
+      <div class="flex flex-col items-end gap-1.5 shrink-0">
+        <span class="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded whitespace-nowrap">${ref}</span>
+        <div class="flex items-center gap-1.5">${proformaAction}${pdfIcon}</div>
       </div>`;
   }
 
@@ -161,10 +168,10 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
           class="h-8 px-2 rounded-lg bg-red-50 text-red-600 text-[10px] font-bold hover:bg-red-100 whitespace-nowrap">Remover</button>`
       : "";
     return `
-      <div class="flex flex-col items-stretch gap-1.5 w-full min-w-[9.5rem]">
-        ${proformaAction}
+      <div class="flex flex-col items-end gap-1.5 shrink-0">
+        <div class="flex items-center gap-1.5">${proformaAction}</div>
         ${canEditQty ? `<input type="number" step="0.01" min="0.01" data-update-quote-qty="${quote.id}" value="${suggested}"
-          class="w-full h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade alocada">` : `<span class="text-xs font-bold text-slate-600 text-center">${suggested} un</span>`}
+          class="w-20 h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade alocada">` : `<span class="text-xs font-bold text-slate-600">${suggested} un</span>`}
         <div class="flex items-center gap-1.5 flex-wrap justify-end">${orderBtn}${removeBtn}</div>
       </div>`;
   }
@@ -835,7 +842,7 @@ export async function loadPresentedPrices({
 
       const orderBtn =
         q.purchaseOrderUrl && q.orderNumber == null
-          ? `<a href="${getAssetUrl(q.purchaseOrderUrl)}" target="_blank" class="text-emerald-600 hover:text-emerald-800 transition-colors" title="PDF Encomenda"><span class="material-symbols-outlined text-sm">picture_as_pdf</span></a>`
+          ? buildQuotePdfIcon(q)
           : "";
 
       entries.push({

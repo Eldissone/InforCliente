@@ -1083,6 +1083,11 @@
                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição</p>
                     <p id="asideDesc" class="text-sm font-bold text-slate-900"></p>
                 </div>
+                <div id="asideProductSection"
+                    class="hidden flex flex-col gap-1 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Produto</p>
+                    <p id="asideProductName" class="text-sm font-bold text-slate-900">—</p>
+                </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="flex flex-col gap-1">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Data</p>
@@ -1122,16 +1127,36 @@
                             <p id="asideCreditInstallment" class="text-xs font-bold text-sky-800">—</p>
                         </div>
                     </div>
-                    <div class="flex flex-col gap-1">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor Previsto (base)
-                        </p>
-                        <p id="asideAmount" class="text-lg font-black text-slate-900"></p>
-                    </div>
-                    <div id="asideFiscalSection"
-                        class="hidden col-span-2 flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Componentes fiscais
-                            (informativo)</p>
-                        <div id="asideFiscalBreakdown" class="flex flex-col gap-1.5"></div>
+                    <div id="asideAccountingSection"
+                        class="col-span-2 flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                        <div class="overflow-x-auto custom-scroll">
+                            <div class="flex items-start gap-5 min-w-max">
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Qtd</span>
+                                    <span id="asideAcctQty" class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">P. Unit.</span>
+                                    <span id="asideAcctUnitPrice" class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">IVA</span>
+                                    <span id="asideAcctVat" class="text-xs font-bold text-emerald-600 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Desc</span>
+                                    <span id="asideAcctDesc" class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Ret</span>
+                                    <span id="asideAcctRet" class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Valor Previsto (base)</span>
+                                    <span id="asideAcctBase" class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">—</span>
+                                </div>
+                            </div>
+                        </div>
                         <p class="text-[10px] text-slate-400 font-semibold">Não altera o valor base do orçamento.</p>
                     </div>
                 </div>
