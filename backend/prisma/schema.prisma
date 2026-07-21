@@ -887,6 +887,9 @@ model WorkNeed {
   priority          NeedPriority         @default(MEDIA)
   status            NeedStatus           @default(PENDING)
   scheduled         Boolean              @default(false)
+  siteReceivedAt    DateTime?
+  siteReceivedBy    String?
+  siteReceivedNotes String?
   responsible       String?
   notes             String?
   createdAt         DateTime             @default(now())

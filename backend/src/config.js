@@ -18,9 +18,14 @@ const config = {
   // os respetivos providers ficam em modo "not configured" (no-op seguro).
   notifications: {
     email: {
-      provider: process.env.EMAIL_PROVIDER || null, // ex.: "sendgrid" | "ses" | "smtp"
+      provider: process.env.EMAIL_PROVIDER || null, // "smtp" | "sendgrid"
       apiKey: process.env.EMAIL_PROVIDER_API_KEY || null,
       fromAddress: process.env.EMAIL_FROM_ADDRESS || null,
+      smtpHost: process.env.SMTP_HOST || null,
+      smtpPort: Number(process.env.SMTP_PORT || 587),
+      smtpUser: process.env.SMTP_USER || null,
+      smtpPass: process.env.SMTP_PASS || process.env.EMAIL_PROVIDER_API_KEY || null,
+      documentArchiveEmail: process.env.DOCUMENT_ARCHIVE_EMAIL || null,
     },
     whatsapp: {
       provider: process.env.WHATSAPP_PROVIDER || null, // ex.: "meta_business" | "twilio"

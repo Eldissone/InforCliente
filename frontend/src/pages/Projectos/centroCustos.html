@@ -582,7 +582,8 @@
                 </header>
 
                 <!-- KPI Row -->
-                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4" id="kpiRow">
+                <div class="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-5 justify-between items-center gap-4"
+                    id="kpiRow">
                     <div class="kpi-card">
                         <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Orçamento
                             Previsto</p>
@@ -853,6 +854,30 @@
 
                 <!-- ═══════════ TAB: CRONOGRAMA DE PAGAMENTOS ═══════════ -->
                 <div class="cc-tab-panel" id="tab-cronograma">
+                    <!-- Entrega ↔ Pagamento (Fase I) -->
+                    <div id="cronogramaPlanningSection"
+                        class="hidden mb-6 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-50">
+                            <h3 class="font-bold text-slate-900">Entrega ↔ Pagamento</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Datas previstas de entrega e próximo vencimento por
+                                item</p>
+                        </div>
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full cc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">Item</th>
+                                        <th class="text-left">Fornecedor</th>
+                                        <th class="text-center">Entrega prevista</th>
+                                        <th class="text-center">Recepção armazém</th>
+                                        <th class="text-center">Recepção obra</th>
+                                        <th class="text-center">Próx. pagamento</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cronogramaPlanningBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div
                             class="px-6 py-5 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -1781,6 +1806,46 @@
                         <button id="formFundCardSubmitBtn" type="submit"
                             class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Adicionar</button>
                     </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Recepção em Obra (Fase I) -->
+    <div class="modal-overlay" id="modalSiteReception">
+        <div class="modal-box" style="max-width:480px">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 tracking-tight">Recepção em Obra</h2>
+                    <p id="siteReceptionDesc" class="text-xs font-semibold text-slate-400 mt-0.5"></p>
+                </div>
+                <button type="button" onclick="document.getElementById('modalSiteReception').classList.remove('open')"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <form id="formSiteReception" class="flex flex-col gap-4">
+                <input type="hidden" id="siteReceptionNeedId" />
+                <input type="hidden" id="siteReceptionCCId" />
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data de
+                        recepção</label>
+                    <input type="date" id="siteReceptionDate" required
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+                </div>
+                <div>
+                    <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Notas
+                        (opcional)</label>
+                    <textarea id="siteReceptionNotes" rows="2"
+                        class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button"
+                        onclick="document.getElementById('modalSiteReception').classList.remove('open')"
+                        class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
+                    <button type="submit"
+                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700">Confirmar
+                        recepção</button>
                 </div>
             </form>
         </div>

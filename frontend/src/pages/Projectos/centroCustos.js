@@ -293,6 +293,16 @@ function canRealizadoAgendar(n) {
   return (st === "EM_ANALISE" || st === "APPROVED") && n.marketWorkflowStarted && !n.scheduled && hasPrice;
 }
 
+function canConfirmSiteReception(n) {
+  if (!n || n.siteReceivedAt) return false;
+  return ["ORDERED", "EM_ANALISE", "APPROVED", "PAID"].includes(n.status);
+}
+
+function siteReceptionLabel(n) {
+  if (!n?.siteReceivedAt) return null;
+  return formatDateBR(n.siteReceivedAt);
+}
+
 function needCronogramaTotal(n) {
   if (n.realizadoTotal != null) return Number(n.realizadoTotal) || 0;
   const qty = Number(n.quantity) || 0;
@@ -857,6 +867,15 @@ function renderNeedsTable(items) {
                 <span class="material-symbols-outlined text-base">schedule</span>
               </button>
               ` : ""}
+              ${budgetViewMode === "realizado" && canConfirmSiteReception(n) ? `
+              <button onclick="openSiteReceptionModal('${n.id}', '${n.costCenterId}', '${n.description.substring(0, 40).replace(/'/g, "\\'")}')" title="Confirmar recepção em obra"
+                class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-sky-100 hover:text-sky-600 transition-all text-slate-500">
+                <span class="material-symbols-outlined text-base">home_work</span>
+              </button>
+              ` : ""}
+              ${budgetViewMode === "realizado" && siteReceptionLabel(n) ? `
+              <span class="text-[10px] font-bold text-sky-700 px-2 py-1 rounded-lg bg-sky-50" title="Recepção em obra">${siteReceptionLabel(n)}</span>
+              ` : ""}
               ${!needIsLockedForEdit(n) ? `
               <button onclick="editNeed('${n.id}')" data-need-raw='${JSON.stringify(n).replace(/'/g, "&#39;")}'
                 class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-amber-100 hover:text-amber-600 transition-all text-slate-500">
@@ -976,14 +995,16 @@ async function loadCronograma() {
   if (tbody) tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
 
   try {
-    const [needsData, timelineData] = await Promise.all([
+    const [needsData, timelineData, deliveriesData] = await Promise.all([
       apiRequest(
         `/cost-centers/project/${selectedProject.id}/needs?pageSize=500&awaitingInstallments=true`
       ),
       apiRequest(`/cost-centers/project/${selectedProject.id}/payments/timeline?${getCronogramaFilters()}`),
+      apiRequest(`/cost-centers/project/${selectedProject.id}/deliveries/timeline?includeReceived=true`).catch(() => ({ planningLinks: [] })),
     ]);
 
     cronogramaPendingNeeds = needsData.items || [];
+    renderCronogramaPlanning(deliveriesData.planningLinks || []);
 
     renderCronogramaList(timelineData.days);
 
@@ -1002,6 +1023,39 @@ async function loadCronograma() {
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
+}
+
+function renderCronogramaPlanning(links) {
+  const section = document.getElementById("cronogramaPlanningSection");
+  const tbody = document.getElementById("cronogramaPlanningBody");
+  if (!section || !tbody) return;
+
+  if (!links?.length) {
+    section.classList.add("hidden");
+    return;
+  }
+
+  section.classList.remove("hidden");
+  tbody.innerHTML = links.map((row) => {
+    const entrega = row.expectedReceiptDate ? formatDateBR(row.expectedReceiptDate) : "—";
+    const armazem = row.warehouseReceivedAt ? formatDateBR(row.warehouseReceivedAt) : "—";
+    const obra = row.siteReceivedAt ? formatDateBR(row.siteReceivedAt) : "—";
+    const pagamento = row.nextPaymentDate ? formatDateBR(row.nextPaymentDate) : "—";
+    const payBadge = row.nextPaymentStatus === "CONFIRMADO"
+      ? "bg-emerald-100 text-emerald-700"
+      : row.nextPaymentDate
+        ? "bg-indigo-100 text-indigo-700"
+        : "bg-slate-100 text-slate-500";
+    return `
+    <tr>
+      <td class="font-medium text-slate-900 text-sm max-w-xs truncate" title="${(row.description || "").replace(/"/g, "&quot;")}">${row.description || "—"}</td>
+      <td class="text-sm text-slate-600">${row.supplier || "—"}</td>
+      <td class="text-center text-xs font-semibold text-slate-700">${entrega}</td>
+      <td class="text-center text-xs text-slate-500">${armazem}</td>
+      <td class="text-center text-xs font-semibold ${row.siteReceivedAt ? "text-sky-700" : "text-slate-400"}">${obra}</td>
+      <td class="text-center"><span class="text-[10px] font-bold px-2 py-1 rounded-full ${payBadge}">${pagamento}</span></td>
+    </tr>`;
+  }).join("");
 }
 
 // ── Cronograma · Vista Calendário ───────────────────────────────────────────────
@@ -1226,6 +1280,41 @@ function renderCronogramaList(days) {
 }
 
 let currentCronogramaTotal = 0;
+
+window.openSiteReceptionModal = function (needId, ccId, description) {
+  document.getElementById("siteReceptionNeedId").value = needId;
+  document.getElementById("siteReceptionCCId").value = ccId;
+  document.getElementById("siteReceptionDesc").textContent = description;
+  document.getElementById("siteReceptionDate").value = new Date().toISOString().split("T")[0];
+  document.getElementById("siteReceptionNotes").value = "";
+  document.getElementById("modalSiteReception").classList.add("open");
+};
+
+async function submitSiteReception(e) {
+  e.preventDefault();
+  const needId = document.getElementById("siteReceptionNeedId").value;
+  const ccId = document.getElementById("siteReceptionCCId").value;
+  const dateStr = document.getElementById("siteReceptionDate").value;
+  const notes = document.getElementById("siteReceptionNotes").value?.trim() || null;
+
+  if (!needId || !ccId || !dateStr) return;
+
+  try {
+    const receivedAt = new Date(`${dateStr}T12:00:00`).toISOString();
+    await apiRequest(`/cost-centers/${ccId}/needs/${needId}/site-reception`, {
+      method: "POST",
+      body: { receivedAt, notes },
+    });
+    showToast("Recepção em obra registada.", "success");
+    document.getElementById("modalSiteReception").classList.remove("open");
+    await loadNeeds();
+    if (document.getElementById("tab-cronograma")?.classList.contains("active")) {
+      await loadCronograma();
+    }
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
 
 window.openCronogramaModal = function (needId, ccId, description, total, currency = "AOA") {
   currentCronogramaTotal = total;
@@ -1479,6 +1568,7 @@ function bindEvents() {
     })
   );
   document.getElementById("formCronograma").addEventListener("submit", submitCronograma);
+  document.getElementById("formSiteReception")?.addEventListener("submit", submitSiteReception);
 
   // Close modals on overlay click
   ["modalCC", "modalNeed", "modalPay", "modalLiq", "modalCronograma", "modalImportExcel", "modalQuote"].forEach((id) => {
@@ -2799,8 +2889,11 @@ async function submitLiquidation(e) {
     compInput.value = "";
     if (fatInput) fatInput.value = "";
 
-    if (selectedProject) loadTransactions();
-    else reloadPaymentsView();
+    if (selectedProject) {
+      loadTransactions();
+      loadNeeds();
+      loadSummary();
+    } else reloadPaymentsView();
   } catch (err) {
     const btn = e.target.querySelector("button[type='submit']");
     btn.innerHTML = liqAlreadyConfirmed ? "Guardar" : "Confirmar Liquidação";

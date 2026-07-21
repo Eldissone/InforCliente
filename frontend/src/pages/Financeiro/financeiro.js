@@ -881,6 +881,17 @@ function bindEvents() {
   document.getElementById("btnPendingPayments")?.addEventListener("click", () => {
     openPendingPaymentsModal();
   });
+
+  document.querySelectorAll("[data-fin-main-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.finMainTab;
+      switchFinMainTab(tab);
+    });
+  });
+
+  document.getElementById("auditCertFilter")?.addEventListener("change", () => loadAuditList());
+  document.getElementById("auditSearch")?.addEventListener("input", debounce(() => loadAuditList(), 350));
+  document.getElementById("auditCertConfirmBtn")?.addEventListener("click", submitAuditCertification);
 }
 
 function isViewingCurrentPeriod() {
@@ -1718,4 +1729,158 @@ function renderPlanTable(days) {
     })
     .join("");
 }
+
+// ── Auditoria de Faturas (Fase I) ─────────────────────────────────────────────
+let finMainTab = "pagamentos";
+let auditCertContext = null;
+
+const CERT_BADGES = {
+  PENDENTE: { label: "Pendente", cls: "bg-amber-100 text-amber-700" },
+  CONFORME: { label: "Conforme", cls: "bg-emerald-100 text-emerald-700" },
+  DIVERGENTE: { label: "Divergente", cls: "bg-red-100 text-red-700" },
+};
+
+function switchFinMainTab(tab) {
+  finMainTab = tab;
+  document.querySelectorAll("[data-fin-main-tab]").forEach((btn) => {
+    const active = btn.dataset.finMainTab === tab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.getElementById("fin-panel-pagamentos")?.classList.toggle("hidden", tab !== "pagamentos");
+  document.getElementById("fin-panel-auditoria")?.classList.toggle("hidden", tab !== "auditoria");
+  if (tab === "auditoria") loadAuditList();
+}
+
+function getAuditFilterParams() {
+  const params = new URLSearchParams();
+  const proj = getProjectFilterValue();
+  if (proj) params.set("projectId", proj);
+  const cert = document.getElementById("auditCertFilter")?.value;
+  if (cert) params.set("certificationStatus", cert);
+  const search = document.getElementById("auditSearch")?.value?.trim();
+  if (search) params.set("search", search);
+  params.set("pageSize", "50");
+  return params;
+}
+
+async function loadAuditList() {
+  const tbody = document.getElementById("auditTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7"><div class="spinner my-8"></div></td></tr>`;
+
+  try {
+    const params = getAuditFilterParams();
+    const data = await apiRequest(`/cost-centers/payments/audit?${params}`);
+    const summary = data.summary || {};
+    document.getElementById("auditKpiPending").textContent = summary.pending ?? 0;
+    document.getElementById("auditKpiConforme").textContent = summary.conforme ?? 0;
+    document.getElementById("auditKpiDivergente").textContent = summary.divergente ?? 0;
+    document.getElementById("auditKpiTotal").textContent = summary.total ?? 0;
+
+    const items = data.items || [];
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="py-12 text-center text-slate-400"><p class="text-sm font-semibold">Sem faturas liquidadas no filtro actual.</p></div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = items.map((p) => {
+      const cur = p.costCenter?.currency || "AOA";
+      const cert = CERT_BADGES[p.certificationStatus] || CERT_BADGES.PENDENTE;
+      const ccId = p.costCenterId || p.costCenter?.id;
+      return `
+      <tr>
+        <td class="font-semibold text-slate-800 text-sm">${p.project?.name || "—"}</td>
+        <td class="text-sm text-slate-700 max-w-xs truncate" title="${escapeAttr(p.description || "")}">${p.description || "—"}</td>
+        <td class="text-sm text-slate-600">${p.supplier || "—"}</td>
+        <td class="text-right font-bold tabular-nums">${formatCurrency(p.paidAmount ?? p.budgetedAmount, cur)}</td>
+        <td class="text-center text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
+        <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${cert.cls}">${cert.label}</span></td>
+        <td class="text-center">
+          <div class="flex justify-center gap-1">
+            ${renderIconBtn("visibility", "Ver detalhes", "slate", {
+              attrs: `onclick="viewAuditPayment('${p.id}')"`,
+            })}
+            ${p.certificationStatus === "PENDENTE" ? renderIconBtn("verified", "Certificar", "emerald", {
+              attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}')"`,
+            }) : renderIconBtn("info", "Ver certificação", "slate", {
+              attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}', true)"`,
+            })}
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+  }
+}
+
+window.viewAuditPayment = function (paymentId) {
+  for (const day of timelineCache.days || []) {
+    const payment = day.items?.find((item) => item.id === paymentId && !item._isExtra);
+    if (payment) {
+      openPaymentAside(payment, "VIEW");
+      return;
+    }
+  }
+  toast("Abra o Plano de Pagamentos para ver o detalhe completo.", { type: "info" });
+};
+
+window.openAuditCertModal = async function (payId, ccId, readOnly = false) {
+  try {
+    const data = await apiRequest(`/cost-centers/${ccId}/payments/${payId}/certification-preview`);
+    auditCertContext = { payId, ccId, readOnly };
+    const analysis = data.analysis || {};
+    const preview = document.getElementById("auditCertPreview");
+    const evidence = (analysis.evidence || [])
+      .map((e) => `<li>${e.type}: ${e.label} — ${formatCurrency(e.amount, data.payment?.costCenter?.currency || "AOA")}</li>`)
+      .join("");
+    preview.innerHTML = `
+      <p class="font-bold text-slate-800 mb-2">${data.payment?.description || ""}</p>
+      <p class="text-xs mb-2">Sugestão: <strong>${analysis.suggestedStatus || "—"}</strong> — ${analysis.reason || ""}</p>
+      ${evidence ? `<ul class="text-xs list-disc pl-4 space-y-1">${evidence}</ul>` : "<p class=\"text-xs text-slate-400\">Sem evidências automáticas.</p>"}
+      ${data.payment?.certificationNotes ? `<p class="text-xs mt-2 text-slate-500">Notas: ${data.payment.certificationNotes}</p>` : ""}`;
+
+    const statusEl = document.getElementById("auditCertStatus");
+    const notesEl = document.getElementById("auditCertNotes");
+    const suggestEl = document.getElementById("auditUseSuggestion");
+    const confirmBtn = document.getElementById("auditCertConfirmBtn");
+
+    if (analysis.suggestedStatus) statusEl.value = analysis.suggestedStatus;
+    notesEl.value = data.payment?.certificationNotes || "";
+    suggestEl.checked = true;
+
+    statusEl.disabled = readOnly;
+    notesEl.disabled = readOnly;
+    suggestEl.disabled = readOnly;
+    confirmBtn.classList.toggle("hidden", readOnly);
+
+    document.getElementById("modalAuditCert").classList.add("open");
+  } catch (err) {
+    toast(err.message || "Erro ao carregar análise.", { type: "error" });
+  }
+};
+
+async function submitAuditCertification() {
+  if (!auditCertContext || auditCertContext.readOnly) return;
+  const { payId, ccId } = auditCertContext;
+  try {
+    await apiRequest(`/cost-centers/${ccId}/payments/${payId}/certify`, {
+      method: "PATCH",
+      body: {
+        status: document.getElementById("auditCertStatus").value,
+        notes: document.getElementById("auditCertNotes").value || null,
+        useSuggestion: document.getElementById("auditUseSuggestion").checked,
+      },
+    });
+    toast("Fatura certificada.", { type: "success" });
+    document.getElementById("modalAuditCert").classList.remove("open");
+    auditCertContext = null;
+    await loadAuditList();
+  } catch (err) {
+    toast(err.message || "Erro ao certificar.", { type: "error" });
+  }
+}
+
+window.switchFinMainTab = switchFinMainTab;
 

@@ -12,6 +12,7 @@ const {
   scanDueAndOverduePayments,
   loadPaymentForNotification,
 } = require("../services/paymentNotificationService");
+const { notifyDocumentArchiveOnPayment } = require("../services/documentArchiveEmailService");
 const {
   sendNeedToFinance,
   listPendingFinanceScheduling,
@@ -509,6 +510,104 @@ costCenterRoutes.get(
     });
 
     return res.json(timeline);
+  })
+);
+
+// GET /cost-centers/project/:projectId/deliveries/timeline — Entregas + pagamentos ligados (Fase I)
+costCenterRoutes.get(
+  "/project/:projectId/deliveries/timeline",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const includeReceived = req.query.includeReceived === "true";
+    const search = req.query.search ? String(req.query.search) : "";
+
+    const [quotes, payments] = await Promise.all([
+      prisma.needQuote.findMany({
+        where: {
+          orderNumber: { not: null },
+          need: {
+            projectId,
+            status: { in: ["ORDERED", "EM_ANALISE", "APPROVED", "PAID"] },
+          },
+        },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          need: {
+            select: {
+              id: true,
+              description: true,
+              siteReceivedAt: true,
+              siteReceivedBy: true,
+              costCenter: { select: { code: true, name: true } },
+            },
+          },
+        },
+        orderBy: { expectedReceiptDate: "asc" },
+      }),
+      prisma.costPayment.findMany({
+        where: { projectId, needId: { not: null } },
+        orderBy: { paymentDate: "asc" },
+        select: {
+          id: true,
+          needId: true,
+          paymentDate: true,
+          budgetedAmount: true,
+          paidAmount: true,
+          status: true,
+          installment: true,
+        },
+      }),
+    ]);
+
+    const deliveryMap = await fetchDeliveryFieldsByQuoteIds(quotes.map((q) => q.id));
+    let mergedQuotes = quotes.map((q) => {
+      const extra = deliveryMap.get(q.id) || {};
+      return {
+        ...q,
+        deliveryStatus: extra.deliveryStatus || "PENDENTE",
+        receivedAt: extra.receivedAt || null,
+        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+      };
+    });
+
+    if (!includeReceived) {
+      mergedQuotes = mergedQuotes.filter(
+        (q) => q.deliveryStatus !== "RECEBIDO" && !q.receivedAt
+      );
+    }
+
+    const paymentsByNeed = {};
+    payments.forEach((p) => {
+      if (!p.needId) return;
+      if (!paymentsByNeed[p.needId]) paymentsByNeed[p.needId] = [];
+      paymentsByNeed[p.needId].push(p);
+    });
+
+    const timeline = buildDeliveryTimeline(mergedQuotes, { search, statusFilter: "" });
+    const links = mergedQuotes.map((q) => {
+      const needPayments = paymentsByNeed[q.needId] || [];
+      const firstPending = needPayments.find((p) => p.status === "PENDENTE");
+      const firstPayment = firstPending || needPayments[0] || null;
+      return {
+        needId: q.needId,
+        quoteId: q.id,
+        description: q.need?.description || "",
+        costCenter: q.need?.costCenter || null,
+        expectedReceiptDate: q.expectedReceiptDate,
+        warehouseReceivedAt: q.receivedAt,
+        siteReceivedAt: q.need?.siteReceivedAt || null,
+        siteReceivedBy: q.need?.siteReceivedBy || null,
+        deliveryStatus: q.deliveryStatus,
+        supplier: q.supplier?.name || null,
+        nextPaymentDate: firstPayment?.paymentDate || null,
+        nextPaymentStatus: firstPayment?.status || null,
+        paymentCount: needPayments.length,
+      };
+    });
+
+    return res.json({ ...timeline, planningLinks: links });
   })
 );
 
@@ -1382,6 +1481,50 @@ costCenterRoutes.post(
   })
 );
 
+// POST /cost-centers/:ccId/needs/:needId/site-reception — Confirmar recepção em obra (Fase I)
+costCenterRoutes.post(
+  "/:ccId/needs/:needId/site-reception",
+  requireRole(["admin", "operador", "supervisor"]),
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const ccId = String(req.params.ccId);
+    const body = z
+      .object({
+        receivedAt: z.string().datetime().optional(),
+        notes: z.string().max(500).optional().nullable(),
+      })
+      .parse(req.body);
+
+    const need = await prisma.workNeed.findFirst({
+      where: { id: needId, costCenterId: ccId },
+      select: { id: true, status: true },
+    });
+    if (!need) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+
+    const allowed = ["ORDERED", "EM_ANALISE", "APPROVED", "PAID"];
+    if (!allowed.includes(need.status)) {
+      return res.status(400).json({ error: "NEED_NOT_READY_FOR_SITE_RECEPTION" });
+    }
+
+    const receivedAt = body.receivedAt ? new Date(body.receivedAt) : new Date();
+    const certifierName = req.user?.name || req.user?.email || req.user?.sub || "Sistema";
+
+    const updated = await prisma.workNeed.update({
+      where: { id: needId },
+      data: {
+        siteReceivedAt: receivedAt,
+        siteReceivedBy: certifierName,
+        siteReceivedNotes: body.notes?.trim() || null,
+      },
+      include: {
+        costCenter: { select: { code: true, name: true, currency: true } },
+      },
+    });
+
+    return res.json({ ok: true, need: mapNeedBudgetFields(updated) });
+  })
+);
+
 // POST /cost-centers/:ccId/needs/:needId/generate-installments — Gerar parcelas (CostPayment) para uma necessidade
 costCenterRoutes.post(
   "/:ccId/needs/:needId/generate-installments",
@@ -1828,6 +1971,9 @@ costCenterRoutes.patch(
           const notifyResult = await notifyPaymentEvent(req.app.get("io"), payment, "PAYMENT_CONFIRMED", req.user, {
             explicitRecipientIds,
           });
+          notifyDocumentArchiveOnPayment(payment).catch((e) =>
+            console.error("notifyDocumentArchiveOnPayment:", e)
+          );
           return res.json({ id: updated.id, notificationsSent: notifyResult.sent || 0 });
         }
       } catch (e) {
