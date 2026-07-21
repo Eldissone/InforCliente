@@ -373,12 +373,19 @@ function renderReadyToOrderBanner(selectedQuote) {
 
   if (!selectedQuote) return;
 
-
-
-  const total = Number(selectedQuote.totalValue ?? selectedQuote.quotedPrice ?? 0)
-    .toLocaleString("pt-PT", { minimumFractionDigits: 2 });
-
-
+  const base = Number(selectedQuote.totalValue ?? selectedQuote.quotedPrice ?? 0);
+  const net = Number(selectedQuote.netTotal);
+  const currency = selectedQuote.currency || "AOA";
+  const priceTotals = renderQuotePriceTotalsHtml(
+    selectedQuote.supplier,
+    base,
+    currency,
+    selectedQuote.supplierProduct
+  );
+  const payableLabel =
+    Number.isFinite(net) && net > 0 && Math.abs(net - base) > 0.05
+      ? `<strong>Líquido a pagar: ${net.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}</strong> (base: ${base.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency})`
+      : `<strong>${base.toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}</strong>`;
 
   const banner = document.createElement("div");
 
@@ -396,11 +403,13 @@ function renderReadyToOrderBanner(selectedQuote) {
 
         <p class="text-sm text-slate-700 font-medium">
 
-          <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${total} ${selectedQuote.currency || "AOA"}.
+          <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${payableLabel}.
 
           Pode trocar de fornecedor, carregar proforma ou confirmar encomenda.
 
         </p>
+
+        ${priceTotals.fiscalBreakdownHtml || ""}
 
       </div>
 

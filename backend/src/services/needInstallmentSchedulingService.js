@@ -122,8 +122,11 @@ function mapPendingInstallmentRow({ need, quote, legacy }) {
 
   if (quote) {
     fiscalSnapshot = quoteFiscalSnapshot(quote, need);
-    baseAmount = fiscalSnapshot.base;
-    amount = fiscalSnapshot.net;
+    baseAmount = Number(quote.totalValue) || fiscalSnapshot.base;
+    amount =
+      quote.netTotal != null && Number(quote.netTotal) > 0
+        ? Number(quote.netTotal)
+        : fiscalSnapshot.net;
   } else if (baseAmount > 0) {
     fiscalSnapshot = buildQuoteFiscalSnapshot({ baseAmount });
     amount = fiscalSnapshot.net;

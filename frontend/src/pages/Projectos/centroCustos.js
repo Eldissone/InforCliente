@@ -1198,16 +1198,7 @@ async function loadCronograma() {
         const total = needCronogramaTotal(n);
         const currency = n.currency || n.costCenter?.currency || "AOA";
         setTimeout(
-          () =>
-            openCronogramaModal(
-              n.id,
-              n.costCenterId,
-              n.displayDescription || n.description,
-              total,
-              currency,
-              n.quoteId,
-              n.supplierLabel || n.supplier?.name
-            ),
+          () => openCronogramaModalFromNeed(n),
           150
         );
       }
@@ -1459,7 +1450,7 @@ function renderCronogramaList(days) {
         <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(totalObra, currency)}</td>
         <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Aguardar parcelamento</span></td>
         <td class="text-center">
-          <button onclick="openCronogramaModal('${n.id}', '${n.costCenterId}', '${desc}', ${totalObra}, '${currency}', ${quoteArg}, ${supplierArg})" title="Definir Cronograma"
+          <button onclick="openCronogramaModalFromNeedById('${n.id}', ${quoteArg})" title="Definir Cronograma"
             class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center hover:bg-amber-200 text-amber-600 border border-amber-200">
             <span class="material-symbols-outlined text-base">calendar_month</span>
           </button>
@@ -1478,6 +1469,159 @@ function renderCronogramaList(days) {
 }
 
 let currentCronogramaTotal = 0;
+let _cronogramaSyncing = false;
+
+function getCronogramaParcelRows() {
+  return Array.from(document.querySelectorAll("#cronogramaParcelasBody tr"));
+}
+
+function setParcelRowAmounts(row, percent) {
+  const pct = Math.min(100, Math.max(0, Number(percent) || 0));
+  const percentInput = row.querySelector(".parcela-percent");
+  const valorInput = row.querySelector(".parcela-valor");
+  if (percentInput) percentInput.value = pct.toFixed(2);
+  if (valorInput) valorInput.value = ((pct / 100) * currentCronogramaTotal).toFixed(2);
+  return pct;
+}
+
+function rebalanceCronogramaPercents(changedInput) {
+  if (_cronogramaSyncing || !changedInput) return;
+  _cronogramaSyncing = true;
+  try {
+    const rows = getCronogramaParcelRows();
+    if (!rows.length) return;
+
+    const changedRow = changedInput.closest("tr");
+    const changedIdx = rows.indexOf(changedRow);
+    if (changedIdx < 0) return;
+
+    if (changedInput.classList.contains("parcela-percent")) {
+      const pct = setParcelRowAmounts(changedRow, changedInput.value);
+
+      if (rows.length === 1) return;
+
+      if (rows.length === 2) {
+        const otherIdx = changedIdx === 0 ? 1 : 0;
+        setParcelRowAmounts(rows[otherIdx], 100 - pct);
+        return;
+      }
+
+      let sumExceptLast = 0;
+      for (let i = 0; i < rows.length - 1; i++) {
+        sumExceptLast += parseFloat(rows[i].querySelector(".parcela-percent")?.value) || 0;
+      }
+      if (sumExceptLast > 100) {
+        const overflow = sumExceptLast - 100;
+        const adjusted = Math.max(0, pct - overflow);
+        setParcelRowAmounts(changedRow, adjusted);
+        sumExceptLast = 100;
+      }
+      setParcelRowAmounts(rows[rows.length - 1], Math.max(0, 100 - sumExceptLast));
+      return;
+    }
+
+    if (changedInput.classList.contains("parcela-valor")) {
+      const valor = parseFloat(changedInput.value) || 0;
+      const pct =
+        currentCronogramaTotal > 0 ? (valor / currentCronogramaTotal) * 100 : 0;
+      changedInput.closest("tr").querySelector(".parcela-percent").value = pct.toFixed(2);
+      _cronogramaSyncing = false;
+      rebalanceCronogramaPercents(changedRow.querySelector(".parcela-percent"));
+    }
+  } finally {
+    _cronogramaSyncing = false;
+  }
+}
+
+function bindCronogramaParcelRowEvents(tr) {
+  const percentInput = tr.querySelector(".parcela-percent");
+  const valorInput = tr.querySelector(".parcela-valor");
+
+  percentInput?.addEventListener("input", () => rebalanceCronogramaPercents(percentInput));
+  valorInput?.addEventListener("input", () => rebalanceCronogramaPercents(valorInput));
+
+  tr.querySelector('button[type="button"]')?.addEventListener("click", () => {
+    setTimeout(() => {
+      const rows = getCronogramaParcelRows();
+      if (!rows.length) return;
+      const equal = 100 / rows.length;
+      rows.forEach((row, idx) => {
+        const pct = idx === rows.length - 1 ? 100 - equal * (rows.length - 1) : equal;
+        setParcelRowAmounts(row, pct);
+      });
+    }, 0);
+  });
+}
+
+function openCronogramaModalFromNeed(n) {
+  if (!n) return;
+  const currency = n.currency || n.costCenter?.currency || "AOA";
+  openCronogramaModal(
+    n.id,
+    n.costCenterId,
+    n.displayDescription || n.description,
+    needCronogramaTotal(n),
+    currency,
+    n.quoteId || null,
+    n.supplierLabel || n.supplier?.name || null,
+    { baseAmount: n.baseAmount, hasFiscal: n.hasFiscal }
+  );
+}
+
+window.openCronogramaModalFromNeedById = function (needId, quoteId = null) {
+  const n = cronogramaPendingNeeds.find(
+    (item) => item.id === needId && (!quoteId || item.quoteId === quoteId)
+  );
+  openCronogramaModalFromNeed(n);
+};
+
+window.openCronogramaModal = function (
+  needId,
+  ccId,
+  description,
+  total,
+  currency = "AOA",
+  quoteId = null,
+  supplierName = null,
+  fiscalMeta = null
+) {
+  currentCronogramaTotal = total;
+  document.getElementById("cronogramaNeedId").value = needId;
+  document.getElementById("cronogramaCCId").value = ccId;
+  document.getElementById("cronogramaQuoteId").value = quoteId || "";
+  const supplierEl = document.getElementById("cronogramaSupplierLabel");
+  if (supplierEl) {
+    supplierEl.textContent = supplierName ? `Fornecedor: ${supplierName}` : "";
+    supplierEl.classList.toggle("hidden", !supplierName);
+  }
+  document.getElementById("cronogramaItemDesc").textContent = description;
+  document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, currency);
+
+  const baseEl = document.getElementById("cronogramaBaseValue");
+  const hintEl = document.getElementById("cronogramaFiscalHint");
+  const labelEl = document.getElementById("cronogramaTotalLabel");
+  const baseAmount = Number(fiscalMeta?.baseAmount);
+  const hasFiscal =
+    Boolean(fiscalMeta?.hasFiscal) || (baseAmount > 0 && Math.abs(baseAmount - total) > 0.05);
+
+  if (baseEl && hintEl && labelEl) {
+    if (hasFiscal && baseAmount > 0) {
+      baseEl.textContent = `Base orçamental (cotação): ${formatCurrency(baseAmount, currency)}`;
+      baseEl.classList.remove("hidden");
+      hintEl.classList.remove("hidden");
+      labelEl.textContent = "Valor líquido a pagar (com impostos)";
+    } else {
+      baseEl.classList.add("hidden");
+      hintEl.classList.add("hidden");
+      labelEl.textContent = "Valor total do item";
+    }
+  }
+
+  document.getElementById("cronogramaNumParcelas").value = 1;
+  document.getElementById("cronogramaParcelasBody").innerHTML = "";
+  gerarParcelasAutomaticas();
+  document.getElementById("modalCronograma").classList.add("open");
+};
 
 window.openSiteReceptionModal = function (needId, ccId, description) {
   document.getElementById("siteReceptionNeedId").value = needId;
@@ -1514,24 +1658,6 @@ async function submitSiteReception(e) {
   }
 }
 
-window.openCronogramaModal = function (needId, ccId, description, total, currency = "AOA", quoteId = null, supplierName = null) {
-  currentCronogramaTotal = total;
-  document.getElementById("cronogramaNeedId").value = needId;
-  document.getElementById("cronogramaCCId").value = ccId;
-  document.getElementById("cronogramaQuoteId").value = quoteId || "";
-  const supplierEl = document.getElementById("cronogramaSupplierLabel");
-  if (supplierEl) {
-    supplierEl.textContent = supplierName ? `Fornecedor: ${supplierName}` : "";
-    supplierEl.classList.toggle("hidden", !supplierName);
-  }
-  document.getElementById("cronogramaItemDesc").textContent = description;
-  document.getElementById("cronogramaTotalValue").textContent = formatCurrency(total, currency);
-  document.getElementById("cronogramaNumParcelas").value = 1;
-  document.getElementById("cronogramaParcelasBody").innerHTML = "";
-  gerarParcelasAutomaticas();
-  document.getElementById("modalCronograma").classList.add("open");
-};
-
 window.gerarParcelasAutomaticas = function () {
   const numParcelas = parseInt(document.getElementById("cronogramaNumParcelas").value) || 1;
   const tbody = document.getElementById("cronogramaParcelasBody");
@@ -1563,20 +1689,7 @@ window.gerarParcelasAutomaticas = function () {
       </td>
     `;
     tbody.appendChild(tr);
-
-    // Add event listeners for percent/value changes
-    const percentInput = tr.querySelector('.parcela-percent');
-    const valorInput = tr.querySelector('.parcela-valor');
-
-    percentInput.addEventListener('input', () => {
-      const percent = parseFloat(percentInput.value) || 0;
-      valorInput.value = ((percent / 100) * currentCronogramaTotal).toFixed(2);
-    });
-
-    valorInput.addEventListener('input', () => {
-      const valor = parseFloat(valorInput.value) || 0;
-      percentInput.value = ((valor / currentCronogramaTotal) * 100).toFixed(2);
-    });
+    bindCronogramaParcelRowEvents(tr);
 
     // Add 30 days for next installment
     currentDate.setDate(currentDate.getDate() + 30);
@@ -1593,6 +1706,15 @@ async function submitCronograma(e) {
 
   if (parcelasRows.length === 0) {
     showToast("Adiciona pelo menos uma parcela", "error");
+    return;
+  }
+
+  const percentSum = Array.from(parcelasRows).reduce(
+    (sum, row) => sum + (parseFloat(row.querySelector(".parcela-percent")?.value) || 0),
+    0
+  );
+  if (Math.abs(percentSum - 100) > 0.05) {
+    showToast(`As parcelas devem totalizar 100% (actual: ${percentSum.toFixed(2)}%).`, "error");
     return;
   }
 

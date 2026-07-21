@@ -16,6 +16,10 @@ const {
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { quoteFiscalSnapshot } = require("../services/needInstallmentSchedulingService");
 const { buildInstallmentFiscalFields } = require("../services/fiscalCalculationService");
+const {
+  syncQuoteFiscalSnapshot,
+  syncAllSelectedQuoteFiscalSnapshots,
+} = require("../services/quoteFiscalSnapshotService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const {
   computeQuoteAllocation,
@@ -66,6 +70,10 @@ function serializeQuote(quote) {
     quotedPrice: String(quote.quotedPrice),
     quantity: quote.quantity != null ? String(quote.quantity) : null,
     totalValue: quote.totalValue != null ? String(quote.totalValue) : null,
+    netTotal: quote.netTotal != null ? String(quote.netTotal) : null,
+    vatAmount: quote.vatAmount != null ? String(quote.vatAmount) : null,
+    withholdingAmount: quote.withholdingAmount != null ? String(quote.withholdingAmount) : null,
+    discountAmount: quote.discountAmount != null ? String(quote.discountAmount) : null,
   };
 }
 
@@ -488,6 +496,13 @@ quoteRoutes.patch(
         quantity,
         totalValue,
       },
+    });
+
+    await syncQuoteFiscalSnapshot(id);
+    await syncNeedFromSelectedQuotes(prisma, quote.needId);
+
+    const refreshedQuote = await prisma.needQuote.findUnique({
+      where: { id },
       include: {
         supplier: { include: { bankAccounts: true } },
         supplierProduct: true,
@@ -500,23 +515,21 @@ quoteRoutes.patch(
       },
     });
 
-    await syncNeedFromSelectedQuotes(prisma, quote.needId);
-
     await logQuoteAction(req, {
       action: "quote_select",
       needId: quote.needId,
       quoteId: id,
       details: {
-        supplierId: updatedQuote.supplierId,
-        quotedPrice: String(updatedQuote.quotedPrice),
+        supplierId: refreshedQuote.supplierId,
+        quotedPrice: String(refreshedQuote.quotedPrice),
         quantity: String(quantity),
       },
     });
 
     res.json({
       ok: true,
-      quote: serializeQuote(updatedQuote),
-      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? updatedQuote : q))),
+      quote: serializeQuote(refreshedQuote),
+      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? refreshedQuote : q))),
     });
   })
 );
@@ -551,12 +564,15 @@ quoteRoutes.patch(
       data: { quantity, totalValue },
     });
 
+    await syncQuoteFiscalSnapshot(id);
     await syncNeedFromSelectedQuotes(prisma, quote.needId);
+
+    const refreshedQuote = await prisma.needQuote.findUnique({ where: { id } });
 
     res.json({
       ok: true,
-      quote: serializeQuote(updatedQuote),
-      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? updatedQuote : q))),
+      quote: serializeQuote(refreshedQuote),
+      allocation: computeQuoteAllocation(quote.need, allQuotes.map((q) => (q.id === id ? refreshedQuote : q))),
     });
   })
 );
@@ -936,6 +952,12 @@ quoteRoutes.post(
     const updatedQuote = await prisma.needQuote.update({
       where: { id },
       data: { proformaUrl },
+    });
+
+    await syncQuoteFiscalSnapshot(id);
+
+    const refreshedQuote = await prisma.needQuote.findUnique({
+      where: { id },
       include: {
         supplier: { include: { bankAccounts: true } },
         supplierProduct: {
@@ -951,7 +973,7 @@ quoteRoutes.post(
     });
 
     const updatedNeed = await applyProformaToNeed({
-      quote: updatedQuote,
+      quote: refreshedQuote,
       need: quote.need,
       req,
     });
@@ -959,7 +981,7 @@ quoteRoutes.post(
     res.json({
       ok: true,
       inAnalysis: true,
-      quote: serializeQuote(updatedQuote),
+      quote: serializeQuote(refreshedQuote),
       need: serializeNeed(updatedNeed),
     });
   })

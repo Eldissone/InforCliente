@@ -1300,6 +1300,13 @@ model NeedQuote {
   quotedPrice       Decimal   @db.Decimal(16, 4)
   quantity          Decimal?  @db.Decimal(16, 4)
   totalValue        Decimal?  @db.Decimal(16, 4)
+  netTotal          Decimal?  @db.Decimal(16, 2)
+  vatAmount         Decimal?  @db.Decimal(16, 2)
+  withholdingAmount Decimal?  @db.Decimal(16, 2)
+  discountAmount    Decimal?  @db.Decimal(16, 2)
+  fiscalApplyVat         Boolean @default(false)
+  fiscalApplyWithholding Boolean @default(false)
+  fiscalApplyDiscount    Boolean @default(false)
   currency          String    @default("AOA")
   selected          Boolean   @default(false)
   notes             String?
