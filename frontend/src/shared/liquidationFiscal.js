@@ -2,11 +2,12 @@ import {
   computeFiscalBreakdown,
   defaultFiscalFlagsFromSupplier,
   formatFiscalAmount,
-  parsePercent,
   renderFiscalBreakdownHtml,
+  resolveFiscalPercents,
 } from "./supplierFiscal.js";
 
 let _currentSupplier = null;
+let _currentProduct = null;
 let _currency = "AOA";
 
 function getEl(id) {
@@ -36,6 +37,7 @@ export function computeCurrentLiquidationFiscal() {
   if (!hasFiscal) return null;
   return computeFiscalBreakdown({
     supplier: _currentSupplier,
+    product: _currentProduct,
     ...opts,
   });
 }
@@ -90,12 +92,13 @@ export function initLiquidationFiscalHandlers() {
 
 export function setupLiquidationFiscalModal(payment) {
   _currentSupplier = payment?.supplierRef || null;
+  _currentProduct = payment?.fiscalProductRef || null;
   _currency = payment?.currency || payment?.costCenter?.currency || "AOA";
 
   const section = getEl("liqFiscalSection");
   if (!section) return;
 
-  const flags = defaultFiscalFlagsFromSupplier(_currentSupplier);
+  const flags = defaultFiscalFlagsFromSupplier(_currentSupplier, _currentProduct);
   const stored = payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount;
 
   const applyVat = stored ? Boolean(payment?.fiscalApplyVat) : flags.applyVat;
@@ -126,13 +129,17 @@ export function setupLiquidationFiscalModal(payment) {
 
   const hint = getEl("liqFiscalSupplierHint");
   if (hint) {
+    const pct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
     const parts = [];
-    if (parsePercent(_currentSupplier?.vatPercent)) parts.push(`IVA ${_currentSupplier.vatPercent}%`);
-    if (parsePercent(_currentSupplier?.withholdingPercent)) parts.push(`Ret. ${_currentSupplier.withholdingPercent}%`);
-    if (parsePercent(_currentSupplier?.discountPercent)) parts.push(`Desc. ${_currentSupplier.discountPercent}%`);
+    if (pct.vatPercent) parts.push(`IVA ${pct.vatPercent}%`);
+    if (pct.withholdingPercent) parts.push(`Ret. ${pct.withholdingPercent}%`);
+    if (pct.discountPercent) parts.push(`Desc. ${pct.discountPercent}%`);
+    const source = _currentProduct?.vatPercent || _currentProduct?.withholdingPercent || _currentProduct?.discountPercent
+      ? "produto"
+      : "fornecedor";
     hint.textContent = parts.length
-      ? `Regime do fornecedor: ${parts.join(" · ")}`
-      : "Fornecedor sem percentagens fiscais — pode activar manualmente.";
+      ? `Regime do ${source}: ${parts.join(" · ")}`
+      : "Sem percentagens fiscais no produto/fornecedor — pode activar manualmente.";
   }
 
   section.classList.remove("hidden");
@@ -165,6 +172,7 @@ export function renderAsideFiscalFromPayment(data) {
   if (hasStored) {
     const breakdown = computeFiscalBreakdown({
       supplier: data.supplierRef,
+      product: data.fiscalProductRef,
       baseAmount: data.budgetedAmount,
       grossAmount: data.grossAmount,
       inputMode: data.fiscalInputMode || "base",
@@ -180,13 +188,16 @@ export function renderAsideFiscalFromPayment(data) {
   }
 
   const supplier = data?.supplierRef || null;
+  const product = data?.fiscalProductRef || null;
   const base = Number(data.budgetedAmount ?? data.amount ?? 0);
+  const pct = resolveFiscalPercents({ product, supplier });
   const breakdown = computeFiscalBreakdown({
     supplier,
+    product,
     baseAmount: base,
-    applyVat: parsePercent(supplier?.vatPercent) > 0,
-    applyWithholding: parsePercent(supplier?.withholdingPercent) > 0,
-    applyDiscount: parsePercent(supplier?.discountPercent) > 0,
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
   });
 
   if (!breakdown.lines.length) {

@@ -1278,6 +1278,9 @@ model SupplierProduct {
   unit        String?
   price       Decimal   @db.Decimal(16, 4)
   currency    String    @default("AOA")
+  vatPercent         Decimal? @db.Decimal(5, 2)
+  withholdingPercent Decimal? @db.Decimal(5, 2)
+  discountPercent    Decimal? @db.Decimal(5, 2)
   validUntil  DateTime?
   notes       String?
   createdAt   DateTime  @default(now())

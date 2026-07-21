@@ -5,6 +5,20 @@ export function parsePercent(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/** Produto tem prioridade; fornecedor é fallback. */
+export function resolveFiscalPercents({ product = null, supplier = null } = {}) {
+  const pick = (productVal, supplierVal) => {
+    const p = parsePercent(productVal);
+    if (p > 0) return p;
+    return parsePercent(supplierVal);
+  };
+  return {
+    vatPercent: pick(product?.vatPercent, supplier?.vatPercent),
+    withholdingPercent: pick(product?.withholdingPercent, supplier?.withholdingPercent),
+    discountPercent: pick(product?.discountPercent, supplier?.discountPercent),
+  };
+}
+
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -22,6 +36,8 @@ function roundMoney(value) {
  */
 export function computeFiscalBreakdown({
   supplier = null,
+  product = null,
+  fiscalPercents = null,
   baseAmount = 0,
   grossAmount = 0,
   inputMode = "base",
@@ -29,9 +45,10 @@ export function computeFiscalBreakdown({
   applyWithholding = false,
   applyDiscount = false,
 } = {}) {
-  const vatPct = applyVat ? parsePercent(supplier?.vatPercent) : 0;
-  const whPct = applyWithholding ? parsePercent(supplier?.withholdingPercent) : 0;
-  const discPct = applyDiscount ? parsePercent(supplier?.discountPercent) : 0;
+  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier });
+  const vatPct = applyVat ? pct.vatPercent : 0;
+  const whPct = applyWithholding ? pct.withholdingPercent : 0;
+  const discPct = applyDiscount ? pct.discountPercent : 0;
 
   const factor = 1 - discPct / 100 + vatPct / 100;
 
@@ -65,17 +82,17 @@ export function computeFiscalBreakdown({
   };
 }
 
-/** Compatibilidade: calcula breakdown informativo a partir da base e % do fornecedor. */
-export function computeSupplierFiscalBreakdown(supplier, baseAmount) {
-  const hasVat = parsePercent(supplier?.vatPercent) > 0;
-  const hasWh = parsePercent(supplier?.withholdingPercent) > 0;
-  const hasDisc = parsePercent(supplier?.discountPercent) > 0;
+/** Compatibilidade: calcula breakdown informativo a partir da base e % do produto/fornecedor. */
+export function computeSupplierFiscalBreakdown(supplier, baseAmount, product = null) {
+  const pct = resolveFiscalPercents({ product, supplier });
   return computeFiscalBreakdown({
     supplier,
+    product,
+    fiscalPercents: pct,
     baseAmount,
-    applyVat: hasVat,
-    applyWithholding: hasWh,
-    applyDiscount: hasDisc,
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
   });
 }
 
@@ -83,8 +100,8 @@ export function formatFiscalAmount(amount, currency = "AOA") {
   return `${Math.abs(amount).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}`;
 }
 
-export function renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency = "AOA") {
-  const { lines } = computeSupplierFiscalBreakdown(supplier, baseAmount);
+export function renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency = "AOA", product = null) {
+  const { lines } = computeSupplierFiscalBreakdown(supplier, baseAmount, product);
   if (!lines.length) return "";
 
   const text = lines
@@ -133,11 +150,12 @@ export function formatSupplierFiscalSummary(supplier) {
   return parts.length ? parts.join(" · ") : "—";
 }
 
-export function defaultFiscalFlagsFromSupplier(supplier) {
+export function defaultFiscalFlagsFromSupplier(supplier, product = null) {
+  const pct = resolveFiscalPercents({ product, supplier });
   return {
-    applyVat: parsePercent(supplier?.vatPercent) > 0,
-    applyWithholding: parsePercent(supplier?.withholdingPercent) > 0,
-    applyDiscount: parsePercent(supplier?.discountPercent) > 0,
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
   };
 }
 

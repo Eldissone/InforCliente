@@ -187,6 +187,13 @@ const PAYMENT_RELATIONS_INCLUDE = {
           creditTermDays: true,
           installmentsPlanned: true,
           invoiceConfirmedAt: true,
+          supplierProduct: {
+            select: {
+              vatPercent: true,
+              withholdingPercent: true,
+              discountPercent: true,
+            },
+          },
         },
       },
     },
@@ -200,19 +207,27 @@ const PAYMENT_RELATIONS_INCLUDE = {
           proformaUrl: true,
           creditTermDays: true,
           installmentsPlanned: true,
+          supplierProduct: {
+            select: {
+              vatPercent: true,
+              withholdingPercent: true,
+              discountPercent: true,
+            },
+          },
         },
       },
     },
   },
 };
 
-async function resolvePaymentFiscalPatch({ body, paymentBefore, supplierRef }) {
+async function resolvePaymentFiscalPatch({ body, paymentBefore, supplierRef, productRef = null }) {
   const budgeted =
     body.budgetedAmount !== undefined ? body.budgetedAmount : paymentBefore.budgetedAmount;
   const paid = body.paidAmount !== undefined ? body.paidAmount : paymentBefore.paidAmount;
 
   const fiscal = computeFiscalFromPaymentInput({
     supplier: supplierRef,
+    product: productRef,
     budgetedAmount: budgeted,
     paidAmount: paid,
     body,
@@ -265,6 +280,7 @@ async function mapPaymentItems(items) {
     const proformaUrl = selectedQuote?.proformaUrl || null;
     const creditTermDays = selectedQuote?.creditTermDays ?? null;
     const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
+    const fiscalProductRef = selectedQuote?.supplierProduct || null;
     const installmentNumber = p.installment ?? p.paymentInstallment?.number ?? null;
     let effectivePlanned = installmentsPlanned;
     if (effectivePlanned == null) {
@@ -282,6 +298,7 @@ async function mapPaymentItems(items) {
       supplierId: p.supplierId || sup.id || null,
       supplierName: sup.name || p.supplier || null,
       supplierRef: p.supplierRef || (sup.id ? sup : null),
+      fiscalProductRef,
       nif: sup.nif || null,
       iban: sup.iban || null,
       supplierPhone: sup.phone || null,
@@ -1227,6 +1244,27 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true, requiresQuotation: true } },
+          quotes: {
+            orderBy: [{ selected: "desc" }, { createdAt: "desc" }],
+            take: 5,
+            select: {
+              selected: true,
+              supplierProduct: {
+                select: {
+                  vatPercent: true,
+                  withholdingPercent: true,
+                  discountPercent: true,
+                },
+              },
+              supplier: {
+                select: {
+                  vatPercent: true,
+                  withholdingPercent: true,
+                  discountPercent: true,
+                },
+              },
+            },
+          },
           _count: { select: { payments: true, quotes: true } },
         },
       }),
@@ -1759,11 +1797,44 @@ costCenterRoutes.patch(
         budgetedAmount: true,
         paidAmount: true,
         supplierId: true,
+        needId: true,
         fiscalApplyVat: true,
         fiscalApplyWithholding: true,
         fiscalApplyDiscount: true,
         fiscalInputMode: true,
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
+        need: {
+          select: {
+            quotes: {
+              where: { selected: true },
+              take: 1,
+              select: {
+                supplierProduct: {
+                  select: {
+                    vatPercent: true,
+                    withholdingPercent: true,
+                    discountPercent: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        paymentInstallment: {
+          select: {
+            quote: {
+              select: {
+                supplierProduct: {
+                  select: {
+                    vatPercent: true,
+                    withholdingPercent: true,
+                    discountPercent: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!before) return res.status(404).json({ error: "PAYMENT_NOT_FOUND" });
@@ -1856,10 +1927,16 @@ costCenterRoutes.patch(
       supplierRef = null;
     }
 
+    const fiscalProductRef =
+      before.need?.quotes?.[0]?.supplierProduct ||
+      before.paymentInstallment?.quote?.supplierProduct ||
+      null;
+
     const fiscalData = await resolvePaymentFiscalPatch({
       body,
       paymentBefore: before,
       supplierRef,
+      productRef: fiscalProductRef,
     });
 
     let comprovativoUrl = undefined;

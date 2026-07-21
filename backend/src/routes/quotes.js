@@ -175,7 +175,15 @@ quoteRoutes.get(
             },
           },
         },
-        supplierProduct: { select: { name: true, notes: true } },
+        supplierProduct: {
+          select: {
+            name: true,
+            notes: true,
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
+          },
+        },
       },
       orderBy: { quotedPrice: "asc" },
     });
@@ -224,7 +232,16 @@ quoteRoutes.get(
       },
       include: {
         supplier: { select: { id: true, name: true } },
-        supplierProduct: { select: { id: true, name: true, unit: true } },
+        supplierProduct: {
+          select: {
+            id: true,
+            name: true,
+            unit: true,
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
+          },
+        },
         need: {
           select: {
             id: true,
@@ -765,7 +782,15 @@ quoteRoutes.post(
       data: { proformaUrl },
       include: {
         supplier: { include: { bankAccounts: true } },
-        supplierProduct: { select: { name: true, notes: true } },
+        supplierProduct: {
+          select: {
+            name: true,
+            notes: true,
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
+          },
+        },
       },
     });
 

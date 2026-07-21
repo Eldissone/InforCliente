@@ -830,15 +830,13 @@
                                         <th class="text-right">P. Unit.</th>
                                         <th class="text-center">Hrs</th>
                                         <th class="text-right">Total Obra</th>
-                                        <th class="text-center">Prioridade</th>
-                                        <th class="text-left">Responsável</th>
                                         <th class="text-center">Status</th>
                                         <th class="text-center">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="needsTableBody">
                                     <tr>
-                                        <td colspan="8">
+                                        <td colspan="9">
                                             <div class="spinner my-8"></div>
                                         </td>
                                     </tr>
@@ -1391,8 +1389,7 @@
             </div>
             <form id="formNeed" class="flex flex-col gap-4">
                 <input type="hidden" id="needId">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                <div>
                         <label for="needCC"
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de
                             Custo *</label>
@@ -1401,18 +1398,6 @@
                             <option value="">Selecionar...</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="needResponsibleId"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">
-                            <span class="material-symbols-outlined text-xs align-middle mr-1">manage_accounts</span>
-                            Responsável (Operador) *
-                        </label>
-                        <select id="needResponsibleId" required
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
-                            <option value="">Selecionar operador...</option>
-                        </select>
-                    </div>
-                </div>
                 <div class="overflow-x-auto pb-2">
                     <table class="w-full text-left border-collapse min-w-[820px]">
                         <thead>
@@ -1423,7 +1408,6 @@
                                 <th class="py-2 px-1 w-24">Qtd.</th>
                                 <th class="py-2 px-1 w-28" id="needModalPriceColLabel">P. Unit.</th>
                                 <th class="py-2 px-1 w-20">Hrs</th>
-                                <th class="py-2 px-1 w-28">Prioridade</th>
                                 <th class="py-2 px-1 w-28" id="needModalStatusColLabel">Status</th>
                                 <th class="py-2 px-1 w-32">Obs.</th>
                                 <th class="py-2 px-1 w-8 text-center"></th>

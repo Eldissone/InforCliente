@@ -213,6 +213,56 @@ async function selectProject(project) {
 }
 
 // ── Orçamento Geral: Previsto vs Realizado ─────────────────────────────────────
+function needsTableColCount() {
+  return budgetViewMode === "realizado" ? 12 : 9;
+}
+
+function needsFiscalExtraCols() {
+  return budgetViewMode === "realizado" ? 3 : 0;
+}
+
+function needsColsBeforeTotal() {
+  return 4 + needsFiscalExtraCols();
+}
+
+function needsColsAfterTotal() {
+  return needsTableColCount() - 2 - needsColsBeforeTotal() - 1;
+}
+
+function fmtFiscalPct(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString("pt-PT", { maximumFractionDigits: 2 })}%` : "—";
+}
+
+function renderNeedFiscalCells(n) {
+  if (budgetViewMode !== "realizado") return "";
+  return `
+          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalVatPercent)}</td>
+          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalWithholdingPercent)}</td>
+          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalDiscountPercent)}</td>`;
+}
+
+function updateNeedsTableHead() {
+  const tr = document.getElementById("needsTableBody")?.closest("table")?.querySelector("thead tr");
+  if (!tr) return;
+  const fiscalHead =
+    budgetViewMode === "realizado"
+      ? `<th class="text-center">% IVA</th><th class="text-center">% Ret.</th><th class="text-center">% Desc.</th>`
+      : "";
+  tr.innerHTML = `
+    <th class="text-center w-14">Nº</th>
+    <th class="text-left">Descrição</th>
+    <th class="text-center">UN</th>
+    <th class="text-center">Qtde</th>
+    <th class="text-right">P. Unit.</th>
+    ${fiscalHead}
+    <th class="text-center">Hrs</th>
+    <th class="text-right">Total Obra</th>
+    <th class="text-center">Status</th>
+    <th class="text-center">Ações</th>
+  `;
+}
+
 function setBudgetViewMode(mode) {
   budgetViewMode = mode === "realizado" ? "realizado" : "previsto";
   const previstoBtn = document.getElementById("budgetViewPrevisto");
@@ -241,6 +291,7 @@ function setBudgetViewMode(mode) {
 
   updateBudgetWorkflowButtonsVisibility();
   updateNeedsStatusFilterOptions();
+  updateNeedsTableHead();
   if (budgetViewMode === "realizado") {
     loadSummary().then(() => loadNeeds({ preserveScroll: true }));
   } else {
@@ -785,7 +836,7 @@ async function loadNeeds(options = {}) {
   const status = document.getElementById("needsStatusFilter").value;
   const tbody = document.getElementById("needsTableBody");
   if (!preserveScroll) {
-    tbody.innerHTML = `<tr><td colspan="11"><div class="spinner my-8"></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${needsTableColCount()}"><div class="spinner my-8"></div></td></tr>`;
   }
 
   try {
@@ -811,7 +862,7 @@ async function loadNeeds(options = {}) {
     restoreNeedsTableUiState(uiState);
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${needsTableColCount()}" class="text-center py-8 text-red-500 text-xs font-bold">${err.message}</td></tr>`;
   }
 }
 
@@ -824,11 +875,10 @@ function renderNeedsTable(items) {
   const hasExtras = extrasGroups.some((g) => (g.items || []).length > 0);
 
   if (!items.length && !hasExtras) {
-    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${needsTableColCount()}"><div class="empty-state"><span class="material-symbols-outlined text-3xl">assignment</span><p class="text-sm font-semibold">Sem itens de orçamento registados</p></div></td></tr>`;
     return;
   }
 
-  const priorityLabels = { ALTA: "Alta", MEDIA: "Média", BAIXA: "Baixa" };
   const statusLabels = { PENDING: "Pendente", IN_QUOTATION: "Em Cotação", ORDERED: "Encomenda", EM_ANALISE: "Em Análise", APPROVED: "Aprovado", REJECTED: "Rejeitado", PAID: "Pago" };
   const statusClasses = { PENDING: "badge-pending", IN_QUOTATION: "badge-in-quotation", ORDERED: "badge-ordered", EM_ANALISE: "badge-in-analysis", APPROVED: "badge-approved", REJECTED: "badge-rejected", PAID: "badge-paid" };
   const extraStatusLabels = { PENDENTE: "Pendente", APROVADO: "A liquidar", PAGO: "Pago", REJEITADO: "Rejeitado", CANCELADO: "Cancelado" };
@@ -839,7 +889,6 @@ function renderNeedsTable(items) {
     REJEITADO: "badge-rejected",
     CANCELADO: "badge-rejected",
   };
-  const prioClasses = { ALTA: "badge-alta", MEDIA: "badge-media", BAIXA: "badge-baixa" };
 
   const grouped = {};
   let totalObraGeral = 0;
@@ -867,12 +916,15 @@ function renderNeedsTable(items) {
   const currency =
     items[0]?.costCenter?.currency || extrasGroups[0]?.currency || "AOA";
 
+  const beforeTotal = needsColsBeforeTotal();
+  const afterTotal = needsColsAfterTotal();
+
   let html = `
     <tr style="background-color: #0f172a !important;">
       <td class="font-bold text-white text-sm" colspan="2">Total Geral (${budgetViewMode === "previsto" ? "Previsto Aprovado" : "Realizado"})</td>
-      <td colspan="4"></td>
+      <td colspan="${beforeTotal}"></td>
       <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>
-      <td colspan="5"></td>
+      <td colspan="${afterTotal}"></td>
     </tr>
   `;
 
@@ -884,9 +936,9 @@ function renderNeedsTable(items) {
         <td colspan="2" class="pl-4">
           <span id="${groupId}-icon" class="material-symbols-outlined text-slate-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
         </td>
-        <td class="font-bold text-slate-800 uppercase text-xs" colspan="4">${ccName}</td>
+        <td class="font-bold text-slate-800 uppercase text-xs" colspan="${beforeTotal}">${ccName}</td>
         <td class="text-right font-bold text-slate-800 text-xs">${formatCurrency(group.totalObra, group.currency)}</td>
-        <td colspan="5"></td>
+        <td colspan="${afterTotal}"></td>
       </tr>
     `;
 
@@ -910,10 +962,9 @@ function renderNeedsTable(items) {
           <td class="text-center text-sm font-medium text-slate-700">${n.unit || "—"}</td>
           <td class="text-center text-sm font-medium text-slate-700">${n.quantity ? Number(n.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
           <td class="text-right text-sm font-medium ${unitClass}">${unitPrice != null ? Number(unitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
+          ${renderNeedFiscalCells(n)}
           <td class="text-center text-sm font-medium text-slate-700">${n.hours ? Number(n.hours).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—"}</td>
           <td class="text-right text-sm font-bold ${totalClass}">${lineTotal != null ? formatCurrency(lineTotal, n.costCenter?.currency || "AOA") : "—"}</td>
-          <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${prioClasses[n.priority] || ""}">${priorityLabels[n.priority] || n.priority}</span></td>
-          <td class="text-sm text-slate-500">${n.responsible || "—"}</td>
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[displayStatus] || "badge-pending"}">${statusLabels[displayStatus] || displayStatus}</span></td>
           <td class="text-center">
             <div class="flex justify-center gap-2">
@@ -974,7 +1025,7 @@ function renderNeedsTable(items) {
   if (budgetViewMode === "realizado" && hasExtras) {
     html += `
       <tr style="background-color: #1e3a5f !important;">
-        <td class="font-bold text-white text-xs uppercase tracking-widest py-3" colspan="12">
+        <td class="font-bold text-white text-xs uppercase tracking-widest py-3" colspan="${needsTableColCount()}">
           <span class="material-symbols-outlined text-sm align-middle mr-1">add_shopping_cart</span>
           Pedidos Extra
         </td>
@@ -993,9 +1044,9 @@ function renderNeedsTable(items) {
           <td colspan="2" class="pl-4">
             <span id="${groupId}-icon" class="material-symbols-outlined text-indigo-400 text-sm align-middle transition-transform duration-200">keyboard_arrow_down</span>
           </td>
-          <td class="font-bold text-indigo-900 uppercase text-xs" colspan="4">${ccLabel}</td>
+          <td class="font-bold text-indigo-900 uppercase text-xs" colspan="${beforeTotal}">${ccLabel}</td>
           <td class="text-right font-bold text-indigo-900 text-xs" title="Total pago">${formatCurrency(paidTotal, cur)}</td>
-          <td colspan="5"></td>
+          <td colspan="${afterTotal}"></td>
         </tr>
       `;
 
@@ -1005,14 +1056,15 @@ function renderNeedsTable(items) {
           const countsPaid = er.status === "PAGO";
           const totalClass = countsPaid ? "text-emerald-700" : "text-slate-500";
           const dueLabel = er.paymentDueDate ? formatDateBR(er.paymentDueDate) : "—";
+          const fiscalPad = `<td colspan="${needsFiscalExtraCols()}"></td>`;
           return `
         <tr class="${groupId}-item">
           <td class="text-center"><span class="inline-flex min-w-8 h-7 items-center justify-center rounded-lg text-xs font-black text-indigo-600 tabular-nums">${idx + 1}</span></td>
           <td class="font-medium text-slate-900 max-w-xs truncate" title="${er.description || ""}">${er.description || "—"}</td>
           <td class="text-center text-xs text-slate-400" colspan="3">Pedido extra</td>
+          ${fiscalPad}
           <td class="text-center text-xs text-slate-500">${dueLabel}</td>
           <td class="text-right text-sm font-bold ${totalClass}">${formatCurrency(amt, er.currency || cur)}</td>
-          <td colspan="2" class="text-xs text-slate-400">${er.requestedBy || "—"}</td>
           <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${extraStatusClasses[er.status] || "badge-pending"}">${extraStatusLabels[er.status] || er.status}</span></td>
           <td class="text-center text-slate-300">—</td>
         </tr>
@@ -1606,6 +1658,7 @@ function bindEvents() {
   );
   document.getElementById("budgetViewPrevisto")?.addEventListener("click", () => setBudgetViewMode("previsto"));
   document.getElementById("budgetViewRealizado")?.addEventListener("click", () => setBudgetViewMode("realizado"));
+  updateNeedsTableHead();
 
   document.getElementById("bulkQuotationConfirmBtn")?.addEventListener("click", confirmBulkQuotation);
   document.getElementById("bulkQuotationSelectAll")?.addEventListener("click", () => {
@@ -1770,22 +1823,6 @@ async function openNeedModal(need = null) {
   ccSelect.value = need?.costCenterId || "";
   ccSelect.disabled = isEdit && !!need?.costCenterId;
 
-  // Carregar lista de operadores/admins
-  const respSel = document.getElementById("needResponsibleId");
-  respSel.innerHTML = `<option value="">A carregar...</option>`;
-  try {
-    const data = await apiRequest("/users/receivers");
-    const ops = data.items || [];
-    respSel.innerHTML = `<option value="">Selecionar operador...</option>` +
-      ops.map(u => {
-        const label = u.name || u.email;
-        const selected = need?.responsible === label ? "selected" : "";
-        return `<option value="${u.id}" data-name="${label}" ${selected}>${label}</option>`;
-      }).join("");
-  } catch {
-    respSel.innerHTML = `<option value="">Erro ao carregar...</option>`;
-  }
-
   const tbody = document.getElementById("needItemsBody");
   tbody.innerHTML = "";
 
@@ -1845,13 +1882,6 @@ window.addNeedRow = function (need = null) {
     </td>
     <td class="py-2 px-1">
       <input type="number" step="0.01" placeholder="1.0" value="${need?.hours || ""}" class="row-hours w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
-    </td>
-    <td class="py-2 px-1">
-      <select class="row-priority w-full h-8 px-1 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
-        <option value="ALTA" ${need?.priority === 'ALTA' ? 'selected' : ''}>Alta</option>
-        <option value="MEDIA" ${(!need || need?.priority === 'MEDIA') ? 'selected' : ''}>Média</option>
-        <option value="BAIXA" ${need?.priority === 'BAIXA' ? 'selected' : ''}>Baixa</option>
-      </select>
     </td>
     <td class="py-2 px-1">
       <select class="row-status w-full h-8 px-1 bg-slate-50 border border-slate-200 rounded text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50">
@@ -1932,10 +1962,6 @@ async function submitNeed(e) {
   const ccId = document.getElementById("needCC").value;
   if (!ccId) { showToast("Seleciona um Centro de Custo", "error"); return; }
 
-  const respSel = document.getElementById("needResponsibleId");
-  const responsibleName = respSel.options[respSel.selectedIndex]?.getAttribute("data-name") || null;
-  if (!respSel.value) { showToast("Seleciona um Responsável (Operador)", "error"); return; }
-
   const rows = document.querySelectorAll(".need-item-row");
   if (rows.length === 0) { showToast("Adiciona pelo menos um item", "error"); return; }
 
@@ -1950,8 +1976,7 @@ async function submitNeed(e) {
         unit: row.querySelector(".row-unit").value.trim() || null,
         unitPrice: row.querySelector(".row-price").value || null,
         hours: row.querySelector(".row-hours").value || null,
-        priority: row.querySelector(".row-priority").value,
-        responsible: responsibleName,
+        priority: "MEDIA",
         notes: row.querySelector(".row-notes").value.trim() || null,
       };
 

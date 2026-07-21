@@ -503,8 +503,13 @@ function renderSupplierProducts() {
   const countEl = document.getElementById("supplierProductsCount");
   if (countEl) countEl.textContent = currentCatalogProducts.length + " produto" + (currentCatalogProducts.length !== 1 ? "s" : "");
 
+  const fmtPct = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? `${n.toLocaleString("pt-PT", { maximumFractionDigits: 2 })}%` : "—";
+  };
+
   if (currentCatalogProducts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-slate-400 font-medium">Nenhum produto registado. Clique em <strong>Novo Produto</strong> para adicionar.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-medium">Nenhum produto registado. Clique em <strong>Novo Produto</strong> para adicionar.</td></tr>`;
     return;
   }
 
@@ -521,6 +526,9 @@ function renderSupplierProducts() {
         </td>
         <td class="py-3 px-5 text-center text-sm text-slate-500">${p.unit || "—"}</td>
         <td class="py-3 px-5 text-right font-bold text-slate-800">${fmt(p.price, p.currency)}</td>
+        <td class="py-3 px-3 text-center text-xs text-slate-600">${fmtPct(p.vatPercent)}</td>
+        <td class="py-3 px-3 text-center text-xs text-slate-600">${fmtPct(p.withholdingPercent)}</td>
+        <td class="py-3 px-3 text-center text-xs text-slate-600">${fmtPct(p.discountPercent)}</td>
         <td class="py-3 px-5 text-center text-xs ${expired ? "text-red-500 font-bold" : "text-slate-400"}">${fmtDate(p.validUntil)}</td>
         <td class="py-3 px-5">
           <div class="flex justify-center gap-1.5">
@@ -550,6 +558,9 @@ document.getElementById("formSupplierProduct").addEventListener("submit", async 
     validUntil: document.getElementById("productValidUntil").value
       ? new Date(document.getElementById("productValidUntil").value).toISOString()
       : null,
+    vatPercent: parseOptionalPercentInput("productVatPercent"),
+    withholdingPercent: parseOptionalPercentInput("productWithholdingPercent"),
+    discountPercent: parseOptionalPercentInput("productDiscountPercent"),
   };
 
   try {
@@ -582,6 +593,9 @@ window.editSupplierProduct = function(productOrId) {
   document.getElementById("productValidUntil").value = product.validUntil
     ? product.validUntil.substring(0, 10)
     : "";
+  document.getElementById("productVatPercent").value = product.vatPercent ?? "";
+  document.getElementById("productWithholdingPercent").value = product.withholdingPercent ?? "";
+  document.getElementById("productDiscountPercent").value = product.discountPercent ?? "";
   document.getElementById("supplierProductSubmitLabel").textContent = "Actualizar Produto";
   document.getElementById("supplierProductCancelEdit").style.display = "block";
   const titleEl = document.getElementById("formProductTitle");

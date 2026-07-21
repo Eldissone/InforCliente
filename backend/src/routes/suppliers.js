@@ -149,6 +149,9 @@ supplierRoutes.post(
         currency: z.string().default("AOA"),
         validUntil: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
+        vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        withholdingPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
       })
       .parse(req.body);
 
@@ -162,6 +165,9 @@ supplierRoutes.post(
         currency: body.currency,
         validUntil: body.validUntil ? new Date(body.validUntil) : null,
         notes: body.notes,
+        vatPercent: body.vatPercent ?? null,
+        withholdingPercent: body.withholdingPercent ?? null,
+        discountPercent: body.discountPercent ?? null,
       },
     });
     res.status(201).json(created);
@@ -181,6 +187,9 @@ supplierRoutes.patch(
         currency: z.string().optional(),
         validUntil: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
+        vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        withholdingPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
       })
       .parse(req.body);
 
@@ -188,6 +197,9 @@ supplierRoutes.patch(
     if (body.validUntil !== undefined) {
       data.validUntil = body.validUntil ? new Date(body.validUntil) : null;
     }
+    if (body.vatPercent === null) data.vatPercent = null;
+    if (body.withholdingPercent === null) data.withholdingPercent = null;
+    if (body.discountPercent === null) data.discountPercent = null;
 
     const updated = await prisma.supplierProduct.update({
       where: { id },

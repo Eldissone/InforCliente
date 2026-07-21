@@ -582,6 +582,22 @@
                                 <input type="date" id="productValidUntil"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
+                            <!-- Fiscal -->
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">% IVA</label>
+                                <input type="number" id="productVatPercent" min="0" max="100" step="0.01" placeholder="Ex: 14"
+                                    class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d]">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">% Retenção</label>
+                                <input type="number" id="productWithholdingPercent" min="0" max="100" step="0.01" placeholder="Ex: 6.5"
+                                    class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d]">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">% Desconto</label>
+                                <input type="number" id="productDiscountPercent" min="0" max="100" step="0.01" placeholder="Ex: 2"
+                                    class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d]">
+                            </div>
                             <!-- Botões -->
                             <div class="md:col-span-2 flex gap-2">
                                 <button type="submit" id="supplierProductSubmitBtn"
@@ -621,13 +637,16 @@
                                     <th class="py-3 px-5">Produto</th>
                                     <th class="py-3 px-5 w-24 text-center">Und.</th>
                                     <th class="py-3 px-5 text-right">Preço Base</th>
+                                    <th class="py-3 px-3 text-center">% IVA</th>
+                                    <th class="py-3 px-3 text-center">% Ret.</th>
+                                    <th class="py-3 px-3 text-center">% Desc.</th>
                                     <th class="py-3 px-5 w-32 text-center">Válido até</th>
                                     <th class="py-3 px-5 w-24 text-center">Acções</th>
                                 </tr>
                             </thead>
                             <tbody id="supplierProductsTableBody" class="text-sm">
                                 <tr>
-                                    <td colspan="5" class="text-center py-10 text-slate-400">Nenhum produto registado.
+                                    <td colspan="8" class="text-center py-10 text-slate-400">Nenhum produto registado.
                                     </td>
                                 </tr>
                             </tbody>

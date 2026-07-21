@@ -77,9 +77,12 @@ function mapNeedBudgetFields(need) {
   const previstoTotal = needLineTotal(need, "previsto");
   const realizadoTotal = realUnit != null ? needLineTotal(need, "realizado") : null;
   const exceedsPrevisto = needExceedsPrevisto(need);
+  const fiscal = resolveNeedFiscalPercents(need);
+
+  const { quotes, ...rest } = need;
 
   return {
-    ...need,
+    ...rest,
     quantity: need.quantity != null ? String(need.quantity) : null,
     unitPrice: need.unitPrice != null ? String(need.unitPrice) : null,
     originalUnitPrice: need.originalUnitPrice != null ? String(need.originalUnitPrice) : null,
@@ -94,6 +97,32 @@ function mapNeedBudgetFields(need) {
     marketWorkflowStarted: isMarketWorkflowStarted(need),
     realizadoDisplayStatus: needRealizadoDisplayStatus(need),
     isPaidLocked: need.status === "PAID",
+    fiscalVatPercent: fiscal.vatPercent,
+    fiscalWithholdingPercent: fiscal.withholdingPercent,
+    fiscalDiscountPercent: fiscal.discountPercent,
+  };
+}
+
+/** Cotação seleccionada → produto → fornecedor. */
+function resolveNeedFiscalPercents(need) {
+  const quotes = need?.quotes || [];
+  const quote = quotes.find((q) => q.selected) || quotes[0] || null;
+  if (!quote) {
+    return { vatPercent: null, withholdingPercent: null, discountPercent: null };
+  }
+  const product = quote.supplierProduct || null;
+  const supplier = quote.supplier || null;
+  const pick = (productVal, supplierVal) => {
+    const p = Number(productVal);
+    if (Number.isFinite(p) && p > 0) return p;
+    const s = Number(supplierVal);
+    if (Number.isFinite(s) && s > 0) return s;
+    return null;
+  };
+  return {
+    vatPercent: pick(product?.vatPercent, supplier?.vatPercent),
+    withholdingPercent: pick(product?.withholdingPercent, supplier?.withholdingPercent),
+    discountPercent: pick(product?.discountPercent, supplier?.discountPercent),
   };
 }
 
@@ -108,4 +137,5 @@ module.exports = {
   needExceedsPrevisto,
   assertPriceWithinPrevistoOrException,
   mapNeedBudgetFields,
+  resolveNeedFiscalPercents,
 };

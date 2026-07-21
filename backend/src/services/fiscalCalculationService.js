@@ -5,6 +5,20 @@ function parsePercent(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/** Produto tem prioridade; fornecedor é fallback. */
+function resolveFiscalPercents({ product = null, supplier = null } = {}) {
+  const pick = (productVal, supplierVal) => {
+    const p = parsePercent(productVal);
+    if (p > 0) return p;
+    return parsePercent(supplierVal);
+  };
+  return {
+    vatPercent: pick(product?.vatPercent, supplier?.vatPercent),
+    withholdingPercent: pick(product?.withholdingPercent, supplier?.withholdingPercent),
+    discountPercent: pick(product?.discountPercent, supplier?.discountPercent),
+  };
+}
+
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -21,6 +35,8 @@ function roundMoney(value) {
  */
 function computeFiscalBreakdown({
   supplier = null,
+  product = null,
+  fiscalPercents = null,
   baseAmount = 0,
   grossAmount = 0,
   inputMode = "base",
@@ -28,9 +44,10 @@ function computeFiscalBreakdown({
   applyWithholding = false,
   applyDiscount = false,
 } = {}) {
-  const vatPct = applyVat ? parsePercent(supplier?.vatPercent) : 0;
-  const whPct = applyWithholding ? parsePercent(supplier?.withholdingPercent) : 0;
-  const discPct = applyDiscount ? parsePercent(supplier?.discountPercent) : 0;
+  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier });
+  const vatPct = applyVat ? pct.vatPercent : 0;
+  const whPct = applyWithholding ? pct.withholdingPercent : 0;
+  const discPct = applyDiscount ? pct.discountPercent : 0;
 
   const factor = 1 - discPct / 100 + vatPct / 100;
 
@@ -67,7 +84,7 @@ function computeFiscalBreakdown({
   };
 }
 
-function computeFiscalFromPaymentInput({ supplier, budgetedAmount, paidAmount, body = {} }) {
+function computeFiscalFromPaymentInput({ supplier, product = null, budgetedAmount, paidAmount, body = {} }) {
   const applyVat = body.fiscalApplyVat === true || body.fiscalApplyVat === "true";
   const applyWithholding =
     body.fiscalApplyWithholding === true || body.fiscalApplyWithholding === "true";
@@ -82,6 +99,7 @@ function computeFiscalFromPaymentInput({ supplier, budgetedAmount, paidAmount, b
 
   const breakdown = computeFiscalBreakdown({
     supplier,
+    product,
     baseAmount: budgetedAmount,
     grossAmount: body.grossAmount ?? paidAmount,
     inputMode,
@@ -129,6 +147,7 @@ function mapStoredFiscalFields(payment) {
 
 module.exports = {
   parsePercent,
+  resolveFiscalPercents,
   computeFiscalBreakdown,
   computeFiscalFromPaymentInput,
   mapStoredFiscalFields,

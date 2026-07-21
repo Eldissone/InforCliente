@@ -983,7 +983,7 @@ export async function loadPresentedPrices({
 
           totalLine: `${total} ${q.currency}`,
 
-          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(q.supplier, totalValue, q.currency || "AOA"),
+          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(q.supplier, totalValue, q.currency || "AOA", q.supplierProduct),
 
           highlighted: Boolean(q.selected),
 
@@ -1027,7 +1027,7 @@ export async function loadPresentedPrices({
 
           totalLine: `${total} ${s.product.currency}`,
 
-          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(s.supplier, totalValue, s.product.currency || "AOA"),
+          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(s.supplier, totalValue, s.product.currency || "AOA", s.product),
 
           actionsHtml: !isLocked
 
