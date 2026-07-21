@@ -5,7 +5,7 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
-import { appendFiscalFieldsToFormData, computeFiscalBreakdown } from "/shared/supplierFiscal.js";
+import { appendFiscalFieldsToFormData, computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFiscal.js";
 import {
   initLiquidationFiscalHandlers,
   setupLiquidationFiscalModal,
@@ -177,7 +177,7 @@ function renderPaymentRowHtml(p, { showProject = false, allowEdit = false } = {}
       <td class="text-sm font-medium text-slate-900 max-w-xs truncate">${p.description}</td>
       <td><span class="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide ${typeClasses[p.paymentType] || "bg-slate-100 text-slate-500 border border-slate-200"}">${typeLabels[p.paymentType] || "—"}</span></td>
       <td class="text-right tabular-nums text-sm font-medium text-slate-600">${formatCurrency(p.budgetedAmount, cur)}</td>
-      <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount, cur)}</td>
+      <td class="text-right tabular-nums text-sm font-bold ${Number(p.paidAmount) > Number(p.netAmount ?? p.budgetedAmount) ? "text-red-600" : "text-slate-900"}">${formatCurrency(p.paidAmount || paymentPayableAmount(p), cur)}</td>
       <td class="text-center text-xs font-bold text-slate-500">${p.week || "—"}</td>
       <td class="text-center"><span class="text-xs font-bold px-2.5 py-1 rounded-full ${statusClasses[p.status] || "badge-pendente"}">${statusLabels[p.status] || p.status}</span></td>
       <td class="text-center">
@@ -400,6 +400,8 @@ function siteReceptionLabel(n) {
 
 function needCronogramaTotal(n) {
   if (n.amount != null) return Number(n.amount) || 0;
+  const displayTotal = needDisplayLineTotal(n);
+  if (displayTotal != null && displayTotal > 0) return displayTotal;
   if (n.realizadoTotal != null) return Number(n.realizadoTotal) || 0;
   const qty = Number(n.quantity) || 0;
   const price = Number(n.realizadoUnitPrice ?? n.unitPrice) || 0;

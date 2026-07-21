@@ -39,6 +39,13 @@ function isPaymentVisible(payment, now = new Date()) {
   return getPaymentVisibilityDate(payment) <= startOfDay(now);
 }
 
+function paymentPayableAmount(payment) {
+  if (!payment) return 0;
+  const net = Number(payment.netAmount);
+  if (Number.isFinite(net) && net > 0) return net;
+  return Number(payment.budgetedAmount || 0) || 0;
+}
+
 function matchesSearch(payment, search) {
   if (!search) return true;
   const term = search.toLowerCase();
@@ -127,7 +134,7 @@ function buildPaymentTimeline(payments, options = {}) {
     }
     const day = dayMap.get(key);
     day.items.push(p);
-    day.totalBudgeted += Number(p.budgetedAmount || 0);
+    day.totalBudgeted += paymentPayableAmount(p);
     day.currencies.add(p.costCenter?.currency || "AOA");
   });
 

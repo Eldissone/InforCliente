@@ -1,5 +1,5 @@
 import { formatCurrency, formatDateBR } from "./format.js";
-import { renderSupplierFiscalBreakdownHtml } from "./supplierFiscal.js";
+import { paymentPayableAmount } from "./supplierFiscal.js";
 
 export const TIMELINE_STATUS = {
   PENDENTE: { label: "Pendente", dot: "bg-blue-400", badge: "bg-blue-100 text-blue-700", border: "border-blue-200" },
@@ -45,7 +45,11 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
   const meta = TIMELINE_STATUS[timelineStatus] || TIMELINE_STATUS.PENDENTE;
   const cur = p.costCenter?.currency || "AOA";
   const payload = escapeAttr(JSON.stringify(p));
-  const fiscalHtml = renderSupplierFiscalBreakdownHtml(p.supplierRef, p.budgetedAmount, cur);
+  const payable = paymentPayableAmount(p);
+  const fiscalHtml =
+    p.netAmount != null && Number(p.netAmount) > 0
+      ? `<p class="text-[10px] text-slate-400 font-semibold">Inclui impostos do orçamento realizado</p>`
+      : "";
   const projectLine = showProject && p.project?.name
     ? `<p class="text-[10px] font-bold text-slate-400 truncate">${escapeAttr(p.project.name)}</p>`
     : "";
@@ -62,7 +66,7 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
           ${projectLine}
         </div>
         <div class="text-right shrink-0">
-          <p class="text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(p.budgetedAmount, cur)}</p>
+          <p class="text-sm font-bold text-slate-900 tabular-nums">${formatCurrency(payable, cur)}</p>
           <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${meta.badge}">${meta.label}</span>
         </div>
       </button>`;
@@ -84,7 +88,7 @@ function renderTimelineItem(p, { showProject = false, compact = false } = {}) {
             ${projectLine}
           </div>
           <div class="text-left sm:text-right shrink-0">
-            <p class="text-base font-black text-slate-900 tabular-nums">${formatCurrency(p.budgetedAmount, cur)}</p>
+            <p class="text-base font-black text-slate-900 tabular-nums">${formatCurrency(payable, cur)}</p>
             <span class="inline-flex mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${meta.badge}">${meta.label}</span>
           </div>
         </div>
@@ -158,7 +162,7 @@ export function renderGroupedListRows(days, { showProject = false, onEdit = null
           ${projectCol}
           <td class="font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(item.description)}">${escapeAttr(item.description)}</td>
           <td class="text-sm text-slate-500">${escapeAttr(item.costCenter?.code || "—")} · ${escapeAttr(item.costCenter?.name || "")}</td>
-          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(item.budgetedAmount, item.costCenter?.currency || "AOA")}</td>
+          <td class="text-right text-sm font-bold text-slate-900">${formatCurrency(paymentPayableAmount(item), item.costCenter?.currency || "AOA")}</td>
           <td class="text-center">${statusBadge}</td>
           <td class="text-center">
             <div class="flex justify-center gap-2">

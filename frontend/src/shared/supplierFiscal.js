@@ -100,6 +100,18 @@ export function formatFiscalAmount(amount, currency = "AOA") {
   return `${Math.abs(amount).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}`;
 }
 
+/** Valor efectivo a pagar (líquido quando fiscal já aplicado no orçamento). */
+export function paymentPayableAmount(payment) {
+  if (!payment) return 0;
+  if (payment.status === "CONFIRMADO" || payment.status === "PAID") {
+    const paid = Number(payment.paidAmount);
+    if (Number.isFinite(paid) && paid > 0) return paid;
+  }
+  const net = Number(payment.netAmount ?? payment.payableAmount);
+  if (Number.isFinite(net) && net > 0) return net;
+  return Number(payment.budgetedAmount ?? payment.amount ?? 0) || 0;
+}
+
 export function renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency = "AOA", product = null) {
   const { lines } = computeSupplierFiscalBreakdown(supplier, baseAmount, product);
   if (!lines.length) return "";

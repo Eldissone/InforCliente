@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { formatCurrency, formatDateBR } from "./format.js";
-import { appendFiscalFieldsToFormData, computeFiscalBreakdown, resolveFiscalPercents } from "./supplierFiscal.js";
+import { appendFiscalFieldsToFormData, computeFiscalBreakdown, resolveFiscalPercents, paymentPayableAmount } from "./supplierFiscal.js";
 import {
   initLiquidationFiscalHandlers,
   setupLiquidationFiscalModal,
@@ -126,9 +126,9 @@ function resolveAsideFiscalBreakdown(data) {
   const supplier = data.supplierRef || null;
   const product = data.fiscalProductRef || null;
   const baseAmount = Number(data.budgetedAmount ?? data.amount ?? 0);
-  const pct = resolveFiscalPercents({ product, supplier });
   const hasStored =
     data.fiscalApplyVat || data.fiscalApplyWithholding || data.fiscalApplyDiscount || data.netAmount;
+  const pct = resolveFiscalPercents({ product, supplier });
 
   return computeFiscalBreakdown({
     supplier,
@@ -192,6 +192,15 @@ export function renderAsideAccountingLine(data) {
   const baseEl = document.getElementById("asideAcctBase");
   if (baseEl) {
     baseEl.textContent = Number.isFinite(baseAmount) && baseAmount > 0 ? formatCurrency(baseAmount, currency) : "—";
+  }
+
+  const noteEl = document.getElementById("asideAccountingNote");
+  if (noteEl) {
+    const payable = paymentPayableAmount(data);
+    const hasPresetFiscal = Boolean(data.fiscalFrozen || (data.netAmount && payable !== baseAmount));
+    noteEl.textContent = hasPresetFiscal
+      ? `Valor líquido a pagar: ${formatCurrency(payable, currency)} — impostos já definidos no orçamento realizado.`
+      : "Não altera o valor base do orçamento.";
   }
 
   section.classList.remove("hidden");

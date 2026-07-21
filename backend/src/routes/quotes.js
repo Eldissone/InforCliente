@@ -14,6 +14,8 @@ const {
   LOCKED_WORKFLOW_STATUSES,
 } = require("../services/needBudgetService");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
+const { quoteFiscalSnapshot } = require("../services/needInstallmentSchedulingService");
+const { buildInstallmentFiscalFields } = require("../services/fiscalCalculationService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const {
   computeQuoteAllocation,
@@ -732,7 +734,24 @@ quoteRoutes.patch(
       where: { id },
       include: {
         supplier: true,
-        need: { select: { id: true, status: true, description: true, projectId: true, costCenterId: true } },
+        supplierProduct: {
+          select: {
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
+          },
+        },
+        need: {
+          select: {
+            id: true,
+            status: true,
+            description: true,
+            projectId: true,
+            costCenterId: true,
+            quantity: true,
+            hours: true,
+          },
+        },
       },
     });
     if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
@@ -749,9 +768,9 @@ quoteRoutes.patch(
       return res.status(400).json({ error: "INVALID_DATE" });
     }
 
-    const totalAmount = Number(quote.totalValue ?? (Number(quote.quantity || 0) * Number(quote.quotedPrice || 0)) ?? quote.quotedPrice);
+    const fiscalSnapshot = quoteFiscalSnapshot(quote, quote.need);
     const plan = buildInstallmentPlan({
-      totalAmount,
+      totalAmount: fiscalSnapshot.net,
       expectedReceiptDate,
       installmentsCount: body.installmentsCount,
     });
@@ -772,6 +791,13 @@ quoteRoutes.patch(
 
       const installments = [];
       for (const item of plan) {
+        const fiscalFields = buildInstallmentFiscalFields({
+          snapshot: fiscalSnapshot,
+          installmentNet: item.amount,
+          supplier: quote.supplier,
+          product: quote.supplierProduct,
+        });
+
         const costPayment = await tx.costPayment.create({
           data: {
             projectId: quote.need.projectId,
@@ -787,8 +813,16 @@ quoteRoutes.patch(
               total: plan.length,
               baseDescription: quote.need.description,
             }),
-            budgetedAmount: String(item.amount),
-            paidAmount: "0",
+            budgetedAmount: fiscalFields.budgetedAmount,
+            paidAmount: fiscalFields.paidAmount,
+            grossAmount: fiscalFields.grossAmount,
+            vatAmount: fiscalFields.vatAmount,
+            withholdingAmount: fiscalFields.withholdingAmount,
+            netAmount: fiscalFields.netAmount,
+            fiscalApplyVat: fiscalFields.fiscalApplyVat,
+            fiscalApplyWithholding: fiscalFields.fiscalApplyWithholding,
+            fiscalApplyDiscount: fiscalFields.fiscalApplyDiscount,
+            fiscalInputMode: fiscalFields.fiscalInputMode,
             paymentMethod: null,
             paymentType: "CREDITO",
             week: null,
@@ -804,7 +838,7 @@ quoteRoutes.patch(
             needId: quote.needId,
             costPaymentId: costPayment.id,
             number: item.number,
-            amount: String(item.amount),
+            amount: String(fiscalFields.payableAmount ?? item.amount),
             currency: quote.currency || "AOA",
             dueDate: item.dueDate,
             status: "PENDENTE",

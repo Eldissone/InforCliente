@@ -2,6 +2,7 @@ const { prisma } = require("../db");
 const { activeProjectRelationFilter } = require("./projectLifecycleService");
 const { mapNeedBudgetFields } = require("./needBudgetService");
 const { quoteAllocatedQty } = require("./quoteAllocationService");
+const { buildQuoteFiscalSnapshot } = require("./fiscalCalculationService");
 
 function quoteLineTotal(quote, need) {
   const stored = Number(quote?.totalValue);
@@ -10,6 +11,23 @@ function quoteLineTotal(quote, need) {
   const price = Number(quote?.quotedPrice) || 0;
   const hours = Number(need?.hours) || 1;
   return qty * price * hours;
+}
+
+function quoteLinePayableTotal(quote, need) {
+  const base = quoteLineTotal(quote, need);
+  const supplier = quote?.supplier || null;
+  const product = quote?.supplierProduct || null;
+  const snapshot = buildQuoteFiscalSnapshot({ baseAmount: base, supplier, product });
+  return snapshot.net;
+}
+
+function quoteFiscalSnapshot(quote, need) {
+  const base = quoteLineTotal(quote, need);
+  return buildQuoteFiscalSnapshot({
+    baseAmount: base,
+    supplier: quote?.supplier || null,
+    product: quote?.supplierProduct || null,
+  });
 }
 
 async function quoteHasPaymentPlan({ quoteId, needId, supplierId }) {
@@ -42,7 +60,25 @@ async function listQuotesAwaitingInstallments({ projectId, needId } = {}) {
       quotes: {
         where: { selected: true },
         include: {
-          supplier: { select: { id: true, name: true, paymentTerm: true } },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              paymentTerm: true,
+              vatPercent: true,
+              withholdingPercent: true,
+              discountPercent: true,
+            },
+          },
+          supplierProduct: {
+            select: {
+              name: true,
+              unit: true,
+              vatPercent: true,
+              withholdingPercent: true,
+              discountPercent: true,
+            },
+          },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -80,7 +116,19 @@ async function listQuotesAwaitingInstallments({ projectId, needId } = {}) {
 function mapPendingInstallmentRow({ need, quote, legacy }) {
   const mapped = mapNeedBudgetFields(need);
   const currency = need.costCenter?.currency || "AOA";
-  const amount = quote ? quoteLineTotal(quote, need) : Number(mapped.realizadoTotal) || 0;
+  let baseAmount = quote ? quoteLineTotal(quote, need) : Number(mapped.realizadoTotal) || 0;
+  let amount = baseAmount;
+  let fiscalSnapshot = null;
+
+  if (quote) {
+    fiscalSnapshot = quoteFiscalSnapshot(quote, need);
+    baseAmount = fiscalSnapshot.base;
+    amount = fiscalSnapshot.net;
+  } else if (baseAmount > 0) {
+    fiscalSnapshot = buildQuoteFiscalSnapshot({ baseAmount });
+    amount = fiscalSnapshot.net;
+  }
+
   const supplier = quote?.supplier || null;
 
   return {
@@ -96,6 +144,8 @@ function mapPendingInstallmentRow({ need, quote, legacy }) {
     status: need.status,
     scheduled: need.scheduled,
     amount,
+    baseAmount,
+    hasFiscal: Boolean(fiscalSnapshot?.hasFiscal),
     currency,
     project: need.project,
     costCenter: need.costCenter,
@@ -115,6 +165,8 @@ async function listPendingFinanceScheduling({ projectId } = {}) {
 
 module.exports = {
   quoteLineTotal,
+  quoteLinePayableTotal,
+  quoteFiscalSnapshot,
   quoteHasPaymentPlan,
   listQuotesAwaitingInstallments,
   listPendingFinanceScheduling,

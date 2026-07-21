@@ -98,6 +98,12 @@ export function setupLiquidationFiscalModal(payment) {
   const section = getEl("liqFiscalSection");
   if (!section) return;
 
+  const fiscalFrozen = Boolean(
+    payment?.fiscalFrozen ||
+      (payment?.netAmount &&
+        (payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount))
+  );
+
   const flags = defaultFiscalFlagsFromSupplier(_currentSupplier, _currentProduct);
   const stored = payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount;
 
@@ -108,6 +114,7 @@ export function setupLiquidationFiscalModal(payment) {
 
   const base = Number(payment?.budgetedAmount ?? payment?.amount ?? 0);
   const gross = Number(payment?.grossAmount ?? base);
+  const net = Number(payment?.netAmount ?? payment?.paidAmount ?? base);
 
   const committed = getEl("liqCommitted");
   if (committed) {
@@ -129,21 +136,43 @@ export function setupLiquidationFiscalModal(payment) {
 
   const hint = getEl("liqFiscalSupplierHint");
   if (hint) {
-    const pct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
-    const parts = [];
-    if (pct.vatPercent) parts.push(`IVA ${pct.vatPercent}%`);
-    if (pct.withholdingPercent) parts.push(`Ret. ${pct.withholdingPercent}%`);
-    if (pct.discountPercent) parts.push(`Desc. ${pct.discountPercent}%`);
-    const source = _currentProduct?.vatPercent || _currentProduct?.withholdingPercent || _currentProduct?.discountPercent
-      ? "produto"
-      : "fornecedor";
-    hint.textContent = parts.length
-      ? `Regime do ${source}: ${parts.join(" · ")}`
-      : "Sem percentagens fiscais no produto/fornecedor — pode activar manualmente.";
+    if (fiscalFrozen) {
+      hint.textContent =
+        "Impostos definidos no orçamento realizado — valor a pagar já inclui IVA/retenção/desconto.";
+    } else {
+      const pct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
+      const parts = [];
+      if (pct.vatPercent) parts.push(`IVA ${pct.vatPercent}%`);
+      if (pct.withholdingPercent) parts.push(`Ret. ${pct.withholdingPercent}%`);
+      if (pct.discountPercent) parts.push(`Desc. ${pct.discountPercent}%`);
+      const source =
+        _currentProduct?.vatPercent ||
+        _currentProduct?.withholdingPercent ||
+        _currentProduct?.discountPercent
+          ? "produto"
+          : "fornecedor";
+      hint.textContent = parts.length
+        ? `Regime do ${source}: ${parts.join(" · ")}`
+        : "Sem percentagens fiscais no produto/fornecedor — pode activar manualmente.";
+    }
   }
+
+  ["liqApplyVat", "liqApplyWithholding", "liqApplyDiscount", "liqFiscalModeBase", "liqFiscalModeGross", "liqBaseAmount", "liqGrossAmount"].forEach(
+    (id) => {
+      const el = getEl(id);
+      if (el) el.disabled = fiscalFrozen;
+    }
+  );
 
   section.classList.remove("hidden");
   refreshFiscalUi();
+
+  const liqAmount = getEl("liqAmount");
+  if (liqAmount && fiscalFrozen && Number.isFinite(net) && net > 0) {
+    liqAmount.value = net;
+    liqAmount.readOnly = true;
+    liqAmount.classList.add("bg-slate-100", "cursor-not-allowed");
+  }
 }
 
 export function getLiquidationFiscalFormDataExtras() {

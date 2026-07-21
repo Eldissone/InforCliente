@@ -9,6 +9,7 @@ import {
 } from "/shared/paymentTimeline.js";
 import { renderPaymentGantt, getDateRangeForView } from "/shared/paymentGantt.js";
 import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
+import { paymentPayableAmount } from "/shared/supplierFiscal.js";
 
 let allProjects = [];
 let ganttViewMode = "month";
@@ -145,7 +146,7 @@ function mergeTimelineDays(paymentDays, extras) {
     (day.items || []).forEach((item) => {
       bucket.items.push(item);
       bucket.count += 1;
-      bucket.totalBudgeted += Number(item.budgetedAmount || 0);
+      bucket.totalBudgeted += paymentPayableAmount(item);
     });
   });
 
@@ -247,7 +248,7 @@ function renderPlanPaymentRow(p) {
       <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(p.description)}">${escapeHtml(p.description || "—")}</td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
       <td>${formatIbanCell(p.iban)}</td>
-      <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(p.budgetedAmount, cur)}</td>
+      <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(paymentPayableAmount(p), cur)}</td>
       <td class="text-center">${renderProformaCell(p.proformaUrl)}</td>
       <td class="text-center">${renderPaymentTypeBadge(p.paymentType)}</td>
       <td class="text-center">${renderStatusBadge(meta.label, meta.badge, icon)}</td>
@@ -1187,7 +1188,7 @@ function updateDashboardKPIsCombined(paymentData, extras) {
 
   paymentItems.forEach((p) => {
     const due = paymentDueDate(p);
-    const amount = Number(p.budgetedAmount || 0);
+    const amount = paymentPayableAmount(p);
     const st = p.timelineStatus || resolveTimelineStatus(p);
 
     if (due.getTime() === today.getTime()) {
@@ -1260,7 +1261,7 @@ function updateDashboardKPIs(paymentData) {
 
   items.forEach((p) => {
     const due = paymentDueDate(p);
-    const amount = Number(p.budgetedAmount || 0);
+    const amount = paymentPayableAmount(p);
     const st = p.timelineStatus || resolveTimelineStatus(p);
 
     if (due.getTime() === today.getTime()) {
@@ -1480,7 +1481,7 @@ function renderBarChartCombined(paymentDays, extras) {
   flattenTimelineItems(paymentDays).forEach((p) => {
     const due = paymentDueDate(p);
     const bucket = buckets.find((b) => b.date.getTime() === due.getTime());
-    if (bucket) bucket.total += Number(p.budgetedAmount || 0);
+    if (bucket) bucket.total += paymentPayableAmount(p);
   });
 
   extras.forEach((e) => {
@@ -1532,7 +1533,7 @@ function renderBarChart(days) {
   flattenTimelineItems(days).forEach((p) => {
     const due = paymentDueDate(p);
     const bucket = buckets.find((b) => b.date.getTime() === due.getTime());
-    if (bucket) bucket.total += Number(p.budgetedAmount || 0);
+    if (bucket) bucket.total += paymentPayableAmount(p);
   });
 
   const max = Math.max(...buckets.map((b) => b.total), 0);

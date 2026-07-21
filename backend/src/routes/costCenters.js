@@ -19,6 +19,8 @@ const {
 } = require("../services/needFinanceBridgeService");
 const {
   quoteLineTotal,
+  quoteLinePayableTotal,
+  quoteFiscalSnapshot,
   listQuotesAwaitingInstallments,
   mapPendingInstallmentRow,
   quoteHasPaymentPlan,
@@ -34,6 +36,9 @@ const { activeProjectRelationFilter } = require("../services/projectLifecycleSer
 const {
   computeFiscalFromPaymentInput,
   mapStoredFiscalFields,
+  buildInstallmentFiscalFields,
+  buildQuoteFiscalSnapshot,
+  paymentHasPresetFiscal,
 } = require("../services/fiscalCalculationService");
 const {
   getEffectivePermissionsForUser,
@@ -248,6 +253,17 @@ async function resolvePaymentFiscalPatch({ body, paymentBefore, supplierRef, pro
     body.budgetedAmount !== undefined ? body.budgetedAmount : paymentBefore.budgetedAmount;
   const paid = body.paidAmount !== undefined ? body.paidAmount : paymentBefore.paidAmount;
 
+  const bodyHasFiscalFlags =
+    body.fiscalApplyVat !== undefined ||
+    body.fiscalApplyWithholding !== undefined ||
+    body.fiscalApplyDiscount !== undefined;
+
+  if (paymentHasPresetFiscal(paymentBefore) && !bodyHasFiscalFlags) {
+    return {
+      paidAmount: String(paymentBefore.netAmount ?? paid),
+    };
+  }
+
   const fiscal = computeFiscalFromPaymentInput({
     supplier: supplierRef,
     product: productRef,
@@ -256,7 +272,14 @@ async function resolvePaymentFiscalPatch({ body, paymentBefore, supplierRef, pro
     body,
   });
 
-  if (!fiscal) return {};
+  if (!fiscal) {
+    if (paymentHasPresetFiscal(paymentBefore)) {
+      return {
+        paidAmount: String(paymentBefore.netAmount ?? paid),
+      };
+    }
+    return {};
+  }
 
   return {
     budgetedAmount: fiscal.budgetedAmount,
@@ -352,6 +375,8 @@ async function mapPaymentItems(items) {
       quoteCurrency,
       budgetedAmount: String(p.budgetedAmount),
       paidAmount: String(p.paidAmount),
+      payableAmount:
+        p.netAmount != null ? String(p.netAmount) : String(p.budgetedAmount),
       ...mapStoredFiscalFields(p),
     };
   });
@@ -1658,7 +1683,16 @@ costCenterRoutes.post(
         costCenter: true,
         quotes: {
           where: { selected: true },
-          include: { supplier: true }
+          include: {
+            supplier: true,
+            supplierProduct: {
+              select: {
+                vatPercent: true,
+                withholdingPercent: true,
+                discountPercent: true,
+              },
+            },
+          },
         }
       },
     });
@@ -1709,16 +1743,27 @@ costCenterRoutes.post(
     }
 
     const totalInstallments = body.installments.length;
-    const quoteTotal = targetQuote ? quoteLineTotal(targetQuote, need) : null;
-    if (quoteTotal != null) {
+    const quoteBaseTotal = targetQuote ? quoteLineTotal(targetQuote, need) : null;
+    const fiscalSnapshot = targetQuote
+      ? quoteFiscalSnapshot(targetQuote, need)
+      : quoteBaseTotal != null
+        ? buildQuoteFiscalSnapshot({ baseAmount: quoteBaseTotal, supplier: targetQuote?.supplier, product: targetQuote?.supplierProduct })
+        : null;
+    const quotePayableTotal = fiscalSnapshot?.net ?? quoteBaseTotal;
+
+    if (quotePayableTotal != null) {
       const sum = body.installments.reduce((acc, inst) => acc + Number(inst.amount), 0);
-      if (Math.abs(sum - quoteTotal) > 0.05) {
+      if (Math.abs(sum - quotePayableTotal) > 0.05) {
+        const label = fiscalSnapshot?.hasFiscal ? "líquido (com impostos)" : "total";
         return res.status(400).json({
           error: "INSTALLMENT_TOTAL_MISMATCH",
-          message: `A soma das parcelas (${sum.toFixed(2)}) deve corresponder ao total do fornecedor (${quoteTotal.toFixed(2)}).`,
+          message: `A soma das parcelas (${sum.toFixed(2)}) deve corresponder ao ${label} do fornecedor (${quotePayableTotal.toFixed(2)}).`,
         });
       }
     }
+
+    const supplierRef = targetQuote?.supplier || null;
+    const productRef = targetQuote?.supplierProduct || null;
 
     const createdPayments = await prisma.$transaction(async (tx) => {
       if (targetQuote?.id) {
@@ -1730,6 +1775,28 @@ costCenterRoutes.post(
 
       const payments = [];
       for (const inst of body.installments) {
+        const fiscalFields =
+          fiscalSnapshot && quotePayableTotal != null
+            ? buildInstallmentFiscalFields({
+                snapshot: fiscalSnapshot,
+                installmentNet: inst.amount,
+                supplier: supplierRef,
+                product: productRef,
+              })
+            : {
+                budgetedAmount: String(inst.amount),
+                paidAmount: "0",
+                grossAmount: null,
+                vatAmount: null,
+                withholdingAmount: null,
+                netAmount: null,
+                fiscalApplyVat: false,
+                fiscalApplyWithholding: false,
+                fiscalApplyDiscount: false,
+                fiscalInputMode: "base",
+                payableAmount: Number(inst.amount),
+              };
+
         const payment = await tx.costPayment.create({
           data: {
             projectId: need.projectId,
@@ -1749,8 +1816,16 @@ costCenterRoutes.post(
                 ? `${need.description} — ${targetQuote.supplier.name}`
                 : need.description,
             }),
-            budgetedAmount: String(inst.amount),
-            paidAmount: "0",
+            budgetedAmount: fiscalFields.budgetedAmount,
+            paidAmount: fiscalFields.paidAmount,
+            grossAmount: fiscalFields.grossAmount,
+            vatAmount: fiscalFields.vatAmount,
+            withholdingAmount: fiscalFields.withholdingAmount,
+            netAmount: fiscalFields.netAmount,
+            fiscalApplyVat: fiscalFields.fiscalApplyVat,
+            fiscalApplyWithholding: fiscalFields.fiscalApplyWithholding,
+            fiscalApplyDiscount: fiscalFields.fiscalApplyDiscount,
+            fiscalInputMode: fiscalFields.fiscalInputMode,
             paymentMethod: null,
             paymentType: body.paymentType,
             week: null,
@@ -1767,7 +1842,7 @@ costCenterRoutes.post(
               needId,
               costPaymentId: payment.id,
               number: inst.installment,
-              amount: String(inst.amount),
+              amount: String(fiscalFields.payableAmount ?? inst.amount),
               currency: targetQuote.currency || need.costCenter?.currency || "AOA",
               dueDate: new Date(inst.paymentDate),
               status: "PENDENTE",

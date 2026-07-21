@@ -129,7 +129,8 @@ function mapStoredFiscalFields(payment) {
     payment.vatAmount != null ||
     payment.fiscalApplyVat ||
     payment.fiscalApplyWithholding ||
-    payment.fiscalApplyDiscount;
+    payment.fiscalApplyDiscount ||
+    payment.netAmount != null;
   if (!hasStored) return null;
 
   return {
@@ -142,7 +143,113 @@ function mapStoredFiscalFields(payment) {
     fiscalApplyWithholding: Boolean(payment.fiscalApplyWithholding),
     fiscalApplyDiscount: Boolean(payment.fiscalApplyDiscount),
     fiscalInputMode: payment.fiscalInputMode || "base",
+    fiscalFrozen: Boolean(
+      payment.netAmount != null &&
+        (payment.fiscalApplyVat || payment.fiscalApplyWithholding || payment.fiscalApplyDiscount)
+    ),
   };
+}
+
+/** Percentagens activas a partir do produto/fornecedor. */
+function defaultFiscalFlagsFromRefs({ supplier = null, product = null } = {}) {
+  const pct = resolveFiscalPercents({ product, supplier });
+  return {
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
+    percents: pct,
+  };
+}
+
+/** Snapshot fiscal de uma linha de cotação (base + líquido a pagar). */
+function buildQuoteFiscalSnapshot({ baseAmount, supplier = null, product = null } = {}) {
+  const base = roundMoney(baseAmount);
+  const flags = defaultFiscalFlagsFromRefs({ supplier, product });
+  const hasFiscal = flags.applyVat || flags.applyWithholding || flags.applyDiscount;
+
+  if (!hasFiscal) {
+    return {
+      base,
+      net: base,
+      gross: base,
+      vat: 0,
+      withholding: 0,
+      discount: 0,
+      applyVat: false,
+      applyWithholding: false,
+      applyDiscount: false,
+      hasFiscal: false,
+    };
+  }
+
+  const breakdown = computeFiscalBreakdown({
+    supplier,
+    product,
+    baseAmount: base,
+    applyVat: flags.applyVat,
+    applyWithholding: flags.applyWithholding,
+    applyDiscount: flags.applyDiscount,
+  });
+
+  return {
+    ...breakdown,
+    applyVat: flags.applyVat,
+    applyWithholding: flags.applyWithholding,
+    applyDiscount: flags.applyDiscount,
+    hasFiscal: true,
+  };
+}
+
+/** Reparte fiscal proporcional de uma parcela (montante = líquido a pagar). */
+function buildInstallmentFiscalFields({ snapshot, installmentNet, supplier = null, product = null }) {
+  const instNet = roundMoney(installmentNet);
+  if (!snapshot?.hasFiscal) {
+    return {
+      budgetedAmount: String(instNet),
+      paidAmount: "0",
+      grossAmount: null,
+      vatAmount: null,
+      withholdingAmount: null,
+      netAmount: null,
+      fiscalApplyVat: false,
+      fiscalApplyWithholding: false,
+      fiscalApplyDiscount: false,
+      fiscalInputMode: "base",
+      payableAmount: instNet,
+    };
+  }
+
+  const ratio = snapshot.net > 0 ? instNet / snapshot.net : 0;
+  const instBase = roundMoney(snapshot.base * ratio);
+  const breakdown = computeFiscalBreakdown({
+    supplier,
+    product,
+    baseAmount: instBase,
+    applyVat: snapshot.applyVat,
+    applyWithholding: snapshot.applyWithholding,
+    applyDiscount: snapshot.applyDiscount,
+  });
+
+  return {
+    budgetedAmount: String(breakdown.base),
+    paidAmount: "0",
+    grossAmount: String(breakdown.gross),
+    vatAmount: String(breakdown.vat),
+    withholdingAmount: String(breakdown.withholding),
+    netAmount: String(breakdown.net),
+    fiscalApplyVat: snapshot.applyVat,
+    fiscalApplyWithholding: snapshot.applyWithholding,
+    fiscalApplyDiscount: snapshot.applyDiscount,
+    fiscalInputMode: "base",
+    payableAmount: breakdown.net,
+  };
+}
+
+function paymentHasPresetFiscal(payment) {
+  return Boolean(
+    payment?.netAmount != null &&
+      (payment.fiscalApplyVat || payment.fiscalApplyWithholding || payment.fiscalApplyDiscount)
+  );
 }
 
 module.exports = {
@@ -151,4 +258,8 @@ module.exports = {
   computeFiscalBreakdown,
   computeFiscalFromPaymentInput,
   mapStoredFiscalFields,
+  defaultFiscalFlagsFromRefs,
+  buildQuoteFiscalSnapshot,
+  buildInstallmentFiscalFields,
+  paymentHasPresetFiscal,
 };
