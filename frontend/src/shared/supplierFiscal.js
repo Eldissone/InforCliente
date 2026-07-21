@@ -114,6 +114,39 @@ export function renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency
   return `<div class="text-[10px] text-slate-400 mt-0.5">${text}</div>`;
 }
 
+/** Totais para linha de cotação: base + líquido (quando há fiscal) e valor para ordenação. */
+export function renderQuotePriceTotalsHtml(supplier, baseAmount, currency = "AOA", product = null) {
+  const breakdown = computeSupplierFiscalBreakdown(supplier, baseAmount, product);
+  const baseFmt = formatFiscalAmount(baseAmount, currency);
+  const fiscalBreakdownHtml = renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency, product);
+
+  if (!breakdown.lines.length) {
+    return {
+      totalHtml: `<div class="text-sm font-black text-slate-900 tabular-nums">${baseFmt}</div>`,
+      fiscalBreakdownHtml: "",
+      sortTotal: baseAmount,
+    };
+  }
+
+  const netFmt = formatFiscalAmount(breakdown.net, currency);
+  return {
+    totalHtml: `
+      <div class="space-y-1 sm:text-right">
+        <div>
+          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base</div>
+          <div class="text-xs font-semibold text-slate-500 tabular-nums">${baseFmt}</div>
+        </div>
+        <div>
+          <div class="text-[9px] font-bold text-emerald-700 uppercase tracking-widest">Líquido</div>
+          <div class="text-sm font-black text-[#0f172a] tabular-nums">${netFmt}</div>
+        </div>
+      </div>
+    `,
+    fiscalBreakdownHtml,
+    sortTotal: breakdown.net,
+  };
+}
+
 export function renderFiscalBreakdownHtml(breakdown, currency = "AOA", { showNet = true } = {}) {
   if (!breakdown?.lines?.length && !showNet) return "";
 

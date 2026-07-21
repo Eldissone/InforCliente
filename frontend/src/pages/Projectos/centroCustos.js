@@ -5,7 +5,7 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
-import { appendFiscalFieldsToFormData } from "/shared/supplierFiscal.js";
+import { appendFiscalFieldsToFormData, computeFiscalBreakdown } from "/shared/supplierFiscal.js";
 import {
   initLiquidationFiscalHandlers,
   setupLiquidationFiscalModal,
@@ -229,17 +229,60 @@ function needsColsAfterTotal() {
   return needsTableColCount() - 2 - needsColsBeforeTotal() - 1;
 }
 
-function fmtFiscalPct(v) {
+function needFiscalPercents(n) {
+  return {
+    vatPercent: Number(n?.fiscalVatPercent) || 0,
+    withholdingPercent: Number(n?.fiscalWithholdingPercent) || 0,
+    discountPercent: Number(n?.fiscalDiscountPercent) || 0,
+  };
+}
+
+function needHasFiscalPercents(n) {
+  const p = needFiscalPercents(n);
+  return p.vatPercent > 0 || p.withholdingPercent > 0 || p.discountPercent > 0;
+}
+
+function needLineBase(n, unitPrice = null) {
+  const unit = unitPrice ?? needDisplayUnitPrice(n);
+  if (unit == null) return 0;
+  const qty = Number(n?.quantity) || 0;
+  const hours = Number(n?.hours) || 1;
+  return qty * unit * hours;
+}
+
+function needFiscalBreakdown(n, { perUnit = false } = {}) {
+  const pct = needFiscalPercents(n);
+  const unit = needDisplayUnitPrice(n);
+  if (unit == null) return null;
+  const baseAmount = perUnit ? unit : needLineBase(n, unit);
+  return computeFiscalBreakdown({
+    fiscalPercents: pct,
+    baseAmount,
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
+  });
+}
+
+function fmtFiscalAmount(v) {
   const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString("pt-PT", { maximumFractionDigits: 2 })}%` : "—";
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  return n.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function renderNeedFiscalCells(n) {
   if (budgetViewMode !== "realizado") return "";
+  const unitBd = needFiscalBreakdown(n, { perUnit: true });
+  if (!unitBd) {
+    return `
+          <td class="text-right text-xs text-slate-600">—</td>
+          <td class="text-right text-xs text-slate-600">—</td>
+          <td class="text-right text-xs text-slate-600">—</td>`;
+  }
   return `
-          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalVatPercent)}</td>
-          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalWithholdingPercent)}</td>
-          <td class="text-center text-xs text-slate-600">${fmtFiscalPct(n.fiscalDiscountPercent)}</td>`;
+          <td class="text-right text-xs text-slate-600">${fmtFiscalAmount(unitBd.vat)}</td>
+          <td class="text-right text-xs text-slate-600">${fmtFiscalAmount(unitBd.withholding)}</td>
+          <td class="text-right text-xs text-slate-600">${fmtFiscalAmount(unitBd.discount)}</td>`;
 }
 
 function updateNeedsTableHead() {
@@ -247,7 +290,7 @@ function updateNeedsTableHead() {
   if (!tr) return;
   const fiscalHead =
     budgetViewMode === "realizado"
-      ? `<th class="text-center">% IVA</th><th class="text-center">% Ret.</th><th class="text-center">% Desc.</th>`
+      ? `<th class="text-right">IVA</th><th class="text-right">Ret.</th><th class="text-right">Desc.</th>`
       : "";
   tr.innerHTML = `
     <th class="text-center w-14">Nº</th>
@@ -525,7 +568,14 @@ function needDisplayUnitPrice(n) {
 
 function needDisplayLineTotal(n) {
   if (budgetViewMode === "realizado") {
-    return n.realizadoTotal != null ? Number(n.realizadoTotal) : null;
+    const unit = needDisplayUnitPrice(n);
+    if (unit == null) return null;
+    if (!needHasFiscalPercents(n)) {
+      const base = needLineBase(n, unit);
+      return base > 0 ? base : (n.realizadoTotal != null ? Number(n.realizadoTotal) : null);
+    }
+    const breakdown = needFiscalBreakdown(n);
+    return breakdown?.net ?? null;
   }
   return Number(n.previstoTotal) || 0;
 }

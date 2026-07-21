@@ -1,5 +1,5 @@
 import { apiUpload, getAssetUrl } from "../services/api.js";
-import { renderSupplierFiscalBreakdownHtml } from "./supplierFiscal.js";
+import { renderQuotePriceTotalsHtml } from "./supplierFiscal.js";
 
 import {
 
@@ -596,7 +596,7 @@ function renderPriceRow({
 
   detailLine,
 
-  totalLine,
+  totalHtml,
 
   fiscalBreakdownHtml = "",
 
@@ -638,7 +638,7 @@ function renderPriceRow({
 
       </div>
 
-      <div class="text-sm font-black text-slate-900 sm:text-right sm:w-36">${totalLine}</div>
+      <div class="sm:text-right sm:w-44 shrink-0">${totalHtml}</div>
 
       <div class="flex items-center gap-2 sm:w-48 sm:justify-end">${actionsHtml}</div>
 
@@ -905,9 +905,9 @@ export async function loadPresentedPrices({
 
       const price = Number(q.quotedPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 });
 
-      const total = totalValue.toLocaleString("pt-PT", { minimumFractionDigits: 2 });
-
       const displayQty = q.quantity ?? need.quantity ?? "—";
+      const currency = q.currency || "AOA";
+      const priceTotals = renderQuotePriceTotalsHtml(q.supplier, totalValue, currency, q.supplierProduct);
 
 
 
@@ -967,7 +967,7 @@ export async function loadPresentedPrices({
 
       entries.push({
 
-        sortTotal: totalValue,
+        sortTotal: priceTotals.sortTotal,
 
         html: renderPriceRow({
 
@@ -979,11 +979,11 @@ export async function loadPresentedPrices({
 
           productName: q.supplierProduct?.name ? `(${q.supplierProduct.name})` : "",
 
-          detailLine: `${displayQty} uni × ${price} ${q.currency}`,
+          detailLine: `${displayQty} uni × ${price} ${currency}`,
 
-          totalLine: `${total} ${q.currency}`,
+          totalHtml: priceTotals.totalHtml,
 
-          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(q.supplier, totalValue, q.currency || "AOA", q.supplierProduct),
+          fiscalBreakdownHtml: priceTotals.fiscalBreakdownHtml,
 
           highlighted: Boolean(q.selected),
 
@@ -1005,13 +1005,14 @@ export async function loadPresentedPrices({
 
       const price = Number(s.product.price).toLocaleString("pt-PT", { minimumFractionDigits: 2 });
 
-      const total = totalValue.toLocaleString("pt-PT", { minimumFractionDigits: 2 });
+      const currency = s.product.currency || "AOA";
+      const priceTotals = renderQuotePriceTotalsHtml(s.supplier, totalValue, currency, s.product);
 
 
 
       entries.push({
 
-        sortTotal: totalValue,
+        sortTotal: priceTotals.sortTotal,
 
         html: renderPriceRow({
 
@@ -1023,11 +1024,11 @@ export async function loadPresentedPrices({
 
           productName: s.product.name,
 
-          detailLine: `${qty} ${need.unit || "uni"} × ${price} ${s.product.currency} / ${s.product.unit || "uni"}`,
+          detailLine: `${qty} ${need.unit || "uni"} × ${price} ${currency} / ${s.product.unit || "uni"}`,
 
-          totalLine: `${total} ${s.product.currency}`,
+          totalHtml: priceTotals.totalHtml,
 
-          fiscalBreakdownHtml: renderSupplierFiscalBreakdownHtml(s.supplier, totalValue, s.product.currency || "AOA", s.product),
+          fiscalBreakdownHtml: priceTotals.fiscalBreakdownHtml,
 
           actionsHtml: !isLocked
 
