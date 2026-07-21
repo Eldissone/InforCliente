@@ -1,5 +1,7 @@
 const WEEKDAY_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
+import { toDateKey } from "./format.js";
+
 export const DELIVERY_STATUS = {
   PENDENTE: { label: "Previsto", badge: "bg-blue-100 text-blue-700", dot: "bg-blue-400" },
   ATRASADO: { label: "Atrasado", badge: "bg-red-100 text-red-700", dot: "bg-red-500" },
@@ -14,8 +16,8 @@ export function resolveDeliveryStatus(item) {
 export function renderDeliveryCalendar(days, { year, month, onDayClick = "selectDeliveryDay" } = {}) {
   const dayMap = new Map();
   (days || []).forEach((d) => {
-    const key = new Date(d.date).toISOString().slice(0, 10);
-    dayMap.set(key, d);
+    const key = toDateKey(d.date);
+    if (key) dayMap.set(key, d);
   });
 
   const first = new Date(year, month, 1);
@@ -43,7 +45,7 @@ export function renderDeliveryCalendar(days, { year, month, onDayClick = "select
     const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
     const dayData = dayMap.get(iso);
     const count = dayData?.count || 0;
-    const isToday = iso === new Date().toISOString().slice(0, 10);
+    const isToday = iso === toDateKey(new Date());
     const hasOverdue = dayData?.items?.some((q) => resolveDeliveryStatus(q) === "ATRASADO");
     const hasPending = dayData?.items?.some((q) => resolveDeliveryStatus(q) === "PENDENTE");
 

@@ -31,6 +31,8 @@ const {
   fetchDeliveryFieldsByQuoteIds,
   setQuoteDeliveryPending,
 } = require("../services/deliveryFieldBridge");
+const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
+const { normalizeDateOnly } = require("../utils/dateOnly");
 const multer = require("multer");
 const path = require("path");
 
@@ -248,6 +250,55 @@ quoteRoutes.get(
   })
 );
 
+// PATCH /quotes/need/:needId/reception-plan — Data/local previstos de recepção em obra
+quoteRoutes.patch(
+  "/need/:needId/reception-plan",
+  asyncHandler(async (req, res) => {
+    const needId = String(req.params.needId);
+    const body = z
+      .object({
+        siteReceptionPlannedAt: z.string().datetime().optional().nullable(),
+        siteReceptionLocation: z.string().max(200).optional().nullable(),
+      })
+      .parse(req.body);
+
+    const existing = await prisma.workNeed.findUnique({
+      where: { id: needId },
+      select: { id: true, status: true },
+    });
+    if (!existing) return res.status(404).json({ error: "NEED_NOT_FOUND" });
+
+    const plannedAt =
+      body.siteReceptionPlannedAt !== undefined
+        ? body.siteReceptionPlannedAt
+          ? normalizeDateOnly(body.siteReceptionPlannedAt)
+          : null
+        : undefined;
+
+    const updated = await prisma.workNeed.update({
+      where: { id: needId },
+      data: {
+        ...(plannedAt !== undefined ? { siteReceptionPlannedAt: plannedAt } : {}),
+        ...(body.siteReceptionLocation !== undefined
+          ? { siteReceptionLocation: body.siteReceptionLocation?.trim() || null }
+          : {}),
+      },
+      select: {
+        id: true,
+        costCenterId: true,
+        siteReceptionPlannedAt: true,
+        siteReceptionLocation: true,
+      },
+    });
+
+    if (body.siteReceptionPlannedAt !== undefined) {
+      await syncNeedReceptionToOrderedQuotes(needId, updated.siteReceptionPlannedAt);
+    }
+
+    return res.json({ need: updated });
+  })
+);
+
 // Obter o plano de parcelas (crédito) já gerado para uma necessidade
 quoteRoutes.get(
   "/need/:needId/installments",
@@ -306,6 +357,8 @@ quoteRoutes.get(
             quantity: true,
             unit: true,
             projectId: true,
+            siteReceptionPlannedAt: true,
+            siteReceptionLocation: true,
             project: { select: { id: true, name: true, code: true } },
             costCenter: { select: { code: true, name: true } },
           },
@@ -330,7 +383,8 @@ quoteRoutes.get(
         ...q,
         deliveryStatus: extra.deliveryStatus || "PENDENTE",
         receivedAt: extra.receivedAt || null,
-        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+        expectedReceiptDate:
+          q.expectedReceiptDate || q.need?.siteReceptionPlannedAt || extra.expectedReceiptDate || null,
       };
     });
 
@@ -668,13 +722,14 @@ quoteRoutes.patch(
 
     let expectedReceiptDate = quote.expectedReceiptDate;
     if (body.expectedReceiptDate) {
-      expectedReceiptDate = new Date(body.expectedReceiptDate);
+      expectedReceiptDate = normalizeDateOnly(body.expectedReceiptDate);
     } else if (!expectedReceiptDate && quote.need?.siteReceptionPlannedAt) {
-      expectedReceiptDate = new Date(quote.need.siteReceptionPlannedAt);
+      expectedReceiptDate = normalizeDateOnly(quote.need.siteReceptionPlannedAt);
     } else if (!expectedReceiptDate) {
       const leadDays = body.leadDays ?? 15;
-      expectedReceiptDate = new Date();
-      expectedReceiptDate.setDate(expectedReceiptDate.getDate() + leadDays);
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + leadDays);
+      expectedReceiptDate = normalizeDateOnly(d);
     }
 
     const updatedQuote = await prisma.needQuote.update({

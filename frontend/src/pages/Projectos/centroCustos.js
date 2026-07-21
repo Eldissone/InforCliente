@@ -3,7 +3,7 @@ import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.j
 import { getSessionUser } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
-import { formatCurrency, formatDateBR } from "/shared/format.js";
+import { formatCurrency, formatDateBR, formatDateOnlyBR, toDateKey } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
 import { appendFiscalFieldsToFormData, computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFiscal.js";
 import {
@@ -1222,10 +1222,21 @@ function renderCronogramaPlanning(links) {
 
   section.classList.remove("hidden");
   tbody.innerHTML = links.map((row) => {
-    const entrega = row.expectedReceiptDate ? formatDateBR(row.expectedReceiptDate) : "—";
-    const armazem = row.warehouseReceivedAt ? formatDateBR(row.warehouseReceivedAt) : "—";
-    const obra = row.siteReceivedAt ? formatDateBR(row.siteReceivedAt) : "—";
-    const pagamento = row.nextPaymentDate ? formatDateBR(row.nextPaymentDate) : "—";
+    const entrega = row.expectedReceiptDate ? formatDateOnlyBR(row.expectedReceiptDate) : "—";
+    const armazem = row.warehouseReceivedAt ? formatDateOnlyBR(row.warehouseReceivedAt) : "—";
+    let obraHtml = "—";
+    if (row.siteReceivedAt) {
+      obraHtml = `<span class="text-sky-700 font-semibold" title="Recepção confirmada">${formatDateOnlyBR(row.siteReceivedAt)}</span>`;
+    } else if (row.siteReceptionPlannedAt) {
+      const dateLabel = formatDateOnlyBR(row.siteReceptionPlannedAt);
+      const locRaw = row.siteReceptionLocation?.trim() || "";
+      const locEsc = locRaw
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/"/g, "&quot;");
+      obraHtml = `<div class="leading-tight"><span class="text-sky-600 font-semibold" title="Recepção planeadas na cotação">${dateLabel}</span>${locEsc ? `<div class="text-[10px] text-slate-400 font-normal mt-0.5">${locEsc}</div>` : ""}</div>`;
+    }
+    const pagamento = row.nextPaymentDate ? formatDateOnlyBR(row.nextPaymentDate) : "—";
     const payBadge = row.nextPaymentStatus === "CONFIRMADO"
       ? "bg-emerald-100 text-emerald-700"
       : row.nextPaymentDate
@@ -1237,7 +1248,7 @@ function renderCronogramaPlanning(links) {
       <td class="text-sm text-slate-600">${row.supplier || "—"}</td>
       <td class="text-center text-xs font-semibold text-slate-700">${entrega}</td>
       <td class="text-center text-xs text-slate-500">${armazem}</td>
-      <td class="text-center text-xs font-semibold ${row.siteReceivedAt ? "text-sky-700" : "text-slate-400"}">${obra}</td>
+      <td class="text-center text-xs">${obraHtml}</td>
       <td class="text-center"><span class="text-[10px] font-bold px-2 py-1 rounded-full ${payBadge}">${pagamento}</span></td>
     </tr>`;
   }).join("");

@@ -1,4 +1,5 @@
 import { apiUpload, getAssetUrl } from "../services/api.js";
+import { dateInputToUtcNoonIso, toDateKey } from "./format.js";
 import { renderQuotePriceTotalsHtml } from "./supplierFiscal.js";
 
 import {
@@ -65,15 +66,70 @@ function updateQuoteQuantityHint(allocation, need) {
       : "Quantidade total alocada — ajuste nas linhas abaixo.";
 }
 
-function loadSiteReceptionFields(needMeta) {
+let siteReceptionDirty = false;
+let siteReceptionSaveTimer = null;
+
+function formatSiteReceptionDateInput(isoOrDate) {
+  return toDateKey(isoOrDate) || "";
+}
+
+function resolveQuoteToast(showToast) {
+  return showToast || window.showQuoteToast;
+}
+
+function loadSiteReceptionFields(needMeta, { force = false } = {}) {
   const dateEl = document.getElementById("quoteSiteReceptionDate");
   const locEl = document.getElementById("quoteSiteReceptionLocation");
   const savedEl = document.getElementById("quoteSiteReceptionSaved");
   if (!dateEl || !locEl) return;
-  const planned = needMeta?.siteReceptionPlannedAt;
-  dateEl.value = planned ? String(planned).substring(0, 10) : "";
+  if (!force && siteReceptionDirty) return;
+  dateEl.value = formatSiteReceptionDateInput(needMeta?.siteReceptionPlannedAt);
   locEl.value = needMeta?.siteReceptionLocation || "";
   if (savedEl) savedEl.classList.add("hidden");
+}
+
+function wireQuoteSiteReception({ need, apiRequest, showToast }) {
+  siteReceptionDirty = false;
+  if (siteReceptionSaveTimer) {
+    clearTimeout(siteReceptionSaveTimer);
+    siteReceptionSaveTimer = null;
+  }
+
+  const dateEl = document.getElementById("quoteSiteReceptionDate");
+  const locEl = document.getElementById("quoteSiteReceptionLocation");
+  const saveSiteBtn = document.getElementById("btnSaveQuoteSiteReception");
+  const toast = resolveQuoteToast(showToast);
+  const save = () =>
+    saveQuoteSiteReception({
+      need: window.__quoteModalNeed || need,
+      apiRequest,
+      showToast: toast,
+    });
+
+  if (saveSiteBtn) saveSiteBtn.onclick = save;
+
+  const markDirty = () => {
+    siteReceptionDirty = true;
+    document.getElementById("quoteSiteReceptionSaved")?.classList.add("hidden");
+  };
+  const scheduleAutoSave = () => {
+    markDirty();
+    clearTimeout(siteReceptionSaveTimer);
+    siteReceptionSaveTimer = setTimeout(save, 700);
+  };
+
+  if (dateEl) {
+    dateEl.disabled = false;
+    dateEl.readOnly = false;
+    dateEl.oninput = markDirty;
+    dateEl.onchange = scheduleAutoSave;
+  }
+  if (locEl) {
+    locEl.disabled = false;
+    locEl.readOnly = false;
+    locEl.oninput = markDirty;
+    locEl.onchange = scheduleAutoSave;
+  }
 }
 
 function canPlaceOrderOnQuote(need, quote) {
@@ -188,27 +244,38 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
 }
 
 async function saveQuoteSiteReception({ need, apiRequest, showToast }) {
-  const ccId = needCostCenterId(need);
-  if (!ccId || !need?.id) {
-    showToast?.("Centro de custo não encontrado.", "error");
-    return;
+  const toast = resolveQuoteToast(showToast);
+  if (!need?.id) {
+    toast?.("Item não encontrado.", "error");
+    return false;
   }
-  const dateStr = document.getElementById("quoteSiteReceptionDate")?.value;
+  const dateStr = document.getElementById("quoteSiteReceptionDate")?.value?.trim() || "";
   const location = document.getElementById("quoteSiteReceptionLocation")?.value?.trim() || null;
   const body = {
     siteReceptionLocation: location,
-    siteReceptionPlannedAt: dateStr ? new Date(dateStr + "T12:00:00").toISOString() : null,
+    siteReceptionPlannedAt: dateInputToUtcNoonIso(dateStr),
   };
   try {
-    await apiRequest(`/cost-centers/${ccId}/needs/${need.id}`, { method: "PATCH", body });
+    const result = await apiRequest(`/quotes/need/${need.id}/reception-plan`, { method: "PATCH", body });
+    const saved = result?.need || {};
+    siteReceptionDirty = false;
+    window.__quoteModalNeed = {
+      ...(window.__quoteModalNeed || need),
+      siteReceptionPlannedAt: saved.siteReceptionPlannedAt ?? body.siteReceptionPlannedAt,
+      siteReceptionLocation: saved.siteReceptionLocation ?? location,
+      costCenterId: saved.costCenterId ?? needCostCenterId(need),
+    };
+    loadSiteReceptionFields(window.__quoteModalNeed, { force: true });
     const savedEl = document.getElementById("quoteSiteReceptionSaved");
     if (savedEl) {
       savedEl.textContent = "Recepção planeadas guardada.";
       savedEl.classList.remove("hidden");
     }
-    showToast?.("Recepção em obra guardada.", "success");
+    toast?.("Recepção em obra guardada.", "success");
+    return true;
   } catch (err) {
-    showToast?.("Erro: " + err.message, "error");
+    toast?.("Erro ao guardar recepção: " + err.message, "error");
+    return false;
   }
 }
 
@@ -405,7 +472,7 @@ function renderReadyToOrderBanner(selectedQuote) {
 
           <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${payableLabel}.
 
-          Pode trocar de fornecedor, carregar proforma ou confirmar encomenda.
+          Pode trocar de fornecedor, carregar proforma ou encomendar na linha do fornecedor abaixo.
 
         </p>
 
@@ -414,26 +481,13 @@ function renderReadyToOrderBanner(selectedQuote) {
       </div>
 
       <div class="flex flex-col gap-2 shrink-0 sm:min-w-[200px]">
-        <div class="flex items-center gap-2">
         <button type="button" id="btnCancelSelection"
 
-          class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-all">
+          class="h-10 px-4 rounded-lg bg-white border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-50 transition-all whitespace-nowrap">
 
           Cancelar Selecção
 
         </button>
-
-        <button type="button" id="btnPlaceOrder"
-
-          class="h-10 px-4 rounded-lg bg-[#0f172a] text-white text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-
-          <span class="material-symbols-outlined text-base">local_shipping</span>
-
-          Encomendar
-
-        </button>
-
-        </div>
 
       </div>
 
@@ -688,8 +742,9 @@ export async function loadPresentedPrices({
 
 
     const quotes = dedupeQuotes(quotesData.items || []);
-    const needMeta = quotesData.need || need;
+    const needMeta = { ...(need || {}), ...(quotesData.need || {}) };
     const allocation = quotesData.allocation || null;
+    window.__quoteModalNeed = needMeta;
     window.__quoteModalAllocation = allocation;
 
     renderAllocationSummary(allocation, needMeta);
@@ -730,22 +785,6 @@ export async function loadPresentedPrices({
     } else if (!isLocked && selectedQuote && selectedQuotes.length === 1) {
 
       renderReadyToOrderBanner(selectedQuote);
-
-      document.getElementById("btnPlaceOrder")?.addEventListener("click", async () => {
-
-        await placeOrderWithPdf(selectedQuote.id, needId, {
-
-          apiRequest,
-
-          showToast: window.showQuoteToast,
-
-          onApproved: window.onQuoteApproved,
-
-          need,
-
-        });
-
-      });
 
       document.getElementById("btnCancelSelection")?.addEventListener("click", async () => {
 
@@ -1460,7 +1499,7 @@ export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast
 
     const siteDate = getSiteReceptionDateStr();
     const orderBody = siteDate
-      ? { expectedReceiptDate: new Date(siteDate + "T12:00:00").toISOString() }
+      ? { expectedReceiptDate: dateInputToUtcNoonIso(siteDate) }
       : {};
 
     const result = await apiRequest(`/quotes/${quoteId}/place-order`, { method: "PATCH", body: orderBody });
@@ -1592,10 +1631,7 @@ export async function openQuotePricingModal({
 
   document.getElementById("quoteQuantity").value = need.quantity || "";
 
-  const saveSiteBtn = document.getElementById("btnSaveQuoteSiteReception");
-  if (saveSiteBtn) {
-    saveSiteBtn.onclick = () => saveQuoteSiteReception({ need, apiRequest, showToast });
-  }
+  wireQuoteSiteReception({ need, apiRequest, showToast });
 
   const proformaInput = document.getElementById("quoteProforma");
 

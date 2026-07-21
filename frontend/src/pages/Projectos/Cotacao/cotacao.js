@@ -652,6 +652,7 @@ async function openQuoteModal(needId) {
     suppliers: currentSuppliers,
     apiRequest,
     openProformaViewer: window.openProformaViewer,
+    showToast,
   });
 }
 

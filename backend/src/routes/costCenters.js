@@ -63,6 +63,8 @@ const {
 } = require("../services/needPaymentStatusService");
 const { buildDeliveryTimeline, suggestProductId } = require("../services/deliveryTimelineService");
 const { fetchDeliveryFieldsByQuoteIds } = require("../services/deliveryFieldBridge");
+const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
+const { normalizeDateOnly } = require("../utils/dateOnly");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -483,6 +485,8 @@ costCenterRoutes.get(
             quantity: true,
             unit: true,
             projectId: true,
+            siteReceptionPlannedAt: true,
+            siteReceptionLocation: true,
             project: { select: { id: true, name: true, code: true } },
             costCenter: { select: { code: true, name: true } },
           },
@@ -507,7 +511,8 @@ costCenterRoutes.get(
         ...q,
         deliveryStatus: extra.deliveryStatus || "PENDENTE",
         receivedAt: extra.receivedAt || null,
-        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+        expectedReceiptDate:
+          q.expectedReceiptDate || q.need?.siteReceptionPlannedAt || extra.expectedReceiptDate || null,
       };
     });
 
@@ -624,6 +629,8 @@ costCenterRoutes.get(
               description: true,
               siteReceivedAt: true,
               siteReceivedBy: true,
+              siteReceptionPlannedAt: true,
+              siteReceptionLocation: true,
               costCenter: { select: { code: true, name: true } },
             },
           },
@@ -652,7 +659,8 @@ costCenterRoutes.get(
         ...q,
         deliveryStatus: extra.deliveryStatus || "PENDENTE",
         receivedAt: extra.receivedAt || null,
-        expectedReceiptDate: q.expectedReceiptDate || extra.expectedReceiptDate || null,
+        expectedReceiptDate:
+          q.expectedReceiptDate || q.need?.siteReceptionPlannedAt || extra.expectedReceiptDate || null,
       };
     });
 
@@ -679,8 +687,11 @@ costCenterRoutes.get(
         quoteId: q.id,
         description: q.need?.description || "",
         costCenter: q.need?.costCenter || null,
-        expectedReceiptDate: q.expectedReceiptDate,
+        expectedReceiptDate:
+          q.expectedReceiptDate || q.need?.siteReceptionPlannedAt || null,
         warehouseReceivedAt: q.receivedAt,
+        siteReceptionPlannedAt: q.need?.siteReceptionPlannedAt || null,
+        siteReceptionLocation: q.need?.siteReceptionLocation || null,
         siteReceivedAt: q.need?.siteReceivedAt || null,
         siteReceivedBy: q.need?.siteReceivedBy || null,
         deliveryStatus: q.deliveryStatus,
@@ -1491,7 +1502,7 @@ costCenterRoutes.patch(
         ...(body.siteReceptionPlannedAt !== undefined
           ? {
               siteReceptionPlannedAt: body.siteReceptionPlannedAt
-                ? new Date(body.siteReceptionPlannedAt)
+                ? normalizeDateOnly(body.siteReceptionPlannedAt)
                 : null,
             }
           : {}),
@@ -1502,6 +1513,14 @@ costCenterRoutes.patch(
       },
       select: { id: true },
     });
+
+    if (body.siteReceptionPlannedAt !== undefined) {
+      const plannedAt = body.siteReceptionPlannedAt
+        ? normalizeDateOnly(body.siteReceptionPlannedAt)
+        : null;
+      await syncNeedReceptionToOrderedQuotes(needId, plannedAt);
+    }
+
     return res.json({ id: updated.id });
   })
 );

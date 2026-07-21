@@ -1,13 +1,15 @@
-function startOfDay(value) {
-  const d = value instanceof Date ? new Date(value) : new Date(value);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+const {
+  toDateKey,
+  todayDateKey,
+  compareDateKeys,
+  dateKeyToUtcNoon,
+} = require("../utils/dateOnly");
 
-function addDays(value, days) {
-  const d = startOfDay(value);
-  d.setDate(d.getDate() + days);
-  return d;
+function addDaysKey(dateKey, days) {
+  const d = dateKeyToUtcNoon(dateKey);
+  if (!d) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return toDateKey(d);
 }
 
 function formatOrderRef(orderNumber) {
@@ -15,17 +17,18 @@ function formatOrderRef(orderNumber) {
   return `EF${String(orderNumber).padStart(3, "0")}`;
 }
 
-function getDeliveryDueDate(quote) {
-  if (!quote.expectedReceiptDate) return null;
-  return startOfDay(quote.expectedReceiptDate);
+function getDeliveryDueDateKey(quote) {
+  const raw = quote.expectedReceiptDate || quote.need?.siteReceptionPlannedAt || null;
+  return toDateKey(raw);
 }
 
 function resolveDeliveryTimelineStatus(quote, now = new Date()) {
   const stored = String(quote.deliveryStatus || "PENDENTE").toUpperCase();
   if (stored === "RECEBIDO") return "RECEBIDO";
-  const due = getDeliveryDueDate(quote);
-  if (!due) return "PENDENTE";
-  if (due < startOfDay(now)) return "ATRASADO";
+  const dueKey = getDeliveryDueDateKey(quote);
+  if (!dueKey) return "PENDENTE";
+  const todayKey = todayDateKey(now);
+  if (compareDateKeys(dueKey, todayKey) < 0) return "ATRASADO";
   return "PENDENTE";
 }
 
@@ -48,7 +51,7 @@ function matchesSearch(quote, search) {
 }
 
 function mapQuoteForTimeline(quote, now = new Date()) {
-  const dueDate = getDeliveryDueDate(quote);
+  const dueDateKey = getDeliveryDueDateKey(quote);
   const timelineStatus = resolveDeliveryTimelineStatus(quote, now);
   const qty = quote.quantity != null ? Number(quote.quantity) : Number(quote.need?.quantity) || 0;
   return {
@@ -56,11 +59,11 @@ function mapQuoteForTimeline(quote, now = new Date()) {
     needId: quote.needId,
     orderNumber: quote.orderNumber,
     orderRef: formatOrderRef(quote.orderNumber),
-    expectedReceiptDate: quote.expectedReceiptDate,
+    expectedReceiptDate: quote.expectedReceiptDate || quote.need?.siteReceptionPlannedAt || null,
     receivedAt: quote.receivedAt,
     deliveryStatus: quote.deliveryStatus,
     timelineStatus,
-    dueDate: dueDate ? dueDate.toISOString() : null,
+    dueDate: dueDateKey,
     quantity: qty,
     quotedPrice: quote.quotedPrice != null ? String(quote.quotedPrice) : null,
     totalValue: quote.totalValue != null ? String(quote.totalValue) : null,
@@ -85,9 +88,9 @@ function buildDeliveryTimeline(quotes, options = {}) {
     daysPast = 30,
   } = options;
 
-  const today = startOfDay(now);
-  const rangeStart = dateFrom ? startOfDay(dateFrom) : addDays(today, -daysPast);
-  const rangeEnd = dateTo ? startOfDay(dateTo) : addDays(today, daysAhead);
+  const todayKey = todayDateKey(now);
+  const rangeStart = dateFrom ? toDateKey(dateFrom) : addDaysKey(todayKey, -daysPast);
+  const rangeEnd = dateTo ? toDateKey(dateTo) : addDaysKey(todayKey, daysAhead);
 
   const enriched = quotes
     .map((q) => mapQuoteForTimeline(q, now))
@@ -97,16 +100,11 @@ function buildDeliveryTimeline(quotes, options = {}) {
       if (statusFilter && q.timelineStatus !== statusFilter) return false;
       if (q.timelineStatus === "RECEBIDO" && !includeReceived) return false;
       if (!q.dueDate) return !dateFrom && !dateTo;
-      const due = startOfDay(q.dueDate);
-      if (due < rangeStart || due > rangeEnd) return false;
+      if (compareDateKeys(q.dueDate, rangeStart) < 0) return false;
+      if (compareDateKeys(q.dueDate, rangeEnd) > 0) return false;
       return true;
     })
-    .sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return new Date(a.dueDate) - new Date(b.dueDate);
-    });
+    .sort((a, b) => compareDateKeys(a.dueDate, b.dueDate));
 
   const dayMap = new Map();
   const noDateItems = [];
@@ -116,7 +114,7 @@ function buildDeliveryTimeline(quotes, options = {}) {
       noDateItems.push(q);
       return;
     }
-    const key = startOfDay(q.dueDate).toISOString();
+    const key = q.dueDate;
     if (!dayMap.has(key)) {
       dayMap.set(key, { date: key, items: [], count: 0 });
     }
@@ -125,7 +123,7 @@ function buildDeliveryTimeline(quotes, options = {}) {
     day.count += 1;
   });
 
-  const days = [...dayMap.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const days = [...dayMap.values()].sort((a, b) => compareDateKeys(a.date, b.date));
 
   return {
     days,
@@ -157,11 +155,28 @@ function suggestProductId(supplierProductName, products) {
   return partial?.id || null;
 }
 
+// Compatibilidade com código legado
+function startOfDay(value) {
+  const key = toDateKey(value);
+  return key ? dateKeyToUtcNoon(key) : null;
+}
+
+function addDays(value, days) {
+  const key = toDateKey(value);
+  return key ? dateKeyToUtcNoon(addDaysKey(key, days)) : null;
+}
+
+function getDeliveryDueDate(quote) {
+  const key = getDeliveryDueDateKey(quote);
+  return key ? dateKeyToUtcNoon(key) : null;
+}
+
 module.exports = {
   startOfDay,
   addDays,
   formatOrderRef,
   getDeliveryDueDate,
+  getDeliveryDueDateKey,
   resolveDeliveryTimelineStatus,
   mapQuoteForTimeline,
   buildDeliveryTimeline,

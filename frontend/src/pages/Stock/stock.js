@@ -4,6 +4,7 @@ import { openModal, initMobileMenu, escapeHtml as esc, renderProductImageThumb, 
 import { resolveProductImageUrl } from "../../services/api.js";
 import { can, initPermissionLayer, activateFirstVisibleStockTab, guardPageAccess } from "../../shared/permissions.js";
 import { renderDeliveryCalendar, DELIVERY_STATUS, resolveDeliveryStatus } from "../../shared/deliveryTimeline.js";
+import { toDateKey } from "../../shared/format.js";
 import { renderFreightTab } from "../../shared/freightOrders.js";
 
 let deliveryMonth = new Date();
@@ -3709,9 +3710,7 @@ function renderDeliveryCalendarGrid() {
 }
 
 window.selectDeliveryDay = function (isoDate) {
-    const dayData = (deliveryCache.days || []).find(
-        (d) => new Date(d.date).toISOString().slice(0, 10) === isoDate
-    );
+    const dayData = (deliveryCache.days || []).find((d) => toDateKey(d.date) === isoDate);
     const title = document.getElementById("deliveryDayTitle");
     const body = document.getElementById("deliveryDayBody");
     if (!title || !body) return;
@@ -3743,6 +3742,7 @@ window.selectDeliveryDay = function (isoDate) {
                         <p class="text-sm font-semibold text-slate-900 truncate">${esc(label)}</p>
                         <p class="text-[10px] text-slate-500 mt-0.5">${esc(q.orderRef || "—")} · ${esc(q.need?.project?.name || "—")}</p>
                         <p class="text-[10px] text-slate-400">${esc(q.supplier?.name || "—")} · ${qty} ${esc(unit)}</p>
+                        ${q.need?.siteReceptionLocation ? `<p class="text-[10px] text-sky-600 mt-0.5">${esc(q.need.siteReceptionLocation)}</p>` : ""}
                     </div>
                     <span class="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0 ${meta.badge}">${meta.label}</span>
                 </div>
