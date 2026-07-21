@@ -1243,9 +1243,9 @@
                                     <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">P. Unit.</span>
                                     <span id="asideAcctUnitPrice" class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
                                 </div>
-                                <div class="flex flex-col gap-0.5">
+                                <div class="flex flex-col gap-0.5 min-w-[5.5rem]">
                                     <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">IVA</span>
-                                    <span id="asideAcctVat" class="text-xs font-bold text-emerald-600 tabular-nums whitespace-nowrap">—</span>
+                                    <div id="asideAcctVat" class="flex flex-col gap-0.5 text-emerald-600 tabular-nums">—</div>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
                                     <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Desc</span>
@@ -1259,9 +1259,13 @@
                                     <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Valor Previsto (base)</span>
                                     <span id="asideAcctBase" class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">—</span>
                                 </div>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[9px] font-black uppercase tracking-widest text-emerald-700 whitespace-nowrap">Líquido a pagar</span>
+                                    <span id="asideAcctNet" class="text-sm font-black text-[#0f172a] tabular-nums whitespace-nowrap">—</span>
+                                </div>
                             </div>
                         </div>
-                        <p id="asideAccountingNote" class="text-[10px] text-slate-400 font-semibold">Não altera o valor base do orçamento.</p>
+                        <p id="asideAccountingNote" class="hidden text-[10px] text-slate-400 font-semibold">Não altera o valor base do orçamento.</p>
                     </div>
                 </div>
             </div>

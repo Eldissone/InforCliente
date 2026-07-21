@@ -122,24 +122,57 @@ function formatAsideSignedAmount(value, currency, { positive = true } = {}) {
   return positive ? `+${fmt}` : `−${fmt}`;
 }
 
-function resolveAsideFiscalBreakdown(data) {
+function resolveAsideLineBase(data) {
+  const qtyNum = Number(data.quoteQuantity) || 0;
+  const unitPriceNum = Number(data.quoteUnitPrice) || 0;
+  const quoteTotal = Number(data.quoteTotalValue) || 0;
+
+  if (qtyNum > 0 && unitPriceNum > 0) {
+    return Math.round(qtyNum * unitPriceNum * 100) / 100;
+  }
+  if (quoteTotal > 0) return quoteTotal;
+  return Number(data.budgetedAmount ?? data.amount ?? 0) || 0;
+}
+
+function resolveAsideFiscalBreakdown(data, lineBaseAmount) {
   const supplier = data.supplierRef || null;
   const product = data.fiscalProductRef || null;
-  const baseAmount = Number(data.budgetedAmount ?? data.amount ?? 0);
+  const baseAmount =
+    lineBaseAmount != null
+      ? lineBaseAmount
+      : Number(data.budgetedAmount ?? data.amount ?? 0);
   const hasStored =
     data.fiscalApplyVat || data.fiscalApplyWithholding || data.fiscalApplyDiscount || data.netAmount;
   const pct = resolveFiscalPercents({ product, supplier });
-
-  return computeFiscalBreakdown({
+  const flags = {
     supplier,
     product,
-    baseAmount,
-    grossAmount: data.grossAmount,
-    inputMode: data.fiscalInputMode || "base",
     applyVat: hasStored ? Boolean(data.fiscalApplyVat) : pct.vatPercent > 0,
     applyWithholding: hasStored ? Boolean(data.fiscalApplyWithholding) : pct.withholdingPercent > 0,
     applyDiscount: hasStored ? Boolean(data.fiscalApplyDiscount) : pct.discountPercent > 0,
+  };
+
+  const breakdown = computeFiscalBreakdown({
+    ...flags,
+    baseAmount,
+    grossAmount: data.grossAmount,
+    inputMode: data.fiscalInputMode || "base",
   });
+
+  return { breakdown, flags };
+}
+
+function renderAsideVatCell({ unitPrice, breakdown, unitBreakdown, currency, applyVat }) {
+  if (!applyVat || (!unitBreakdown?.vat && !breakdown.vat)) return "—";
+  const unitVat = unitBreakdown?.vat
+    ? formatAsideSignedAmount(unitBreakdown.vat, currency, { positive: true })
+    : "—";
+  const totalVat = breakdown.vat
+    ? formatAsideSignedAmount(breakdown.vat, currency, { positive: true })
+    : "—";
+  return `
+    <span class="text-[10px] font-semibold whitespace-nowrap" title="IVA sobre P. Unit.">${unitVat}<span class="text-slate-400 font-normal">/un</span></span>
+    <span class="text-xs font-bold whitespace-nowrap" title="IVA sobre Valor Previsto">${totalVat}</span>`;
 }
 
 export function renderAsideProductSection(data) {
@@ -165,8 +198,17 @@ export function renderAsideAccountingLine(data) {
   const unit = data.needUnit || "un";
   const qty = data.quoteQuantity;
   const unitPrice = data.quoteUnitPrice;
-  const baseAmount = Number(data.budgetedAmount ?? data.paidAmount ?? data.amount ?? 0);
-  const breakdown = resolveAsideFiscalBreakdown(data);
+  const unitPriceNum = Number(unitPrice) || 0;
+  const lineBase = resolveAsideLineBase(data);
+  const { breakdown, flags } = resolveAsideFiscalBreakdown(data, lineBase);
+  const unitBreakdown =
+    unitPriceNum > 0
+      ? computeFiscalBreakdown({
+          ...flags,
+          baseAmount: unitPriceNum,
+          inputMode: "base",
+        })
+      : null;
 
   const qtyEl = document.getElementById("asideAcctQty");
   if (qtyEl) {
@@ -181,7 +223,15 @@ export function renderAsideAccountingLine(data) {
   }
 
   const vatEl = document.getElementById("asideAcctVat");
-  if (vatEl) vatEl.textContent = formatAsideSignedAmount(breakdown.vat, currency, { positive: true });
+  if (vatEl) {
+    vatEl.innerHTML = renderAsideVatCell({
+      unitPrice,
+      breakdown,
+      unitBreakdown,
+      currency,
+      applyVat: flags.applyVat,
+    });
+  }
 
   const descEl = document.getElementById("asideAcctDesc");
   if (descEl) descEl.textContent = formatAsideSignedAmount(breakdown.discount, currency, { positive: false });
@@ -191,16 +241,32 @@ export function renderAsideAccountingLine(data) {
 
   const baseEl = document.getElementById("asideAcctBase");
   if (baseEl) {
-    baseEl.textContent = Number.isFinite(baseAmount) && baseAmount > 0 ? formatCurrency(baseAmount, currency) : "—";
+    baseEl.textContent = lineBase > 0 ? formatCurrency(lineBase, currency) : "—";
+  }
+
+  const netEl = document.getElementById("asideAcctNet");
+  if (netEl) {
+    const lineNet = breakdown.net > 0 ? breakdown.net : lineBase;
+    netEl.textContent = lineNet > 0 ? formatCurrency(lineNet, currency) : "—";
   }
 
   const noteEl = document.getElementById("asideAccountingNote");
   if (noteEl) {
-    const payable = paymentPayableAmount(data);
-    const hasPresetFiscal = Boolean(data.fiscalFrozen || (data.netAmount && payable !== baseAmount));
-    noteEl.textContent = hasPresetFiscal
-      ? `Valor líquido a pagar: ${formatCurrency(payable, currency)} — impostos já definidos no orçamento realizado.`
-      : "Não altera o valor base do orçamento.";
+    const installmentPayable = paymentPayableAmount(data);
+    const lineNet = breakdown.net > 0 ? breakdown.net : lineBase;
+    const isInstallment =
+      installmentPayable > 0 && lineNet > 0 && Math.abs(installmentPayable - lineNet) > 0.05;
+
+    if (isInstallment) {
+      noteEl.classList.remove("hidden");
+      noteEl.textContent = `Valor desta parcela: ${formatCurrency(installmentPayable, currency)}.`;
+    } else {
+      const hasPresetFiscal = Boolean(data.fiscalFrozen || data.netAmount);
+      noteEl.classList.toggle("hidden", hasPresetFiscal);
+      if (!hasPresetFiscal) {
+        noteEl.textContent = "Não altera o valor base do orçamento.";
+      }
+    }
   }
 
   section.classList.remove("hidden");
