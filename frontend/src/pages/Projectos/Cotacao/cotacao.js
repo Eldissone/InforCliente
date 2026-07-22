@@ -3,6 +3,7 @@ import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatSupplierFiscalSummary } from "/shared/supplierFiscal.js";
+import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -16,6 +17,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initPermissionLayer();
   wireLogout();
   wireUsersNav();
+  await initExtraRequestModal({ showToast });
+  wireExtraRequestButton("btnNewExtra", () => {
+    if (!currentProjectId) return { errorMessage: "Seleccione uma obra primeiro" };
+    return {
+      type: "OBRA",
+      projectId: currentProjectId,
+      lockType: true,
+      lockProject: true,
+    };
+  });
 
   const urlParams = new URLSearchParams(window.location.search);
   currentProjectId = urlParams.get("project") || localStorage.getItem("InfoCliente.currentProjectId");

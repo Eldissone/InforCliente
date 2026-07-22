@@ -1,9 +1,14 @@
-import { apiRequest, apiUpload } from "/services/api.js";
+import { apiRequest } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { getSessionUser } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu } from "/shared/ui.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
+import {
+  initExtraRequestModal,
+  openExtraRequestModalForEdit,
+  wireExtraRequestButton,
+} from "/shared/extraRequestModal.js";
 
 let generalCenters = [];
 let allProjects = [];
@@ -39,10 +44,6 @@ const EXTRA_SOURCE_LABELS = {
   SOLICITACAO_TRANSFERENCIA: "Solicitação de Transferência",
   TRANSFERENCIA_INTERNA_CARTAO: "Transferência interna (carregar cartão)",
 };
-
-function isExtraCardSource(source) {
-  return source === "FUNDO_MANEIO" || source === "TRANSFERENCIA_INTERNA_CARTAO";
-}
 
 function cardScopeLabel(card) {
   if (!card?.projectId) return "Global";
@@ -158,15 +159,6 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
     </button>`;
 }
 
-function toDateInputValue(value) {
-  if (!value) return "";
-  const raw = String(value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
-}
-
 function extraReferenceLabel(it) {
   if (it.type === "GERAL") {
     return it.generalCostCenter?.name || "Centro geral";
@@ -179,34 +171,6 @@ function extraReferenceLabel(it) {
     : "";
   if (obra && cc) return `${obra} · ${cc}`;
   return obra || cc || "—";
-}
-
-async function loadCostCentersForExtra(projectId, selectedId = "") {
-  const select = document.getElementById("extraCostCenterId");
-  if (!select) return;
-  if (!projectId) {
-    select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
-    select.value = "";
-    return;
-  }
-  select.innerHTML = `<option value="">A carregar...</option>`;
-  try {
-    const data = await apiRequest(`/cost-centers/project/${projectId}`);
-    const items = (data.items || []).filter((cc) => cc.active !== false);
-    select.innerHTML =
-      `<option value="">Selecionar centro de custo...</option>` +
-      items
-        .map(
-          (cc) =>
-            `<option value="${cc.id}">${cc.code} — ${cc.name}${cc.currency ? ` (${cc.currency})` : ""}</option>`
-        )
-        .join("");
-    if (selectedId) select.value = selectedId;
-  } catch (err) {
-    console.error("Erro ao carregar centros de custo:", err);
-    select.innerHTML = `<option value="">Erro ao carregar centros</option>`;
-    showToast("Erro ao carregar centros de custo: " + err.message, "error");
-  }
 }
 
 function renderExtraRow(it) {
@@ -320,7 +284,7 @@ function bindTableActions() {
       const id = btn.dataset.id;
       const action = btn.dataset.action;
       if (action === "edit") {
-        openExtraModalForEdit(id);
+        openExtraRequestModalForEdit(id);
       } else if (action === "approve") {
         if (!confirm("Aprovar este Pedido Extra?")) return;
         try {
@@ -362,267 +326,6 @@ function bindTableActions() {
   });
 }
 
-function setExtraType(type) {
-  const isGeral = type === "GERAL";
-  document.getElementById("extraType").value = type;
-  document.getElementById("btnTypeGeral").classList.toggle("active", isGeral);
-  document.getElementById("btnTypeObra").classList.toggle("active", !isGeral);
-  document.getElementById("rowGeneralCc").classList.toggle("hidden", !isGeral);
-  document.getElementById("rowProject").classList.toggle("hidden", isGeral);
-  document.getElementById("rowObraCostCenter").classList.toggle("hidden", isGeral);
-  document.getElementById("extraGeneralCcId").required = isGeral;
-  document.getElementById("extraProjectId").required = !isGeral;
-  document.getElementById("extraCostCenterId").required = !isGeral;
-  if (isGeral) {
-    document.getElementById("extraCostCenterId").value = "";
-  }
-  document.getElementById("modalExtraTitle").textContent = isGeral
-    ? "Novo Pedido Extra Geral"
-    : "Novo Pedido Extra da Obra";
-  ensureCardsLoadedForExtra(type);
-}
-
-function toggleExtraPaymentFields() {
-  const source = document.getElementById("extraSource").value;
-  const isEdit = Boolean(document.getElementById("extraEditId").value);
-  const editing = isEdit ? extrasCache.find((e) => e.id === document.getElementById("extraEditId").value) : null;
-  document.getElementById("extraCardRow").classList.toggle("hidden", !isExtraCardSource(source));
-  document.getElementById("extraProformaRow").classList.toggle("hidden", source !== "SOLICITACAO_TRANSFERENCIA");
-  const proformaInput = document.getElementById("extraProforma");
-  if (proformaInput) {
-    proformaInput.required = source === "SOLICITACAO_TRANSFERENCIA" && !isEdit && !editing?.proformaUrl;
-    if (source !== "SOLICITACAO_TRANSFERENCIA") proformaInput.value = "";
-  }
-  const proformaHint = document.getElementById("extraProformaHint");
-  if (proformaHint) {
-    proformaHint.classList.toggle(
-      "hidden",
-      !(source === "SOLICITACAO_TRANSFERENCIA" && editing?.proformaUrl)
-    );
-  }
-}
-
-async function ensureCardsLoadedForExtra(type) {
-  try {
-    const projectId = document.getElementById("extraProjectId")?.value || "";
-    const params = new URLSearchParams();
-    if (type === "OBRA" && projectId) params.set("projectId", projectId);
-    const data = await apiRequest(`/petty-cash/cards${params.toString() ? `?${params}` : ""}`);
-    allCards = data.items || [];
-  } catch (err) {
-    console.error("Erro ao carregar cartões:", err);
-    allCards = [];
-  }
-  populateExtraCardSelect();
-}
-
-function populateExtraCardSelect() {
-  const cardSelect = document.getElementById("extraCardId");
-  const type = document.getElementById("extraType").value || "GERAL";
-  const projectId = document.getElementById("extraProjectId")?.value || "";
-  let cards = allCards.filter((c) => c.active !== false);
-  if (type === "OBRA" && projectId) {
-    cards = cards.filter((c) => !c.projectId || c.projectId === projectId);
-  }
-  cardSelect.innerHTML =
-    `<option value="">Selecionar cartão...</option>` +
-    cards
-      .map(
-        (c) =>
-          `<option value="${c.id}" data-fund-id="${c.fundId}">${c.label} (${formatCurrency(c.currentBalance, c.currency)})</option>`
-      )
-      .join("");
-  syncExtraFundFromCard();
-}
-
-function syncExtraFundFromCard() {
-  const cardSelect = document.getElementById("extraCardId");
-  const selected = cardSelect.options[cardSelect.selectedIndex];
-  document.getElementById("extraFundId").value = selected?.dataset?.fundId || "";
-}
-
-function setExtraFormLocked(locked) {
-  document.getElementById("btnTypeGeral").disabled = locked;
-  document.getElementById("btnTypeObra").disabled = locked;
-  document.getElementById("extraGeneralCcId").disabled = locked;
-  document.getElementById("extraProjectId").disabled = locked;
-  document.getElementById("extraCostCenterId").disabled = locked;
-  document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
-}
-
-function resetExtraFormState() {
-  document.getElementById("extraEditId").value = "";
-  document.getElementById("modalExtraTitle").textContent = "Novo Pedido Extra";
-  document.getElementById("extraSubmitBtn").textContent = "Guardar Pedido";
-  document.getElementById("extraProformaHint")?.classList.add("hidden");
-  setExtraFormLocked(false);
-}
-
-async function openExtraModalForEdit(id) {
-  const item = extrasCache.find((e) => e.id === id);
-  if (!item) {
-    showToast("Pedido extra não encontrado", "error");
-    return;
-  }
-  if (item.status !== "PENDENTE" && item.status !== "APROVADO") {
-    showToast("Só é possível editar pedidos não liquidados", "error");
-    return;
-  }
-
-  document.getElementById("formExtra").reset();
-  document.getElementById("extraEditId").value = item.id;
-  document.getElementById("modalExtraTitle").textContent = "Editar Pedido Extra";
-  document.getElementById("extraSubmitBtn").textContent = "Guardar alterações";
-
-  setExtraType(item.type);
-  setExtraFormLocked(true);
-
-  if (item.type === "GERAL") {
-    document.getElementById("extraGeneralCcId").value = item.generalCostCenterId || "";
-    if (item.paymentSource === "FUNDO_MANEIO" || item.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO") {
-      await ensureCardsLoadedForExtra(item.type);
-    }
-  } else {
-    document.getElementById("extraProjectId").value = item.projectId || "";
-    await loadCostCentersForExtra(item.projectId, item.costCenterId || "");
-    await ensureCardsLoadedForExtra("OBRA");
-  }
-
-  document.getElementById("extraDesc").value = item.description || "";
-  document.getElementById("extraAmount").value = item.amount || "";
-  document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
-  document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
-  toggleExtraPaymentFields();
-
-  if (item.cardId) document.getElementById("extraCardId").value = item.cardId;
-  syncExtraFundFromCard();
-  if (!document.getElementById("extraFundId").value && item.fundId) {
-    document.getElementById("extraFundId").value = item.fundId;
-  }
-
-  document.getElementById("extraNotes").value = item.notes || "";
-
-  const proformaInput = document.getElementById("extraProforma");
-  if (proformaInput) proformaInput.required = false;
-  const proformaHint = document.getElementById("extraProformaHint");
-  if (proformaHint) {
-    proformaHint.classList.toggle("hidden", !(item.paymentSource === "SOLICITACAO_TRANSFERENCIA" && item.proformaUrl));
-  }
-
-  document.getElementById("modalExtra").classList.add("open");
-}
-
-async function openExtraModal(prefillType = "GERAL", prefillGccId = "") {
-  document.getElementById("formExtra").reset();
-  resetExtraFormState();
-  setExtraType(prefillType);
-  if (prefillGccId) {
-    document.getElementById("extraGeneralCcId").value = prefillGccId;
-  }
-  const dueInput = document.getElementById("extraPaymentDueDate");
-  if (dueInput) dueInput.value = new Date().toISOString().slice(0, 10);
-  toggleExtraPaymentFields();
-  document.getElementById("modalExtra").classList.add("open");
-}
-
-function closeExtraModal() {
-  document.getElementById("modalExtra").classList.remove("open");
-  resetExtraFormState();
-}
-
-async function submitExtra(e) {
-  e.preventDefault();
-  const editId = document.getElementById("extraEditId").value;
-  const type = document.getElementById("extraType").value || "GERAL";
-  const source = document.getElementById("extraSource").value;
-  const body = {
-    type,
-    projectId: type === "OBRA" ? document.getElementById("extraProjectId").value || null : null,
-    costCenterId: type === "OBRA" ? document.getElementById("extraCostCenterId").value || null : null,
-    generalCostCenterId:
-      type === "GERAL" ? document.getElementById("extraGeneralCcId").value || null : null,
-    description: document.getElementById("extraDesc").value.trim(),
-    amount: parseFloat(document.getElementById("extraAmount").value) || 0,
-    paymentDueDate: document.getElementById("extraPaymentDueDate").value,
-    paymentSource: source,
-    fundId: isExtraCardSource(source) ? document.getElementById("extraFundId").value || null : null,
-    cardId: isExtraCardSource(source) ? document.getElementById("extraCardId").value || null : null,
-    notes: document.getElementById("extraNotes").value.trim() || null,
-  };
-
-  if (!editId) {
-    if (type === "GERAL" && !body.generalCostCenterId) {
-      showToast("Seleccione o centro de custo geral", "error");
-      return;
-    }
-    if (type === "OBRA" && !body.projectId) {
-      showToast("Seleccione a obra", "error");
-      return;
-    }
-    if (type === "OBRA" && !body.costCenterId) {
-      showToast("Seleccione o centro de custo da obra", "error");
-      return;
-    }
-  }
-
-  if (!body.paymentDueDate) {
-    showToast("Indique a data prevista de liquidação", "error");
-    return;
-  }
-
-  if (isExtraCardSource(source) && !body.cardId) {
-    showToast("Seleccione o cartão", "error");
-    return;
-  }
-
-  const editing = extrasCache.find((item) => item.id === editId);
-  const proformaFile = document.getElementById("extraProforma")?.files?.[0];
-  const needsProforma = source === "SOLICITACAO_TRANSFERENCIA";
-  const hasExistingProforma = Boolean(editing?.proformaUrl);
-
-  if (needsProforma && !editId && !proformaFile) {
-    showToast("Anexe a proforma para transferência bancária", "error");
-    return;
-  }
-  if (needsProforma && editId && !hasExistingProforma && !proformaFile) {
-    showToast("Anexe a proforma para transferência bancária", "error");
-    return;
-  }
-
-  try {
-    if (editId) {
-      const patchBody = {
-        description: body.description,
-        amount: body.amount,
-        paymentDueDate: body.paymentDueDate,
-        paymentSource: body.paymentSource,
-        fundId: body.fundId,
-        cardId: body.cardId,
-        notes: body.notes,
-      };
-      await apiRequest(`/extra-requests/${editId}`, { method: "PATCH", body: patchBody });
-      if (needsProforma && proformaFile) {
-        const fd = new FormData();
-        fd.append("proforma", proformaFile);
-        await apiUpload(`/extra-requests/${editId}/proforma`, fd);
-      }
-      showToast("Pedido Extra actualizado", "success");
-    } else {
-      const created = await apiRequest("/extra-requests", { method: "POST", body });
-      if (needsProforma && proformaFile) {
-        const fd = new FormData();
-        fd.append("proforma", proformaFile);
-        await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
-      }
-      showToast("Pedido Extra criado", "success");
-    }
-    closeExtraModal();
-    loadExtras();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
-}
-
 function bindEvents() {
   document.getElementById("btnNewGcc")?.addEventListener("click", () => {
     if (!can("pedidosExtras", "create")) {
@@ -635,34 +338,10 @@ function bindEvents() {
   document.getElementById("btnCloseGccModal")?.addEventListener("click", closeGccModal);
   document.getElementById("btnCancelGcc")?.addEventListener("click", closeGccModal);
 
-  document.getElementById("btnNewExtra")?.addEventListener("click", () => {
-    if (!can("pedidosExtras", "create")) {
-      showToast("Sem permissão para criar pedidos extra", "error");
-      return;
-    }
-    openExtraModal(selectedGccFilter ? "GERAL" : "GERAL", selectedGccFilter);
-  });
-  document.getElementById("btnTypeGeral")?.addEventListener("click", () => setExtraType("GERAL"));
-  document.getElementById("btnTypeObra")?.addEventListener("click", () => setExtraType("OBRA"));
-  document.getElementById("extraSource")?.addEventListener("change", async () => {
-    toggleExtraPaymentFields();
-    const source = document.getElementById("extraSource").value;
-    if (isExtraCardSource(source)) {
-      const type = document.getElementById("extraType").value || "GERAL";
-      await ensureCardsLoadedForExtra(type);
-    }
-  });
-  document.getElementById("extraCardId")?.addEventListener("change", syncExtraFundFromCard);
-  document.getElementById("extraProjectId")?.addEventListener("change", async () => {
-    if (document.getElementById("extraType").value === "OBRA") {
-      const projectId = document.getElementById("extraProjectId").value;
-      await loadCostCentersForExtra(projectId);
-      await ensureCardsLoadedForExtra("OBRA");
-    }
-  });
-  document.getElementById("formExtra")?.addEventListener("submit", submitExtra);
-  document.getElementById("btnCloseExtraModal")?.addEventListener("click", closeExtraModal);
-  document.getElementById("btnCancelExtra")?.addEventListener("click", closeExtraModal);
+  wireExtraRequestButton("btnNewExtra", () => ({
+    type: "GERAL",
+    generalCostCenterId: selectedGccFilter || "",
+  }));
 
   ["filterType", "filterStatus", "filterGeneralCc", "filterProject"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
@@ -1140,6 +819,11 @@ async function loadInitialData() {
   wireLogout();
   wireUsersNav();
   initMobileMenu();
+  await initExtraRequestModal({
+    showToast,
+    onSuccess: () => loadExtras(),
+    getEditItem: (id) => extrasCache.find((e) => e.id === id),
+  });
   bindEvents();
   bindSectionToggles();
   applySectionVisibility();

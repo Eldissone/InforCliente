@@ -7,6 +7,7 @@ import {
   guardPageAccess,
 } from "../../shared/permissions.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml, renderProductImageThumb } from "../../shared/ui.js";
+import { initExtraRequestModal, wireExtraRequestButton } from "../../shared/extraRequestModal.js";
 import {
   parseStockMovementLogistics,
   buildStockMovementDetailHtml,
@@ -3151,6 +3152,19 @@ async function init() {
   wireUsersNav();
   await guardPageAccess("obras", "view");
   await initPermissionLayer();
+  await initExtraRequestModal({
+    showToast: (msg, type) => toast(msg, { type: type === "error" ? "error" : type === "success" ? "success" : "info" }),
+  });
+  wireExtraRequestButton("btnNewExtra", () => {
+    const projectId = getProjectId();
+    if (!projectId) return { errorMessage: "Obra não identificada" };
+    return {
+      type: "OBRA",
+      projectId,
+      lockType: true,
+      lockProject: true,
+    };
+  });
   await loadProject();
   await loadTransactions();
   await loadBudgetExecution();

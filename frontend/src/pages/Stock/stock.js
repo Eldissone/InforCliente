@@ -6,6 +6,7 @@ import { can, initPermissionLayer, activateFirstVisibleStockTab, guardPageAccess
 import { renderDeliveryCalendar, DELIVERY_STATUS, resolveDeliveryStatus } from "../../shared/deliveryTimeline.js";
 import { toDateKey } from "../../shared/format.js";
 import { renderFreightTab } from "../../shared/freightOrders.js";
+import { initExtraRequestModal, wireExtraRequestButton } from "../../shared/extraRequestModal.js";
 
 let deliveryMonth = new Date();
 deliveryMonth.setDate(1);
@@ -68,6 +69,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     wireProductImagePreview();
     await guardPageAccess("stock", "view");
     await initPermissionLayer();
+    await initExtraRequestModal({ showToast: toast });
+    wireExtraRequestButton("btnNewExtra", () => ({ type: "GERAL" }));
     init();
 });
 

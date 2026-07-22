@@ -13,6 +13,7 @@ import {
 } from "/shared/liquidationFiscal.js";
 import { renderAsideProductSection, renderAsideAccountingLine } from "/shared/paymentDetailAside.js";
 import { initMobileMenu } from "/shared/ui.js";
+import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let allProjects = [];
@@ -36,6 +37,17 @@ let currentSuppliers = [];
   wireLogout();
   wireUsersNav();
   initMobileMenu();
+  await initExtraRequestModal({ showToast });
+  wireExtraRequestButton("btnNewExtra", () => {
+    if (!selectedProject) return { errorMessage: "Seleccione uma obra primeiro" };
+    return {
+      type: "OBRA",
+      projectId: selectedProject.id,
+      costCenterId: currentCC?.id || "",
+      lockType: true,
+      lockProject: true,
+    };
+  });
   await loadProjects();
   bindEvents();
 
