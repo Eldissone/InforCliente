@@ -1,8 +1,10 @@
 const express = require("express");
 const { z } = require("zod");
+const multer = require("multer");
 const { prisma } = require("../db");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
 const {
   listEligibleQuotes,
   createFreightOrder,
@@ -16,6 +18,11 @@ const {
 
 const freightOrderRoutes = express.Router();
 freightOrderRoutes.use(authRequired);
+
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const allocationSchema = z.object({
   needQuoteId: z.string().optional().nullable(),
@@ -142,14 +149,25 @@ freightOrderRoutes.patch(
 freightOrderRoutes.post(
   "/:id/send-to-finance",
   requireRole(["admin", "operador"]),
+  fileUpload.single("document"),
   asyncHandler(async (req, res) => {
-    const body = z
-      .object({
-        paymentDate: z.string().datetime().optional(),
-      })
-      .parse(req.body || {});
+    const raw = req.body || {};
+    const paymentDateRaw = raw.paymentDate ? String(raw.paymentDate).trim() : "";
+    const paymentDate =
+      paymentDateRaw && !Number.isNaN(Date.parse(paymentDateRaw)) ? paymentDateRaw : undefined;
 
-    const result = await sendFreightToFinance(String(req.params.id), body);
+    let documentUrl = null;
+    if (req.file) {
+      const id = String(req.params.id);
+      const ext = (req.file.originalname || "").split(".").pop() || "pdf";
+      const storagePath = `freight-orders/${id}/document-${Date.now()}.${ext}`;
+      documentUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    }
+
+    const result = await sendFreightToFinance(String(req.params.id), {
+      ...(paymentDate ? { paymentDate } : {}),
+      ...(documentUrl ? { documentUrl } : {}),
+    });
     return res.json({ ok: true, ...result });
   })
 );

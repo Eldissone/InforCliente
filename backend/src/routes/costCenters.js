@@ -325,7 +325,10 @@ async function mapPaymentItems(items) {
   return items.map((p) => {
     const sup = p.supplierRef || supplierMap[p.supplier] || {};
     const selectedQuote = p.paymentInstallment?.quote || p.need?.quotes?.[0] || null;
-    const proformaUrl = selectedQuote?.proformaUrl || null;
+    const proformaUrl =
+      selectedQuote?.proformaUrl ||
+      (p.category === "TRANSPORTE" && p.faturaUrl ? p.faturaUrl : null) ||
+      null;
     const creditTermDays = selectedQuote?.creditTermDays ?? null;
     const installmentsPlanned = selectedQuote?.installmentsPlanned ?? null;
     const fiscalProductRef = selectedQuote?.supplierProduct || null;

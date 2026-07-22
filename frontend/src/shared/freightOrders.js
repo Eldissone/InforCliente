@@ -1,4 +1,4 @@
-import { apiRequest } from "../services/api.js";
+import { apiRequest, apiUpload } from "../services/api.js";
 import { openModal, escapeHtml as esc, toast, setButtonLoading } from "./ui.js";
 import { formatCurrency } from "./format.js";
 
@@ -195,20 +195,52 @@ function openFreightCreateModal({ onSaved } = {}) {
   });
 }
 
+function openFreightSendFinanceModal(id, { onSent } = {}) {
+  openModal({
+    title: "Enviar frete ao financeiro",
+    primaryLabel: "Enviar ao financeiro",
+    contentHtml: `
+      <div class="flex flex-col gap-4">
+        <p class="text-sm text-slate-600">Será criado um pagamento pendente para o transportador. Pode anexar a fatura ou proforma do frete (opcional).</p>
+        <div>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Documento (PDF ou imagem)</label>
+          <input id="freightFinanceDoc" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" class="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200" />
+          <p class="text-[10px] text-slate-400 mt-1">Máx. 10 MB · PDF, PNG ou JPG</p>
+        </div>
+      </div>`,
+    onPrimary: async ({ close, btn }) => {
+      const file = document.getElementById("freightFinanceDoc")?.files?.[0] || null;
+      setButtonLoading(btn, true);
+      try {
+        if (file) {
+          await apiUpload(`/freight-orders/${id}/send-to-finance`, { file, fieldName: "document" });
+        } else {
+          await apiRequest(`/freight-orders/${id}/send-to-finance`, { method: "POST", body: {} });
+        }
+        toast("Frete enviado ao financeiro");
+        close();
+        await onSent?.();
+      } catch (e) {
+        toast(e.message || "Erro ao enviar ao financeiro", { type: "error" });
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
 async function freightAction(id, action, reload) {
   const paths = {
     submit: `/freight-orders/${id}/submit-analysis`,
     approve: `/freight-orders/${id}/approve`,
-    finance: `/freight-orders/${id}/send-to-finance`,
   };
   try {
     if (action === "finance") {
-      await apiRequest(paths.finance, { method: "POST", body: {} });
-      toast("Frete enviado ao financeiro");
-    } else {
-      await apiRequest(paths[action], { method: "PATCH" });
-      toast(action === "approve" ? "Frete aprovado" : "Submetido para análise");
+      openFreightSendFinanceModal(id, { onSent: reload });
+      return;
     }
+    await apiRequest(paths[action], { method: "PATCH" });
+    toast(action === "approve" ? "Frete aprovado" : "Submetido para análise");
     await reload?.();
   } catch (e) {
     toast(e.message || "Erro", { type: "error" });

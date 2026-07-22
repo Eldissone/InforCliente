@@ -225,7 +225,7 @@ async function approveFreight(id) {
   return updateFreightOrder(id, { status: "APPROVED" });
 }
 
-async function sendFreightToFinance(id, { paymentDate } = {}) {
+async function sendFreightToFinance(id, { paymentDate, documentUrl } = {}) {
   const order = await prisma.freightOrder.findUnique({
     where: { id },
     include: {
@@ -275,6 +275,7 @@ async function sendFreightToFinance(id, { paymentDate } = {}) {
       paymentType: "PRONTO_PAGAMENTO",
       status: "PENDENTE",
       notes: order.notes ? `${order.notes}\nRateio: ${rateioSummary}` : `Rateio: ${rateioSummary}`,
+      ...(documentUrl ? { faturaUrl: documentUrl } : {}),
     },
   });
 
