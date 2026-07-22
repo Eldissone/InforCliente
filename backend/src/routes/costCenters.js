@@ -55,6 +55,7 @@ const {
   mapNeedBudgetFields,
   needLineTotal,
   needRealizadoUnitPrice,
+  calcEmAnaliseNeedTotal,
 } = require("../services/needBudgetService");
 const {
   assertCanModifyPaidNeed,
@@ -1007,6 +1008,9 @@ costCenterRoutes.get(
         unitPrice: true,
         originalUnitPrice: true,
         hours: true,
+        scheduled: true,
+        priceExceptionReason: true,
+        _count: { select: { quotes: true } },
         costCenter: { select: { currency: true } },
       },
     });
@@ -1014,16 +1018,20 @@ costCenterRoutes.get(
     const basePrevistoMap = {};
     const estimadoOriginalMap = {};
     const realizadoOrcamentoMap = {};
+    const emAnaliseOrcamentoMap = {};
     approvedNeeds.forEach((need) => {
       const ccId = need.costCenterId;
       const previstoTotal = calcPrevistoApprovedNeedTotal(need);
       const realizadoTotal = calcRealizadoNeedTotal(need);
+      const emAnaliseTotal = calcEmAnaliseNeedTotal(need);
       if (!basePrevistoMap[ccId]) basePrevistoMap[ccId] = 0;
       if (!estimadoOriginalMap[ccId]) estimadoOriginalMap[ccId] = 0;
       if (!realizadoOrcamentoMap[ccId]) realizadoOrcamentoMap[ccId] = 0;
+      if (!emAnaliseOrcamentoMap[ccId]) emAnaliseOrcamentoMap[ccId] = 0;
       basePrevistoMap[ccId] += previstoTotal;
       estimadoOriginalMap[ccId] += previstoTotal;
       realizadoOrcamentoMap[ccId] += realizadoTotal;
+      emAnaliseOrcamentoMap[ccId] += emAnaliseTotal;
     });
 
     // Agrupamento de necessidades por CC e status
@@ -1047,6 +1055,7 @@ costCenterRoutes.get(
       const basePrevisto = basePrevistoMap[cc.id] || 0;
       const estimadoOriginal = estimadoOriginalMap[cc.id] || 0;
       const realizadoOrcamento = realizadoOrcamentoMap[cc.id] || 0;
+      const emAnaliseOrcamento = emAnaliseOrcamentoMap[cc.id] || 0;
       const liquidado = liquidadoMap[cc.id] || 0;
       const needs = needsMap[cc.id] || {};
       const saldo = basePrevisto - liquidado;
@@ -1070,6 +1079,7 @@ costCenterRoutes.get(
           basePrevisto: 0,
           estimadoOriginal: 0,
           realizadoOrcamento: 0,
+          emAnaliseOrcamento: 0,
           liquidado: 0,
           budgeted: 0,
           paid: 0,
@@ -1078,6 +1088,7 @@ costCenterRoutes.get(
       totalsByCurrency[currency].basePrevisto += basePrevisto;
       totalsByCurrency[currency].estimadoOriginal += estimadoOriginal;
       totalsByCurrency[currency].realizadoOrcamento += realizadoOrcamento;
+      totalsByCurrency[currency].emAnaliseOrcamento += emAnaliseOrcamento;
       totalsByCurrency[currency].liquidado += liquidado;
       totalsByCurrency[currency].budgeted += pay.budgeted;
       totalsByCurrency[currency].paid += pay.paid;
@@ -1090,6 +1101,7 @@ costCenterRoutes.get(
         basePrevisto,
         estimadoOriginal,
         realizadoOrcamento,
+        emAnaliseOrcamento,
         liquidado,
         desvioPrevistoRealizado,
         desvioRealizadoLiquidado,

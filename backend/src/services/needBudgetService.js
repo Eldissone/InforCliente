@@ -50,6 +50,18 @@ function needExceedsPrevisto(need) {
   return real > previsto + 1e-6;
 }
 
+/** Soma linha para KPI «Orçamento Em Análise» — alinhado com badge «Em Análise» na tabela. */
+function calcEmAnaliseNeedTotal(need) {
+  if (needRealizadoDisplayStatus(need) !== "EM_ANALISE") return 0;
+  const qty = Number(need?.quantity) || 0;
+  const hours = Number(need?.hours) || 1;
+  const priced = needRealizadoUnitPrice(need);
+  const fallback = Number(need?.unitPrice) || 0;
+  const unit = priced != null && priced > 0 ? priced : fallback;
+  if (unit <= 0) return 0;
+  return qty * unit * hours;
+}
+
 function assertPriceWithinPrevistoOrException(need, newUnitPrice, { priceExceptionReason, actorName }) {
   const previsto = needPrevistoUnitPrice(need);
   const next = Number(newUnitPrice) || 0;
@@ -140,6 +152,7 @@ module.exports = {
   needRealizadoUnitPrice,
   needLineTotal,
   needExceedsPrevisto,
+  calcEmAnaliseNeedTotal,
   assertPriceWithinPrevistoOrException,
   mapNeedBudgetFields,
   resolveNeedFiscalPercents,

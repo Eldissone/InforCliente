@@ -700,9 +700,6 @@ async function loadSummary() {
     dashSummary = data;
     renderKPIs(data.totals);
     renderPrevistoRealTable(data.summary, data.totals);
-    // Dashboard extra cards
-    loadWeeklyBreakdown();
-    loadTopExpenses();
     const needsTabActive = document.getElementById("tab-necessidades")?.classList.contains("active");
     if (needsTabActive && budgetViewMode === "realizado") {
       refreshNeedsTableFromCache({ preserveUi: true });
@@ -744,13 +741,14 @@ function renderKPIs(totalsByCurrency) {
     const t = totalsByCurrency[cur] || {
       basePrevisto: 0,
       realizadoOrcamento: 0,
+      emAnaliseOrcamento: 0,
       liquidado: 0,
       pctExecutado: 0,
       desvioPrevistoRealizado: 0,
     };
 
     baseEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.basePrevisto ?? 0, cur)}</p>`;
-    realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.realizadoOrcamento ?? 0, cur)}</p>`;
+    realizadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.emAnaliseOrcamento ?? 0, cur)}</p>`;
     if (liquidadoEl) {
       liquidadoEl.innerHTML += `<p class="text-xl font-bold text-slate-900 tracking-tight" title="${cur}">${formatCurrency(t.liquidado ?? 0, cur)}</p>`;
     }
@@ -3025,58 +3023,6 @@ async function loadHistory() {
       </div>`;
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-400 text-sm">Erro ao carregar histórico.</td></tr>`;
-  }
-}
-
-// ── Dashboard: Pagamentos por Semana ─────────────────────────────────────────
-async function loadWeeklyBreakdown() {
-  const el = document.getElementById("weeklyBreakdownList");
-  if (!el || !selectedProject) return;
-  try {
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/weekly-summary`);
-    if (!data.weeks?.length) {
-      el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais registados</p>`;
-      return;
-    }
-    const max = Math.max(...data.weeks.map(w => w.paid));
-    el.innerHTML = data.weeks.map(w => {
-      const pct = max > 0 ? (w.paid / max) * 100 : 0;
-      return `
-        <div class="flex items-center gap-3">
-          <span class="text-[10px] font-black text-slate-400 uppercase w-12 flex-shrink-0">${w.week}</span>
-          <div class="flex-1 prog-bar-wrap">
-            <div class="prog-bar bg-blue-500" style="width:${pct.toFixed(1)}%"></div>
-          </div>
-          <span class="text-xs font-bold text-slate-700 w-32 text-right tabular-nums">${formatCurrency(w.paid, w.currency || 'AOA')}</span>
-        </div>`;
-    }).join("");
-  } catch {
-    el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem dados semanais</p>`;
-  }
-}
-
-// ── Dashboard: Top 5 Maiores Despesas ─────────────────────────────────────────
-async function loadTopExpenses() {
-  const el = document.getElementById("topExpensesList");
-  if (!el || !selectedProject) return;
-  try {
-    const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/top-expenses?limit=5`);
-    if (!data.items?.length) {
-      el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem despesas registadas</p>`;
-      return;
-    }
-    const colors = ["bg-red-500", "bg-orange-500", "bg-amber-500", "bg-blue-500", "bg-slate-400"];
-    el.innerHTML = data.items.map((p, i) => `
-      <div class="flex items-center gap-3 py-1">
-        <span class="w-5 h-5 rounded-full ${colors[i]} text-white text-[10px] font-black flex items-center justify-center flex-shrink-0">${i + 1}</span>
-        <div class="flex-1 min-w-0">
-          <p class="text-xs font-bold text-slate-900 truncate">${p.supplier || p.description}</p>
-          <p class="text-[10px] text-slate-400">${p.costCenter?.code || "—"} · ${p.category}</p>
-        </div>
-        <span class="text-sm font-black text-slate-900 tabular-nums">${formatCurrency(p.paidAmount, p.costCenter?.currency || 'AOA')}</span>
-      </div>`).join("");
-  } catch {
-    el.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Sem despesas registadas</p>`;
   }
 }
 
