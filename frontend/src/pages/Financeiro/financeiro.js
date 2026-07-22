@@ -26,7 +26,7 @@ let pendingFinanceNeedsCache = [];
 const EXTRA_SOURCE_LABELS = {
   CAIXA: "Caixa",
   BANCO: "Banco",
-  FUNDO_MANEIO: "Fundo de Maneio",
+  FUNDO_MANEIO: "Cartão",
   SOLICITACAO_TRANSFERENCIA: "Transferência bancária",
 };
 

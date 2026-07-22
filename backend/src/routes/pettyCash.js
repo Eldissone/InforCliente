@@ -673,4 +673,362 @@ pettyCashRoutes.patch(
   })
 );
 
+function mapCardWithFund(card, fund) {
+  return {
+    ...mapCard(card),
+    fundId: card.fundId,
+    currency: fund?.currency || "AOA",
+    projectId: fund?.projectId || null,
+    project: fund?.project || null,
+    notes: fund?.notes || null,
+  };
+}
+
+// ── Cartões (API centrada no cartão; fundo interno 1:1 por cartão novo) ───────
+
+// GET /petty-cash/cards — Lista cartões (globais ou por obra)
+pettyCashRoutes.get(
+  "/cards",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const scope = req.query.scope ? String(req.query.scope) : "";
+    const includeInactive = req.query.includeInactive === "true";
+
+    const fundWhere = {
+      active: true,
+      ...(projectId
+        ? { OR: [{ projectId }, { projectId: null }] }
+        : scope === "global"
+          ? { projectId: null }
+          : scope === "obra"
+            ? { projectId: { not: null } }
+            : { OR: [{ projectId: null }, { project: { active: true } }] }),
+    };
+
+    const cards = await prisma.pettyCashCard.findMany({
+      where: {
+        ...(includeInactive ? {} : { active: true }),
+        fund: fundWhere,
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        fund: {
+          include: { project: { select: { id: true, name: true, code: true } } },
+        },
+      },
+    });
+
+    let items = cards.map((c) => mapCardWithFund(c, c.fund));
+    if (projectId) {
+      items = items.filter((c) => !c.projectId || c.projectId === projectId);
+    }
+
+    return res.json({ items });
+  })
+);
+
+// POST /petty-cash/cards — Criar cartão (cria fundo interno dedicado)
+pettyCashRoutes.post(
+  "/cards",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        label: z.string().min(1),
+        projectId: z.string().optional().nullable(),
+        currency: z.string().optional().default("AOA"),
+        notes: z.string().optional().nullable(),
+        lastDigits: z.string().max(4).optional().nullable(),
+        cardNumberMasked: z.string().optional().nullable(),
+        bank: z.string().optional().nullable(),
+        holderName: z.string().optional().nullable(),
+        type: z.enum(["PREPAGO", "DEBITO", "CREDITO"]).optional().default("PREPAGO"),
+        issuedAt: z.string().optional().nullable(),
+        expiresAt: z.string().optional().nullable(),
+        limitAmount: z.union([z.number(), z.string()]).optional().nullable(),
+        responsibleName: z.string().optional().nullable(),
+        initialBalance: z.union([z.number(), z.string()]).optional().default(0),
+      })
+      .parse(req.body);
+
+    const u = req.user || {};
+    const initialBalance = String(body.initialBalance || 0);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const fund = await tx.pettyCashFund.create({
+        data: {
+          projectId: body.projectId || null,
+          name: body.label,
+          currency: body.currency || "AOA",
+          initialBalance: "0",
+          currentBalance: initialBalance,
+          notes: body.notes || null,
+          createdBy: u.name || u.email || u.sub || null,
+        },
+      });
+
+      const card = await tx.pettyCashCard.create({
+        data: {
+          fundId: fund.id,
+          label: body.label,
+          lastDigits: body.lastDigits || null,
+          cardNumberMasked: body.cardNumberMasked || null,
+          bank: body.bank || null,
+          holderName: body.holderName || null,
+          type: body.type || "PREPAGO",
+          issuedAt: body.issuedAt ? new Date(body.issuedAt) : null,
+          expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+          limitAmount:
+            body.limitAmount != null && body.limitAmount !== "" ? String(body.limitAmount) : null,
+          responsibleName: body.responsibleName || null,
+          initialBalance,
+          currentBalance: initialBalance,
+        },
+      });
+
+      await syncFundBalanceFromCards(tx, fund.id);
+      const fundWithProject = await tx.pettyCashFund.findUnique({
+        where: { id: fund.id },
+        include: { project: { select: { id: true, name: true, code: true } } },
+      });
+      return { card, fund: fundWithProject };
+    });
+
+    await logFundAction(req, {
+      action: "card_create",
+      fundId: result.fund.id,
+      details: { cardId: result.card.id, label: result.card.label },
+    });
+
+    return res.status(201).json(mapCardWithFund(result.card, result.fund));
+  })
+);
+
+// GET /petty-cash/cards/:id — Detalhe do cartão com movimentações
+pettyCashRoutes.get(
+  "/cards/:id",
+  requirePermission("obras", "view"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const card = await prisma.pettyCashCard.findUnique({
+      where: { id },
+      include: {
+        fund: { include: { project: { select: { id: true, name: true, code: true } } } },
+      },
+    });
+    if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
+
+    const page = Math.max(1, Number(req.query.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
+
+    const [total, movements] = await Promise.all([
+      prisma.pettyCashMovement.count({ where: { cardId: id } }),
+      prisma.pettyCashMovement.findMany({
+        where: { cardId: id },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          extraRequest: {
+            select: {
+              id: true,
+              description: true,
+              type: true,
+              generalCostCenter: { select: { id: true, name: true } },
+              project: { select: { id: true, name: true, code: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return res.json({
+      card: mapCardWithFund(card, card.fund),
+      movements: {
+        page,
+        pageSize,
+        total,
+        items: movements.map((m) => ({
+          ...m,
+          amount: String(m.amount),
+          balanceAfter: String(m.balanceAfter),
+        })),
+      },
+    });
+  })
+);
+
+// PATCH /petty-cash/cards/:id — Editar cartão e atribuição (obra)
+pettyCashRoutes.patch(
+  "/cards/:id",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const body = z
+      .object({
+        label: z.string().min(1).optional(),
+        projectId: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
+        lastDigits: z.string().max(4).optional().nullable(),
+        cardNumberMasked: z.string().optional().nullable(),
+        bank: z.string().optional().nullable(),
+        holderName: z.string().optional().nullable(),
+        type: z.enum(["PREPAGO", "DEBITO", "CREDITO"]).optional(),
+        issuedAt: z.string().optional().nullable(),
+        expiresAt: z.string().optional().nullable(),
+        limitAmount: z.union([z.number(), z.string()]).optional().nullable(),
+        responsibleName: z.string().optional().nullable(),
+        active: z.boolean().optional(),
+      })
+      .parse(req.body);
+
+    const card = await prisma.pettyCashCard.findUnique({
+      where: { id },
+      include: { fund: true },
+    });
+    if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const cardUpdated = await tx.pettyCashCard.update({
+        where: { id },
+        data: {
+          ...(body.label !== undefined ? { label: body.label } : {}),
+          ...(body.lastDigits !== undefined ? { lastDigits: body.lastDigits } : {}),
+          ...(body.cardNumberMasked !== undefined ? { cardNumberMasked: body.cardNumberMasked } : {}),
+          ...(body.bank !== undefined ? { bank: body.bank } : {}),
+          ...(body.holderName !== undefined ? { holderName: body.holderName } : {}),
+          ...(body.type !== undefined ? { type: body.type } : {}),
+          ...(body.issuedAt !== undefined ? { issuedAt: body.issuedAt ? new Date(body.issuedAt) : null } : {}),
+          ...(body.expiresAt !== undefined ? { expiresAt: body.expiresAt ? new Date(body.expiresAt) : null } : {}),
+          ...(body.limitAmount !== undefined
+            ? { limitAmount: body.limitAmount != null && body.limitAmount !== "" ? String(body.limitAmount) : null }
+            : {}),
+          ...(body.responsibleName !== undefined ? { responsibleName: body.responsibleName } : {}),
+          ...(body.active !== undefined ? { active: body.active } : {}),
+        },
+      });
+
+      const fundPatch = {};
+      if (body.label !== undefined) fundPatch.name = body.label;
+      if (body.projectId !== undefined) fundPatch.projectId = body.projectId || null;
+      if (body.notes !== undefined) fundPatch.notes = body.notes || null;
+      if (Object.keys(fundPatch).length) {
+        await tx.pettyCashFund.update({ where: { id: card.fundId }, data: fundPatch });
+      }
+      if (body.active !== undefined) {
+        await syncFundBalanceFromCards(tx, card.fundId);
+      }
+
+      const fund = await tx.pettyCashFund.findUnique({
+        where: { id: card.fundId },
+        include: { project: { select: { id: true, name: true, code: true } } },
+      });
+      return { card: cardUpdated, fund };
+    });
+
+    await logFundAction(req, { action: "card_update", fundId: card.fundId, details: { cardId: id, ...body } });
+    return res.json(mapCardWithFund(updated.card, updated.fund));
+  })
+);
+
+// DELETE /petty-cash/cards/:id — Eliminar cartão (e fundo dedicado se aplicável)
+pettyCashRoutes.delete(
+  "/cards/:id",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const card = await prisma.pettyCashCard.findUnique({
+      where: { id },
+      include: { fund: { include: { _count: { select: { cards: true, movements: true, extraRequests: true } } } } },
+    });
+    if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
+
+    const balance = Number(card.currentBalance);
+    if (Math.abs(balance) > 0.001) {
+      return res.status(409).json({
+        error: "CARD_HAS_BALANCE",
+        message: "O cartão ainda tem saldo. Carregue ou ajuste para zero antes de eliminar.",
+      });
+    }
+
+    const movementCount = await prisma.pettyCashMovement.count({ where: { cardId: id } });
+    if (movementCount > 0) {
+      return res.status(409).json({
+        error: "CARD_HAS_MOVEMENTS",
+        message: "Cartões com movimentações não podem ser eliminados. Desactiva o cartão em alternativa.",
+      });
+    }
+
+    const pendingRequests = await prisma.pettyCashReinforcementRequest.count({
+      where: { cardId: id, status: "PENDENTE" },
+    });
+    if (pendingRequests > 0) {
+      return res.status(409).json({ error: "CARD_HAS_PENDING_REQUESTS" });
+    }
+
+    const fundId = card.fundId;
+    const otherCards = card.fund._count.cards - 1;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.pettyCashCard.delete({ where: { id } });
+      if (otherCards <= 0 && card.fund._count.movements === 0 && card.fund._count.extraRequests === 0) {
+        await tx.pettyCashFund.delete({ where: { id: fundId } });
+      } else {
+        await syncFundBalanceFromCards(tx, fundId);
+      }
+    });
+
+    await logFundAction(req, { action: "card_delete", fundId, details: { cardId: id, label: card.label } });
+    return res.json({ ok: true });
+  })
+);
+
+// POST /petty-cash/cards/:id/movements — Carregar (CREDITO) ou ajuste (AJUSTE)
+pettyCashRoutes.post(
+  "/cards/:id/movements",
+  requireRole(["admin", "operador"]),
+  asyncHandler(async (req, res) => {
+    const cardId = String(req.params.id);
+    const body = z
+      .object({
+        type: z.enum(["CREDITO", "AJUSTE"]).default("CREDITO"),
+        amount: z.union([z.number(), z.string()]),
+        description: z.string().min(2),
+      })
+      .parse(req.body);
+
+    const card = await prisma.pettyCashCard.findUnique({ where: { id: cardId } });
+    if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
+
+    const u = req.user || {};
+    try {
+      const { movement, card: updatedCard } = await applyFundMovement({
+        fundId: card.fundId,
+        cardId,
+        type: body.type,
+        amount: body.amount,
+        description: body.description,
+        createdBy: u.name || u.email || u.sub || null,
+      });
+
+      await logFundAction(req, {
+        action: "card_movement_create",
+        fundId: card.fundId,
+        details: { cardId, type: body.type, amount: String(body.amount) },
+      });
+
+      return res.status(201).json({
+        movement: { ...movement, amount: String(movement.amount), balanceAfter: String(movement.balanceAfter) },
+        card: mapCard(updatedCard),
+      });
+    } catch (err) {
+      if (err instanceof InsufficientBalanceError) {
+        return res.status(422).json({ error: err.message, message: "Saldo insuficiente no cartão." });
+      }
+      throw err;
+    }
+  })
+);
+
 module.exports = { pettyCashRoutes };

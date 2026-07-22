@@ -261,9 +261,9 @@ const PERMISSION_GROUPS = [
   },
   {
     id: "fundoManeio",
-    label: "Fundo de Maneio",
-    icon: "account_balance_wallet",
-    pages: [{ id: "fundoManeio.main", label: "Fundo de Maneio", route: "/Projectos/centroCustos.html" }],
+    label: "Gestão de Cartões",
+    icon: "credit_card",
+    pages: [{ id: "fundoManeio.main", label: "Gestão de Cartões", route: "/Financeiro/centrosGerais.html" }],
     actions: ["view", "create", "edit", "manage", "full_access"],
   },
   {
