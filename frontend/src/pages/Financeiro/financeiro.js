@@ -886,17 +886,6 @@ function bindEvents() {
   document.getElementById("btnPendingPayments")?.addEventListener("click", () => {
     openPendingPaymentsModal();
   });
-
-  document.querySelectorAll("[data-fin-main-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.finMainTab;
-      switchFinMainTab(tab);
-    });
-  });
-
-  document.getElementById("auditCertFilter")?.addEventListener("change", () => loadAuditList());
-  document.getElementById("auditSearch")?.addEventListener("input", debounce(() => loadAuditList(), 350));
-  document.getElementById("auditCertConfirmBtn")?.addEventListener("click", submitAuditCertification);
 }
 
 function isViewingCurrentPeriod() {
