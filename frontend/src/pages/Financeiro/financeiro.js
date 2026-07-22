@@ -28,6 +28,7 @@ const EXTRA_SOURCE_LABELS = {
   BANCO: "Banco",
   FUNDO_MANEIO: "Cartão",
   SOLICITACAO_TRANSFERENCIA: "Transferência bancária",
+  TRANSFERENCIA_INTERNA_CARTAO: "Transferência interna (carregar cartão)",
 };
 
 const TIMELINE_ICONS = {
@@ -189,10 +190,10 @@ function extraRequestReference(extra) {
 
 function extraRequestPaymentLabel(extra) {
   const src = EXTRA_SOURCE_LABELS[extra.paymentSource] || extra.paymentSource || "—";
-  if (extra.paymentSource === "FUNDO_MANEIO") {
+  if (extra.paymentSource === "FUNDO_MANEIO" || extra.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO") {
     const parts = [src];
-    if (extra.fund?.name) parts.push(extra.fund.name);
-    if (extra.card?.label) parts.push(`Cartão: ${extra.card.label}`);
+    if (extra.card?.label) parts.push(extra.card.label);
+    else if (extra.fund?.name) parts.push(extra.fund.name);
     return parts.join(" · ");
   }
   return src;
@@ -568,10 +569,24 @@ async function handleExtraDeepLink() {
   }
 }
 
+function renderExtraPayCardLoadSection(extra) {
+  const cardLabel = extra.card?.label || "cartão seleccionado";
+  return `
+    <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/60">
+      <p class="text-xs font-semibold text-emerald-800">
+        Ao liquidar, ${formatCurrency(extra.amount, extra.currency || "AOA")} será creditado no cartão
+        <strong>${escapeHtml(cardLabel)}</strong>.
+      </p>
+    </div>`;
+}
+
 function openExtraPayModal(extra) {
   const needsComprovativo = extra.paymentSource === "SOLICITACAO_TRANSFERENCIA";
+  const isCardLoad = extra.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO";
   document.getElementById("extraPayBody").innerHTML =
-    renderExtraDetailGrid(extra) + (needsComprovativo ? renderExtraPayComprovativoSection() : "");
+    renderExtraDetailGrid(extra) +
+    (needsComprovativo ? renderExtraPayComprovativoSection() : "") +
+    (isCardLoad ? renderExtraPayCardLoadSection(extra) : "");
 
   const btn = document.getElementById("extraPayConfirmBtn");
   const canPay = extra.status === "APROVADO";

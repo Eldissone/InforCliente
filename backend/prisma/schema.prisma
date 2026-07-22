@@ -975,6 +975,7 @@ enum ExtraPaymentSource {
   BANCO
   FUNDO_MANEIO
   SOLICITACAO_TRANSFERENCIA // pedido de transferência bancária (substitui BANCO nos novos pedidos)
+  TRANSFERENCIA_INTERNA_CARTAO // transferência interna para carregar cartão (crédito na liquidação)
 }
 
 enum ExtraRequestStatus {

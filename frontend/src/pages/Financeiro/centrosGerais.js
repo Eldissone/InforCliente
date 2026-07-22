@@ -37,7 +37,12 @@ const EXTRA_SOURCE_LABELS = {
   BANCO: "Banco",
   FUNDO_MANEIO: "Cartão",
   SOLICITACAO_TRANSFERENCIA: "Solicitação de Transferência",
+  TRANSFERENCIA_INTERNA_CARTAO: "Transferência interna (carregar cartão)",
 };
+
+function isExtraCardSource(source) {
+  return source === "FUNDO_MANEIO" || source === "TRANSFERENCIA_INTERNA_CARTAO";
+}
 
 function cardScopeLabel(card) {
   if (!card?.projectId) return "Global";
@@ -208,7 +213,9 @@ function renderExtraRow(it) {
   const sourceLabel =
     it.paymentSource === "FUNDO_MANEIO"
       ? `Cartão: ${it.card?.label || it.fund?.name || "—"}`
-      : EXTRA_SOURCE_LABELS[it.paymentSource] || it.paymentSource;
+      : it.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO"
+        ? `Carregar: ${it.card?.label || "—"}`
+        : EXTRA_SOURCE_LABELS[it.paymentSource] || it.paymentSource;
   const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${EXTRA_STATUS_STYLES[it.status] || ""}">${EXTRA_STATUS_LABELS[it.status] || it.status}</span>`;
   const typeBadge =
     it.type === "GERAL"
@@ -379,7 +386,7 @@ function toggleExtraPaymentFields() {
   const source = document.getElementById("extraSource").value;
   const isEdit = Boolean(document.getElementById("extraEditId").value);
   const editing = isEdit ? extrasCache.find((e) => e.id === document.getElementById("extraEditId").value) : null;
-  document.getElementById("extraCardRow").classList.toggle("hidden", source !== "FUNDO_MANEIO");
+  document.getElementById("extraCardRow").classList.toggle("hidden", !isExtraCardSource(source));
   document.getElementById("extraProformaRow").classList.toggle("hidden", source !== "SOLICITACAO_TRANSFERENCIA");
   const proformaInput = document.getElementById("extraProforma");
   if (proformaInput) {
@@ -472,8 +479,8 @@ async function openExtraModalForEdit(id) {
 
   if (item.type === "GERAL") {
     document.getElementById("extraGeneralCcId").value = item.generalCostCenterId || "";
-    if (item.paymentSource === "FUNDO_MANEIO") {
-      await ensureCardsLoadedForExtra("GERAL");
+    if (item.paymentSource === "FUNDO_MANEIO" || item.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO") {
+      await ensureCardsLoadedForExtra(item.type);
     }
   } else {
     document.getElementById("extraProjectId").value = item.projectId || "";
@@ -538,8 +545,8 @@ async function submitExtra(e) {
     amount: parseFloat(document.getElementById("extraAmount").value) || 0,
     paymentDueDate: document.getElementById("extraPaymentDueDate").value,
     paymentSource: source,
-    fundId: source === "FUNDO_MANEIO" ? document.getElementById("extraFundId").value || null : null,
-    cardId: source === "FUNDO_MANEIO" ? document.getElementById("extraCardId").value || null : null,
+    fundId: isExtraCardSource(source) ? document.getElementById("extraFundId").value || null : null,
+    cardId: isExtraCardSource(source) ? document.getElementById("extraCardId").value || null : null,
     notes: document.getElementById("extraNotes").value.trim() || null,
   };
 
@@ -563,7 +570,7 @@ async function submitExtra(e) {
     return;
   }
 
-  if (source === "FUNDO_MANEIO" && !body.cardId) {
+  if (isExtraCardSource(source) && !body.cardId) {
     showToast("Seleccione o cartão", "error");
     return;
   }
@@ -637,7 +644,14 @@ function bindEvents() {
   });
   document.getElementById("btnTypeGeral")?.addEventListener("click", () => setExtraType("GERAL"));
   document.getElementById("btnTypeObra")?.addEventListener("click", () => setExtraType("OBRA"));
-  document.getElementById("extraSource")?.addEventListener("change", toggleExtraPaymentFields);
+  document.getElementById("extraSource")?.addEventListener("change", async () => {
+    toggleExtraPaymentFields();
+    const source = document.getElementById("extraSource").value;
+    if (isExtraCardSource(source)) {
+      const type = document.getElementById("extraType").value || "GERAL";
+      await ensureCardsLoadedForExtra(type);
+    }
+  });
   document.getElementById("extraCardId")?.addEventListener("change", syncExtraFundFromCard);
   document.getElementById("extraProjectId")?.addEventListener("change", async () => {
     if (document.getElementById("extraType").value === "OBRA") {

@@ -25,6 +25,14 @@ const fileUpload = multer({
 const extraRequestRoutes = express.Router();
 extraRequestRoutes.use(authRequired);
 
+const EXTRA_PAYMENT_SOURCES = [
+  "CAIXA",
+  "BANCO",
+  "FUNDO_MANEIO",
+  "SOLICITACAO_TRANSFERENCIA",
+  "TRANSFERENCIA_INTERNA_CARTAO",
+];
+
 async function logExtraAction(req, { action, extraRequestId, details }) {
   const u = req.user || {};
   await createLog({
@@ -172,9 +180,8 @@ extraRequestRoutes.post(
         description: z.string().min(2),
         amount: z.union([z.number(), z.string()]),
         currency: z.string().optional().default("AOA"),
-        // CAIXA/BANCO mantidos apenas para compatibilidade com pedidos antigos;
-        // o formulário atual só oferece FUNDO_MANEIO e SOLICITACAO_TRANSFERENCIA.
-        paymentSource: z.enum(["CAIXA", "BANCO", "FUNDO_MANEIO", "SOLICITACAO_TRANSFERENCIA"]).optional().default("SOLICITACAO_TRANSFERENCIA"),
+        // CAIXA/BANCO mantidos apenas para compatibilidade com pedidos antigos.
+        paymentSource: z.enum(EXTRA_PAYMENT_SOURCES).optional().default("SOLICITACAO_TRANSFERENCIA"),
         fundId: z.string().optional().nullable(),
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -196,6 +203,17 @@ extraRequestRoutes.post(
     }
     if (body.paymentSource === "FUNDO_MANEIO" && !body.fundId) {
       return res.status(400).json({ error: "FUND_REQUIRED_FOR_FUNDO_MANEIO" });
+    }
+    if (body.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO" && !body.cardId) {
+      return res.status(400).json({ error: "CARD_REQUIRED_FOR_INTERNAL_TRANSFER" });
+    }
+    if (body.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO" && body.cardId && !body.fundId) {
+      const card = await prisma.pettyCashCard.findUnique({
+        where: { id: body.cardId },
+        select: { fundId: true },
+      });
+      if (!card) return res.status(400).json({ error: "CARD_NOT_FOUND" });
+      body.fundId = card.fundId;
     }
     if (body.type === "OBRA") {
       const cc = await prisma.costCenter.findFirst({
@@ -250,7 +268,7 @@ extraRequestRoutes.patch(
       .object({
         description: z.string().min(2).optional(),
         amount: z.union([z.number(), z.string()]).optional(),
-        paymentSource: z.enum(["CAIXA", "BANCO", "FUNDO_MANEIO", "SOLICITACAO_TRANSFERENCIA"]).optional(),
+        paymentSource: z.enum(EXTRA_PAYMENT_SOURCES).optional(),
         fundId: z.string().optional().nullable(),
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
@@ -446,6 +464,21 @@ extraRequestRoutes.post(
           type: "DEBITO",
           amount: existing.amount,
           description: `Pedido Extra: ${existing.description}`,
+          extraRequestId: id,
+          createdBy: u.name || u.email || u.sub || null,
+        });
+      }
+
+      if (existing.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO") {
+        if (!existing.cardId || !existing.fundId) {
+          return res.status(400).json({ error: "CARD_REQUIRED_FOR_INTERNAL_TRANSFER" });
+        }
+        await applyFundMovement({
+          fundId: existing.fundId,
+          cardId: existing.cardId,
+          type: "CREDITO",
+          amount: existing.amount,
+          description: `Transferência interna (carregamento): ${existing.description}`,
           extraRequestId: id,
           createdBy: u.name || u.email || u.sub || null,
         });
