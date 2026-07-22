@@ -259,8 +259,13 @@ export function renderAsideAccountingLine(data) {
 
     if (isInstallment) {
       noteEl.classList.remove("hidden");
-      noteEl.textContent = `Valor desta parcela: ${formatCurrency(installmentPayable, currency)}.`;
+      noteEl.className =
+        "mt-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#0f172a] border border-[#2afc8d]/30 shadow-sm";
+      noteEl.innerHTML = `
+        <span class="text-[10px] font-black uppercase tracking-widest text-[#2afc8d]">Valor desta parcela</span>
+        <span class="text-base font-black text-white tabular-nums">${formatCurrency(installmentPayable, currency)}</span>`;
     } else {
+      noteEl.className = "hidden text-[10px] text-slate-400 font-semibold";
       const hasPresetFiscal = Boolean(data.fiscalFrozen || data.netAmount);
       noteEl.classList.toggle("hidden", hasPresetFiscal);
       if (!hasPresetFiscal) {
