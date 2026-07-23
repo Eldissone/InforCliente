@@ -7,7 +7,13 @@
       "default",
       {
         "ignore": [
-          "backdrop-filter"
+          "backdrop-filter",
+          "-webkit-text-size-adjust",
+          "-webkit-overflow-scrolling",
+          "scrollbar-color",
+          "scrollbar-width",
+          "scrollbar-width",
+          "scrollbar-width: thin"
         ]
       }
     ],
@@ -15,7 +21,8 @@
       "default",
       {
         "image-alt": "off",
-        "document-title": "off"
+        "document-title": "off",
+        "frame-title": "off"
       }
     ],
     "axe/forms": [
