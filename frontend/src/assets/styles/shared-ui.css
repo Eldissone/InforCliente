@@ -197,3 +197,43 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+
+@layer utilities {
+  .modal-overlay{
+    scrollbar-width: thin;
+    scrollbar-color: #444444b9 transparent;
+  }
+
+  /* Barra */
+  .modal-overlay::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  /* Fundo */
+  .modal-overlay::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Polegar */
+  .modal-overlay::-webkit-scrollbar-thumb {
+    background: #10b981;
+    border-radius: 9999px;
+  }
+
+  .modal-overlay::-webkit-scrollbar-thumb:hover {
+    background: #059669;
+  }
+
+  /* Remove os botões */
+  .modal-overlay::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Remove os cantos */
+  .modal-overlay::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
