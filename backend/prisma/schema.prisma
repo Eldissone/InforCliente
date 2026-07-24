@@ -1142,6 +1142,11 @@ model ExtraRequest {
   notes          String?
   proformaUrl    String?
   comprovativoUrl String?
+  // Beneficiário da transferência: fornecedor registado e/ou dados manuais
+  supplierId     String?
+  supplierName   String?
+  supplierNif    String?
+  supplierIban   String?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
@@ -1150,6 +1155,7 @@ model ExtraRequest {
   generalCostCenter GeneralCostCenter? @relation(fields: [generalCostCenterId], references: [id], onDelete: SetNull)
   fund              PettyCashFund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
   card              PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  supplierRef       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   movement          PettyCashMovement?
 
   @@index([projectId])
@@ -1157,6 +1163,7 @@ model ExtraRequest {
   @@index([type])
   @@index([fundId])
   @@index([generalCostCenterId])
+  @@index([supplierId])
 }
 
 model SystemLog {
@@ -1199,11 +1206,12 @@ model Supplier {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  products     SupplierProduct[]
-  quotes       NeedQuote[]
-  bankAccounts SupplierBankAccount[]
-  payments     CostPayment[]
+  products      SupplierProduct[]
+  quotes        NeedQuote[]
+  bankAccounts  SupplierBankAccount[]
+  payments      CostPayment[]
   freightOrders FreightOrder[]
+  extraRequests ExtraRequest[]
 }
 
 enum SupplierType {

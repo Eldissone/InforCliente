@@ -74,7 +74,102 @@ const EXTRA_INCLUDE = {
   generalCostCenter: { select: { id: true, code: true, name: true, description: true } },
   fund: { select: { id: true, name: true, currentBalance: true, currency: true } },
   card: { select: { id: true, label: true } },
+  supplierRef: {
+    select: {
+      id: true,
+      name: true,
+      nif: true,
+      iban: true,
+      bankAccounts: { select: { iban: true, isPrimary: true, bankName: true }, orderBy: { isPrimary: "desc" } },
+    },
+  },
 };
+
+const supplierFieldsSchema = {
+  supplierId: z.string().optional().nullable(),
+  supplierName: z.string().optional().nullable(),
+  supplierNif: z.string().optional().nullable(),
+  supplierIban: z.string().optional().nullable(),
+};
+
+function trimOrNull(value) {
+  const s = String(value || "").trim();
+  return s || null;
+}
+
+function primarySupplierIban(supplier) {
+  if (!supplier) return null;
+  const fromAccounts = (supplier.bankAccounts || []).find((a) => a.iban)?.iban;
+  return trimOrNull(fromAccounts || supplier.iban);
+}
+
+/**
+ * Resolve e valida dados do beneficiário para solicitação de transferência.
+ * Aceita fornecedor registado (supplierId) ou preenchimento manual (nome + nif + iban).
+ */
+async function resolveTransferSupplierFields(input, { required = true } = {}) {
+  const supplierId = trimOrNull(input.supplierId);
+  let supplierName = trimOrNull(input.supplierName);
+  let supplierNif = trimOrNull(input.supplierNif);
+  let supplierIban = trimOrNull(input.supplierIban);
+
+  if (supplierId) {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: {
+        id: true,
+        name: true,
+        nif: true,
+        iban: true,
+        bankAccounts: { select: { iban: true, isPrimary: true }, orderBy: { isPrimary: "desc" } },
+      },
+    });
+    if (!supplier) {
+      const err = new Error("SUPPLIER_NOT_FOUND");
+      err.status = 400;
+      err.code = "SUPPLIER_NOT_FOUND";
+      throw err;
+    }
+    supplierName = supplierName || trimOrNull(supplier.name);
+    supplierNif = supplierNif || trimOrNull(supplier.nif);
+    supplierIban = supplierIban || primarySupplierIban(supplier);
+  }
+
+  const hasCompleteManual = Boolean(supplierName && supplierNif && supplierIban);
+  const hasSupplierLink = Boolean(supplierId);
+
+  if (required && !hasSupplierLink && !hasCompleteManual) {
+    const err = new Error(
+      "Indique o fornecedor ou preencha Nome, NIF e IBAN antes de anexar a proforma."
+    );
+    err.status = 400;
+    err.code = "TRANSFER_SUPPLIER_REQUIRED";
+    throw err;
+  }
+
+  if (required && hasSupplierLink && (!supplierName || !supplierIban)) {
+    const err = new Error(
+      "O fornecedor seleccionado precisa de Nome e IBAN. Complete os dados em falta."
+    );
+    err.status = 400;
+    err.code = "TRANSFER_SUPPLIER_INCOMPLETE";
+    throw err;
+  }
+
+  if (required && hasSupplierLink && !supplierNif) {
+    const err = new Error("Indique o NIF do fornecedor (em falta no registo).");
+    err.status = 400;
+    err.code = "TRANSFER_SUPPLIER_NIF_REQUIRED";
+    throw err;
+  }
+
+  return {
+    supplierId: hasSupplierLink ? supplierId : null,
+    supplierName: supplierName || null,
+    supplierNif: supplierNif || null,
+    supplierIban: supplierIban || null,
+  };
+}
 
 // GET /extra-requests — Listar pedidos extra (Obra ou Geral)
 extraRequestRoutes.get(
@@ -186,6 +281,7 @@ extraRequestRoutes.post(
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
         paymentDueDate: paymentDueDateSchema,
+        ...supplierFieldsSchema,
       })
       .parse(req.body);
 
@@ -222,6 +318,23 @@ extraRequestRoutes.post(
       if (!cc) return res.status(400).json({ error: "COST_CENTER_NOT_IN_PROJECT" });
     }
 
+    let supplierData = {
+      supplierId: null,
+      supplierName: null,
+      supplierNif: null,
+      supplierIban: null,
+    };
+    if (body.paymentSource === "SOLICITACAO_TRANSFERENCIA") {
+      try {
+        supplierData = await resolveTransferSupplierFields(body, { required: true });
+      } catch (err) {
+        return res.status(err.status || 400).json({
+          error: err.code || "TRANSFER_SUPPLIER_REQUIRED",
+          message: err.message,
+        });
+      }
+    }
+
     const u = req.user || {};
     const created = await prisma.extraRequest.create({
       data: {
@@ -238,6 +351,10 @@ extraRequestRoutes.post(
         notes: body.notes || null,
         paymentDueDate: parsePaymentDueDate(body.paymentDueDate),
         requestedBy: u.name || u.email || u.sub || null,
+        supplierId: supplierData.supplierId,
+        supplierName: supplierData.supplierName,
+        supplierNif: supplierData.supplierNif,
+        supplierIban: supplierData.supplierIban,
       },
       include: EXTRA_INCLUDE,
     });
@@ -273,11 +390,48 @@ extraRequestRoutes.patch(
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
         paymentDueDate: paymentDueDateSchema.optional(),
+        ...supplierFieldsSchema,
       })
       .parse(req.body);
 
     const paymentDueDate =
       body.paymentDueDate !== undefined ? parsePaymentDueDate(body.paymentDueDate) : undefined;
+
+    const nextSource = body.paymentSource !== undefined ? body.paymentSource : existing.paymentSource;
+    const supplierTouched =
+      body.supplierId !== undefined ||
+      body.supplierName !== undefined ||
+      body.supplierNif !== undefined ||
+      body.supplierIban !== undefined ||
+      body.paymentSource !== undefined;
+
+    let supplierPatch = {};
+    if (nextSource === "SOLICITACAO_TRANSFERENCIA" && supplierTouched) {
+      try {
+        const resolved = await resolveTransferSupplierFields(
+          {
+            supplierId: body.supplierId !== undefined ? body.supplierId : existing.supplierId,
+            supplierName: body.supplierName !== undefined ? body.supplierName : existing.supplierName,
+            supplierNif: body.supplierNif !== undefined ? body.supplierNif : existing.supplierNif,
+            supplierIban: body.supplierIban !== undefined ? body.supplierIban : existing.supplierIban,
+          },
+          { required: true }
+        );
+        supplierPatch = resolved;
+      } catch (err) {
+        return res.status(err.status || 400).json({
+          error: err.code || "TRANSFER_SUPPLIER_REQUIRED",
+          message: err.message,
+        });
+      }
+    } else if (nextSource !== "SOLICITACAO_TRANSFERENCIA" && body.paymentSource !== undefined) {
+      supplierPatch = {
+        supplierId: null,
+        supplierName: null,
+        supplierNif: null,
+        supplierIban: null,
+      };
+    }
 
     const updated = await prisma.extraRequest.update({
       where: { id },
@@ -289,6 +443,7 @@ extraRequestRoutes.patch(
         ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(paymentDueDate !== undefined ? { paymentDueDate } : {}),
+        ...supplierPatch,
       },
       include: EXTRA_INCLUDE,
     });
@@ -309,8 +464,16 @@ extraRequestRoutes.patch(
     if (existing.status !== "PENDENTE") {
       return res.status(409).json({ error: "ONLY_PENDING_CAN_BE_APPROVED" });
     }
-    if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !existing.proformaUrl) {
-      return res.status(409).json({ error: "PROFORMA_REQUIRED" });
+    if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA") {
+      if (!existing.supplierName || !existing.supplierNif || !existing.supplierIban) {
+        return res.status(409).json({
+          error: "TRANSFER_SUPPLIER_REQUIRED",
+          message: "Indique o fornecedor (Nome, NIF e IBAN) antes de aprovar.",
+        });
+      }
+      if (!existing.proformaUrl) {
+        return res.status(409).json({ error: "PROFORMA_REQUIRED" });
+      }
     }
 
     const u = req.user || {};
@@ -394,6 +557,12 @@ extraRequestRoutes.post(
     }
     if (existing.status !== "PENDENTE" && existing.status !== "APROVADO") {
       return res.status(409).json({ error: "ONLY_UNLIQUIDATED_CAN_UPLOAD_PROFORMA" });
+    }
+    if (!existing.supplierName || !existing.supplierNif || !existing.supplierIban) {
+      return res.status(400).json({
+        error: "TRANSFER_SUPPLIER_REQUIRED",
+        message: "Indique o fornecedor ou preencha Nome, NIF e IBAN antes de anexar a proforma.",
+      });
     }
     if (!req.file) return res.status(400).json({ error: "PROFORMA_REQUIRED" });
 

@@ -79,11 +79,41 @@ const EXTRA_MODAL_HTML = `
           <option value="">Selecionar cartão...</option>
         </select>
       </div>
+      <div id="extraSupplierRow" class="hidden space-y-3">
+        <div>
+          <label for="extraSupplierId" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fornecedor</label>
+          <select id="extraSupplierId"
+            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            <option value="">Seleccionar fornecedor registado...</option>
+          </select>
+          <p class="text-[11px] text-slate-400 mt-1">Ou preencha manualmente Nome, NIF e IBAN abaixo.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3">
+          <div>
+            <label for="extraSupplierName" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome do Fornecedor *</label>
+            <input id="extraSupplierName" type="text" placeholder="Nome completo / razão social"
+              class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="extraSupplierNif" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">NIF *</label>
+              <input id="extraSupplierNif" type="text" placeholder="NIF"
+                class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            </div>
+            <div>
+              <label for="extraSupplierIban" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">IBAN *</label>
+              <input id="extraSupplierIban" type="text" placeholder="AO06..."
+                class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="extraProformaRow" class="hidden">
         <label for="extraProforma" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Proforma *</label>
         <input id="extraProforma" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"
           class="w-full text-sm font-semibold text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-bold hover:file:bg-emerald-100">
         <p class="text-[11px] text-slate-400 mt-1">Obrigatório para solicitação de transferência bancária (PDF ou imagem).</p>
+        <p id="extraProformaBlockedHint" class="hidden text-[11px] text-amber-600 mt-1 font-semibold">Preencha o fornecedor (Nome, NIF e IBAN) antes de anexar o documento.</p>
         <p id="extraProformaHint" class="hidden text-[11px] text-emerald-600 mt-1 font-semibold">Proforma já anexada. Envie um novo ficheiro apenas para substituir.</p>
       </div>
       <div>
@@ -107,10 +137,12 @@ export function isExtraCardSource(source) {
 
 let allProjects = [];
 let allCards = [];
+let allSuppliers = [];
 let generalCenters = [];
 let modalOptions = { showToast: defaultToast, onSuccess: null, getEditItem: null };
 let eventsBound = false;
 let editingItemCache = null;
+let supplierManualOverride = false;
 
 function defaultToast(msg, type = "info") {
   console.log(`[extra] ${type}: ${msg}`);
@@ -152,14 +184,137 @@ function populateProjectSelects() {
 }
 
 async function loadReferenceData() {
-  const [projectsData, gccData] = await Promise.all([
+  const [projectsData, gccData, suppliersResult] = await Promise.all([
     apiRequest("/projects?pageSize=200"),
     apiRequest("/general-cost-centers"),
+    apiRequest("/suppliers").catch((err) => {
+      console.warn("Não foi possível carregar fornecedores:", err);
+      return { items: [] };
+    }),
   ]);
   allProjects = projectsData.items || projectsData.projects || [];
   generalCenters = gccData.items || [];
+  allSuppliers = (suppliersResult.items || []).filter((s) => s.active !== false);
   populateProjectSelects();
   populateGeneralCcSelects();
+  populateExtraSupplierSelect();
+}
+
+function primarySupplierIban(supplier) {
+  if (!supplier) return "";
+  const fromAccounts = (supplier.bankAccounts || []).find((a) => a.iban)?.iban;
+  return String(fromAccounts || supplier.iban || "").trim();
+}
+
+function populateExtraSupplierSelect(selectedId = "") {
+  const select = document.getElementById("extraSupplierId");
+  if (!select) return;
+  select.innerHTML =
+    `<option value="">Seleccionar fornecedor registado...</option>` +
+    allSuppliers
+      .map((s) => {
+        const nif = s.nif ? ` · NIF ${s.nif}` : "";
+        return `<option value="${s.id}">${s.name}${nif}</option>`;
+      })
+      .join("");
+  if (selectedId) select.value = selectedId;
+}
+
+function getExtraSupplierFormData() {
+  return {
+    supplierId: document.getElementById("extraSupplierId")?.value || null,
+    supplierName: document.getElementById("extraSupplierName")?.value.trim() || null,
+    supplierNif: document.getElementById("extraSupplierNif")?.value.trim() || null,
+    supplierIban: document.getElementById("extraSupplierIban")?.value.trim() || null,
+  };
+}
+
+function hasCompleteTransferSupplier(data = getExtraSupplierFormData()) {
+  return Boolean(data.supplierName && data.supplierNif && data.supplierIban);
+}
+
+function applySupplierToForm(supplier) {
+  if (!supplier) return;
+  document.getElementById("extraSupplierName").value = supplier.name || "";
+  document.getElementById("extraSupplierNif").value = supplier.nif || "";
+  document.getElementById("extraSupplierIban").value = primarySupplierIban(supplier);
+  supplierManualOverride = false;
+}
+
+function onExtraSupplierSelectChange() {
+  const id = document.getElementById("extraSupplierId")?.value || "";
+  if (!id) {
+    if (!supplierManualOverride) {
+      document.getElementById("extraSupplierName").value = "";
+      document.getElementById("extraSupplierNif").value = "";
+      document.getElementById("extraSupplierIban").value = "";
+    }
+    syncExtraProformaAvailability();
+    return;
+  }
+  const supplier = allSuppliers.find((s) => s.id === id);
+  applySupplierToForm(supplier);
+  syncExtraProformaAvailability();
+}
+
+function onExtraSupplierManualInput() {
+  supplierManualOverride = true;
+  // Se o utilizador editar manualmente e deixar de coincidir com o seleccionado, limpa o select
+  const selectedId = document.getElementById("extraSupplierId")?.value || "";
+  if (selectedId) {
+    const supplier = allSuppliers.find((s) => s.id === selectedId);
+    const data = getExtraSupplierFormData();
+    const matches =
+      supplier &&
+      (data.supplierName || "").toLowerCase() === (supplier.name || "").toLowerCase() &&
+      (data.supplierNif || "") === (supplier.nif || "") &&
+      (data.supplierIban || "") === primarySupplierIban(supplier);
+    if (!matches) {
+      // Mantém o ID se o nome ainda corresponder; só limpa se o nome divergir totalmente
+      if ((data.supplierName || "").toLowerCase() !== (supplier?.name || "").toLowerCase()) {
+        document.getElementById("extraSupplierId").value = "";
+      }
+    }
+  }
+  syncExtraProformaAvailability();
+}
+
+function syncExtraProformaAvailability() {
+  const source = document.getElementById("extraSource")?.value;
+  const isTransfer = source === "SOLICITACAO_TRANSFERENCIA";
+  const isEdit = Boolean(document.getElementById("extraEditId")?.value);
+  const editing = isEdit ? editingItemCache : null;
+  const complete = hasCompleteTransferSupplier();
+  const proformaInput = document.getElementById("extraProforma");
+  const blockedHint = document.getElementById("extraProformaBlockedHint");
+
+  if (!isTransfer) {
+    if (proformaInput) {
+      proformaInput.disabled = false;
+      proformaInput.required = false;
+    }
+    blockedHint?.classList.add("hidden");
+    return;
+  }
+
+  if (proformaInput) {
+    proformaInput.disabled = !complete;
+    proformaInput.required = complete && !isEdit && !editing?.proformaUrl;
+    if (!complete) proformaInput.value = "";
+  }
+  blockedHint?.classList.toggle("hidden", complete);
+}
+
+function clearExtraSupplierFields() {
+  const idEl = document.getElementById("extraSupplierId");
+  const nameEl = document.getElementById("extraSupplierName");
+  const nifEl = document.getElementById("extraSupplierNif");
+  const ibanEl = document.getElementById("extraSupplierIban");
+  if (idEl) idEl.value = "";
+  if (nameEl) nameEl.value = "";
+  if (nifEl) nifEl.value = "";
+  if (ibanEl) ibanEl.value = "";
+  supplierManualOverride = false;
 }
 
 async function loadCostCentersForExtra(projectId, selectedId = "") {
@@ -245,6 +400,8 @@ function resetExtraFormState() {
   document.getElementById("modalExtraTitle").textContent = "Novo Pedido Extra";
   document.getElementById("extraSubmitBtn").textContent = "Guardar Pedido";
   document.getElementById("extraProformaHint")?.classList.add("hidden");
+  document.getElementById("extraProformaBlockedHint")?.classList.add("hidden");
+  clearExtraSupplierFields();
   setExtraFormLocked(false);
   document.getElementById("extraProjectId").disabled = false;
   editingItemCache = null;
@@ -277,19 +434,26 @@ function toggleExtraPaymentFields() {
   const source = document.getElementById("extraSource").value;
   const isEdit = Boolean(document.getElementById("extraEditId").value);
   const editing = isEdit ? editingItemCache : null;
+  const isTransfer = source === "SOLICITACAO_TRANSFERENCIA";
   document.getElementById("extraCardRow").classList.toggle("hidden", !isExtraCardSource(source));
-  document.getElementById("extraProformaRow").classList.toggle("hidden", source !== "SOLICITACAO_TRANSFERENCIA");
-  const proformaInput = document.getElementById("extraProforma");
-  if (proformaInput) {
-    proformaInput.required = source === "SOLICITACAO_TRANSFERENCIA" && !isEdit && !editing?.proformaUrl;
-    if (source !== "SOLICITACAO_TRANSFERENCIA") proformaInput.value = "";
+  document.getElementById("extraSupplierRow")?.classList.toggle("hidden", !isTransfer);
+  document.getElementById("extraProformaRow").classList.toggle("hidden", !isTransfer);
+  if (!isTransfer) {
+    clearExtraSupplierFields();
+    const proformaInput = document.getElementById("extraProforma");
+    if (proformaInput) {
+      proformaInput.required = false;
+      proformaInput.disabled = false;
+      proformaInput.value = "";
+    }
+    document.getElementById("extraProformaHint")?.classList.add("hidden");
+    document.getElementById("extraProformaBlockedHint")?.classList.add("hidden");
+    return;
   }
+  syncExtraProformaAvailability();
   const proformaHint = document.getElementById("extraProformaHint");
   if (proformaHint) {
-    proformaHint.classList.toggle(
-      "hidden",
-      !(source === "SOLICITACAO_TRANSFERENCIA" && editing?.proformaUrl)
-    );
+    proformaHint.classList.toggle("hidden", !(isTransfer && editing?.proformaUrl));
   }
 }
 
@@ -373,6 +537,14 @@ export async function openExtraRequestModalForEdit(id) {
   document.getElementById("extraAmount").value = item.amount || "";
   document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
   document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
+
+  populateExtraSupplierSelect(item.supplierId || "");
+  document.getElementById("extraSupplierName").value = item.supplierName || item.supplierRef?.name || "";
+  document.getElementById("extraSupplierNif").value = item.supplierNif || item.supplierRef?.nif || "";
+  document.getElementById("extraSupplierIban").value =
+    item.supplierIban || primarySupplierIban(item.supplierRef) || "";
+  supplierManualOverride = !item.supplierId;
+
   toggleExtraPaymentFields();
 
   if (item.cardId) document.getElementById("extraCardId").value = item.cardId;
@@ -384,6 +556,7 @@ export async function openExtraRequestModalForEdit(id) {
   document.getElementById("extraNotes").value = item.notes || "";
   const proformaInput = document.getElementById("extraProforma");
   if (proformaInput) proformaInput.required = false;
+  syncExtraProformaAvailability();
 
   document.getElementById("modalExtra").classList.add("open");
 }
@@ -393,6 +566,7 @@ async function submitExtra(e) {
   const editId = document.getElementById("extraEditId").value;
   const type = document.getElementById("extraType").value || "GERAL";
   const source = document.getElementById("extraSource").value;
+  const supplierData = getExtraSupplierFormData();
   const body = {
     type,
     projectId: type === "OBRA" ? document.getElementById("extraProjectId").value || null : null,
@@ -405,6 +579,10 @@ async function submitExtra(e) {
     fundId: isExtraCardSource(source) ? document.getElementById("extraFundId").value || null : null,
     cardId: isExtraCardSource(source) ? document.getElementById("extraCardId").value || null : null,
     notes: document.getElementById("extraNotes").value.trim() || null,
+    supplierId: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierId : null,
+    supplierName: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierName : null,
+    supplierNif: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierNif : null,
+    supplierIban: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierIban : null,
   };
 
   if (!editId) {
@@ -437,6 +615,14 @@ async function submitExtra(e) {
   const needsProforma = source === "SOLICITACAO_TRANSFERENCIA";
   const hasExistingProforma = Boolean(editing?.proformaUrl);
 
+  if (needsProforma && !hasCompleteTransferSupplier(supplierData)) {
+    modalOptions.showToast(
+      "Seleccione o fornecedor ou preencha Nome, NIF e IBAN antes de anexar a proforma",
+      "error"
+    );
+    return;
+  }
+
   if (needsProforma && !editId && !proformaFile) {
     modalOptions.showToast("Anexe a proforma para transferência bancária", "error");
     return;
@@ -456,6 +642,10 @@ async function submitExtra(e) {
         fundId: body.fundId,
         cardId: body.cardId,
         notes: body.notes,
+        supplierId: body.supplierId,
+        supplierName: body.supplierName,
+        supplierNif: body.supplierNif,
+        supplierIban: body.supplierIban,
       };
       await apiRequest(`/extra-requests/${editId}`, { method: "PATCH", body: patchBody });
       if (needsProforma && proformaFile) {
@@ -495,6 +685,19 @@ function bindModalEvents() {
     }
   });
   document.getElementById("extraCardId")?.addEventListener("change", syncExtraFundFromCard);
+  document.getElementById("extraSupplierId")?.addEventListener("change", onExtraSupplierSelectChange);
+  ["extraSupplierName", "extraSupplierNif", "extraSupplierIban"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", onExtraSupplierManualInput);
+  });
+  document.getElementById("extraProforma")?.addEventListener("click", (e) => {
+    if (document.getElementById("extraSource")?.value !== "SOLICITACAO_TRANSFERENCIA") return;
+    if (hasCompleteTransferSupplier()) return;
+    e.preventDefault();
+    modalOptions.showToast(
+      "Seleccione o fornecedor ou preencha Nome, NIF e IBAN antes de anexar o documento",
+      "error"
+    );
+  });
   document.getElementById("extraProjectId")?.addEventListener("change", async () => {
     if (document.getElementById("extraType").value === "OBRA") {
       const projectId = document.getElementById("extraProjectId").value;

@@ -269,7 +269,10 @@ function renderPlanExtraRow(extra, p) {
   const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
   const cur = extra?.currency || "AOA";
   const canPay = extra?.status === "APROVADO";
-  const supplier = extraRequestPaymentLabel(extra);
+  const supplier =
+    extra?.supplierName ||
+    extra?.supplierRef?.name ||
+    extraRequestPaymentLabel(extra);
 
   return `
     <tr class="group">
@@ -277,7 +280,7 @@ function renderPlanExtraRow(extra, p) {
         <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
       </td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
-      <td>${formatIbanCell(null)}</td>
+      <td>${formatIbanCell(extra?.supplierIban || extra?.supplierRef?.iban)}</td>
       <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(extra?.amount, cur)}</td>
       <td class="text-center">${renderProformaCell(extra?.proformaUrl)}</td>
       <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">Extra</span></td>
@@ -327,12 +330,29 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
   ];
 
   if (extra.paymentSource === "SOLICITACAO_TRANSFERENCIA") {
-    fields.push({
-      label: "Proforma",
-      value: extra.proformaUrl ? renderExtraDocumentLink(extra.proformaUrl, "proforma") : "Não anexada",
-      wide: false,
-      isHtml: Boolean(extra.proformaUrl),
-    });
+    fields.push(
+      {
+        label: "Fornecedor",
+        value: extra.supplierName || extra.supplierRef?.name || "—",
+        wide: false,
+      },
+      {
+        label: "NIF",
+        value: extra.supplierNif || extra.supplierRef?.nif || "—",
+        wide: false,
+      },
+      {
+        label: "IBAN",
+        value: extra.supplierIban || extra.supplierRef?.iban || "—",
+        wide: false,
+      },
+      {
+        label: "Proforma",
+        value: extra.proformaUrl ? renderExtraDocumentLink(extra.proformaUrl, "proforma") : "Não anexada",
+        wide: false,
+        isHtml: Boolean(extra.proformaUrl),
+      }
+    );
   }
   if (extra.comprovativoUrl) {
     fields.push({
