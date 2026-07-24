@@ -231,35 +231,37 @@
         }
 
         /* Chrome, Edge e Safari */
-.form-scroll::-webkit-scrollbar {
-  width: 8px;
-}
+        .form-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
 
-.form-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 9999px;
-}
+        .form-scroll::-webkit-scrollbar-track {
+            background: transparent;
+            border-radius: 9999px;
+        }
 
-.form-scroll::-webkit-scrollbar-thumb {
-  background: #94a3b8; /* slate-400 */
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
+        .form-scroll::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            /* slate-400 */
+            border-radius: 9999px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
 
-.form-scroll::-webkit-scrollbar-thumb:hover {
-  background: #64748b; /* slate-500 */
-}
+        .form-scroll::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+            /* slate-500 */
+        }
 
-.form-scroll::-webkit-scrollbar-corner {
-  background: transparent;
-}
+        .form-scroll::-webkit-scrollbar-corner {
+            background: transparent;
+        }
 
-/* Firefox */
-.form-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: #94a3b8 transparent;
-}
+        /* Firefox */
+        .form-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #94a3b8 transparent;
+        }
     </style>
 </head>
 
@@ -274,11 +276,10 @@
                     <span id="navBrandText">Gestor</span>
                 </span>
                 <div class="hidden lg:flex items-center gap-6">
-                    <a
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        data-nav-dashboard href="../Dashboard/index.html">Dashboard</a>
                     <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        data-nav-clientes href="../Clientes/clienteLista.html">Clientes</a>
+                        data-nav-dashboard href="../Dashboard/index.html">Dashboard</a>
+                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" data-nav-clientes
+                        href="../Clientes/clienteLista.html">Clientes</a>
                     <a class="text-sm font-semibold text-[#2afc8d] transition-all bg-[#2afc8d]/10 px-3 py-1.5 rounded-lg"
                         data-nav-obras href="../Projectos/ProjectGeral.html">Obras</a>
                     <a data-nav-logistics
@@ -313,8 +314,7 @@
             </div>
         </div>
         <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a
-                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
+            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 data-nav-dashboard href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
             </a>
