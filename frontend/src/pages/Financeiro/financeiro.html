@@ -720,6 +720,18 @@
                 </select>
                 <input id="finSearch" type="search" placeholder="Pagamentos, extras, obras..."
                     class="h-10 flex-1 sm:flex-none px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 sm:w-52 min-w-[140px]">
+                <select id="finDateField"
+                    class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
+                    title="Filtrar por data de vencimento ou de liquidação">
+                    <option value="due">Data: vencimento</option>
+                    <option value="confirmed">Data: liquidação</option>
+                </select>
+                <input id="finDateFrom" type="date"
+                    class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
+                    title="Data inicial do filtro">
+                <input id="finDateTo" type="date"
+                    class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
+                    title="Data final do filtro">
             </div>
             <div class="fin-toolbar-actions">
                 <button id="btnPendingPayments" type="button"
@@ -902,7 +914,7 @@
                             <table class="fin-table w-full min-w-[1100px]">
                                 <thead>
                                     <tr>
-                                        <th>Data</th>
+                                        <th title="Vencimento ou data de liquidação">Data</th>
                                         <th>Material / Descrição</th>
                                         <th>Fornecedor</th>
                                         <th>IBAN</th>
@@ -1179,6 +1191,15 @@
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
                     <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Com IVA/retenção activos, calcula
                         automaticamente. O orçamento realizado usa sempre a base.</p>
+                </div>
+                <div>
+                    <label for="liqConfirmedDate"
+                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data da liquidação
+                        *</label>
+                    <input id="liqConfirmedDate" type="date" required
+                        class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Registe quando o pagamento foi efectivamente
+                        realizado (útil para liquidações de pedidos antigos).</p>
                 </div>
                 <div id="liqDocsBlock" class="flex flex-col gap-3">
                     <div class="flex items-center justify-between gap-3">

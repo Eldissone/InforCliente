@@ -1,5 +1,5 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
-import { formatCurrency, formatDateBR } from "./format.js";
+import { formatCurrency, formatDateBR, toDateKey, dateInputToUtcNoonIso } from "./format.js";
 import { appendFiscalFieldsToFormData, computeFiscalBreakdown, resolveFiscalPercents, paymentPayableAmount } from "./supplierFiscal.js";
 import {
   initLiquidationFiscalHandlers,
@@ -341,6 +341,12 @@ function bindLiqDocRowEvents(scope = document) {
   });
 }
 
+function setLiqConfirmedDateInput(data) {
+  const el = document.getElementById("liqConfirmedDate");
+  if (!el) return;
+  el.value = toDateKey(data?.confirmedAt) || toDateKey(new Date());
+}
+
 function openLiquidateModal(payment) {
   const data =
     payment && typeof payment === "object"
@@ -364,6 +370,7 @@ function openLiquidateModal(payment) {
     document.getElementById("formLiq").appendChild(ccInput);
   }
   ccInput.value = data.costCenterId;
+  setLiqConfirmedDateInput(data);
 
   const title = document.getElementById("liqModalTitle");
   const subtitle = document.getElementById("liqModalSubtitle");
@@ -407,9 +414,14 @@ async function submitLiquidation(e) {
 
   if (!realizedAmount) return _showToast?.("Valor é obrigatório", "error");
 
+  const confirmedDateEl = document.getElementById("liqConfirmedDate");
+  const confirmedDate = confirmedDateEl?.value?.trim();
+  if (!confirmedDate) return _showToast?.("Data da liquidação é obrigatória", "error");
+
   const docRows = Array.from(document.querySelectorAll("#liqDocsList .liq-doc-row"));
   const fd = new FormData();
   fd.append("paidAmount", realizedAmount);
+  fd.append("confirmedAt", dateInputToUtcNoonIso(confirmedDate));
   if (!liqAlreadyConfirmed) fd.append("status", "CONFIRMADO");
 
   let hasComprovativo = liqAlreadyConfirmed;
@@ -521,11 +533,18 @@ function openPaymentAside(data, type, options = {}) {
 
   document.getElementById("asideDesc").textContent = data.description || "—";
   renderAsideProductSection(data);
-  document.getElementById("asideDate").textContent = data.paymentDate
-    ? formatDateBR(data.paymentDate)
-    : data.date
-      ? formatDateBR(data.date)
-      : "—";
+  document.getElementById("asideDate").textContent =
+    data.status === "CONFIRMADO" || data.status === "PAID"
+      ? data.confirmedAt
+        ? formatDateBR(data.confirmedAt)
+        : data.paymentDate
+          ? formatDateBR(data.paymentDate)
+          : "—"
+      : data.paymentDate
+        ? formatDateBR(data.paymentDate)
+        : data.date
+          ? formatDateBR(data.date)
+          : "—";
   document.getElementById("asideSupplier").textContent = data.supplier || "—";
   document.getElementById("asideCategory").textContent = data.category || "—";
   renderAsidePaymentType(data);

@@ -3,7 +3,7 @@ import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.j
 import { getSessionUser } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
-import { formatCurrency, formatDateBR, formatDateOnlyBR, toDateKey } from "/shared/format.js";
+import { formatCurrency, formatDateBR, formatDateOnlyBR, toDateKey, dateInputToUtcNoonIso } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
 import { appendFiscalFieldsToFormData, computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFiscal.js";
 import {
@@ -2826,6 +2826,11 @@ window.openLiquidateModal = function (payment) {
   }
   ccInput.value = data.costCenterId;
 
+  const liqConfirmedDate = document.getElementById("liqConfirmedDate");
+  if (liqConfirmedDate) {
+    liqConfirmedDate.value = toDateKey(data.confirmedAt) || toDateKey(new Date());
+  }
+
   const compInput = document.getElementById("liqComprovativo");
   const compLabel = document.getElementById("liqComprovativoLabel");
   const compHint = document.getElementById("liqComprovativoHint");
@@ -2876,6 +2881,9 @@ async function submitLiquidation(e) {
 
   if (!realizedAmount) return showToast("Valor é obrigatório", "error");
 
+  const confirmedDate = document.getElementById("liqConfirmedDate")?.value?.trim();
+  if (!confirmedDate) return showToast("Data da liquidação é obrigatória", "error");
+
   const compInput = document.getElementById("liqComprovativo");
   if (!liqAlreadyConfirmed && (!compInput || !compInput.files[0])) {
     return showToast("Comprovativo de pagamento é obrigatório", "error");
@@ -2883,6 +2891,7 @@ async function submitLiquidation(e) {
 
   const fd = new FormData();
   fd.append("paidAmount", realizedAmount);
+  fd.append("confirmedAt", dateInputToUtcNoonIso(confirmedDate));
   if (!liqAlreadyConfirmed) fd.append("status", "CONFIRMADO");
   if (compInput && compInput.files[0]) fd.append("comprovativo", compInput.files[0]);
 

@@ -917,6 +917,7 @@ model CostPayment {
   supplierId         String?
   docNumber          String?
   paymentDate        DateTime
+  confirmedAt        DateTime?
   supplier           String?
   category           PaymentCategory     @default(MATERIAL)
   description        String
@@ -953,6 +954,7 @@ model CostPayment {
   @@index([supplierId])
   @@index([projectId, costCenterId])
   @@index([projectId, paymentDate])
+  @@index([confirmedAt])
   @@index([certificationStatus])
 }
 

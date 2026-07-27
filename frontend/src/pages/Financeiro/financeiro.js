@@ -2,7 +2,7 @@ import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
-import { formatCurrency, formatDateBR } from "/shared/format.js";
+import { formatCurrency, formatDateBR, toDateKey, dateInputToUtcNoonIso } from "/shared/format.js";
 import {
   resolveTimelineStatus,
   TIMELINE_STATUS,
@@ -265,15 +265,32 @@ window.toggleIbanCell = function (btn) {
 };
 
 function planRowDate(item, extra) {
-  const raw =
-    item?.dueDate ||
-    item?.paymentDate ||
-    extra?.paymentDueDate ||
-    extra?.approvedAt ||
-    extra?.requestedAt ||
-    extra?.createdAt;
-  if (!raw) return `<span class="text-slate-300">—</span>`;
-  return `<span class="text-xs text-slate-600 whitespace-nowrap tabular-nums">${formatDateBR(raw)}</span>`;
+  if (extra) {
+    const raw =
+      extra.status === "PAGO" && extra.paidAt
+        ? extra.paidAt
+        : extra.paymentDueDate ||
+          extra.approvedAt ||
+          extra.requestedAt ||
+          extra.createdAt;
+    if (!raw) return `<span class="text-slate-300">—</span>`;
+    return `<span class="text-xs text-slate-600 whitespace-nowrap tabular-nums">${formatDateBR(raw)}</span>`;
+  }
+
+  const st = item?.timelineStatus || resolveTimelineStatus(item);
+  const isPaid = st === "PAGO" || String(item?.status || "").toUpperCase() === "CONFIRMADO";
+  const displayRaw = isPaid && item?.confirmedAt ? item.confirmedAt : item?.dueDate || item?.paymentDate;
+  if (!displayRaw) return `<span class="text-slate-300">—</span>`;
+
+  const dueRaw = item?.dueDate || item?.paymentDate;
+  const title =
+    isPaid && item?.confirmedAt && dueRaw && toDateKey(dueRaw) !== toDateKey(item.confirmedAt)
+      ? `Vencimento: ${formatDateBR(dueRaw)}`
+      : isPaid && item?.confirmedAt
+        ? "Data de liquidação"
+        : "Data de vencimento";
+
+  return `<span class="text-xs text-slate-600 whitespace-nowrap tabular-nums" title="${escapeAttr(title)}">${formatDateBR(displayRaw)}</span>`;
 }
 
 function renderPlanDocCells({ proformaUrl, comprovativoUrl, faturaUrl } = {}) {
@@ -1030,7 +1047,7 @@ function bindEvents() {
     setDashboardVisible(Boolean(visible));
   });
 
-  ["finProjFilter", "finStatusFilter", "finSearch", "finIncludePaid"].forEach((id) => {
+  ["finProjFilter", "finStatusFilter", "finSearch", "finIncludePaid", "finDateField", "finDateFrom", "finDateTo"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
       reloadAll();
     });
@@ -1202,6 +1219,27 @@ async function loadProjects() {
   }
 }
 
+function appendFinDateFilters(params) {
+  const dateField = document.getElementById("finDateField")?.value || "due";
+  const fromInput = document.getElementById("finDateFrom")?.value?.trim();
+  const toInput = document.getElementById("finDateTo")?.value?.trim();
+
+  if (dateField === "confirmed") params.set("dateField", "confirmed");
+  if (fromInput) params.set("dateFrom", dateInputToUtcNoonIso(fromInput));
+  if (toInput) params.set("dateTo", dateInputToUtcNoonIso(toInput));
+}
+
+function getFinTimelineDateRange() {
+  const fromInput = document.getElementById("finDateFrom")?.value?.trim();
+  const toInput = document.getElementById("finDateTo")?.value?.trim();
+  if (fromInput || toInput) {
+    const from = fromInput ? new Date(dateInputToUtcNoonIso(fromInput)) : new Date(0);
+    const to = toInput ? new Date(dateInputToUtcNoonIso(toInput)) : new Date("2099-12-31T12:00:00.000Z");
+    return { from, to };
+  }
+  return getDateRangeForView(ganttViewMode, calendarAnchor);
+}
+
 function getDashboardFilterParams() {
   const params = new URLSearchParams();
   const projectId = getProjectFilterValue();
@@ -1215,8 +1253,11 @@ function getDashboardFilterParams() {
   params.set("onlyVisible", "false");
   params.set("includePaid", includePaid ? "true" : "false");
   if (status === "CANCELADO") params.set("includeCancelled", "true");
-  params.set("daysPast", "90");
-  params.set("daysAhead", "365");
+  appendFinDateFilters(params);
+  if (!params.has("dateFrom") && !params.has("dateTo")) {
+    params.set("daysPast", "90");
+    params.set("daysAhead", "365");
+  }
   return params;
 }
 
@@ -1748,10 +1789,12 @@ function getFilters() {
   if (search) params.set("search", search);
   params.set("onlyVisible", "false");
   if (includePaid) params.set("includePaid", "true");
+  if (status === "CANCELADO") params.set("includeCancelled", "true");
 
-  const { from, to } = getDateRangeForView(ganttViewMode, calendarAnchor);
-  params.set("dateFrom", from.toISOString());
-  params.set("dateTo", to.toISOString());
+  appendFinDateFilters(params);
+  const { from, to } = getFinTimelineDateRange();
+  if (!params.has("dateFrom")) params.set("dateFrom", from.toISOString());
+  if (!params.has("dateTo")) params.set("dateTo", to.toISOString());
 
   return params;
 }
@@ -2065,7 +2108,7 @@ async function loadAuditList() {
         <td class="text-sm text-slate-700 max-w-xs truncate" title="${escapeAttr(p.description || "")}">${p.description || "—"}</td>
         <td class="text-sm text-slate-600">${p.supplier || "—"}</td>
         <td class="text-right font-bold tabular-nums">${formatCurrency(p.paidAmount ?? p.budgetedAmount, cur)}</td>
-        <td class="text-center text-xs text-slate-500">${formatDateBR(p.paymentDate)}</td>
+        <td class="text-center text-xs text-slate-500">${formatDateBR(p.confirmedAt || p.paymentDate)}</td>
         <td class="text-center"><span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${cert.cls}">${cert.label}</span></td>
         <td class="text-center">
           <div class="flex justify-center gap-1">

@@ -426,6 +426,7 @@ costCenterRoutes.get(
     const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
     const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
     const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+    const dateField = req.query.dateField === "confirmed" ? "confirmed" : "due";
 
     const payments = await prisma.costPayment.findMany({
       where,
@@ -449,6 +450,7 @@ costCenterRoutes.get(
       daysPast,
       dateFrom,
       dateTo,
+      dateField,
     });
 
     setImmediate(() => {
@@ -570,6 +572,7 @@ costCenterRoutes.get(
     const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
     const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
     const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+    const dateField = req.query.dateField === "confirmed" ? "confirmed" : "due";
 
     const where = {
       projectId,
@@ -598,6 +601,7 @@ costCenterRoutes.get(
       daysPast,
       dateFrom,
       dateTo,
+      dateField,
     });
 
     setImmediate(() => {
@@ -2088,6 +2092,7 @@ costCenterRoutes.patch(
     const body = z.object({
       docNumber: z.string().optional().nullable(),
       paymentDate: z.string().datetime().optional(),
+      confirmedAt: z.string().datetime().optional().nullable(),
       supplier: z.string().optional().nullable(),
       supplierId: z.string().optional().nullable(),
       category: z.enum(["MATERIAL", "SERVICO", "MAO_DE_OBRA", "EQUIPAMENTO", "TRANSPORTE", "ADMINISTRATIVO", "OUTRO"]).optional(),
@@ -2241,11 +2246,25 @@ costCenterRoutes.patch(
       }
     }
 
+    let confirmedAtPatch = undefined;
+    if (body.confirmedAt !== undefined) {
+      confirmedAtPatch = body.confirmedAt ? new Date(body.confirmedAt) : null;
+    } else if (body.status === "CONFIRMADO" && before.status !== "CONFIRMADO") {
+      confirmedAtPatch = new Date();
+    } else if (
+      body.status &&
+      body.status !== "CONFIRMADO" &&
+      before.status === "CONFIRMADO"
+    ) {
+      confirmedAtPatch = null;
+    }
+
     const updated = await prisma.costPayment.update({
       where: { id: payId },
       data: {
         ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
         ...(body.paymentDate ? { paymentDate: new Date(body.paymentDate) } : {}),
+        ...(confirmedAtPatch !== undefined ? { confirmedAt: confirmedAtPatch } : {}),
         ...(resolvedSupplierName !== undefined ? { supplier: resolvedSupplierName } : {}),
         ...(body.supplierId !== undefined ? { supplierId: body.supplierId || null } : {}),
         ...(body.category ? { category: body.category } : {}),

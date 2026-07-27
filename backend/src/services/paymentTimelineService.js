@@ -78,9 +78,22 @@ function enrichPaymentForTimeline(payment, now = new Date()) {
   };
 }
 
+function getTimelineAnchorDate(payment, dateField = "due") {
+  const status = String(payment.status || "").toUpperCase();
+  if (
+    dateField === "confirmed" &&
+    (status === "CONFIRMADO" || payment.timelineStatus === "PAGO") &&
+    payment.confirmedAt
+  ) {
+    return startOfDay(payment.confirmedAt);
+  }
+  return getPaymentDueDate(payment);
+}
+
 /**
  * Agrupa pagamentos por dia de vencimento, incluindo apenas dias com pagamentos.
  * Filtra por visibilidade (1 dia antes) quando onlyVisible=true.
+ * dateField: "due" (vencimento) | "confirmed" (data de liquidação)
  */
 function buildPaymentTimeline(payments, options = {}) {
   const {
@@ -94,6 +107,7 @@ function buildPaymentTimeline(payments, options = {}) {
     daysPast = 30,
     dateFrom = null,
     dateTo = null,
+    dateField = "due",
   } = options;
 
   const today = startOfDay(now);
@@ -116,15 +130,18 @@ function buildPaymentTimeline(payments, options = {}) {
       if (onlyVisible && p.timelineStatus !== "PAGO" && p.timelineStatus !== "CANCELADO" && !p.isVisible) {
         return false;
       }
-      const due = startOfDay(p.dueDate);
-      if (due < rangeStart || due > rangeEnd) return false;
+      const anchor = getTimelineAnchorDate(p, dateField);
+      if (anchor < rangeStart || anchor > rangeEnd) return false;
       return true;
     })
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    .sort(
+      (a, b) =>
+        getTimelineAnchorDate(a, dateField) - getTimelineAnchorDate(b, dateField)
+    );
 
   const dayMap = new Map();
   enriched.forEach((p) => {
-    const key = startOfDay(p.dueDate).toISOString();
+    const key = getTimelineAnchorDate(p, dateField).toISOString();
     if (!dayMap.has(key)) {
       dayMap.set(key, {
         date: key,
@@ -163,4 +180,5 @@ module.exports = {
   isPaymentVisible,
   enrichPaymentForTimeline,
   buildPaymentTimeline,
+  getTimelineAnchorDate,
 };
