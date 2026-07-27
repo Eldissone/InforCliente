@@ -9,7 +9,12 @@ import {
 } from "/shared/paymentTimeline.js";
 import { renderPaymentGantt, getDateRangeForView } from "/shared/paymentGantt.js";
 import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
-import { paymentPayableAmount } from "/shared/supplierFiscal.js";
+import { paymentPayableAmount, appendFiscalFieldsToFormData } from "/shared/supplierFiscal.js";
+import {
+  renderFiscalSectionHtml,
+  setupLiquidationFiscalModal,
+  getLiquidationFiscalFormDataExtras,
+} from "/shared/liquidationFiscal.js";
 
 let allProjects = [];
 let ganttViewMode = "month";
@@ -561,15 +566,86 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
 
 function renderExtraPayComprovativoSection() {
   return `
-    <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/60">
-      <label for="extraPayComprovativo"
-        class="block text-[10px] font-black uppercase tracking-widest text-amber-800 mb-2">
-        Comprovativo da transferência *
-      </label>
-      <input id="extraPayComprovativo" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" required
-        class="w-full text-sm font-semibold text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white file:text-emerald-700 file:font-bold hover:file:bg-emerald-50">
-      <p class="text-[11px] text-amber-700/80 mt-2">Anexe o comprovativo bancário para concluir a liquidação.</p>
+    <div id="extraPayDocsBlock" class="flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-3">
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-400">Documentos</label>
+        <button type="button" id="extraPayAddDocBtn"
+          class="h-9 px-3 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] hover:bg-slate-200 transition-all inline-flex items-center gap-1">
+          <span class="material-symbols-outlined text-base">add</span> Adicionar
+        </button>
+      </div>
+      <div id="extraPayDocsList" class="flex flex-col gap-3"></div>
+      <p class="text-[11px] text-amber-700/80">Inclua o comprovativo da transferência. Outros documentos são opcionais.</p>
     </div>`;
+}
+
+function renderExtraPayFiscalBlock(extra) {
+  const cur = extra.currency || "AOA";
+  return `
+    <div class="flex flex-col gap-4">
+      <div>
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor base do pedido</label>
+        <input id="extraPayCommitted" type="text" disabled
+          class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed"
+          value="${escapeAttr(formatCurrency(extra.amount, cur))}" />
+      </div>
+      ${renderFiscalSectionHtml("extraPay")}
+      <div>
+        <label for="extraPayAmount" class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor líquido a pagar *</label>
+        <input id="extraPayAmount" type="number" min="0" step="0.01" required
+          value="${escapeAttr(String(Number(extra.amount) || 0))}"
+          class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
+      </div>
+    </div>`;
+}
+
+function renderExtraPayDocRow({ kind = "comprovativo", required = false, removable = true } = {}) {
+  const removeBtn = removable
+    ? `<button type="button" class="extra-pay-doc-remove w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors flex items-center justify-center" title="Remover">
+        <span class="material-symbols-outlined text-base">delete</span>
+      </button>`
+    : "";
+  const descHidden = kind !== "outro" ? "hidden" : "";
+  return `
+    <div class="extra-pay-doc-row p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-2">
+      <div class="flex items-center gap-2">
+        <select class="extra-pay-doc-kind flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+          <option value="comprovativo" ${kind === "comprovativo" ? "selected" : ""}>Comprovativo</option>
+          <option value="fatura" ${kind === "fatura" ? "selected" : ""}>Fatura / Recibo</option>
+          <option value="outro" ${kind === "outro" ? "selected" : ""}>Outro documento</option>
+        </select>
+        ${removeBtn}
+      </div>
+      <input type="file" class="extra-pay-doc-file w-full h-11 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" accept=".pdf,.png,.jpg,.jpeg,.webp,image/*" ${required ? "required" : ""} />
+      <input type="text" class="extra-pay-doc-desc w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 ${descHidden}" placeholder="Descrição (opcional)" />
+    </div>`;
+}
+
+function syncExtraPayDocDescVisibility(row) {
+  if (!row) return;
+  const kind = row.querySelector(".extra-pay-doc-kind")?.value || "comprovativo";
+  const desc = row.querySelector(".extra-pay-doc-desc");
+  if (!desc) return;
+  const show = kind === "outro";
+  desc.classList.toggle("hidden", !show);
+  if (!show) desc.value = "";
+}
+
+function bindExtraPayDocEvents(scope = document) {
+  scope.querySelectorAll(".extra-pay-doc-row").forEach((row) => syncExtraPayDocDescVisibility(row));
+  scope.querySelectorAll(".extra-pay-doc-kind").forEach((select) => {
+    select.onchange = () => syncExtraPayDocDescVisibility(select.closest(".extra-pay-doc-row"));
+  });
+  scope.querySelectorAll(".extra-pay-doc-remove").forEach((btn) => {
+    btn.onclick = () => btn.closest(".extra-pay-doc-row")?.remove();
+  });
+}
+
+function resetExtraPayDocuments(requiredComprovativo = true) {
+  const list = document.getElementById("extraPayDocsList");
+  if (!list) return;
+  list.innerHTML = renderExtraPayDocRow({ kind: "comprovativo", required: requiredComprovativo, removable: false });
+  bindExtraPayDocEvents(list);
 }
 
 function renderPendingFinanceNeedCard(need) {
@@ -776,8 +852,36 @@ function openExtraPayModal(extra) {
   const isCardLoad = extra.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO";
   document.getElementById("extraPayBody").innerHTML =
     renderExtraDetailGrid(extra) +
+    renderExtraPayFiscalBlock(extra) +
     (needsComprovativo ? renderExtraPayComprovativoSection() : "") +
     (isCardLoad ? renderExtraPayCardLoadSection(extra) : "");
+
+  setupLiquidationFiscalModal(
+    {
+      amount: extra.amount,
+      budgetedAmount: extra.amount,
+      supplierRef: extra.supplierRef || {
+        vatPercent: null,
+        withholdingPercent: null,
+        discountPercent: null,
+      },
+      currency: extra.currency,
+    },
+    { prefix: "extraPay", amountField: "extraPayAmount", committedField: "extraPayCommitted" }
+  );
+
+  if (needsComprovativo) {
+    resetExtraPayDocuments(true);
+    const addBtn = document.getElementById("extraPayAddDocBtn");
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const list = document.getElementById("extraPayDocsList");
+        if (!list) return;
+        list.insertAdjacentHTML("beforeend", renderExtraPayDocRow({ kind: "outro", removable: true }));
+        bindExtraPayDocEvents(list);
+      };
+    }
+  }
 
   const btn = document.getElementById("extraPayConfirmBtn");
   const canPay = extra.status === "APROVADO";
@@ -786,19 +890,37 @@ function openExtraPayModal(extra) {
   btn.classList.toggle("cursor-not-allowed", !canPay);
   btn.onclick = canPay
     ? async () => {
-        if (!confirm(`Confirmar liquidação de ${formatCurrency(extra.amount, extra.currency || "AOA")}?`)) return;
+        const payAmount = Number(document.getElementById("extraPayAmount")?.value) || Number(extra.amount);
+        if (!confirm(`Confirmar liquidação de ${formatCurrency(payAmount, extra.currency || "AOA")}?`)) return;
         try {
+          const fd = new FormData();
+          fd.append("paidAmount", String(payAmount));
+
+          const fiscalExtras = getLiquidationFiscalFormDataExtras();
+          if (fiscalExtras) appendFiscalFieldsToFormData(fd, fiscalExtras);
+
           if (needsComprovativo) {
-            const file = document.getElementById("extraPayComprovativo")?.files?.[0];
-            if (!file) {
+            const docRows = Array.from(document.querySelectorAll("#extraPayDocsList .extra-pay-doc-row"));
+            let hasComprovativo = false;
+            docRows.forEach((row) => {
+              const file = row.querySelector(".extra-pay-doc-file")?.files?.[0];
+              if (!file) return;
+              const kind = row.querySelector(".extra-pay-doc-kind")?.value || "outro";
+              if (kind === "comprovativo" && !hasComprovativo) {
+                fd.append("comprovativo", file);
+                hasComprovativo = true;
+              }
+            });
+            if (!hasComprovativo) {
               toast("Anexe o comprovativo da transferência bancária.", { type: "error" });
               return;
             }
-            const fd = new FormData();
-            fd.append("comprovativo", file);
             await apiUpload(`/extra-requests/${extra.id}/pay`, fd, "POST");
           } else {
-            await apiRequest(`/extra-requests/${extra.id}/pay`, { method: "POST" });
+            await apiRequest(`/extra-requests/${extra.id}/pay`, {
+              method: "POST",
+              body: { paidAmount: payAmount },
+            });
           }
           toast("Pedido Extra liquidado com sucesso.", { type: "success" });
           document.getElementById("modalExtraPay").classList.remove("open");

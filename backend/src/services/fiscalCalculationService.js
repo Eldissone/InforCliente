@@ -100,7 +100,7 @@ function computeFiscalFromPaymentInput({ supplier, product = null, budgetedAmoun
   const breakdown = computeFiscalBreakdown({
     supplier,
     product,
-    baseAmount: budgetedAmount,
+    baseAmount: body.budgetedAmount ?? budgetedAmount,
     grossAmount: body.grossAmount ?? paidAmount,
     inputMode,
     applyVat,

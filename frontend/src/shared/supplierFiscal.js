@@ -204,12 +204,15 @@ export function defaultFiscalFlagsFromSupplier(supplier, product = null) {
   };
 }
 
-export function appendFiscalFieldsToFormData(fd, { inputMode, applyVat, applyWithholding, applyDiscount, grossAmount }) {
+export function appendFiscalFieldsToFormData(fd, { inputMode, applyVat, applyWithholding, applyDiscount, grossAmount, baseAmount }) {
   fd.append("fiscalInputMode", inputMode || "base");
   fd.append("fiscalApplyVat", applyVat ? "true" : "false");
   fd.append("fiscalApplyWithholding", applyWithholding ? "true" : "false");
   fd.append("fiscalApplyDiscount", applyDiscount ? "true" : "false");
   if (inputMode === "gross" && grossAmount != null) {
     fd.append("grossAmount", String(grossAmount));
+  }
+  if (baseAmount != null) {
+    fd.append("budgetedAmount", String(baseAmount));
   }
 }

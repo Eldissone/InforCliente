@@ -6,35 +6,93 @@ import {
   resolveFiscalPercents,
 } from "./supplierFiscal.js";
 
+const DEFAULT_FIELDS = {
+  section: "liqFiscalSection",
+  committed: "liqCommitted",
+  baseAmount: "liqBaseAmount",
+  grossAmount: "liqGrossAmount",
+  baseWrap: "liqBaseInputWrap",
+  grossWrap: "liqGrossInputWrap",
+  applyVat: "liqApplyVat",
+  applyWithholding: "liqApplyWithholding",
+  applyDiscount: "liqApplyDiscount",
+  modeBase: "liqFiscalModeBase",
+  modeGross: "liqFiscalModeGross",
+  breakdown: "liqFiscalBreakdown",
+  supplierHint: "liqFiscalSupplierHint",
+  amount: "liqAmount",
+};
+
+let _fields = { ...DEFAULT_FIELDS };
 let _currentSupplier = null;
 let _currentProduct = null;
 let _currency = "AOA";
+let _fiscalFrozen = false;
+const _boundRoots = new Set();
 
-function getEl(id) {
-  return document.getElementById(id);
+function getEl(key) {
+  const id = _fields[key];
+  return id ? document.getElementById(id) : null;
+}
+
+export function configureLiquidationFiscalFields(overrides = {}) {
+  _fields = { ...DEFAULT_FIELDS, ...overrides };
+}
+
+export function renderFiscalSectionHtml(prefix = "liq") {
+  const p = (name) => `${prefix}${name}`;
+  return `
+    <div id="${p("FiscalSection")}" class="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3" data-fiscal-root="${prefix}">
+      <div class="flex items-center justify-between gap-2">
+        <p class="text-xs font-black uppercase tracking-widest text-slate-500">Cálculo fiscal</p>
+        <div class="flex items-center gap-3 text-[11px] font-bold text-slate-600">
+          <label class="inline-flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="${p("FiscalMode")}" id="${p("FiscalModeBase")}" value="base" checked class="accent-emerald-600" />
+            Base
+          </label>
+          <label class="inline-flex items-center gap-1 cursor-pointer">
+            <input type="radio" name="${p("FiscalMode")}" id="${p("FiscalModeGross")}" value="gross" class="accent-emerald-600" />
+            Bruto
+          </label>
+        </div>
+      </div>
+      <p id="${p("FiscalSupplierHint")}" class="text-[10px] text-slate-400 font-semibold"></p>
+      <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-700">
+        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${p("ApplyVat")}" class="accent-emerald-600" /> Tem IVA</label>
+        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${p("ApplyWithholding")}" class="accent-emerald-600" /> Retenção na fonte</label>
+        <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${p("ApplyDiscount")}" class="accent-emerald-600" /> Desconto</label>
+      </div>
+      <div id="${p("BaseInputWrap")}">
+        <label for="${p("BaseAmount")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor base</label>
+        <input id="${p("BaseAmount")}" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+      </div>
+      <div id="${p("GrossInputWrap")}" class="hidden">
+        <label for="${p("GrossAmount")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor bruto (fatura)</label>
+        <input id="${p("GrossAmount")}" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+      </div>
+      <div id="${p("FiscalBreakdown")}" class="pt-1"></div>
+    </div>`;
 }
 
 function readFiscalOptions() {
-  const inputMode = getEl("liqFiscalModeGross")?.checked ? "gross" : "base";
+  const inputMode = getEl("modeGross")?.checked ? "gross" : "base";
   return {
     inputMode,
-    applyVat: Boolean(getEl("liqApplyVat")?.checked),
-    applyWithholding: Boolean(getEl("liqApplyWithholding")?.checked),
-    applyDiscount: Boolean(getEl("liqApplyDiscount")?.checked),
+    applyVat: Boolean(getEl("applyVat")?.checked),
+    applyWithholding: Boolean(getEl("applyWithholding")?.checked),
+    applyDiscount: Boolean(getEl("applyDiscount")?.checked),
   };
 }
 
 function readInputAmounts() {
   const opts = readFiscalOptions();
-  const baseAmount = Number(getEl("liqBaseAmount")?.value) || Number(getEl("liqCommitted")?.dataset?.raw) || 0;
-  const grossAmount = Number(getEl("liqGrossAmount")?.value) || 0;
+  const baseAmount = Number(getEl("baseAmount")?.value) || Number(getEl("committed")?.dataset?.raw) || 0;
+  const grossAmount = Number(getEl("grossAmount")?.value) || 0;
   return { ...opts, baseAmount, grossAmount };
 }
 
 export function computeCurrentLiquidationFiscal() {
   const opts = readInputAmounts();
-  const hasFiscal = opts.applyVat || opts.applyWithholding || opts.applyDiscount;
-  if (!hasFiscal) return null;
   return computeFiscalBreakdown({
     supplier: _currentSupplier,
     product: _currentProduct,
@@ -42,26 +100,59 @@ export function computeCurrentLiquidationFiscal() {
   });
 }
 
+function syncCrossAmountFields(breakdown) {
+  if (!breakdown || _fiscalFrozen) return;
+  const baseEl = getEl("baseAmount");
+  const grossEl = getEl("grossAmount");
+  const opts = readFiscalOptions();
+  if (opts.inputMode === "gross") {
+    if (baseEl && document.activeElement !== baseEl) baseEl.value = breakdown.base;
+  } else if (grossEl && document.activeElement !== grossEl) {
+    grossEl.value = breakdown.gross;
+  }
+}
+
 function syncPaidAmountFromFiscal() {
   const breakdown = computeCurrentLiquidationFiscal();
-  const liqAmount = getEl("liqAmount");
-  if (!liqAmount) return;
-  if (breakdown) {
-    liqAmount.value = breakdown.net;
-    liqAmount.readOnly = true;
-    liqAmount.classList.add("bg-slate-100", "cursor-not-allowed");
-  } else {
-    liqAmount.readOnly = false;
-    liqAmount.classList.remove("bg-slate-100", "cursor-not-allowed");
+  const amountEl = getEl("amount");
+  if (!amountEl) return;
+
+  const opts = readFiscalOptions();
+  const hasFiscal = opts.applyVat || opts.applyWithholding || opts.applyDiscount;
+
+  if (hasFiscal && breakdown) {
+    amountEl.value = breakdown.net;
+    amountEl.readOnly = true;
+    amountEl.classList.add("bg-slate-100", "cursor-not-allowed");
+    syncCrossAmountFields(breakdown);
+    return;
+  }
+
+  if (_fiscalFrozen) return;
+
+  amountEl.readOnly = false;
+  amountEl.classList.remove("bg-slate-100", "cursor-not-allowed");
+  const base = Number(getEl("baseAmount")?.value) || Number(getEl("committed")?.dataset?.raw) || 0;
+  if (document.activeElement !== amountEl) {
+    amountEl.value = base;
   }
 }
 
 function renderBreakdownPanel() {
-  const panel = getEl("liqFiscalBreakdown");
+  const panel = getEl("breakdown");
   if (!panel) return;
 
+  const opts = readFiscalOptions();
+  const hasFiscal = opts.applyVat || opts.applyWithholding || opts.applyDiscount;
   const breakdown = computeCurrentLiquidationFiscal();
-  if (!breakdown) {
+
+  if (!hasFiscal) {
+    const base = Number(getEl("baseAmount")?.value) || Number(getEl("committed")?.dataset?.raw) || 0;
+    panel.innerHTML = `<p class="text-[10px] text-slate-400 font-semibold">Sem impostos activos — valor líquido igual ao valor base (${formatFiscalAmount(base, _currency)}).</p>`;
+    return;
+  }
+
+  if (!breakdown.lines.length) {
     panel.innerHTML = `<p class="text-[10px] text-slate-400 font-semibold">Active IVA, retenção ou desconto para calcular automaticamente.</p>`;
     return;
   }
@@ -71,8 +162,8 @@ function renderBreakdownPanel() {
 
 function toggleInputMode() {
   const opts = readFiscalOptions();
-  getEl("liqBaseInputWrap")?.classList.toggle("hidden", opts.inputMode === "gross");
-  getEl("liqGrossInputWrap")?.classList.toggle("hidden", opts.inputMode !== "gross");
+  getEl("baseWrap")?.classList.toggle("hidden", opts.inputMode === "gross");
+  getEl("grossWrap")?.classList.toggle("hidden", opts.inputMode !== "gross");
 }
 
 function refreshFiscalUi() {
@@ -81,24 +172,59 @@ function refreshFiscalUi() {
   syncPaidAmountFromFiscal();
 }
 
-export function initLiquidationFiscalHandlers() {
-  ["liqFiscalModeBase", "liqFiscalModeGross", "liqApplyVat", "liqApplyWithholding", "liqApplyDiscount", "liqBaseAmount", "liqGrossAmount"].forEach(
-    (id) => {
-      getEl(id)?.addEventListener("input", refreshFiscalUi);
-      getEl(id)?.addEventListener("change", refreshFiscalUi);
-    }
-  );
+export function initLiquidationFiscalHandlers(prefixOrFields = null) {
+  const rootId =
+    typeof prefixOrFields === "string"
+      ? `${prefixOrFields}FiscalSection`
+      : _fields.section;
+  if (_boundRoots.has(rootId)) return;
+  _boundRoots.add(rootId);
+
+  const root = document.getElementById(rootId);
+  if (!root) return;
+
+  root.addEventListener("input", (e) => {
+    if (!e.target.closest(`#${rootId}`)) return;
+    refreshFiscalUi();
+  });
+  root.addEventListener("change", (e) => {
+    if (!e.target.closest(`#${rootId}`)) return;
+    refreshFiscalUi();
+  });
 }
 
-export function setupLiquidationFiscalModal(payment) {
-  _currentSupplier = payment?.supplierRef || null;
+export function setupLiquidationFiscalModal(payment, options = {}) {
+  if (options.prefix) {
+    configureLiquidationFiscalFields({
+      section: `${options.prefix}FiscalSection`,
+      baseAmount: `${options.prefix}BaseAmount`,
+      grossAmount: `${options.prefix}GrossAmount`,
+      baseWrap: `${options.prefix}BaseInputWrap`,
+      grossWrap: `${options.prefix}GrossInputWrap`,
+      applyVat: `${options.prefix}ApplyVat`,
+      applyWithholding: `${options.prefix}ApplyWithholding`,
+      applyDiscount: `${options.prefix}ApplyDiscount`,
+      modeBase: `${options.prefix}FiscalModeBase`,
+      modeGross: `${options.prefix}FiscalModeGross`,
+      breakdown: `${options.prefix}FiscalBreakdown`,
+      supplierHint: `${options.prefix}FiscalSupplierHint`,
+      amount: options.amountField || "liqAmount",
+      committed: options.committedField || "liqCommitted",
+    });
+    initLiquidationFiscalHandlers(options.prefix);
+  } else {
+    configureLiquidationFiscalFields(options.fields || {});
+    initLiquidationFiscalHandlers("liq");
+  }
+
+  _currentSupplier = payment?.supplierRef || payment?.supplier || null;
   _currentProduct = payment?.fiscalProductRef || null;
   _currency = payment?.currency || payment?.costCenter?.currency || "AOA";
 
-  const section = getEl("liqFiscalSection");
+  const section = getEl("section");
   if (!section) return;
 
-  const fiscalFrozen = Boolean(
+  _fiscalFrozen = Boolean(
     payment?.fiscalFrozen ||
       (payment?.netAmount &&
         (payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount))
@@ -116,27 +242,27 @@ export function setupLiquidationFiscalModal(payment) {
   const gross = Number(payment?.grossAmount ?? base);
   const net = Number(payment?.netAmount ?? payment?.paidAmount ?? base);
 
-  const committed = getEl("liqCommitted");
+  const committed = getEl("committed");
   if (committed) {
     committed.dataset.raw = String(base);
     committed.value = formatFiscalAmount(base, _currency);
   }
 
-  const baseInput = getEl("liqBaseAmount");
+  const baseInput = getEl("baseAmount");
   if (baseInput) baseInput.value = base;
 
-  const grossInput = getEl("liqGrossAmount");
+  const grossInput = getEl("grossAmount");
   if (grossInput) grossInput.value = gross;
 
-  if (getEl("liqApplyVat")) getEl("liqApplyVat").checked = applyVat;
-  if (getEl("liqApplyWithholding")) getEl("liqApplyWithholding").checked = applyWithholding;
-  if (getEl("liqApplyDiscount")) getEl("liqApplyDiscount").checked = applyDiscount;
-  if (getEl("liqFiscalModeBase")) getEl("liqFiscalModeBase").checked = inputMode === "base";
-  if (getEl("liqFiscalModeGross")) getEl("liqFiscalModeGross").checked = inputMode === "gross";
+  if (getEl("applyVat")) getEl("applyVat").checked = applyVat;
+  if (getEl("applyWithholding")) getEl("applyWithholding").checked = applyWithholding;
+  if (getEl("applyDiscount")) getEl("applyDiscount").checked = applyDiscount;
+  if (getEl("modeBase")) getEl("modeBase").checked = inputMode === "base";
+  if (getEl("modeGross")) getEl("modeGross").checked = inputMode === "gross";
 
-  const hint = getEl("liqFiscalSupplierHint");
+  const hint = getEl("supplierHint");
   if (hint) {
-    if (fiscalFrozen) {
+    if (_fiscalFrozen) {
       hint.textContent =
         "Impostos definidos no orçamento realizado — valor a pagar já inclui IVA/retenção/desconto.";
     } else {
@@ -157,36 +283,44 @@ export function setupLiquidationFiscalModal(payment) {
     }
   }
 
-  ["liqApplyVat", "liqApplyWithholding", "liqApplyDiscount", "liqFiscalModeBase", "liqFiscalModeGross", "liqBaseAmount", "liqGrossAmount"].forEach(
-    (id) => {
-      const el = getEl(id);
-      if (el) el.disabled = fiscalFrozen;
+  ["applyVat", "applyWithholding", "applyDiscount", "modeBase", "modeGross", "baseAmount", "grossAmount"].forEach(
+    (key) => {
+      const el = getEl(key);
+      if (el) el.disabled = _fiscalFrozen;
     }
   );
 
   section.classList.remove("hidden");
   refreshFiscalUi();
 
-  const liqAmount = getEl("liqAmount");
-  if (liqAmount && fiscalFrozen && Number.isFinite(net) && net > 0) {
-    liqAmount.value = net;
-    liqAmount.readOnly = true;
-    liqAmount.classList.add("bg-slate-100", "cursor-not-allowed");
+  const amountEl = getEl("amount");
+  if (amountEl && _fiscalFrozen && Number.isFinite(net) && net > 0) {
+    amountEl.value = net;
+    amountEl.readOnly = true;
+    amountEl.classList.add("bg-slate-100", "cursor-not-allowed");
   }
 }
 
 export function getLiquidationFiscalFormDataExtras() {
   const opts = readFiscalOptions();
   const hasFiscal = opts.applyVat || opts.applyWithholding || opts.applyDiscount;
-  if (!hasFiscal) return null;
-
   const breakdown = computeCurrentLiquidationFiscal();
-  return {
-    ...opts,
-    grossAmount: opts.inputMode === "gross" ? Number(getEl("liqGrossAmount")?.value) || 0 : breakdown?.gross,
-    netAmount: breakdown?.net,
-    baseAmount: breakdown?.base,
-  };
+
+  if (hasFiscal && breakdown) {
+    return {
+      ...opts,
+      grossAmount: opts.inputMode === "gross" ? Number(getEl("grossAmount")?.value) || 0 : breakdown.gross,
+      netAmount: breakdown.net,
+      baseAmount: breakdown.base,
+    };
+  }
+
+  const base = Number(getEl("baseAmount")?.value) || Number(getEl("committed")?.dataset?.raw) || 0;
+  if (base > 0) {
+    return { ...opts, baseAmount: base, netAmount: Number(getEl("amount")?.value) || base };
+  }
+
+  return null;
 }
 
 export function renderAsideFiscalFromPayment(data) {

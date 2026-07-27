@@ -307,12 +307,23 @@ function closeDocumentAside() {
   closeDocumentViewer();
 }
 
+function syncLiqDocDescVisibility(row) {
+  if (!row) return;
+  const kind = row.querySelector(".liq-doc-kind")?.value || "comprovativo";
+  const desc = row.querySelector(".liq-doc-desc");
+  if (!desc) return;
+  const show = kind === "outro";
+  desc.classList.toggle("hidden", !show);
+  if (!show) desc.value = "";
+}
+
 function renderLiqDocRow({ kind = "comprovativo", required = false, removable = true } = {}) {
   const removeBtn = removable
     ? `<button type="button" class="liq-doc-remove w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition-colors flex items-center justify-center" title="Remover">
         <span class="material-symbols-outlined text-base">delete</span>
       </button>`
     : "";
+  const descHidden = kind !== "outro" ? "hidden" : "";
   return `
     <div class="liq-doc-row p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-2">
       <div class="flex items-center gap-2">
@@ -324,7 +335,7 @@ function renderLiqDocRow({ kind = "comprovativo", required = false, removable = 
         ${removeBtn}
       </div>
       <input type="file" class="liq-doc-file w-full h-11 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" accept="image/*,.pdf" ${required ? "required" : ""} />
-      <input type="text" class="liq-doc-desc w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700" placeholder="Descrição (opcional)" />
+      <input type="text" class="liq-doc-desc w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 ${descHidden}" placeholder="Descrição (opcional)" />
     </div>`;
 }
 
@@ -336,6 +347,10 @@ function resetLiqDocuments() {
 }
 
 function bindLiqDocRowEvents(scope = document) {
+  scope.querySelectorAll(".liq-doc-row").forEach((row) => syncLiqDocDescVisibility(row));
+  scope.querySelectorAll(".liq-doc-kind").forEach((select) => {
+    select.onchange = () => syncLiqDocDescVisibility(select.closest(".liq-doc-row"));
+  });
   scope.querySelectorAll(".liq-doc-remove").forEach((btn) => {
     btn.onclick = () => btn.closest(".liq-doc-row")?.remove();
   });
@@ -431,7 +446,9 @@ async function submitLiquidation(e) {
     const file = row.querySelector(".liq-doc-file")?.files?.[0];
     if (!file) return;
     const kind = row.querySelector(".liq-doc-kind")?.value || "outro";
-    const desc = row.querySelector(".liq-doc-desc")?.value?.trim() || file.name;
+    const descInput = row.querySelector(".liq-doc-desc");
+    const desc =
+      kind === "outro" ? descInput?.value?.trim() || file.name : file.name;
 
     if (kind === "comprovativo" && !fd.has("comprovativo")) {
       fd.append("comprovativo", file);
@@ -653,7 +670,7 @@ export function initPaymentDetailAside({ onLiquidated, showToast } = {}) {
   window.closeDocumentAside = closeDocumentAside;
 
   document.getElementById("formLiq")?.addEventListener("submit", submitLiquidation);
-  initLiquidationFiscalHandlers();
+  initLiquidationFiscalHandlers("liq");
   document.getElementById("liqAddDocBtn")?.addEventListener("click", () => {
     const list = document.getElementById("liqDocsList");
     if (!list) return;

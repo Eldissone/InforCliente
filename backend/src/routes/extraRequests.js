@@ -612,6 +612,10 @@ extraRequestRoutes.post(
     }
 
     const u = req.user || {};
+    const paidAmount =
+      req.body?.paidAmount != null && req.body.paidAmount !== ""
+        ? String(req.body.paidAmount)
+        : String(existing.amount);
 
     try {
       if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !req.file) {
@@ -631,7 +635,7 @@ extraRequestRoutes.post(
           fundId: existing.fundId,
           cardId: existing.cardId || null,
           type: "DEBITO",
-          amount: existing.amount,
+          amount: paidAmount,
           description: `Pedido Extra: ${existing.description}`,
           extraRequestId: id,
           createdBy: u.name || u.email || u.sub || null,
@@ -646,7 +650,7 @@ extraRequestRoutes.post(
           fundId: existing.fundId,
           cardId: existing.cardId,
           type: "CREDITO",
-          amount: existing.amount,
+          amount: paidAmount,
           description: `Transferência interna (carregamento): ${existing.description}`,
           extraRequestId: id,
           createdBy: u.name || u.email || u.sub || null,
@@ -657,6 +661,7 @@ extraRequestRoutes.post(
         where: { id },
         data: {
           status: "PAGO",
+          amount: paidAmount,
           paidBy: u.name || u.email || u.sub || null,
           paidAt: new Date(),
           ...(comprovativoUrl ? { comprovativoUrl } : {}),
@@ -667,7 +672,7 @@ extraRequestRoutes.post(
       await logExtraAction(req, {
         action: "extra_request_pay",
         extraRequestId: id,
-        details: { paymentSource: existing.paymentSource, amount: String(existing.amount) },
+        details: { paymentSource: existing.paymentSource, amount: paidAmount },
       });
 
       return res.json(mapExtra(updated));
