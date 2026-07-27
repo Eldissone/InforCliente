@@ -507,6 +507,9 @@ function openPaymentAside(data, type, options = {}) {
     if (data.status === "CONFIRMADO" || data.status === "PAID") {
       badge.textContent = "Pago";
       badge.classList.add("bg-emerald-100", "text-emerald-700");
+    } else if (data.status === "EM_ESPERA") {
+      badge.textContent = "Em espera";
+      badge.classList.add("bg-amber-100", "text-amber-800");
     } else if (data.status === "CANCELADO") {
       badge.textContent = "Cancelado";
       badge.classList.add("bg-red-100", "text-red-700");
@@ -563,7 +566,16 @@ function openPaymentAside(data, type, options = {}) {
   const actionBtn = document.getElementById("asideActionBtn");
 
   if (type === "VIEW") {
-    actionBtn?.classList.add("hidden");
+    if (data.status === "CONFIRMADO" || data.status === "PAID") {
+      actionBtn?.classList.remove("hidden");
+      actionBtn.innerHTML = `<span class="material-symbols-outlined text-base">edit</span> Editar liquidação`;
+      actionBtn.onclick = () => {
+        openLiquidateModal(data);
+        closePaymentAside();
+      };
+    } else {
+      actionBtn?.classList.add("hidden");
+    }
   } else {
     actionBtn?.classList.remove("hidden");
     actionBtn.innerHTML = `<span class="material-symbols-outlined text-base">payments</span> Confirmar & Pagar`;

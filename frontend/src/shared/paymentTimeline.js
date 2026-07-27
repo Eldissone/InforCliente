@@ -4,6 +4,7 @@ import { paymentPayableAmount } from "./supplierFiscal.js";
 export const TIMELINE_STATUS = {
   PENDENTE: { label: "Pendente", dot: "bg-blue-400", badge: "bg-blue-100 text-blue-700", border: "border-blue-200" },
   VENCIDO: { label: "Atrasado", dot: "bg-red-400", badge: "bg-red-100 text-red-700", border: "border-red-200" },
+  EM_ESPERA: { label: "Em espera", dot: "bg-amber-400", badge: "bg-amber-100 text-amber-800", border: "border-amber-200" },
   PAGO: { label: "Pago", dot: "bg-emerald-400", badge: "bg-emerald-100 text-emerald-700", border: "border-emerald-200" },
   CANCELADO: { label: "Cancelado", dot: "bg-slate-300", badge: "bg-slate-100 text-slate-500", border: "border-slate-200" },
 };
@@ -12,6 +13,7 @@ export function resolveTimelineStatus(payment, now = new Date()) {
   const status = String(payment.status || payment.timelineStatus || "").toUpperCase();
   if (status === "CONFIRMADO" || status === "PAGO") return "PAGO";
   if (status === "CANCELADO") return "CANCELADO";
+  if (status === "EM_ESPERA") return "EM_ESPERA";
   const due = new Date(payment.paymentDate || payment.dueDate);
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);

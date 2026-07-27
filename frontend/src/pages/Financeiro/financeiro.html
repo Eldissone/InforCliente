@@ -707,7 +707,9 @@
                     <optgroup label="Pagamentos">
                         <option value="PENDENTE">Pendentes</option>
                         <option value="VENCIDO">Atrasados</option>
+                        <option value="EM_ESPERA">Em espera</option>
                         <option value="CONFIRMADO">Pagos</option>
+                        <option value="CANCELADO">Rejeitados / cancelados</option>
                     </optgroup>
                     <optgroup label="Pedidos Extra">
                         <option value="EXTRA">Todos os pedidos extra</option>
@@ -897,14 +899,17 @@
                     </div>
                     <div id="planListView" class="hidden">
                         <div class="overflow-x-auto -mx-2 md:mx-0">
-                            <table class="fin-table w-full min-w-[960px]">
+                            <table class="fin-table w-full min-w-[1100px]">
                                 <thead>
                                     <tr>
+                                        <th>Data</th>
                                         <th>Material / Descrição</th>
                                         <th>Fornecedor</th>
                                         <th>IBAN</th>
                                         <th class="text-right">Valor</th>
-                                        <th class="text-center">Doc.</th>
+                                        <th class="text-center" title="Proforma">Prof.</th>
+                                        <th class="text-center" title="Comprovativo">Comp.</th>
+                                        <th class="text-center" title="Fatura">Fat.</th>
                                         <th class="text-center">Tipo</th>
                                         <th class="text-center">Estado</th>
                                         <th class="text-center">Acções</th>
@@ -912,7 +917,7 @@
                                 </thead>
                                 <tbody id="planTableBody">
                                     <tr>
-                                        <td colspan="8">
+                                        <td colspan="11">
                                             <div class="spinner my-8"></div>
                                         </td>
                                     </tr>

@@ -34,6 +34,7 @@ const EXTRA_SOURCE_LABELS = {
 const TIMELINE_ICONS = {
   PENDENTE: "schedule",
   VENCIDO: "error",
+  EM_ESPERA: "pause_circle",
   PAGO: "check_circle",
   CANCELADO: "block",
 };
@@ -208,17 +209,78 @@ function renderExtraDocumentLink(url, label) {
   </a>`;
 }
 
-function renderProformaCell(url, title = "Proforma") {
+const DOC_CELL_META = {
+  proforma: { title: "Proforma", icon: "description", variant: "emerald" },
+  comprovativo: { title: "Comprovativo", icon: "receipt_long", variant: "blue" },
+  fatura: { title: "Fatura", icon: "request_quote", variant: "amber" },
+};
+
+function renderDocCell(url, kind = "proforma") {
+  const meta = DOC_CELL_META[kind] || DOC_CELL_META.proforma;
   if (!url) return `<span class="text-slate-300">—</span>`;
-  return `<button type="button" title="Ver ${escapeAttr(title)}"
-    class="fin-icon-btn fin-icon-btn--emerald" onclick="event.stopPropagation(); openDocumentAside('${escapeAttr(url)}', '${escapeAttr(title)}')">
-    <span class="material-symbols-outlined text-base">description</span>
+  return `<button type="button" title="Ver ${escapeAttr(meta.title)}"
+    class="fin-icon-btn fin-icon-btn--${meta.variant}" onclick="event.stopPropagation(); openDocumentAside('${escapeAttr(url)}', '${escapeAttr(meta.title)}')">
+    <span class="material-symbols-outlined text-base">${meta.icon}</span>
   </button>`;
 }
 
+const IBAN_SHORT_LEN = 7;
+
 function formatIbanCell(iban) {
   if (!iban) return `<span class="text-slate-300">—</span>`;
-  return `<span class="text-xs font-mono text-slate-600 truncate max-w-[140px] inline-block align-middle" title="${escapeAttr(iban)}">${escapeHtml(iban)}</span>`;
+  const full = String(iban).trim();
+  if (full.length <= IBAN_SHORT_LEN) {
+    return `<span class="text-xs font-mono text-slate-600">${escapeHtml(full)}</span>`;
+  }
+  const short = `${full.slice(0, IBAN_SHORT_LEN)}…`;
+  return `<button type="button"
+    class="iban-toggle text-xs font-mono text-slate-600 hover:text-emerald-700 inline-flex items-center gap-0.5 max-w-[180px] text-left"
+    data-iban-full="${escapeAttr(full)}" data-expanded="false"
+    title="Clique para expandir IBAN"
+    onclick="event.stopPropagation(); toggleIbanCell(this)">
+    <span class="iban-text truncate">${escapeHtml(short)}</span>
+    <span class="material-symbols-outlined text-sm text-slate-400 shrink-0">unfold_more</span>
+  </button>`;
+}
+
+window.toggleIbanCell = function (btn) {
+  if (!btn) return;
+  const full = btn.dataset.ibanFull || "";
+  const expanded = btn.dataset.expanded === "true";
+  const textEl = btn.querySelector(".iban-text");
+  const iconEl = btn.querySelector(".material-symbols-outlined");
+  if (!textEl || !full) return;
+
+  if (expanded) {
+    textEl.textContent = `${full.slice(0, IBAN_SHORT_LEN)}…`;
+    btn.dataset.expanded = "false";
+    btn.title = "Clique para expandir IBAN";
+    if (iconEl) iconEl.textContent = "unfold_more";
+  } else {
+    textEl.textContent = full;
+    btn.dataset.expanded = "true";
+    btn.title = "Clique para encolher IBAN";
+    if (iconEl) iconEl.textContent = "unfold_less";
+  }
+};
+
+function planRowDate(item, extra) {
+  const raw =
+    item?.dueDate ||
+    item?.paymentDate ||
+    extra?.paymentDueDate ||
+    extra?.approvedAt ||
+    extra?.requestedAt ||
+    extra?.createdAt;
+  if (!raw) return `<span class="text-slate-300">—</span>`;
+  return `<span class="text-xs text-slate-600 whitespace-nowrap tabular-nums">${formatDateBR(raw)}</span>`;
+}
+
+function renderPlanDocCells({ proformaUrl, comprovativoUrl, faturaUrl } = {}) {
+  return `
+      <td class="text-center">${renderDocCell(proformaUrl, "proforma")}</td>
+      <td class="text-center">${renderDocCell(comprovativoUrl, "comprovativo")}</td>
+      <td class="text-center">${renderDocCell(faturaUrl, "fatura")}</td>`;
 }
 
 function flattenPlanRows(days) {
@@ -236,39 +298,134 @@ function flattenPlanRows(days) {
   return rows;
 }
 
+function findPlanPayment(paymentId) {
+  for (const day of timelineCache.days || []) {
+    const payment = day.items.find((item) => item.id === paymentId && !item._isExtra);
+    if (payment) return payment;
+  }
+  return null;
+}
+
+async function patchPaymentStatusFromPlan(paymentId, status, notes) {
+  const payment = findPlanPayment(paymentId);
+  if (!payment) throw new Error("Pagamento não encontrado");
+  const ccId = payment.costCenterId || payment.costCenter?.id;
+  if (!ccId) throw new Error("Centro de custo não encontrado");
+
+  await apiRequest(`/cost-centers/${ccId}/payments/${paymentId}`, {
+    method: "PATCH",
+    body: {
+      status,
+      ...(notes ? { notes } : {}),
+    },
+  });
+}
+
+function renderPlanPaymentActions(p) {
+  const dbStatus = String(p.status || "").toUpperCase();
+  const st = p.timelineStatus || resolveTimelineStatus(p);
+  const actions = [];
+
+  if (st === "PENDENTE" || st === "VENCIDO" || dbStatus === "EM_ESPERA") {
+    if (dbStatus !== "EM_ESPERA") {
+      actions.push(
+        renderIconBtn("pause_circle", "Colocar em espera", "amber", {
+          attrs: `onclick="holdPaymentFromPlan('${escapeAttr(p.id)}')"`,
+        })
+      );
+    } else {
+      actions.push(
+        renderIconBtn("play_circle", "Retomar pagamento", "blue", {
+          attrs: `onclick="resumePaymentFromPlan('${escapeAttr(p.id)}')"`,
+        })
+      );
+    }
+    actions.push(
+      renderIconBtn("done_all", "Liquidar pagamento", "emerald", {
+        attrs: `onclick="liquidateFromPlan('${escapeAttr(p.id)}')"`,
+      }),
+      renderIconBtn("block", "Rejeitar pagamento", "red", {
+        attrs: `onclick="rejectPaymentFromPlan('${escapeAttr(p.id)}')"`,
+      })
+    );
+  } else if (st === "PAGO" || dbStatus === "CONFIRMADO") {
+    actions.push(
+      renderIconBtn("edit", "Editar liquidação", "blue", {
+        attrs: `onclick="editPaymentFromPlan('${escapeAttr(p.id)}')"`,
+      }),
+      renderIconBtn("undo", "Reabrir pagamento", "amber", {
+        attrs: `onclick="reopenPaymentFromPlan('${escapeAttr(p.id)}')"`,
+      })
+    );
+  } else if (st === "CANCELADO") {
+    actions.push(
+      renderIconBtn("replay", "Reactivar pagamento", "blue", {
+        attrs: `onclick="resumePaymentFromPlan('${escapeAttr(p.id)}')"`,
+      })
+    );
+  }
+
+  if (!actions.length) return `<span class="text-slate-300 text-xs">—</span>`;
+  return `<div class="fin-actions flex-wrap">${actions.join("")}</div>`;
+}
+
+function renderPlanExtraActions(extra) {
+  const actions = [];
+  if (extra?.status === "PENDENTE") {
+    actions.push(
+      renderIconBtn("block", "Rejeitar pedido extra", "red", {
+        attrs: `onclick="rejectExtraFromPlan('${escapeAttr(extra.id)}')"`,
+      })
+    );
+  } else if (extra?.status === "APROVADO") {
+    actions.push(
+      renderIconBtn("done_all", "Liquidar pedido extra", "emerald", {
+        attrs: `onclick="openExtraFromPlan('${escapeAttr(extra.id)}')"`,
+      }),
+      renderIconBtn("cancel", "Cancelar pedido extra", "amber", {
+        attrs: `onclick="cancelExtraFromPlan('${escapeAttr(extra.id)}')"`,
+      })
+    );
+  } else if (extra?.status === "PAGO") {
+    actions.push(
+      renderIconBtn("edit", "Ver / editar documentos", "blue", {
+        attrs: `onclick="openExtraFromPlan('${escapeAttr(extra.id)}')"`,
+      })
+    );
+  }
+
+  if (!actions.length) return `<span class="text-slate-300 text-xs">—</span>`;
+  return `<div class="fin-actions flex-wrap">${actions.join("")}</div>`;
+}
+
 function renderPlanPaymentRow(p) {
   const st = p.timelineStatus || resolveTimelineStatus(p);
   const meta = TIMELINE_STATUS[st] || TIMELINE_STATUS.PENDENTE;
   const icon = TIMELINE_ICONS[st] || TIMELINE_ICONS.PENDENTE;
   const cur = p.costCenter?.currency || "AOA";
-  const isPending = st === "PENDENTE" || st === "VENCIDO";
   const supplier = p.supplierName || p.supplier || "—";
 
   return `
     <tr class="group">
+      <td>${planRowDate(p)}</td>
       <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(p.description)}">${escapeHtml(p.description || "—")}</td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
       <td>${formatIbanCell(p.iban)}</td>
       <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(paymentPayableAmount(p), cur)}</td>
-      <td class="text-center">${renderProformaCell(p.proformaUrl)}</td>
+      ${renderPlanDocCells({
+        proformaUrl: p.proformaUrl,
+        comprovativoUrl: p.comprovativoUrl,
+        faturaUrl: p.faturaUrl,
+      })}
       <td class="text-center">${renderPaymentTypeBadge(p.paymentType)}</td>
       <td class="text-center">${renderStatusBadge(meta.label, meta.badge, icon)}</td>
-      <td class="text-center">
-        <div class="fin-actions">
-          ${isPending
-            ? renderIconBtn("done_all", "Liquidar pagamento", "emerald", {
-                attrs: `onclick="liquidateFromPlan('${escapeAttr(p.id)}')"`,
-              })
-            : `<span class="text-slate-300 text-xs">—</span>`}
-        </div>
-      </td>
+      <td class="text-center">${renderPlanPaymentActions(p)}</td>
     </tr>`;
 }
 
 function renderPlanExtraRow(extra, p) {
   const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
   const cur = extra?.currency || "AOA";
-  const canPay = extra?.status === "APROVADO";
   const supplier =
     extra?.supplierName ||
     extra?.supplierRef?.name ||
@@ -276,24 +433,21 @@ function renderPlanExtraRow(extra, p) {
 
   return `
     <tr class="group">
+      <td>${planRowDate(p, extra)}</td>
       <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
         <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
       </td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
       <td>${formatIbanCell(extra?.supplierIban || extra?.supplierRef?.iban)}</td>
       <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(extra?.amount, cur)}</td>
-      <td class="text-center">${renderProformaCell(extra?.proformaUrl)}</td>
+      ${renderPlanDocCells({
+        proformaUrl: extra?.proformaUrl,
+        comprovativoUrl: extra?.comprovativoUrl,
+        faturaUrl: extra?.faturaUrl,
+      })}
       <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">Extra</span></td>
       <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
-      <td class="text-center">
-        <div class="fin-actions">
-          ${canPay
-            ? renderIconBtn("done_all", "Liquidar pedido extra", "emerald", {
-                attrs: `onclick="openExtraFromPlan('${extra?.id || p._extraId}')"`,
-              })
-            : `<span class="text-slate-300 text-xs">—</span>`}
-        </div>
-      </td>
+      <td class="text-center">${renderPlanExtraActions(extra)}</td>
     </tr>`;
 }
 
@@ -306,7 +460,7 @@ function renderPaymentTypeBadge(paymentType) {
   return `<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${cls}">${label}</span>`;
 }
 
-const PLAN_TABLE_COLSPAN = 8;
+const PLAN_TABLE_COLSPAN = 11;
 
 function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) {
   const cur = extra.currency || "AOA";
@@ -1060,6 +1214,7 @@ function getDashboardFilterParams() {
   if (search) params.set("search", search);
   params.set("onlyVisible", "false");
   params.set("includePaid", includePaid ? "true" : "false");
+  if (status === "CANCELADO") params.set("includeCancelled", "true");
   params.set("daysPast", "90");
   params.set("daysAhead", "365");
   return params;
@@ -1673,8 +1828,13 @@ window.openGanttPayment = function (btn) {
       }
     }
     const st = payload.timelineStatus || resolveTimelineStatus(payload);
-    const isPending = st === "PENDENTE" || st === "VENCIDO";
-    openPaymentAside(payload, isPending ? "PAYMENT" : "VIEW");
+    const dbStatus = String(payload.status || "").toUpperCase();
+    const isActionable =
+      st === "PENDENTE" ||
+      st === "VENCIDO" ||
+      st === "EM_ESPERA" ||
+      dbStatus === "EM_ESPERA";
+    openPaymentAside(payload, isActionable ? "PAYMENT" : "VIEW");
   } catch (err) {
     console.error("Erro ao abrir pagamento no Gantt:", err);
     toast("Não foi possível abrir os detalhes do pagamento.", { type: "error" });
@@ -1716,17 +1876,99 @@ window.openExtraFromPlan = function (extraId) {
 };
 
 window.liquidateFromPlan = function (paymentId) {
-  for (const day of timelineCache.days || []) {
-    const payment = day.items.find((item) => item.id === paymentId && !item._isExtra);
-    if (payment) {
-      openLiquidateModal({
-        ...payment,
-        costCenterId: payment.costCenterId || payment.costCenter?.id,
-      });
-      return;
-    }
+  const payment = findPlanPayment(paymentId);
+  if (payment) {
+    openLiquidateModal({
+      ...payment,
+      costCenterId: payment.costCenterId || payment.costCenter?.id,
+    });
+    return;
   }
   toast("Não foi possível localizar o lançamento.", { type: "error" });
+};
+
+window.editPaymentFromPlan = function (paymentId) {
+  window.liquidateFromPlan(paymentId);
+};
+
+window.holdPaymentFromPlan = async function (paymentId) {
+  if (!confirm("Colocar este pagamento em espera?")) return;
+  try {
+    await patchPaymentStatusFromPlan(paymentId, "EM_ESPERA");
+    toast("Pagamento colocado em espera.", { type: "success" });
+    await reloadAll();
+  } catch (err) {
+    toast(err.message || "Não foi possível colocar o pagamento em espera.", { type: "error" });
+  }
+};
+
+window.resumePaymentFromPlan = async function (paymentId) {
+  if (!confirm("Retomar este pagamento para liquidação?")) return;
+  try {
+    await patchPaymentStatusFromPlan(paymentId, "PENDENTE");
+    toast("Pagamento reactivado.", { type: "success" });
+    await reloadAll();
+  } catch (err) {
+    toast(err.message || "Não foi possível reactivar o pagamento.", { type: "error" });
+  }
+};
+
+window.rejectPaymentFromPlan = async function (paymentId) {
+  const reason = prompt("Motivo da rejeição (opcional):");
+  if (reason === null) return;
+  if (!confirm("Rejeitar este pagamento? Esta acção pode ser revertida depois.")) return;
+  try {
+    const notes = reason.trim() ? `[Rejeitado] ${reason.trim()}` : "[Rejeitado]";
+    await patchPaymentStatusFromPlan(paymentId, "CANCELADO", notes);
+    toast("Pagamento rejeitado.", { type: "success" });
+    await reloadAll();
+  } catch (err) {
+    toast(err.message || "Não foi possível rejeitar o pagamento.", { type: "error" });
+  }
+};
+
+window.reopenPaymentFromPlan = async function (paymentId) {
+  if (
+    !confirm(
+      "Reabrir este pagamento liquidado?\n\nO estado voltará a pendente para permitir ajustes de valor, documentos ou nova liquidação."
+    )
+  ) {
+    return;
+  }
+  try {
+    await patchPaymentStatusFromPlan(paymentId, "PENDENTE");
+    toast("Pagamento reaberto para edição.", { type: "success" });
+    await reloadAll();
+    window.liquidateFromPlan(paymentId);
+  } catch (err) {
+    toast(err.message || "Não foi possível reabrir o pagamento.", { type: "error" });
+  }
+};
+
+window.rejectExtraFromPlan = async function (extraId) {
+  const reason = prompt("Motivo da rejeição (opcional):");
+  if (reason === null) return;
+  try {
+    await apiRequest(`/extra-requests/${extraId}/reject`, {
+      method: "PATCH",
+      body: { reason: reason.trim() || null },
+    });
+    toast("Pedido extra rejeitado.", { type: "success" });
+    await reloadAll();
+  } catch (err) {
+    toast(err.message || "Não foi possível rejeitar o pedido extra.", { type: "error" });
+  }
+};
+
+window.cancelExtraFromPlan = async function (extraId) {
+  if (!confirm("Cancelar este pedido extra aprovado?")) return;
+  try {
+    await apiRequest(`/extra-requests/${extraId}/cancel`, { method: "PATCH" });
+    toast("Pedido extra cancelado.", { type: "success" });
+    await reloadAll();
+  } catch (err) {
+    toast(err.message || "Não foi possível cancelar o pedido extra.", { type: "error" });
+  }
 };
 
 function renderPlanTable(days) {

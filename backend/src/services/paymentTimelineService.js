@@ -28,6 +28,7 @@ function resolveTimelineStatus(payment, now = new Date()) {
   const status = String(payment.status || "").toUpperCase();
   if (status === "CONFIRMADO") return "PAGO";
   if (status === "CANCELADO") return "CANCELADO";
+  if (status === "EM_ESPERA") return "EM_ESPERA";
   const due = getPaymentDueDate(payment);
   if (due < startOfDay(now)) return "VENCIDO";
   return "PENDENTE";
@@ -106,6 +107,7 @@ function buildPaymentTimeline(payments, options = {}) {
       if (statusFilter) {
         if (statusFilter === "PENDENTE" && p.timelineStatus !== "PENDENTE") return false;
         if (statusFilter === "VENCIDO" && p.timelineStatus !== "VENCIDO") return false;
+        if (statusFilter === "EM_ESPERA" && p.timelineStatus !== "EM_ESPERA") return false;
         if (statusFilter === "CONFIRMADO" && p.timelineStatus !== "PAGO") return false;
         if (statusFilter === "CANCELADO" && p.timelineStatus !== "CANCELADO") return false;
       }

@@ -126,7 +126,7 @@ function sortWeekEntries(weekMap) {
 // no cronograma (ex.: "VENCIDO") é um estado virtual calculado a partir da
 // data de vencimento (ver paymentTimelineService.resolveTimelineStatus) e
 // não existe no enum `CostPayStatus` da base de dados — só "PENDENTE",
-// "CONFIRMADO" e "CANCELADO" são valores reais. Rotas que precisam de
+// "EM_ESPERA", "CONFIRMADO" e "CANCELADO" são valores reais. Rotas que precisam de
 // filtrar pelo estado real da BD (ex.: listagem simples) devem aplicá-lo
 // explicitamente com o valor bruto da query, tal como já acontece na rota
 // equivalente por obra (`/project/:projectId/payments/timeline`).
@@ -420,6 +420,7 @@ costCenterRoutes.get(
     const search = req.query.search ? String(req.query.search) : "";
     const status = req.query.status ? String(req.query.status) : "";
     const includePaid = req.query.includePaid === "true";
+    const includeCancelled = req.query.includeCancelled === "true" || status === "CANCELADO";
     const onlyVisible = req.query.onlyVisible !== "false";
     const daysAhead = Math.min(365, Math.max(7, Number(req.query.daysAhead || 120)));
     const daysPast = Math.min(90, Math.max(0, Number(req.query.daysPast || 30)));
@@ -443,6 +444,7 @@ costCenterRoutes.get(
       statusFilter: status,
       onlyVisible,
       includePaid,
+      includeCancelled,
       daysAhead,
       daysPast,
       dateFrom,
@@ -559,6 +561,7 @@ costCenterRoutes.get(
     const search = req.query.search ? String(req.query.search) : "";
     const status = req.query.status ? String(req.query.status) : "";
     const includePaid = req.query.includePaid === "true";
+    const includeCancelled = req.query.includeCancelled === "true" || status === "CANCELADO";
     // Por omissão os pagamentos só ficam visíveis 1 dia antes do vencimento (regra do
     // cronograma "lista"/"timeline"). A vista de calendário precisa de ver o mês completo,
     // por isso permite desligar essa restrição de forma explícita e retrocompatível.
@@ -590,6 +593,7 @@ costCenterRoutes.get(
       statusFilter: status,
       onlyVisible,
       includePaid,
+      includeCancelled,
       daysAhead,
       daysPast,
       dateFrom,
@@ -1973,7 +1977,7 @@ costCenterRoutes.post(
       paymentMethod: z.string().optional().nullable(),
       paymentType: z.string().optional().default("PRONTO_PAGAMENTO"),
       week: z.string().optional().nullable(),
-      status: z.enum(["PENDENTE", "CONFIRMADO", "CANCELADO"]).optional(),
+      status: z.enum(["PENDENTE", "EM_ESPERA", "CONFIRMADO", "CANCELADO"]).optional(),
       needId: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
     }).parse(req.body);
@@ -2093,7 +2097,7 @@ costCenterRoutes.patch(
       paymentMethod: z.string().optional().nullable(),
       paymentType: z.string().optional(),
       week: z.string().optional().nullable(),
-      status: z.enum(["PENDENTE", "CONFIRMADO", "CANCELADO"]).optional(),
+      status: z.enum(["PENDENTE", "EM_ESPERA", "CONFIRMADO", "CANCELADO"]).optional(),
       needId: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       recipientIds: z.string().optional().nullable(),
@@ -2110,6 +2114,15 @@ costCenterRoutes.patch(
     const isLiquidating =
       isFirstConfirmation ||
       (before.status === "PENDENTE" && hasComprovativo);
+    const isStatusChange = body.status && body.status !== before.status;
+    const isWorkflowAction =
+      isStatusChange &&
+      (body.status === "CANCELADO" ||
+        body.status === "EM_ESPERA" ||
+        (body.status === "PENDENTE" &&
+          (before.status === "CONFIRMADO" ||
+            before.status === "EM_ESPERA" ||
+            before.status === "CANCELADO")));
 
     if (isFirstConfirmation && !hasComprovativo && !before.comprovativoUrl) {
       return res.status(400).json({
@@ -2118,7 +2131,7 @@ costCenterRoutes.patch(
       });
     }
 
-    if (isLiquidating) {
+    if (isLiquidating || isWorkflowAction) {
       try {
         await assertCanLiquidatePayment(req);
       } catch (err) {
@@ -2305,6 +2318,21 @@ costCenterRoutes.patch(
         }
       } catch (e) {
         console.error("notifyPaymentEvent CONFIRMED:", e);
+      }
+    }
+
+    if (
+      before.status === "CONFIRMADO" &&
+      body.status &&
+      body.status !== "CONFIRMADO"
+    ) {
+      try {
+        await prisma.freightOrder.updateMany({
+          where: { costPaymentId: payId, status: "PAGO" },
+          data: { status: "APPROVED" },
+        });
+      } catch (e) {
+        console.error("freightOrder reopen sync:", e);
       }
     }
 
