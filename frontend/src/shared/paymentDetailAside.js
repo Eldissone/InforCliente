@@ -375,7 +375,7 @@ function openLiquidateModal(payment) {
   document.getElementById("liqDesc").textContent = data.description || "";
   document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
   document.getElementById("liqAmount").value = data.netAmount ?? amount;
-  setupLiquidationFiscalModal(data);
+  setupLiquidationFiscalModal(data, { lockFiscal: false });
 
   let ccInput = document.getElementById("liqCcId");
   if (!ccInput) {

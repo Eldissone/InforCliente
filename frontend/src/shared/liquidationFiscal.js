@@ -178,19 +178,14 @@ export function initLiquidationFiscalHandlers(prefixOrFields = null) {
       ? `${prefixOrFields}FiscalSection`
       : _fields.section;
   if (_boundRoots.has(rootId)) return;
-  _boundRoots.add(rootId);
 
   const root = document.getElementById(rootId);
   if (!root) return;
 
-  root.addEventListener("input", (e) => {
-    if (!e.target.closest(`#${rootId}`)) return;
-    refreshFiscalUi();
-  });
-  root.addEventListener("change", (e) => {
-    if (!e.target.closest(`#${rootId}`)) return;
-    refreshFiscalUi();
-  });
+  _boundRoots.add(rootId);
+
+  root.addEventListener("input", () => refreshFiscalUi());
+  root.addEventListener("change", () => refreshFiscalUi());
 }
 
 export function setupLiquidationFiscalModal(payment, options = {}) {
@@ -224,11 +219,9 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
   const section = getEl("section");
   if (!section) return;
 
-  _fiscalFrozen = Boolean(
-    payment?.fiscalFrozen ||
-      (payment?.netAmount &&
-        (payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount))
-  );
+  // Só bloqueia edição fiscal quando explicitamente pedido (ex.: modo só-leitura).
+  // Pagamentos com netAmount/IVA já planeados (parcelas) devem continuar editáveis na liquidação.
+  _fiscalFrozen = options.lockFiscal === true;
 
   const flags = defaultFiscalFlagsFromSupplier(_currentSupplier, _currentProduct);
   const stored = payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount;
@@ -265,6 +258,12 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
     if (_fiscalFrozen) {
       hint.textContent =
         "Impostos definidos no orçamento realizado — valor a pagar já inclui IVA/retenção/desconto.";
+    } else if (
+      payment?.netAmount &&
+      (payment?.fiscalApplyVat || payment?.fiscalApplyWithholding || payment?.fiscalApplyDiscount)
+    ) {
+      hint.textContent =
+        "Valores sugeridos pelo orçamento — pode ajustar IVA, retenção, desconto e base antes de liquidar.";
     } else {
       const pct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
       const parts = [];
