@@ -1,10 +1,18 @@
 import { apiRequest, apiUpload } from "../services/api.js";
 import { can } from "./permissions.js";
 import { formatCurrency } from "./format.js";
+import {
+  loadAllCostCategories,
+  mountRubricFirstCascade,
+  resetCostCategoryCascade,
+  extraTypeToCostDomain,
+  COST_CASCADE_IDS,
+  DOMAIN_LABELS,
+} from "./costCategoryCascade.js";
 
 const EXTRA_MODAL_HTML = `
 <div class="modal-overlay" id="modalExtra">
-  <div class="modal-box" style="max-width:560px">
+  <div class="modal-box" style="max-width:580px">
     <div class="flex items-center justify-between mb-6">
       <h2 id="modalExtraTitle" class="text-lg font-bold text-slate-900">Novo Pedido Extra</h2>
       <button type="button" id="btnCloseExtraModal" aria-label="Fechar"
@@ -22,12 +30,19 @@ const EXTRA_MODAL_HTML = `
         </div>
         <input type="hidden" id="extraType" value="GERAL">
       </div>
-      <div id="rowGeneralCc">
-        <label for="extraGeneralCcId" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro de Custo Geral *</label>
-        <select id="extraGeneralCcId" required
-          class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-          <option value="">Selecionar centro geral...</option>
-        </select>
+      <div id="rowCostCategory" class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Classificação do custo *</span>
+          <span id="extraCostDomainBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[11px] font-bold"></span>
+        </div>
+        <p id="extraCostSelectionSummary" class="text-xs font-semibold text-slate-400 leading-relaxed min-h-[1.25rem]"></p>
+        <div id="extraCostCategoryCascade" class="flex flex-col gap-3"></div>
+        <input type="hidden" id="extraCostCategoryId" value="">
+        <div id="rowCostDetailDescription" class="hidden">
+          <label for="extraCostDetailDescription" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 mt-1">Descrição custo *</label>
+          <input id="extraCostDetailDescription" type="text" placeholder="Ex.: nome da ferramenta ou material"
+            class="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+        </div>
       </div>
       <div id="rowProject" class="hidden">
         <label for="extraProjectId" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Obra *</label>
@@ -138,7 +153,7 @@ export function isExtraCardSource(source) {
 let allProjects = [];
 let allCards = [];
 let allSuppliers = [];
-let generalCenters = [];
+let costCategoriesLoaded = false;
 let modalOptions = { showToast: defaultToast, onSuccess: null, getEditItem: null };
 let eventsBound = false;
 let editingItemCache = null;
@@ -165,12 +180,30 @@ function toDateInputValue(value) {
   return d.toISOString().slice(0, 10);
 }
 
-function populateGeneralCcSelects() {
-  const opts = generalCenters.map((cc) => `<option value="${cc.id}">${cc.name}</option>`).join("");
-  const select = document.getElementById("extraGeneralCcId");
-  if (select) {
-    select.innerHTML = `<option value="">Selecionar centro geral...</option>${opts}`;
+function refreshExtraCostCascade({ initialCategoryId = "", disabled = false } = {}) {
+  const type = document.getElementById("extraType")?.value || "GERAL";
+  const domain = extraTypeToCostDomain(type);
+  const badge = document.getElementById("extraCostDomainBadge");
+  if (badge) badge.textContent = DOMAIN_LABELS[domain] || domain;
+
+  const row = document.getElementById("rowCostCategory");
+  if (row && badge) {
+    badge.className =
+      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold " +
+      (domain === "OBRA" ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800");
   }
+
+  const container = document.getElementById(COST_CASCADE_IDS.container);
+  mountRubricFirstCascade({
+    container,
+    summaryEl: COST_CASCADE_IDS.summary,
+    hiddenInputId: COST_CASCADE_IDS.hidden,
+    detailRowId: COST_CASCADE_IDS.detailRow,
+    detailInputId: COST_CASCADE_IDS.detailInput,
+    domain,
+    initialCategoryId,
+    disabled,
+  });
 }
 
 function populateProjectSelects() {
@@ -184,19 +217,19 @@ function populateProjectSelects() {
 }
 
 async function loadReferenceData() {
-  const [projectsData, gccData, suppliersResult] = await Promise.all([
+  const [projectsData, , suppliersResult] = await Promise.all([
     apiRequest("/projects?pageSize=200"),
-    apiRequest("/general-cost-centers"),
+    loadAllCostCategories().then(() => {
+      costCategoriesLoaded = true;
+    }),
     apiRequest("/suppliers").catch((err) => {
       console.warn("Não foi possível carregar fornecedores:", err);
       return { items: [] };
     }),
   ]);
   allProjects = projectsData.items || projectsData.projects || [];
-  generalCenters = gccData.items || [];
   allSuppliers = (suppliersResult.items || []).filter((s) => s.active !== false);
   populateProjectSelects();
-  populateGeneralCcSelects();
   populateExtraSupplierSelect();
 }
 
@@ -389,9 +422,11 @@ function syncExtraFundFromCard() {
 function setExtraFormLocked(locked) {
   document.getElementById("btnTypeGeral").disabled = locked;
   document.getElementById("btnTypeObra").disabled = locked;
-  document.getElementById("extraGeneralCcId").disabled = locked;
   document.getElementById("extraProjectId").disabled = locked;
   document.getElementById("extraCostCenterId").disabled = locked;
+  document.getElementById("rowCostCategory")?.querySelectorAll("select").forEach((el) => {
+    el.disabled = locked;
+  });
   document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
 }
 
@@ -412,15 +447,16 @@ function setExtraType(type) {
   document.getElementById("extraType").value = type;
   document.getElementById("btnTypeGeral").classList.toggle("active", isGeral);
   document.getElementById("btnTypeObra").classList.toggle("active", !isGeral);
-  document.getElementById("rowGeneralCc").classList.toggle("hidden", !isGeral);
+  document.getElementById("rowGeneralCc")?.classList.add("hidden");
+  document.getElementById("rowCostCategory")?.classList.remove("hidden");
   document.getElementById("rowProject").classList.toggle("hidden", isGeral);
   document.getElementById("rowObraCostCenter").classList.toggle("hidden", isGeral);
-  document.getElementById("extraGeneralCcId").required = isGeral;
   document.getElementById("extraProjectId").required = !isGeral;
   document.getElementById("extraCostCenterId").required = !isGeral;
   if (isGeral) {
     document.getElementById("extraCostCenterId").value = "";
   }
+  refreshExtraCostCascade();
   const isEdit = Boolean(document.getElementById("extraEditId").value);
   if (!isEdit) {
     document.getElementById("modalExtraTitle").textContent = isGeral
@@ -466,6 +502,7 @@ export async function openExtraRequestModal({
   type = "GERAL",
   projectId = "",
   costCenterId = "",
+  costCategoryId = "",
   generalCostCenterId = "",
   lockType = false,
   lockProject = false,
@@ -473,14 +510,16 @@ export async function openExtraRequestModal({
   ensureModalMounted();
   document.getElementById("formExtra").reset();
   resetExtraFormState();
+  if (!costCategoriesLoaded) await loadAllCostCategories();
   setExtraType(type);
 
   if (type === "OBRA" && projectId) {
     document.getElementById("extraProjectId").value = projectId;
     await loadCostCentersForExtra(projectId, costCenterId || "");
   }
-  if (type === "GERAL" && generalCostCenterId) {
-    document.getElementById("extraGeneralCcId").value = generalCostCenterId;
+  const presetCategory = costCategoryId || generalCostCenterId;
+  if (presetCategory) {
+    refreshExtraCostCascade({ initialCategoryId: presetCategory });
   }
 
   if (lockType) {
@@ -519,18 +558,23 @@ export async function openExtraRequestModalForEdit(id) {
   document.getElementById("modalExtraTitle").textContent = "Editar Pedido Extra";
   document.getElementById("extraSubmitBtn").textContent = "Guardar alterações";
 
+  if (!costCategoriesLoaded) await loadAllCostCategories();
   setExtraType(item.type);
   setExtraFormLocked(true);
 
-  if (item.type === "GERAL") {
-    document.getElementById("extraGeneralCcId").value = item.generalCostCenterId || "";
-    if (isExtraCardSource(item.paymentSource)) {
-      await ensureCardsLoadedForExtra(item.type);
-    }
-  } else {
+  refreshExtraCostCascade({
+    initialCategoryId: item.costCategoryId || item.generalCostCenterId || "",
+    disabled: true,
+  });
+  if (item.costDetailDescription) {
+    document.getElementById("extraCostDetailDescription").value = item.costDetailDescription;
+  }
+  if (item.type === "OBRA") {
     document.getElementById("extraProjectId").value = item.projectId || "";
     await loadCostCentersForExtra(item.projectId, item.costCenterId || "");
-    await ensureCardsLoadedForExtra("OBRA");
+  }
+  if (isExtraCardSource(item.paymentSource)) {
+    await ensureCardsLoadedForExtra(item.type);
   }
 
   document.getElementById("extraDesc").value = item.description || "";
@@ -571,7 +615,9 @@ async function submitExtra(e) {
     type,
     projectId: type === "OBRA" ? document.getElementById("extraProjectId").value || null : null,
     costCenterId: type === "OBRA" ? document.getElementById("extraCostCenterId").value || null : null,
-    generalCostCenterId: type === "GERAL" ? document.getElementById("extraGeneralCcId").value || null : null,
+    costCategoryId: document.getElementById("extraCostCategoryId").value || null,
+    costDetailDescription:
+      document.getElementById("extraCostDetailDescription")?.value.trim() || null,
     description: document.getElementById("extraDesc").value.trim(),
     amount: parseFloat(document.getElementById("extraAmount").value) || 0,
     paymentDueDate: document.getElementById("extraPaymentDueDate").value,
@@ -586,8 +632,13 @@ async function submitExtra(e) {
   };
 
   if (!editId) {
-    if (type === "GERAL" && !body.generalCostCenterId) {
-      modalOptions.showToast("Seleccione o centro de custo geral", "error");
+    if (!body.costCategoryId) {
+      modalOptions.showToast("Seleccione o tipo de custo até ao nível final", "error");
+      return;
+    }
+    const detailEl = document.getElementById("extraCostDetailDescription");
+    if (detailEl?.required && !body.costDetailDescription) {
+      modalOptions.showToast("Indique o detalhe do custo", "error");
       return;
     }
     if (type === "OBRA" && !body.projectId) {

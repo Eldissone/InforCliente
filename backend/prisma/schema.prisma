@@ -1119,6 +1119,34 @@ model GeneralCostCenter {
   @@index([active])
 }
 
+enum CostCategoryDomain {
+  GERAL
+  OBRA
+  VIATURAS
+}
+
+// Catálogo de tipos de custo / subcustos (CENTRO COMPRAS).
+model CostCategory {
+  id                   String              @id
+  code                 String              @unique
+  name                 String
+  domain               CostCategoryDomain
+  parentId             String?
+  level                Int
+  sortOrder            Int                 @default(0)
+  isSelectable         Boolean             @default(true)
+  requiresDetailText   Boolean             @default(false)
+  active               Boolean             @default(true)
+  createdAt            DateTime            @default(now())
+
+  parent        CostCategory?  @relation("CostCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      CostCategory[] @relation("CostCategoryTree")
+  extraRequests ExtraRequest[]
+
+  @@index([domain, parentId])
+  @@index([active])
+}
+
 // Pedido Extra: da Obra (vinculado) ou Geral (sem vínculo obrigatório).
 // Pode ser pago via Caixa, Banco ou débito num Fundo de Maneio.
 model ExtraRequest {
@@ -1127,6 +1155,8 @@ model ExtraRequest {
   projectId           String?
   costCenterId        String?
   generalCostCenterId String?
+  costCategoryId      String?
+  costDetailDescription String?
   description    String
   amount         Decimal            @db.Decimal(16, 2)
   currency       String             @default("AOA")
@@ -1156,6 +1186,7 @@ model ExtraRequest {
   project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
   costCenter        CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   generalCostCenter GeneralCostCenter? @relation(fields: [generalCostCenterId], references: [id], onDelete: SetNull)
+  costCategory      CostCategory?      @relation(fields: [costCategoryId], references: [id], onDelete: SetNull)
   fund              PettyCashFund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
   card              PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
   supplierRef       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -1166,6 +1197,7 @@ model ExtraRequest {
   @@index([type])
   @@index([fundId])
   @@index([generalCostCenterId])
+  @@index([costCategoryId])
   @@index([supplierId])
 }
 

@@ -16,6 +16,7 @@ const { createLog } = require("../services/logService");
 const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
+const { validateSelectableCategory } = require("../services/costCategoryService");
 
 const fileUpload = multer({
   storage: multer.memoryStorage(),
@@ -72,6 +73,7 @@ const EXTRA_INCLUDE = {
   project: { select: { id: true, name: true, code: true } },
   costCenter: { select: { id: true, code: true, name: true } },
   generalCostCenter: { select: { id: true, code: true, name: true, description: true } },
+  costCategory: { select: { id: true, code: true, name: true, domain: true, requiresDetailText: true } },
   fund: { select: { id: true, name: true, currentBalance: true, currency: true } },
   card: { select: { id: true, label: true } },
   supplierRef: {
@@ -179,6 +181,7 @@ extraRequestRoutes.get(
     const type = req.query.type ? String(req.query.type) : "";
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
     const generalCostCenterId = req.query.generalCostCenterId ? String(req.query.generalCostCenterId) : "";
+    const costCategoryId = req.query.costCategoryId ? String(req.query.costCategoryId) : "";
     const status = req.query.status ? String(req.query.status) : "";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
@@ -187,6 +190,7 @@ extraRequestRoutes.get(
       ...(type ? { type } : {}),
       ...(projectId ? { projectId } : {}),
       ...(generalCostCenterId ? { generalCostCenterId } : {}),
+      ...(costCategoryId ? { costCategoryId } : {}),
       ...(status ? { status } : {}),
       ...(!projectId ? { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] } : {}),
     };
@@ -272,6 +276,8 @@ extraRequestRoutes.post(
         projectId: z.string().optional().nullable(),
         costCenterId: z.string().optional().nullable(),
         generalCostCenterId: z.string().optional().nullable(),
+        costCategoryId: z.string().optional().nullable(),
+        costDetailDescription: z.string().max(500).optional().nullable(),
         description: z.string().min(2),
         amount: z.union([z.number(), z.string()]),
         currency: z.string().optional().default("AOA"),
@@ -291,8 +297,26 @@ extraRequestRoutes.post(
     if (body.type === "OBRA" && !body.costCenterId) {
       return res.status(400).json({ error: "COST_CENTER_REQUIRED_FOR_OBRA" });
     }
-    if (body.type === "GERAL" && !body.generalCostCenterId) {
-      return res.status(400).json({ error: "GENERAL_COST_CENTER_REQUIRED" });
+    if (body.type === "GERAL" && !body.costCategoryId && !body.generalCostCenterId) {
+      return res.status(400).json({ error: "COST_CATEGORY_REQUIRED" });
+    }
+    if (body.type === "OBRA" && !body.costCategoryId) {
+      return res.status(400).json({ error: "COST_CATEGORY_REQUIRED" });
+    }
+
+    let validatedCostCategory = null;
+    if (body.costCategoryId) {
+      const expectedDomain = body.type === "GERAL" ? "GERAL" : "OBRA";
+      const check = await validateSelectableCategory(body.costCategoryId, expectedDomain);
+      if (!check.ok) return res.status(400).json({ error: check.error });
+      validatedCostCategory = check.category;
+      if (validatedCostCategory.requiresDetailText && !trimOrNull(body.costDetailDescription)) {
+        return res.status(400).json({ error: "COST_DETAIL_DESCRIPTION_REQUIRED" });
+      }
+    } else if (body.type === "GERAL" && body.generalCostCenterId) {
+      // Pedidos legados: centro geral plano sem taxonomia
+    } else if (body.type === "GERAL") {
+      return res.status(400).json({ error: "COST_CATEGORY_REQUIRED" });
     }
     if (body.type === "GERAL" && body.projectId) {
       return res.status(400).json({ error: "PROJECT_NOT_ALLOWED_FOR_GERAL" });
@@ -341,7 +365,10 @@ extraRequestRoutes.post(
         type: body.type,
         projectId: body.type === "OBRA" ? body.projectId || null : null,
         costCenterId: body.type === "OBRA" ? body.costCenterId || null : null,
-        generalCostCenterId: body.type === "GERAL" ? body.generalCostCenterId || null : null,
+        generalCostCenterId:
+          body.type === "GERAL" && !body.costCategoryId ? body.generalCostCenterId || null : null,
+        costCategoryId: body.costCategoryId || null,
+        costDetailDescription: trimOrNull(body.costDetailDescription),
         description: body.description,
         amount: String(body.amount),
         currency: body.currency || "AOA",

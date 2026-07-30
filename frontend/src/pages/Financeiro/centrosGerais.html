@@ -359,8 +359,8 @@
                                 <span class="material-symbols-outlined text-xl">category</span>
                             </span>
                             <span class="min-w-0">
-                                <span class="block text-sm font-bold text-slate-900">Tipos de Custos Gerais</span>
-                                <span id="gccSectionMeta" class="block text-[11px] text-slate-400 truncate">Centros de custo fora de obra</span>
+                                <span class="block text-sm font-bold text-slate-900">Tipos de custo</span>
+                                <span id="gccSectionMeta" class="block text-[11px] text-slate-400 truncate">Catálogo CENTRO COMPRAS</span>
                             </span>
                         </span>
                         <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
@@ -370,17 +370,35 @@
                         <span class="material-symbols-outlined text-base">add_circle</span>
                         Pedido Extra
                     </button>
-                    <button id="btnNewGcc" type="button"
-                        class="h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shrink-0">
+                    <button id="btnNewCostCategory" type="button"
+                        class="hidden h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shrink-0">
                         <span class="material-symbols-outlined text-base">add</span>
-                        Centro Geral
+                        Nova rubrica
                     </button>
                 </div>
                 <div class="section-panel__body">
-                    <div id="gccGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div class="gcc-card animate-pulse h-28"></div>
-                        <div class="gcc-card animate-pulse h-28"></div>
-                        <div class="gcc-card animate-pulse h-28"></div>
+                    <div class="flex flex-wrap items-center gap-2 mb-4 border-b border-slate-100 pb-3">
+                        <button type="button" data-cost-tab="tipos"
+                            class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-900 text-white">Tipos de custo</button>
+                        <button type="button" data-cost-tab="estrutura"
+                            class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-600">Tipo 1 / Grupo</button>
+                        <div id="costCatalogCrudToolbar" class="hidden ml-auto flex flex-wrap gap-1.5 justify-end">
+                            <button type="button" data-add-sheet-level="TIPO1"
+                                class="h-9 px-2.5 rounded-xl bg-slate-100 text-slate-700 text-[10px] font-bold hover:bg-slate-200">+ Tipo 1</button>
+                            <button type="button" data-add-sheet-level="GRUPO"
+                                class="h-9 px-2.5 rounded-xl bg-slate-100 text-slate-700 text-[10px] font-bold hover:bg-slate-200">+ Grupo</button>
+                            <button type="button" data-add-sheet-level="TIPO2"
+                                class="h-9 px-2.5 rounded-xl bg-slate-100 text-slate-700 text-[10px] font-bold hover:bg-slate-200">+ Tipo 2</button>
+                            <button type="button" data-add-sheet-level="SUBCUSTO"
+                                class="h-9 px-2.5 rounded-xl bg-slate-900 text-white text-[10px] font-bold hover:bg-slate-800">+ Tipo custo 3</button>
+                        </div>
+                    </div>
+                    <div id="costCatalogFilters"></div>
+                    <div id="costCatalogTipos"></div>
+                    <p id="costCatalogTiposHelp" class="text-[11px] text-slate-400 mt-2">Tabela única: tipo custo 1 → grupo → tipo 2 → <strong>tipo custo 3 (subcustos)</strong>. Clique para filtrar pedidos; duplo clique abre pedido extra.</p>
+                    <div id="costCatalogEstrutura" class="hidden">
+                        <div id="estruturaCatalog"></div>
+                        <p id="costCatalogEstruturaHelp" class="text-[11px] text-slate-400 mt-2 hidden">Gestão de <strong>Tipo custo 1</strong> (famílias) e <strong>Grupos</strong> do domínio Custo gerais.</p>
                     </div>
                 </div>
             </div>
@@ -419,9 +437,9 @@
                             <option value="REJEITADO">Rejeitados</option>
                             <option value="CANCELADO">Cancelados</option>
                         </select>
-                        <select id="filterGeneralCc"
+                        <select id="filterCostCategory"
                             class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
-                            <option value="">Todos os centros gerais</option>
+                            <option value="">Todos os tipos de custo</option>
                         </select>
                         <select id="filterProject"
                             class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
@@ -467,40 +485,86 @@
         </div>
     </footer>
 
-    <!-- Modal: Novo Centro Geral -->
-    <div class="modal-overlay" id="modalGcc">
-        <div class="modal-box" style="max-width:480px">
+    <!-- Modal: Novo Centro Geral — removido (catálogo fixo CENTRO COMPRAS) -->
+
+    <div class="modal-overlay" id="modalCostCategory">
+        <div class="modal-box" style="max-width:520px">
             <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-bold text-slate-900">Novo Centro Geral</h2>
-                <button type="button" id="btnCloseGccModal" aria-label="Fechar"
+                <h2 id="modalCostCategoryTitle" class="text-lg font-bold text-slate-900">Catálogo de custos</h2>
+                <button type="button" id="btnCloseCostCategoryModal" aria-label="Fechar"
                     class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">close</span>
                 </button>
             </div>
-            <form id="formGcc" class="flex flex-col gap-4">
+            <form id="formCostCategory" class="flex flex-col gap-4">
+                <input type="hidden" id="costCategoryEditId" value="">
                 <div>
-                    <label for="gccName"
+                    <label for="costCategorySheetLevel"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nível na folha *</label>
+                    <select id="costCategorySheetLevel" required
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="TIPO1">Tipo custo 1</option>
+                        <option value="GRUPO">Grupo</option>
+                        <option value="TIPO2">Tipo custo 2</option>
+                        <option value="SUBCUSTO" selected>Subcusto (tipo 3)</option>
+                    </select>
+                </div>
+                <input type="hidden" id="costCategoryDomain" value="GERAL">
+                <div id="rowCostCategoryTipo1" class="hidden">
+                    <label for="costCategoryTipo1Id"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo custo 1 (pai)</label>
+                    <select id="costCategoryTipo1Id"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">— Seleccione —</option>
+                    </select>
+                </div>
+                <div id="rowCostCategoryGrupo" class="hidden">
+                    <label for="costCategoryGrupoId"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Grupo (opcional)</label>
+                    <select id="costCategoryGrupoId"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">— Directamente sob tipo 1 —</option>
+                    </select>
+                </div>
+                <div id="rowCostCategoryParent">
+                    <label for="costCategoryParentId"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo custo 2 (pai do subcusto)</label>
+                    <select id="costCategoryParentId"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="">— Seleccione o tipo custo 2 —</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="costCategoryName"
                         class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome *</label>
-                    <input id="gccName" type="text" required placeholder="Ex: Marketing e Publicidade"
+                    <input id="costCategoryName" type="text" required maxlength="120" placeholder="Ex.: Combustível"
                         class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
+                <div id="rowCostCategoryFlags" class="grid grid-cols-1 gap-3">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                        <input id="costCategoryRequiresDetail" type="checkbox" class="rounded border-slate-300">
+                        Descrição custo obrigatória no pedido extra
+                    </label>
+                    <label id="rowCostCategorySelectable" class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                        <input id="costCategorySelectable" type="checkbox" checked class="rounded border-slate-300">
+                        Seleccionável em pedidos
+                    </label>
+                </div>
                 <div>
-                    <label for="gccDescription"
-                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição</label>
-                    <textarea id="gccDescription" rows="3" placeholder="Breve descrição do tipo de custo"
-                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none resize-none"></textarea>
+                    <label for="costCategorySortOrder"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Ordem</label>
+                    <input id="costCategorySortOrder" type="number" min="0" step="1" placeholder="Automática"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
                 </div>
                 <div class="flex gap-3 justify-end pt-2">
-                    <button type="button" id="btnCancelGcc"
+                    <button type="button" id="btnCancelCostCategory"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
                     <button type="submit"
-                        class="h-10 px-6 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all">Criar
-                        Centro</button>
+                        class="h-10 px-6 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all">Guardar</button>
                 </div>
             </form>
         </div>
     </div>
-
     <!-- Modal: Detalhe do Cartão -->
     <div class="modal-overlay" id="modalCardDetail">
         <div class="modal-box modal-box--wide">

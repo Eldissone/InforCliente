@@ -7,17 +7,196 @@ import { formatCurrency, formatDateBR } from "/shared/format.js";
 import {
   initExtraRequestModal,
   openExtraRequestModalForEdit,
+  openExtraRequestModal,
   wireExtraRequestButton,
 } from "/shared/extraRequestModal.js";
 
-let generalCenters = [];
+import {
+  loadAllCostCategories,
+  buildCategoryPath,
+  formatExtraCostLabel,
+  formatCategoryDisplayName,
+  getCachedCategories,
+} from "/shared/costCategoryCascade.js";
+import {
+  buildCostCatalogSheetRows,
+  applySheetFilters,
+  sheetFilterOptions,
+  sheetCellRowspan,
+  classifyCategorySheetLevel,
+  SHEET_LEVEL_LABELS,
+  SHEET_TIPO1_FLAT,
+} from "/shared/costCategorySheet.js";
+
+let costCategories = [];
 let allProjects = [];
 let allCards = [];
 let managedCards = [];
 let selectedCardId = null;
 let selectedCardCache = null;
-let selectedGccFilter = "";
+let selectedCostCategoryFilter = "";
 let extrasCache = [];
+let activeCostCatalogTab = "tipos";
+let catalogSheetFilters = {
+  tipo1: "",
+  grupo: "",
+  tipo2: "",
+  tipo3: "",
+};
+
+function inferDomainFromCatalogContext() {
+  const t1 = catalogSheetFilters.tipo1;
+  if (t1 === SHEET_TIPO1_FLAT.OBRA) return "OBRA";
+  if (t1 === SHEET_TIPO1_FLAT.VIATURAS) return "VIATURAS";
+  return "GERAL";
+}
+
+function getCostCategoryDomainValue() {
+  return document.getElementById("costCategoryDomain")?.value || "GERAL";
+}
+
+function setCostCategoryDomainValue(domain) {
+  const el = document.getElementById("costCategoryDomain");
+  if (el) el.value = domain;
+}
+
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+}
+
+function getCatalogSheetRows() {
+  const items = costCategories.length ? costCategories : getCachedCategories();
+  return buildCostCatalogSheetRows(items);
+}
+
+function renderCatalogFilterBar() {
+  const bar = document.getElementById("costCatalogFilters");
+  if (!bar) return;
+  const allRows = getCatalogSheetRows();
+  const opts = sheetFilterOptions(allRows, catalogSheetFilters);
+
+  const mkSelect = (id, title, entries, value) => {
+    const options = entries
+      .map(
+        ({ v, label }) =>
+          `<option value="${escapeHtml(v)}"${value === v ? " selected" : ""}>${escapeHtml(label)}</option>`
+      )
+      .join("");
+    return `<label class="flex flex-col gap-0.5 min-w-[9.5rem] flex-1 shrink-0">
+      <span class="text-[9px] font-black uppercase tracking-wide text-slate-400 truncate">${title}</span>
+      <select id="${id}" class="cost-sheet-filter h-9 px-2 bg-white border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 w-full min-w-0">${options}</select>
+    </label>`;
+  };
+
+  const tipo1Entries = [{ v: "", label: "Tipo custo 1 — todos" }, ...opts.tipo1.map((t) => ({ v: t, label: t }))];
+  const grupoValues = opts.grupo;
+  const grupoEntries = [{ v: "", label: "Grupo — todos" }];
+  if (grupoValues.includes("")) grupoEntries.push({ v: "__EMPTY__", label: "(sem grupo)" });
+  grupoValues.filter(Boolean).forEach((g) => grupoEntries.push({ v: g, label: g }));
+  const tipo2Entries = [{ v: "", label: "Tipo custo 2 — todos" }, ...opts.tipo2.map((t) => ({ v: t, label: t }))];
+  const tipo3Entries = [{ v: "", label: "Tipo custo 3 — todos" }, ...opts.tipo3.map((t) => ({ v: t, label: t }))];
+
+  bar.innerHTML = `<div class="flex flex-nowrap items-end gap-2 mb-3 p-3 bg-slate-50/90 border border-slate-100 rounded-xl overflow-x-auto">
+    ${mkSelect("filterSheetTipo1", "Tipo custo 1", tipo1Entries, catalogSheetFilters.tipo1)}
+    ${mkSelect("filterSheetGrupo", "Grupo", grupoEntries, catalogSheetFilters.grupo)}
+    ${mkSelect("filterSheetTipo2", "Tipo custo 2", tipo2Entries, catalogSheetFilters.tipo2)}
+    ${mkSelect("filterSheetTipo3", "Tipo custo 3", tipo3Entries, catalogSheetFilters.tipo3)}
+    <button type="button" id="btnClearSheetFilters" class="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 shrink-0 whitespace-nowrap">Limpar filtros</button>
+  </div>`;
+}
+
+function readCatalogSheetFiltersFromDom() {
+  catalogSheetFilters.tipo1 = document.getElementById("filterSheetTipo1")?.value || "";
+  catalogSheetFilters.grupo = document.getElementById("filterSheetGrupo")?.value || "";
+  catalogSheetFilters.tipo2 = document.getElementById("filterSheetTipo2")?.value || "";
+  catalogSheetFilters.tipo3 = document.getElementById("filterSheetTipo3")?.value || "";
+}
+
+function resetCatalogSheetFiltersCascade(fromKey) {
+  if (fromKey === "tipo1") {
+    catalogSheetFilters.grupo = "";
+    catalogSheetFilters.tipo2 = "";
+    catalogSheetFilters.tipo3 = "";
+  } else if (fromKey === "grupo") {
+    catalogSheetFilters.tipo2 = "";
+    catalogSheetFilters.tipo3 = "";
+  } else if (fromKey === "tipo2") {
+    catalogSheetFilters.tipo3 = "";
+  }
+}
+
+function bindCatalogSheetRowEvents(container, items) {
+  container.querySelectorAll("[data-add-child-category]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const parent = items.find((c) => c.id === btn.dataset.addChildCategory);
+      openCostCategoryModal({
+        domain: parent?.domain || "GERAL",
+        sheetLevel: "SUBCUSTO",
+        parentId: btn.dataset.addChildCategory,
+      });
+    });
+  });
+
+  container.querySelectorAll(".cost-catalog-table__row[data-pick-category]").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("[data-edit-category], [data-delete-category], [data-add-child-category]")) return;
+      const id = row.dataset.pickCategory;
+      selectedCostCategoryFilter = selectedCostCategoryFilter === id ? "" : id;
+      document.getElementById("filterCostCategory").value = selectedCostCategoryFilter;
+      renderCostCatalogViews();
+      loadExtras();
+    });
+    row.addEventListener("dblclick", async (e) => {
+      if (e.target.closest("[data-edit-category], [data-delete-category], [data-add-child-category]")) return;
+      if (!can("pedidosExtras", "create")) return;
+      const domain = row.dataset.domain;
+      if (domain === "VIATURAS") {
+        showToast("Custos de viaturas: em breve no pedido extra. Use filtro por agora.", "info");
+        return;
+      }
+      await openExtraRequestModal({
+        type: domain === "OBRA" ? "OBRA" : "GERAL",
+        costCategoryId: row.dataset.pickCategory,
+      });
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        row.click();
+      }
+    });
+  });
+}
+
+function canManageCostCatalog() {
+  return can("pedidosExtras", "create");
+}
+
+function canDeleteCostCatalog() {
+  return can("pedidosExtras", "delete");
+}
+
+function catalogManageActionsHtml(categoryId) {
+  if (!canManageCostCatalog()) return "";
+  const del = canDeleteCostCatalog()
+    ? `<button type="button" class="cost-catalog-action cost-catalog-action--danger" data-delete-category="${categoryId}" title="Eliminar">
+        <span class="material-symbols-outlined">delete</span>
+      </button>`
+    : "";
+  return `<button type="button" class="cost-catalog-action" data-edit-category="${categoryId}" title="Editar">
+      <span class="material-symbols-outlined">edit</span>
+    </button>${del}`;
+}
+
+function applyCatalogManageVisibility() {
+  const show = canManageCostCatalog();
+  document.getElementById("btnNewCostCategory")?.classList.toggle("hidden", true);
+  document.getElementById("costCatalogCrudToolbar")?.classList.toggle("hidden", !show);
+}
 
 const CARD_TYPE_LABELS = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
 
@@ -59,6 +238,7 @@ function apiErrorMessage(err) {
 function movementReferenceLabel(m) {
   const ex = m.extraRequest;
   if (!ex) return "—";
+  if (ex.costCategory?.name) return formatExtraCostLabel(ex);
   if (ex.generalCostCenter?.name) return ex.generalCostCenter.name;
   if (ex.project) return `${ex.project.name}${ex.project.code ? ` (${ex.project.code})` : ""}`;
   return "Pedido extra";
@@ -82,53 +262,509 @@ function showToast(msg, type = "info") {
   }, 3500);
 }
 
-function renderGeneralCentersGrid() {
-  const grid = document.getElementById("gccGrid");
+function renderCostCatalogTipos() {
+  const container = document.getElementById("costCatalogTipos");
   const meta = document.getElementById("gccSectionMeta");
+  const items = costCategories.length ? costCategories : getCachedCategories();
+  const allSheet = getCatalogSheetRows();
+  const rows = applySheetFilters(allSheet, catalogSheetFilters);
+
   if (meta) {
-    meta.textContent = generalCenters.length
-      ? `${generalCenters.length} centro(s) geral(is) configurado(s)`
-      : "Nenhum centro geral configurado";
+    meta.textContent = allSheet.length
+      ? `${allSheet.length} linhas no catálogo (tipo 1 → 3)`
+      : "Catálogo indisponível";
   }
-  if (!generalCenters.length) {
-    grid.innerHTML = `<p class="text-sm text-slate-400 col-span-full">Nenhum centro geral configurado.</p>`;
+  if (!container) return;
+
+  const actionsHead = canManageCostCatalog()
+    ? `<th class="px-3 py-2.5 text-center w-28 border-l border-slate-300">Acções</th>`
+    : "";
+  const colSpan = canManageCostCatalog() ? 6 : 5;
+
+  const bodyRows = rows.length
+    ? rows
+        .map((r, i) => {
+          const selected =
+            selectedCostCategoryFilter === r.pickCategoryId
+              ? " cost-catalog-table__row--selected"
+              : "";
+          const desc = r.requiresDetailText ? "Preencher no pedido extra" : "—";
+          const manageId = r.tipo3Id || r.tipo2Id;
+          const actions = canManageCostCatalog()
+            ? `<td class="px-3 py-2 text-center whitespace-nowrap border-l border-slate-200">
+                ${catalogManageActionsHtml(manageId)}
+                <button type="button" class="cost-catalog-action" data-add-child-category="${r.tipo2Id}" title="Adicionar tipo custo 3">
+                  <span class="material-symbols-outlined">add</span>
+                </button>
+              </td>`
+            : "";
+          const span1 = sheetCellRowspan(rows, i, "tipo1");
+          const spanG = sheetCellRowspan(rows, i, "grupo");
+          const span2 = sheetCellRowspan(rows, i, "tipo2");
+          const tipo1Cell =
+            span1 > 0
+              ? `<td rowspan="${span1}" class="px-3 py-2 text-[11px] text-slate-800 align-top border-r border-slate-100 bg-white">${escapeHtml(r.tipo1)}</td>`
+              : "";
+          const grupoCell =
+            spanG > 0
+              ? `<td rowspan="${spanG}" class="px-3 py-2 text-[11px] text-slate-600 align-top border-r border-slate-100">${r.grupo ? escapeHtml(r.grupo) : "—"}</td>`
+              : "";
+          const tipo2Cell =
+            span2 > 0
+              ? `<td rowspan="${span2}" class="px-3 py-2 text-[11px] font-semibold text-slate-900 align-top border-r border-slate-100">${escapeHtml(r.tipo2)}</td>`
+              : "";
+          return `<tr class="cost-catalog-table__row${selected}" data-pick-category="${r.pickCategoryId}" data-domain="${r.domain}" tabindex="0">
+            ${tipo1Cell}
+            ${grupoCell}
+            ${tipo2Cell}
+            <td class="px-3 py-2 text-[11px] text-slate-700 border-r border-slate-100">${escapeHtml(r.tipo3)}</td>
+            <td class="px-3 py-2 text-[11px] text-slate-500 italic">${desc}</td>
+            ${actions}
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Nenhuma linha com estes filtros.</td></tr>`;
+
+  container.innerHTML = `
+    <div class="overflow-x-auto border border-slate-200 rounded-lg max-h-[560px] overflow-y-auto">
+      <table class="cost-catalog-table cost-catalog-table--sheet w-full text-left">
+        <thead class="sticky top-0 z-[1]">
+          <tr class="bg-slate-200/95 text-[10px] font-black uppercase text-slate-700 border-b border-slate-300">
+            <th class="px-3 py-2.5 border-r border-slate-300">Tipo custo 1</th>
+            <th class="px-3 py-2.5 border-r border-slate-300 w-24">Grupo</th>
+            <th class="px-3 py-2.5 border-r border-slate-300">Tipo custo 2</th>
+            <th class="px-3 py-2.5 border-r border-slate-300">Tipo custo 3</th>
+            <th class="px-3 py-2.5 border-r border-slate-300">Descrição custo</th>
+            ${actionsHead}
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>`;
+
+  bindCatalogSheetRowEvents(container, items);
+}
+
+function setCostCatalogTab(tab) {
+  activeCostCatalogTab = tab;
+  document.querySelectorAll(".cost-catalog-tab").forEach((btn) => {
+    const active = btn.dataset.costTab === tab;
+    btn.classList.toggle("bg-slate-900", active);
+    btn.classList.toggle("text-white", active);
+    btn.classList.toggle("bg-slate-100", !active);
+    btn.classList.toggle("text-slate-600", !active);
+  });
+  document.getElementById("costCatalogTipos")?.classList.toggle("hidden", tab !== "tipos");
+  document.getElementById("costCatalogTiposHelp")?.classList.toggle("hidden", tab !== "tipos");
+  document.getElementById("costCatalogEstrutura")?.classList.toggle("hidden", tab !== "estrutura");
+  document.getElementById("costCatalogEstruturaHelp")?.classList.toggle("hidden", tab !== "estrutura");
+  renderCatalogFilterBar();
+  if (tab === "tipos") renderCostCatalogTipos();
+  if (tab === "estrutura") renderEstruturaCatalog();
+  applyCatalogManageVisibility();
+}
+
+function renderCostCatalogViews() {
+  renderCatalogFilterBar();
+  if (activeCostCatalogTab === "tipos") renderCostCatalogTipos();
+  if (activeCostCatalogTab === "estrutura") renderEstruturaCatalog();
+}
+
+function categoriesBySheetLevel(domain, level) {
+  return costCategories.filter(
+    (c) =>
+      c.domain === domain &&
+      c.active !== false &&
+      classifyCategorySheetLevel(c) === level &&
+      !(level === "TIPO1" && (c.code?.includes("_PRODUCAO") || String(c.name).toUpperCase().includes("PRODUÇÃO")))
+  );
+}
+
+function populateCostCategoryTipo1Select(domain, selectedId = "") {
+  const select = document.getElementById("costCategoryTipo1Id");
+  if (!select) return;
+  const items = categoriesBySheetLevel(domain, "TIPO1");
+  select.innerHTML =
+    `<option value="">— Seleccione —</option>` +
+    items
+      .map(
+        (c) =>
+          `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
+      )
+      .join("");
+}
+
+function populateCostCategoryGrupoSelect(domain, tipo1Id, selectedId = "") {
+  const select = document.getElementById("costCategoryGrupoId");
+  if (!select) return;
+  if (!tipo1Id) {
+    select.innerHTML = `<option value="">— Directamente sob tipo 1 —</option>`;
     return;
   }
-  grid.innerHTML = generalCenters
-    .map(
-      (cc) => `
-    <button type="button" data-gcc-id="${cc.id}"
-      class="gcc-card text-left ${selectedGccFilter === cc.id ? "gcc-card--active" : ""}">
-      <div class="flex items-start gap-3">
-        <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">account_balance_wallet</span>
-        <div class="min-w-0">
-          <p class="text-sm font-bold text-slate-900">${cc.name}</p>
-          <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">${cc.description || "—"}</p>
-        </div>
-      </div>
-    </button>`
-    )
-    .join("");
+  const grupos = costCategories.filter(
+    (c) =>
+      c.domain === domain &&
+      c.active !== false &&
+      c.parentId === tipo1Id &&
+      classifyCategorySheetLevel(c) === "GRUPO"
+  );
+  select.innerHTML =
+    `<option value="">— Directamente sob tipo 1 —</option>` +
+    grupos
+      .map(
+        (c) =>
+          `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
+      )
+      .join("");
+}
 
-  grid.querySelectorAll("[data-gcc-id]").forEach((btn) => {
+function populateCostCategoryTipo2ParentSelect(domain, selectedId = "") {
+  const select = document.getElementById("costCategoryParentId");
+  if (!select) return;
+  const items = costCategories.filter((c) => {
+    if (c.domain !== domain || c.active === false) return false;
+    const lvl = classifyCategorySheetLevel(c);
+    return lvl === "TIPO2" || (domain !== "GERAL" && !c.parentId && lvl === "TIPO2");
+  });
+  const opts = items
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"))
+    .map((c) => {
+      const path = buildCategoryPath(c.id, costCategories);
+      return `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${path || formatCategoryDisplayName(c.name)}</option>`;
+    })
+    .join("");
+  select.innerHTML = `<option value="">— Seleccione o tipo custo 2 —</option>${opts}`;
+}
+
+function syncCostCategoryFormForLevel() {
+  const level = document.getElementById("costCategorySheetLevel")?.value || "TIPO2";
+  const editId = document.getElementById("costCategoryEditId")?.value;
+  if (!editId) {
+    const domain =
+      level === "TIPO1" || level === "GRUPO" ? "GERAL" : inferDomainFromCatalogContext();
+    setCostCategoryDomainValue(domain);
+  }
+  const domain = getCostCategoryDomainValue();
+
+  document.getElementById("rowCostCategoryTipo1")?.classList.toggle("hidden", level !== "GRUPO" && level !== "TIPO2");
+  document.getElementById("rowCostCategoryGrupo")?.classList.toggle("hidden", level !== "TIPO2" || domain !== "GERAL");
+  document.getElementById("rowCostCategoryParent")?.classList.toggle("hidden", level !== "SUBCUSTO");
+  document.getElementById("rowCostCategorySelectable")?.classList.toggle("hidden", level === "TIPO1" || level === "GRUPO");
+
+  if (level === "GRUPO" || (level === "TIPO2" && domain === "GERAL")) {
+    populateCostCategoryTipo1Select(domain, document.getElementById("costCategoryTipo1Id")?.value);
+  }
+  if (level === "TIPO2" && domain === "GERAL") {
+    const t1 = document.getElementById("costCategoryTipo1Id")?.value;
+    populateCostCategoryGrupoSelect(domain, t1, document.getElementById("costCategoryGrupoId")?.value);
+  }
+  if (level === "SUBCUSTO") {
+    populateCostCategoryTipo2ParentSelect(domain, document.getElementById("costCategoryParentId")?.value);
+  }
+}
+
+function resolveCostCategoryParentIdForSubmit(sheetLevel, domain) {
+  if (sheetLevel === "TIPO1") return null;
+  if (sheetLevel === "GRUPO") {
+    return document.getElementById("costCategoryTipo1Id")?.value || null;
+  }
+  if (sheetLevel === "TIPO2") {
+    if (domain === "GERAL") {
+      const g = document.getElementById("costCategoryGrupoId")?.value;
+      const t1 = document.getElementById("costCategoryTipo1Id")?.value;
+      return g || t1 || null;
+    }
+    return null;
+  }
+  if (sheetLevel === "SUBCUSTO") {
+    return document.getElementById("costCategoryParentId")?.value || null;
+  }
+  return null;
+}
+
+function renderEstruturaCatalog() {
+  const container = document.getElementById("estruturaCatalog");
+  if (!container) return;
+  const domain = "GERAL";
+  const tipo1s = categoriesBySheetLevel(domain, "TIPO1");
+  const grupos = categoriesBySheetLevel(domain, "GRUPO");
+  const actionsHead = canManageCostCatalog()
+    ? `<th class="px-3 py-2.5 text-center w-28">Acções</th>`
+    : "";
+  const colSpan = canManageCostCatalog() ? 4 : 3;
+
+  const rows = [];
+  tipo1s.forEach((t1) => {
+    rows.push({ kind: "TIPO1", tipo1: t1, grupo: null });
+    grupos
+      .filter((g) => g.parentId === t1.id)
+      .forEach((g) => rows.push({ kind: "GRUPO", tipo1: t1, grupo: g }));
+  });
+
+  const body = rows.length
+    ? rows
+        .map(({ kind, tipo1, grupo }) => {
+          const cat = kind === "TIPO1" ? tipo1 : grupo;
+          const actions = canManageCostCatalog() ? `<td class="px-3 py-2 text-center">${catalogManageActionsHtml(cat.id)}</td>` : "";
+          return `<tr class="cost-catalog-table__row" data-pick-category="${cat.id}" tabindex="0">
+            <td class="px-3 py-2 text-[11px] font-semibold">${formatCategoryDisplayName(tipo1.name)}</td>
+            <td class="px-3 py-2 text-[11px]">${grupo ? formatCategoryDisplayName(grupo.name) : "—"}</td>
+            <td class="px-3 py-2 text-[10px] uppercase text-slate-500">${SHEET_LEVEL_LABELS[kind]}</td>
+            ${actions}
+          </tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1 / grupos neste domínio. Use + Tipo 1 ou + Grupo.</td></tr>`;
+
+  container.innerHTML = `
+    <div class="overflow-x-auto border border-slate-200 rounded-lg">
+      <table class="cost-catalog-table cost-catalog-table--sheet w-full text-left">
+        <thead>
+          <tr class="bg-slate-200/90 text-[10px] font-black uppercase text-slate-700">
+            <th class="px-3 py-2.5">Tipo custo 1</th>
+            <th class="px-3 py-2.5">Grupo</th>
+            <th class="px-3 py-2.5">Nível</th>
+            ${actionsHead}
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+
+function openCostCategoryModal({
+  editId = "",
+  domain = "GERAL",
+  sheetLevel = "TIPO2",
+  parentId = "",
+  tipo1Id = "",
+  grupoId = "",
+} = {}) {
+  document.getElementById("formCostCategory").reset();
+  document.getElementById("costCategoryEditId").value = editId;
+  setCostCategoryDomainValue(domain);
+  document.getElementById("costCategorySheetLevel").disabled = Boolean(editId);
+
+  if (editId) {
+    const item = costCategories.find((c) => c.id === editId);
+    const level = item ? classifyCategorySheetLevel(item) : sheetLevel;
+    document.getElementById("costCategorySheetLevel").value = level;
+    if (item) {
+      setCostCategoryDomainValue(item.domain);
+      document.getElementById("costCategoryName").value = item.name;
+      document.getElementById("costCategorySelectable").checked = item.isSelectable !== false;
+      document.getElementById("costCategoryRequiresDetail").checked = Boolean(item.requiresDetailText);
+      document.getElementById("costCategorySortOrder").value = item.sortOrder ?? "";
+      if (level === "GRUPO" && item.parentId) {
+        document.getElementById("costCategoryTipo1Id").value = item.parentId;
+      }
+      if (level === "TIPO2" && item.domain === "GERAL" && item.parentId) {
+        const parent = costCategories.find((c) => c.id === item.parentId);
+        if (parent && classifyCategorySheetLevel(parent) === "GRUPO") {
+          document.getElementById("costCategoryGrupoId").value = parent.id;
+          document.getElementById("costCategoryTipo1Id").value = parent.parentId || "";
+        } else if (parent) {
+          document.getElementById("costCategoryTipo1Id").value = parent.id;
+        }
+      }
+      if (level === "SUBCUSTO" && item.parentId) {
+        document.getElementById("costCategoryParentId").value = item.parentId;
+      }
+    }
+    document.getElementById("modalCostCategoryTitle").textContent = `Editar ${SHEET_LEVEL_LABELS[level] || "entrada"}`;
+  } else {
+    document.getElementById("costCategorySheetLevel").value = sheetLevel;
+    document.getElementById("modalCostCategoryTitle").textContent = `Novo ${SHEET_LEVEL_LABELS[sheetLevel] || "entrada"}`;
+    if (parentId) document.getElementById("costCategoryParentId").value = parentId;
+    if (tipo1Id) document.getElementById("costCategoryTipo1Id").value = tipo1Id;
+    if (grupoId) document.getElementById("costCategoryGrupoId").value = grupoId;
+  }
+
+  syncCostCategoryFormForLevel();
+  document.getElementById("modalCostCategory").classList.add("open");
+}
+
+function closeCostCategoryModal() {
+  document.getElementById("modalCostCategory")?.classList.remove("open");
+  document.getElementById("costCategorySheetLevel").disabled = false;
+}
+
+async function submitCostCategory(e) {
+  e.preventDefault();
+  const editId = document.getElementById("costCategoryEditId").value;
+  const domain = getCostCategoryDomainValue();
+  const sheetLevel = document.getElementById("costCategorySheetLevel").value;
+  const name = document.getElementById("costCategoryName").value.trim();
+  const isSelectable = document.getElementById("costCategorySelectable").checked;
+  const requiresDetailText = document.getElementById("costCategoryRequiresDetail").checked;
+  const sortRaw = document.getElementById("costCategorySortOrder").value;
+  const sortOrder = sortRaw === "" ? undefined : Number(sortRaw);
+  const parentId = resolveCostCategoryParentIdForSubmit(sheetLevel, domain);
+
+  if (!name) {
+    showToast("Indique o nome", "error");
+    return;
+  }
+  if (!editId && sheetLevel !== "TIPO1" && sheetLevel !== "TIPO2" && !parentId) {
+    showToast("Seleccione o registo pai", "error");
+    return;
+  }
+  if (!editId && sheetLevel === "TIPO2" && domain === "GERAL" && !parentId) {
+    showToast("Seleccione tipo custo 1 ou grupo", "error");
+    return;
+  }
+
+  try {
+    if (editId) {
+      await apiRequest(`/cost-categories/${editId}`, {
+        method: "PATCH",
+        body: {
+          name,
+          isSelectable,
+          requiresDetailText,
+          ...(sortOrder !== undefined && !Number.isNaN(sortOrder) ? { sortOrder } : {}),
+        },
+      });
+      showToast("Entrada actualizada", "success");
+    } else {
+      await apiRequest("/cost-categories", {
+        method: "POST",
+        body: {
+          domain,
+          parentId,
+          name,
+          sheetLevel,
+          isSelectable: sheetLevel === "TIPO1" || sheetLevel === "GRUPO" ? false : isSelectable,
+          requiresDetailText,
+          ...(sortOrder !== undefined && !Number.isNaN(sortOrder) ? { sortOrder } : {}),
+        },
+      });
+      showToast("Entrada criada", "success");
+    }
+    closeCostCategoryModal();
+    await reloadCostCatalog();
+  } catch (err) {
+    const msg =
+      err?.data?.message ||
+      ({ PARENT_TIPO1_REQUIRED: "Seleccione o tipo custo 1.", PARENT_TIPO2_REQUIRED: "Seleccione o tipo custo 2." }[
+        err?.data?.error
+      ] ||
+        err.message ||
+        "Erro ao guardar");
+    showToast(msg, "error");
+  }
+}
+
+async function deleteCostCategory(id) {
+  const item = costCategories.find((c) => c.id === id);
+  const label = item ? formatCategoryDisplayName(item.name) : "esta entrada";
+  if (!confirm(`Eliminar ou desactivar «${label}»?`)) return;
+  try {
+    const res = await apiRequest(`/cost-categories/${id}`, { method: "DELETE" });
+    if (res.softDeleted) {
+      showToast("Desactivada (existem pedidos que a usam)", "info");
+    } else {
+      showToast("Eliminada", "success");
+    }
+    if (selectedCostCategoryFilter === id) {
+      selectedCostCategoryFilter = "";
+      document.getElementById("filterCostCategory").value = "";
+    }
+    await reloadCostCatalog();
+    loadExtras();
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Não foi possível eliminar", "error");
+  }
+}
+
+async function reloadCostCatalog() {
+  costCategories = await loadAllCostCategories("", { includeInactive: true });
+  populateCostCategoryFilter();
+  renderCostCatalogViews();
+}
+
+function bindCatalogCrudEvents() {
+  document.querySelectorAll("[data-add-sheet-level]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.gccId;
-      selectedGccFilter = selectedGccFilter === id ? "" : id;
-      document.getElementById("filterGeneralCc").value = selectedGccFilter;
-      renderGeneralCentersGrid();
-      loadExtras();
+      const sheetLevel = btn.dataset.addSheetLevel;
+      const domain =
+        sheetLevel === "TIPO1" || sheetLevel === "GRUPO" ? "GERAL" : inferDomainFromCatalogContext();
+      const presets = { domain, sheetLevel };
+      if (sheetLevel === "GRUPO" && catalogSheetFilters.tipo1) {
+        const t1 = costCategories.find(
+          (c) => formatCategoryDisplayName(c.name) === catalogSheetFilters.tipo1 || c.name === catalogSheetFilters.tipo1
+        );
+        if (t1) presets.tipo1Id = t1.id;
+      }
+      if (sheetLevel === "SUBCUSTO" && catalogSheetFilters.tipo2) {
+        const t2 = costCategories.find(
+          (c) =>
+            classifyCategorySheetLevel(c) === "TIPO2" &&
+            formatCategoryDisplayName(c.name) === catalogSheetFilters.tipo2
+        );
+        if (t2) presets.parentId = t2.id;
+      }
+      openCostCategoryModal(presets);
     });
+  });
+
+  document.getElementById("formCostCategory")?.addEventListener("submit", submitCostCategory);
+  document.getElementById("btnCloseCostCategoryModal")?.addEventListener("click", closeCostCategoryModal);
+  document.getElementById("btnCancelCostCategory")?.addEventListener("click", closeCostCategoryModal);
+  document.getElementById("costCategorySheetLevel")?.addEventListener("change", syncCostCategoryFormForLevel);
+  document.getElementById("costCategoryTipo1Id")?.addEventListener("change", () => {
+    const domain = getCostCategoryDomainValue();
+    populateCostCategoryGrupoSelect(domain, document.getElementById("costCategoryTipo1Id").value);
+  });
+
+  document.getElementById("panelGcc")?.addEventListener("change", (e) => {
+    const sel = e.target.closest(".cost-sheet-filter");
+    if (!sel) return;
+    const cascadeFrom = {
+      filterSheetTipo1: "tipo1",
+      filterSheetGrupo: "grupo",
+      filterSheetTipo2: "tipo2",
+      filterSheetTipo3: "tipo3",
+    }[sel.id];
+    if (!cascadeFrom) return;
+    readCatalogSheetFiltersFromDom();
+    resetCatalogSheetFiltersCascade(cascadeFrom);
+    renderCostCatalogViews();
+  });
+
+  document.getElementById("panelGcc")?.addEventListener("click", (e) => {
+    if (e.target.closest("#btnClearSheetFilters")) {
+      catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
+      renderCostCatalogViews();
+      return;
+    }
+    const editBtn = e.target.closest("[data-edit-category]");
+    if (editBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      openCostCategoryModal({ editId: editBtn.dataset.editCategory });
+      return;
+    }
+    const delBtn = e.target.closest("[data-delete-category]");
+    if (delBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      deleteCostCategory(delBtn.dataset.deleteCategory);
+    }
   });
 }
 
-function populateGeneralCcSelects() {
-  const opts = generalCenters
-    .map((cc) => `<option value="${cc.id}">${cc.name}</option>`)
+function populateCostCategoryFilter() {
+  const select = document.getElementById("filterCostCategory");
+  if (!select) return;
+  const leaves = costCategories.filter((c) => c.isSelectable);
+  const opts = leaves
+    .map((c) => {
+      const path = buildCategoryPath(c.id, costCategories);
+      return `<option value="${c.id}">${path || c.name}</option>`;
+    })
     .join("");
-  document.getElementById("extraGeneralCcId").innerHTML =
-    `<option value="">Selecionar centro geral...</option>${opts}`;
-  document.getElementById("filterGeneralCc").innerHTML =
-    `<option value="">Todos os centros gerais</option>${opts}`;
+  select.innerHTML = `<option value="">Todos os tipos de custo</option>${opts}`;
 }
 
 function populateProjectSelects() {
@@ -160,8 +796,9 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
 }
 
 function extraReferenceLabel(it) {
+  const costLabel = formatExtraCostLabel(it);
   if (it.type === "GERAL") {
-    return it.generalCostCenter?.name || "Centro geral";
+    return costLabel !== "—" ? costLabel : "Geral";
   }
   const obra = it.project
     ? `${it.project.name}${it.project.code ? ` (${it.project.code})` : ""}`
@@ -169,8 +806,11 @@ function extraReferenceLabel(it) {
   const cc = it.costCenter
     ? `${it.costCenter.code ? `${it.costCenter.code} — ` : ""}${it.costCenter.name}`
     : "";
+  const costPart = costLabel !== "—" ? costLabel : "";
+  if (obra && cc && costPart) return `${obra} · ${cc} · ${costPart}`;
   if (obra && cc) return `${obra} · ${cc}`;
-  return obra || cc || "—";
+  if (obra && costPart) return `${obra} · ${costPart}`;
+  return obra || cc || costPart || "—";
 }
 
 function renderExtraRow(it) {
@@ -247,13 +887,13 @@ async function loadExtras() {
 
   const type = document.getElementById("filterType")?.value || "";
   const status = document.getElementById("filterStatus")?.value || "";
-  const generalCostCenterId = document.getElementById("filterGeneralCc")?.value || "";
+  const costCategoryId = document.getElementById("filterCostCategory")?.value || "";
   const projectId = document.getElementById("filterProject")?.value || "";
 
   const params = new URLSearchParams({ pageSize: "100" });
   if (type) params.set("type", type);
   if (status) params.set("status", status);
-  if (generalCostCenterId) params.set("generalCostCenterId", generalCostCenterId);
+  if (costCategoryId) params.set("costCategoryId", costCategoryId);
   if (projectId) params.set("projectId", projectId);
 
   try {
@@ -327,74 +967,32 @@ function bindTableActions() {
 }
 
 function bindEvents() {
-  document.getElementById("btnNewGcc")?.addEventListener("click", () => {
-    if (!can("pedidosExtras", "create")) {
-      showToast("Sem permissão para criar centros gerais", "error");
-      return;
-    }
-    openGccModal();
+  document.querySelectorAll("[data-cost-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => setCostCatalogTab(btn.dataset.costTab));
   });
-  document.getElementById("formGcc")?.addEventListener("submit", submitGcc);
-  document.getElementById("btnCloseGccModal")?.addEventListener("click", closeGccModal);
-  document.getElementById("btnCancelGcc")?.addEventListener("click", closeGccModal);
 
   wireExtraRequestButton("btnNewExtra", () => ({
     type: "GERAL",
-    generalCostCenterId: selectedGccFilter || "",
+    costCategoryId: selectedCostCategoryFilter || "",
   }));
 
-  ["filterType", "filterStatus", "filterGeneralCc", "filterProject"].forEach((id) => {
+  ["filterType", "filterStatus", "filterCostCategory", "filterProject"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
-      if (id === "filterGeneralCc") {
-        selectedGccFilter = document.getElementById("filterGeneralCc").value;
-        renderGeneralCentersGrid();
+      if (id === "filterCostCategory") {
+        selectedCostCategoryFilter = document.getElementById("filterCostCategory").value;
       }
       loadExtras();
     });
   });
 
   bindCardEvents();
+  bindCatalogCrudEvents();
+  applyCatalogManageVisibility();
 }
 
-async function loadGeneralCenters() {
-  const gccData = await apiRequest("/general-cost-centers");
-  generalCenters = gccData.items || [];
-  populateGeneralCcSelects();
-  renderGeneralCentersGrid();
-}
-
-function openGccModal() {
-  document.getElementById("formGcc").reset();
-  document.getElementById("modalGcc").classList.add("open");
-}
-
-function closeGccModal() {
-  document.getElementById("modalGcc").classList.remove("open");
-}
-
-async function submitGcc(e) {
-  e.preventDefault();
-  const name = document.getElementById("gccName").value.trim();
-  const description = document.getElementById("gccDescription").value.trim();
-  if (!name) {
-    showToast("Indique o nome do centro geral", "error");
-    return;
-  }
-  try {
-    const created = await apiRequest("/general-cost-centers", {
-      method: "POST",
-      body: { name, description: description || null },
-    });
-    showToast(`Centro "${created.name}" criado`, "success");
-    closeGccModal();
-    await loadGeneralCenters();
-    selectedGccFilter = created.id;
-    document.getElementById("filterGeneralCc").value = created.id;
-    renderGeneralCentersGrid();
-    loadExtras();
-  } catch (err) {
-    showToast("Erro: " + err.message, "error");
-  }
+async function loadCostCategories() {
+  await reloadCostCatalog();
+  setCostCatalogTab("tipos");
 }
 
 // ── Gestão de Cartões ────────────────────────────────────────────────────────
@@ -808,7 +1406,7 @@ async function loadInitialData() {
     await loadCards();
   }
   if (can("pedidosExtras", "view")) {
-    await loadGeneralCenters();
+    await loadCostCategories();
     await loadExtras();
   }
 }
@@ -838,7 +1436,8 @@ async function loadInitialData() {
 
   if (!can("pedidosExtras", "create")) {
     document.getElementById("btnNewExtra")?.classList.add("hidden");
-    document.getElementById("btnNewGcc")?.classList.add("hidden");
+  } else {
+    applyCatalogManageVisibility();
   }
 
   try {

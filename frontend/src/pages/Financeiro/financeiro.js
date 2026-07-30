@@ -9,7 +9,7 @@ import {
 } from "/shared/paymentTimeline.js";
 import { renderPaymentGantt, getDateRangeForView } from "/shared/paymentGantt.js";
 import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
-import { paymentPayableAmount, appendFiscalFieldsToFormData } from "/shared/supplierFiscal.js";
+import { formatExtraCostLabel } from "/shared/costCategoryCascade.js";
 import {
   renderFiscalSectionHtml,
   setupLiquidationFiscalModal,
@@ -183,15 +183,15 @@ function escapeHtml(value) {
 }
 
 function extraRequestReference(extra) {
+  const cost = formatExtraCostLabel(extra);
   if (extra.type === "GERAL") {
-    const name = extra.generalCostCenter?.name || "Centro geral";
-    const desc = extra.generalCostCenter?.description;
-    return desc ? `${name} — ${desc}` : name;
+    return cost !== "—" ? cost : extra.generalCostCenter?.name || "Geral";
   }
   if (extra.project) {
-    return `${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`;
+    const obra = `${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`;
+    return cost !== "—" ? `${obra} · ${cost}` : obra;
   }
-  return "—";
+  return cost;
 }
 
 function extraRequestPaymentLabel(extra) {
