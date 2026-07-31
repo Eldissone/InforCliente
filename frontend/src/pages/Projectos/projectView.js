@@ -25,6 +25,12 @@ import {
 } from "../../shared/wbsHelpers.js";
 import { exportMeasurementExcel, exportMeasurementPdf } from "../../shared/measurementReportExport.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import {
+  openGalleryLightbox,
+  closeGalleryLightbox,
+  initGalleryLightboxActions,
+  galleryPhotoTitle,
+} from "../../shared/galleryLightbox.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
 
 checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "financeiro", "tecnico", "cliente"] });
@@ -3205,11 +3211,11 @@ async function init() {
   document.addEventListener("click", e => {
     const productImgBtn = e.target.closest("[data-preview-url]");
     if (productImgBtn) {
-      openLightbox(
-        productImgBtn.getAttribute("data-preview-url"),
-        productImgBtn.getAttribute("data-preview-title") || "Produto",
-        ""
-      );
+      openGalleryLightbox({
+        url: productImgBtn.getAttribute("data-preview-url"),
+        title: productImgBtn.getAttribute("data-preview-title") || "Produto",
+        date: "",
+      });
       return;
     }
 
@@ -3223,15 +3229,16 @@ async function init() {
     // Close Lightbox on backdrop click
     const lightbox = el("imageLightbox");
     if (e.target === lightbox || e.target.closest("#closeLightbox")) {
-      closeLightbox();
+      closeGalleryLightbox();
     }
   });
 
   // ESC key for Lightbox
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLightbox();
+    if (e.key === "Escape") closeGalleryLightbox();
   });
 
+  initGalleryLightboxActions();
 }
 
 function openPreview(fileId) {
@@ -3273,34 +3280,18 @@ function openPhotoPreview(photoId) {
   if (!photo) return;
 
   const url = getAssetUrl(photo.path);
-  const title = photo.description || (photo.movement?.product?.name ? `Registo: ${photo.movement.product.name}` : "Foto de Obra");
+  const title = galleryPhotoTitle(photo);
   const date = formatDateBR(photo.createdAt);
+  const projectId = getProjectId();
 
-  openLightbox(url, title, date);
-}
-
-function openLightbox(url, title, date) {
-  const lightbox = el("imageLightbox");
-  const img = el("lightboxImage");
-  const titleEl = el("lightboxTitle");
-  const dateEl = el("lightboxDate");
-
-  if (!lightbox || !img) return;
-
-  img.src = url;
-  titleEl.textContent = title;
-  dateEl.textContent = date;
-
-  lightbox.classList.add("active");
-  document.body.style.overflow = "hidden"; // Prevent scrolling
-}
-
-function closeLightbox() {
-  const lightbox = el("imageLightbox");
-  if (!lightbox) return;
-
-  lightbox.classList.remove("active");
-  document.body.style.overflow = ""; // Restore scrolling
+  openGalleryLightbox({
+    url,
+    title,
+    date,
+    projectId,
+    photoId,
+    portal: false,
+  });
 }
 
 function wirePreview() {

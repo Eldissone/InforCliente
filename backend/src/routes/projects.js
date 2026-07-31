@@ -9,6 +9,7 @@ const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
 const { getStaffOwnProjectCondition, enforceOwnProjectScope } = require("../services/scopeService");
+const { checkUserPermission } = require("../services/permissionResolver");
 const {
   softDeleteProject,
   restoreProject,
@@ -19,6 +20,79 @@ const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+const MIME_BY_EXT = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+function resolvePhotoDownloadFilename(description, ext) {
+  const normalizedExt = ext && ext.startsWith(".") ? ext.toLowerCase() : ".jpg";
+  const label = String(description ?? "").trim() || "foto-obra";
+  const fullName = `${label}${normalizedExt}`;
+  const asciiFallback =
+    label
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120) || "foto-obra";
+  const asciiName = `${asciiFallback}${normalizedExt}`;
+  return { fullName, asciiName };
+}
+
+async function loadProjectPhotoAsset(photoPath) {
+  const raw = String(photoPath || "").trim();
+  if (!raw) {
+    const err = new Error("PHOTO_PATH_MISSING");
+    err.status = 404;
+    throw err;
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    const upstream = await fetch(raw);
+    if (!upstream.ok) {
+      const err = new Error("PHOTO_FETCH_FAILED");
+      err.status = 502;
+      throw err;
+    }
+    let ext = ".jpg";
+    try {
+      ext = path.extname(new URL(raw).pathname) || ".jpg";
+    } catch {
+      ext = ".jpg";
+    }
+    return {
+      buffer: Buffer.from(await upstream.arrayBuffer()),
+      contentType: upstream.headers.get("content-type") || MIME_BY_EXT[ext.toLowerCase()] || "application/octet-stream",
+      ext,
+    };
+  }
+
+  const rel = raw.replace(/^\/+/, "");
+  const candidates = [
+    path.join(process.cwd(), rel),
+    path.join(process.cwd(), "uploads", rel.replace(/^uploads[/\\]/, "")),
+  ];
+
+  const localPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!localPath) {
+    const err = new Error("PHOTO_FILE_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  const ext = path.extname(localPath) || ".jpg";
+  return {
+    buffer: fs.readFileSync(localPath),
+    contentType: MIME_BY_EXT[ext.toLowerCase()] || "application/octet-stream",
+    ext,
+  };
 }
 
 const projectRoutes = express.Router();
@@ -89,6 +163,28 @@ async function ensureProjectReadable(req, projectId) {
   }
 
   return project;
+}
+
+async function requireGalleryDownload(req, res, next) {
+  const userId = req.user?.sub;
+  const userRole = (req.user?.role || "").toLowerCase();
+  if (!userId || !userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (userRole === "admin") return next();
+
+  try {
+    for (const mod of ["obras", "portal"]) {
+      const { allowed } = await checkUserPermission(userId, userRole, mod, "download_gallery", "POST");
+      if (allowed === "true") return next();
+      if (allowed === "own") {
+        req.permissionScope = "own";
+        return next();
+      }
+    }
+    return res.status(403).json({ error: "FORBIDDEN_BY_PERMISSION" });
+  } catch (error) {
+    console.error("Permission check error:", error);
+    return res.status(500).json({ error: "PERMISSION_CHECK_FAILED" });
+  }
 }
 
 async function generateProjectCode() {
@@ -1536,6 +1632,38 @@ projectRoutes.get(
       }
     });
     return res.json({ items: photos });
+  })
+);
+
+projectRoutes.get(
+  "/:id/photos/:photoId/download",
+  requireGalleryDownload,
+  asyncHandler(async (req, res) => {
+    const { id, photoId } = req.params;
+    await ensureProjectReadable(req, id);
+
+    const photo = await prisma.projectPhoto.findFirst({
+      where: { id: photoId, projectId: id },
+    });
+    if (!photo) {
+      return res.status(404).json({ error: "PHOTO_NOT_FOUND" });
+    }
+
+    let asset;
+    try {
+      asset = await loadProjectPhotoAsset(photo.path);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message || "PHOTO_LOAD_FAILED" });
+    }
+
+    const { fullName, asciiName } = resolvePhotoDownloadFilename(photo.description, asset.ext);
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(fullName)}`
+    );
+    res.setHeader("Content-Type", asset.contentType);
+    return res.send(asset.buffer);
   })
 );
 

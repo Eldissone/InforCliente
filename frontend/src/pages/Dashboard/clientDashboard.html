@@ -216,6 +216,45 @@
             transform: rotate(90deg) scale(1.1);
             border-color: #2afc8d;
         }
+
+        #imageLightbox .lightbox-toolbar {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 2;
+        }
+
+        #imageLightbox .download-btn {
+            color: #2afc8d;
+            cursor: pointer;
+            width: 3.5rem;
+            height: 3.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #imageLightbox .download-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.08);
+            border-color: #2afc8d;
+        }
+
+        #imageLightbox .download-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        #imageLightbox .close-btn {
+            position: static;
+        }
     </style>
 </head>
 
@@ -931,8 +970,14 @@
 
     <!-- Lightbox -->
     <div id="imageLightbox">
-        <div class="close-btn" id="closeLightbox">
-            <span class="material-symbols-outlined text-3xl">close</span>
+        <div class="lightbox-toolbar">
+            <button type="button" id="lightboxDownloadBtn" class="download-btn hidden" title="Descarregar foto"
+                aria-label="Descarregar foto">
+                <span class="material-symbols-outlined text-3xl">download</span>
+            </button>
+            <div class="close-btn" id="closeLightbox">
+                <span class="material-symbols-outlined text-3xl">close</span>
+            </div>
         </div>
         <div class="lightbox-content">
             <img id="lightboxImage" src="" alt="Preview" />

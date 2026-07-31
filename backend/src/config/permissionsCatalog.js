@@ -27,6 +27,7 @@ const ACTION_LABELS = {
   delete: "Eliminar",
   approve: "Aprovar",
   export: "Exportar",
+  download_gallery: "Descarregar fotos da galeria",
   manage_permissions: "Gerir permissões",
   full_access: "Acesso total",
   confirm_invoice: "Confirmar fatura (crédito)",
@@ -170,7 +171,7 @@ const PERMISSION_GROUPS = [
       { id: "obras.tecnico", label: "Planos (técnico)", route: "/Projectos/tecnicoPlanos.html" },
       { id: "obras.planos", label: "Planos diários / tarefas", route: "/Projectos/projectView.html" },
     ],
-    actions: ["view", "read", "create", "edit", "delete", "approve", "export", "manage", "financeiro", "full_access"],
+    actions: ["view", "read", "create", "edit", "delete", "approve", "export", "download_gallery", "manage", "financeiro", "full_access"],
   },
   {
     id: "logistica",
@@ -257,7 +258,7 @@ const PERMISSION_GROUPS = [
     label: "Portal do Cliente",
     icon: "business",
     pages: [{ id: "portal.main", label: "Portal cliente", route: "/Dashboard/clientDashboard.html" }],
-    actions: ["view", "export", "full_access"],
+    actions: ["view", "export", "download_gallery", "full_access"],
   },
   {
     id: "fundoManeio",
@@ -327,7 +328,7 @@ function defaultAllowedFor(role, module, action) {
       chat: { view: "true", send: "true", create_group: "true" },
       obras: {
         view: "true", read: "true", create: "true", edit: "true", delete: "false",
-        approve: "true", export: "true", manage: "true", financeiro: "view", full_access: "false",
+        approve: "true", export: "true", download_gallery: "true", manage: "true", financeiro: "view", full_access: "false",
       },
       logistica: { view: "true", export: "true", full_access: "false" },
       stock: {
@@ -358,7 +359,7 @@ function defaultAllowedFor(role, module, action) {
       chat: { view: "true", send: "true", create_group: "true" },
       obras: {
         view: "true", read: "true", create: "true", edit: "true", delete: "false",
-        approve: "true", export: "true", manage: "true", financeiro: "true", full_access: "false",
+        approve: "true", export: "true", download_gallery: "true", manage: "true", financeiro: "true", full_access: "false",
       },
       logistica: { view: "true", export: "true", full_access: "false" },
       stock: {
@@ -389,7 +390,7 @@ function defaultAllowedFor(role, module, action) {
       chat: { view: "true", send: "true", create_group: "false" },
       obras: {
         view: "view", read: "view", create: "false", edit: "false", delete: "false",
-        approve: "false", export: "view", manage: "false", financeiro: "true", full_access: "false",
+        approve: "false", export: "view", download_gallery: "false", manage: "false", financeiro: "true", full_access: "false",
       },
       logistica: { view: "false", export: "false", full_access: "false" },
       stock: {
@@ -423,7 +424,7 @@ function defaultAllowedFor(role, module, action) {
       chat: { view: "true", send: "true", create_group: "false" },
       obras: {
         view: "true", read: "true", create: "false", edit: "true", delete: "false",
-        approve: "false", export: "view", manage: "true", financeiro: "false", full_access: "false",
+        approve: "false", export: "view", download_gallery: "true", manage: "true", financeiro: "false", full_access: "false",
       },
       logistica: { view: "view", export: "false", full_access: "false" },
       stock: {
@@ -472,6 +473,7 @@ function defaultAllowedFor(role, module, action) {
       return "false";
     }
     if (module === "portal") {
+      if (action === "download_gallery") return "false";
       if (["view", "export", "full_access"].includes(action)) return action === "full_access" ? "false" : "true";
     }
     if (module === "navlinks") return "false";

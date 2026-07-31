@@ -45,8 +45,18 @@ function isGrp(c) {
 function isRubricCode(c) {
   return c.code?.includes("_R_");
 }
+function isSheetRubric(c) {
+  if (!c || isFam(c) || isGrp(c)) return false;
+  if (isRubricCode(c)) return true;
+  return classifyCategorySheetLevel(c) === "TIPO2";
+}
 function isDetailCode(c) {
   return c.code?.includes("_D_");
+}
+function isSheetSubcost(c) {
+  if (!c) return false;
+  if (isDetailCode(c)) return true;
+  return classifyCategorySheetLevel(c) === "SUBCUSTO";
 }
 
 /**
@@ -113,21 +123,21 @@ export function buildCostCatalogSheetRows(items = []) {
       return;
     }
 
-    if (isRubricCode(node)) {
+    if (isSheetRubric(node)) {
       const rubricCtx = { ...nextCtx, rubric: node };
       const kids = childrenOf(node.id);
 
       if (!kids.length) {
-        if (node.isSelectable) pushRow(rubricCtx, node, node);
+        pushRow(rubricCtx, node, node);
         return;
       }
 
       let emitted = false;
       kids.forEach((k) => {
-        if (k.isSelectable && !childrenOf(k.id).length) {
+        if (isSheetSubcost(k) && !childrenOf(k.id).length) {
           pushRow(rubricCtx, node, k);
           emitted = true;
-        } else if (isDetailCode(k) && k.isSelectable) {
+        } else if (!isSheetSubcost(k) && k.isSelectable && !childrenOf(k.id).length) {
           pushRow(rubricCtx, node, k);
           emitted = true;
         } else {
@@ -135,11 +145,11 @@ export function buildCostCatalogSheetRows(items = []) {
         }
       });
 
-      if (!emitted && node.isSelectable) pushRow(rubricCtx, node, node);
+      if (!emitted) pushRow(rubricCtx, node, node);
       return;
     }
 
-    if (isDetailCode(node) && node.isSelectable && ctx.rubric) {
+    if (isSheetSubcost(node) && ctx.rubric) {
       pushRow(ctx, ctx.rubric, node);
       return;
     }
@@ -167,25 +177,75 @@ export function buildCostCatalogSheetRows(items = []) {
       const kids = childrenOf(rubric.id).filter((c) => !isFam(c) && !isGrp(c));
       const ctxFlat = { domain, tipo1, tipo1CategoryId: null, grupo: "", grupoCategoryId: null };
       if (!kids.length) {
-        if (rubric.isSelectable) {
-          pushRow(ctxFlat, rubric, rubric);
-        }
+        pushRow(ctxFlat, rubric, rubric);
         return;
       }
       let any = false;
       kids.forEach((k) => {
-        if (k.isSelectable) {
-          pushRow(ctxFlat, rubric, k);
-          any = true;
-        }
+        pushRow(ctxFlat, rubric, k);
+        any = true;
       });
-      if (!any && rubric.isSelectable) {
-        pushRow(ctxFlat, rubric, rubric);
-      }
+      if (!any) pushRow(ctxFlat, rubric, rubric);
     });
   });
 
+  supplementSheetRowsFromOrphans(active, rows, pushRow);
+
   return rows;
+}
+
+/** Tipos na BD que não entraram na árvore principal (códigos legados, etc.). */
+function supplementSheetRowsFromOrphans(active, rows, pushRow) {
+  const seen = new Set(rows.map((r) => r.pickCategoryId));
+  const byId = new Map(active.map((c) => [c.id, c]));
+
+  function ancestorsOf(cat) {
+    let fam = null;
+    let grp = null;
+    let rubric = null;
+    let cur = cat;
+    while (cur) {
+      const lvl = classifyCategorySheetLevel(cur);
+      if (lvl === "TIPO1") fam = cur;
+      if (lvl === "GRUPO") grp = cur;
+      if (lvl === "TIPO2" || isSheetRubric(cur)) rubric = cur;
+      cur = cur.parentId ? byId.get(cur.parentId) : null;
+    }
+    return { fam, grp, rubric };
+  }
+
+  function ctxFor(cat) {
+    const { fam, grp } = ancestorsOf(cat);
+    const tipo1 =
+      cat.domain === "GERAL"
+        ? fam?.name || "CUSTO GERAIS"
+        : SHEET_TIPO1_FLAT[cat.domain] || cat.domain;
+    return {
+      domain: cat.domain,
+      tipo1,
+      tipo1CategoryId: fam?.id || null,
+      grupo: grp?.name || "",
+      grupoCategoryId: grp?.id || null,
+    };
+  }
+
+  for (const cat of active) {
+    if (seen.has(cat.id)) continue;
+    const lvl = classifyCategorySheetLevel(cat);
+    if (lvl === "SUBCUSTO" || (isSheetSubcost(cat) && cat.parentId)) {
+      const { rubric } = ancestorsOf(cat);
+      if (!rubric) continue;
+      pushRow(ctxFor(cat), rubric, cat);
+      seen.add(cat.id);
+      continue;
+    }
+    if ((lvl === "TIPO2" || isSheetRubric(cat)) && !isFam(cat) && !isGrp(cat)) {
+      const hasChild = active.some((c) => c.parentId === cat.id);
+      if (hasChild) continue;
+      pushRow(ctxFor(cat), cat, cat);
+      seen.add(cat.id);
+    }
+  }
 }
 
 export function uniqueSorted(values) {
@@ -234,6 +294,59 @@ export function applySheetFilters(rows, filters) {
     if (filters.tipo3 && r.tipo3 !== filters.tipo3) return false;
     return true;
   });
+}
+
+/** Chave estável para agrupar linhas da folha pelo mesmo tipo custo 2. */
+export function catalogSheetGroupKey(row) {
+  return `${row.domain}|${row.tipo1}|${row.grupo || ""}|${row.tipo2}`;
+}
+
+/**
+ * Agrupa linhas filtradas: uma linha de tabela por tipo custo 2, com variantes de tipo custo 3.
+ */
+export function groupCatalogSheetDisplayRows(rows = []) {
+  const order = [];
+  const groups = new Map();
+  for (const r of rows) {
+    const key = catalogSheetGroupKey(r);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        domain: r.domain,
+        tipo1: r.tipo1,
+        tipo1CategoryId: r.tipo1CategoryId,
+        grupo: r.grupo,
+        grupoCategoryId: r.grupoCategoryId,
+        tipo2: r.tipo2,
+        tipo2Id: r.tipo2Id,
+        variants: [],
+      });
+      order.push(key);
+    }
+    groups.get(key).variants.push({
+      tipo3: r.tipo3,
+      tipo3Id: r.tipo3Id,
+      pickCategoryId: r.pickCategoryId,
+      requiresDetailText: r.requiresDetailText,
+    });
+  }
+  return order.map((key) => {
+    const g = groups.get(key);
+    const seen = new Set();
+    g.variants = g.variants.filter((v) => {
+      if (seen.has(v.pickCategoryId)) return false;
+      seen.add(v.pickCategoryId);
+      return true;
+    });
+    return g;
+  });
+}
+
+export function resolveGroupActiveVariant(group, preferredPickId = "") {
+  if (preferredPickId) {
+    const hit = group.variants.find((v) => v.pickCategoryId === preferredPickId);
+    if (hit) return hit;
+  }
+  return group.variants[0] || null;
 }
 
 /** Uma linha por rubrica (aba Tipos de custo). */

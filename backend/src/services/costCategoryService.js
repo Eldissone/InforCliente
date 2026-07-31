@@ -27,30 +27,43 @@ async function ensureCostCategories() {
     }
 
     for (const node of [...nodes].sort((a, b) => a.level - b.level)) {
-      await prisma.costCategory.upsert({
-        where: { code: node.code },
-        create: {
-          id: node.id,
-          code: node.code,
-          name: node.name,
-          domain: node.domain,
-          parentId: node.parentCode ? byCode.get(node.parentCode).id : null,
-          level: node.level,
-          sortOrder: node.sortOrder,
-          isSelectable: node.isSelectable,
-          requiresDetailText: node.requiresDetailText,
-          active: true,
-        },
-        update: {
-          name: node.name,
-          domain: node.domain,
-          parentId: node.parentCode ? byCode.get(node.parentCode).id : null,
-          level: node.level,
-          sortOrder: node.sortOrder,
-          isSelectable: node.isSelectable,
-          requiresDetailText: node.requiresDetailText,
-          active: true,
-        },
+      let parentId = null;
+      if (node.parentCode) {
+        const parentRow = await prisma.costCategory.findUnique({ where: { code: node.parentCode } });
+        if (!parentRow) {
+          throw new Error(`Parent inexistente na BD: ${node.parentCode} (${node.code})`);
+        }
+        parentId = parentRow.id;
+      }
+
+      const payload = {
+        name: node.name,
+        domain: node.domain,
+        parentId,
+        level: node.level,
+        sortOrder: node.sortOrder,
+        isSelectable: node.isSelectable,
+        requiresDetailText: node.requiresDetailText,
+        active: true,
+      };
+
+      const existingByCode = await prisma.costCategory.findUnique({ where: { code: node.code } });
+      if (existingByCode) {
+        await prisma.costCategory.update({ where: { code: node.code }, data: payload });
+        continue;
+      }
+
+      const existingById = await prisma.costCategory.findUnique({ where: { id: node.id } });
+      if (existingById) {
+        await prisma.costCategory.update({
+          where: { id: node.id },
+          data: { ...payload, code: node.code },
+        });
+        continue;
+      }
+
+      await prisma.costCategory.create({
+        data: { id: node.id, code: node.code, ...payload },
       });
     }
     console.log(`✅ Catálogo de tipos de custo verificado (${nodes.length} nós)`);
@@ -250,6 +263,50 @@ async function computeLevelAndDomain(parentId, domainFallback) {
   return { level: parent.level + 1, domain: parent.domain };
 }
 
+/** Verifica se `candidateParentId` é o próprio nó ou um descendente (evita ciclos ao reparentar). */
+async function wouldCreateParentCycle(nodeId, candidateParentId) {
+  if (!candidateParentId) return false;
+  if (candidateParentId === nodeId) return true;
+  let cur = await prisma.costCategory.findUnique({ where: { id: candidateParentId } });
+  while (cur?.parentId) {
+    if (cur.parentId === nodeId) return true;
+    cur = await prisma.costCategory.findUnique({ where: { id: cur.parentId } });
+  }
+  return false;
+}
+
+async function resolveParentIdForUpdate(existing, parentIdInput) {
+  const sheetLevel = classifySheetLevel(existing);
+  const body = { parentId: parentIdInput ?? null };
+  const parentRecord = await resolveParentForSheetLevel(sheetLevel, body, existing.domain);
+  const parentId = parentRecord ? parentRecord.id : null;
+  if (await wouldCreateParentCycle(existing.id, parentId)) {
+    const err = new Error("PARENT_CYCLE");
+    err.status = 400;
+    throw err;
+  }
+  const { level, domain } = await computeLevelAndDomain(parentId, existing.domain);
+  if (domain !== existing.domain) {
+    const err = new Error("DOMAIN_MISMATCH_WITH_PARENT");
+    err.status = 400;
+    throw err;
+  }
+  return { parentId, level };
+}
+
+async function refreshDescendantLevels(parentId) {
+  const parent = await prisma.costCategory.findUnique({ where: { id: parentId } });
+  if (!parent) return;
+  const children = await prisma.costCategory.findMany({ where: { parentId: parent.id } });
+  for (const child of children) {
+    const newLevel = parent.level + 1;
+    if (child.level !== newLevel) {
+      await prisma.costCategory.update({ where: { id: child.id }, data: { level: newLevel } });
+    }
+    await refreshDescendantLevels(child.id);
+  }
+}
+
 async function validateSelectableCategory(categoryId, expectedDomain) {
   if (!categoryId) return { ok: false, error: "COST_CATEGORY_REQUIRED" };
   const cat = await prisma.costCategory.findFirst({
@@ -279,4 +336,6 @@ module.exports = {
   defaultFlagsForSheetLevel,
   resolveParentForSheetLevel,
   computeLevelAndDomain,
+  resolveParentIdForUpdate,
+  refreshDescendantLevels,
 };

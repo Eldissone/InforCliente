@@ -25,6 +25,12 @@ import {
   exportContractualReportExcel,
   safeFilePart,
 } from "../../shared/contractualReportExport.js";
+import {
+  openGalleryLightbox,
+  closeGalleryLightbox,
+  initGalleryLightboxActions,
+  galleryPhotoTitle,
+} from "../../shared/galleryLightbox.js";
 
 const STOCK_ENTRY_TYPES = new Set(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
 
@@ -1529,11 +1535,11 @@ function renderGallerySection(containerId, photos, isCampo) {
 
     groups[cat].forEach(p => {
       const url = getAssetUrl(p.path);
-      const matName = p.movement?.material?.name || p.description || "Registo Fotográfico";
+      const matName = galleryPhotoTitle(p);
       const dateStr = new Date(p.createdAt).toLocaleDateString('pt-PT');
 
       html += `
-         <div data-preview-url="${url}" data-preview-title="${escapeHtml(matName)}" data-preview-date="${dateStr}" 
+         <div data-preview-url="${url}" data-preview-title="${escapeHtml(matName)}" data-preview-date="${dateStr}" data-preview-photo-id="${p.id}"
               class="group gallery-item flex items-center gap-3 p-2 rounded-xl border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
             <!-- Thumbnail -->
             <div class="w-12 h-12 shrink-0 rounded-lg overflow-hidden bg-slate-100 shadow-sm border border-slate-100">
@@ -1740,14 +1746,22 @@ function wireEvents() {
       const url = galleryItem.getAttribute("data-preview-url");
       const title = galleryItem.getAttribute("data-preview-title");
       const date = galleryItem.getAttribute("data-preview-date") || "";
-      openLightbox(url, title, date);
+      const photoId = galleryItem.getAttribute("data-preview-photo-id");
+      openGalleryLightbox({
+        url,
+        title,
+        date,
+        projectId: state.projectId !== "all" ? state.projectId : undefined,
+        photoId: photoId || undefined,
+        portal: true,
+      });
       return;
     }
 
     const lightboxOverlay = document.getElementById("imageLightbox");
     const closeBtn = e.target.closest("#closeLightbox");
     if (closeBtn || e.target === lightboxOverlay) {
-      closeLightbox();
+      closeGalleryLightbox();
     }
 
     // Individual Table Toggles
@@ -1767,7 +1781,7 @@ function wireEvents() {
 
   // Handle ESC key for Lightbox
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeLightbox();
+    if (e.key === "Escape") closeGalleryLightbox();
   });
   const updateDates = () => {
     state.startDate = document.getElementById("filterStart")?.value || "";
@@ -1971,29 +1985,6 @@ if (searchInput) {
 }
 
 
-function openLightbox(url, title, date) {
-  const lightbox = document.getElementById("imageLightbox");
-  const img = document.getElementById("lightboxImage");
-  const titleEl = document.getElementById("lightboxTitle");
-  const dateEl = document.getElementById("lightboxDate");
-
-  if (!lightbox || !img) return;
-
-  img.src = url;
-  titleEl.textContent = title;
-  dateEl.textContent = date;
-
-  lightbox.classList.add("active");
-  document.body.style.overflow = "hidden";
-}
-
-function closeLightbox() {
-  const lightbox = document.getElementById("imageLightbox");
-  if (!lightbox) return;
-  lightbox.classList.remove("active");
-  document.body.style.overflow = "";
-}
-
 function hoistTabs() {
   // Ensure all .tab-content divs are direct children of <main>
   // This corrects any HTML nesting errors without touching the HTML source
@@ -2033,26 +2024,27 @@ async function init() {
   wireStockEvents();
   loadDashboardData();
 
-  // Global click for photos and lightbox
+  // Global click for photos and lightbox (evidências de stock — sem download de galeria)
   document.addEventListener("click", e => {
     const photoItem = e.target.closest("[data-preview-photo]");
     if (photoItem) {
       const img = photoItem.querySelector("img");
       if (img) {
-        openLightbox(img.src, "Evidência de Obra", "");
+        openGalleryLightbox({
+          url: img.src,
+          title: "Evidência de Obra",
+          date: "",
+        });
       }
       return;
     }
 
     if (e.target.id === "imageLightbox" || e.target.closest("#closeLightbox")) {
-      closeLightbox();
+      closeGalleryLightbox();
     }
   });
 
-  // ESC key for Lightbox
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") closeLightbox();
-  });
+  initGalleryLightboxActions();
 }
 
 document.addEventListener("DOMContentLoaded", init);

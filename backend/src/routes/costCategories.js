@@ -12,6 +12,8 @@ const {
   defaultFlagsForSheetLevel,
   resolveParentForSheetLevel,
   computeLevelAndDomain,
+  resolveParentIdForUpdate,
+  refreshDescendantLevels,
 } = require("../services/costCategoryService");
 
 const sheetLevelSchema = z.enum(["TIPO1", "GRUPO", "TIPO2", "SUBCUSTO"]);
@@ -186,8 +188,36 @@ costCategoryRoutes.patch(
         requiresDetailText: z.boolean().optional(),
         sortOrder: z.number().int().optional(),
         active: z.boolean().optional(),
+        parentId: z.string().nullable().optional(),
       })
       .parse(req.body);
+
+    let parentPatch = {};
+    if (body.parentId !== undefined) {
+      try {
+        parentPatch = await resolveParentIdForUpdate(existing, body.parentId);
+      } catch (e) {
+        const status = e.status || 400;
+        const messages = {
+          PARENT_TIPO1_REQUIRED: "Seleccione o tipo custo 1.",
+          PARENT_TIPO2_REQUIRED: "Seleccione o tipo custo 2.",
+          PARENT_REQUIRED_GERAL_TIPO2: "Seleccione tipo custo 1 ou grupo.",
+          TIPO1_CANNOT_HAVE_PARENT: "Tipo custo 1 não pode ter pai.",
+          TIPO1_ONLY_GERAL: "Tipo custo 1 só existe em Custo gerais.",
+          TIPO2_OBRA_VIATURAS_NO_PARENT: "Tipo custo 2 em Obra/Viaturas não tem pai.",
+          PARENT_MUST_BE_TIPO1: "O pai deve ser tipo custo 1.",
+          PARENT_MUST_BE_TIPO1_OR_GRUPO: "O pai deve ser tipo custo 1 ou grupo.",
+          PARENT_MUST_BE_TIPO2: "O pai deve ser tipo custo 2.",
+          PARENT_NOT_FOUND: "Registo pai não encontrado.",
+          PARENT_CYCLE: "Não pode mover para um descendente de si mesmo.",
+          DOMAIN_MISMATCH_WITH_PARENT: "Domínio incompatível com o pai.",
+        };
+        return res.status(status).json({
+          error: e.message,
+          message: messages[e.message] || e.message,
+        });
+      }
+    }
 
     const updated = await prisma.costCategory.update({
       where: { id },
@@ -197,8 +227,12 @@ costCategoryRoutes.patch(
         ...(body.requiresDetailText !== undefined ? { requiresDetailText: body.requiresDetailText } : {}),
         ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
         ...(body.active !== undefined ? { active: body.active } : {}),
+        ...parentPatch,
       },
     });
+    if (parentPatch.level !== undefined) {
+      await refreshDescendantLevels(id);
+    }
     return res.json(updated);
   })
 );

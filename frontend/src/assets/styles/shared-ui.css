@@ -270,6 +270,31 @@
   outline-offset: -2px;
 }
 
+.cost-catalog-tipo3-select {
+  display: block;
+  width: 100%;
+  max-width: 14rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(51 65 85);
+  background-color: rgb(255 255 255);
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.cost-catalog-tipo3-select:focus {
+  outline: 2px solid rgb(199 210 254);
+  outline-offset: 0;
+}
+
+.cost-catalog-table__row--selected .cost-catalog-tipo3-select {
+  border-color: rgb(165 180 252);
+  background-color: rgb(255 255 255);
+}
+
 .cost-catalog-table__section td {
   background-color: rgb(248 250 252);
   border-top: 1px solid rgb(226 232 240);
