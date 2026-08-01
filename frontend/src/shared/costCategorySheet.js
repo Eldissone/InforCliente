@@ -45,18 +45,24 @@ function isGrp(c) {
 function isRubricCode(c) {
   return c.code?.includes("_R_");
 }
-function isSheetRubric(c) {
-  if (!c || isFam(c) || isGrp(c)) return false;
+function isSheetRubric(c, byId) {
+  if (!c || isFam(c) || isGrp(c) || isDetailCode(c)) return false;
   if (isRubricCode(c)) return true;
-  return classifyCategorySheetLevel(c) === "TIPO2";
+  if (!c.parentId) return c.domain !== "GERAL";
+  const parent = byId?.get(c.parentId);
+  if (parent && (isFam(parent) || isGrp(parent))) return true;
+  return false;
 }
 function isDetailCode(c) {
   return c.code?.includes("_D_");
 }
-function isSheetSubcost(c) {
-  if (!c) return false;
+function isSheetSubcost(c, byId) {
+  if (!c || isFam(c) || isGrp(c)) return false;
   if (isDetailCode(c)) return true;
-  return classifyCategorySheetLevel(c) === "SUBCUSTO";
+  if (isSheetRubric(c, byId)) return false;
+  const parent = c.parentId ? byId?.get(c.parentId) : null;
+  if (parent && isSheetRubric(parent, byId)) return true;
+  return classifyCategorySheetLevel(c) === "SUBCUSTO" && Boolean(c.parentId);
 }
 
 /**
@@ -66,6 +72,7 @@ function isSheetSubcost(c) {
  */
 export function buildCostCatalogSheetRows(items = []) {
   const active = items.filter((c) => c.active !== false);
+  const byId = new Map(active.map((c) => [c.id, c]));
   const rows = [];
 
   function childrenOf(parentId) {
@@ -123,7 +130,7 @@ export function buildCostCatalogSheetRows(items = []) {
       return;
     }
 
-    if (isSheetRubric(node)) {
+    if (isSheetRubric(node, byId)) {
       const rubricCtx = { ...nextCtx, rubric: node };
       const kids = childrenOf(node.id);
 
@@ -134,10 +141,10 @@ export function buildCostCatalogSheetRows(items = []) {
 
       let emitted = false;
       kids.forEach((k) => {
-        if (isSheetSubcost(k) && !childrenOf(k.id).length) {
+        if (isSheetSubcost(k, byId) && !childrenOf(k.id).length) {
           pushRow(rubricCtx, node, k);
           emitted = true;
-        } else if (!isSheetSubcost(k) && k.isSelectable && !childrenOf(k.id).length) {
+        } else if (!isSheetSubcost(k, byId) && !childrenOf(k.id).length) {
           pushRow(rubricCtx, node, k);
           emitted = true;
         } else {
@@ -149,7 +156,7 @@ export function buildCostCatalogSheetRows(items = []) {
       return;
     }
 
-    if (isSheetSubcost(node) && ctx.rubric) {
+    if (isSheetSubcost(node, byId) && ctx.rubric) {
       pushRow(ctx, ctx.rubric, node);
       return;
     }
@@ -189,15 +196,14 @@ export function buildCostCatalogSheetRows(items = []) {
     });
   });
 
-  supplementSheetRowsFromOrphans(active, rows, pushRow);
+  supplementSheetRowsFromOrphans(active, rows, pushRow, byId, childrenOf);
 
   return rows;
 }
 
-/** Tipos na BD que não entraram na árvore principal (códigos legados, etc.). */
-function supplementSheetRowsFromOrphans(active, rows, pushRow) {
+/** Garante linhas para todos os tipos custo 2 activos (incl. recém-criados e legados). */
+function supplementSheetRowsFromOrphans(active, rows, pushRow, byId, childrenOf) {
   const seen = new Set(rows.map((r) => r.pickCategoryId));
-  const byId = new Map(active.map((c) => [c.id, c]));
 
   function ancestorsOf(cat) {
     let fam = null;
@@ -205,10 +211,9 @@ function supplementSheetRowsFromOrphans(active, rows, pushRow) {
     let rubric = null;
     let cur = cat;
     while (cur) {
-      const lvl = classifyCategorySheetLevel(cur);
-      if (lvl === "TIPO1") fam = cur;
-      if (lvl === "GRUPO") grp = cur;
-      if (lvl === "TIPO2" || isSheetRubric(cur)) rubric = cur;
+      if (isFam(cur)) fam = cur;
+      if (isGrp(cur)) grp = cur;
+      if (isSheetRubric(cur, byId)) rubric = cur;
       cur = cur.parentId ? byId.get(cur.parentId) : null;
     }
     return { fam, grp, rubric };
@@ -231,20 +236,32 @@ function supplementSheetRowsFromOrphans(active, rows, pushRow) {
 
   for (const cat of active) {
     if (seen.has(cat.id)) continue;
-    const lvl = classifyCategorySheetLevel(cat);
-    if (lvl === "SUBCUSTO" || (isSheetSubcost(cat) && cat.parentId)) {
+    if (isSheetSubcost(cat, byId)) {
       const { rubric } = ancestorsOf(cat);
       if (!rubric) continue;
       pushRow(ctxFor(cat), rubric, cat);
       seen.add(cat.id);
-      continue;
     }
-    if ((lvl === "TIPO2" || isSheetRubric(cat)) && !isFam(cat) && !isGrp(cat)) {
-      const hasChild = active.some((c) => c.parentId === cat.id);
-      if (hasChild) continue;
-      pushRow(ctxFor(cat), cat, cat);
+  }
+
+  const tipo2InSheet = new Set(rows.map((r) => r.tipo2Id));
+  for (const cat of active) {
+    if (!isSheetRubric(cat, byId)) continue;
+    if (tipo2InSheet.has(cat.id)) continue;
+    const ctx = ctxFor(cat);
+    const kids = childrenOf(cat.id).filter((k) => isSheetSubcost(k, byId));
+    if (kids.length) {
+      kids.forEach((k) => {
+        if (!seen.has(k.id)) {
+          pushRow(ctx, cat, k);
+          seen.add(k.id);
+        }
+      });
+    } else {
+      pushRow(ctx, cat, cat);
       seen.add(cat.id);
     }
+    tipo2InSheet.add(cat.id);
   }
 }
 

@@ -69,6 +69,9 @@ function focusCreatedCatalogItem(categoryId) {
     }
     return;
   }
+  if (hit.tipo2Id === categoryId && !hit.tipo3Id) {
+    showToast("Tipo custo 2 adicionado — coluna «Tipo custo 3» fica «—» até criar subcustos.", "info");
+  }
   catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
   const gkey = catalogSheetGroupKey({
     domain: hit.domain,
