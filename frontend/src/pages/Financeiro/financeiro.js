@@ -15,6 +15,7 @@ import {
   setupLiquidationFiscalModal,
   getLiquidationFiscalFormDataExtras,
 } from "/shared/liquidationFiscal.js";
+import { paymentPayableAmount } from "/shared/supplierFiscal.js";
 
 let allProjects = [];
 let ganttViewMode = "month";
