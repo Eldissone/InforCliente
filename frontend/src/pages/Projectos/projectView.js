@@ -179,9 +179,10 @@ function renderFileCard(f) {
   const icon = isImage ? "image" : (f.mimeType === "application/pdf" ? "picture_as_pdf" : "description");
   const iconColor = isImage ? "text-blue-500" : (f.mimeType === "application/pdf" ? "text-red-500" : "text-slate-400");
   const fileUrl = getAssetUrl(f.path);
+  const dragAttrs = canManageProjectFiles() ? `draggable="true" data-drag-file="${f.id}"` : "";
 
   return `
-    <div data-preview-file="${f.id}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer overflow-hidden relative">
+    <div data-preview-file="${f.id}" ${dragAttrs} class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer overflow-hidden relative">
         <div class="flex items-start justify-between mb-6">
             <div class="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center ${iconColor}">
                 <span class="material-symbols-outlined text-2xl">${icon}</span>
@@ -204,14 +205,17 @@ function renderFileCard(f) {
 }
 
 function renderFolderCard(f) {
+  const dragAttrs = canManageProjectFiles()
+    ? `draggable="true" data-drag-folder="${f.id}"`
+    : "";
   return `
-    <div data-enter-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer">
+    <div data-enter-folder="${f.id}" data-drop-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" ${dragAttrs} class="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group cursor-pointer">
         <div class="flex items-start justify-between mb-6">
             <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">folder</span>
             </div>
             <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                <button data-edit-folder="${f.id}" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
+                <button data-edit-folder="${f.id}" data-folder-name="${escapeHtml(f.name)}" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all">
                     <span class="material-symbols-outlined text-sm">edit</span>
                 </button>
                 <button data-delete-folder="${f.id}" class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all">
@@ -286,6 +290,40 @@ async function loadProject() {
 let projectState = null;
 let txState = { search: "" };
 let fileState = { currentFolderId: null, breadcrumbs: [], items: [], folders: [] };
+const FILE_DRAG_MIME = "application/x-infor-project-file";
+
+function canManageProjectFiles() {
+  const role = (getSessionUser()?.role || "").toLowerCase();
+  return ["admin", "operador", "supervisor"].includes(role);
+}
+
+async function fetchAllProjectFolders(projectId) {
+  const res = await apiRequest(`/projects/${encodeURIComponent(projectId)}/folders?all=1`);
+  return res.items || [];
+}
+
+function buildFolderSelectOptions(folders, selectedId) {
+  const byParent = new Map();
+  folders.forEach((f) => {
+    const key = f.parentId || "root";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(f);
+  });
+  const lines = [`<option value="" ${!selectedId ? "selected" : ""}>Raiz (sem pasta)</option>`];
+  const walk = (parentKey, depth) => {
+    const list = byParent.get(parentKey) || [];
+    list.sort((a, b) => a.name.localeCompare(b.name, "pt"));
+    for (const f of list) {
+      const pad = depth ? `${"— ".repeat(depth)}` : "";
+      lines.push(
+        `<option value="${f.id}" ${selectedId === f.id ? "selected" : ""}>${pad}${escapeHtml(f.name)}</option>`
+      );
+      walk(f.id, depth + 1);
+    }
+  };
+  walk("root", 0);
+  return lines.join("");
+}
 let stockState = {
   items: [],
   summary: [],
@@ -2408,13 +2446,16 @@ async function loadFiles() {
     const breadEl = el("fileBreadcrumbs");
     if (breadEl) {
       const breadHtml = [
-        `<button data-go-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Iní­cio</button>`,
+        `<button data-go-folder="root" data-drop-folder="root" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-sm">home</span> Início</button>`,
         ...breadcrumbs.map((b, idx) => `
           <span class="material-symbols-outlined text-xs">chevron_right</span>
-          <button data-go-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e] font-black' : 'hover:text-primary'} transition-colors">${escapeHtml(b.name)}</button>
+          <button data-go-folder="${b.id}" data-drop-folder="${b.id}" class="${idx === breadcrumbs.length - 1 ? 'text-[#212e3e] font-black' : 'hover:text-primary'} transition-colors">${escapeHtml(b.name)}</button>
         `)
       ].join("");
       breadEl.innerHTML = breadHtml;
+      if (canManageProjectFiles()) {
+        breadEl.title = "Arraste ficheiros ou pastas para uma pasta ou para Início";
+      }
     }
 
     // Carregar subpastas do nÃ­vel actual
@@ -2453,14 +2494,10 @@ function wireFilesUpload() {
     // Carrega todas as pastas para o selector de mover
     let allFolders = [];
     try {
-      const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
-      allFolders = fr.items || [];
-    } catch (_) { }
+      allFolders = await fetchAllProjectFolders(id);
+    } catch (_) { /* ignore */ }
 
-    const folderOptions = [
-      `<option value="" ${!fileState.currentFolderId ? 'selected' : ''}>Raiz (sem pasta)</option>`,
-      ...allFolders.map(f => `<option value="${f.id}" ${fileState.currentFolderId === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`)
-    ].join("");
+    const folderOptions = buildFolderSelectOptions(allFolders, fileState.currentFolderId);
 
     openModal({
       title: `Submeter Documento`,
@@ -2517,26 +2554,22 @@ function wireFilesUpload() {
 }
 
 function wireNewFolder() {
-  if (!el("uploadFileBtn")) return;
-  if (!el("createNewFolderBtn")) {
-    const btn = document.createElement("button");
-    btn.id = "createNewFolderBtn";
-    btn.className = "bg-white text-primary px-6 py-3 rounded-xl text-sm font-bold flex items-end gap-3 hover:bg-primary/50 transition-all mr-4";
-    btn.innerHTML = `Nova Pasta <span class="material-symbols-outlined">create_new_folder</span>`;
-    el("uploadFileBtn").insertAdjacentElement("beforebegin", btn);
-  }
+  const btn = el("createNewFolderBtn");
+  if (!btn || btn.dataset.wired === "true") return;
+  btn.dataset.wired = "true";
 
-  el("createNewFolderBtn")?.addEventListener("click", () => {
+  btn.addEventListener("click", () => {
     const parentId = fileState.currentFolderId;
     const parentName = parentId && fileState.breadcrumbs.length
       ? fileState.breadcrumbs.at(-1).name
       : "Raiz";
 
     openModal({
-      title: `Nova Pasta ${parentId ? `dentro de "${parentName}"` : ''}`,
+      title: parentId ? `Nova subpasta em «${parentName}»` : "Nova pasta na raiz",
       primaryLabel: "Criar",
       contentHtml: `
         <div class="space-y-3">
+          <p class="text-xs text-slate-500">A pasta será criada ${parentId ? `dentro de <strong>${escapeHtml(parentName)}</strong>` : "no nível principal"}. Abra uma pasta antes de criar se quiser aninhar noutro sítio.</p>
           <label class="block text-[10px] font-black uppercase text-on-surface-variant mb-2">Nome da Pasta</label>
           <input id="fold_name" class="w-full rounded-xl border-surface-container bg-surface-container-low text-sm" placeholder="Ex: 1- Administrativo" />
         </div>
@@ -2557,10 +2590,91 @@ function wireNewFolder() {
           await loadFiles();
         } catch (err) {
           setButtonLoading(btn, false);
-          toast("Falha ao criar pasta", { type: "error" });
+          toast(err.message || "Falha ao criar pasta", { type: "error" });
         }
       }
     });
+  });
+}
+
+function wireFileDragDrop() {
+  if (!canManageProjectFiles()) return;
+  if (document.body.dataset.fileDragWired === "true") return;
+  document.body.dataset.fileDragWired = "true";
+
+  document.addEventListener("dragstart", (e) => {
+    const fileEl = e.target.closest("[data-drag-file]");
+    const folderEl = e.target.closest("[data-drag-folder]");
+    if (!fileEl && !folderEl) return;
+    if (e.target.closest("button, a")) {
+      e.preventDefault();
+      return;
+    }
+    const payload = fileEl
+      ? { type: "file", id: fileEl.getAttribute("data-drag-file") }
+      : { type: "folder", id: folderEl.getAttribute("data-drag-folder") };
+    e.dataTransfer.setData(FILE_DRAG_MIME, JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = "move";
+    (fileEl || folderEl).classList.add("file-dragging");
+  });
+
+  document.addEventListener("dragend", () => {
+    document.querySelectorAll(".file-dragging").forEach((node) => node.classList.remove("file-dragging"));
+    document.querySelectorAll(".file-drop-target").forEach((node) => node.classList.remove("file-drop-target"));
+  });
+
+  document.addEventListener("dragover", (e) => {
+    const dropEl = e.target.closest("[data-drop-folder]");
+    if (!dropEl) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    document.querySelectorAll(".file-drop-target").forEach((node) => {
+      if (node !== dropEl) node.classList.remove("file-drop-target");
+    });
+    dropEl.classList.add("file-drop-target");
+  });
+
+  document.addEventListener("dragleave", (e) => {
+    const dropEl = e.target.closest("[data-drop-folder]");
+    if (dropEl && !dropEl.contains(e.relatedTarget)) {
+      dropEl.classList.remove("file-drop-target");
+    }
+  });
+
+  document.addEventListener("drop", async (e) => {
+    const dropEl = e.target.closest("[data-drop-folder]");
+    if (!dropEl) return;
+    e.preventDefault();
+    dropEl.classList.remove("file-drop-target");
+    let payload;
+    try {
+      payload = JSON.parse(e.dataTransfer.getData(FILE_DRAG_MIME));
+    } catch {
+      return;
+    }
+    const targetRaw = dropEl.getAttribute("data-drop-folder");
+    const targetFolderId = targetRaw === "root" ? null : targetRaw;
+    const projectId = getProjectId();
+    try {
+      if (payload.type === "file") {
+        await apiRequest(`/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(payload.id)}`, {
+          method: "PATCH",
+          body: { folderId: targetFolderId },
+        });
+      } else if (payload.type === "folder") {
+        if (payload.id === targetFolderId) return;
+        await apiRequest(`/projects/${encodeURIComponent(projectId)}/folders/${encodeURIComponent(payload.id)}`, {
+          method: "PATCH",
+          body: { parentId: targetFolderId },
+        });
+      } else {
+        return;
+      }
+      toast("Item movido com sucesso", { type: "success" });
+      await loadFiles();
+    } catch (err) {
+      toast(err.message || "Não foi possível mover o item", { type: "error" });
+    }
   });
 }
 
@@ -2634,7 +2748,10 @@ function wireFileNavigation() {
     if (editFolderBtn) {
       e.stopPropagation();
       const folderId = editFolderBtn.getAttribute("data-edit-folder");
-      const currentName = editFolderBtn.getAttribute("data-folder-name");
+      const currentName =
+        editFolderBtn.getAttribute("data-folder-name") ||
+        editFolderBtn.closest("[data-enter-folder]")?.getAttribute("data-folder-name") ||
+        "";
       const id = getProjectId();
       openModal({
         title: "Renomear Pasta",
@@ -2678,14 +2795,11 @@ function wireFileNavigation() {
       // Carrega todas as pastas para o selector de mover
       let allFolders = [];
       try {
-        const fr = await apiRequest(`/projects/${encodeURIComponent(id)}/folders?parentId=root`);
-        allFolders = fr.items || [];
-      } catch (_) { }
+        allFolders = await fetchAllProjectFolders(id);
+      } catch (_) { /* ignore */ }
 
-      const folderOptions = [
-        `<option value="">Raiz (sem pasta)</option>`,
-        ...allFolders.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`)
-      ].join("");
+      const currentFile = fileState.items.find((f) => f.id === fileId);
+      const folderOptions = buildFolderSelectOptions(allFolders, currentFile?.folderId || "");
 
       openModal({
         title: "Editar Arquivo",
@@ -3198,6 +3312,7 @@ async function init() {
   wireNewFolder();
   wireFileNavigation();
   wireFileDeletion();
+  wireFileDragDrop();
   wirePreview();
   wireProgressTasks();
   wireMeasurements();

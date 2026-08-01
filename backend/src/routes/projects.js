@@ -1288,7 +1288,7 @@ projectRoutes.post(
 // PATCH — renomear ficheiro ou mover para outra pasta
 projectRoutes.patch(
   "/:id/files/:fileId",
-  requireRole(["admin", "operador"]),
+  requireRole(["admin", "operador", "supervisor"]),
   asyncHandler(async (req, res) => {
     const { id, fileId } = req.params;
     const body = z.object({
@@ -1300,6 +1300,13 @@ projectRoutes.patch(
     const file = await prisma.projectFile.findUnique({ where: { id: fileId } });
     if (!file || file.projectId !== id) {
       return res.status(404).json({ error: "FILE_NOT_FOUND" });
+    }
+
+    if (body.folderId) {
+      const targetFolder = await prisma.projectFolder.findUnique({ where: { id: body.folderId } });
+      if (!targetFolder || targetFolder.projectId !== id) {
+        return res.status(400).json({ error: "INVALID_FOLDER" });
+      }
     }
 
     const updated = await prisma.projectFile.update({
@@ -1362,13 +1369,38 @@ async function deleteFolderRecursive(folderId, projectId) {
   await prisma.projectFolder.delete({ where: { id: folderId } });
 }
 
+async function folderIsDescendantOf(folderId, ancestorId) {
+  if (!folderId || !ancestorId) return false;
+  if (folderId === ancestorId) return true;
+  let current = await prisma.projectFolder.findUnique({
+    where: { id: folderId },
+    select: { parentId: true },
+  });
+  while (current?.parentId) {
+    if (current.parentId === ancestorId) return true;
+    current = await prisma.projectFolder.findUnique({
+      where: { id: current.parentId },
+      select: { parentId: true },
+    });
+  }
+  return false;
+}
+
 // GET — listar pastas de um nível (raiz ou dentro de outra pasta)
 projectRoutes.get(
   "/:id/folders",
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { parentId } = req.query;
+    const { parentId, all } = req.query;
     await ensureProjectReadable(req, id);
+
+    if (all === "1" || all === "true") {
+      const folders = await prisma.projectFolder.findMany({
+        where: { projectId: id },
+        orderBy: { name: "asc" },
+      });
+      return res.json({ items: folders });
+    }
 
     const folders = await prisma.projectFolder.findMany({
       where: {
@@ -1385,7 +1417,7 @@ projectRoutes.get(
 // POST — criar pasta (com parentId opcional para subpastas)
 projectRoutes.post(
   "/:id/folders",
-  requireRole(["admin", "operador", "cliente"]),
+  requireRole(["admin", "operador", "supervisor", "cliente"]),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const body = z.object({
@@ -1415,24 +1447,49 @@ projectRoutes.post(
   })
 );
 
-// PATCH — renomear pasta
+// PATCH — renomear ou mover pasta
 projectRoutes.patch(
   "/:id/folders/:folderId",
-  requireRole(["admin", "operador"]),
+  requireRole(["admin", "operador", "supervisor"]),
   asyncHandler(async (req, res) => {
     const { id, folderId } = req.params;
-    const body = z.object({
-      name: z.string().min(1),
-    }).parse(req.body);
+    const body = z
+      .object({
+        name: z.string().min(1).optional(),
+        parentId: z.string().nullable().optional(),
+      })
+      .refine((b) => b.name !== undefined || b.parentId !== undefined, {
+        message: "EMPTY_UPDATE",
+      })
+      .parse(req.body);
 
     const folder = await prisma.projectFolder.findUnique({ where: { id: folderId } });
     if (!folder || folder.projectId !== id) {
       return res.status(404).json({ error: "FOLDER_NOT_FOUND" });
     }
 
+    if (body.parentId !== undefined) {
+      if (body.parentId === folderId) {
+        return res.status(400).json({ error: "INVALID_PARENT_FOLDER" });
+      }
+      if (body.parentId) {
+        const parent = await prisma.projectFolder.findUnique({ where: { id: body.parentId } });
+        if (!parent || parent.projectId !== id) {
+          return res.status(400).json({ error: "INVALID_PARENT_FOLDER" });
+        }
+        const nested = await folderIsDescendantOf(body.parentId, folderId);
+        if (nested) {
+          return res.status(400).json({ error: "FOLDER_MOVE_INTO_DESCENDANT" });
+        }
+      }
+    }
+
     const updated = await prisma.projectFolder.update({
       where: { id: folderId },
-      data: { name: body.name },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.parentId !== undefined ? { parentId: body.parentId } : {}),
+      },
     });
 
     res.json(updated);

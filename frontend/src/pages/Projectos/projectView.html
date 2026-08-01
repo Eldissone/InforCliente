@@ -269,6 +269,16 @@
             position: static;
         }
 
+        .file-drop-target {
+            outline: 3px solid #2afc8d;
+            outline-offset: 4px;
+            background: rgba(42, 252, 141, 0.08) !important;
+        }
+
+        .file-dragging {
+            opacity: 0.55;
+        }
+
         /* Chrome, Edge e Safari */
         .form-scroll::-webkit-scrollbar {
             width: 8px;
@@ -1133,11 +1143,18 @@
                     <h2 class="text-2xl font-bold">Documentos</h2>
                     <p class="text-sm text-slate-400 font-medium">Arquivos e evidências da obra.</p>
                 </div>
-                <button id="uploadFileBtn" data-role-visible="admin,operador"
-                    class="h-14 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
-                    <span class="hidden md:inline">Anexar</span> <span
-                        class="material-symbols-outlined text-2xl">cloud_upload</span>
-                </button>
+                <div class="flex items-center gap-3 shrink-0">
+                    <button id="createNewFolderBtn" type="button" data-role-visible="admin,operador,supervisor"
+                        class="h-14 bg-white/10 text-white border border-white/20 px-4 md:px-6 rounded-[24px] font-bold hidden items-center justify-center gap-2 hover:bg-white/20 transition-all">
+                        <span class="hidden md:inline">Nova pasta</span>
+                        <span class="material-symbols-outlined text-2xl">create_new_folder</span>
+                    </button>
+                    <button id="uploadFileBtn" data-role-visible="admin,operador,supervisor"
+                        class="h-14 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                        <span class="hidden md:inline">Anexar</span> <span
+                            class="material-symbols-outlined text-2xl">cloud_upload</span>
+                    </button>
+                </div>
             </div>
             <div id="projectFilesList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"></div>
             <div id="noFilesMsg"
