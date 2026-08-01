@@ -30,10 +30,104 @@ import {
   SHEET_LEVEL_LABELS,
   SHEET_TIPO1_FLAT,
 } from "/shared/costCategorySheet.js";
+import {
+  renderBankCardHtml,
+  normalizeBankKey,
+  monthInputToExpiresAt,
+  expiresAtToMonthInput,
+  parseCardNumberInput,
+} from "/shared/bankCardVisual.js";
 
 let costCategories = [];
 let allProjects = [];
 let allCards = [];
+let centrosMainTab = "cartoes";
+
+function switchCentrosMainTab(tab) {
+  centrosMainTab = tab;
+  document.querySelectorAll("[data-centros-tab]").forEach((btn) => {
+    const active = btn.dataset.centrosTab === tab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.getElementById("centrosPanelCartoes")?.classList.toggle("hidden", tab !== "cartoes");
+  document.getElementById("centrosPanelCatalogo")?.classList.toggle("hidden", tab !== "catalogo");
+  document.getElementById("centrosPanelExtras")?.classList.toggle("hidden", tab !== "extras");
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    window.history.replaceState({}, "", url);
+  } catch {
+    /* ignore */
+  }
+}
+
+function bindCentrosMainTabs() {
+  document.querySelectorAll("[data-centros-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => switchCentrosMainTab(btn.dataset.centrosTab));
+  });
+}
+
+function applyCentrosMainTabVisibility() {
+  const hasCards = can("fundoManeio", "view");
+  const hasPedidos = can("pedidosExtras", "view");
+  const tabsEl = document.getElementById("centrosMainTabs");
+
+  document.getElementById("centrosTabBtnCartoes")?.classList.toggle("hidden", !hasCards);
+  document.getElementById("centrosTabBtnCatalogo")?.classList.toggle("hidden", !hasPedidos);
+  document.getElementById("centrosTabBtnExtras")?.classList.toggle("hidden", !hasPedidos);
+
+  const tabCount = (hasCards ? 1 : 0) + (hasPedidos ? 2 : 0);
+  tabsEl?.classList.toggle("hidden", tabCount <= 1);
+
+  const validTabs = [];
+  if (hasCards) validTabs.push("cartoes");
+  if (hasPedidos) validTabs.push("catalogo", "extras");
+
+  const urlTab = new URLSearchParams(window.location.search).get("tab");
+  const initial = validTabs.includes(urlTab) ? urlTab : validTabs[0] || "cartoes";
+  switchCentrosMainTab(initial);
+}
+
+function cardPreviewPayloadFromForm() {
+  const bankSelect = document.getElementById("cardBank")?.value || "";
+  const bankKey = normalizeBankKey(bankSelect) || bankSelect;
+  const month = document.getElementById("cardExpiresAt")?.value || "";
+  const expiresAt = month ? monthInputToExpiresAt(month) : null;
+  const { cardNumberMasked, lastDigits } = parseCardNumberInput(
+    document.getElementById("cardNumberMasked")?.value
+  );
+  return {
+    id: "preview",
+    label: document.getElementById("cardLabel")?.value.trim() || "NOME APELIDO",
+    bank: bankKey || null,
+    holderName: document.getElementById("cardHolderName")?.value.trim() || "",
+    type: document.getElementById("cardType")?.value || "DEBITO",
+    lastDigits,
+    cardNumberMasked: cardNumberMasked || "",
+    expiresAt,
+  };
+}
+
+function updateCardFormPreview() {
+  const host = document.getElementById("cardFormPreview");
+  if (!host) return;
+  host.innerHTML = renderBankCardHtml(cardPreviewPayloadFromForm(), { compact: true, asButton: false });
+}
+
+function renderCardScopeBadgeHtml(card) {
+  const scope = cardScopeLabel(card);
+  if (card.projectId) {
+    return `<span class="debit-card__scope-pill">${escapeHtml(scope)}</span>`;
+  }
+  return `<span class="debit-card__scope-pill">Global</span>`;
+}
+
+function renderCardBalanceBadgeHtml(card) {
+  const balance = Number(card.currentBalance || 0);
+  return `<span class="debit-card__balance-pill">${escapeHtml(formatCurrency(balance, card.currency))}</span>`;
+}
+
 let managedCards = [];
 let selectedCardId = null;
 let selectedCardCache = null;
@@ -219,6 +313,7 @@ function bindCatalogSheetRowEvents(container, items) {
       )
         return;
       if (!can("pedidosExtras", "create")) return;
+      switchCentrosMainTab("extras");
       const domain = row.dataset.domain;
       if (domain === "VIATURAS") {
         showToast("Custos de viaturas: em breve no pedido extra. Use filtro por agora.", "info");
@@ -1280,6 +1375,7 @@ function openCardDetailModal() {
 
 function closeCardDetailModal() {
   document.getElementById("modalCardDetail")?.classList.remove("open");
+  document.getElementById("cardDetailPreview").innerHTML = "";
   selectedCardId = null;
   selectedCardCache = null;
   renderCardsGrid();
@@ -1357,27 +1453,18 @@ function renderCardsGrid() {
     grid.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
       <span class="material-symbols-outlined text-4xl mb-2">credit_card</span>
       <p class="text-sm font-semibold">Nenhum cartão encontrado</p>
+      <p class="text-[11px] mt-1 max-w-sm text-center">Crie um cartão BAI, BFA ou Caixa Angola para ver o layout do banco.</p>
     </div>`;
     return;
   }
   grid.innerHTML = cards
-    .map((c) => {
-      const active = c.id === selectedCardId;
-      const balance = Number(c.currentBalance || 0);
-      const scope = cardScopeLabel(c);
-      const scopeBadge = c.projectId
-        ? `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-sky-100 text-sky-700">${scope}</span>`
-        : `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-violet-100 text-violet-700">Global</span>`;
-      const meta = [c.bank, c.holderName, CARD_TYPE_LABELS[c.type] || c.type].filter(Boolean).join(" · ");
-      return `<button type="button" data-card-id="${c.id}"
-        class="card-item ${active ? "card-item--active" : ""}">
-        <div class="flex items-start justify-between gap-2 mb-2">${scopeBadge}</div>
-        <p class="text-xs font-bold text-slate-400 uppercase tracking-wide truncate">${c.label}${c.lastDigits ? ` •••• ${c.lastDigits}` : ""}</p>
-        <p class="text-2xl font-bold text-slate-900 mt-1">${formatCurrency(balance, c.currency)}</p>
-        <p class="text-[11px] text-slate-400 mt-1">${meta || "Cartão"}</p>
-        <span class="fund-card__hint"><span class="material-symbols-outlined text-sm">open_in_new</span> Ver detalhes</span>
-      </button>`;
-    })
+    .map((c) =>
+      renderBankCardHtml(c, {
+        active: c.id === selectedCardId,
+        balanceHtml: renderCardBalanceBadgeHtml(c),
+        scopeBadgeHtml: renderCardScopeBadgeHtml(c),
+      })
+    )
     .join("");
 
   grid.querySelectorAll("[data-card-id]").forEach((btn) => {
@@ -1401,6 +1488,16 @@ async function selectCard(cardId) {
       `${card.label}${card.lastDigits ? ` •••• ${card.lastDigits}` : ""} · ${formatCurrency(balance, card.currency)}`;
     document.getElementById("cardDetailScope").textContent =
       `${cardScopeLabel(card)} · Histórico de carregamentos e gastos`;
+
+    const previewHost = document.getElementById("cardDetailPreview");
+    if (previewHost) {
+      previewHost.innerHTML = renderBankCardHtml(card, {
+        compact: true,
+        asButton: false,
+        balanceHtml: renderCardBalanceBadgeHtml(card),
+        scopeBadgeHtml: renderCardScopeBadgeHtml(card),
+      });
+    }
 
     const movements = data.movements.items || [];
     document.getElementById("cardMovementsBody").innerHTML =
@@ -1437,10 +1534,18 @@ function updateCardActionButtons() {
   document.getElementById("cardDeleteBtn")?.classList.toggle("hidden", !canManage);
 }
 
+function resolveBankSelectValue(bank) {
+  const key = normalizeBankKey(bank);
+  if (key === "BAI" || key === "BFA" || key === "CAIXA") return key;
+  return "";
+}
+
 function openCardFormModal(cardId = "") {
   document.getElementById("formCard").reset();
   document.getElementById("cardEditId").value = "";
   document.getElementById("cardCurrency").value = "AOA";
+  document.getElementById("cardBank").value = "BAI";
+  document.getElementById("cardType").value = "DEBITO";
   document.getElementById("modalCardFormTitle").textContent = "Novo Cartão";
   document.getElementById("cardFormSubmitBtn").textContent = "Criar Cartão";
   document.getElementById("cardInitialBalanceRow").classList.remove("hidden");
@@ -1461,9 +1566,16 @@ function openCardFormModal(cardId = "") {
     document.getElementById("cardFormSubmitBtn").textContent = "Guardar";
     document.getElementById("cardInitialBalanceRow").classList.add("hidden");
     document.getElementById("cardLabel").value = card.label || "";
-    document.getElementById("cardType").value = card.type || "PREPAGO";
-    document.getElementById("cardBank").value = card.bank || "";
-    document.getElementById("cardLastDigits").value = card.lastDigits || "";
+    document.getElementById("cardType").value = card.type || "DEBITO";
+    document.getElementById("cardBank").value = resolveBankSelectValue(card.bank);
+    if (card.cardNumberMasked) {
+      document.getElementById("cardNumberMasked").value = card.cardNumberMasked;
+    } else if (card.lastDigits) {
+      document.getElementById("cardNumberMasked").value = `•••• •••• •••• ${card.lastDigits}`;
+    } else {
+      document.getElementById("cardNumberMasked").value = "";
+    }
+    document.getElementById("cardExpiresAt").value = expiresAtToMonthInput(card.expiresAt);
     document.getElementById("cardHolderName").value = card.holderName || "";
     document.getElementById("cardCurrency").value = card.currency || "AOA";
     if (card.projectId) {
@@ -1474,6 +1586,7 @@ function openCardFormModal(cardId = "") {
     }
   }
 
+  updateCardFormPreview();
   document.getElementById("modalCardForm").classList.add("open");
 }
 
@@ -1490,13 +1603,20 @@ async function submitCardForm(e) {
     showToast("Seleccione a obra", "error");
     return;
   }
+  const bankSelect = document.getElementById("cardBank").value;
+  const monthVal = document.getElementById("cardExpiresAt").value;
+  const { cardNumberMasked, lastDigits } = parseCardNumberInput(
+    document.getElementById("cardNumberMasked").value
+  );
   const body = {
     label: document.getElementById("cardLabel").value.trim(),
     type: document.getElementById("cardType").value,
-    bank: document.getElementById("cardBank").value.trim() || null,
-    lastDigits: document.getElementById("cardLastDigits").value.trim() || null,
+    bank: bankSelect || null,
+    lastDigits,
+    cardNumberMasked,
     holderName: document.getElementById("cardHolderName").value.trim() || null,
     currency: document.getElementById("cardCurrency").value.trim() || "AOA",
+    expiresAt: monthVal ? monthInputToExpiresAt(monthVal) : null,
     projectId,
   };
   if (!cardId) {
@@ -1580,6 +1700,7 @@ function bindCardEvents() {
       showToast("Sem permissão para criar cartões", "error");
       return;
     }
+    switchCentrosMainTab("cartoes");
     openCardFormModal();
   });
   document.getElementById("btnCardScopeGlobal")?.addEventListener("click", () => setCardScope("global"));
@@ -1595,6 +1716,18 @@ function bindCardEvents() {
   document.getElementById("btnCloseCardMovementModal")?.addEventListener("click", closeCardMovementModal);
   document.getElementById("btnCancelCardMovement")?.addEventListener("click", closeCardMovementModal);
   document.getElementById("btnCloseCardDetailModal")?.addEventListener("click", closeCardDetailModal);
+
+  [
+    "cardLabel",
+    "cardBank",
+    "cardType",
+    "cardHolderName",
+    "cardNumberMasked",
+    "cardExpiresAt",
+  ].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", updateCardFormPreview);
+    document.getElementById(id)?.addEventListener("change", updateCardFormPreview);
+  });
 
   ["filterCardScope", "filterCardProject"].forEach((id) => {
     document.getElementById(id)?.addEventListener("change", () => {
@@ -1684,14 +1817,17 @@ async function loadInitialData() {
   });
   bindEvents();
   bindSectionToggles();
+  bindCentrosMainTabs();
   applySectionVisibility();
+  applyCentrosMainTabVisibility();
 
-  // Por defeito: cartões expandidos; restantes colapsados (se visíveis)
+  // Catálogo: painéis expandidos na aba correspondente; cartões sempre expandidos na aba Cartões
   if (can("fundoManeio", "view")) {
-    setSectionCollapsed("panelGcc", true);
-    setSectionCollapsed("panelExtras", true);
-  } else {
-    setSectionCollapsed("panelCards", true);
+    setSectionCollapsed("panelCards", false);
+  }
+  if (can("pedidosExtras", "view")) {
+    setSectionCollapsed("panelGcc", false);
+    setSectionCollapsed("panelExtras", false);
   }
 
   if (!can("pedidosExtras", "create")) {

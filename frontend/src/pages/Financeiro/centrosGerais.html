@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&family=Share+Tech+Mono&display=swap"
         rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         rel="stylesheet" />
@@ -196,6 +196,298 @@
             border-top: 1px solid #f1f5f9;
             padding: 1rem 1.25rem 1.25rem;
         }
+
+        .centros-main-tab {
+            padding: 0.625rem 1.25rem;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 0.75rem 0.75rem 0 0;
+            color: #64748b;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            cursor: pointer;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .centros-main-tab:hover {
+            color: #0f172a;
+        }
+
+        .centros-main-tab.active {
+            color: #059669;
+            border-bottom-color: #059669;
+        }
+
+        .debit-card-wrap {
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            text-align: left;
+            border-radius: 16px;
+            transition: transform 0.15s;
+        }
+
+        .debit-card-wrap:hover {
+            transform: translateY(-2px);
+        }
+
+        .debit-card-wrap--active .debit-card {
+            box-shadow: 0 0 0 3px #059669, 0 12px 28px rgba(15, 23, 42, 0.25);
+        }
+
+        .debit-card {
+            position: relative;
+            aspect-ratio: 1.586 / 1;
+            border-radius: 14px;
+            padding: 1rem 1.15rem 0.85rem;
+            color: #fff;
+            overflow: hidden;
+            font-family: Inter, system-ui, sans-serif;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+        }
+
+        .debit-card--compact {
+            max-width: 340px;
+        }
+
+        .debit-card__decor {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.35;
+        }
+
+        .debit-card--bai {
+            background: linear-gradient(115deg, #00a0e3 0%, #1a3b8b 100%);
+        }
+
+        .debit-card--bai .debit-card__decor {
+            background:
+                radial-gradient(circle at 55% 45%, rgba(255, 255, 255, 0.12) 0%, transparent 45%),
+                repeating-radial-gradient(circle at 88% 92%, rgba(255, 255, 255, 0.15) 0 2px, transparent 2px 8px);
+        }
+
+        .debit-card--bfa {
+            background: linear-gradient(135deg, #ff9100 0%, #e86a00 100%);
+        }
+
+        .debit-card--bfa .debit-card__decor {
+            background:
+                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(255, 255, 255, 0.2) 0%, transparent 55%),
+                radial-gradient(ellipse 50% 40% at 70% 30%, rgba(255, 220, 160, 0.25) 0%, transparent 50%);
+        }
+
+        .debit-card--caixa {
+            background: linear-gradient(160deg, #0088d4 0%, #004a8d 100%);
+        }
+
+        .debit-card--caixa .debit-card__decor {
+            background:
+                radial-gradient(ellipse 70% 55% at 50% 42%, rgba(0, 40, 90, 0.45) 0%, transparent 60%),
+                linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
+        }
+
+        .debit-card--generic {
+            background: linear-gradient(135deg, #334155 0%, #0f172a 100%);
+        }
+
+        .debit-card__top {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+
+        .debit-card__brand {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-width: 0;
+        }
+
+        .debit-card__logo-mark {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: #fff;
+            box-shadow: inset 0 0 0 2px rgba(0, 160, 227, 0.5);
+            flex-shrink: 0;
+        }
+
+        .debit-card__logo-mark--bfa {
+            border-radius: 4px;
+            background: linear-gradient(135deg, #fff 40%, #ffe0b2 100%);
+        }
+
+        .debit-card__logo-mark--caixa {
+            border-radius: 2px;
+            background: #fff;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+            width: 26px;
+            height: 22px;
+        }
+
+        .debit-card__logo-text {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            line-height: 1;
+        }
+
+        .debit-card__logo-text--serif {
+            font-family: Georgia, "Times New Roman", serif;
+            font-weight: 700;
+        }
+
+        .debit-card__logo-text--caixa {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            line-height: 1.15;
+            max-width: 5.5rem;
+        }
+
+        .debit-card__type-block {
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .debit-card__type-icon {
+            display: block;
+            width: 22px;
+            height: 22px;
+            margin: 0 auto 2px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.85);
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 30%, transparent 70%);
+        }
+
+        .debit-card__type-label {
+            font-size: 0.62rem;
+            font-weight: 600;
+            text-transform: lowercase;
+            letter-spacing: 0.06em;
+            opacity: 0.95;
+        }
+
+        .debit-card__chip {
+            position: relative;
+            z-index: 1;
+            width: 38px;
+            height: 28px;
+            margin-top: 0.65rem;
+            border-radius: 5px;
+            background: linear-gradient(145deg, #e8c547 0%, #b8922a 50%, #d4af37 100%);
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+        }
+
+        .debit-card__chip::before {
+            content: "";
+            position: absolute;
+            inset: 5px 4px;
+            border-radius: 2px;
+            border-top: 2px solid rgba(0, 0, 0, 0.12);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+        }
+
+        .debit-card__number {
+            position: relative;
+            z-index: 1;
+            margin: 0.55rem 0 0;
+            font-family: "Share Tech Mono", ui-monospace, monospace;
+            font-size: clamp(0.95rem, 2.8vw, 1.15rem);
+            letter-spacing: 0.12em;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .debit-card__expiry {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-end;
+            gap: 0.35rem;
+            margin-top: 0.35rem;
+            font-size: 0.55rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            opacity: 0.92;
+        }
+
+        .debit-card__exp-label--stack {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            font-size: 0.48rem;
+        }
+
+        .debit-card__exp-value {
+            font-family: "Share Tech Mono", ui-monospace, monospace;
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+        }
+
+        .debit-card__holder {
+            position: relative;
+            z-index: 1;
+            margin: 0.45rem 0 0;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .debit-card__disclaimer {
+            position: relative;
+            z-index: 1;
+            margin: 0.15rem 0 0;
+            font-size: 0.42rem;
+            letter-spacing: 0.12em;
+            opacity: 0.75;
+        }
+
+        .debit-card__app-meta {
+            position: absolute;
+            right: 0.85rem;
+            bottom: 0.65rem;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.25rem;
+            max-width: 55%;
+        }
+
+        .debit-card__balance-pill {
+            padding: 0.2rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+
+        .debit-card__scope-pill {
+            padding: 0.15rem 0.45rem;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.22);
+            font-size: 0.55rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        #cardsGrid {
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        }
     </style>
 </head>
 
@@ -302,6 +594,17 @@
             </div>
         </div>
 
+        <div id="centrosMainTabs" class="flex flex-wrap gap-1 mb-6 border-b border-slate-200" role="tablist"
+            aria-label="Secções Centros Gerais">
+            <button type="button" id="centrosTabBtnCartoes" data-centros-tab="cartoes"
+                class="centros-main-tab active" role="tab" aria-selected="true" aria-controls="centrosPanelCartoes">Cartões</button>
+            <button type="button" id="centrosTabBtnCatalogo" data-centros-tab="catalogo"
+                class="centros-main-tab" role="tab" aria-selected="false" aria-controls="centrosPanelCatalogo">Tipos de custo</button>
+            <button type="button" id="centrosTabBtnExtras" data-centros-tab="extras"
+                class="centros-main-tab" role="tab" aria-selected="false" aria-controls="centrosPanelExtras">Pedidos Extra</button>
+        </div>
+
+        <div id="centrosPanelCartoes" role="tabpanel" aria-labelledby="centrosTabBtnCartoes">
         <!-- ═══════════ SECÇÃO: CARTÕES ═══════════ -->
         <section id="sectionCards" class="mb-6">
             <div class="section-panel" id="panelCards">
@@ -339,15 +642,17 @@
                             <option value="">Todas as obras</option>
                         </select>
                     </div>
-                    <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div class="card-item animate-pulse h-28"></div>
-                        <div class="card-item animate-pulse h-28"></div>
-                        <div class="card-item animate-pulse h-28"></div>
+                    <div id="cardsGrid" class="grid gap-5">
+                        <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
+                        <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
+                        <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
                     </div>
                 </div>
             </div>
         </section>
+        </div>
 
+        <div id="centrosPanelCatalogo" class="hidden" role="tabpanel" aria-labelledby="centrosTabBtnCatalogo">
         <section id="sectionGcc" class="mb-6">
             <div class="section-panel" id="panelGcc">
                 <div class="flex items-center gap-2 pr-3">
@@ -364,11 +669,6 @@
                             </span>
                         </span>
                         <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
-                    </button>
-                    <button id="btnNewExtra" type="button"
-                        class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shrink-0">
-                        <span class="material-symbols-outlined text-base">add_circle</span>
-                        Pedido Extra
                     </button>
                     <button id="btnNewCostCategory" type="button"
                         class="hidden h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shrink-0">
@@ -403,23 +703,32 @@
                 </div>
             </div>
         </section>
+        </div>
 
+        <div id="centrosPanelExtras" class="hidden" role="tabpanel" aria-labelledby="centrosTabBtnExtras">
         <section id="sectionExtras" class="mb-6">
             <div class="section-panel" id="panelExtras">
-                <button type="button" class="section-panel__toggle" data-section-toggle="panelExtras"
-                    aria-expanded="true">
-                    <span class="flex items-center gap-3 min-w-0">
-                        <span
-                            class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                            <span class="material-symbols-outlined text-xl">receipt_long</span>
+                <div class="flex items-center gap-2 pr-3">
+                    <button type="button" class="section-panel__toggle flex-1" data-section-toggle="panelExtras"
+                        aria-expanded="true">
+                        <span class="flex items-center gap-3 min-w-0">
+                            <span
+                                class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                <span class="material-symbols-outlined text-xl">receipt_long</span>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-sm font-bold text-slate-900">Pedidos Extra</span>
+                                <span id="extrasSectionMeta" class="block text-[11px] text-slate-400 truncate">A carregar...</span>
+                            </span>
                         </span>
-                        <span class="min-w-0">
-                            <span class="block text-sm font-bold text-slate-900">Pedidos Extra</span>
-                            <span id="extrasSectionMeta" class="block text-[11px] text-slate-400 truncate">A carregar...</span>
-                        </span>
-                    </span>
-                    <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
-                </button>
+                        <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
+                    </button>
+                    <button id="btnNewExtra" type="button"
+                        class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shrink-0">
+                        <span class="material-symbols-outlined text-base">add_circle</span>
+                        Pedido Extra
+                    </button>
+                </div>
                 <div class="section-panel__body">
                     <div class="flex flex-wrap items-center gap-2 mb-4">
                         <select id="filterType"
@@ -471,6 +780,7 @@
                 </div>
             </div>
         </section>
+        </div>
     </main>
 
     <footer class="border-t border-slate-100 px-4 mt-10 md:px-8 py-10 bg-white">
@@ -608,6 +918,7 @@
                 </div>
             </div>
             <div class="modal-box__scroll">
+                <div id="cardDetailPreview" class="mb-5 flex justify-center"></div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left">
                         <thead>
@@ -677,19 +988,32 @@
                         </select>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label for="cardBank"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Banco</label>
-                        <input id="cardBank" type="text" placeholder="Ex: BAI"
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                    </div>
-                    <div>
-                        <label for="cardLastDigits"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Últimos 4 dígitos</label>
-                        <input id="cardLastDigits" type="text" maxlength="4" placeholder="0000"
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                    </div>
+                <div>
+                    <label for="cardBank"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Banco (visual do cartão)</label>
+                    <select id="cardBank"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                        <option value="BAI">BAI — Banco Angolano de Investimentos</option>
+                        <option value="BFA">BFA — Banco de Fomento Angola</option>
+                        <option value="CAIXA">Caixa Angola</option>
+                        <option value="">Outro / genérico</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="cardNumberMasked"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">N.º do cartão (opcional)</label>
+                    <input id="cardNumberMasked" type="text" maxlength="19" placeholder="0000 0000 0000 0000"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none font-mono">
+                </div>
+                <div>
+                    <label for="cardExpiresAt"
+                        class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Validade</label>
+                    <input id="cardExpiresAt" type="month"
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                </div>
+                <div id="cardFormPreviewWrap" class="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Pré-visualização</p>
+                    <div id="cardFormPreview" class="max-w-[340px] mx-auto pointer-events-none"></div>
                 </div>
                 <div>
                     <label for="cardHolderName"
