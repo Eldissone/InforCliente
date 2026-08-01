@@ -54,6 +54,7 @@ const EXTRA_STATUS_META = {
 };
 
 const FIN_GENERAL_CENTERS = "__geral__";
+const FIN_MAIN_TAB_KEY = "InfoCliente.finMainTab";
 const FIN_DASHBOARD_VISIBLE_KEY = "InfoCliente.finDashboardVisible";
 
 function getFinStatusFilter() {
@@ -796,7 +797,7 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
     showToast: (msg, type) => toast(msg, { type }),
   });
   bindEvents();
-  initDashboardVisibility();
+  initFinMainTab();
   syncGanttViewButtons();
   syncPaymentViewMode();
   updateDashboardDate();
@@ -820,6 +821,8 @@ async function handleExtraDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const extraId = params.get("extraRequestId");
   if (!extraId) return;
+
+  setFinMainTab("pagamentos", { persist: false });
 
   const projectId = params.get("projectId");
   if (projectId) {
@@ -940,6 +943,8 @@ async function handlePaymentDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const paymentId = params.get("paymentId");
   if (!paymentId) return;
+
+  setFinMainTab("pagamentos", { persist: false });
 
   const projectId = params.get("projectId");
   const focus = params.get("focus") || undefined;
@@ -1164,10 +1169,11 @@ window.rejectReinforcementFinance = async function (id) {
 };
 
 function bindEvents() {
-  document.getElementById("btnToggleDashboard")?.addEventListener("click", () => {
-    const panel = document.getElementById("finDashboardPanel");
-    const visible = panel?.classList.contains("is-hidden");
-    setDashboardVisible(Boolean(visible));
+  document.querySelectorAll("[data-fin-main-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.finMainTab;
+      if (tab) setFinMainTab(tab);
+    });
   });
 
   ["finProjFilter", "finStatusFilter", "finSearch", "finIncludePaid", "finDateField", "finDateFrom", "finDateTo"].forEach((id) => {
@@ -1261,21 +1267,32 @@ function syncPaymentViewMode() {
   if (listEl) listEl.classList.toggle("hidden", paymentViewMode !== "list");
 }
 
-function initDashboardVisibility() {
-  const stored = localStorage.getItem(FIN_DASHBOARD_VISIBLE_KEY);
-  const visible = stored === null ? true : stored === "true";
-  setDashboardVisible(visible, { persist: false });
+function initFinMainTab() {
+  let tab = localStorage.getItem(FIN_MAIN_TAB_KEY);
+  if (tab !== "dashboard" && tab !== "pagamentos") {
+    const legacy = localStorage.getItem(FIN_DASHBOARD_VISIBLE_KEY);
+    tab = legacy === "false" ? "pagamentos" : "dashboard";
+  }
+  setFinMainTab(tab, { persist: false });
 }
 
-function setDashboardVisible(visible, { persist = true } = {}) {
-  const panel = document.getElementById("finDashboardPanel");
-  const btn = document.getElementById("btnToggleDashboard");
-  if (!panel || !btn) return;
-  panel.classList.toggle("is-hidden", !visible);
-  btn.setAttribute("aria-expanded", visible ? "true" : "false");
-  btn.title = visible ? "Ocultar dashboard financeiro" : "Mostrar dashboard financeiro";
+function setFinMainTab(tab, { persist = true } = {}) {
+  const normalized = tab === "pagamentos" ? "pagamentos" : "dashboard";
+  document.querySelectorAll("[data-fin-main-tab]").forEach((btn) => {
+    const active = btn.dataset.finMainTab === normalized;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.getElementById("finDashboardPanel")?.classList.toggle("active", normalized === "dashboard");
+  document.getElementById("fin-panel-pagamentos")?.classList.toggle("active", normalized === "pagamentos");
   if (persist) {
-    localStorage.setItem(FIN_DASHBOARD_VISIBLE_KEY, String(visible));
+    localStorage.setItem(FIN_MAIN_TAB_KEY, normalized);
+  }
+  if (normalized === "pagamentos" && timelineCache.days?.length) {
+    requestAnimationFrame(() => {
+      renderCalendar();
+      syncPaymentViewMode();
+    });
   }
 }
 
