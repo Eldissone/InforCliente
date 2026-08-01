@@ -1,6 +1,11 @@
 import { getSessionUser, logout as clearSession } from "../services/auth.js";
 import { resolveHomePathByRole } from "./postLoginRedirect.js";
 import { toast } from "./ui.js";
+import {
+  initAppNavDropdowns,
+  syncNavDropdownGroups,
+  transformDesktopNavToDropdowns,
+} from "./appNav.js";
 
 export function wireLogout() {
   document.addEventListener("click", (e) => {
@@ -129,6 +134,9 @@ export function wireUsersNav() {
 
   applyRoleVisibility(role);
 
+  transformDesktopNavToDropdowns();
+  initAppNavDropdowns();
+
   import("./permissions.js")
     .then(({ initPermissionLayer }) => initPermissionLayer())
     .catch(() => { });
@@ -161,6 +169,7 @@ async function wireNavLinks(role) {
     document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.remove("hidden");
     });
+    syncNavDropdownGroups();
     return;
   }
 
@@ -169,6 +178,7 @@ async function wireNavLinks(role) {
     document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.add("hidden");
     });
+    syncNavDropdownGroups();
     return;
   }
 
@@ -197,11 +207,13 @@ async function wireNavLinks(role) {
       });
     });
 
+    syncNavDropdownGroups();
   } catch {
     // Em caso de erro, ocultar os links por segurança
     document.querySelectorAll(allNavSelectors).forEach(el => {
       el.classList.add("hidden");
     });
+    syncNavDropdownGroups();
   }
 }
 

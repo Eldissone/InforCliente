@@ -892,3 +892,25 @@
   outline: 2px solid rgba(5, 150, 105, 0.25);
   border-color: #10b981;
 }
+
+/* Header nav dropdowns (desktop) */
+.nav-dropdown-menu {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .nav-dropdown:hover .nav-dropdown-menu,
+  .nav-dropdown:focus-within .nav-dropdown-menu,
+  .nav-dropdown.nav-dropdown-open .nav-dropdown-menu {
+    display: block;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .nav-dropdown-open .nav-dropdown-trigger .material-symbols-outlined {
+    transform: rotate(180deg);
+  }
+
+  .nav-dropdown-trigger .material-symbols-outlined {
+    transition: transform 0.2s ease;
+  }
+}
