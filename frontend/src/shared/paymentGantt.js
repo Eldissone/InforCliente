@@ -1,5 +1,6 @@
 import { formatCurrency } from "./format.js";
 import { resolveTimelineStatus, TIMELINE_STATUS } from "./paymentTimeline.js";
+import { paymentPayableAmount } from "./supplierFiscal.js";
 
 const GROUP_PALETTE = [
   { pill: "bg-violet-100 text-violet-700", row: "bg-violet-50/60", sticky: "bg-violet-50" },
@@ -306,7 +307,7 @@ export function renderPaymentGantt(
       const barClass = BAR_BY_STATUS[st] || BAR_BY_STATUS.PENDENTE;
       const cur = p.costCenter?.currency || "AOA";
       const payload = escapeHtml(JSON.stringify(p)).replace(/'/g, "&#39;");
-      const amount = formatCurrency(p.budgetedAmount, cur);
+      const amount = formatCurrency(paymentPayableAmount(p), cur);
       const supplier = p.supplier || "Sem fornecedor";
       const barHtml = renderPaymentMarker(p, viewMode, barClass, payload, amount, onPaymentClick);
 
