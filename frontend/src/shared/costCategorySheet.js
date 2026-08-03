@@ -35,12 +35,6 @@ function isFam(c) {
 function isGrpCat(c) {
   return classifyCategorySheetLevel(c) === "GRUPO";
 }
-function isExcludedTipo1Fam(c) {
-  if (!isFam(c)) return false;
-  if (c.code?.includes("_PRODUCAO")) return true;
-  if (String(c.name).toUpperCase().includes("PRODUÇÃO")) return true;
-  return false;
-}
 function isGrp(c) {
   return isGrpCat(c);
 }
@@ -168,7 +162,7 @@ export function buildCostCatalogSheetRows(items = []) {
   }
 
   active
-    .filter((c) => c.domain === "GERAL" && isFam(c) && !c.parentId && !isExcludedTipo1Fam(c))
+    .filter((c) => c.domain === "GERAL" && isFam(c) && !c.parentId)
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .forEach((fam) => walkFam(fam, { domain: "GERAL" }));
 

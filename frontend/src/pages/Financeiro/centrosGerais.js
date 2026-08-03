@@ -882,8 +882,7 @@ function categoriesBySheetLevel(domain, level) {
     (c) =>
       c.domain === domain &&
       c.active !== false &&
-      classifyCategorySheetLevel(c) === level &&
-      !(level === "TIPO1" && (c.code?.includes("_PRODUCAO") || String(c.name).toUpperCase().includes("PRODUÇÃO")))
+      classifyCategorySheetLevel(c) === level
   );
 }
 
