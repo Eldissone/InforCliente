@@ -1,9 +1,10 @@
 import { apiRequest } from "/services/api.js";
 import {
   buildCostCatalogSheetRows,
-  sheetFilterOptions,
   applySheetFilters,
   groupCatalogSheetDisplayRows,
+  classifyCategorySheetLevel,
+  uniqueSorted,
 } from "/shared/costCategorySheet.js";
 
 const DOMAIN_BY_EXTRA_TYPE = {
@@ -15,6 +16,57 @@ let categoriesCache = null;
 
 export function extraTypeToCostDomain(extraType) {
   return DOMAIN_BY_EXTRA_TYPE[extraType] || "GERAL";
+}
+
+/**
+ * Tipos custo 1 disponíveis no domínio.
+ * Em GERAL vem dos FAMs cadastrados (estrutura), não só das linhas com tipo 2.
+ */
+export function listTipo1NamesForDomain(domain, items = categoriesCache || [], sheetRows = null) {
+  const rows =
+    sheetRows ||
+    buildCostCatalogSheetRows(items).filter((r) => !domain || r.domain === domain);
+  const fromRows = rows.filter((r) => !domain || r.domain === domain).map((r) => r.tipo1);
+
+  if (domain === "GERAL") {
+    const fromFams = items
+      .filter(
+        (c) =>
+          c.domain === "GERAL" &&
+          c.active !== false &&
+          !c.parentId &&
+          classifyCategorySheetLevel(c) === "TIPO1"
+      )
+      .map((c) => c.name);
+    return uniqueSorted([...fromRows, ...fromFams]);
+  }
+
+  return uniqueSorted(fromRows);
+}
+
+/** Grupos cadastrados sob um tipo custo 1 (estrutura), mesmo sem tipo 2 ainda. */
+export function listGrupoNamesForTipo1(domain, tipo1Name, items = categoriesCache || []) {
+  if (domain !== "GERAL" || !tipo1Name) return [];
+  const fam = items.find(
+    (c) =>
+      c.domain === "GERAL" &&
+      c.active !== false &&
+      !c.parentId &&
+      classifyCategorySheetLevel(c) === "TIPO1" &&
+      c.name === tipo1Name
+  );
+  if (!fam) return [];
+  return uniqueSorted(
+    items
+      .filter(
+        (c) =>
+          c.domain === "GERAL" &&
+          c.active !== false &&
+          sameCostId(c.parentId, fam.id) &&
+          classifyCategorySheetLevel(c) === "GRUPO"
+      )
+      .map((c) => c.name)
+  );
 }
 
 export async function loadAllCostCategories(domain = "", { includeInactive = false } = {}) {
@@ -153,7 +205,8 @@ function escapeAttr(value) {
 }
 
 /**
- * Fluxo pedido extra (GERAL / OBRA): Tipo 1 → Grupo → Tipo 2 → Subcusto (tipo 3).
+ * Fluxo pedido extra (GERAL / OBRA): Tipo 1 → Tipo 2 → Subcusto (tipo 3).
+ * O grupo do catálogo fica implícito (não é passo de selecção).
  * Usa a mesma folha do catálogo CENTRO COMPRAS.
  */
 export function mountRubricFirstCascade({
@@ -247,15 +300,6 @@ export function mountRubricFirstCascade({
     onChange(categoryId ? items.find((c) => sameCostId(c.id, categoryId)) : null, meta);
   }
 
-  function currentFilters() {
-    return {
-      domain,
-      tipo1: state.tipo1,
-      grupo: state.grupo,
-      tipo2: state.tipo2,
-    };
-  }
-
   function removeField(key) {
     refs[key]?.wrap?.remove();
     refs[key] = null;
@@ -266,7 +310,6 @@ export function mountRubricFirstCascade({
       applySheetFilters(allRows, {
         domain,
         tipo1: state.tipo1,
-        grupo: state.grupo,
         tipo2: state.tipo2,
       })
     );
@@ -278,6 +321,8 @@ export function mountRubricFirstCascade({
       setPick("");
       return null;
     }
+    if (group.grupo) state.grupo = group.grupo;
+    else state.grupo = "";
     const realTipo3 = (group.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
     return { group, realTipo3 };
   }
@@ -327,27 +372,62 @@ export function mountRubricFirstCascade({
   function renderTipo2(presetTipo2 = "", presetPickId = "") {
     removeField("tipo3");
     removeField("tipo2");
+    removeField("grupo");
+    document.getElementById("extraCascadeEmptyTipo2")?.remove();
+    state.grupo = "";
     state.tipo2 = "";
     state.tipo2Id = "";
     state.tipo3PickId = "";
 
-    const opts = sheetFilterOptions(allRows, currentFilters());
-    const tipo2Names = opts.tipo2 || [];
+    const filtered = applySheetFilters(allRows, { domain, tipo1: state.tipo1 });
+    const groups = groupCatalogSheetDisplayRows(filtered);
+    if (!groups.length) {
+      setPick("");
+      const empty = document.createElement("p");
+      empty.className =
+        "text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2";
+      empty.id = "extraCascadeEmptyTipo2";
+      empty.textContent =
+        "Este tipo custo 1 ainda não tem tipo custo 2 cadastrado. Cadastre na aba «Tipos de custo».";
+      container.appendChild(empty);
+      return;
+    }
+
+    // Mesmo nome de tipo 2 em grupos diferentes → desambiguar no rótulo.
+    const nameCount = groups.reduce((acc, g) => {
+      acc[g.tipo2] = (acc[g.tipo2] || 0) + 1;
+      return acc;
+    }, {});
+
+    const options = groups.map((g) => {
+      const base = formatCategoryDisplayName(g.tipo2);
+      const label =
+        nameCount[g.tipo2] > 1 && g.grupo
+          ? `${base} (${formatCategoryDisplayName(g.grupo)})`
+          : base;
+      return { value: costIdKey(g.tipo2Id), label, tipo2: g.tipo2, grupo: g.grupo || "" };
+    });
+
+    const presetValue = presetPickId
+      ? ""
+      : presetTipo2
+        ? costIdKey(
+            groups.find((g) => g.tipo2 === presetTipo2 && (!state.grupo || g.grupo === state.grupo))
+              ?.tipo2Id || groups.find((g) => g.tipo2 === presetTipo2)?.tipo2Id
+          )
+        : "";
+
     const { wrap, sel } = makeCascadeSelect({
       label: "Tipo custo 2",
       placeholder: "Seleccionar tipo custo 2...",
       disabled,
-      value: presetTipo2,
-      options: tipo2Names.map((name) => ({ value: name, label: name })),
+      value: presetValue,
+      options: options.map((o) => ({ value: o.value, label: o.label })),
       onChange: (val) => {
-        state.tipo2 = val;
-        const row = applySheetFilters(allRows, {
-          domain,
-          tipo1: state.tipo1,
-          grupo: state.grupo,
-          tipo2: val,
-        })[0];
-        state.tipo2Id = row?.tipo2Id || "";
+        const hit = options.find((o) => o.value === val);
+        state.tipo2 = hit?.tipo2 || "";
+        state.tipo2Id = val || "";
+        state.grupo = hit?.grupo || "";
         if (!val) {
           removeField("tipo3");
           setPick("");
@@ -359,78 +439,23 @@ export function mountRubricFirstCascade({
     refs.tipo2 = { wrap, sel };
     container.appendChild(wrap);
 
-    if (presetTipo2 && tipo2Names.includes(presetTipo2)) {
-      sel.value = presetTipo2;
-      state.tipo2 = presetTipo2;
-      const row = applySheetFilters(allRows, {
-        domain,
-        tipo1: state.tipo1,
-        grupo: state.grupo,
-        tipo2: presetTipo2,
-      })[0];
-      state.tipo2Id = row?.tipo2Id || "";
+    let selectedId = "";
+    if (presetPickId) {
+      const byPick = filtered.find((r) => sameCostId(r.pickCategoryId, presetPickId));
+      if (byPick) selectedId = costIdKey(byPick.tipo2Id);
+    }
+    if (!selectedId && presetTipo2) {
+      selectedId = costIdKey(
+        groups.find((g) => g.tipo2 === presetTipo2)?.tipo2Id
+      );
+    }
+    if (selectedId && options.some((o) => o.value === selectedId)) {
+      sel.value = selectedId;
+      const hit = options.find((o) => o.value === selectedId);
+      state.tipo2 = hit?.tipo2 || "";
+      state.tipo2Id = selectedId;
+      state.grupo = hit?.grupo || "";
       renderTipo3(presetPickId);
-    } else {
-      setPick("");
-    }
-  }
-
-  function renderGrupo(presetGrupo = "", presetTipo2 = "", presetPickId = "") {
-    removeField("tipo3");
-    removeField("tipo2");
-    removeField("grupo");
-    state.grupo = "";
-    state.tipo2 = "";
-    state.tipo2Id = "";
-    state.tipo3PickId = "";
-
-    const opts = sheetFilterOptions(allRows, { domain, tipo1: state.tipo1 });
-    const grupos = (opts.grupo || []).filter(Boolean);
-    const hasEmptyGrupo = applySheetFilters(allRows, { domain, tipo1: state.tipo1 }).some(
-      (r) => !r.grupo
-    );
-
-    if (!grupos.length) {
-      state.grupo = "";
-      renderTipo2(presetTipo2, presetPickId);
-      return;
-    }
-
-    const options = [];
-    if (hasEmptyGrupo) options.push({ value: "__EMPTY__", label: "Sem grupo" });
-    grupos.forEach((g) => options.push({ value: g, label: g }));
-
-    const presetGrupoValue =
-      presetGrupo && presetGrupo !== "__EMPTY__"
-        ? presetGrupo
-        : presetTipo2 && !presetGrupo && hasEmptyGrupo
-          ? "__EMPTY__"
-          : presetGrupo || "";
-
-    const { wrap, sel } = makeCascadeSelect({
-      label: "Grupo",
-      placeholder: "Seleccionar grupo...",
-      disabled,
-      value: presetGrupoValue,
-      options,
-      onChange: (val) => {
-        state.grupo = val; // pode ser nome, "__EMPTY__" ou ""
-        if (!val) {
-          removeField("tipo2");
-          removeField("tipo3");
-          setPick("");
-          return;
-        }
-        renderTipo2();
-      },
-    });
-    refs.grupo = { wrap, sel };
-    container.appendChild(wrap);
-
-    if (presetGrupoValue && (presetGrupoValue === "__EMPTY__" || grupos.includes(presetGrupoValue))) {
-      sel.value = presetGrupoValue;
-      state.grupo = presetGrupoValue;
-      renderTipo2(presetTipo2, presetPickId);
     } else {
       setPick("");
     }
@@ -439,13 +464,12 @@ export function mountRubricFirstCascade({
   function renderTipo1(preset = null) {
     container.innerHTML = "";
     refs.tipo1 = refs.grupo = refs.tipo2 = refs.tipo3 = null;
+    document.getElementById("extraCascadeEmptyTipo2")?.remove();
 
-    const tipo1Opts = sheetFilterOptions(allRows, { domain }).tipo1 || [];
-    const hideTipo1 = tipo1Opts.length <= 1;
-
-    if (hideTipo1) {
-      state.tipo1 = tipo1Opts[0] || "";
-      renderGrupo(preset?.grupo || "", preset?.tipo2 || "", preset?.pickId || "");
+    const tipo1Opts = listTipo1NamesForDomain(domain, items, allRows);
+    if (!tipo1Opts.length) {
+      container.innerHTML = `<p class="text-xs text-slate-400">Sem tipo custo 1 para este domínio.</p>`;
+      setPick("");
       return;
     }
 
@@ -454,17 +478,21 @@ export function mountRubricFirstCascade({
       placeholder: "Seleccionar tipo custo 1...",
       disabled,
       value: preset?.tipo1 || "",
-      options: tipo1Opts.map((name) => ({ value: name, label: name })),
+      options: tipo1Opts.map((name) => ({
+        value: name,
+        label: formatCategoryDisplayName(name),
+      })),
       onChange: (val) => {
         state.tipo1 = val;
         if (!val) {
           removeField("grupo");
           removeField("tipo2");
           removeField("tipo3");
+          document.getElementById("extraCascadeEmptyTipo2")?.remove();
           setPick("");
           return;
         }
-        renderGrupo();
+        renderTipo2();
       },
     });
     refs.tipo1 = { wrap, sel };
@@ -473,7 +501,8 @@ export function mountRubricFirstCascade({
     if (preset?.tipo1 && tipo1Opts.includes(preset.tipo1)) {
       sel.value = preset.tipo1;
       state.tipo1 = preset.tipo1;
-      renderGrupo(preset.grupo || "", preset.tipo2 || "", preset.pickId || "");
+      if (preset.grupo) state.grupo = preset.grupo;
+      renderTipo2(preset.tipo2 || "", preset.pickId || "");
     } else {
       setPick("");
     }
