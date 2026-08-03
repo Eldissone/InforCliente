@@ -415,8 +415,8 @@ function openTipo3DrillModal(group) {
   const hasRealTipo3 = variants.some((v) => v.tipo3 && v.tipo3 !== "—");
   if (meta) {
     meta.textContent = hasRealTipo3
-      ? `${variants.length} tipo${variants.length === 1 ? "" : "s"} custo 3`
-      : "Sem tipo custo 3 — este tipo 2 é seleccionável directamente";
+      ? `${variants.length} Subcustos${variants.length === 1 ? "" : "s"}`
+      : "Sem subcustos — este tipo 2 é seleccionável directamente";
   }
   if (addBtn) {
     addBtn.classList.toggle("hidden", !canManageCostCatalog());
@@ -429,7 +429,7 @@ function openTipo3DrillModal(group) {
     ? variants
         .map((v) => {
           const label = v.tipo3 && v.tipo3 !== "—" ? v.tipo3 : group.tipo2;
-          const badge = v.tipo3 && v.tipo3 !== "—" ? "Tipo custo 3" : "Tipo 2 (directo)";
+          const badge = v.tipo3 && v.tipo3 !== "—" ? "Subcusto" : "Tipo 2 (directo)";
           const desc = v.requiresDetailText ? "Descrição obrigatória no pedido" : "Sem descrição extra";
           const selected =
             selectedCostCategoryFilter === v.pickCategoryId
@@ -584,7 +584,12 @@ function applyCatalogManageVisibility() {
   const show = canManageCostCatalog();
   document.getElementById("btnNewCostCategory")?.classList.toggle("hidden", true);
   document.getElementById("costCatalogCrudToolbar")?.classList.toggle("hidden", true);
-  document.getElementById("costCatalogNovaWrap")?.classList.toggle("hidden", !show);
+  document.getElementById("costCatalogNovaWrap")?.classList.toggle("hidden", true);
+  const onTipos = activeCostCatalogTab === "tipos";
+  const onEstrutura = activeCostCatalogTab === "estrutura";
+  document.getElementById("btnCostCatalogNova")?.classList.toggle("hidden", !(show && onTipos));
+  document.getElementById("costCatalogEstruturaNova")?.classList.toggle("hidden", !(show && onEstrutura));
+  document.getElementById("costCatalogSearch")?.closest(".relative")?.classList.toggle("hidden", onEstrutura);
 }
 
 const CARD_TYPE_LABELS = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
@@ -695,7 +700,7 @@ function renderCostCatalogTipos() {
           const countLabel =
             count > 0
               ? `${count} tipo${count === 1 ? "" : "s"} custo 3`
-              : "Sem tipo custo 3";
+              : "Sem subcustos";
           const countBadge =
             count > 0
               ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">${count} subcustos</span>`
@@ -1044,7 +1049,7 @@ function renderEstruturaCatalog() {
           </tr>`;
         })
         .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1 / grupos neste domínio. Use + Tipo 1 ou + Grupo.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1 / grupos. Use os botões «Tipo 1» ou «Grupo» acima.</td></tr>`;
 
   container.innerHTML = `
     <div class="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1075,13 +1080,12 @@ function openCostCategoryModal({
   hideCatalogLineContextUI();
   clearCostCategoryBatchLines();
   document.getElementById("costCategoryEditId").value = "";
-  document.getElementById("costCategorySheetLevel").disabled = false;
+  document.getElementById("costCategorySheetLevel").disabled = true;
   document.getElementById("costCategoryTipo1Id").disabled = false;
   document.getElementById("costCategoryGrupoId").disabled = false;
 
   if (editId) {
     document.getElementById("costCategoryEditId").value = editId;
-    document.getElementById("costCategorySheetLevel").disabled = true;
     const item = costCategories.find((c) => c.id === editId);
     if (item) {
       loadCostCategoryEditFields(item);
@@ -1110,9 +1114,6 @@ function openCostCategoryModal({
     if (tipo1Id) document.getElementById("costCategoryTipo1Id").value = tipo1Id;
     if (grupoId) document.getElementById("costCategoryGrupoId").value = grupoId;
     syncCostCategoryFormForLevel();
-    if (sheetLevel === "SUBCUSTO" && !editId) {
-      document.getElementById("costCategoryNovaMenu")?.classList.add("hidden");
-    }
   }
 
   document.getElementById("modalCostCategory").classList.add("open");
@@ -1219,9 +1220,11 @@ async function submitCostCategory(e) {
   } catch (err) {
     const msg =
       err?.data?.message ||
-      ({ PARENT_TIPO1_REQUIRED: "Seleccione o tipo custo 1.", PARENT_TIPO2_REQUIRED: "Seleccione o tipo custo 2." }[
-        err?.data?.error
-      ] ||
+      ({
+        PARENT_TIPO1_REQUIRED: "Seleccione o tipo custo 1.",
+        PARENT_TIPO2_REQUIRED: "Seleccione o tipo custo 2.",
+        COST_CATEGORY_DUPLICATE_NAME: "Já existe um tipo com este nome neste nível.",
+      }[err?.data?.error] ||
         err?.data?.message ||
         err.message ||
         "Erro ao guardar");
@@ -1289,18 +1292,12 @@ function sheetRowPresetsForCatalogFilters(sheetLevel) {
 function bindCatalogCrudEvents() {
   document.querySelectorAll("[data-add-sheet-level]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.getElementById("costCatalogNovaMenu")?.classList.add("hidden");
       const sheetLevel = btn.dataset.addSheetLevel;
       const domain =
         sheetLevel === "TIPO1" || sheetLevel === "GRUPO" ? "GERAL" : inferDomainFromCatalogContext();
       const presets = { domain, sheetLevel, ...sheetRowPresetsForCatalogFilters(sheetLevel) };
       openCostCategoryModal(presets);
     });
-  });
-
-  document.getElementById("btnCostCatalogNova")?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    document.getElementById("costCatalogNovaMenu")?.classList.toggle("hidden");
   });
 
   document.getElementById("costCatalogSearch")?.addEventListener("input", (e) => {
@@ -1361,9 +1358,6 @@ function bindCatalogCrudEvents() {
   });
 
   document.getElementById("panelGcc")?.addEventListener("click", (e) => {
-    if (!e.target.closest("#costCatalogNovaWrap")) {
-      document.getElementById("costCatalogNovaMenu")?.classList.add("hidden");
-    }
     if (!e.target.closest(".cost-catalog-actions")) {
       document.querySelectorAll(".cost-catalog-actions__menu").forEach((m) => m.classList.add("hidden"));
     }

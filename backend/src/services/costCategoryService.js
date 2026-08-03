@@ -111,10 +111,11 @@ function isFamCode(code) {
   return code && code.includes("_FAM_") && !/_GRP_|_R_|_D_/.test(code);
 }
 function isGrpCode(code) {
-  return code && code.includes("_GRP_");
+  // Só o nó grupo — filhos tipo 2/3 mantêm `_GRP_` no path do código do pai
+  return code && code.includes("_GRP_") && !code.includes("_R_") && !code.includes("_D_");
 }
 function isRubricCode(code) {
-  return code && code.includes("_R_");
+  return code && code.includes("_R_") && !code.includes("_D_");
 }
 function isSubcostCode(code) {
   return code && code.includes("_D_");
@@ -123,10 +124,10 @@ function isSubcostCode(code) {
 function classifySheetLevel(category) {
   if (!category) return "TIPO2";
   const { code, parentId } = category;
-  if (isFamCode(code)) return "TIPO1";
-  if (isGrpCode(code)) return "GRUPO";
   if (isSubcostCode(code)) return "SUBCUSTO";
   if (isRubricCode(code)) return "TIPO2";
+  if (isGrpCode(code)) return "GRUPO";
+  if (isFamCode(code)) return "TIPO1";
   if (!parentId) return "TIPO2";
   return "SUBCUSTO";
 }

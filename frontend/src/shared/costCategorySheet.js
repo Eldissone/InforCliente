@@ -16,10 +16,12 @@ export const SHEET_LEVEL_LABELS = {
 export function classifyCategorySheetLevel(cat) {
   if (!cat?.code) return "TIPO2";
   const code = cat.code;
-  if (code.includes("_FAM_") && !/_GRP_|_R_|_D_/.test(code)) return "TIPO1";
-  if (code.includes("_GRP_")) return "GRUPO";
+  // Ordem do mais específico: subcusto → tipo 2 → grupo → tipo 1
+  // (códigos sob grupo incluem `_GRP_` no path do pai, ex.: ..._GRP_OUTROS_R_EMPRESTIMOS)
   if (code.includes("_D_")) return "SUBCUSTO";
   if (code.includes("_R_")) return "TIPO2";
+  if (code.includes("_GRP_")) return "GRUPO";
+  if (code.includes("_FAM_")) return "TIPO1";
   if (!cat.parentId && cat.domain !== "GERAL") return "TIPO2";
   return "SUBCUSTO";
 }
@@ -43,11 +45,12 @@ function isGrp(c) {
   return isGrpCat(c);
 }
 function isRubricCode(c) {
-  return c.code?.includes("_R_");
+  return Boolean(c.code?.includes("_R_") && !c.code?.includes("_D_"));
 }
 function isSheetRubric(c, byId) {
   if (!c || isFam(c) || isGrp(c) || isDetailCode(c)) return false;
   if (isRubricCode(c)) return true;
+  if (classifyCategorySheetLevel(c) === "TIPO2") return true;
   if (!c.parentId) return c.domain !== "GERAL";
   const parent = byId?.get(c.parentId);
   if (parent && (isFam(parent) || isGrp(parent))) return true;
@@ -315,7 +318,7 @@ export function applySheetFilters(rows, filters) {
 
 /** Chave estável para agrupar linhas da folha pelo mesmo tipo custo 2. */
 export function catalogSheetGroupKey(row) {
-  return `${row.domain}|${row.tipo1}|${row.grupo || ""}|${row.tipo2}`;
+  return `${row.domain}|${row.tipo1}|${row.grupo || ""}|${row.tipo2Id || row.tipo2}`;
 }
 
 /**

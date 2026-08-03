@@ -125,6 +125,24 @@ costCategoryRoutes.post(
       return res.status(400).json({ error: "DOMAIN_MISMATCH_WITH_PARENT" });
     }
 
+    const siblings = await prisma.costCategory.findMany({
+      where: {
+        domain,
+        parentId: parentId || null,
+        active: true,
+      },
+      select: { id: true, name: true },
+    });
+    const nameKey = name.toLocaleLowerCase("pt-PT");
+    const dup = siblings.find((s) => s.name.trim().toLocaleLowerCase("pt-PT") === nameKey);
+    if (dup) {
+      return res.status(409).json({
+        error: "COST_CATEGORY_DUPLICATE_NAME",
+        message: `Já existe «${dup.name}» neste nível. Use outro nome ou edite o existente.`,
+        existingId: dup.id,
+      });
+    }
+
     const defaults = defaultFlagsForSheetLevel(sheetLevel);
     const isSelectable = body.isSelectable !== undefined ? body.isSelectable : defaults.isSelectable;
     const requiresDetailText =
