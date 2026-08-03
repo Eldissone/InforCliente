@@ -1127,11 +1127,11 @@ enum CostCategoryDomain {
 
 // Catálogo de tipos de custo / subcustos (CENTRO COMPRAS).
 model CostCategory {
-  id                   String              @id
+  id                   Int                 @id @default(autoincrement())
   code                 String              @unique
   name                 String
   domain               CostCategoryDomain
-  parentId             String?
+  parentId             Int?
   level                Int
   sortOrder            Int                 @default(0)
   isSelectable         Boolean             @default(true)
@@ -1155,7 +1155,7 @@ model ExtraRequest {
   projectId           String?
   costCenterId        String?
   generalCostCenterId String?
-  costCategoryId      String?
+  costCategoryId      Int?
   costDetailDescription String?
   description    String
   amount         Decimal            @db.Decimal(16, 2)

@@ -1,6 +1,5 @@
 const express = require("express");
 const { z } = require("zod");
-const { randomUUID } = require("crypto");
 const { prisma } = require("../db");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
@@ -17,11 +16,21 @@ const {
 } = require("../services/costCategoryService");
 
 const sheetLevelSchema = z.enum(["TIPO1", "GRUPO", "TIPO2", "SUBCUSTO"]);
+const optionalParentIdSchema = z
+  .union([z.coerce.number().int().positive(), z.null(), z.literal(""), z.undefined()])
+  .optional()
+  .transform((v) => (v === "" || v === undefined ? null : v));
 
 const costCategoryRoutes = express.Router();
 costCategoryRoutes.use(authRequired);
 
 const domainSchema = z.enum(["GERAL", "OBRA", "VIATURAS"]);
+
+function parseRouteId(raw) {
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return id;
+}
 
 costCategoryRoutes.get(
   "/domains",
@@ -37,7 +46,7 @@ costCategoryRoutes.get(
   requirePermission("pedidosExtras", "view"),
   asyncHandler(async (req, res) => {
     const domain = req.query.domain ? String(req.query.domain).toUpperCase() : "";
-    const parentId = req.query.parentId !== undefined ? String(req.query.parentId) : undefined;
+    const parentRaw = req.query.parentId !== undefined ? String(req.query.parentId) : undefined;
     const all = req.query.all === "true" || req.query.all === "1";
     const includeInactive = req.query.includeInactive === "true" || req.query.includeInactive === "1";
 
@@ -57,9 +66,13 @@ costCategoryRoutes.get(
       ...(domain ? { domain } : {}),
     };
 
-    if (parentId === "" || parentId === "null") {
+    if (parentRaw === "" || parentRaw === "null") {
       where.parentId = null;
-    } else if (parentId) {
+    } else if (parentRaw) {
+      const parentId = parseRouteId(parentRaw);
+      if (parentId == null) {
+        return res.status(400).json({ error: "INVALID_PARENT_ID" });
+      }
       where.parentId = parentId;
     }
 
@@ -75,7 +88,8 @@ costCategoryRoutes.get(
   "/:id",
   requirePermission("pedidosExtras", "view"),
   asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
+    const id = parseRouteId(req.params.id);
+    if (id == null) return res.status(400).json({ error: "INVALID_ID" });
     const item = await prisma.costCategory.findUnique({ where: { id } });
     if (!item) return res.status(404).json({ error: "COST_CATEGORY_NOT_FOUND" });
     const childCount = await prisma.costCategory.count({ where: { parentId: id, active: true } });
@@ -91,7 +105,7 @@ costCategoryRoutes.post(
     const body = z
       .object({
         domain: domainSchema,
-        parentId: z.string().optional().nullable(),
+        parentId: optionalParentIdSchema,
         name: z.string().min(2).max(120),
         sheetLevel: sheetLevelSchema.optional(),
         isSelectable: z.boolean().optional(),
@@ -175,7 +189,6 @@ costCategoryRoutes.post(
 
     const item = await prisma.costCategory.create({
       data: {
-        id: randomUUID(),
         code,
         name,
         domain,
@@ -195,7 +208,8 @@ costCategoryRoutes.patch(
   "/:id",
   requirePermission("pedidosExtras", "create"),
   asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
+    const id = parseRouteId(req.params.id);
+    if (id == null) return res.status(400).json({ error: "INVALID_ID" });
     const existing = await prisma.costCategory.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "COST_CATEGORY_NOT_FOUND" });
 
@@ -206,7 +220,7 @@ costCategoryRoutes.patch(
         requiresDetailText: z.boolean().optional(),
         sortOrder: z.number().int().optional(),
         active: z.boolean().optional(),
-        parentId: z.string().nullable().optional(),
+        parentId: optionalParentIdSchema,
       })
       .parse(req.body);
 
@@ -259,7 +273,8 @@ costCategoryRoutes.delete(
   "/:id",
   requirePermission("pedidosExtras", "delete"),
   asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
+    const id = parseRouteId(req.params.id);
+    if (id == null) return res.status(400).json({ error: "INVALID_ID" });
     const existing = await prisma.costCategory.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "COST_CATEGORY_NOT_FOUND" });
 

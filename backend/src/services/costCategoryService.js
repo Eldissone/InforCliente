@@ -18,6 +18,10 @@ function loadSeedNodes() {
 async function ensureCostCategories() {
   try {
     const nodes = loadSeedNodes();
+    if (!nodes.length) {
+      console.log("ℹ️ Seed de tipos de custo vazio — catálogo manual");
+      return;
+    }
     const byCode = new Map(nodes.map((n) => [n.code, n]));
 
     for (const node of nodes) {
@@ -26,7 +30,7 @@ async function ensureCostCategories() {
       }
     }
 
-    for (const node of [...nodes].sort((a, b) => a.level - b.level)) {
+    for (const node of [...nodes].sort((a, b) => a.level - b.level || a.sortOrder - b.sortOrder)) {
       let parentId = null;
       if (node.parentCode) {
         const parentRow = await prisma.costCategory.findUnique({ where: { code: node.parentCode } });
@@ -53,17 +57,9 @@ async function ensureCostCategories() {
         continue;
       }
 
-      const existingById = await prisma.costCategory.findUnique({ where: { id: node.id } });
-      if (existingById) {
-        await prisma.costCategory.update({
-          where: { id: node.id },
-          data: { ...payload, code: node.code },
-        });
-        continue;
-      }
-
+      // id autoincrement; seed JSON id é só referência documental
       await prisma.costCategory.create({
-        data: { id: node.id, code: node.code, ...payload },
+        data: { code: node.code, ...payload },
       });
     }
     console.log(`✅ Catálogo de tipos de custo verificado (${nodes.length} nós)`);
@@ -81,8 +77,6 @@ async function ensureCostCategories() {
     console.error("❌ Erro ao garantir tipos de custo:", error.message);
   }
 }
-
-const { randomUUID } = require("crypto");
 
 function slugifyCode(name) {
   return (
@@ -172,9 +166,17 @@ function defaultFlagsForSheetLevel(sheetLevel) {
   }
 }
 
+function normalizeCategoryId(value) {
+  if (value == null || value === "") return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return id;
+}
+
 async function resolveParentForSheetLevel(sheetLevel, body, domain) {
+  const parentId = normalizeCategoryId(body?.parentId);
   if (sheetLevel === "TIPO1") {
-    if (body.parentId) {
+    if (parentId) {
       const err = new Error("TIPO1_CANNOT_HAVE_PARENT");
       err.status = 400;
       throw err;
@@ -187,12 +189,12 @@ async function resolveParentForSheetLevel(sheetLevel, body, domain) {
     return null;
   }
   if (sheetLevel === "GRUPO") {
-    if (!body.parentId) {
+    if (!parentId) {
       const err = new Error("PARENT_TIPO1_REQUIRED");
       err.status = 400;
       throw err;
     }
-    const parent = await prisma.costCategory.findUnique({ where: { id: body.parentId } });
+    const parent = await prisma.costCategory.findUnique({ where: { id: parentId } });
     if (!parent || !isFamCode(parent.code)) {
       const err = new Error("PARENT_MUST_BE_TIPO1");
       err.status = 400;
@@ -202,12 +204,12 @@ async function resolveParentForSheetLevel(sheetLevel, body, domain) {
   }
   if (sheetLevel === "TIPO2") {
     if (domain === "GERAL") {
-      if (!body.parentId) {
+      if (!parentId) {
         const err = new Error("PARENT_REQUIRED_GERAL_TIPO2");
         err.status = 400;
         throw err;
       }
-      const parent = await prisma.costCategory.findUnique({ where: { id: body.parentId } });
+      const parent = await prisma.costCategory.findUnique({ where: { id: parentId } });
       if (!parent || (!isFamCode(parent.code) && !isGrpCode(parent.code))) {
         const err = new Error("PARENT_MUST_BE_TIPO1_OR_GRUPO");
         err.status = 400;
@@ -215,7 +217,7 @@ async function resolveParentForSheetLevel(sheetLevel, body, domain) {
       }
       return parent;
     }
-    if (body.parentId) {
+    if (parentId) {
       const err = new Error("TIPO2_OBRA_VIATURAS_NO_PARENT");
       err.status = 400;
       throw err;
@@ -223,12 +225,12 @@ async function resolveParentForSheetLevel(sheetLevel, body, domain) {
     return null;
   }
   if (sheetLevel === "SUBCUSTO") {
-    if (!body.parentId) {
+    if (!parentId) {
       const err = new Error("PARENT_TIPO2_REQUIRED");
       err.status = 400;
       throw err;
     }
-    const parent = await prisma.costCategory.findUnique({ where: { id: body.parentId } });
+    const parent = await prisma.costCategory.findUnique({ where: { id: parentId } });
     if (!parent) {
       const err = new Error("PARENT_NOT_FOUND");
       err.status = 400;
@@ -246,8 +248,8 @@ async function resolveParentForSheetLevel(sheetLevel, body, domain) {
     }
     return parent;
   }
-  return body.parentId
-    ? await prisma.costCategory.findUnique({ where: { id: body.parentId } })
+  return parentId
+    ? await prisma.costCategory.findUnique({ where: { id: parentId } })
     : null;
 }
 
@@ -278,7 +280,7 @@ async function wouldCreateParentCycle(nodeId, candidateParentId) {
 
 async function resolveParentIdForUpdate(existing, parentIdInput) {
   const sheetLevel = classifySheetLevel(existing);
-  const body = { parentId: parentIdInput ?? null };
+  const body = { parentId: normalizeCategoryId(parentIdInput) };
   const parentRecord = await resolveParentForSheetLevel(sheetLevel, body, existing.domain);
   const parentId = parentRecord ? parentRecord.id : null;
   if (await wouldCreateParentCycle(existing.id, parentId)) {
@@ -309,9 +311,10 @@ async function refreshDescendantLevels(parentId) {
 }
 
 async function validateSelectableCategory(categoryId, expectedDomain) {
-  if (!categoryId) return { ok: false, error: "COST_CATEGORY_REQUIRED" };
+  const id = normalizeCategoryId(categoryId);
+  if (!id) return { ok: false, error: "COST_CATEGORY_REQUIRED" };
   const cat = await prisma.costCategory.findFirst({
-    where: { id: categoryId, active: true },
+    where: { id, active: true },
   });
   if (!cat) return { ok: false, error: "COST_CATEGORY_NOT_FOUND" };
   if (expectedDomain && cat.domain !== expectedDomain) {

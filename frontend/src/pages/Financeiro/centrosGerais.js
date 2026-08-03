@@ -17,6 +17,8 @@ import {
   formatExtraCostLabel,
   formatCategoryDisplayName,
   getCachedCategories,
+  costIdKey,
+  sameCostId,
 } from "/shared/costCategoryCascade.js";
 import {
   buildCostCatalogSheetRows,
@@ -203,11 +205,11 @@ function focusCreatedCatalogItem(categoryId) {
   if (!categoryId) return;
   const sheet = getCatalogSheetRows();
   const hit =
-    sheet.find((r) => r.pickCategoryId === categoryId) ||
-    sheet.find((r) => r.tipo3Id === categoryId) ||
-    sheet.find((r) => r.tipo2Id === categoryId);
+    sheet.find((r) => sameCostId(r.pickCategoryId, categoryId)) ||
+    sheet.find((r) => sameCostId(r.tipo3Id, categoryId)) ||
+    sheet.find((r) => sameCostId(r.tipo2Id, categoryId));
   if (!hit) {
-    const cat = costCategories.find((c) => c.id === categoryId);
+    const cat = costCategories.find((c) => sameCostId(c.id, categoryId));
     const lvl = cat ? classifyCategorySheetLevel(cat) : "";
     if (lvl === "TIPO1" || lvl === "GRUPO") {
       showToast("Estrutura criada. Veja na aba «Tipo 1 / Grupo».", "info");
@@ -217,7 +219,7 @@ function focusCreatedCatalogItem(categoryId) {
     }
     return;
   }
-  if (hit.tipo2Id === categoryId && !hit.tipo3Id) {
+  if (sameCostId(hit.tipo2Id, categoryId) && !hit.tipo3Id) {
     showToast("Tipo custo 2 adicionado. Clique na linha para gerir tipos custo 3.", "info");
   }
   catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
@@ -236,7 +238,7 @@ function focusCreatedCatalogItem(categoryId) {
     );
     rowEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const group = getCatalogGroupByKey(gkey);
-    if (group && (hit.tipo3Id || hit.pickCategoryId !== hit.tipo2Id)) {
+    if (group && (hit.tipo3Id || !sameCostId(hit.pickCategoryId, hit.tipo2Id))) {
       openTipo3DrillModal(group);
     }
   });
@@ -328,7 +330,7 @@ function bindCatalogSheetRowEvents(container, items) {
   container.querySelectorAll("[data-add-child-category]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const parent = items.find((c) => c.id === btn.dataset.addChildCategory);
+      const parent = items.find((c) => sameCostId(c.id, btn.dataset.addChildCategory));
       openCostCategoryModal({
         domain: parent?.domain || "GERAL",
         sheetLevel: "SUBCUSTO",
@@ -432,7 +434,7 @@ function openTipo3DrillModal(group) {
           const badge = v.tipo3 && v.tipo3 !== "—" ? "Subcusto" : "Tipo 2 (directo)";
           const desc = v.requiresDetailText ? "Descrição obrigatória no pedido" : "Sem descrição extra";
           const selected =
-            selectedCostCategoryFilter === v.pickCategoryId
+            sameCostId(selectedCostCategoryFilter, v.pickCategoryId)
               ? " cost-catalog-drill-item--selected"
               : "";
           const manage =
@@ -485,7 +487,7 @@ function bindTipo3DrillListEvents(list, group) {
     btn.addEventListener("click", (e) => {
       if (e.target.closest("[data-edit-category], [data-delete-category], .cost-catalog-drill-extra")) return;
       const id = btn.dataset.pickCategory;
-      selectedCostCategoryFilter = selectedCostCategoryFilter === id ? "" : id;
+      selectedCostCategoryFilter = sameCostId(selectedCostCategoryFilter, id) ? "" : id;
       const filterEl = document.getElementById("filterCostCategory");
       if (filterEl) filterEl.value = selectedCostCategoryFilter;
       openTipo3DrillModal(group);
@@ -693,7 +695,7 @@ function renderCostCatalogTipos() {
           const count = realTipo3.length;
           const selected =
             selectedCostCategoryFilter &&
-            (g.variants || []).some((v) => v.pickCategoryId === selectedCostCategoryFilter)
+            (g.variants || []).some((v) => sameCostId(v.pickCategoryId, selectedCostCategoryFilter))
               ? " cost-catalog-table__row--selected"
               : "";
           const parentPath = [g.tipo1, g.grupo || null].filter(Boolean).join(" › ");
@@ -797,7 +799,7 @@ function populateCostCategoryTipo1Select(domain, selectedId = "") {
     items
       .map(
         (c) =>
-          `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
+          `<option value="${c.id}"${sameCostId(c.id, selectedId) ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
       )
       .join("");
 }
@@ -813,7 +815,7 @@ function populateCostCategoryGrupoSelect(domain, tipo1Id, selectedId = "") {
     (c) =>
       c.domain === domain &&
       c.active !== false &&
-      c.parentId === tipo1Id &&
+      sameCostId(c.parentId, tipo1Id) &&
       classifyCategorySheetLevel(c) === "GRUPO"
   );
   select.innerHTML =
@@ -821,7 +823,7 @@ function populateCostCategoryGrupoSelect(domain, tipo1Id, selectedId = "") {
     grupos
       .map(
         (c) =>
-          `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
+          `<option value="${c.id}"${sameCostId(c.id, selectedId) ? " selected" : ""}>${formatCategoryDisplayName(c.name)}</option>`
       )
       .join("");
 }
@@ -838,7 +840,7 @@ function populateCostCategoryTipo2ParentSelect(domain, selectedId = "") {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"))
     .map((c) => {
       const path = buildCategoryPath(c.id, costCategories);
-      return `<option value="${c.id}"${c.id === selectedId ? " selected" : ""}>${path || formatCategoryDisplayName(c.name)}</option>`;
+      return `<option value="${c.id}"${sameCostId(c.id, selectedId) ? " selected" : ""}>${path || formatCategoryDisplayName(c.name)}</option>`;
     })
     .join("");
   select.innerHTML = `<option value="">— Seleccione o tipo custo 2 —</option>${opts}`;
@@ -959,7 +961,7 @@ function populateCatalogLineContextUI(group, activeEditId) {
     sel.innerHTML = targets
       .map(
         (t) =>
-          `<option value="${t.id}"${t.id === activeEditId ? " selected" : ""}>${escapeHtml(t.label)}</option>`
+          `<option value="${t.id}"${sameCostId(t.id, activeEditId) ? " selected" : ""}>${escapeHtml(t.label)}</option>`
       )
       .join("");
     sel.disabled = targets.length <= 1;
@@ -974,29 +976,29 @@ function hideCatalogLineContextUI() {
 function fillCostCategoryParentFields(item, level) {
   if (!item) return;
   if (level === "GRUPO" && item.parentId) {
-    document.getElementById("costCategoryTipo1Id").value = item.parentId;
+    document.getElementById("costCategoryTipo1Id").value = costIdKey(item.parentId);
   }
   if (level === "TIPO2" && item.domain === "GERAL" && item.parentId) {
-    const parent = costCategories.find((c) => c.id === item.parentId);
+    const parent = costCategories.find((c) => sameCostId(c.id, item.parentId));
     if (parent && classifyCategorySheetLevel(parent) === "GRUPO") {
-      document.getElementById("costCategoryGrupoId").value = parent.id;
-      document.getElementById("costCategoryTipo1Id").value = parent.parentId || "";
+      document.getElementById("costCategoryGrupoId").value = costIdKey(parent.id);
+      document.getElementById("costCategoryTipo1Id").value = costIdKey(parent.parentId || "");
     } else if (parent) {
       document.getElementById("costCategoryGrupoId").value = "";
-      document.getElementById("costCategoryTipo1Id").value = parent.id;
+      document.getElementById("costCategoryTipo1Id").value = costIdKey(parent.id);
     }
   }
   if (level === "SUBCUSTO" && item.parentId) {
-    document.getElementById("costCategoryParentId").value = item.parentId;
+    document.getElementById("costCategoryParentId").value = costIdKey(item.parentId);
     if (item.domain !== "GERAL") return;
-    const tipo2 = costCategories.find((c) => c.id === item.parentId);
+    const tipo2 = costCategories.find((c) => sameCostId(c.id, item.parentId));
     if (!tipo2?.parentId) return;
-    const p = costCategories.find((c) => c.id === tipo2.parentId);
+    const p = costCategories.find((c) => sameCostId(c.id, tipo2.parentId));
     if (p && classifyCategorySheetLevel(p) === "GRUPO") {
-      document.getElementById("costCategoryTipo1Id").value = p.parentId || "";
-      document.getElementById("costCategoryGrupoId").value = p.id;
+      document.getElementById("costCategoryTipo1Id").value = costIdKey(p.parentId || "");
+      document.getElementById("costCategoryGrupoId").value = costIdKey(p.id);
     } else if (p) {
-      document.getElementById("costCategoryTipo1Id").value = p.id;
+      document.getElementById("costCategoryTipo1Id").value = costIdKey(p.id);
       document.getElementById("costCategoryGrupoId").value = "";
     }
   }
@@ -1005,7 +1007,7 @@ function fillCostCategoryParentFields(item, level) {
 function loadCostCategoryEditFields(item) {
   if (!item) return;
   const level = classifyCategorySheetLevel(item);
-  document.getElementById("costCategoryEditId").value = item.id;
+  document.getElementById("costCategoryEditId").value = costIdKey(item.id);
   setCostCategoryDomainValue(item.domain);
   document.getElementById("costCategorySheetLevel").value = level;
   document.getElementById("costCategoryName").value = item.name;
@@ -1032,7 +1034,7 @@ function renderEstruturaCatalog() {
   tipo1s.forEach((t1) => {
     rows.push({ kind: "TIPO1", tipo1: t1, grupo: null });
     grupos
-      .filter((g) => g.parentId === t1.id)
+      .filter((g) => sameCostId(g.parentId, t1.id))
       .forEach((g) => rows.push({ kind: "GRUPO", tipo1: t1, grupo: g }));
   });
 
@@ -1085,8 +1087,8 @@ function openCostCategoryModal({
   document.getElementById("costCategoryGrupoId").disabled = false;
 
   if (editId) {
-    document.getElementById("costCategoryEditId").value = editId;
-    const item = costCategories.find((c) => c.id === editId);
+    document.getElementById("costCategoryEditId").value = costIdKey(editId);
+    const item = costCategories.find((c) => sameCostId(c.id, editId));
     if (item) {
       loadCostCategoryEditFields(item);
       if (catalogLine) populateCatalogLineContextUI(catalogLine, editId);
@@ -1110,9 +1112,9 @@ function openCostCategoryModal({
   } else {
     setCostCategoryDomainValue(domain);
     document.getElementById("costCategorySheetLevel").value = sheetLevel;
-    if (parentId) document.getElementById("costCategoryParentId").value = parentId;
-    if (tipo1Id) document.getElementById("costCategoryTipo1Id").value = tipo1Id;
-    if (grupoId) document.getElementById("costCategoryGrupoId").value = grupoId;
+    if (parentId) document.getElementById("costCategoryParentId").value = costIdKey(parentId);
+    if (tipo1Id) document.getElementById("costCategoryTipo1Id").value = costIdKey(tipo1Id);
+    if (grupoId) document.getElementById("costCategoryGrupoId").value = costIdKey(grupoId);
     syncCostCategoryFormForLevel();
   }
 
@@ -1233,7 +1235,7 @@ async function submitCostCategory(e) {
 }
 
 async function deleteCostCategory(id) {
-  const item = costCategories.find((c) => c.id === id);
+  const item = costCategories.find((c) => sameCostId(c.id, id));
   const label = item ? formatCategoryDisplayName(item.name) : "esta entrada";
   if (!confirm(`Eliminar ou desactivar «${label}»?`)) return;
   try {
@@ -1243,7 +1245,7 @@ async function deleteCostCategory(id) {
     } else {
       showToast("Eliminada", "success");
     }
-    if (selectedCostCategoryFilter === id) {
+    if (sameCostId(selectedCostCategoryFilter, id)) {
       selectedCostCategoryFilter = "";
       document.getElementById("filterCostCategory").value = "";
     }
@@ -1339,7 +1341,7 @@ function bindCatalogCrudEvents() {
   document.getElementById("costCategoryLineTarget")?.addEventListener("change", () => {
     const id = document.getElementById("costCategoryLineTarget")?.value;
     if (!id) return;
-    const item = costCategories.find((c) => c.id === id);
+    const item = costCategories.find((c) => sameCostId(c.id, id));
     if (item) loadCostCategoryEditFields(item);
   });
 

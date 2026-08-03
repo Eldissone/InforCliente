@@ -181,7 +181,13 @@ extraRequestRoutes.get(
     const type = req.query.type ? String(req.query.type) : "";
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
     const generalCostCenterId = req.query.generalCostCenterId ? String(req.query.generalCostCenterId) : "";
-    const costCategoryId = req.query.costCategoryId ? String(req.query.costCategoryId) : "";
+    const costCategoryId = req.query.costCategoryId
+      ? Number(req.query.costCategoryId)
+      : null;
+    const costCategoryFilter =
+      costCategoryId != null && Number.isInteger(costCategoryId) && costCategoryId > 0
+        ? { costCategoryId }
+        : {};
     const status = req.query.status ? String(req.query.status) : "";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
@@ -190,7 +196,7 @@ extraRequestRoutes.get(
       ...(type ? { type } : {}),
       ...(projectId ? { projectId } : {}),
       ...(generalCostCenterId ? { generalCostCenterId } : {}),
-      ...(costCategoryId ? { costCategoryId } : {}),
+      ...costCategoryFilter,
       ...(status ? { status } : {}),
       ...(!projectId ? { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] } : {}),
     };
@@ -276,7 +282,7 @@ extraRequestRoutes.post(
         projectId: z.string().optional().nullable(),
         costCenterId: z.string().optional().nullable(),
         generalCostCenterId: z.string().optional().nullable(),
-        costCategoryId: z.string().optional().nullable(),
+        costCategoryId: z.coerce.number().int().positive().optional().nullable(),
         costDetailDescription: z.string().max(500).optional().nullable(),
         description: z.string().min(2),
         amount: z.union([z.number(), z.string()]),

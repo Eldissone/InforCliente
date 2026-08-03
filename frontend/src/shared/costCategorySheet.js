@@ -1,4 +1,4 @@
-import { formatCategoryDisplayName } from "/shared/costCategoryCascade.js";
+import { formatCategoryDisplayName, costIdKey, sameCostId } from "/shared/costCategoryCascade.js";
 
 /** Rótulos TIPO CUSTO 1 como na folha Excel (domínios planos). */
 export const SHEET_TIPO1_FLAT = {
@@ -52,7 +52,7 @@ function isSheetRubric(c, byId) {
   if (isRubricCode(c)) return true;
   if (classifyCategorySheetLevel(c) === "TIPO2") return true;
   if (!c.parentId) return c.domain !== "GERAL";
-  const parent = byId?.get(c.parentId);
+  const parent = byId?.get(costIdKey(c.parentId));
   if (parent && (isFam(parent) || isGrp(parent))) return true;
   return false;
 }
@@ -63,7 +63,7 @@ function isSheetSubcost(c, byId) {
   if (!c || isFam(c) || isGrp(c)) return false;
   if (isDetailCode(c)) return true;
   if (isSheetRubric(c, byId)) return false;
-  const parent = c.parentId ? byId?.get(c.parentId) : null;
+  const parent = c.parentId ? byId?.get(costIdKey(c.parentId)) : null;
   if (parent && isSheetRubric(parent, byId)) return true;
   return classifyCategorySheetLevel(c) === "SUBCUSTO" && Boolean(c.parentId);
 }
@@ -75,19 +75,19 @@ function isSheetSubcost(c, byId) {
  */
 export function buildCostCatalogSheetRows(items = []) {
   const active = items.filter((c) => c.active !== false);
-  const byId = new Map(active.map((c) => [c.id, c]));
+  const byId = new Map(active.map((c) => [costIdKey(c.id), c]));
   const rows = [];
 
   function childrenOf(parentId) {
     return active
-      .filter((c) => (c.parentId || null) === (parentId || null))
+      .filter((c) => costIdKey(c.parentId || "") === costIdKey(parentId || ""))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"));
   }
 
   function pushRow(ctx, rubric, leaf) {
     const pick = leaf || rubric;
     if (!pick) return;
-    const tipo3Node = leaf && rubric && leaf.id !== rubric.id ? leaf : null;
+    const tipo3Node = leaf && rubric && !sameCostId(leaf.id, rubric.id) ? leaf : null;
     rows.push({
       domain: ctx.domain,
       tipo1: ctx.tipo1,
@@ -206,7 +206,7 @@ export function buildCostCatalogSheetRows(items = []) {
 
 /** Garante linhas para todos os tipos custo 2 activos (incl. recém-criados e legados). */
 function supplementSheetRowsFromOrphans(active, rows, pushRow, byId, childrenOf) {
-  const seen = new Set(rows.map((r) => r.pickCategoryId));
+  const seen = new Set(rows.map((r) => costIdKey(r.pickCategoryId)));
 
   function ancestorsOf(cat) {
     let fam = null;
@@ -217,7 +217,7 @@ function supplementSheetRowsFromOrphans(active, rows, pushRow, byId, childrenOf)
       if (isFam(cur)) fam = cur;
       if (isGrp(cur)) grp = cur;
       if (isSheetRubric(cur, byId)) rubric = cur;
-      cur = cur.parentId ? byId.get(cur.parentId) : null;
+      cur = cur.parentId ? byId.get(costIdKey(cur.parentId)) : null;
     }
     return { fam, grp, rubric };
   }
@@ -238,33 +238,33 @@ function supplementSheetRowsFromOrphans(active, rows, pushRow, byId, childrenOf)
   }
 
   for (const cat of active) {
-    if (seen.has(cat.id)) continue;
+    if (seen.has(costIdKey(cat.id))) continue;
     if (isSheetSubcost(cat, byId)) {
       const { rubric } = ancestorsOf(cat);
       if (!rubric) continue;
       pushRow(ctxFor(cat), rubric, cat);
-      seen.add(cat.id);
+      seen.add(costIdKey(cat.id));
     }
   }
 
-  const tipo2InSheet = new Set(rows.map((r) => r.tipo2Id));
+  const tipo2InSheet = new Set(rows.map((r) => costIdKey(r.tipo2Id)));
   for (const cat of active) {
     if (!isSheetRubric(cat, byId)) continue;
-    if (tipo2InSheet.has(cat.id)) continue;
+    if (tipo2InSheet.has(costIdKey(cat.id))) continue;
     const ctx = ctxFor(cat);
     const kids = childrenOf(cat.id).filter((k) => isSheetSubcost(k, byId));
     if (kids.length) {
       kids.forEach((k) => {
-        if (!seen.has(k.id)) {
+        if (!seen.has(costIdKey(k.id))) {
           pushRow(ctx, cat, k);
-          seen.add(k.id);
+          seen.add(costIdKey(k.id));
         }
       });
     } else {
       pushRow(ctx, cat, cat);
-      seen.add(cat.id);
+      seen.add(costIdKey(cat.id));
     }
-    tipo2InSheet.add(cat.id);
+    tipo2InSheet.add(costIdKey(cat.id));
   }
 }
 
@@ -363,7 +363,7 @@ export function groupCatalogSheetDisplayRows(rows = []) {
 
 export function resolveGroupActiveVariant(group, preferredPickId = "") {
   if (preferredPickId) {
-    const hit = group.variants.find((v) => v.pickCategoryId === preferredPickId);
+    const hit = group.variants.find((v) => sameCostId(v.pickCategoryId, preferredPickId));
     if (hit) return hit;
   }
   return group.variants[0] || null;

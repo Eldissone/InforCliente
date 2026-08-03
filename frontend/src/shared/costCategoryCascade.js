@@ -24,6 +24,18 @@ export function getCachedCategories() {
   return categoriesCache || [];
 }
 
+/** Normaliza id de CostCategory (int na API, string em data-*). */
+export function costIdKey(id) {
+  if (id == null || id === "") return "";
+  return String(id);
+}
+
+export function sameCostId(a, b) {
+  const ka = costIdKey(a);
+  const kb = costIdKey(b);
+  return Boolean(ka) && ka === kb;
+}
+
 export function formatCategoryDisplayName(name) {
   if (!name) return "";
   const s = String(name).trim();
@@ -36,12 +48,12 @@ export function formatCategoryDisplayName(name) {
 
 export function buildCategoryPath(categoryId, items = categoriesCache || []) {
   if (!categoryId || !items.length) return "";
-  const byId = new Map(items.map((c) => [c.id, c]));
+  const byId = new Map(items.map((c) => [costIdKey(c.id), c]));
   const parts = [];
-  let cur = byId.get(categoryId);
+  let cur = byId.get(costIdKey(categoryId));
   while (cur) {
     parts.push(formatCategoryDisplayName(cur.name));
-    cur = cur.parentId ? byId.get(cur.parentId) : null;
+    cur = cur.parentId ? byId.get(costIdKey(cur.parentId)) : null;
   }
   parts.reverse();
   return parts.join(" › ");
@@ -60,12 +72,12 @@ export function formatExtraCostLabel(extra) {
 
 function childrenOf(parentId, domain, items) {
   return items
-    .filter((c) => c.domain === domain && (c.parentId || null) === (parentId || null))
+    .filter((c) => c.domain === domain && costIdKey(c.parentId || "") === costIdKey(parentId || ""))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"));
 }
 
 function hasChildren(id, domain, items) {
-  return items.some((c) => c.domain === domain && c.parentId === id);
+  return items.some((c) => c.domain === domain && sameCostId(c.parentId, id));
 }
 
 /** Rubricas de 1.º nível (folha TIPO CUSTOS) por domínio. */
@@ -90,7 +102,7 @@ function subcascadeEntryParentIds(rubric, domain, items) {
   const sameNameNodes = items.filter(
     (c) =>
       c.domain === domain &&
-      c.id !== rubric.id &&
+      !sameCostId(c.id, rubric.id) &&
       c.name.toUpperCase() === rubric.name.toUpperCase()
   );
   const entries = [];
@@ -105,17 +117,17 @@ function resolveLeafFromSelects(selects, domain, items, hidden) {
   for (let i = selects.length - 1; i >= 0; i -= 1) {
     const val = selects[i]?.value;
     if (!val) continue;
-    const node = items.find((c) => c.id === val);
+    const node = items.find((c) => sameCostId(c.id, val));
     if (node && node.isSelectable && !hasChildren(node.id, domain, items)) {
-      hidden.value = node.id;
+      hidden.value = costIdKey(node.id);
       return;
     }
   }
   const rubricVal = selects[0]?.value;
   if (rubricVal) {
-    const rubric = items.find((c) => c.id === rubricVal);
+    const rubric = items.find((c) => sameCostId(c.id, rubricVal));
     if (rubric?.isSelectable && !hasChildren(rubric.id, domain, items)) {
-      hidden.value = rubric.id;
+      hidden.value = costIdKey(rubric.id);
       return;
     }
   }
@@ -156,7 +168,7 @@ export function mountRubricFirstCascade({
 
   function syncDetailField(categoryId) {
     if (!detailRow || !detailInput) return;
-    const cat = items.find((c) => c.id === categoryId);
+    const cat = items.find((c) => sameCostId(c.id, categoryId));
     const show = Boolean(cat?.requiresDetailText);
     detailRow.classList.toggle("hidden", !show);
     detailInput.required = show;
@@ -188,7 +200,7 @@ export function mountRubricFirstCascade({
     const leafId = hidden.value;
     syncDetailField(leafId);
     updateSummary(leafId);
-    onChange(leafId ? items.find((c) => c.id === leafId) : null);
+    onChange(leafId ? items.find((c) => sameCostId(c.id, leafId)) : null);
   }
 
   function appendSubSelect(parentId, label, options, selectedId = "") {
@@ -210,7 +222,7 @@ export function mountRubricFirstCascade({
             }</option>`
         )
         .join("");
-    if (selectedId) sel.value = selectedId;
+    if (selectedId) sel.value = costIdKey(selectedId);
 
     sel.addEventListener("change", () => {
       while (subSelects.length > subSelects.indexOf(sel) + 1) {
@@ -236,7 +248,7 @@ export function mountRubricFirstCascade({
       refreshHidden();
       return;
     }
-    const rubric = items.find((c) => c.id === rubricSelect.value);
+    const rubric = items.find((c) => sameCostId(c.id, rubricSelect.value));
     const entries = subcascadeEntryParentIds(rubric, domain, items);
 
     if (entries.length === 1) {
@@ -256,7 +268,7 @@ export function mountRubricFirstCascade({
     if (presetSubPath.length) {
       presetSubPath.forEach((id, idx) => {
         if (subSelects[idx]) {
-          subSelects[idx].value = id;
+          subSelects[idx].value = costIdKey(id);
           subSelects[idx].dispatchEvent(new Event("change"));
         }
       });
@@ -283,17 +295,17 @@ export function mountRubricFirstCascade({
 
   if (initialCategoryId) {
     const path = [];
-    let cur = items.find((c) => c.id === initialCategoryId);
+    let cur = items.find((c) => sameCostId(c.id, initialCategoryId));
     while (cur) {
-      path.unshift(cur.id);
-      cur = cur.parentId ? items.find((c) => c.id === cur.parentId) : null;
+      path.unshift(costIdKey(cur.id));
+      cur = cur.parentId ? items.find((c) => sameCostId(c.id, cur.parentId)) : null;
     }
-    const rubricInPath = path.find((id) => rubrics.some((r) => r.id === id));
+    const rubricInPath = path.find((id) => rubrics.some((r) => sameCostId(r.id, id)));
     if (rubricInPath) {
-      rubricSelect.value = rubricInPath;
+      rubricSelect.value = costIdKey(rubricInPath);
       const subPath = path.slice(path.indexOf(rubricInPath) + 1);
       onRubricChange(subPath);
-      hidden.value = initialCategoryId;
+      hidden.value = costIdKey(initialCategoryId);
       syncDetailField(initialCategoryId);
       updateSummary(initialCategoryId);
     }
