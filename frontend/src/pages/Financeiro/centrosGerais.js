@@ -736,7 +736,16 @@ function movementReferenceLabel(m) {
 }
 
 function showToast(msg, type = "info") {
-  const container = document.getElementById("toast");
+  let container = document.getElementById("toast");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast";
+    document.body.appendChild(container);
+  }
+  if (container.parentElement !== document.body) {
+    document.body.appendChild(container);
+  }
+  container.style.zIndex = "10000";
   const colors = {
     success: "bg-emerald-600 text-white",
     error: "bg-red-600 text-white",
@@ -745,6 +754,8 @@ function showToast(msg, type = "info") {
   const icons = { success: "check_circle", error: "error", info: "info" };
   const el = document.createElement("div");
   el.className = `pointer-events-auto flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl text-sm font-bold ${colors[type]}`;
+  el.style.position = "relative";
+  el.style.zIndex = "10001";
   el.innerHTML = `<span class="material-symbols-outlined text-base">${icons[type]}</span>${msg}`;
   container.appendChild(el);
   setTimeout(() => {
@@ -1076,34 +1087,52 @@ function hideCatalogLineContextUI() {
   document.getElementById("rowCostCategoryLineContext")?.classList.add("hidden");
 }
 
-function fillCostCategoryParentFields(item, level) {
-  if (!item) return;
+function resolveParentFieldIds(item, level) {
+  const out = { tipo1Id: "", grupoId: "", parentId: "" };
+  if (!item) return out;
   if (level === "GRUPO" && item.parentId) {
-    document.getElementById("costCategoryTipo1Id").value = costIdKey(item.parentId);
+    out.tipo1Id = costIdKey(item.parentId);
   }
   if (level === "TIPO2" && item.domain === "GERAL" && item.parentId) {
     const parent = costCategories.find((c) => sameCostId(c.id, item.parentId));
     if (parent && classifyCategorySheetLevel(parent) === "GRUPO") {
-      document.getElementById("costCategoryGrupoId").value = costIdKey(parent.id);
-      document.getElementById("costCategoryTipo1Id").value = costIdKey(parent.parentId || "");
+      out.grupoId = costIdKey(parent.id);
+      out.tipo1Id = costIdKey(parent.parentId || "");
     } else if (parent) {
-      document.getElementById("costCategoryGrupoId").value = "";
-      document.getElementById("costCategoryTipo1Id").value = costIdKey(parent.id);
+      out.tipo1Id = costIdKey(parent.id);
     }
   }
   if (level === "SUBCUSTO" && item.parentId) {
-    document.getElementById("costCategoryParentId").value = costIdKey(item.parentId);
-    if (item.domain !== "GERAL") return;
-    const tipo2 = costCategories.find((c) => sameCostId(c.id, item.parentId));
-    if (!tipo2?.parentId) return;
-    const p = costCategories.find((c) => sameCostId(c.id, tipo2.parentId));
-    if (p && classifyCategorySheetLevel(p) === "GRUPO") {
-      document.getElementById("costCategoryTipo1Id").value = costIdKey(p.parentId || "");
-      document.getElementById("costCategoryGrupoId").value = costIdKey(p.id);
-    } else if (p) {
-      document.getElementById("costCategoryTipo1Id").value = costIdKey(p.id);
-      document.getElementById("costCategoryGrupoId").value = "";
+    out.parentId = costIdKey(item.parentId);
+    if (item.domain === "GERAL") {
+      const tipo2 = costCategories.find((c) => sameCostId(c.id, item.parentId));
+      if (tipo2?.parentId) {
+        const p = costCategories.find((c) => sameCostId(c.id, tipo2.parentId));
+        if (p && classifyCategorySheetLevel(p) === "GRUPO") {
+          out.tipo1Id = costIdKey(p.parentId || "");
+          out.grupoId = costIdKey(p.id);
+        } else if (p) {
+          out.tipo1Id = costIdKey(p.id);
+        }
+      }
     }
+  }
+  return out;
+}
+
+function fillCostCategoryParentFields(item, level) {
+  if (!item) return;
+  const parents = resolveParentFieldIds(item, level);
+  const domain = item.domain || getCostCategoryDomainValue();
+
+  if (level === "GRUPO" || (level === "TIPO2" && domain === "GERAL") || level === "SUBCUSTO") {
+    populateCostCategoryTipo1Select(domain, parents.tipo1Id);
+  }
+  if ((level === "TIPO2" && domain === "GERAL") || level === "SUBCUSTO") {
+    populateCostCategoryGrupoSelect(domain, parents.tipo1Id, parents.grupoId);
+  }
+  if (level === "SUBCUSTO") {
+    populateCostCategoryTipo2ParentSelect(domain, parents.parentId);
   }
 }
 
@@ -1117,9 +1146,10 @@ function loadCostCategoryEditFields(item) {
   document.getElementById("costCategorySelectable").checked = item.isSelectable !== false;
   document.getElementById("costCategoryRequiresDetail").checked = Boolean(item.requiresDetailText);
   document.getElementById("costCategorySortOrder").value = item.sortOrder ?? "";
-  fillCostCategoryParentFields(item, level);
   setCostCategoryModalTitles({ editId: item.id, sheetLevel: level });
+  // Visibilidade das linhas primeiro; depois preencher selects com o pai correcto
   syncCostCategoryFormForLevel();
+  fillCostCategoryParentFields(item, level);
 }
 
 function renderEstruturaCatalog() {
