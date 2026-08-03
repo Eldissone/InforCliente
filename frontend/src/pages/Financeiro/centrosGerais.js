@@ -1122,38 +1122,83 @@ function renderEstruturaCatalog() {
   const tipo1s = categoriesBySheetLevel(domain, "TIPO1");
   const grupos = categoriesBySheetLevel(domain, "GRUPO");
   const canDelete = canDeleteCostCatalog() && catalogDeleteSelectMode;
-  const actionsHead = canManageCostCatalog()
-    ? `<th class="px-3 py-2.5 text-center w-28">Acções</th>`
+  const canManage = canManageCostCatalog();
+  const actionsHead = canManage
+    ? `<th class="px-3 py-2.5 text-center w-36">Acções</th>`
     : "";
 
-  const rows = [];
+  const visibleIds = [];
   tipo1s.forEach((t1) => {
-    rows.push({ kind: "TIPO1", tipo1: t1, grupo: null });
-    grupos
-      .filter((g) => sameCostId(g.parentId, t1.id))
-      .forEach((g) => rows.push({ kind: "GRUPO", tipo1: t1, grupo: g }));
+    visibleIds.push(t1.id);
+    grupos.filter((g) => sameCostId(g.parentId, t1.id)).forEach((g) => visibleIds.push(g.id));
   });
-  const visibleIds = rows.map(({ kind, tipo1, grupo }) => (kind === "TIPO1" ? tipo1.id : grupo.id));
   const checkHead = catalogSelectAllHeadHtml(visibleIds);
-  const colSpan = (canDelete ? 1 : 0) + 3 + (canManageCostCatalog() ? 1 : 0);
+  const colSpan = (canDelete ? 1 : 0) + 2 + (canManage ? 1 : 0);
 
-  const body = rows.length
-    ? rows
-        .map(({ kind, tipo1, grupo }) => {
-          const cat = kind === "TIPO1" ? tipo1 : grupo;
-          const actions = canManageCostCatalog()
-            ? `<td class="px-3 py-2 text-center">${catalogEstruturaActionsHtml(cat.id)}</td>`
+  const body = tipo1s.length
+    ? tipo1s
+        .map((t1) => {
+          const kids = grupos
+            .filter((g) => sameCostId(g.parentId, t1.id))
+            .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"));
+          const gruposHtml = kids.length
+            ? `<ul class="cost-catalog-grupos-list space-y-1.5 m-0 p-0 list-none">
+                ${kids
+                  .map((g) => {
+                    const check =
+                      canDelete
+                        ? `<input type="checkbox" class="cost-catalog-check h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" data-catalog-check="${costIdKey(g.id)}"${
+                            catalogDeleteSelectionHas(g.id) ? " checked" : ""
+                          } aria-label="Seleccionar grupo">`
+                        : "";
+                    const gActions = canManage
+                      ? `<span class="inline-flex items-center gap-0.5 shrink-0">
+                          <button type="button" class="cost-catalog-action" data-edit-category="${g.id}" title="Editar grupo">
+                            <span class="material-symbols-outlined text-[16px]">edit</span>
+                          </button>
+                          ${
+                            canDeleteCostCatalog()
+                              ? `<button type="button" class="cost-catalog-action cost-catalog-action--danger" data-delete-category="${g.id}" title="Eliminar grupo">
+                                  <span class="material-symbols-outlined text-[16px]">delete</span>
+                                </button>`
+                              : ""
+                          }
+                        </span>`
+                      : "";
+                    return `<li class="flex items-center gap-2 min-w-0">
+                      ${check}
+                      <span class="inline-flex items-center gap-1.5 min-w-0 flex-1 px-2 py-1 rounded-md bg-slate-50 border border-slate-100">
+                        <span class="text-[12px] font-semibold text-slate-800 truncate">${formatCategoryDisplayName(g.name)}</span>
+                        ${gActions}
+                      </span>
+                    </li>`;
+                  })
+                  .join("")}
+              </ul>`
+            : `<span class="text-[11px] text-slate-400">Sem grupo (opcional)</span>`;
+          const addGrupo = canManage
+            ? `<button type="button" class="mt-2 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-0.5" data-add-grupo-under="${t1.id}">
+                <span class="material-symbols-outlined text-sm">add</span>
+                Adicionar grupo
+              </button>`
             : "";
-          return `<tr class="cost-catalog-table__row" data-pick-category="${cat.id}" tabindex="0">
-            ${catalogCheckboxCellHtml(cat.id)}
-            <td class="px-3 py-2 text-[11px] font-semibold">${formatCategoryDisplayName(tipo1.name)}</td>
-            <td class="px-3 py-2 text-[11px]">${grupo ? formatCategoryDisplayName(grupo.name) : "—"}</td>
-            <td class="px-3 py-2 text-[10px] uppercase text-slate-500">${SHEET_LEVEL_LABELS[kind]}</td>
+          const actions = canManage
+            ? `<td class="px-3 py-2.5 text-center align-top">${catalogEstruturaActionsHtml(t1.id)}</td>`
+            : "";
+          return `<tr class="cost-catalog-table__row" data-pick-category="${t1.id}">
+            ${catalogCheckboxCellHtml(t1.id)}
+            <td class="px-3 py-2.5 align-top">
+              <span class="block text-sm font-bold text-slate-900">${formatCategoryDisplayName(t1.name)}</span>
+            </td>
+            <td class="px-3 py-2.5 align-top border-l border-slate-100">
+              ${gruposHtml}
+              ${addGrupo}
+            </td>
             ${actions}
           </tr>`;
         })
         .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1 / grupos. Use os botões «Tipo 1» ou «Grupo» acima.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1. Use «Tipo 1» acima; o grupo é opcional e fica dentro de cada tipo 1.</td></tr>`;
 
   container.innerHTML = `
     <div class="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1162,8 +1207,7 @@ function renderEstruturaCatalog() {
           <tr class="bg-slate-200/90 text-[10px] font-black uppercase text-slate-700">
             ${checkHead}
             <th class="px-3 py-2.5">Tipo custo 1</th>
-            <th class="px-3 py-2.5">Grupo</th>
-            <th class="px-3 py-2.5">Nível</th>
+            <th class="px-3 py-2.5">Grupos <span class="font-semibold normal-case text-slate-500">(opcional)</span></th>
             ${actionsHead}
           </tr>
         </thead>
@@ -1171,6 +1215,16 @@ function renderEstruturaCatalog() {
       </table>
     </div>`;
   bindCatalogCheckboxEvents(container, visibleIds);
+  container.querySelectorAll("[data-add-grupo-under]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCostCategoryModal({
+        domain: "GERAL",
+        sheetLevel: "GRUPO",
+        tipo1Id: btn.dataset.addGrupoUnder,
+      });
+    });
+  });
   updateCatalogBulkDeleteButton();
 }
 
