@@ -190,11 +190,6 @@ const EXTRA_MODAL_HTML = `
         <p id="extraProformaBlockedHint" class="hidden text-[11px] text-amber-600 mt-1 font-semibold">Preencha o fornecedor (Nome, NIF e IBAN) antes de anexar o documento.</p>
         <p id="extraProformaHint" class="hidden text-[11px] text-emerald-600 mt-1 font-semibold">Proforma já anexada. Envie um novo ficheiro apenas para substituir.</p>
       </div>
-      <div>
-        <label for="extraNotes" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Observações</label>
-        <textarea id="extraNotes" rows="2"
-          class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none resize-none"></textarea>
-      </div>
       <div class="flex gap-3 justify-end pt-2">
         <button type="button" id="btnCancelExtra"
           class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
@@ -1304,7 +1299,6 @@ export async function openExtraRequestModalForEdit(id) {
     document.getElementById("extraFundId").value = item.fundId;
   }
 
-  document.getElementById("extraNotes").value = item.notes || "";
   const proformaInput = document.getElementById("extraProforma");
   if (proformaInput) proformaInput.required = false;
   syncExtraProformaAvailability();
@@ -1338,7 +1332,6 @@ async function submitExtra(e) {
     paymentSource: source,
     fundId: isExtraCardSource(source) ? document.getElementById("extraFundId").value || null : null,
     cardId: isExtraCardSource(source) ? document.getElementById("extraCardId").value || null : null,
-    notes: document.getElementById("extraNotes").value.trim() || null,
     supplierId: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierId : null,
     supplierName: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierName : null,
     supplierNif: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierNif : null,
@@ -1466,7 +1459,6 @@ async function submitExtra(e) {
         paymentSource: body.paymentSource,
         fundId: body.fundId,
         cardId: body.cardId,
-        notes: body.notes,
         supplierId: body.supplierId,
         supplierName: body.supplierName,
         supplierNif: body.supplierNif,
