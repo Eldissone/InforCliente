@@ -1158,6 +1158,8 @@ model ExtraRequest {
   costCategoryId      Int?
   costDetailDescription String?
   description    String
+  /// Quantidade pedida (obrigatória para ferramentas/material).
+  quantity       Decimal?           @db.Decimal(16, 4)
   amount         Decimal            @db.Decimal(16, 2)
   currency       String             @default("AOA")
   paymentSource  ExtraPaymentSource @default(CAIXA)

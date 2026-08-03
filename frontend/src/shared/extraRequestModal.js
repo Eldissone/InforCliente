@@ -76,6 +76,12 @@ const EXTRA_MODAL_HTML = `
           class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
         <p id="extraDescSelectHint" class="hidden text-[11px] text-slate-400 mt-1"></p>
       </div>
+      <div id="rowExtraQuantity" class="hidden">
+        <label for="extraQuantity" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Quantidade *</label>
+        <input id="extraQuantity" type="number" step="0.01" min="0.01" placeholder="Ex.: 1"
+          class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+        <p class="text-[11px] text-slate-400 mt-1">Indique quantas unidades de ferramenta/material pretende pedir.</p>
+      </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="extraAmount" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Valor *</label>
@@ -224,6 +230,18 @@ function ensureModalMounted() {
       hint.className = "hidden text-[11px] text-slate-400 mt-1";
       descInput.after(hint);
     }
+    if (!document.getElementById("rowExtraQuantity")) {
+      const amountLabel = document.querySelector('label[for="extraAmount"]');
+      const amountGrid = amountLabel?.closest(".grid");
+      const qtyRow = document.createElement("div");
+      qtyRow.id = "rowExtraQuantity";
+      qtyRow.className = "hidden";
+      qtyRow.innerHTML = `<label for="extraQuantity" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Quantidade *</label>
+        <input id="extraQuantity" type="number" step="0.01" min="0.01" placeholder="Ex.: 1"
+          class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+        <p class="text-[11px] text-slate-400 mt-1">Indique quantas unidades de ferramenta/material pretende pedir.</p>`;
+      amountGrid?.before(qtyRow);
+    }
     return;
   }
   const root = document.createElement("div");
@@ -249,6 +267,21 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function needsItemQuantity() {
+  return toolPickerActive || Boolean(obraDescPickerKind);
+}
+
+function syncQuantityFieldVisibility() {
+  const row = document.getElementById("rowExtraQuantity");
+  const input = document.getElementById("extraQuantity");
+  const show = needsItemQuantity();
+  row?.classList.toggle("hidden", !show);
+  if (input) {
+    input.required = show;
+    if (!show) input.value = "";
+  }
+}
+
 function setToolPickerMode(active) {
   toolPickerActive = active;
   const input = document.getElementById("extraCostDetailDescription");
@@ -270,6 +303,7 @@ function setToolPickerMode(active) {
       label.setAttribute("for", "extraCostDetailDescription");
     }
     toolOptionsCache = [];
+    syncQuantityFieldVisibility();
     return;
   }
 
@@ -281,6 +315,7 @@ function setToolPickerMode(active) {
   if (label) {
     label.setAttribute("for", "extraToolSelect");
   }
+  syncQuantityFieldVisibility();
 }
 
 function syncDetailFromToolSelect() {
@@ -416,6 +451,7 @@ function setObraDescPickerMode(kind) {
       label.setAttribute("for", "extraDesc");
     }
     obraDescOptionsCache = [];
+    syncQuantityFieldVisibility();
     return;
   }
 
@@ -427,6 +463,7 @@ function setObraDescPickerMode(kind) {
     label.textContent = kind === "materials" ? "Material (orçamento) *" : "Ferramenta (orçamento) *";
     label.setAttribute("for", "extraDescSelect");
   }
+  syncQuantityFieldVisibility();
 }
 
 function syncDescFromObraSelect() {
@@ -813,6 +850,8 @@ function setExtraFormLocked(locked) {
   if (toolSelect) toolSelect.disabled = locked;
   const descSelect = document.getElementById("extraDescSelect");
   if (descSelect) descSelect.disabled = locked;
+  const qtyInput = document.getElementById("extraQuantity");
+  if (qtyInput) qtyInput.disabled = locked;
   document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
 }
 
@@ -829,6 +868,7 @@ function resetExtraFormState() {
   lastCascadeMeta = { domain: "GERAL", grupo: "", tipo2: "" };
   setToolPickerMode(false);
   setObraDescPickerMode(null);
+  syncQuantityFieldVisibility();
 }
 
 function setExtraType(type) {
@@ -980,6 +1020,9 @@ export async function openExtraRequestModalForEdit(id) {
   if (item.type !== "OBRA" || !obraDescPickerKind) {
     document.getElementById("extraDesc").value = item.description || "";
   }
+  document.getElementById("extraQuantity").value =
+    item.quantity != null && item.quantity !== "" ? String(item.quantity) : "";
+  syncQuantityFieldVisibility();
   document.getElementById("extraAmount").value = item.amount || "";
   document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
   document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
@@ -1021,6 +1064,12 @@ async function submitExtra(e) {
     costDetailDescription:
       document.getElementById("extraCostDetailDescription")?.value.trim() || null,
     description: document.getElementById("extraDesc").value.trim(),
+    quantity: (() => {
+      const raw = document.getElementById("extraQuantity")?.value;
+      if (!needsItemQuantity()) return null;
+      if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+      return parseFloat(raw);
+    })(),
     amount: parseFloat(document.getElementById("extraAmount").value) || 0,
     paymentDueDate: document.getElementById("extraPaymentDueDate").value,
     paymentSource: source,
@@ -1074,6 +1123,13 @@ async function submitExtra(e) {
       modalOptions.showToast("Indique a descrição", "error");
       return;
     }
+    if (needsItemQuantity()) {
+      const qty = Number(body.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        modalOptions.showToast("Indique a quantidade (maior que zero)", "error");
+        return;
+      }
+    }
   }
 
   if (!body.paymentDueDate) {
@@ -1123,6 +1179,16 @@ async function submitExtra(e) {
         supplierNif: body.supplierNif,
         supplierIban: body.supplierIban,
       };
+      if (needsItemQuantity()) {
+        const qty = Number(body.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) {
+          modalOptions.showToast("Indique a quantidade (maior que zero)", "error");
+          return;
+        }
+        patchBody.quantity = qty;
+      } else {
+        patchBody.quantity = null;
+      }
       await apiRequest(`/extra-requests/${editId}`, { method: "PATCH", body: patchBody });
       if (needsProforma && proformaFile) {
         const fd = new FormData();

@@ -492,6 +492,14 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
     { label: "Tipo", value: extra.type === "GERAL" ? "Geral" : "Obra", wide: false },
     { label: "Referência", value: extraRequestReference(extra), wide: false },
     { label: "Descrição", value: extra.description || "—", wide: true },
+    {
+      label: "Quantidade",
+      value:
+        extra.quantity != null && extra.quantity !== ""
+          ? String(extra.quantity)
+          : "—",
+      wide: false,
+    },
     { label: "Valor", value: formatCurrency(extra.amount, cur), wide: false, highlight: true },
     { label: "Moeda", value: cur, wide: false },
     { label: "Origem do pagamento", value: extraRequestPaymentLabel(extra), wide: false },

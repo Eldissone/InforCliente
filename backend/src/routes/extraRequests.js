@@ -49,8 +49,19 @@ async function logExtraAction(req, { action, extraRequestId, details }) {
   });
 }
 
+function parseOptionalQuantity(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return undefined; // invalid
+  return String(n);
+}
+
 function mapExtra(item) {
-  return { ...item, amount: String(item.amount) };
+  return {
+    ...item,
+    amount: String(item.amount),
+    quantity: item.quantity != null ? String(item.quantity) : null,
+  };
 }
 
 function parsePaymentDueDate(value) {
@@ -422,6 +433,7 @@ extraRequestRoutes.post(
         costCategoryId: z.coerce.number().int().positive().optional().nullable(),
         costDetailDescription: z.string().max(500).optional().nullable(),
         description: z.string().min(2),
+        quantity: z.union([z.number(), z.string()]).optional().nullable(),
         amount: z.union([z.number(), z.string()]),
         currency: z.string().optional().default("AOA"),
         // CAIXA/BANCO mantidos apenas para compatibilidade com pedidos antigos.
@@ -482,6 +494,11 @@ extraRequestRoutes.post(
       if (!cc) return res.status(400).json({ error: "COST_CENTER_NOT_IN_PROJECT" });
     }
 
+    const quantityParsed = parseOptionalQuantity(body.quantity);
+    if (body.quantity !== undefined && body.quantity !== null && body.quantity !== "" && quantityParsed === undefined) {
+      return res.status(400).json({ error: "INVALID_QUANTITY", message: "Quantidade inválida." });
+    }
+
     let supplierData = {
       supplierId: null,
       supplierName: null,
@@ -510,6 +527,7 @@ extraRequestRoutes.post(
         costCategoryId: body.costCategoryId || null,
         costDetailDescription: trimOrNull(body.costDetailDescription),
         description: body.description,
+        quantity: quantityParsed,
         amount: String(body.amount),
         currency: body.currency || "AOA",
         paymentSource: body.paymentSource,
@@ -551,6 +569,7 @@ extraRequestRoutes.patch(
     const body = z
       .object({
         description: z.string().min(2).optional(),
+        quantity: z.union([z.number(), z.string()]).optional().nullable(),
         amount: z.union([z.number(), z.string()]).optional(),
         paymentSource: z.enum(EXTRA_PAYMENT_SOURCES).optional(),
         fundId: z.string().optional().nullable(),
@@ -563,6 +582,19 @@ extraRequestRoutes.patch(
 
     const paymentDueDate =
       body.paymentDueDate !== undefined ? parsePaymentDueDate(body.paymentDueDate) : undefined;
+
+    let quantityPatch = {};
+    if (body.quantity !== undefined) {
+      if (body.quantity === null || body.quantity === "") {
+        quantityPatch = { quantity: null };
+      } else {
+        const quantityParsed = parseOptionalQuantity(body.quantity);
+        if (quantityParsed === undefined) {
+          return res.status(400).json({ error: "INVALID_QUANTITY", message: "Quantidade inválida." });
+        }
+        quantityPatch = { quantity: quantityParsed };
+      }
+    }
 
     const nextSource = body.paymentSource !== undefined ? body.paymentSource : existing.paymentSource;
     const supplierTouched =
@@ -604,6 +636,7 @@ extraRequestRoutes.patch(
       where: { id },
       data: {
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...quantityPatch,
         ...(body.amount !== undefined ? { amount: String(body.amount) } : {}),
         ...(body.paymentSource !== undefined ? { paymentSource: body.paymentSource } : {}),
         ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),

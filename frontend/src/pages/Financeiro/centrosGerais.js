@@ -1767,7 +1767,11 @@ function renderExtraRow(it) {
     <td class="px-5 py-3 text-xs text-slate-500">${formatDateBR(it.createdAt)}</td>
     <td class="px-5 py-3">${typeBadge}</td>
     <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[180px] truncate">${extraReferenceLabel(it)}</td>
-    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[200px] truncate">${it.description}</td>
+    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[200px] truncate">${it.description}${
+      it.quantity != null && it.quantity !== ""
+        ? ` <span class="text-slate-400 font-bold">× ${escapeHtml(String(it.quantity))}</span>`
+        : ""
+    }</td>
     <td class="px-5 py-3 text-xs text-slate-500">${sourceLabel}</td>
     <td class="px-5 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(it.amount, it.currency)}</td>
     <td class="px-5 py-3">${statusBadge}</td>
