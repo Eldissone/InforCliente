@@ -12,7 +12,7 @@ import {
 
 const EXTRA_MODAL_HTML = `
 <div class="modal-overlay" id="modalExtra">
-  <div class="modal-box" style="max-width:580px">
+  <div class="modal-box" style="max-width:640px">
     <div class="flex items-center justify-between mb-6">
       <h2 id="modalExtraTitle" class="text-lg font-bold text-slate-900">Novo Pedido Extra</h2>
       <button type="button" id="btnCloseExtraModal" aria-label="Fechar"
@@ -35,6 +35,7 @@ const EXTRA_MODAL_HTML = `
           <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Classificação do custo *</span>
           <span id="extraCostDomainBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[11px] font-bold"></span>
         </div>
+        <p class="text-[11px] text-slate-500 leading-relaxed">Escolha Tipo 1 → Grupo (se existir) → Tipo 2 → Subcusto (tipo 3).</p>
         <p id="extraCostSelectionSummary" class="text-xs font-semibold text-slate-400 leading-relaxed min-h-[1.25rem]"></p>
         <div id="extraCostCategoryCascade" class="flex flex-col gap-3"></div>
         <input type="hidden" id="extraCostCategoryId" value="">
@@ -633,7 +634,7 @@ async function submitExtra(e) {
 
   if (!editId) {
     if (!body.costCategoryId) {
-      modalOptions.showToast("Seleccione o tipo de custo até ao nível final", "error");
+      modalOptions.showToast("Seleccione o tipo de custo até ao subcusto (tipo 3), se existir", "error");
       return;
     }
     const detailEl = document.getElementById("extraCostDetailDescription");

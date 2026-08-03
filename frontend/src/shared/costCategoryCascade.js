@@ -1,4 +1,10 @@
 import { apiRequest } from "/services/api.js";
+import {
+  buildCostCatalogSheetRows,
+  sheetFilterOptions,
+  applySheetFilters,
+  groupCatalogSheetDisplayRows,
+} from "/shared/costCategorySheet.js";
 
 const DOMAIN_BY_EXTRA_TYPE = {
   GERAL: "GERAL",
@@ -70,72 +76,56 @@ export function formatExtraCostLabel(extra) {
   return "—";
 }
 
-function childrenOf(parentId, domain, items) {
-  return items
-    .filter((c) => c.domain === domain && costIdKey(c.parentId || "") === costIdKey(parentId || ""))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"));
-}
-
-function hasChildren(id, domain, items) {
-  return items.some((c) => c.domain === domain && sameCostId(c.parentId, id));
-}
-
-/** Rubricas de 1.º nível (folha TIPO CUSTOS) por domínio. */
+/** Rubricas seleccionáveis (folha) por domínio — tipos custo 2. */
 export function sheetRubricsForDomain(domain, items = categoriesCache || []) {
-  return items
-    .filter(
-      (c) =>
-        c.domain === domain &&
-        c.parentId === null &&
-        !c.code.includes("_FAM_") &&
-        !c.code.includes("_GRP_") &&
-        c.isSelectable
-    )
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt"));
+  const rows = buildCostCatalogSheetRows(items).filter((r) => r.domain === domain);
+  const groups = groupCatalogSheetDisplayRows(rows);
+  return groups
+    .map((g) => ({
+      id: g.tipo2Id,
+      name: g.tipo2,
+      tipo1: g.tipo1,
+      grupo: g.grupo,
+      sortOrder: 0,
+      isSelectable: true,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt"));
 }
 
-/** Onde continuar a cascata depois de escolher a rubrica (ex.: empréstimos sob família Outros). */
-function subcascadeEntryParentIds(rubric, domain, items) {
-  const direct = childrenOf(rubric.id, domain, items);
-  if (direct.length) return [{ parentId: rubric.id, label: "Detalhe" }];
-
-  const sameNameNodes = items.filter(
-    (c) =>
-      c.domain === domain &&
-      !sameCostId(c.id, rubric.id) &&
-      c.name.toUpperCase() === rubric.name.toUpperCase()
-  );
-  const entries = [];
-  sameNameNodes.forEach((node) => {
-    const kids = childrenOf(node.id, domain, items);
-    if (kids.length) entries.push({ parentId: node.id, label: "Tipo custo 3" });
-  });
-  return entries;
+function emptyCascadeHint() {
+  return "Seleccione tipo 1, tipo 2 e, se existir, o subcusto (tipo 3).";
 }
 
-function resolveLeafFromSelects(selects, domain, items, hidden) {
-  for (let i = selects.length - 1; i >= 0; i -= 1) {
-    const val = selects[i]?.value;
-    if (!val) continue;
-    const node = items.find((c) => sameCostId(c.id, val));
-    if (node && node.isSelectable && !hasChildren(node.id, domain, items)) {
-      hidden.value = costIdKey(node.id);
-      return;
-    }
-  }
-  const rubricVal = selects[0]?.value;
-  if (rubricVal) {
-    const rubric = items.find((c) => sameCostId(c.id, rubricVal));
-    if (rubric?.isSelectable && !hasChildren(rubric.id, domain, items)) {
-      hidden.value = costIdKey(rubric.id);
-      return;
-    }
-  }
-  hidden.value = "";
+function makeCascadeSelect({ label, placeholder, options, value = "", disabled = false, onChange }) {
+  const wrap = document.createElement("div");
+  wrap.className = "cost-cascade-field";
+  const lab = document.createElement("label");
+  lab.className = "cost-cascade-field__label";
+  lab.textContent = label;
+  const sel = document.createElement("select");
+  sel.className = "cost-cascade-field__select";
+  sel.disabled = disabled;
+  sel.innerHTML =
+    `<option value="">${placeholder}</option>` +
+    options.map((o) => `<option value="${escapeAttr(o.value)}">${escapeAttr(o.label)}</option>`).join("");
+  if (value) sel.value = String(value);
+  sel.addEventListener("change", () => onChange?.(sel.value));
+  wrap.appendChild(lab);
+  wrap.appendChild(sel);
+  return { wrap, sel };
+}
+
+function escapeAttr(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /**
- * Fluxo pedido extra: Tipo custo 2 → Tipo custo 3 (cascata).
+ * Fluxo pedido extra (GERAL / OBRA): Tipo 1 → Grupo → Tipo 2 → Subcusto (tipo 3).
+ * Usa a mesma folha do catálogo CENTRO COMPRAS.
  */
 export function mountRubricFirstCascade({
   container,
@@ -163,13 +153,33 @@ export function mountRubricFirstCascade({
     return;
   }
 
-  const rubrics = sheetRubricsForDomain(domain, items);
-  const subSelects = [];
+  const allRows = buildCostCatalogSheetRows(items).filter((r) => r.domain === domain);
+  if (!allRows.length) {
+    container.innerHTML = `<p class="text-xs text-slate-400">Sem tipos de custo para este domínio.</p>`;
+    if (hidden) hidden.value = "";
+    return;
+  }
 
-  function syncDetailField(categoryId) {
+  const state = {
+    tipo1: "",
+    grupo: "",
+    tipo2: "",
+    tipo2Id: "",
+    tipo3PickId: "",
+  };
+
+  const refs = {
+    tipo1: null,
+    grupo: null,
+    tipo2: null,
+    tipo3: null,
+  };
+
+  function syncDetailField(categoryId, requiresDetail = null) {
     if (!detailRow || !detailInput) return;
     const cat = items.find((c) => sameCostId(c.id, categoryId));
-    const show = Boolean(cat?.requiresDetailText);
+    const show =
+      requiresDetail != null ? Boolean(requiresDetail) : Boolean(cat?.requiresDetailText);
     detailRow.classList.toggle("hidden", !show);
     detailInput.required = show;
     if (!show) detailInput.value = "";
@@ -178,7 +188,7 @@ export function mountRubricFirstCascade({
   function updateSummary(categoryId) {
     if (!summary) return;
     if (!categoryId) {
-      summary.textContent = "Seleccione o tipo custo 2 e, se existir, o tipo custo 3.";
+      summary.textContent = emptyCascadeHint();
       summary.classList.add("text-slate-400");
       summary.classList.remove("text-emerald-700");
       return;
@@ -188,130 +198,261 @@ export function mountRubricFirstCascade({
     summary.classList.add("text-emerald-700");
   }
 
-  function clearSubSelects() {
-    while (subSelects.length) {
-      const el = subSelects.pop();
-      el.parentElement?.remove();
+  function setPick(categoryId, requiresDetail = null) {
+    if (hidden) hidden.value = categoryId ? costIdKey(categoryId) : "";
+    syncDetailField(categoryId, requiresDetail);
+    updateSummary(categoryId);
+    onChange(categoryId ? items.find((c) => sameCostId(c.id, categoryId)) : null);
+  }
+
+  function currentFilters() {
+    return {
+      domain,
+      tipo1: state.tipo1,
+      grupo: state.grupo,
+      tipo2: state.tipo2,
+    };
+  }
+
+  function removeField(key) {
+    refs[key]?.wrap?.remove();
+    refs[key] = null;
+  }
+
+  function resolvePickFromTipo2() {
+    const groups = groupCatalogSheetDisplayRows(
+      applySheetFilters(allRows, {
+        domain,
+        tipo1: state.tipo1,
+        grupo: state.grupo,
+        tipo2: state.tipo2,
+      })
+    );
+    const group =
+      groups.find((g) => sameCostId(g.tipo2Id, state.tipo2Id)) ||
+      groups.find((g) => g.tipo2 === state.tipo2) ||
+      groups[0];
+    if (!group) {
+      setPick("");
+      return null;
     }
+    const realTipo3 = (group.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
+    return { group, realTipo3 };
   }
 
-  function refreshHidden() {
-    resolveLeafFromSelects([rubricSelect, ...subSelects], domain, items, hidden);
-    const leafId = hidden.value;
-    syncDetailField(leafId);
-    updateSummary(leafId);
-    onChange(leafId ? items.find((c) => sameCostId(c.id, leafId)) : null);
-  }
+  function renderTipo3(presetPickId = "") {
+    removeField("tipo3");
+    const resolved = resolvePickFromTipo2();
+    if (!resolved) return;
 
-  function appendSubSelect(parentId, label, options, selectedId = "") {
-    const wrap = document.createElement("div");
-    wrap.className = "cost-cascade-field";
-    const lab = document.createElement("label");
-    lab.className = "cost-cascade-field__label";
-    lab.textContent = label;
-    const sel = document.createElement("select");
-    sel.className = "cost-cascade-field__select";
-    sel.disabled = disabled;
-    sel.innerHTML =
-      `<option value="">Seleccionar...</option>` +
-      options
-        .map(
-          (o) =>
-            `<option value="${o.id}">${formatCategoryDisplayName(o.name)}${
-              o.isSelectable && !hasChildren(o.id, domain, items) ? "" : ""
-            }</option>`
-        )
-        .join("");
-    if (selectedId) sel.value = costIdKey(selectedId);
-
-    sel.addEventListener("change", () => {
-      while (subSelects.length > subSelects.indexOf(sel) + 1) {
-        const removed = subSelects.pop();
-        removed.parentElement?.remove();
-      }
-      const id = sel.value;
-      if (id && hasChildren(id, domain, items)) {
-        appendSubSelect(id, "Tipo custo 3", childrenOf(id, domain, items));
-      }
-      refreshHidden();
-    });
-
-    wrap.appendChild(lab);
-    wrap.appendChild(sel);
-    container.appendChild(wrap);
-    subSelects.push(sel);
-  }
-
-  function onRubricChange(presetSubPath = []) {
-    clearSubSelects();
-    if (!rubricSelect.value) {
-      refreshHidden();
+    const { group, realTipo3 } = resolved;
+    if (!realTipo3.length) {
+      const direct = group.variants[0];
+      state.tipo3PickId = direct?.pickCategoryId || group.tipo2Id;
+      setPick(state.tipo3PickId, direct?.requiresDetailText);
       return;
     }
-    const rubric = items.find((c) => sameCostId(c.id, rubricSelect.value));
-    const entries = subcascadeEntryParentIds(rubric, domain, items);
 
-    if (entries.length === 1) {
-      appendSubSelect(
-        entries[0].parentId,
-        entries[0].label,
-        childrenOf(entries[0].parentId, domain, items)
-      );
-    } else if (entries.length > 1) {
-      appendSubSelect(
-        entries[0].parentId,
-        "Tipo custo 3",
-        childrenOf(entries[0].parentId, domain, items)
-      );
-    }
+    const { wrap, sel } = makeCascadeSelect({
+      label: "Subcusto (tipo 3)",
+      placeholder: "Seleccionar subcusto...",
+      disabled,
+      value: presetPickId,
+      options: realTipo3.map((v) => ({
+        value: costIdKey(v.pickCategoryId),
+        label: v.tipo3,
+      })),
+      onChange: (val) => {
+        state.tipo3PickId = val;
+        const hit = realTipo3.find((v) => sameCostId(v.pickCategoryId, val));
+        setPick(val || "", hit?.requiresDetailText);
+      },
+    });
+    refs.tipo3 = { wrap, sel };
+    container.appendChild(wrap);
 
-    if (presetSubPath.length) {
-      presetSubPath.forEach((id, idx) => {
-        if (subSelects[idx]) {
-          subSelects[idx].value = costIdKey(id);
-          subSelects[idx].dispatchEvent(new Event("change"));
-        }
-      });
+    if (presetPickId && realTipo3.some((v) => sameCostId(v.pickCategoryId, presetPickId))) {
+      sel.value = costIdKey(presetPickId);
+      state.tipo3PickId = costIdKey(presetPickId);
+      const hit = realTipo3.find((v) => sameCostId(v.pickCategoryId, presetPickId));
+      setPick(presetPickId, hit?.requiresDetailText);
     } else {
-      refreshHidden();
+      state.tipo3PickId = "";
+      setPick("");
     }
   }
 
-  const rubricWrap = document.createElement("div");
-  rubricWrap.className = "cost-cascade-field";
-  const rubricLabel = document.createElement("label");
-  rubricLabel.className = "cost-cascade-field__label";
-  rubricLabel.textContent = "Tipo custo 2";
-  const rubricSelect = document.createElement("select");
-  rubricSelect.className = "cost-cascade-field__select";
-  rubricSelect.disabled = disabled;
-  rubricSelect.innerHTML =
-    `<option value="">Seleccionar tipo custo 2...</option>` +
-    rubrics.map((r) => `<option value="${r.id}">${formatCategoryDisplayName(r.name)}</option>`).join("");
-  rubricSelect.addEventListener("change", () => onRubricChange());
-  rubricWrap.appendChild(rubricLabel);
-  rubricWrap.appendChild(rubricSelect);
-  container.appendChild(rubricWrap);
+  function renderTipo2(presetTipo2 = "", presetPickId = "") {
+    removeField("tipo3");
+    removeField("tipo2");
+    state.tipo2 = "";
+    state.tipo2Id = "";
+    state.tipo3PickId = "";
 
+    const opts = sheetFilterOptions(allRows, currentFilters());
+    const tipo2Names = opts.tipo2 || [];
+    const { wrap, sel } = makeCascadeSelect({
+      label: "Tipo custo 2",
+      placeholder: "Seleccionar tipo custo 2...",
+      disabled,
+      value: presetTipo2,
+      options: tipo2Names.map((name) => ({ value: name, label: name })),
+      onChange: (val) => {
+        state.tipo2 = val;
+        const row = applySheetFilters(allRows, {
+          domain,
+          tipo1: state.tipo1,
+          grupo: state.grupo,
+          tipo2: val,
+        })[0];
+        state.tipo2Id = row?.tipo2Id || "";
+        if (!val) {
+          removeField("tipo3");
+          setPick("");
+          return;
+        }
+        renderTipo3();
+      },
+    });
+    refs.tipo2 = { wrap, sel };
+    container.appendChild(wrap);
+
+    if (presetTipo2 && tipo2Names.includes(presetTipo2)) {
+      sel.value = presetTipo2;
+      state.tipo2 = presetTipo2;
+      const row = applySheetFilters(allRows, {
+        domain,
+        tipo1: state.tipo1,
+        grupo: state.grupo,
+        tipo2: presetTipo2,
+      })[0];
+      state.tipo2Id = row?.tipo2Id || "";
+      renderTipo3(presetPickId);
+    } else {
+      setPick("");
+    }
+  }
+
+  function renderGrupo(presetGrupo = "", presetTipo2 = "", presetPickId = "") {
+    removeField("tipo3");
+    removeField("tipo2");
+    removeField("grupo");
+    state.grupo = "";
+    state.tipo2 = "";
+    state.tipo2Id = "";
+    state.tipo3PickId = "";
+
+    const opts = sheetFilterOptions(allRows, { domain, tipo1: state.tipo1 });
+    const grupos = (opts.grupo || []).filter(Boolean);
+    const hasEmptyGrupo = applySheetFilters(allRows, { domain, tipo1: state.tipo1 }).some(
+      (r) => !r.grupo
+    );
+
+    if (!grupos.length) {
+      state.grupo = "";
+      renderTipo2(presetTipo2, presetPickId);
+      return;
+    }
+
+    const options = [];
+    if (hasEmptyGrupo) options.push({ value: "__EMPTY__", label: "Sem grupo" });
+    grupos.forEach((g) => options.push({ value: g, label: g }));
+
+    const presetGrupoValue =
+      presetGrupo && presetGrupo !== "__EMPTY__"
+        ? presetGrupo
+        : presetTipo2 && !presetGrupo && hasEmptyGrupo
+          ? "__EMPTY__"
+          : presetGrupo || "";
+
+    const { wrap, sel } = makeCascadeSelect({
+      label: "Grupo",
+      placeholder: "Seleccionar grupo...",
+      disabled,
+      value: presetGrupoValue,
+      options,
+      onChange: (val) => {
+        state.grupo = val; // pode ser nome, "__EMPTY__" ou ""
+        if (!val) {
+          removeField("tipo2");
+          removeField("tipo3");
+          setPick("");
+          return;
+        }
+        renderTipo2();
+      },
+    });
+    refs.grupo = { wrap, sel };
+    container.appendChild(wrap);
+
+    if (presetGrupoValue && (presetGrupoValue === "__EMPTY__" || grupos.includes(presetGrupoValue))) {
+      sel.value = presetGrupoValue;
+      state.grupo = presetGrupoValue;
+      renderTipo2(presetTipo2, presetPickId);
+    } else {
+      setPick("");
+    }
+  }
+
+  function renderTipo1(preset = null) {
+    container.innerHTML = "";
+    refs.tipo1 = refs.grupo = refs.tipo2 = refs.tipo3 = null;
+
+    const tipo1Opts = sheetFilterOptions(allRows, { domain }).tipo1 || [];
+    const hideTipo1 = tipo1Opts.length <= 1;
+
+    if (hideTipo1) {
+      state.tipo1 = tipo1Opts[0] || "";
+      renderGrupo(preset?.grupo || "", preset?.tipo2 || "", preset?.pickId || "");
+      return;
+    }
+
+    const { wrap, sel } = makeCascadeSelect({
+      label: "Tipo custo 1",
+      placeholder: "Seleccionar tipo custo 1...",
+      disabled,
+      value: preset?.tipo1 || "",
+      options: tipo1Opts.map((name) => ({ value: name, label: name })),
+      onChange: (val) => {
+        state.tipo1 = val;
+        if (!val) {
+          removeField("grupo");
+          removeField("tipo2");
+          removeField("tipo3");
+          setPick("");
+          return;
+        }
+        renderGrupo();
+      },
+    });
+    refs.tipo1 = { wrap, sel };
+    container.appendChild(wrap);
+
+    if (preset?.tipo1 && tipo1Opts.includes(preset.tipo1)) {
+      sel.value = preset.tipo1;
+      state.tipo1 = preset.tipo1;
+      renderGrupo(preset.grupo || "", preset.tipo2 || "", preset.pickId || "");
+    } else {
+      setPick("");
+    }
+  }
+
+  let preset = null;
   if (initialCategoryId) {
-    const path = [];
-    let cur = items.find((c) => sameCostId(c.id, initialCategoryId));
-    while (cur) {
-      path.unshift(costIdKey(cur.id));
-      cur = cur.parentId ? items.find((c) => sameCostId(c.id, cur.parentId)) : null;
+    const hit =
+      allRows.find((r) => sameCostId(r.pickCategoryId, initialCategoryId)) ||
+      allRows.find((r) => sameCostId(r.tipo2Id, initialCategoryId));
+    if (hit) {
+      preset = {
+        tipo1: hit.tipo1,
+        grupo: hit.grupo || "",
+        tipo2: hit.tipo2,
+        pickId: costIdKey(hit.pickCategoryId),
+      };
     }
-    const rubricInPath = path.find((id) => rubrics.some((r) => sameCostId(r.id, id)));
-    if (rubricInPath) {
-      rubricSelect.value = costIdKey(rubricInPath);
-      const subPath = path.slice(path.indexOf(rubricInPath) + 1);
-      onRubricChange(subPath);
-      hidden.value = costIdKey(initialCategoryId);
-      syncDetailField(initialCategoryId);
-      updateSummary(initialCategoryId);
-    }
-  } else {
-    updateSummary("");
   }
+
+  renderTipo1(preset);
 }
 
 export function resetCostCategoryCascade(container, hiddenInputId, detailRowId, detailInputId) {
@@ -327,7 +468,7 @@ export function resetCostCategoryCascade(container, hiddenInputId, detailRowId, 
   }
   const summary = document.getElementById("extraCostSelectionSummary");
   if (summary) {
-    summary.textContent = "Seleccione o tipo custo 2 e, se existir, o tipo custo 3.";
+    summary.textContent = emptyCascadeHint();
     summary.classList.add("text-slate-400");
     summary.classList.remove("text-emerald-700");
   }
