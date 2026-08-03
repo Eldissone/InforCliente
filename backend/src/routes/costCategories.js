@@ -99,6 +99,83 @@ costCategoryRoutes.get(
 );
 
 costCategoryRoutes.post(
+  "/bulk-delete",
+  requirePermission("pedidosExtras", "delete"),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        ids: z.array(z.coerce.number().int().positive()).min(1).max(500),
+      })
+      .parse(req.body);
+
+    const requested = [...new Set(body.ids)];
+    const all = await prisma.costCategory.findMany({
+      select: { id: true, parentId: true, level: true, active: true },
+    });
+    const byParent = new Map();
+    for (const c of all) {
+      const key = c.parentId == null ? "root" : c.parentId;
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key).push(c.id);
+    }
+
+    const expanded = new Set();
+    const queue = [...requested];
+    while (queue.length) {
+      const id = queue.pop();
+      if (expanded.has(id)) continue;
+      expanded.add(id);
+      const kids = byParent.get(id) || [];
+      for (const kid of kids) queue.push(kid);
+    }
+
+    const targets = all
+      .filter((c) => expanded.has(c.id))
+      .sort((a, b) => b.level - a.level || b.id - a.id);
+
+    let deleted = 0;
+    let softDeleted = 0;
+    const results = [];
+
+    for (const target of targets) {
+      const usageCount = await prisma.extraRequest.count({
+        where: { costCategoryId: target.id },
+      });
+      if (usageCount > 0) {
+        await prisma.costCategory.update({
+          where: { id: target.id },
+          data: { active: false, isSelectable: false },
+        });
+        softDeleted += 1;
+        results.push({ id: target.id, softDeleted: true, usageCount });
+        continue;
+      }
+
+      const stillExists = await prisma.costCategory.findUnique({
+        where: { id: target.id },
+        select: { id: true },
+      });
+      if (!stillExists) {
+        results.push({ id: target.id, skipped: true, reason: "already_gone" });
+        continue;
+      }
+
+      await prisma.costCategory.delete({ where: { id: target.id } });
+      deleted += 1;
+      results.push({ id: target.id, deleted: true });
+    }
+
+    return res.json({
+      requested: requested.length,
+      expanded: targets.length,
+      deleted,
+      softDeleted,
+      results,
+    });
+  })
+);
+
+costCategoryRoutes.post(
   "/",
   requirePermission("pedidosExtras", "create"),
   asyncHandler(async (req, res) => {

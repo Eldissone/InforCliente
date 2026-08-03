@@ -145,6 +145,93 @@ let catalogTipo3PickByGroup = {};
 /** Grupo da tabela ao editar a partir de uma linha (modal). */
 let activeCatalogLineForModal = null;
 let catalogSearchQuery = "";
+/** IDs seleccionados para eliminação em massa (chaves string). */
+let selectedCatalogDeleteIds = new Set();
+/** Modo de selecção para eliminar — checkboxes só neste estado. */
+let catalogDeleteSelectMode = false;
+
+function catalogDeleteSelectionHas(id) {
+  return selectedCatalogDeleteIds.has(costIdKey(id));
+}
+
+function setCatalogDeleteSelected(id, on) {
+  const key = costIdKey(id);
+  if (!key) return;
+  if (on) selectedCatalogDeleteIds.add(key);
+  else selectedCatalogDeleteIds.delete(key);
+}
+
+function setCatalogDeleteSelectMode(on) {
+  catalogDeleteSelectMode = Boolean(on);
+  if (!catalogDeleteSelectMode) selectedCatalogDeleteIds.clear();
+  updateCatalogBulkDeleteButton();
+  renderCostCatalogViews();
+}
+
+function clearCatalogDeleteSelection() {
+  selectedCatalogDeleteIds.clear();
+  updateCatalogBulkDeleteButton();
+}
+
+function updateCatalogBulkDeleteButton() {
+  const selectBtn = document.getElementById("btnCostCatalogSelectDelete");
+  const cancelBtn = document.getElementById("btnCostCatalogCancelSelect");
+  const deleteBtn = document.getElementById("btnCostCatalogBulkDelete");
+  const label = document.getElementById("btnCostCatalogBulkDeleteLabel");
+  const canDel = canDeleteCostCatalog();
+  const n = selectedCatalogDeleteIds.size;
+
+  selectBtn?.classList.toggle("hidden", !canDel || catalogDeleteSelectMode);
+  cancelBtn?.classList.toggle("hidden", !canDel || !catalogDeleteSelectMode);
+  deleteBtn?.classList.toggle("hidden", !canDel || !catalogDeleteSelectMode || n === 0);
+  if (label) {
+    label.textContent =
+      n === 1 ? "Eliminar 1 seleccionado" : `Eliminar ${n} seleccionados`;
+  }
+}
+
+function catalogCheckboxCellHtml(id) {
+  if (!canDeleteCostCatalog() || !catalogDeleteSelectMode) return "";
+  const checked = catalogDeleteSelectionHas(id) ? " checked" : "";
+  return `<td class="px-3 py-3 align-middle w-10" onclick="event.stopPropagation()">
+    <input type="checkbox" class="cost-catalog-check h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" data-catalog-check="${costIdKey(id)}"${checked} aria-label="Seleccionar">
+  </td>`;
+}
+
+function catalogSelectAllHeadHtml(ids) {
+  if (!canDeleteCostCatalog() || !catalogDeleteSelectMode) return "";
+  const list = (ids || []).map(costIdKey).filter(Boolean);
+  const allOn = list.length > 0 && list.every((id) => selectedCatalogDeleteIds.has(id));
+  const checked = allOn ? " checked" : "";
+  return `<th class="px-3 py-3 w-10">
+    <input type="checkbox" id="costCatalogSelectAll" class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"${checked} title="Seleccionar todos" aria-label="Seleccionar todos">
+  </th>`;
+}
+
+function bindCatalogCheckboxEvents(container, visibleIds) {
+  if (!container || !canDeleteCostCatalog() || !catalogDeleteSelectMode) return;
+  container.querySelectorAll("[data-catalog-check]").forEach((cb) => {
+    cb.addEventListener("click", (e) => e.stopPropagation());
+    cb.addEventListener("change", () => {
+      setCatalogDeleteSelected(cb.dataset.catalogCheck, cb.checked);
+      updateCatalogBulkDeleteButton();
+      const selectAll = container.querySelector("#costCatalogSelectAll");
+      if (selectAll) {
+        const ids = (visibleIds || []).map(costIdKey);
+        selectAll.checked = ids.length > 0 && ids.every((id) => selectedCatalogDeleteIds.has(id));
+      }
+    });
+  });
+  const selectAll = container.querySelector("#costCatalogSelectAll");
+  selectAll?.addEventListener("change", () => {
+    const ids = (visibleIds || []).map(costIdKey).filter(Boolean);
+    ids.forEach((id) => setCatalogDeleteSelected(id, selectAll.checked));
+    container.querySelectorAll("[data-catalog-check]").forEach((cb) => {
+      cb.checked = selectAll.checked;
+    });
+    updateCatalogBulkDeleteButton();
+  });
+}
 
 function catalogGroupPathLabel(g) {
   return [g.tipo1, g.grupo || null, g.tipo2].filter(Boolean).join(" › ");
@@ -592,6 +679,7 @@ function applyCatalogManageVisibility() {
   document.getElementById("btnCostCatalogNova")?.classList.toggle("hidden", !(show && onTipos));
   document.getElementById("costCatalogEstruturaNova")?.classList.toggle("hidden", !(show && onEstrutura));
   document.getElementById("costCatalogSearch")?.closest(".relative")?.classList.toggle("hidden", onEstrutura);
+  updateCatalogBulkDeleteButton();
 }
 
 const CARD_TYPE_LABELS = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
@@ -682,10 +770,12 @@ function renderCostCatalogTipos() {
   }
   if (!container) return;
 
+  const canDelete = canDeleteCostCatalog() && catalogDeleteSelectMode;
+  const checkHead = catalogSelectAllHeadHtml(displayRows.map((g) => g.tipo2Id));
   const actionsHead = canManageCostCatalog()
     ? `<th class="px-3 py-2.5 text-right w-28">Acções</th>`
     : "";
-  const colSpan = canManageCostCatalog() ? 4 : 3;
+  const colSpan = (canDelete ? 1 : 0) + 3 + (canManageCostCatalog() ? 1 : 0);
 
   const bodyRows = displayRows.length
     ? displayRows
@@ -711,6 +801,7 @@ function renderCostCatalogTipos() {
             ? `<td class="px-3 py-2.5 text-right align-middle">${catalogRowActionsHtml(g)}</td>`
             : "";
           return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0" title="Clique para ver tipos custo 3">
+            ${catalogCheckboxCellHtml(g.tipo2Id)}
             <td class="px-4 py-3 align-middle">
               <div class="cost-catalog-desc-cell flex items-start gap-3">
                 <span class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
@@ -741,6 +832,7 @@ function renderCostCatalogTipos() {
       <table class="cost-catalog-table cost-catalog-table--extrato w-full text-left">
         <thead class="sticky top-0 z-[1]">
           <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
+            ${checkHead}
             <th class="px-4 py-3">Tipo custo 2</th>
             <th class="px-3 py-3 border-l border-slate-200 w-40">Tipo custo 3</th>
             <th class="px-3 py-3 border-l border-slate-200 w-24">Estado</th>
@@ -753,6 +845,11 @@ function renderCostCatalogTipos() {
 
   bindCatalogSheetRowEvents(container, items);
   bindCatalogActionsMenus(container);
+  bindCatalogCheckboxEvents(
+    container,
+    displayRows.map((g) => g.tipo2Id)
+  );
+  updateCatalogBulkDeleteButton();
 }
 
 function setCostCatalogTab(tab) {
@@ -1025,10 +1122,10 @@ function renderEstruturaCatalog() {
   const domain = "GERAL";
   const tipo1s = categoriesBySheetLevel(domain, "TIPO1");
   const grupos = categoriesBySheetLevel(domain, "GRUPO");
+  const canDelete = canDeleteCostCatalog() && catalogDeleteSelectMode;
   const actionsHead = canManageCostCatalog()
     ? `<th class="px-3 py-2.5 text-center w-28">Acções</th>`
     : "";
-  const colSpan = canManageCostCatalog() ? 4 : 3;
 
   const rows = [];
   tipo1s.forEach((t1) => {
@@ -1037,13 +1134,19 @@ function renderEstruturaCatalog() {
       .filter((g) => sameCostId(g.parentId, t1.id))
       .forEach((g) => rows.push({ kind: "GRUPO", tipo1: t1, grupo: g }));
   });
+  const visibleIds = rows.map(({ kind, tipo1, grupo }) => (kind === "TIPO1" ? tipo1.id : grupo.id));
+  const checkHead = catalogSelectAllHeadHtml(visibleIds);
+  const colSpan = (canDelete ? 1 : 0) + 3 + (canManageCostCatalog() ? 1 : 0);
 
   const body = rows.length
     ? rows
         .map(({ kind, tipo1, grupo }) => {
           const cat = kind === "TIPO1" ? tipo1 : grupo;
-          const actions = canManageCostCatalog() ? `<td class="px-3 py-2 text-center">${catalogEstruturaActionsHtml(cat.id)}</td>` : "";
+          const actions = canManageCostCatalog()
+            ? `<td class="px-3 py-2 text-center">${catalogEstruturaActionsHtml(cat.id)}</td>`
+            : "";
           return `<tr class="cost-catalog-table__row" data-pick-category="${cat.id}" tabindex="0">
+            ${catalogCheckboxCellHtml(cat.id)}
             <td class="px-3 py-2 text-[11px] font-semibold">${formatCategoryDisplayName(tipo1.name)}</td>
             <td class="px-3 py-2 text-[11px]">${grupo ? formatCategoryDisplayName(grupo.name) : "—"}</td>
             <td class="px-3 py-2 text-[10px] uppercase text-slate-500">${SHEET_LEVEL_LABELS[kind]}</td>
@@ -1058,6 +1161,7 @@ function renderEstruturaCatalog() {
       <table class="cost-catalog-table cost-catalog-table--sheet w-full text-left">
         <thead>
           <tr class="bg-slate-200/90 text-[10px] font-black uppercase text-slate-700">
+            ${checkHead}
             <th class="px-3 py-2.5">Tipo custo 1</th>
             <th class="px-3 py-2.5">Grupo</th>
             <th class="px-3 py-2.5">Nível</th>
@@ -1067,6 +1171,8 @@ function renderEstruturaCatalog() {
         <tbody>${body}</tbody>
       </table>
     </div>`;
+  bindCatalogCheckboxEvents(container, visibleIds);
+  updateCatalogBulkDeleteButton();
 }
 
 function openCostCategoryModal({
@@ -1249,6 +1355,7 @@ async function deleteCostCategory(id) {
       selectedCostCategoryFilter = "";
       document.getElementById("filterCostCategory").value = "";
     }
+    selectedCatalogDeleteIds.delete(costIdKey(id));
     await reloadCostCatalog();
     loadExtras();
   } catch (err) {
@@ -1256,11 +1363,55 @@ async function deleteCostCategory(id) {
   }
 }
 
+async function deleteSelectedCostCategories() {
+  const ids = [...selectedCatalogDeleteIds].map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (!ids.length) return;
+  if (
+    !confirm(
+      `Eliminar ${ids.length} tipo${ids.length === 1 ? "" : "s"} de custo seleccionado${ids.length === 1 ? "" : "s"}?\n\nTambém serão removidos os subníveis (filhos). Entradas usadas em pedidos serão só desactivadas.`
+    )
+  ) {
+    return;
+  }
+  try {
+    const res = await apiRequest("/cost-categories/bulk-delete", {
+      method: "POST",
+      body: { ids },
+    });
+    const parts = [];
+    if (res.deleted) parts.push(`${res.deleted} eliminado${res.deleted === 1 ? "" : "s"}`);
+    if (res.softDeleted) {
+      parts.push(`${res.softDeleted} desactivado${res.softDeleted === 1 ? "" : "s"}`);
+    }
+    showToast(parts.length ? parts.join(" · ") : "Nada a eliminar", parts.length ? "success" : "info");
+    if (
+      selectedCostCategoryFilter &&
+      ids.some((id) => sameCostId(id, selectedCostCategoryFilter))
+    ) {
+      selectedCostCategoryFilter = "";
+      const filterEl = document.getElementById("filterCostCategory");
+      if (filterEl) filterEl.value = "";
+    }
+    clearCatalogDeleteSelection();
+    catalogDeleteSelectMode = false;
+    updateCatalogBulkDeleteButton();
+    await reloadCostCatalog();
+    loadExtras();
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Não foi possível eliminar em massa", "error");
+  }
+}
+
 async function reloadCostCatalog() {
   costCategories = await loadAllCostCategories("", { includeInactive: true });
+  const valid = new Set(costCategories.map((c) => costIdKey(c.id)));
+  selectedCatalogDeleteIds = new Set(
+    [...selectedCatalogDeleteIds].filter((id) => valid.has(id))
+  );
   populateCostCategoryFilter();
   renderCostCatalogViews();
   refreshTipo3DrillIfOpen();
+  updateCatalogBulkDeleteButton();
 }
 
 function sheetRowPresetsForCatalogFilters(sheetLevel) {
@@ -1305,6 +1456,16 @@ function bindCatalogCrudEvents() {
   document.getElementById("costCatalogSearch")?.addEventListener("input", (e) => {
     catalogSearchQuery = e.target.value || "";
     if (activeCostCatalogTab === "tipos") renderCostCatalogTipos();
+  });
+
+  document.getElementById("btnCostCatalogSelectDelete")?.addEventListener("click", () => {
+    setCatalogDeleteSelectMode(true);
+  });
+  document.getElementById("btnCostCatalogCancelSelect")?.addEventListener("click", () => {
+    setCatalogDeleteSelectMode(false);
+  });
+  document.getElementById("btnCostCatalogBulkDelete")?.addEventListener("click", () => {
+    deleteSelectedCostCategories();
   });
 
   document.getElementById("btnAddCostCategoryBatchLine")?.addEventListener("click", () => {

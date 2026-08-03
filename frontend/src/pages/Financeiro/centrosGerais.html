@@ -725,6 +725,20 @@
                                 class="cost-catalog-search w-full h-9 pl-10 pr-3 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200">
                         </div>
                         <p id="costCatalogSummary" class="text-[11px] font-semibold text-slate-500 ml-auto shrink-0"></p>
+                        <button type="button" id="btnCostCatalogSelectDelete"
+                            class="hidden h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 border border-slate-200 hover:bg-slate-200">
+                            <span class="material-symbols-outlined text-base">checklist</span>
+                            Seleccionar para eliminar
+                        </button>
+                        <button type="button" id="btnCostCatalogCancelSelect"
+                            class="hidden h-9 px-3 rounded-lg bg-white text-slate-600 text-xs font-bold inline-flex items-center gap-1.5 border border-slate-200 hover:bg-slate-50">
+                            Cancelar
+                        </button>
+                        <button type="button" id="btnCostCatalogBulkDelete"
+                            class="hidden h-9 px-3 rounded-lg bg-red-50 text-red-700 text-xs font-bold inline-flex items-center gap-1.5 border border-red-200 hover:bg-red-100">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                            <span id="btnCostCatalogBulkDeleteLabel">Eliminar seleccionados</span>
+                        </button>
                         <div id="costCatalogCrudToolbar" class="hidden" aria-hidden="true"></div>
                         <div id="costCatalogNovaWrap" class="hidden" aria-hidden="true"></div>
                     </div>
