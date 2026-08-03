@@ -24,7 +24,6 @@ import {
   sheetFilterOptions,
   groupCatalogSheetDisplayRows,
   catalogSheetGroupKey,
-  resolveGroupActiveVariant,
   classifyCategorySheetLevel,
   SHEET_LEVEL_LABELS,
   SHEET_TIPO1_FLAT,
@@ -219,7 +218,7 @@ function focusCreatedCatalogItem(categoryId) {
     return;
   }
   if (hit.tipo2Id === categoryId && !hit.tipo3Id) {
-    showToast("Tipo custo 2 adicionado — coluna «Tipo custo 3» fica «—» até criar subcustos.", "info");
+    showToast("Tipo custo 2 adicionado. Clique na linha para gerir tipos custo 3.", "info");
   }
   catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
   const gkey = catalogSheetGroupKey({
@@ -232,9 +231,14 @@ function focusCreatedCatalogItem(categoryId) {
   selectedCostCategoryFilter = hit.pickCategoryId;
   renderCostCatalogViews();
   requestAnimationFrame(() => {
-    document
-      .querySelector(`#costCatalogTipos tr[data-pick-category="${hit.pickCategoryId}"]`)
-      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const rowEl = [...document.querySelectorAll("#costCatalogTipos tr[data-group-key]")].find(
+      (tr) => tr.dataset.groupKey === gkey
+    );
+    rowEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const group = getCatalogGroupByKey(gkey);
+    if (group && (hit.tipo3Id || hit.pickCategoryId !== hit.tipo2Id)) {
+      openTipo3DrillModal(group);
+    }
   });
 }
 
@@ -291,13 +295,11 @@ function renderCatalogFilterBar() {
   if (grupoValues.includes("")) grupoEntries.push({ v: "__EMPTY__", label: "(sem grupo)" });
   grupoValues.filter(Boolean).forEach((g) => grupoEntries.push({ v: g, label: g }));
   const tipo2Entries = [{ v: "", label: "Tipo custo 2 — todos" }, ...opts.tipo2.map((t) => ({ v: t, label: t }))];
-  const tipo3Entries = [{ v: "", label: "Tipo custo 3 — todos" }, ...opts.tipo3.map((t) => ({ v: t, label: t }))];
 
   bar.innerHTML = `<div class="flex flex-nowrap items-end gap-2 mb-3 p-3 bg-slate-50/90 border border-slate-100 rounded-xl overflow-x-auto">
     ${mkSelect("filterSheetTipo1", "Tipo custo 1", tipo1Entries, catalogSheetFilters.tipo1)}
     ${mkSelect("filterSheetGrupo", "Grupo", grupoEntries, catalogSheetFilters.grupo)}
     ${mkSelect("filterSheetTipo2", "Tipo custo 2", tipo2Entries, catalogSheetFilters.tipo2)}
-    ${mkSelect("filterSheetTipo3", "Tipo custo 3", tipo3Entries, catalogSheetFilters.tipo3)}
     <button type="button" id="btnClearSheetFilters" class="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 shrink-0 whitespace-nowrap">Limpar filtros</button>
   </div>`;
 }
@@ -306,7 +308,7 @@ function readCatalogSheetFiltersFromDom() {
   catalogSheetFilters.tipo1 = document.getElementById("filterSheetTipo1")?.value || "";
   catalogSheetFilters.grupo = document.getElementById("filterSheetGrupo")?.value || "";
   catalogSheetFilters.tipo2 = document.getElementById("filterSheetTipo2")?.value || "";
-  catalogSheetFilters.tipo3 = document.getElementById("filterSheetTipo3")?.value || "";
+  catalogSheetFilters.tipo3 = "";
 }
 
 function resetCatalogSheetFiltersCascade(fromKey) {
@@ -335,48 +337,46 @@ function bindCatalogSheetRowEvents(container, items) {
     });
   });
 
-  container.querySelectorAll(".cost-catalog-tipo3-select").forEach((sel) => {
-    sel.addEventListener("click", (e) => e.stopPropagation());
-    sel.addEventListener("mousedown", (e) => e.stopPropagation());
-    sel.addEventListener("change", (e) => {
-      e.stopPropagation();
-      const gkey = sel.dataset.groupKey;
-      if (gkey) catalogTipo3PickByGroup[gkey] = sel.value;
-      renderCostCatalogTipos();
-    });
-  });
-
-  container.querySelectorAll(".cost-catalog-table__row[data-pick-category]").forEach((row) => {
+  container.querySelectorAll(".cost-catalog-table__row[data-group-key]").forEach((row) => {
     row.addEventListener("click", (e) => {
       if (
         e.target.closest(
-          "[data-edit-category], [data-delete-category], [data-add-child-category], .cost-catalog-tipo3-select, .cost-catalog-actions"
+          "[data-edit-category], [data-delete-category], [data-add-child-category], .cost-catalog-actions"
         )
       )
         return;
-      const id = row.dataset.pickCategory;
-      selectedCostCategoryFilter = selectedCostCategoryFilter === id ? "" : id;
-      document.getElementById("filterCostCategory").value = selectedCostCategoryFilter;
-      renderCostCatalogViews();
-      loadExtras();
+      const group = getCatalogGroupByKey(row.dataset.groupKey);
+      if (group) openTipo3DrillModal(group);
     });
     row.addEventListener("dblclick", async (e) => {
       if (
         e.target.closest(
-          "[data-edit-category], [data-delete-category], [data-add-child-category], .cost-catalog-tipo3-select, .cost-catalog-actions"
+          "[data-edit-category], [data-delete-category], [data-add-child-category], .cost-catalog-actions"
         )
       )
         return;
       if (!can("pedidosExtras", "create")) return;
+      const group = getCatalogGroupByKey(row.dataset.groupKey);
+      if (!group) return;
+      const realTipo3 = (group.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
+      if (realTipo3.length > 1) {
+        openTipo3DrillModal(group);
+        showToast("Escolha o tipo custo 3 no modal e use «Pedido extra».", "info");
+        return;
+      }
+      const pickId =
+        realTipo3[0]?.pickCategoryId ||
+        group.variants?.[0]?.pickCategoryId ||
+        group.tipo2Id;
       switchCentrosMainTab("extras");
-      const domain = row.dataset.domain;
+      const domain = group.domain;
       if (domain === "VIATURAS") {
         showToast("Custos de viaturas: em breve no pedido extra. Use filtro por agora.", "info");
         return;
       }
       await openExtraRequestModal({
         type: domain === "OBRA" ? "OBRA" : "GERAL",
-        costCategoryId: row.dataset.pickCategory,
+        costCategoryId: pickId,
       });
     });
     row.addEventListener("keydown", (e) => {
@@ -384,6 +384,146 @@ function bindCatalogSheetRowEvents(container, items) {
         e.preventDefault();
         row.click();
       }
+    });
+  });
+}
+
+let activeTipo3DrillGroup = null;
+
+function getTipo3VariantsForGroup(group) {
+  if (!group) return [];
+  const variants = group.variants || [];
+  const withTipo3 = variants.filter((v) => v.tipo3 && v.tipo3 !== "—");
+  if (withTipo3.length) return withTipo3;
+  return variants.length ? variants : [];
+}
+
+function openTipo3DrillModal(group) {
+  if (!group) return;
+  activeTipo3DrillGroup = group;
+  const modal = document.getElementById("modalTipo3Drill");
+  const title = document.getElementById("tipo3DrillTitle");
+  const path = document.getElementById("tipo3DrillPath");
+  const meta = document.getElementById("tipo3DrillMeta");
+  const list = document.getElementById("tipo3DrillList");
+  const addBtn = document.getElementById("btnTipo3DrillAdd");
+  if (!modal || !list) return;
+
+  if (title) title.textContent = group.tipo2 || "—";
+  if (path) path.textContent = catalogGroupPathLabel(group);
+  const variants = getTipo3VariantsForGroup(group);
+  const hasRealTipo3 = variants.some((v) => v.tipo3 && v.tipo3 !== "—");
+  if (meta) {
+    meta.textContent = hasRealTipo3
+      ? `${variants.length} tipo${variants.length === 1 ? "" : "s"} custo 3`
+      : "Sem tipo custo 3 — este tipo 2 é seleccionável directamente";
+  }
+  if (addBtn) {
+    addBtn.classList.toggle("hidden", !canManageCostCatalog());
+    addBtn.dataset.tipo2Id = group.tipo2Id || "";
+    addBtn.dataset.domain = group.domain || "GERAL";
+  }
+
+  const canCreateExtra = can("pedidosExtras", "create");
+  list.innerHTML = variants.length
+    ? variants
+        .map((v) => {
+          const label = v.tipo3 && v.tipo3 !== "—" ? v.tipo3 : group.tipo2;
+          const badge = v.tipo3 && v.tipo3 !== "—" ? "Tipo custo 3" : "Tipo 2 (directo)";
+          const desc = v.requiresDetailText ? "Descrição obrigatória no pedido" : "Sem descrição extra";
+          const selected =
+            selectedCostCategoryFilter === v.pickCategoryId
+              ? " cost-catalog-drill-item--selected"
+              : "";
+          const manage =
+            canManageCostCatalog()
+              ? `<div class="flex items-center gap-1 shrink-0 cost-catalog-drill-manage">
+                  <button type="button" class="cost-catalog-action" data-edit-category="${v.pickCategoryId}" title="Editar">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                  ${
+                    canDeleteCostCatalog()
+                      ? `<button type="button" class="cost-catalog-action cost-catalog-action--danger" data-delete-category="${v.pickCategoryId}" title="Eliminar">
+                          <span class="material-symbols-outlined">delete</span>
+                        </button>`
+                      : ""
+                  }
+                </div>`
+              : "";
+          const extraBtn = canCreateExtra
+            ? `<button type="button" class="cost-catalog-drill-extra h-8 px-2.5 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-bold hover:bg-indigo-100 shrink-0" data-extra-category="${v.pickCategoryId}" data-domain="${group.domain}">Pedido extra</button>`
+            : "";
+          return `<button type="button" class="cost-catalog-drill-item${selected} w-full text-left flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/40 transition-all" data-pick-category="${v.pickCategoryId}">
+            <span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-lg">subdirectory_arrow_right</span>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-bold text-slate-900 truncate">${escapeHtml(label)}</span>
+              <span class="block text-[11px] text-slate-500 mt-0.5">${escapeHtml(badge)} · ${escapeHtml(desc)}</span>
+            </span>
+            ${extraBtn}
+            ${manage}
+          </button>`;
+        })
+        .join("")
+    : `<p class="text-sm text-slate-400 text-center py-8">Nenhum tipo custo 3. Use «Adicionar tipo custo 3».</p>`;
+
+  modal.classList.add("open");
+  bindTipo3DrillListEvents(list, group);
+}
+
+function closeTipo3DrillModal() {
+  document.getElementById("modalTipo3Drill")?.classList.remove("open");
+  activeTipo3DrillGroup = null;
+}
+
+function bindTipo3DrillListEvents(list, group) {
+  list.querySelectorAll(".cost-catalog-drill-manage").forEach((wrap) => {
+    wrap.addEventListener("click", (e) => e.stopPropagation());
+  });
+  list.querySelectorAll(".cost-catalog-drill-item[data-pick-category]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      if (e.target.closest("[data-edit-category], [data-delete-category], .cost-catalog-drill-extra")) return;
+      const id = btn.dataset.pickCategory;
+      selectedCostCategoryFilter = selectedCostCategoryFilter === id ? "" : id;
+      const filterEl = document.getElementById("filterCostCategory");
+      if (filterEl) filterEl.value = selectedCostCategoryFilter;
+      openTipo3DrillModal(group);
+      loadExtras();
+      if (selectedCostCategoryFilter) {
+        showToast("Filtro de pedidos extra aplicado a este tipo de custo.", "info");
+      }
+    });
+  });
+  list.querySelectorAll(".cost-catalog-drill-extra").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const domain = btn.dataset.domain;
+      if (domain === "VIATURAS") {
+        showToast("Custos de viaturas: em breve no pedido extra.", "info");
+        return;
+      }
+      closeTipo3DrillModal();
+      switchCentrosMainTab("extras");
+      await openExtraRequestModal({
+        type: domain === "OBRA" ? "OBRA" : "GERAL",
+        costCategoryId: btn.dataset.extraCategory,
+      });
+    });
+  });
+  list.querySelectorAll("[data-edit-category]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCostCategoryModal({
+        editId: btn.dataset.editCategory,
+        catalogLine: group,
+      });
+    });
+  });
+  list.querySelectorAll("[data-delete-category]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteCostCategory(btn.dataset.deleteCategory);
     });
   });
 }
@@ -424,16 +564,17 @@ function catalogEstruturaActionsHtml(categoryId) {
     </button>${del}`;
 }
 
-function catalogRowActionsHtml(g, manageId) {
+function catalogRowActionsHtml(g) {
   if (!canManageCostCatalog()) return "";
   const del = canDeleteCostCatalog()
-    ? `<button type="button" class="cost-catalog-actions__item cost-catalog-actions__item--danger" data-delete-category="${manageId}">Eliminar</button>`
+    ? `<button type="button" class="cost-catalog-actions__item cost-catalog-actions__item--danger" data-delete-category="${g.tipo2Id}">Eliminar tipo 2</button>`
     : "";
   return `<div class="cost-catalog-actions relative inline-block text-left">
       <button type="button" class="cost-catalog-actions__btn">Acções <span class="material-symbols-outlined text-sm align-middle">expand_more</span></button>
       <div class="cost-catalog-actions__menu hidden">
-        <button type="button" class="cost-catalog-actions__item" data-edit-category="${manageId}">Editar</button>
+        <button type="button" class="cost-catalog-actions__item" data-edit-category="${g.tipo2Id}">Editar tipo 2</button>
         <button type="button" class="cost-catalog-actions__item" data-add-child-category="${g.tipo2Id}">Adicionar tipo custo 3</button>
+        <button type="button" class="cost-catalog-actions__item" data-open-tipo3-drill="${escapeHtml(catalogSheetGroupKey(g))}">Ver tipos custo 3</button>
         ${del}
       </div>
     </div>`;
@@ -516,18 +657,18 @@ function renderCostCatalogTipos() {
   const summaryEl = document.getElementById("costCatalogSummary");
   const items = costCategories.length ? costCategories : getCachedCategories();
   const allSheet = getCatalogSheetRows();
-  const rows = applySheetFilters(allSheet, catalogSheetFilters);
+  const rows = applySheetFilters(allSheet, { ...catalogSheetFilters, tipo3: "" });
   let displayRows = groupCatalogSheetDisplayRows(rows);
   displayRows = displayRows.filter((g) => catalogGroupMatchesSearch(g, catalogSearchQuery));
 
   if (meta) {
     meta.textContent = allSheet.length
-      ? `${displayRows.length} tipos de custo (${allSheet.length} linhas no catálogo)`
+      ? `${displayRows.length} tipos custo 2 (${allSheet.length} linhas no catálogo)`
       : "Catálogo indisponível";
   }
   if (summaryEl) {
     summaryEl.textContent = displayRows.length
-      ? `${displayRows.length} registos`
+      ? `${displayRows.length} tipos custo 2`
       : catalogSearchQuery.trim()
         ? "Nenhum resultado"
         : "";
@@ -537,56 +678,48 @@ function renderCostCatalogTipos() {
   const actionsHead = canManageCostCatalog()
     ? `<th class="px-3 py-2.5 text-right w-28">Acções</th>`
     : "";
-  const colSpan = canManageCostCatalog() ? 5 : 4;
+  const colSpan = canManageCostCatalog() ? 4 : 3;
 
   const bodyRows = displayRows.length
     ? displayRows
         .map((g) => {
           const gkey = catalogSheetGroupKey(g);
-          const preferred =
-            catalogTipo3PickByGroup[gkey] ||
-            (g.variants.some((v) => v.pickCategoryId === selectedCostCategoryFilter)
-              ? selectedCostCategoryFilter
-              : "");
-          const active = resolveGroupActiveVariant(g, preferred);
-          const pickId = active?.pickCategoryId || "";
+          const realTipo3 = (g.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
+          const count = realTipo3.length;
           const selected =
-            selectedCostCategoryFilter && selectedCostCategoryFilter === pickId
+            selectedCostCategoryFilter &&
+            (g.variants || []).some((v) => v.pickCategoryId === selectedCostCategoryFilter)
               ? " cost-catalog-table__row--selected"
               : "";
-          const descDetail = active?.requiresDetailText ? "Obrigatória no pedido" : "—";
-          const manageId = active?.tipo3Id || g.tipo2Id;
-          const multiTipo3 = g.variants.length > 1;
-          const subcustosHint = multiTipo3
-            ? `${g.variants.length} subcustos`
-            : active?.tipo3 && active.tipo3 !== "—"
-              ? active.tipo3
-              : "Sem subcusto (tipo 2 directo)";
-          const tipo3Cell = multiTipo3
-            ? `<select class="cost-catalog-tipo3-select" data-group-key="${escapeHtml(gkey)}" aria-label="Tipo custo 3">
-                ${g.variants
-                  .map(
-                    (v) =>
-                      `<option value="${v.pickCategoryId}"${
-                        v.pickCategoryId === pickId ? " selected" : ""
-                      }>${escapeHtml(v.tipo3)}</option>`
-                  )
-                  .join("")}
-              </select>`
-            : `<span class="text-sm text-slate-700">${escapeHtml(active?.tipo3 ?? "—")}</span>`;
+          const parentPath = [g.tipo1, g.grupo || null].filter(Boolean).join(" › ");
+          const countLabel =
+            count > 0
+              ? `${count} tipo${count === 1 ? "" : "s"} custo 3`
+              : "Sem tipo custo 3";
+          const countBadge =
+            count > 0
+              ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">${count} subcustos</span>`
+              : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">Directo</span>`;
           const actions = canManageCostCatalog()
-            ? `<td class="px-3 py-2.5 text-right align-middle">${catalogRowActionsHtml(g, manageId)}</td>`
+            ? `<td class="px-3 py-2.5 text-right align-middle">${catalogRowActionsHtml(g)}</td>`
             : "";
-          return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-pick-category="${pickId}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" tabindex="0">
+          return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0" title="Clique para ver tipos custo 3">
             <td class="px-4 py-3 align-middle">
-              <div class="cost-catalog-desc-cell">
-                <span class="block text-sm font-bold text-slate-900">${escapeHtml(g.tipo2)}</span>
-                <span class="block text-xs text-slate-500 mt-0.5">${escapeHtml(catalogGroupPathLabel(g))}</span>
-                <span class="block text-[11px] text-slate-400 mt-0.5">${escapeHtml(subcustosHint)}</span>
+              <div class="cost-catalog-desc-cell flex items-start gap-3">
+                <span class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <span class="material-symbols-outlined text-lg">category</span>
+                </span>
+                <span class="min-w-0">
+                  <span class="inline-flex items-center gap-2">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Tipo custo 2</span>
+                    ${countBadge}
+                  </span>
+                  <span class="block text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(g.tipo2)}</span>
+                  <span class="block text-xs text-slate-500 mt-0.5">${escapeHtml(parentPath || "—")}</span>
+                </span>
               </div>
             </td>
-            <td class="px-3 py-3 align-middle border-l border-slate-100">${tipo3Cell}</td>
-            <td class="px-3 py-3 text-xs text-slate-600 align-middle border-l border-slate-100">${escapeHtml(descDetail)}</td>
+            <td class="px-3 py-3 text-xs font-semibold text-slate-600 align-middle border-l border-slate-100">${escapeHtml(countLabel)}</td>
             <td class="px-3 py-3 align-middle border-l border-slate-100">
               <span class="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-bold uppercase">Activo</span>
             </td>
@@ -594,16 +727,15 @@ function renderCostCatalogTipos() {
           </tr>`;
         })
         .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-10 text-center text-sm text-slate-400">Nenhum tipo de custo com estes filtros ou pesquisa.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-10 text-center text-sm text-slate-400">Nenhum tipo custo 2 com estes filtros ou pesquisa.</td></tr>`;
 
   container.innerHTML = `
     <div class="cost-catalog-extrato-wrap overflow-x-auto border border-slate-200 rounded-xl bg-white max-h-[560px] overflow-y-auto">
       <table class="cost-catalog-table cost-catalog-table--extrato w-full text-left">
         <thead class="sticky top-0 z-[1]">
           <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
-            <th class="px-4 py-3">Descrição / classificação</th>
-            <th class="px-3 py-3 border-l border-slate-200 w-44">Tipo custo 3</th>
-            <th class="px-3 py-3 border-l border-slate-200 w-36">Descrição custo</th>
+            <th class="px-4 py-3">Tipo custo 2</th>
+            <th class="px-3 py-3 border-l border-slate-200 w-40">Tipo custo 3</th>
             <th class="px-3 py-3 border-l border-slate-200 w-24">Estado</th>
             ${actionsHead}
           </tr>
@@ -772,8 +904,19 @@ function resolveCostCategoryParentIdForSubmit(sheetLevel, domain) {
 
 function getCatalogGroupByKey(gkey) {
   if (!gkey) return null;
-  const rows = applySheetFilters(getCatalogSheetRows(), catalogSheetFilters);
-  return groupCatalogSheetDisplayRows(rows).find((g) => catalogSheetGroupKey(g) === gkey) || null;
+  const all = groupCatalogSheetDisplayRows(getCatalogSheetRows());
+  const hit = all.find((g) => catalogSheetGroupKey(g) === gkey);
+  if (hit) return hit;
+  const filtered = applySheetFilters(getCatalogSheetRows(), catalogSheetFilters);
+  return groupCatalogSheetDisplayRows(filtered).find((g) => catalogSheetGroupKey(g) === gkey) || null;
+}
+
+function refreshTipo3DrillIfOpen() {
+  if (!activeTipo3DrillGroup) return;
+  const gkey = catalogSheetGroupKey(activeTipo3DrillGroup);
+  const fresh = getCatalogGroupByKey(gkey);
+  if (fresh) openTipo3DrillModal(fresh);
+  else closeTipo3DrillModal();
 }
 
 function catalogLineEditTargets(group) {
@@ -1112,6 +1255,7 @@ async function reloadCostCatalog() {
   costCategories = await loadAllCostCategories("", { includeInactive: true });
   populateCostCategoryFilter();
   renderCostCatalogViews();
+  refreshTipo3DrillIfOpen();
 }
 
 function sheetRowPresetsForCatalogFilters(sheetLevel) {
@@ -1173,6 +1317,20 @@ function bindCatalogCrudEvents() {
     if (removeBtn) removeBtn.closest(".cost-catalog-batch-line")?.remove();
   });
 
+  document.getElementById("btnCloseTipo3Drill")?.addEventListener("click", closeTipo3DrillModal);
+  document.getElementById("btnCancelTipo3Drill")?.addEventListener("click", closeTipo3DrillModal);
+  document.getElementById("btnTipo3DrillAdd")?.addEventListener("click", () => {
+    const btn = document.getElementById("btnTipo3DrillAdd");
+    openCostCategoryModal({
+      domain: btn?.dataset.domain || "GERAL",
+      sheetLevel: "SUBCUSTO",
+      parentId: btn?.dataset.tipo2Id || "",
+    });
+  });
+  document.getElementById("modalTipo3Drill")?.addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeTipo3DrillModal();
+  });
+
   document.getElementById("formCostCategory")?.addEventListener("submit", submitCostCategory);
   document.getElementById("btnCloseCostCategoryModal")?.addEventListener("click", closeCostCategoryModal);
   document.getElementById("btnCancelCostCategory")?.addEventListener("click", closeCostCategoryModal);
@@ -1195,7 +1353,6 @@ function bindCatalogCrudEvents() {
       filterSheetTipo1: "tipo1",
       filterSheetGrupo: "grupo",
       filterSheetTipo2: "tipo2",
-      filterSheetTipo3: "tipo3",
     }[sel.id];
     if (!cascadeFrom) return;
     readCatalogSheetFiltersFromDom();
@@ -1213,6 +1370,14 @@ function bindCatalogCrudEvents() {
     if (e.target.closest("#btnClearSheetFilters")) {
       catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
       renderCostCatalogViews();
+      return;
+    }
+    const openDrill = e.target.closest("[data-open-tipo3-drill]");
+    if (openDrill) {
+      e.stopPropagation();
+      e.preventDefault();
+      const group = getCatalogGroupByKey(openDrill.dataset.openTipo3Drill);
+      if (group) openTipo3DrillModal(group);
       return;
     }
     const editBtn = e.target.closest("[data-edit-category]");

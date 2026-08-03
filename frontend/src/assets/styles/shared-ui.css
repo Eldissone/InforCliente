@@ -384,6 +384,30 @@
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 }
 
+.cost-catalog-drill-item--selected {
+  border-color: rgb(52 211 153) !important;
+  background-color: rgb(236 253 245) !important;
+}
+
+.cost-catalog-drill-list .cost-catalog-action {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: rgb(71 85 105);
+  background: rgb(248 250 252);
+}
+
+.cost-catalog-drill-list .cost-catalog-action:hover {
+  background: rgb(241 245 249);
+}
+
+.cost-catalog-drill-list .cost-catalog-action--danger {
+  color: rgb(220 38 38);
+}
+
 .cost-catalog-table__section td {
   background-color: rgb(248 250 252);
   border-top: 1px solid rgb(226 232 240);
