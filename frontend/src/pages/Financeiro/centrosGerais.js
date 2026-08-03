@@ -540,19 +540,21 @@ function openTipo3DrillModal(group) {
                 </div>`
               : "";
           const extraBtn = canCreateExtra
-            ? `<button type="button" class="cost-catalog-drill-extra h-8 px-2.5 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-bold hover:bg-indigo-100 shrink-0" data-extra-category="${v.pickCategoryId}" data-domain="${group.domain}">Pedido extra</button>`
+            ? `<button type="button" class="cost-catalog-drill-extra h-8 px-2.5 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-bold hover:bg-indigo-100 shrink-0 whitespace-nowrap" data-extra-category="${v.pickCategoryId}" data-domain="${group.domain}">Pedido extra</button>`
             : "";
-          return `<button type="button" class="cost-catalog-drill-item${selected} w-full text-left flex items-center gap-3 px-3 py-3 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/40 transition-all" data-pick-category="${v.pickCategoryId}">
+          return `<div role="button" tabindex="0" class="cost-catalog-drill-item${selected} w-full text-left flex flex-nowrap items-center gap-3 px-3 py-3 rounded-xl border border-slate-100 hover:border-emerald-200 hover:bg-emerald-50/40 transition-all cursor-pointer" data-pick-category="${v.pickCategoryId}">
             <span class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
               <span class="material-symbols-outlined text-lg">subdirectory_arrow_right</span>
             </span>
-            <span class="min-w-0 flex-1">
+            <span class="min-w-0 flex-1 overflow-hidden">
               <span class="block text-sm font-bold text-slate-900 truncate">${escapeHtml(label)}</span>
-              <span class="block text-[11px] text-slate-500 mt-0.5">${escapeHtml(badge)} · ${escapeHtml(desc)}</span>
+              <span class="block text-[11px] text-slate-500 mt-0.5 truncate">${escapeHtml(badge)} · ${escapeHtml(desc)}</span>
             </span>
-            ${extraBtn}
-            ${manage}
-          </button>`;
+            <span class="flex items-center gap-2 shrink-0 ml-auto">
+              ${extraBtn}
+              ${manage}
+            </span>
+          </div>`;
         })
         .join("")
     : `<p class="text-sm text-slate-400 text-center py-8">Nenhum tipo custo 3. Use «Adicionar tipo custo 3».</p>`;
@@ -570,10 +572,10 @@ function bindTipo3DrillListEvents(list, group) {
   list.querySelectorAll(".cost-catalog-drill-manage").forEach((wrap) => {
     wrap.addEventListener("click", (e) => e.stopPropagation());
   });
-  list.querySelectorAll(".cost-catalog-drill-item[data-pick-category]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
+  list.querySelectorAll(".cost-catalog-drill-item[data-pick-category]").forEach((row) => {
+    row.addEventListener("click", (e) => {
       if (e.target.closest("[data-edit-category], [data-delete-category], .cost-catalog-drill-extra")) return;
-      const id = btn.dataset.pickCategory;
+      const id = row.dataset.pickCategory;
       selectedCostCategoryFilter = sameCostId(selectedCostCategoryFilter, id) ? "" : id;
       const filterEl = document.getElementById("filterCostCategory");
       if (filterEl) filterEl.value = selectedCostCategoryFilter;
@@ -582,6 +584,11 @@ function bindTipo3DrillListEvents(list, group) {
       if (selectedCostCategoryFilter) {
         showToast("Filtro de pedidos extra aplicado a este tipo de custo.", "info");
       }
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      row.click();
     });
   });
   list.querySelectorAll(".cost-catalog-drill-extra").forEach((btn) => {
