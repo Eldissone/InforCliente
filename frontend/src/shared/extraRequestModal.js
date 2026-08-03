@@ -179,7 +179,8 @@ let editingItemCache = null;
 let supplierManualOverride = false;
 let lastCascadeMeta = { domain: "GERAL", grupo: "", tipo2: "" };
 let toolPickerActive = false;
-let obraDescPickerKind = null; // 'tools' | 'materials' | null
+let obraDescPickerKind = null; // 'tools' | 'materials' | 'budget' | null
+let obraDescOtherMode = false;
 let toolOptionsCache = [];
 let toolOptionsLoadToken = 0;
 let obraDescOptionsCache = [];
@@ -268,7 +269,7 @@ function escapeHtml(value) {
 }
 
 function needsItemQuantity() {
-  return toolPickerActive || Boolean(obraDescPickerKind);
+  return toolPickerActive || obraDescPickerKind === "tools" || obraDescPickerKind === "materials";
 }
 
 function syncQuantityFieldVisibility() {
@@ -432,6 +433,7 @@ async function loadToolOptionsForPicker({ preserveValue = true } = {}) {
 
 function setObraDescPickerMode(kind) {
   obraDescPickerKind = kind;
+  obraDescOtherMode = false;
   const input = document.getElementById("extraDesc");
   const select = document.getElementById("extraDescSelect");
   const hint = document.getElementById("extraDescSelectHint");
@@ -444,7 +446,10 @@ function setObraDescPickerMode(kind) {
       select.innerHTML = `<option value="">Seleccionar...</option>`;
     }
     input?.classList.remove("hidden");
-    if (input) input.required = true;
+    if (input) {
+      input.required = true;
+      input.placeholder = "Motivo do pedido extra";
+    }
     hint?.classList.add("hidden");
     if (label) {
       label.textContent = "Descrição *";
@@ -455,21 +460,48 @@ function setObraDescPickerMode(kind) {
     return;
   }
 
-  input?.classList.add("hidden");
-  if (input) input.required = true;
   select?.classList.remove("hidden");
   if (select) select.required = true;
+  input?.classList.add("hidden");
+  if (input) input.required = true;
   if (label) {
-    label.textContent = kind === "materials" ? "Material (orçamento) *" : "Ferramenta (orçamento) *";
+    label.textContent =
+      kind === "materials"
+        ? "Material (orçamento) *"
+        : kind === "tools"
+          ? "Ferramenta (orçamento) *"
+          : "Item do orçamento *";
     label.setAttribute("for", "extraDescSelect");
   }
   syncQuantityFieldVisibility();
+}
+
+function applyObraOtherMode(enabled, { clearValue = false } = {}) {
+  obraDescOtherMode = enabled;
+  const input = document.getElementById("extraDesc");
+  if (!input) return;
+  if (enabled) {
+    input.classList.remove("hidden");
+    input.required = true;
+    input.placeholder = "Descreva o item que não está no orçamento";
+    if (clearValue) input.value = "";
+    input.focus();
+  } else {
+    input.classList.add("hidden");
+    input.placeholder = "Motivo do pedido extra";
+  }
 }
 
 function syncDescFromObraSelect() {
   const select = document.getElementById("extraDescSelect");
   const input = document.getElementById("extraDesc");
   if (!select || !input || !obraDescPickerKind) return;
+  const val = select.value;
+  if (val === "__OTHER__") {
+    applyObraOtherMode(true, { clearValue: !input.value || !obraDescOtherMode });
+    return;
+  }
+  applyObraOtherMode(false);
   const opt = select.options[select.selectedIndex];
   input.value = opt?.dataset?.name || "";
 }
@@ -477,10 +509,12 @@ function syncDescFromObraSelect() {
 function renderObraDescOptions(items, preferredName = "") {
   const select = document.getElementById("extraDescSelect");
   if (!select) return;
-  const isMat = obraDescPickerKind === "materials";
-  const placeholder = isMat
-    ? "Seleccionar material do orçamento..."
-    : "Seleccionar ferramenta do orçamento...";
+  const placeholder =
+    obraDescPickerKind === "materials"
+      ? "Seleccionar material do orçamento..."
+      : obraDescPickerKind === "tools"
+        ? "Seleccionar ferramenta do orçamento..."
+        : "Seleccionar item do orçamento...";
 
   select.innerHTML =
     `<option value="">${placeholder}</option>` +
@@ -491,72 +525,98 @@ function renderObraDescOptions(items, preferredName = "") {
           t.name
         )}${escapeHtml(qty)}</option>`;
       })
-      .join("");
+      .join("") +
+    `<option value="__OTHER__">Outro (não está no orçamento)…</option>`;
 
   if (preferredName) {
     const hit = items.find(
       (t) => String(t.name).trim().toLowerCase() === String(preferredName).trim().toLowerCase()
     );
-    if (hit) select.value = hit.id;
+    if (hit) {
+      select.value = hit.id;
+      applyObraOtherMode(false);
+      syncDescFromObraSelect();
+      return;
+    }
+    // Nome livre → modo Outro
+    select.value = "__OTHER__";
+    applyObraOtherMode(true);
+    inputKeepPreferred(preferredName);
+    return;
   }
   syncDescFromObraSelect();
 }
 
+function inputKeepPreferred(preferredName) {
+  const input = document.getElementById("extraDesc");
+  if (input) input.value = preferredName || "";
+}
+
 async function loadObraDescOptions({ preserveValue = true } = {}) {
   const projectId = document.getElementById("extraProjectId")?.value || "";
+  const costCenterId = document.getElementById("extraCostCenterId")?.value || "";
   const select = document.getElementById("extraDescSelect");
   const hint = document.getElementById("extraDescSelectHint");
   const preferredName = preserveValue ? document.getElementById("extraDesc")?.value || "" : "";
-  const kind = obraDescPickerKind;
 
-  if (!kind) return;
-
-  if (!projectId) {
-    if (select) select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
-    if (hint) {
-      hint.textContent = "Escolha a obra para carregar o orçamento em planificação.";
-      hint.classList.remove("hidden");
-    }
+  if (!projectId || !costCenterId) {
+    setObraDescPickerMode(null);
     return;
   }
 
   const token = ++obraDescLoadToken;
-  const noun = kind === "materials" ? "materiais" : "ferramentas";
-  if (select) select.innerHTML = `<option value="">A carregar ${noun}...</option>`;
+  if (select) {
+    select.classList.remove("hidden");
+    select.innerHTML = `<option value="">A carregar itens do orçamento...</option>`;
+  }
   if (hint) {
-    hint.textContent = `${kind === "materials" ? "Materiais" : "Ferramentas"} presentes no orçamento / planificação da obra.`;
+    hint.textContent = "A carregar itens orçamentados deste centro de custo…";
     hint.classList.remove("hidden");
   }
 
   try {
-    const params = new URLSearchParams({ scope: "OBRA", projectId, kind });
-    const costCenterId = document.getElementById("extraCostCenterId")?.value || "";
-    if (costCenterId) params.set("costCenterId", costCenterId);
+    const params = new URLSearchParams({
+      scope: "OBRA",
+      projectId,
+      costCenterId,
+      kind: "budget",
+    });
     const data = await apiRequest(`/extra-requests/tool-options?${params.toString()}`);
     if (token !== obraDescLoadToken) return;
-    obraDescOptionsCache = data.items || [];
-    renderObraDescOptions(obraDescOptionsCache, preferredName);
-    if (hint && !obraDescOptionsCache.length) {
-      hint.textContent = `Não há ${noun} nas necessidades deste centro de custo. Crie-os na planificação da obra.`;
-    } else if (hint) {
-      hint.textContent = `${kind === "materials" ? "Materiais" : "Ferramentas"} das necessidades / orçamento deste centro de custo.`;
+    const items = data.items || [];
+    const kind = data.kind || classifyObraCostCenterKind(
+      document.getElementById("extraCostCenterId")?.selectedOptions?.[0]?.dataset?.code || "",
+      document.getElementById("extraCostCenterId")?.selectedOptions?.[0]?.dataset?.name || ""
+    ) || "budget";
+
+    if (!items.length) {
+      // Sem itens orçamentados → descrição livre
+      setObraDescPickerMode(null);
+      if (hint) {
+        hint.textContent = "Este centro de custo não tem itens orçamentados — use descrição livre.";
+        hint.classList.remove("hidden");
+        setTimeout(() => hint.classList.add("hidden"), 4000);
+      }
+      return;
+    }
+
+    setObraDescPickerMode(kind);
+    obraDescOptionsCache = items;
+    renderObraDescOptions(items, preferredName);
+    if (hint) {
+      hint.textContent =
+        "Seleccione um item do orçamento ou «Outro» para um item que não exista na planificação.";
+      hint.classList.remove("hidden");
     }
   } catch (err) {
     if (token !== obraDescLoadToken) return;
     obraDescOptionsCache = [];
-    if (select) select.innerHTML = `<option value="">Erro ao carregar ${noun}</option>`;
+    setObraDescPickerMode(null);
     if (hint) {
-      hint.textContent = err.message || `Não foi possível carregar os ${noun}.`;
+      hint.textContent = err.message || "Não foi possível carregar o orçamento deste centro.";
       hint.classList.remove("hidden");
     }
   }
-}
-
-function getSelectedObraCostCenterKind() {
-  const select = document.getElementById("extraCostCenterId");
-  if (!select?.value) return null;
-  const opt = select.options[select.selectedIndex];
-  return classifyObraCostCenterKind(opt?.dataset?.code || "", opt?.dataset?.name || opt?.textContent || "");
 }
 
 async function syncObraDescPickerFromCostCenter({ preserveValue = true } = {}) {
@@ -565,12 +625,12 @@ async function syncObraDescPickerFromCostCenter({ preserveValue = true } = {}) {
     setObraDescPickerMode(null);
     return;
   }
-  const kind = getSelectedObraCostCenterKind();
-  if (!kind) {
+  const costCenterId = document.getElementById("extraCostCenterId")?.value || "";
+  const projectId = document.getElementById("extraProjectId")?.value || "";
+  if (!costCenterId || !projectId) {
     setObraDescPickerMode(null);
     return;
   }
-  setObraDescPickerMode(kind);
   await loadObraDescOptions({ preserveValue });
 }
 
@@ -868,6 +928,7 @@ function resetExtraFormState() {
   lastCascadeMeta = { domain: "GERAL", grupo: "", tipo2: "" };
   setToolPickerMode(false);
   setObraDescPickerMode(null);
+  obraDescOtherMode = false;
   syncQuantityFieldVisibility();
 }
 
@@ -1108,15 +1169,19 @@ async function submitExtra(e) {
       return;
     }
     if (obraDescPickerKind) {
+      const descSelect = document.getElementById("extraDescSelect");
       syncDescFromObraSelect();
       body.description = document.getElementById("extraDesc")?.value.trim() || "";
-      if (!document.getElementById("extraDescSelect")?.value || !body.description) {
-        modalOptions.showToast(
-          obraDescPickerKind === "materials"
-            ? "Seleccione o material do orçamento"
-            : "Seleccione a ferramenta do orçamento",
-          "error"
-        );
+      if (!descSelect?.value) {
+        modalOptions.showToast("Seleccione um item do orçamento ou «Outro»", "error");
+        return;
+      }
+      if (descSelect.value === "__OTHER__" && !body.description) {
+        modalOptions.showToast("Descreva o item que não está no orçamento", "error");
+        return;
+      }
+      if (descSelect.value !== "__OTHER__" && !body.description) {
+        modalOptions.showToast("Seleccione um item do orçamento", "error");
         return;
       }
     } else if (!body.description) {

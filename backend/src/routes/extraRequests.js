@@ -272,14 +272,18 @@ extraRequestRoutes.get(
         });
       }
 
-      // 1) Necessidades do centro de custo (orçamento / planificação financeira da obra)
+      // Necessidades do centro de custo (orçamento / planificação)
       let costCenterIds = [];
+      let costCenterMeta = null;
       if (costCenterId) {
         const cc = await prisma.costCenter.findFirst({
           where: { id: costCenterId, projectId },
-          select: { id: true },
+          select: { id: true, code: true, name: true },
         });
-        if (cc) costCenterIds = [cc.id];
+        if (cc) {
+          costCenterIds = [cc.id];
+          costCenterMeta = cc;
+        }
       } else {
         const centers = await prisma.costCenter.findMany({
           where: { projectId, active: true },
@@ -320,7 +324,7 @@ extraRequestRoutes.get(
             id: n.id,
             name,
             sku: null,
-            category: resolvedKind === "materials" ? "MATERIAL" : "TOOL",
+            category: null,
             unit: n.unit || null,
             plannedQty: n.quantity != null ? Number(n.quantity) : null,
             source: "workNeed",
@@ -328,8 +332,8 @@ extraRequestRoutes.get(
         }
       }
 
-      // 2) Fallback: plano de stock da obra (ProjectMaterialPlan)
-      if (!items.length) {
+      // Fallback stock só sem CC concreto e quando se pediu tools/materials
+      if (!items.length && !costCenterId) {
         const categories =
           resolvedKind === "materials" ? ["MATERIAL", "CONSUMABLE"] : ["TOOL", "EQUIPMENT"];
         const plans = await prisma.projectMaterialPlan.findMany({
@@ -353,9 +357,18 @@ extraRequestRoutes.get(
         }));
       }
 
+      let responseKind = "budget";
+      if (costCenterMeta) {
+        const text = normalizeLabel(`${costCenterMeta.code} ${costCenterMeta.name}`);
+        if (text.includes("ferrament")) responseKind = "tools";
+        else if (text.includes("material")) responseKind = "materials";
+      } else {
+        responseKind = resolvedKind;
+      }
+
       return res.json({
         scope: "OBRA",
-        kind: resolvedKind,
+        kind: responseKind,
         items,
       });
     }
