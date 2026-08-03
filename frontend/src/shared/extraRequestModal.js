@@ -8,6 +8,8 @@ import {
   extraTypeToCostDomain,
   COST_CASCADE_IDS,
   DOMAIN_LABELS,
+  isToolCostSelection,
+  classifyObraCostCenterKind,
 } from "./costCategoryCascade.js";
 
 const EXTRA_MODAL_HTML = `
@@ -40,9 +42,14 @@ const EXTRA_MODAL_HTML = `
         <div id="extraCostCategoryCascade" class="flex flex-col gap-3"></div>
         <input type="hidden" id="extraCostCategoryId" value="">
         <div id="rowCostDetailDescription" class="hidden">
-          <label for="extraCostDetailDescription" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 mt-1">Descrição custo *</label>
+          <label id="extraCostDetailLabel" for="extraCostDetailDescription" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 mt-1">Descrição custo *</label>
+          <select id="extraToolSelect"
+            class="hidden w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            <option value="">Seleccionar ferramenta...</option>
+          </select>
           <input id="extraCostDetailDescription" type="text" placeholder="Ex.: nome da ferramenta ou material"
             class="w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+          <p id="extraToolSelectHint" class="hidden text-[11px] text-slate-400 mt-1"></p>
         </div>
       </div>
       <div id="rowProject" class="hidden">
@@ -60,9 +67,14 @@ const EXTRA_MODAL_HTML = `
         </select>
       </div>
       <div>
-        <label for="extraDesc" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição *</label>
+        <label id="extraDescLabel" for="extraDesc" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Descrição *</label>
+        <select id="extraDescSelect"
+          class="hidden w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+          <option value="">Seleccionar...</option>
+        </select>
         <input id="extraDesc" type="text" required placeholder="Motivo do pedido extra"
           class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+        <p id="extraDescSelectHint" class="hidden text-[11px] text-slate-400 mt-1"></p>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
@@ -159,13 +171,61 @@ let modalOptions = { showToast: defaultToast, onSuccess: null, getEditItem: null
 let eventsBound = false;
 let editingItemCache = null;
 let supplierManualOverride = false;
+let lastCascadeMeta = { domain: "GERAL", grupo: "", tipo2: "" };
+let toolPickerActive = false;
+let obraDescPickerKind = null; // 'tools' | 'materials' | null
+let toolOptionsCache = [];
+let toolOptionsLoadToken = 0;
+let obraDescOptionsCache = [];
+let obraDescLoadToken = 0;
 
 function defaultToast(msg, type = "info") {
   console.log(`[extra] ${type}: ${msg}`);
 }
 
 function ensureModalMounted() {
-  if (document.getElementById("modalExtra")) return;
+  if (document.getElementById("modalExtra")) {
+    // Migração suave se o modal antigo ainda estiver no DOM sem o select de ferramentas
+    const detailRow = document.getElementById("rowCostDetailDescription");
+    if (detailRow && !document.getElementById("extraToolSelect")) {
+      const input = document.getElementById("extraCostDetailDescription");
+      const label = detailRow.querySelector("label");
+      if (label) {
+        label.id = "extraCostDetailLabel";
+        label.setAttribute("for", "extraCostDetailDescription");
+      }
+      const select = document.createElement("select");
+      select.id = "extraToolSelect";
+      select.className =
+        "hidden w-full h-11 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none";
+      select.innerHTML = `<option value="">Seleccionar ferramenta...</option>`;
+      input?.before(select);
+      const hint = document.createElement("p");
+      hint.id = "extraToolSelectHint";
+      hint.className = "hidden text-[11px] text-slate-400 mt-1";
+      input?.after(hint);
+    }
+    const descInput = document.getElementById("extraDesc");
+    if (descInput && !document.getElementById("extraDescSelect")) {
+      const wrap = descInput.parentElement;
+      const label = wrap?.querySelector("label");
+      if (label) {
+        label.id = "extraDescLabel";
+        label.setAttribute("for", "extraDesc");
+      }
+      const select = document.createElement("select");
+      select.id = "extraDescSelect";
+      select.className =
+        "hidden w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none";
+      select.innerHTML = `<option value="">Seleccionar...</option>`;
+      descInput.before(select);
+      const hint = document.createElement("p");
+      hint.id = "extraDescSelectHint";
+      hint.className = "hidden text-[11px] text-slate-400 mt-1";
+      descInput.after(hint);
+    }
+    return;
+  }
   const root = document.createElement("div");
   root.id = "extraRequestModalRoot";
   root.innerHTML = EXTRA_MODAL_HTML;
@@ -179,6 +239,319 @@ function toDateInputValue(value) {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function setToolPickerMode(active) {
+  toolPickerActive = active;
+  const input = document.getElementById("extraCostDetailDescription");
+  const select = document.getElementById("extraToolSelect");
+  const hint = document.getElementById("extraToolSelectHint");
+  const label = document.getElementById("extraCostDetailLabel");
+  const row = document.getElementById("rowCostDetailDescription");
+
+  if (!active) {
+    select?.classList.add("hidden");
+    if (select) {
+      select.required = false;
+      select.innerHTML = `<option value="">Seleccionar ferramenta...</option>`;
+    }
+    input?.classList.remove("hidden");
+    hint?.classList.add("hidden");
+    if (label) {
+      label.textContent = "Descrição custo *";
+      label.setAttribute("for", "extraCostDetailDescription");
+    }
+    toolOptionsCache = [];
+    return;
+  }
+
+  row?.classList.remove("hidden");
+  input?.classList.add("hidden");
+  if (input) input.required = true;
+  select?.classList.remove("hidden");
+  if (select) select.required = true;
+  if (label) {
+    label.setAttribute("for", "extraToolSelect");
+  }
+}
+
+function syncDetailFromToolSelect() {
+  const select = document.getElementById("extraToolSelect");
+  const input = document.getElementById("extraCostDetailDescription");
+  if (!select || !input || !toolPickerActive) return;
+  const opt = select.options[select.selectedIndex];
+  input.value = opt?.dataset?.name || opt?.textContent?.trim() || "";
+}
+
+function renderToolSelectOptions(items, preferredName = "") {
+  const select = document.getElementById("extraToolSelect");
+  if (!select) return;
+  const type = document.getElementById("extraType")?.value || "GERAL";
+  const placeholder =
+    type === "OBRA"
+      ? "Seleccionar ferramenta do orçamento..."
+      : "Seleccionar ferramenta do catálogo...";
+
+  select.innerHTML =
+    `<option value="">${placeholder}</option>` +
+    items
+      .map((t) => {
+        const qty =
+          type === "OBRA" && t.plannedQty != null
+            ? ` (prev. ${t.plannedQty})`
+            : t.sku
+              ? ` · ${t.sku}`
+              : "";
+        return `<option value="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}">${escapeHtml(
+          t.name
+        )}${escapeHtml(qty)}</option>`;
+      })
+      .join("");
+
+  if (preferredName) {
+    const hit = items.find(
+      (t) => String(t.name).trim().toLowerCase() === String(preferredName).trim().toLowerCase()
+    );
+    if (hit) {
+      select.value = hit.id;
+    } else {
+      // Mantém valor legado no input se a ferramenta já não estiver na lista
+      const input = document.getElementById("extraCostDetailDescription");
+      if (input && !input.value) input.value = preferredName;
+    }
+  }
+  syncDetailFromToolSelect();
+}
+
+async function loadToolOptionsForPicker({ preserveValue = true } = {}) {
+  const type = document.getElementById("extraType")?.value || "GERAL";
+  const projectId = document.getElementById("extraProjectId")?.value || "";
+  const select = document.getElementById("extraToolSelect");
+  const hint = document.getElementById("extraToolSelectHint");
+  const label = document.getElementById("extraCostDetailLabel");
+  const preferredName = preserveValue
+    ? document.getElementById("extraCostDetailDescription")?.value || ""
+    : "";
+
+  if (type === "OBRA" && !projectId) {
+    if (select) {
+      select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
+      select.required = true;
+    }
+    if (hint) {
+      hint.textContent = "Escolha a obra para carregar as ferramentas planeadas no orçamento.";
+      hint.classList.remove("hidden");
+    }
+    if (label) label.textContent = "Ferramenta (orçamento) *";
+    toolOptionsCache = [];
+    return;
+  }
+
+  const token = ++toolOptionsLoadToken;
+  if (select) select.innerHTML = `<option value="">A carregar ferramentas...</option>`;
+  if (hint) {
+    hint.textContent =
+      type === "OBRA"
+        ? "Ferramentas presentes no orçamento / planificação da obra."
+        : "Ferramentas do catálogo de logística.";
+    hint.classList.remove("hidden");
+  }
+  if (label) {
+    label.textContent =
+      type === "OBRA" ? "Ferramenta (orçamento) *" : "Ferramenta (catálogo logística) *";
+  }
+
+  try {
+    const params = new URLSearchParams({ scope: type });
+    if (type === "OBRA") params.set("projectId", projectId);
+    const data = await apiRequest(`/extra-requests/tool-options?${params.toString()}`);
+    if (token !== toolOptionsLoadToken) return;
+    toolOptionsCache = data.items || [];
+    renderToolSelectOptions(toolOptionsCache, preferredName);
+    if (hint) {
+      if (!toolOptionsCache.length) {
+        hint.textContent =
+          type === "OBRA"
+            ? "Não há ferramentas planeadas nesta obra. Defina-as na planificação de stock."
+            : "Catálogo de ferramentas vazio na logística.";
+      }
+    }
+  } catch (err) {
+    if (token !== toolOptionsLoadToken) return;
+    toolOptionsCache = [];
+    if (select) select.innerHTML = `<option value="">Erro ao carregar ferramentas</option>`;
+    if (hint) {
+      hint.textContent = err.message || "Não foi possível carregar as ferramentas.";
+      hint.classList.remove("hidden");
+    }
+  }
+}
+
+function setObraDescPickerMode(kind) {
+  obraDescPickerKind = kind;
+  const input = document.getElementById("extraDesc");
+  const select = document.getElementById("extraDescSelect");
+  const hint = document.getElementById("extraDescSelectHint");
+  const label = document.getElementById("extraDescLabel");
+
+  if (!kind) {
+    select?.classList.add("hidden");
+    if (select) {
+      select.required = false;
+      select.innerHTML = `<option value="">Seleccionar...</option>`;
+    }
+    input?.classList.remove("hidden");
+    if (input) input.required = true;
+    hint?.classList.add("hidden");
+    if (label) {
+      label.textContent = "Descrição *";
+      label.setAttribute("for", "extraDesc");
+    }
+    obraDescOptionsCache = [];
+    return;
+  }
+
+  input?.classList.add("hidden");
+  if (input) input.required = true;
+  select?.classList.remove("hidden");
+  if (select) select.required = true;
+  if (label) {
+    label.textContent = kind === "materials" ? "Material (orçamento) *" : "Ferramenta (orçamento) *";
+    label.setAttribute("for", "extraDescSelect");
+  }
+}
+
+function syncDescFromObraSelect() {
+  const select = document.getElementById("extraDescSelect");
+  const input = document.getElementById("extraDesc");
+  if (!select || !input || !obraDescPickerKind) return;
+  const opt = select.options[select.selectedIndex];
+  input.value = opt?.dataset?.name || "";
+}
+
+function renderObraDescOptions(items, preferredName = "") {
+  const select = document.getElementById("extraDescSelect");
+  if (!select) return;
+  const isMat = obraDescPickerKind === "materials";
+  const placeholder = isMat
+    ? "Seleccionar material do orçamento..."
+    : "Seleccionar ferramenta do orçamento...";
+
+  select.innerHTML =
+    `<option value="">${placeholder}</option>` +
+    items
+      .map((t) => {
+        const qty = t.plannedQty != null ? ` (prev. ${t.plannedQty})` : "";
+        return `<option value="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}">${escapeHtml(
+          t.name
+        )}${escapeHtml(qty)}</option>`;
+      })
+      .join("");
+
+  if (preferredName) {
+    const hit = items.find(
+      (t) => String(t.name).trim().toLowerCase() === String(preferredName).trim().toLowerCase()
+    );
+    if (hit) select.value = hit.id;
+  }
+  syncDescFromObraSelect();
+}
+
+async function loadObraDescOptions({ preserveValue = true } = {}) {
+  const projectId = document.getElementById("extraProjectId")?.value || "";
+  const select = document.getElementById("extraDescSelect");
+  const hint = document.getElementById("extraDescSelectHint");
+  const preferredName = preserveValue ? document.getElementById("extraDesc")?.value || "" : "";
+  const kind = obraDescPickerKind;
+
+  if (!kind) return;
+
+  if (!projectId) {
+    if (select) select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
+    if (hint) {
+      hint.textContent = "Escolha a obra para carregar o orçamento em planificação.";
+      hint.classList.remove("hidden");
+    }
+    return;
+  }
+
+  const token = ++obraDescLoadToken;
+  const noun = kind === "materials" ? "materiais" : "ferramentas";
+  if (select) select.innerHTML = `<option value="">A carregar ${noun}...</option>`;
+  if (hint) {
+    hint.textContent = `${kind === "materials" ? "Materiais" : "Ferramentas"} presentes no orçamento / planificação da obra.`;
+    hint.classList.remove("hidden");
+  }
+
+  try {
+    const params = new URLSearchParams({ scope: "OBRA", projectId, kind });
+    const costCenterId = document.getElementById("extraCostCenterId")?.value || "";
+    if (costCenterId) params.set("costCenterId", costCenterId);
+    const data = await apiRequest(`/extra-requests/tool-options?${params.toString()}`);
+    if (token !== obraDescLoadToken) return;
+    obraDescOptionsCache = data.items || [];
+    renderObraDescOptions(obraDescOptionsCache, preferredName);
+    if (hint && !obraDescOptionsCache.length) {
+      hint.textContent = `Não há ${noun} nas necessidades deste centro de custo. Crie-os na planificação da obra.`;
+    } else if (hint) {
+      hint.textContent = `${kind === "materials" ? "Materiais" : "Ferramentas"} das necessidades / orçamento deste centro de custo.`;
+    }
+  } catch (err) {
+    if (token !== obraDescLoadToken) return;
+    obraDescOptionsCache = [];
+    if (select) select.innerHTML = `<option value="">Erro ao carregar ${noun}</option>`;
+    if (hint) {
+      hint.textContent = err.message || `Não foi possível carregar os ${noun}.`;
+      hint.classList.remove("hidden");
+    }
+  }
+}
+
+function getSelectedObraCostCenterKind() {
+  const select = document.getElementById("extraCostCenterId");
+  if (!select?.value) return null;
+  const opt = select.options[select.selectedIndex];
+  return classifyObraCostCenterKind(opt?.dataset?.code || "", opt?.dataset?.name || opt?.textContent || "");
+}
+
+async function syncObraDescPickerFromCostCenter({ preserveValue = true } = {}) {
+  const type = document.getElementById("extraType")?.value || "GERAL";
+  if (type !== "OBRA") {
+    setObraDescPickerMode(null);
+    return;
+  }
+  const kind = getSelectedObraCostCenterKind();
+  if (!kind) {
+    setObraDescPickerMode(null);
+    return;
+  }
+  setObraDescPickerMode(kind);
+  await loadObraDescOptions({ preserveValue });
+}
+
+function applyCostDetailPicker(category, meta) {
+  lastCascadeMeta = meta || lastCascadeMeta;
+  const type = document.getElementById("extraType")?.value || "GERAL";
+  // Em OBRA o menu de descrição vem do centro de custo, não da cascata
+  if (type === "OBRA") {
+    setToolPickerMode(false);
+    return;
+  }
+  const useTools = Boolean(category) && isToolCostSelection(meta || {});
+  if (useTools) {
+    setToolPickerMode(true);
+    loadToolOptionsForPicker({ preserveValue: true });
+    return;
+  }
+  setToolPickerMode(false);
 }
 
 function refreshExtraCostCascade({ initialCategoryId = "", disabled = false } = {}) {
@@ -204,6 +577,7 @@ function refreshExtraCostCascade({ initialCategoryId = "", disabled = false } = 
     domain,
     initialCategoryId,
     disabled,
+    onChange: (category, meta) => applyCostDetailPicker(category, meta),
   });
 }
 
@@ -357,6 +731,7 @@ async function loadCostCentersForExtra(projectId, selectedId = "") {
   if (!projectId) {
     select.innerHTML = `<option value="">Seleccione primeiro a obra...</option>`;
     select.value = "";
+    await syncObraDescPickerFromCostCenter({ preserveValue: false });
     return;
   }
   select.innerHTML = `<option value="">A carregar...</option>`;
@@ -368,13 +743,19 @@ async function loadCostCentersForExtra(projectId, selectedId = "") {
       items
         .map(
           (cc) =>
-            `<option value="${cc.id}">${cc.code} — ${cc.name}${cc.currency ? ` (${cc.currency})` : ""}</option>`
+            `<option value="${cc.id}" data-code="${escapeHtml(cc.code || "")}" data-name="${escapeHtml(
+              cc.name || ""
+            )}">${escapeHtml(cc.code)} — ${escapeHtml(cc.name)}${
+              cc.currency ? ` (${escapeHtml(cc.currency)})` : ""
+            }</option>`
         )
         .join("");
     if (selectedId) select.value = selectedId;
+    await syncObraDescPickerFromCostCenter({ preserveValue: Boolean(selectedId) });
   } catch (err) {
     select.innerHTML = `<option value="">Erro ao carregar centros</option>`;
     modalOptions.showToast("Erro ao carregar centros de custo: " + err.message, "error");
+    await syncObraDescPickerFromCostCenter({ preserveValue: false });
   }
 }
 
@@ -428,6 +809,10 @@ function setExtraFormLocked(locked) {
   document.getElementById("rowCostCategory")?.querySelectorAll("select").forEach((el) => {
     el.disabled = locked;
   });
+  const toolSelect = document.getElementById("extraToolSelect");
+  if (toolSelect) toolSelect.disabled = locked;
+  const descSelect = document.getElementById("extraDescSelect");
+  if (descSelect) descSelect.disabled = locked;
   document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
 }
 
@@ -441,6 +826,9 @@ function resetExtraFormState() {
   setExtraFormLocked(false);
   document.getElementById("extraProjectId").disabled = false;
   editingItemCache = null;
+  lastCascadeMeta = { domain: "GERAL", grupo: "", tipo2: "" };
+  setToolPickerMode(false);
+  setObraDescPickerMode(null);
 }
 
 function setExtraType(type) {
@@ -456,6 +844,7 @@ function setExtraType(type) {
   document.getElementById("extraCostCenterId").required = !isGeral;
   if (isGeral) {
     document.getElementById("extraCostCenterId").value = "";
+    setObraDescPickerMode(null);
   }
   refreshExtraCostCascade();
   const isEdit = Boolean(document.getElementById("extraEditId").value);
@@ -465,6 +854,9 @@ function setExtraType(type) {
       : "Novo Pedido Extra da Obra";
   }
   ensureCardsLoadedForExtra(type);
+  if (!isGeral) {
+    syncObraDescPickerFromCostCenter({ preserveValue: false });
+  }
 }
 
 function toggleExtraPaymentFields() {
@@ -570,15 +962,24 @@ export async function openExtraRequestModalForEdit(id) {
   if (item.costDetailDescription) {
     document.getElementById("extraCostDetailDescription").value = item.costDetailDescription;
   }
+  if (toolPickerActive) {
+    await loadToolOptionsForPicker({ preserveValue: true });
+  }
   if (item.type === "OBRA") {
     document.getElementById("extraProjectId").value = item.projectId || "";
+    document.getElementById("extraDesc").value = item.description || "";
     await loadCostCentersForExtra(item.projectId, item.costCenterId || "");
+    if (obraDescPickerKind) {
+      await loadObraDescOptions({ preserveValue: true });
+    }
   }
   if (isExtraCardSource(item.paymentSource)) {
     await ensureCardsLoadedForExtra(item.type);
   }
 
-  document.getElementById("extraDesc").value = item.description || "";
+  if (item.type !== "OBRA" || !obraDescPickerKind) {
+    document.getElementById("extraDesc").value = item.description || "";
+  }
   document.getElementById("extraAmount").value = item.amount || "";
   document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
   document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
@@ -633,12 +1034,19 @@ async function submitExtra(e) {
   };
 
   if (!editId) {
-    if (!body.costCategoryId) {
+    if (type === "GERAL" && !body.costCategoryId) {
       modalOptions.showToast("Seleccione o tipo de custo até ao subcusto (tipo 3), se existir", "error");
       return;
     }
     const detailEl = document.getElementById("extraCostDetailDescription");
-    if (detailEl?.required && !body.costDetailDescription) {
+    if (toolPickerActive) {
+      syncDetailFromToolSelect();
+      body.costDetailDescription = detailEl?.value.trim() || null;
+      if (!document.getElementById("extraToolSelect")?.value || !body.costDetailDescription) {
+        modalOptions.showToast("Seleccione a ferramenta na lista", "error");
+        return;
+      }
+    } else if (detailEl?.required && !body.costDetailDescription) {
       modalOptions.showToast("Indique o detalhe do custo", "error");
       return;
     }
@@ -648,6 +1056,22 @@ async function submitExtra(e) {
     }
     if (type === "OBRA" && !body.costCenterId) {
       modalOptions.showToast("Seleccione o centro de custo da obra", "error");
+      return;
+    }
+    if (obraDescPickerKind) {
+      syncDescFromObraSelect();
+      body.description = document.getElementById("extraDesc")?.value.trim() || "";
+      if (!document.getElementById("extraDescSelect")?.value || !body.description) {
+        modalOptions.showToast(
+          obraDescPickerKind === "materials"
+            ? "Seleccione o material do orçamento"
+            : "Seleccione a ferramenta do orçamento",
+          "error"
+        );
+        return;
+      }
+    } else if (!body.description) {
+      modalOptions.showToast("Indique a descrição", "error");
       return;
     }
   }
@@ -749,6 +1173,13 @@ function bindModalEvents() {
       "Seleccione o fornecedor ou preencha Nome, NIF e IBAN antes de anexar o documento",
       "error"
     );
+  });
+  document.getElementById("formExtra")?.addEventListener("change", (e) => {
+    if (e.target?.id === "extraToolSelect") syncDetailFromToolSelect();
+    if (e.target?.id === "extraDescSelect") syncDescFromObraSelect();
+    if (e.target?.id === "extraCostCenterId") {
+      syncObraDescPickerFromCostCenter({ preserveValue: false });
+    }
   });
   document.getElementById("extraProjectId")?.addEventListener("change", async () => {
     if (document.getElementById("extraType").value === "OBRA") {

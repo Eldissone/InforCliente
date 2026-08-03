@@ -234,6 +234,143 @@ extraRequestRoutes.get(
   })
 );
 
+// GET /extra-requests/tool-options — Ferramentas/materiais para descrição
+extraRequestRoutes.get(
+  "/tool-options",
+  requirePermission("pedidosExtras", "view"),
+  asyncHandler(async (req, res) => {
+    const scope = String(req.query.scope || "GERAL").toUpperCase();
+    const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const costCenterId = req.query.costCenterId ? String(req.query.costCenterId) : "";
+    const kind = String(req.query.kind || "tools").toLowerCase();
+    const resolvedKind = kind === "materials" ? "materials" : "tools";
+
+    function normalizeLabel(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    }
+
+    if (scope === "OBRA") {
+      if (!projectId) {
+        return res.status(400).json({
+          error: "PROJECT_REQUIRED",
+          message: "Seleccione a obra para listar itens do orçamento.",
+        });
+      }
+
+      // 1) Necessidades do centro de custo (orçamento / planificação financeira da obra)
+      let costCenterIds = [];
+      if (costCenterId) {
+        const cc = await prisma.costCenter.findFirst({
+          where: { id: costCenterId, projectId },
+          select: { id: true },
+        });
+        if (cc) costCenterIds = [cc.id];
+      } else {
+        const centers = await prisma.costCenter.findMany({
+          where: { projectId, active: true },
+          select: { id: true, code: true, name: true },
+        });
+        const needle = resolvedKind === "materials" ? "material" : "ferrament";
+        costCenterIds = centers
+          .filter((cc) => normalizeLabel(`${cc.code} ${cc.name}`).includes(needle))
+          .map((cc) => cc.id);
+      }
+
+      let items = [];
+      if (costCenterIds.length) {
+        const needs = await prisma.workNeed.findMany({
+          where: {
+            projectId,
+            costCenterId: { in: costCenterIds },
+            status: { not: "REJECTED" },
+          },
+          select: {
+            id: true,
+            description: true,
+            quantity: true,
+            unit: true,
+            status: true,
+          },
+          orderBy: { description: "asc" },
+        });
+
+        const seen = new Set();
+        for (const n of needs) {
+          const name = String(n.description || "").trim();
+          if (!name) continue;
+          const key = name.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          items.push({
+            id: n.id,
+            name,
+            sku: null,
+            category: resolvedKind === "materials" ? "MATERIAL" : "TOOL",
+            unit: n.unit || null,
+            plannedQty: n.quantity != null ? Number(n.quantity) : null,
+            source: "workNeed",
+          });
+        }
+      }
+
+      // 2) Fallback: plano de stock da obra (ProjectMaterialPlan)
+      if (!items.length) {
+        const categories =
+          resolvedKind === "materials" ? ["MATERIAL", "CONSUMABLE"] : ["TOOL", "EQUIPMENT"];
+        const plans = await prisma.projectMaterialPlan.findMany({
+          where: {
+            projectId,
+            product: { active: true, category: { in: categories } },
+          },
+          include: {
+            product: { select: { id: true, name: true, sku: true, category: true, unit: true } },
+          },
+          orderBy: { product: { name: "asc" } },
+        });
+        items = plans.map((p) => ({
+          id: p.product.id,
+          name: p.product.name,
+          sku: p.product.sku,
+          category: p.product.category,
+          unit: p.product.unit,
+          plannedQty: Number(p.plannedQty || 0),
+          source: "materialPlan",
+        }));
+      }
+
+      return res.json({
+        scope: "OBRA",
+        kind: resolvedKind,
+        items,
+      });
+    }
+
+    const products = await prisma.product.findMany({
+      where: {
+        active: true,
+        category: { in: ["TOOL", "EQUIPMENT"] },
+      },
+      select: { id: true, name: true, sku: true, category: true, unit: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({
+      scope: "GERAL",
+      items: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        category: p.category,
+        unit: p.unit,
+        source: "catalog",
+      })),
+    });
+  })
+);
+
 async function assertCanPayExtraRequest(req) {
   const role = (req.user?.role || "").toLowerCase();
   if (role === "admin") return;
@@ -304,9 +441,6 @@ extraRequestRoutes.post(
       return res.status(400).json({ error: "COST_CENTER_REQUIRED_FOR_OBRA" });
     }
     if (body.type === "GERAL" && !body.costCategoryId && !body.generalCostCenterId) {
-      return res.status(400).json({ error: "COST_CATEGORY_REQUIRED" });
-    }
-    if (body.type === "OBRA" && !body.costCategoryId) {
       return res.status(400).json({ error: "COST_CATEGORY_REQUIRED" });
     }
 

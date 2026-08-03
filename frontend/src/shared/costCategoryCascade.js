@@ -96,6 +96,35 @@ function emptyCascadeHint() {
   return "Seleccione tipo 1, tipo 2 e, se existir, o subcusto (tipo 3).";
 }
 
+/** Normaliza rótulos da folha para comparações (ex.: Produto / Ferramentas). */
+export function normalizeCostLabel(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Grupo «Produto» + tipo «Ferramentas» — só para pedidos GERAL (catálogo logística).
+ * Em OBRA o menu depende do Centro de Custo da Obra.
+ */
+export function isToolCostSelection({ domain = "", grupo = "", tipo2 = "" } = {}) {
+  if (String(domain).toUpperCase() === "OBRA") return false;
+  const t2 = normalizeCostLabel(tipo2);
+  if (!t2.includes("ferrament")) return false;
+  const g = normalizeCostLabel(grupo === "__EMPTY__" ? "" : grupo);
+  return g.includes("produto");
+}
+
+/** Classifica centro de custo da obra para menu de descrição. */
+export function classifyObraCostCenterKind(code = "", name = "") {
+  const text = normalizeCostLabel(`${code} ${name}`);
+  if (text.includes("ferrament")) return "tools";
+  if (text.includes("material")) return "materials";
+  return null;
+}
+
 function makeCascadeSelect({ label, placeholder, options, value = "", disabled = false, onChange }) {
   const wrap = document.createElement("div");
   wrap.className = "cost-cascade-field";
@@ -175,11 +204,23 @@ export function mountRubricFirstCascade({
     tipo3: null,
   };
 
+  function getSelectionMeta() {
+    return {
+      domain,
+      tipo1: state.tipo1,
+      grupo: state.grupo === "__EMPTY__" ? "" : state.grupo,
+      tipo2: state.tipo2,
+      tipo2Id: state.tipo2Id,
+    };
+  }
+
   function syncDetailField(categoryId, requiresDetail = null) {
     if (!detailRow || !detailInput) return;
     const cat = items.find((c) => sameCostId(c.id, categoryId));
+    const forceTool = isToolCostSelection(getSelectionMeta()) && Boolean(categoryId);
     const show =
-      requiresDetail != null ? Boolean(requiresDetail) : Boolean(cat?.requiresDetailText);
+      forceTool ||
+      (requiresDetail != null ? Boolean(requiresDetail) : Boolean(cat?.requiresDetailText));
     detailRow.classList.toggle("hidden", !show);
     detailInput.required = show;
     if (!show) detailInput.value = "";
@@ -200,9 +241,10 @@ export function mountRubricFirstCascade({
 
   function setPick(categoryId, requiresDetail = null) {
     if (hidden) hidden.value = categoryId ? costIdKey(categoryId) : "";
+    const meta = getSelectionMeta();
     syncDetailField(categoryId, requiresDetail);
     updateSummary(categoryId);
-    onChange(categoryId ? items.find((c) => sameCostId(c.id, categoryId)) : null);
+    onChange(categoryId ? items.find((c) => sameCostId(c.id, categoryId)) : null, meta);
   }
 
   function currentFilters() {
