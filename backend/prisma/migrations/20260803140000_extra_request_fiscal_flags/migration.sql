@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ExtraRequest" ADD COLUMN IF NOT EXISTS "fiscalInputMode" TEXT DEFAULT 'base';
+ALTER TABLE "ExtraRequest" ADD COLUMN IF NOT EXISTS "fiscalApplyVat" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "ExtraRequest" ADD COLUMN IF NOT EXISTS "fiscalApplyWithholding" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "ExtraRequest" ADD COLUMN IF NOT EXISTS "fiscalApplyDiscount" BOOLEAN NOT NULL DEFAULT false;

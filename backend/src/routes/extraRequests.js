@@ -56,11 +56,73 @@ function parseOptionalQuantity(value) {
   return String(n);
 }
 
+/** Percentagem fiscal opcional (0–100). null limpa; undefined = inválida. */
+function parseOptionalFiscalPercent(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return undefined;
+  return String(n);
+}
+
 function mapExtra(item) {
   return {
     ...item,
     amount: String(item.amount),
     quantity: item.quantity != null ? String(item.quantity) : null,
+    fiscalVatPercent: item.fiscalVatPercent != null ? String(item.fiscalVatPercent) : null,
+    fiscalWithholdingPercent:
+      item.fiscalWithholdingPercent != null ? String(item.fiscalWithholdingPercent) : null,
+    fiscalDiscountPercent:
+      item.fiscalDiscountPercent != null ? String(item.fiscalDiscountPercent) : null,
+  };
+}
+
+function resolveFiscalPercentFields(body, { requireGrossFlags = false } = {}) {
+  const mode = body.fiscalInputMode === "gross" ? "gross" : "base";
+  if (mode !== "gross") {
+    return {
+      fiscalInputMode: "base",
+      fiscalApplyVat: false,
+      fiscalApplyWithholding: false,
+      fiscalApplyDiscount: false,
+      fiscalVatPercent: null,
+      fiscalWithholdingPercent: null,
+      fiscalDiscountPercent: null,
+    };
+  }
+
+  const applyVat = Boolean(body.fiscalApplyVat);
+  const applyWithholding = Boolean(body.fiscalApplyWithholding);
+  const applyDiscount = Boolean(body.fiscalApplyDiscount);
+
+  const vat = applyVat ? parseOptionalFiscalPercent(body.fiscalVatPercent) : null;
+  const wh = applyWithholding ? parseOptionalFiscalPercent(body.fiscalWithholdingPercent) : null;
+  const disc = applyDiscount ? parseOptionalFiscalPercent(body.fiscalDiscountPercent) : null;
+
+  if (vat === undefined || wh === undefined || disc === undefined) {
+    return { error: "INVALID_FISCAL_PERCENT" };
+  }
+  if (requireGrossFlags && !applyVat && !applyWithholding && !applyDiscount) {
+    return { error: "FISCAL_FLAGS_REQUIRED" };
+  }
+  if (applyVat && !(Number(vat) > 0)) {
+    return { error: "VAT_PERCENT_REQUIRED", message: "Indique a percentagem de IVA." };
+  }
+  if (applyWithholding && !(Number(wh) > 0)) {
+    return { error: "WITHHOLDING_PERCENT_REQUIRED", message: "Indique a percentagem de retenção." };
+  }
+  if (applyDiscount && !(Number(disc) > 0)) {
+    return { error: "DISCOUNT_PERCENT_REQUIRED", message: "Indique a percentagem de desconto." };
+  }
+
+  return {
+    fiscalInputMode: "gross",
+    fiscalApplyVat: applyVat,
+    fiscalApplyWithholding: applyWithholding,
+    fiscalApplyDiscount: applyDiscount,
+    fiscalVatPercent: applyVat ? vat : null,
+    fiscalWithholdingPercent: applyWithholding ? wh : null,
+    fiscalDiscountPercent: applyDiscount ? disc : null,
   };
 }
 
@@ -448,6 +510,13 @@ extraRequestRoutes.post(
         description: z.string().min(2),
         quantity: z.union([z.number(), z.string()]).optional().nullable(),
         amount: z.union([z.number(), z.string()]),
+        fiscalInputMode: z.enum(["base", "gross"]).optional().default("base"),
+        fiscalApplyVat: z.boolean().optional().default(false),
+        fiscalApplyWithholding: z.boolean().optional().default(false),
+        fiscalApplyDiscount: z.boolean().optional().default(false),
+        fiscalVatPercent: z.union([z.number(), z.string()]).optional().nullable(),
+        fiscalWithholdingPercent: z.union([z.number(), z.string()]).optional().nullable(),
+        fiscalDiscountPercent: z.union([z.number(), z.string()]).optional().nullable(),
         currency: z.string().optional().default("AOA"),
         // CAIXA/BANCO mantidos apenas para compatibilidade com pedidos antigos.
         paymentSource: z.enum(EXTRA_PAYMENT_SOURCES).optional().default("SOLICITACAO_TRANSFERENCIA"),
@@ -529,6 +598,14 @@ extraRequestRoutes.post(
       }
     }
 
+    const fiscalFields = resolveFiscalPercentFields(body, { requireGrossFlags: true });
+    if (fiscalFields.error) {
+      return res.status(400).json({
+        error: fiscalFields.error,
+        message: fiscalFields.message || "Dados fiscais inválidos.",
+      });
+    }
+
     const u = req.user || {};
     const created = await prisma.extraRequest.create({
       data: {
@@ -542,6 +619,7 @@ extraRequestRoutes.post(
         description: body.description,
         quantity: quantityParsed,
         amount: String(body.amount),
+        ...fiscalFields,
         currency: body.currency || "AOA",
         paymentSource: body.paymentSource,
         fundId: body.fundId || null,
@@ -584,6 +662,13 @@ extraRequestRoutes.patch(
         description: z.string().min(2).optional(),
         quantity: z.union([z.number(), z.string()]).optional().nullable(),
         amount: z.union([z.number(), z.string()]).optional(),
+        fiscalInputMode: z.enum(["base", "gross"]).optional(),
+        fiscalApplyVat: z.boolean().optional(),
+        fiscalApplyWithholding: z.boolean().optional(),
+        fiscalApplyDiscount: z.boolean().optional(),
+        fiscalVatPercent: z.union([z.number(), z.string()]).optional().nullable(),
+        fiscalWithholdingPercent: z.union([z.number(), z.string()]).optional().nullable(),
+        fiscalDiscountPercent: z.union([z.number(), z.string()]).optional().nullable(),
         paymentSource: z.enum(EXTRA_PAYMENT_SOURCES).optional(),
         fundId: z.string().optional().nullable(),
         cardId: z.string().optional().nullable(),
@@ -645,12 +730,51 @@ extraRequestRoutes.patch(
       };
     }
 
+    let fiscalPatch = {};
+    const fiscalTouched =
+      body.fiscalInputMode !== undefined ||
+      body.fiscalApplyVat !== undefined ||
+      body.fiscalApplyWithholding !== undefined ||
+      body.fiscalApplyDiscount !== undefined ||
+      body.fiscalVatPercent !== undefined ||
+      body.fiscalWithholdingPercent !== undefined ||
+      body.fiscalDiscountPercent !== undefined;
+    if (fiscalTouched) {
+      const fiscalFields = resolveFiscalPercentFields(
+        {
+          fiscalInputMode: body.fiscalInputMode ?? existing.fiscalInputMode ?? "base",
+          fiscalApplyVat: body.fiscalApplyVat ?? existing.fiscalApplyVat,
+          fiscalApplyWithholding: body.fiscalApplyWithholding ?? existing.fiscalApplyWithholding,
+          fiscalApplyDiscount: body.fiscalApplyDiscount ?? existing.fiscalApplyDiscount,
+          fiscalVatPercent:
+            body.fiscalVatPercent !== undefined ? body.fiscalVatPercent : existing.fiscalVatPercent,
+          fiscalWithholdingPercent:
+            body.fiscalWithholdingPercent !== undefined
+              ? body.fiscalWithholdingPercent
+              : existing.fiscalWithholdingPercent,
+          fiscalDiscountPercent:
+            body.fiscalDiscountPercent !== undefined
+              ? body.fiscalDiscountPercent
+              : existing.fiscalDiscountPercent,
+        },
+        { requireGrossFlags: true }
+      );
+      if (fiscalFields.error) {
+        return res.status(400).json({
+          error: fiscalFields.error,
+          message: fiscalFields.message || "Dados fiscais inválidos.",
+        });
+      }
+      fiscalPatch = fiscalFields;
+    }
+
     const updated = await prisma.extraRequest.update({
       where: { id },
       data: {
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...quantityPatch,
         ...(body.amount !== undefined ? { amount: String(body.amount) } : {}),
+        ...fiscalPatch,
         ...(body.paymentSource !== undefined ? { paymentSource: body.paymentSource } : {}),
         ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),
         ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),

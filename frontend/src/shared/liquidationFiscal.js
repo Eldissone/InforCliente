@@ -16,6 +16,12 @@ const DEFAULT_FIELDS = {
   applyVat: "liqApplyVat",
   applyWithholding: "liqApplyWithholding",
   applyDiscount: "liqApplyDiscount",
+  vatPercent: "liqVatPercent",
+  withholdingPercent: "liqWithholdingPercent",
+  discountPercent: "liqDiscountPercent",
+  vatPctWrap: "liqVatPctWrap",
+  whPctWrap: "liqWhPctWrap",
+  discPctWrap: "liqDiscPctWrap",
   modeBase: "liqFiscalModeBase",
   modeGross: "liqFiscalModeGross",
   breakdown: "liqFiscalBreakdown",
@@ -62,6 +68,20 @@ export function renderFiscalSectionHtml(prefix = "liq") {
         <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${p("ApplyWithholding")}" class="accent-emerald-600" /> Retenção na fonte</label>
         <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${p("ApplyDiscount")}" class="accent-emerald-600" /> Desconto</label>
       </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div id="${p("VatPctWrap")}" class="hidden">
+          <label for="${p("VatPercent")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">IVA %</label>
+          <input id="${p("VatPercent")}" type="number" min="0" max="100" step="0.01" placeholder="Ex: 14" class="w-full px-3 h-10 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+        </div>
+        <div id="${p("WhPctWrap")}" class="hidden">
+          <label for="${p("WithholdingPercent")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Retenção %</label>
+          <input id="${p("WithholdingPercent")}" type="number" min="0" max="100" step="0.01" placeholder="Ex: 6.5" class="w-full px-3 h-10 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+        </div>
+        <div id="${p("DiscPctWrap")}" class="hidden">
+          <label for="${p("DiscountPercent")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Desconto %</label>
+          <input id="${p("DiscountPercent")}" type="number" min="0" max="100" step="0.01" placeholder="Ex: 5" class="w-full px-3 h-10 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
+        </div>
+      </div>
       <div id="${p("BaseInputWrap")}">
         <label for="${p("BaseAmount")}" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor base</label>
         <input id="${p("BaseAmount")}" type="number" min="0" step="0.01" class="w-full px-4 h-11 bg-white border border-slate-200 rounded-xl text-sm font-bold" />
@@ -72,6 +92,20 @@ export function renderFiscalSectionHtml(prefix = "liq") {
       </div>
       <div id="${p("FiscalBreakdown")}" class="pt-1"></div>
     </div>`;
+}
+
+function readFiscalPercentsFromInputs() {
+  const read = (key) => {
+    const raw = getEl(key)?.value;
+    if (raw === undefined || raw === null || String(raw).trim() === "") return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  return {
+    vatPercent: read("vatPercent"),
+    withholdingPercent: read("withholdingPercent"),
+    discountPercent: read("discountPercent"),
+  };
 }
 
 function readFiscalOptions() {
@@ -88,7 +122,7 @@ function readInputAmounts() {
   const opts = readFiscalOptions();
   const baseAmount = Number(getEl("baseAmount")?.value) || Number(getEl("committed")?.dataset?.raw) || 0;
   const grossAmount = Number(getEl("grossAmount")?.value) || 0;
-  return { ...opts, baseAmount, grossAmount };
+  return { ...opts, baseAmount, grossAmount, fiscalPercents: readFiscalPercentsFromInputs() };
 }
 
 export function computeCurrentLiquidationFiscal() {
@@ -98,6 +132,13 @@ export function computeCurrentLiquidationFiscal() {
     product: _currentProduct,
     ...opts,
   });
+}
+
+function syncPercentInputVisibility() {
+  const opts = readFiscalOptions();
+  getEl("vatPctWrap")?.classList.toggle("hidden", !opts.applyVat);
+  getEl("whPctWrap")?.classList.toggle("hidden", !opts.applyWithholding);
+  getEl("discPctWrap")?.classList.toggle("hidden", !opts.applyDiscount);
 }
 
 function syncCrossAmountFields(breakdown) {
@@ -167,6 +208,7 @@ function toggleInputMode() {
 }
 
 function refreshFiscalUi() {
+  syncPercentInputVisibility();
   toggleInputMode();
   renderBreakdownPanel();
   syncPaidAmountFromFiscal();
@@ -177,11 +219,11 @@ export function initLiquidationFiscalHandlers(prefixOrFields = null) {
     typeof prefixOrFields === "string"
       ? `${prefixOrFields}FiscalSection`
       : _fields.section;
-  if (_boundRoots.has(rootId)) return;
-
   const root = document.getElementById(rootId);
   if (!root) return;
-
+  // Rebind when o HTML do modal é recriado (novo nó sem o marcador).
+  if (root.dataset.fiscalHandlersBound === "1") return;
+  root.dataset.fiscalHandlersBound = "1";
   _boundRoots.add(rootId);
 
   root.addEventListener("input", () => refreshFiscalUi());
@@ -199,6 +241,12 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
       applyVat: `${options.prefix}ApplyVat`,
       applyWithholding: `${options.prefix}ApplyWithholding`,
       applyDiscount: `${options.prefix}ApplyDiscount`,
+      vatPercent: `${options.prefix}VatPercent`,
+      withholdingPercent: `${options.prefix}WithholdingPercent`,
+      discountPercent: `${options.prefix}DiscountPercent`,
+      vatPctWrap: `${options.prefix}VatPctWrap`,
+      whPctWrap: `${options.prefix}WhPctWrap`,
+      discPctWrap: `${options.prefix}DiscPctWrap`,
       modeBase: `${options.prefix}FiscalModeBase`,
       modeGross: `${options.prefix}FiscalModeGross`,
       breakdown: `${options.prefix}FiscalBreakdown`,
@@ -231,6 +279,20 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
   const applyDiscount = stored ? Boolean(payment?.fiscalApplyDiscount) : flags.applyDiscount;
   const inputMode = payment?.fiscalInputMode === "gross" ? "gross" : "base";
 
+  const resolvedPct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
+  const vatPct =
+    Number(payment?.fiscalVatPercent) > 0
+      ? Number(payment.fiscalVatPercent)
+      : resolvedPct.vatPercent;
+  const whPct =
+    Number(payment?.fiscalWithholdingPercent) > 0
+      ? Number(payment.fiscalWithholdingPercent)
+      : resolvedPct.withholdingPercent;
+  const discPct =
+    Number(payment?.fiscalDiscountPercent) > 0
+      ? Number(payment.fiscalDiscountPercent)
+      : resolvedPct.discountPercent;
+
   const base = Number(payment?.budgetedAmount ?? payment?.amount ?? 0);
   const gross = Number(payment?.grossAmount ?? base);
   const net = Number(payment?.netAmount ?? payment?.paidAmount ?? base);
@@ -252,6 +314,9 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
   if (getEl("applyDiscount")) getEl("applyDiscount").checked = applyDiscount;
   if (getEl("modeBase")) getEl("modeBase").checked = inputMode === "base";
   if (getEl("modeGross")) getEl("modeGross").checked = inputMode === "gross";
+  if (getEl("vatPercent")) getEl("vatPercent").value = vatPct > 0 ? String(vatPct) : "";
+  if (getEl("withholdingPercent")) getEl("withholdingPercent").value = whPct > 0 ? String(whPct) : "";
+  if (getEl("discountPercent")) getEl("discountPercent").value = discPct > 0 ? String(discPct) : "";
 
   const hint = getEl("supplierHint");
   if (hint) {
@@ -264,12 +329,23 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
     ) {
       hint.textContent =
         "Valores sugeridos pelo orçamento — pode ajustar IVA, retenção, desconto e base antes de liquidar.";
-    } else {
-      const pct = resolveFiscalPercents({ product: _currentProduct, supplier: _currentSupplier });
+    } else if (
+      payment?.fiscalVatPercent ||
+      payment?.fiscalWithholdingPercent ||
+      payment?.fiscalDiscountPercent
+    ) {
       const parts = [];
-      if (pct.vatPercent) parts.push(`IVA ${pct.vatPercent}%`);
-      if (pct.withholdingPercent) parts.push(`Ret. ${pct.withholdingPercent}%`);
-      if (pct.discountPercent) parts.push(`Desc. ${pct.discountPercent}%`);
+      if (vatPct) parts.push(`IVA ${vatPct}%`);
+      if (whPct) parts.push(`Ret. ${whPct}%`);
+      if (discPct) parts.push(`Desc. ${discPct}%`);
+      hint.textContent = parts.length
+        ? `Percentagens do pedido: ${parts.join(" · ")}`
+        : "Indique as percentagens para calcular automaticamente.";
+    } else {
+      const parts = [];
+      if (resolvedPct.vatPercent) parts.push(`IVA ${resolvedPct.vatPercent}%`);
+      if (resolvedPct.withholdingPercent) parts.push(`Ret. ${resolvedPct.withholdingPercent}%`);
+      if (resolvedPct.discountPercent) parts.push(`Desc. ${resolvedPct.discountPercent}%`);
       const source =
         _currentProduct?.vatPercent ||
         _currentProduct?.withholdingPercent ||
@@ -278,11 +354,11 @@ export function setupLiquidationFiscalModal(payment, options = {}) {
           : "fornecedor";
       hint.textContent = parts.length
         ? `Regime do ${source}: ${parts.join(" · ")}`
-        : "Sem percentagens fiscais no produto/fornecedor — pode activar manualmente.";
+        : "Sem percentagens fiscais no produto/fornecedor — indique manualmente.";
     }
   }
 
-  ["applyVat", "applyWithholding", "applyDiscount", "modeBase", "modeGross", "baseAmount", "grossAmount"].forEach(
+  ["applyVat", "applyWithholding", "applyDiscount", "modeBase", "modeGross", "baseAmount", "grossAmount", "vatPercent", "withholdingPercent", "discountPercent"].forEach(
     (key) => {
       const el = getEl(key);
       if (el) el.disabled = _fiscalFrozen;

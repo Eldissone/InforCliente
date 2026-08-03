@@ -501,6 +501,38 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
       wide: false,
     },
     { label: "Valor", value: formatCurrency(extra.amount, cur), wide: false, highlight: true },
+    {
+      label: "Impostos no valor",
+      value: (() => {
+        if (extra.fiscalInputMode === "gross") {
+          const parts = [];
+          if (extra.fiscalApplyVat) {
+            parts.push(
+              Number(extra.fiscalVatPercent) > 0
+                ? `IVA ${Number(extra.fiscalVatPercent)}%`
+                : "IVA"
+            );
+          }
+          if (extra.fiscalApplyWithholding) {
+            parts.push(
+              Number(extra.fiscalWithholdingPercent) > 0
+                ? `Retenção ${Number(extra.fiscalWithholdingPercent)}%`
+                : "Retenção"
+            );
+          }
+          if (extra.fiscalApplyDiscount) {
+            parts.push(
+              Number(extra.fiscalDiscountPercent) > 0
+                ? `Desconto ${Number(extra.fiscalDiscountPercent)}%`
+                : "Desconto"
+            );
+          }
+          return parts.length ? `Já inclui: ${parts.join(", ")}` : "Já inclui impostos";
+        }
+        return "Valor base (sem impostos)";
+      })(),
+      wide: false,
+    },
     { label: "Moeda", value: cur, wide: false },
     { label: "Origem do pagamento", value: extraRequestPaymentLabel(extra), wide: false },
     { label: "Solicitante", value: extra.requestedBy || "—", wide: false },
@@ -591,10 +623,12 @@ function renderExtraPayComprovativoSection() {
 
 function renderExtraPayFiscalBlock(extra) {
   const cur = extra.currency || "AOA";
+  const isGross = extra.fiscalInputMode === "gross";
+  const committedLabel = isGross ? "Valor do pedido (já com impostos)" : "Valor base do pedido";
   return `
     <div class="flex flex-col gap-4">
       <div>
-        <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor base do pedido</label>
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">${committedLabel}</label>
         <input id="extraPayCommitted" type="text" disabled
           class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed"
           value="${escapeAttr(formatCurrency(extra.amount, cur))}" />
@@ -868,10 +902,20 @@ function openExtraPayModal(extra) {
     (needsComprovativo ? renderExtraPayComprovativoSection() : "") +
     (isCardLoad ? renderExtraPayCardLoadSection(extra) : "");
 
+  const fiscalMode = extra.fiscalInputMode === "gross" ? "gross" : "base";
+  const amountNum = Number(extra.amount) || 0;
   setupLiquidationFiscalModal(
     {
-      amount: extra.amount,
-      budgetedAmount: extra.amount,
+      amount: amountNum,
+      budgetedAmount: amountNum,
+      grossAmount: amountNum,
+      fiscalInputMode: fiscalMode,
+      fiscalApplyVat: Boolean(extra.fiscalApplyVat),
+      fiscalApplyWithholding: Boolean(extra.fiscalApplyWithholding),
+      fiscalApplyDiscount: Boolean(extra.fiscalApplyDiscount),
+      fiscalVatPercent: extra.fiscalVatPercent,
+      fiscalWithholdingPercent: extra.fiscalWithholdingPercent,
+      fiscalDiscountPercent: extra.fiscalDiscountPercent,
       supplierRef: extra.supplierRef || {
         vatPercent: null,
         withholdingPercent: null,

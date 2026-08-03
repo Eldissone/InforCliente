@@ -1161,6 +1161,14 @@ model ExtraRequest {
   /// Quantidade pedida (obrigatória para ferramentas/material).
   quantity       Decimal?           @db.Decimal(16, 4)
   amount         Decimal            @db.Decimal(16, 2)
+  /// "base" = valor sem impostos | "gross" = valor já inclui IVA/outros
+  fiscalInputMode        String?  @default("base")
+  fiscalApplyVat         Boolean  @default(false)
+  fiscalApplyWithholding Boolean  @default(false)
+  fiscalApplyDiscount    Boolean  @default(false)
+  fiscalVatPercent         Decimal? @db.Decimal(5, 2)
+  fiscalWithholdingPercent Decimal? @db.Decimal(5, 2)
+  fiscalDiscountPercent    Decimal? @db.Decimal(5, 2)
   currency       String             @default("AOA")
   paymentSource  ExtraPaymentSource @default(CAIXA)
   fundId         String?

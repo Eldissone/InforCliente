@@ -1,6 +1,7 @@
 import { apiRequest, apiUpload } from "../services/api.js";
 import { can } from "./permissions.js";
 import { formatCurrency } from "./format.js";
+import { computeFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
 import {
   loadAllCostCategories,
   mountRubricFirstCascade,
@@ -94,6 +95,45 @@ const EXTRA_MODAL_HTML = `
             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
         </div>
       </div>
+      <div id="rowExtraFiscal" class="rounded-xl border border-slate-100 bg-slate-50/80 p-4 space-y-3">
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Impostos no valor</p>
+        <div class="flex flex-wrap gap-3 text-sm font-semibold text-slate-700">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="extraFiscalMode" id="extraFiscalModeBase" value="base" checked class="accent-emerald-600">
+            Valor base (sem impostos)
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="extraFiscalMode" id="extraFiscalModeGross" value="gross" class="accent-emerald-600">
+            Já inclui IVA / impostos
+          </label>
+        </div>
+        <div id="extraFiscalFlags" class="hidden space-y-3">
+          <div class="flex flex-wrap gap-4 text-xs font-bold text-slate-700">
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extraFiscalApplyVat" class="accent-emerald-600" checked> IVA incluído</label>
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extraFiscalApplyWithholding" class="accent-emerald-600"> Retenção incluída</label>
+            <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extraFiscalApplyDiscount" class="accent-emerald-600"> Desconto incluído</label>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div id="extraFiscalVatPctWrap" class="hidden">
+              <label for="extraFiscalVatPercent" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">IVA %</label>
+              <input id="extraFiscalVatPercent" type="number" min="0.01" max="100" step="0.01" placeholder="Ex: 14"
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            </div>
+            <div id="extraFiscalWhPctWrap" class="hidden">
+              <label for="extraFiscalWithholdingPercent" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Retenção %</label>
+              <input id="extraFiscalWithholdingPercent" type="number" min="0.01" max="100" step="0.01" placeholder="Ex: 6.5"
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            </div>
+            <div id="extraFiscalDiscPctWrap" class="hidden">
+              <label for="extraFiscalDiscountPercent" class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Desconto %</label>
+              <input id="extraFiscalDiscountPercent" type="number" min="0.01" max="100" step="0.01" placeholder="Ex: 5"
+                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+            </div>
+          </div>
+          <div id="extraFiscalPreview" class="hidden rounded-lg border border-emerald-100 bg-white px-3 py-2 text-xs text-slate-600 space-y-1"></div>
+        </div>
+        <p id="extraFiscalHint" class="text-[11px] text-slate-400">Na liquidação o cálculo fiscal usa esta indicação (base ou bruto).</p>
+      </div>
       <div class="grid grid-cols-1 gap-4">
         <div>
           <label for="extraSource" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Origem do Pagamento</label>
@@ -108,7 +148,7 @@ const EXTRA_MODAL_HTML = `
       <div id="extraCardRow" class="hidden">
         <input type="hidden" id="extraFundId" value="">
         <label for="extraCardId" class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Cartão *</label>
-        <select id="extraCardId" required
+        <select id="extraCardId"
           class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
           <option value="">Selecionar cartão...</option>
         </select>
@@ -243,6 +283,12 @@ function ensureModalMounted() {
         <p class="text-[11px] text-slate-400 mt-1">Indique quantas unidades de ferramenta/material pretende pedir.</p>`;
       amountGrid?.before(qtyRow);
     }
+    // Cartão: nunca required enquanto a linha estiver oculta (evita "not focusable")
+    const cardSelect = document.getElementById("extraCardId");
+    if (cardSelect) {
+      const cardRowHidden = document.getElementById("extraCardRow")?.classList.contains("hidden");
+      cardSelect.required = !cardRowHidden && isExtraCardSource(document.getElementById("extraSource")?.value);
+    }
     return;
   }
   const root = document.createElement("div");
@@ -310,7 +356,7 @@ function setToolPickerMode(active) {
 
   row?.classList.remove("hidden");
   input?.classList.add("hidden");
-  if (input) input.required = true;
+  if (input) input.required = false;
   select?.classList.remove("hidden");
   if (select) select.required = true;
   if (label) {
@@ -325,6 +371,7 @@ function syncDetailFromToolSelect() {
   if (!select || !input || !toolPickerActive) return;
   const opt = select.options[select.selectedIndex];
   input.value = opt?.dataset?.name || opt?.textContent?.trim() || "";
+  input.required = false;
 }
 
 function renderToolSelectOptions(items, preferredName = "") {
@@ -463,7 +510,7 @@ function setObraDescPickerMode(kind) {
   select?.classList.remove("hidden");
   if (select) select.required = true;
   input?.classList.add("hidden");
-  if (input) input.required = true;
+  if (input) input.required = false;
   if (label) {
     label.textContent =
       kind === "materials"
@@ -488,6 +535,7 @@ function applyObraOtherMode(enabled, { clearValue = false } = {}) {
     input.focus();
   } else {
     input.classList.add("hidden");
+    input.required = false;
     input.placeholder = "Motivo do pedido extra";
   }
 }
@@ -915,6 +963,154 @@ function setExtraFormLocked(locked) {
   document.getElementById("extraTypeRow")?.classList.toggle("opacity-60", locked);
 }
 
+function parseExtraPercentInput(id) {
+  const raw = document.getElementById(id)?.value;
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getExtraFiscalFormData() {
+  const mode = document.getElementById("extraFiscalModeGross")?.checked ? "gross" : "base";
+  if (mode !== "gross") {
+    return {
+      fiscalInputMode: "base",
+      fiscalApplyVat: false,
+      fiscalApplyWithholding: false,
+      fiscalApplyDiscount: false,
+      fiscalVatPercent: null,
+      fiscalWithholdingPercent: null,
+      fiscalDiscountPercent: null,
+    };
+  }
+  const applyVat = Boolean(document.getElementById("extraFiscalApplyVat")?.checked);
+  const applyWithholding = Boolean(document.getElementById("extraFiscalApplyWithholding")?.checked);
+  const applyDiscount = Boolean(document.getElementById("extraFiscalApplyDiscount")?.checked);
+  return {
+    fiscalInputMode: "gross",
+    fiscalApplyVat: applyVat,
+    fiscalApplyWithholding: applyWithholding,
+    fiscalApplyDiscount: applyDiscount,
+    fiscalVatPercent: applyVat ? parseExtraPercentInput("extraFiscalVatPercent") : null,
+    fiscalWithholdingPercent: applyWithholding
+      ? parseExtraPercentInput("extraFiscalWithholdingPercent")
+      : null,
+    fiscalDiscountPercent: applyDiscount ? parseExtraPercentInput("extraFiscalDiscountPercent") : null,
+  };
+}
+
+function syncExtraFiscalPercentVisibility() {
+  const isGross = document.getElementById("extraFiscalModeGross")?.checked;
+  const applyVat = Boolean(document.getElementById("extraFiscalApplyVat")?.checked);
+  const applyWh = Boolean(document.getElementById("extraFiscalApplyWithholding")?.checked);
+  const applyDisc = Boolean(document.getElementById("extraFiscalApplyDiscount")?.checked);
+  document.getElementById("extraFiscalVatPctWrap")?.classList.toggle("hidden", !isGross || !applyVat);
+  document.getElementById("extraFiscalWhPctWrap")?.classList.toggle("hidden", !isGross || !applyWh);
+  document.getElementById("extraFiscalDiscPctWrap")?.classList.toggle("hidden", !isGross || !applyDisc);
+}
+
+function refreshExtraFiscalPreview() {
+  const preview = document.getElementById("extraFiscalPreview");
+  if (!preview) return;
+  const fiscal = getExtraFiscalFormData();
+  const amount = parseFloat(document.getElementById("extraAmount")?.value) || 0;
+  if (fiscal.fiscalInputMode !== "gross") {
+    preview.classList.add("hidden");
+    preview.innerHTML = "";
+    return;
+  }
+  const hasPct =
+    (fiscal.fiscalApplyVat && Number(fiscal.fiscalVatPercent) > 0) ||
+    (fiscal.fiscalApplyWithholding && Number(fiscal.fiscalWithholdingPercent) > 0) ||
+    (fiscal.fiscalApplyDiscount && Number(fiscal.fiscalDiscountPercent) > 0);
+  if (!amount || !hasPct) {
+    preview.classList.remove("hidden");
+    preview.innerHTML =
+      '<p class="text-slate-400 font-semibold">Indique as percentagens para calcular o valor base.</p>';
+    return;
+  }
+  const breakdown = computeFiscalBreakdown({
+    fiscalPercents: {
+      vatPercent: Number(fiscal.fiscalVatPercent) || 0,
+      withholdingPercent: Number(fiscal.fiscalWithholdingPercent) || 0,
+      discountPercent: Number(fiscal.fiscalDiscountPercent) || 0,
+    },
+    grossAmount: amount,
+    inputMode: "gross",
+    applyVat: fiscal.fiscalApplyVat,
+    applyWithholding: fiscal.fiscalApplyWithholding,
+    applyDiscount: fiscal.fiscalApplyDiscount,
+  });
+  preview.classList.remove("hidden");
+  preview.innerHTML = `
+    <div class="flex justify-between gap-2"><span class="font-semibold text-slate-500">Valor bruto</span><span class="font-bold tabular-nums">${formatFiscalAmount(amount)}</span></div>
+    <div class="flex justify-between gap-2"><span class="font-semibold text-slate-500">Valor base</span><span class="font-black tabular-nums text-emerald-700">${formatFiscalAmount(breakdown.base)}</span></div>
+    ${breakdown.lines
+      .map(
+        (line) =>
+          `<div class="flex justify-between gap-2"><span class="text-slate-500">${line.label}</span><span class="font-semibold tabular-nums">${formatFiscalAmount(line.amount)}</span></div>`
+      )
+      .join("")}
+    <div class="flex justify-between gap-2 pt-1 border-t border-slate-100"><span class="font-black uppercase tracking-wide text-[10px] text-slate-700">Líquido estimado</span><span class="font-black tabular-nums">${formatFiscalAmount(breakdown.net)}</span></div>
+  `;
+}
+
+function toggleExtraFiscalFlags() {
+  const isGross = document.getElementById("extraFiscalModeGross")?.checked;
+  const flags = document.getElementById("extraFiscalFlags");
+  const hint = document.getElementById("extraFiscalHint");
+  flags?.classList.toggle("hidden", !isGross);
+  if (hint) {
+    hint.textContent = isGross
+      ? "Indique as % incluídas no valor para obter a base na liquidação."
+      : "Na liquidação o cálculo fiscal usa esta indicação (base ou bruto).";
+  }
+  if (isGross) {
+    const vat = document.getElementById("extraFiscalApplyVat");
+    const wh = document.getElementById("extraFiscalApplyWithholding");
+    const disc = document.getElementById("extraFiscalApplyDiscount");
+    if (vat && !vat.checked && !wh?.checked && !disc?.checked) vat.checked = true;
+  }
+  syncExtraFiscalPercentVisibility();
+  refreshExtraFiscalPreview();
+}
+
+function applyExtraFiscalToForm(item = {}) {
+  const isGross = item.fiscalInputMode === "gross";
+  const baseRadio = document.getElementById("extraFiscalModeBase");
+  const grossRadio = document.getElementById("extraFiscalModeGross");
+  if (baseRadio) baseRadio.checked = !isGross;
+  if (grossRadio) grossRadio.checked = isGross;
+  const vat = document.getElementById("extraFiscalApplyVat");
+  const wh = document.getElementById("extraFiscalApplyWithholding");
+  const disc = document.getElementById("extraFiscalApplyDiscount");
+  if (vat) vat.checked = isGross ? Boolean(item.fiscalApplyVat ?? true) : false;
+  if (wh) wh.checked = isGross ? Boolean(item.fiscalApplyWithholding) : false;
+  if (disc) disc.checked = isGross ? Boolean(item.fiscalApplyDiscount) : false;
+  const vatPct = document.getElementById("extraFiscalVatPercent");
+  const whPct = document.getElementById("extraFiscalWithholdingPercent");
+  const discPct = document.getElementById("extraFiscalDiscountPercent");
+  if (vatPct) {
+    vatPct.value =
+      item.fiscalVatPercent != null && item.fiscalVatPercent !== ""
+        ? String(item.fiscalVatPercent)
+        : "";
+  }
+  if (whPct) {
+    whPct.value =
+      item.fiscalWithholdingPercent != null && item.fiscalWithholdingPercent !== ""
+        ? String(item.fiscalWithholdingPercent)
+        : "";
+  }
+  if (discPct) {
+    discPct.value =
+      item.fiscalDiscountPercent != null && item.fiscalDiscountPercent !== ""
+        ? String(item.fiscalDiscountPercent)
+        : "";
+  }
+  toggleExtraFiscalFlags();
+}
+
 function resetExtraFormState() {
   document.getElementById("extraEditId").value = "";
   document.getElementById("modalExtraTitle").textContent = "Novo Pedido Extra";
@@ -930,6 +1126,7 @@ function resetExtraFormState() {
   setObraDescPickerMode(null);
   obraDescOtherMode = false;
   syncQuantityFieldVisibility();
+  applyExtraFiscalToForm({ fiscalInputMode: "base" });
 }
 
 function setExtraType(type) {
@@ -965,7 +1162,10 @@ function toggleExtraPaymentFields() {
   const isEdit = Boolean(document.getElementById("extraEditId").value);
   const editing = isEdit ? editingItemCache : null;
   const isTransfer = source === "SOLICITACAO_TRANSFERENCIA";
-  document.getElementById("extraCardRow").classList.toggle("hidden", !isExtraCardSource(source));
+  const isCard = isExtraCardSource(source);
+  document.getElementById("extraCardRow").classList.toggle("hidden", !isCard);
+  const cardSelect = document.getElementById("extraCardId");
+  if (cardSelect) cardSelect.required = isCard;
   document.getElementById("extraSupplierRow")?.classList.toggle("hidden", !isTransfer);
   document.getElementById("extraProformaRow").classList.toggle("hidden", !isTransfer);
   if (!isTransfer) {
@@ -1085,6 +1285,7 @@ export async function openExtraRequestModalForEdit(id) {
     item.quantity != null && item.quantity !== "" ? String(item.quantity) : "";
   syncQuantityFieldVisibility();
   document.getElementById("extraAmount").value = item.amount || "";
+  applyExtraFiscalToForm(item);
   document.getElementById("extraPaymentDueDate").value = toDateInputValue(item.paymentDueDate);
   document.getElementById("extraSource").value = item.paymentSource || "SOLICITACAO_TRANSFERENCIA";
 
@@ -1132,6 +1333,7 @@ async function submitExtra(e) {
       return parseFloat(raw);
     })(),
     amount: parseFloat(document.getElementById("extraAmount").value) || 0,
+    ...getExtraFiscalFormData(),
     paymentDueDate: document.getElementById("extraPaymentDueDate").value,
     paymentSource: source,
     fundId: isExtraCardSource(source) ? document.getElementById("extraFundId").value || null : null,
@@ -1202,6 +1404,25 @@ async function submitExtra(e) {
     return;
   }
 
+  if (body.fiscalInputMode === "gross") {
+    if (!body.fiscalApplyVat && !body.fiscalApplyWithholding && !body.fiscalApplyDiscount) {
+      modalOptions.showToast("Indique quais impostos já estão incluídos no valor", "error");
+      return;
+    }
+    if (body.fiscalApplyVat && !(Number(body.fiscalVatPercent) > 0)) {
+      modalOptions.showToast("Indique a percentagem de IVA incluída", "error");
+      return;
+    }
+    if (body.fiscalApplyWithholding && !(Number(body.fiscalWithholdingPercent) > 0)) {
+      modalOptions.showToast("Indique a percentagem de retenção incluída", "error");
+      return;
+    }
+    if (body.fiscalApplyDiscount && !(Number(body.fiscalDiscountPercent) > 0)) {
+      modalOptions.showToast("Indique a percentagem de desconto incluída", "error");
+      return;
+    }
+  }
+
   if (isExtraCardSource(source) && !body.cardId) {
     modalOptions.showToast("Seleccione o cartão", "error");
     return;
@@ -1234,6 +1455,13 @@ async function submitExtra(e) {
       const patchBody = {
         description: body.description,
         amount: body.amount,
+        fiscalInputMode: body.fiscalInputMode,
+        fiscalApplyVat: body.fiscalApplyVat,
+        fiscalApplyWithholding: body.fiscalApplyWithholding,
+        fiscalApplyDiscount: body.fiscalApplyDiscount,
+        fiscalVatPercent: body.fiscalVatPercent,
+        fiscalWithholdingPercent: body.fiscalWithholdingPercent,
+        fiscalDiscountPercent: body.fiscalDiscountPercent,
         paymentDueDate: body.paymentDueDate,
         paymentSource: body.paymentSource,
         fundId: body.fundId,
@@ -1320,6 +1548,19 @@ function bindModalEvents() {
     }
   });
   document.getElementById("formExtra")?.addEventListener("submit", submitExtra);
+  document.getElementById("extraFiscalModeBase")?.addEventListener("change", toggleExtraFiscalFlags);
+  document.getElementById("extraFiscalModeGross")?.addEventListener("change", toggleExtraFiscalFlags);
+  ["extraFiscalApplyVat", "extraFiscalApplyWithholding", "extraFiscalApplyDiscount"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      syncExtraFiscalPercentVisibility();
+      refreshExtraFiscalPreview();
+    });
+  });
+  ["extraFiscalVatPercent", "extraFiscalWithholdingPercent", "extraFiscalDiscountPercent", "extraAmount"].forEach(
+    (id) => {
+      document.getElementById(id)?.addEventListener("input", refreshExtraFiscalPreview);
+    }
+  );
   document.getElementById("btnCloseExtraModal")?.addEventListener("click", closeExtraModal);
   document.getElementById("btnCancelExtra")?.addEventListener("click", closeExtraModal);
   document.getElementById("modalExtra")?.addEventListener("click", (e) => {
