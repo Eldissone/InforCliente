@@ -87,14 +87,13 @@ function extraReferenceDate(extra) {
 
 function mapExtraToTimelineItem(extra) {
   const refDate = extra.paymentDueDate || extra.approvedAt || extra.requestedAt || extra.createdAt;
-  const timelineStatus =
-    extra.status === "PAGO"
-      ? "PAGO"
-      : extra.status === "APROVADO"
-        ? "VENCIDO"
-        : extra.status === "PENDENTE"
-          ? "PENDENTE"
-          : "CANCELADO";
+  let timelineStatus = "CANCELADO";
+  if (extra.status === "PAGO") {
+    timelineStatus = "PAGO";
+  } else if (extra.status === "PENDENTE" || extra.status === "APROVADO") {
+    // Atrasado só depois da data prevista — igual aos pagamentos normais.
+    timelineStatus = resolveTimelineStatus({ status: "PENDENTE", paymentDate: refDate });
+  }
   return {
     id: extra.id,
     description: extra.description,
@@ -1635,8 +1634,11 @@ function updateDashboardKPIsCombined(paymentData, extras) {
       monthlyAmount += amount;
       monthlyCount += 1;
     }
-    if (e.status === "APROVADO") pending += 1;
-    else if (e.status === "PENDENTE") overdue += 1;
+    if (e.status === "APROVADO" || e.status === "PENDENTE") {
+      const st = resolveTimelineStatus({ status: "PENDENTE", paymentDate: e.paymentDueDate || e.approvedAt || e.requestedAt || e.createdAt });
+      if (st === "VENCIDO") overdue += 1;
+      else pending += 1;
+    }
   });
 
   const totalRecords = (paymentData.total || paymentItems.length) + extras.length;
