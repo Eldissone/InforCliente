@@ -65,7 +65,7 @@ const ACTION_LABELS = {
   // Navlinks
   nav_cotacao: "Link nav: Cotação",
   nav_financeiro: "Link nav: Financeiro",
-  nav_centros_gerais: "Link nav: Centros Gerais",
+  nav_centros_gerais: "Link nav: Centro de Compras",
 };
 
 /**
@@ -215,7 +215,7 @@ const PERMISSION_GROUPS = [
     icon: "payments",
     pages: [
       { id: "financeiro.perfil", label: "Perfil Financeiro", route: "/Financeiro/financeiro.html" },
-      { id: "financeiro.centrosGerais", label: "Centros Gerais e Pedidos Extra", route: "/Financeiro/centrosGerais.html" },
+      { id: "financeiro.centrosGerais", label: "Centro de Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
       { id: "financeiro.obras", label: "Financeiro por obra", route: "/Projectos/projectView.html" },
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
@@ -264,21 +264,21 @@ const PERMISSION_GROUPS = [
     id: "fundoManeio",
     label: "Gestão de Cartões",
     icon: "credit_card",
-    pages: [{ id: "fundoManeio.main", label: "Gestão de Cartões", route: "/Financeiro/centrosGerais.html" }],
+    pages: [{ id: "fundoManeio.main", label: "Gestão de Cartões", route: "/Financeiro/centroDeCompras.html" }],
     actions: ["view", "create", "edit", "manage", "full_access"],
   },
   {
     id: "pedidosExtras",
     label: "Pedidos Extras",
     icon: "request_quote",
-    pages: [{ id: "pedidosExtras.main", label: "Centros Gerais e Pedidos Extra", route: "/Financeiro/centrosGerais.html" }],
+    pages: [{ id: "pedidosExtras.main", label: "Centro de Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" }],
     actions: ["view", "create", "approve", "pay", "delete", "full_access"],
   },
   {
     id: "fornecedores",
     label: "Fornecedores",
     icon: "local_shipping",
-    pages: [{ id: "fornecedores.main", label: "Fornecedores", route: "/Financeiro/centrosGerais.html" }],
+    pages: [{ id: "fornecedores.main", label: "Fornecedores", route: "/Financeiro/centroDeCompras.html" }],
     actions: ["view", "create", "edit", "delete", "manage", "full_access"],
   },
   {
@@ -293,7 +293,7 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/centroCustos.html" },
       { id: "navlinks.cotacao", label: "Link: Cotação", route: "/Projectos/Cotacao/index.html" },
       { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
-      { id: "navlinks.centros_gerais", label: "Link: Centros Gerais", route: "/Financeiro/centrosGerais.html" },
+      { id: "navlinks.centros_gerais", label: "Link: Centro de Compras", route: "/Financeiro/centroDeCompras.html" },
       { id: "navlinks.users", label: "Link: Gestão", route: "/Users/index.html" },
     ],
     actions: ["nav_dashboard", "nav_clientes", "nav_obras", "nav_logistica", "nav_planeamento", "nav_cotacao", "nav_financeiro", "nav_centros_gerais", "nav_users"],
@@ -311,7 +311,7 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Projectos/tecnicoPlanos.html", module: "obras", action: "view", roles: ["tecnico", "admin", "supervisor", "operador"] },
   { route: "/Stock/index.html", module: "stock", action: "view" },
   { route: "/Financeiro/financeiro.html", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
-  { route: "/Financeiro/centrosGerais.html", module: "pedidosExtras", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "tecnico"] },
+  { route: "/Financeiro/centroDeCompras.html", module: "pedidosExtras", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "tecnico"] },
   { route: "/Users/index.html", module: "sistema", action: "view", roles: ["admin"] },
 ];
 
