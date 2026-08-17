@@ -25,6 +25,7 @@ const { extraRequestRoutes } = require("./routes/extraRequests");
 const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
 const { costCategoryRoutes } = require("./routes/costCategories");
 const { freightOrderRoutes } = require("./routes/freightOrders");
+const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { initialize } = require("./utils/startup");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 const { createSocketServer } = require("./socket");
@@ -115,6 +116,7 @@ app.use("/extra-requests", extraRequestRoutes);
 app.use("/general-cost-centers", generalCostCenterRoutes);
 app.use("/cost-categories", costCategoryRoutes);
 app.use("/freight-orders", freightOrderRoutes);
+app.use("/purchase-orders", purchaseOrderRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

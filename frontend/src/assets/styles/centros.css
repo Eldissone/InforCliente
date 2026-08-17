@@ -1,0 +1,840 @@
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Sticky footer: viewport real no mobile (100dvh) */
+html {
+    min-height: 100%;
+}
+
+html,
+body {
+    min-height: 100vh;
+}
+
+@supports (min-height: 100dvh) {
+
+    html,
+    body {
+        min-height: 100dvh;
+    }
+}
+
+.gcc-card {
+    background: white;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.gcc-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.gcc-card--active {
+    border-color: #059669;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+}
+
+.type-toggle-btn {
+    padding: 0.5rem 1rem;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 0.75rem;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.type-toggle-btn.active {
+    background: #0f172a;
+    color: white;
+    border-color: #0f172a;
+}
+
+.fin-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.fin-icon-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    cursor: pointer;
+    border: none;
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.fin-icon-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.fin-icon-btn--emerald:hover {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.fin-icon-btn--blue:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.fin-icon-btn--amber:hover {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.fin-icon-btn--red:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.fin-icon-btn:disabled,
+.fin-icon-btn.fin-icon-btn--muted {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.fund-card,
+.card-item {
+    background: white;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    text-align: left;
+}
+
+.fund-card:hover,
+.card-item:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.fund-card--active,
+.card-item--active {
+    border-color: #059669;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+    background: #ecfdf5;
+}
+
+.fund-card__hint {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+    font-size: 10px;
+    font-weight: 700;
+    color: #059669;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.modal-box--wide {
+    max-width: 920px;
+}
+
+.modal-box__scroll {
+    overflow-y: auto;
+    max-height: calc(90vh - 7rem);
+}
+
+.section-panel {
+    background: white;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+}
+
+.section-panel__toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    text-align: left;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.section-panel__toggle:hover {
+    background: #f8fafc;
+}
+
+.section-panel__chevron {
+    transition: transform 0.2s;
+    color: #94a3b8;
+}
+
+.section-panel.is-collapsed .section-panel__chevron {
+    transform: rotate(-90deg);
+}
+
+.section-panel.is-collapsed .section-panel__body {
+    display: none;
+}
+
+.section-panel__body {
+    border-top: 1px solid #f1f5f9;
+    padding: 1rem 1.25rem 1.25rem;
+}
+
+.centros-main-tab {
+    padding: 0.625rem 1.25rem;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 0.75rem 0.75rem 0 0;
+    color: #64748b;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.centros-main-tab:hover {
+    color: #0f172a;
+}
+
+.centros-main-tab.active {
+    color: #059669;
+    border-bottom-color: #059669;
+}
+
+.debit-card-wrap {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 16px;
+    transition: transform 0.15s;
+}
+
+.debit-card-wrap:hover {
+    transform: translateY(-2px);
+}
+
+.debit-card-wrap--active .debit-card {
+    box-shadow: 0 0 0 3px #059669, 0 12px 28px rgba(15, 23, 42, 0.25);
+}
+
+.debit-card {
+    position: relative;
+    aspect-ratio: 1.586 / 1;
+    border-radius: 14px;
+    padding: 1rem 1.15rem 0.85rem;
+    color: #fff;
+    overflow: hidden;
+    font-family: Inter, system-ui, sans-serif;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.debit-card--compact {
+    max-width: 340px;
+}
+
+.debit-card__decor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+}
+
+.debit-card--bai {
+    background: linear-gradient(115deg, #00a0e3 0%, #1a3b8b 100%);
+}
+
+.debit-card--bai .debit-card__decor {
+    background:
+        radial-gradient(circle at 55% 45%, rgba(255, 255, 255, 0.12) 0%, transparent 45%),
+        repeating-radial-gradient(circle at 88% 92%, rgba(255, 255, 255, 0.15) 0 2px, transparent 2px 8px);
+}
+
+.debit-card--bfa {
+    background: linear-gradient(135deg, #ff9100 0%, #e86a00 100%);
+}
+
+.debit-card--bfa .debit-card__decor {
+    background:
+        radial-gradient(ellipse 80% 60% at 20% 80%, rgba(255, 255, 255, 0.2) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 40% at 70% 30%, rgba(255, 220, 160, 0.25) 0%, transparent 50%);
+}
+
+.debit-card--caixa {
+    background: linear-gradient(160deg, #0088d4 0%, #004a8d 100%);
+}
+
+.debit-card--caixa .debit-card__decor {
+    background:
+        radial-gradient(ellipse 70% 55% at 50% 42%, rgba(0, 40, 90, 0.45) 0%, transparent 60%),
+        linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
+}
+
+.debit-card--generic {
+    background: linear-gradient(135deg, #334155 0%, #0f172a 100%);
+}
+
+.debit-card__top {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.debit-card__brand {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.debit-card__logo-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: inset 0 0 0 2px rgba(0, 160, 227, 0.5);
+    flex-shrink: 0;
+}
+
+.debit-card__logo-mark--bfa {
+    border-radius: 4px;
+    background: linear-gradient(135deg, #fff 40%, #ffe0b2 100%);
+}
+
+.debit-card__logo-mark--caixa {
+    border-radius: 2px;
+    background: #fff;
+    clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+    width: 26px;
+    height: 22px;
+}
+
+.debit-card__logo-text {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+}
+
+.debit-card__logo-text--serif {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 700;
+}
+
+.debit-card__logo-text--caixa {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    max-width: 5.5rem;
+}
+
+.debit-card__type-block {
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.debit-card__type-icon {
+    display: block;
+    width: 22px;
+    height: 22px;
+    margin: 0 auto 2px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 30%, transparent 70%);
+}
+
+.debit-card__type-label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    opacity: 0.95;
+}
+
+.debit-card__chip {
+    position: relative;
+    z-index: 1;
+    width: 38px;
+    height: 28px;
+    margin-top: 0.65rem;
+    border-radius: 5px;
+    background: linear-gradient(145deg, #e8c547 0%, #b8922a 50%, #d4af37 100%);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.debit-card__chip::before {
+    content: "";
+    position: absolute;
+    inset: 5px 4px;
+    border-radius: 2px;
+    border-top: 2px solid rgba(0, 0, 0, 0.12);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.debit-card__number {
+    position: relative;
+    z-index: 1;
+    margin: 0.55rem 0 0;
+    font-family: "Share Tech Mono", ui-monospace, monospace;
+    font-size: clamp(0.95rem, 2.8vw, 1.15rem);
+    letter-spacing: 0.12em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.debit-card__expiry {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.92;
+}
+
+.debit-card__exp-label--stack {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    font-size: 0.48rem;
+}
+
+.debit-card__exp-value {
+    font-family: "Share Tech Mono", ui-monospace, monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+}
+
+.debit-card__holder {
+    position: relative;
+    z-index: 1;
+    margin: 0.45rem 0 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.debit-card__disclaimer {
+    position: relative;
+    z-index: 1;
+    margin: 0.15rem 0 0;
+    font-size: 0.42rem;
+    letter-spacing: 0.12em;
+    opacity: 0.75;
+}
+
+.debit-card__app-meta {
+    position: absolute;
+    right: 0.85rem;
+    bottom: 0.65rem;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    max-width: 55%;
+}
+
+.debit-card__balance-pill {
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.debit-card__scope-pill {
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.22);
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+#cardsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* ── CSS do Centro de Compras ── */
+.cc-layout {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    min-height: 600px;
+}
+
+/* Sidebar */
+.cc-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: white;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    padding: 0.75rem 0.5rem;
+    position: sticky;
+    top: 80px;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.cc-sidebar.collapsed {
+    width: 52px;
+}
+
+.cc-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0.5rem 0.5rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.cc-sidebar-label {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.2s;
+}
+
+.cc-sidebar.collapsed .cc-sidebar-label {
+    opacity: 0;
+    width: 0;
+}
+
+.cc-sidebar-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 0.5rem;
+    background: #f1f5f9;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    color: #64748b;
+}
+
+.cc-sidebar-toggle:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.cc-sub-tab {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 0.625rem;
+    color: #64748b;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-align: left;
+}
+
+.cc-sub-tab:hover {
+    color: #0f172a;
+    background: #f8fafc;
+}
+
+.cc-sub-tab.active {
+    color: #0f172a;
+    background: #f1f5f9;
+    font-weight: 800;
+}
+
+.cc-sub-tab .cc-tab-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.cc-sub-tab.active .cc-tab-icon {
+    color: #059669;
+}
+
+.cc-sub-tab .cc-tab-label {
+    transition: opacity 0.2s, width 0.25s;
+    overflow: hidden;
+}
+
+.cc-sidebar.collapsed .cc-tab-label {
+    opacity: 0;
+    width: 0;
+}
+
+/* Main content area */
+.cc-main {
+    flex: 1;
+    min-width: 0;
+    padding-left: 1.25rem;
+}
+
+.cc-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.cc-kpi-card {
+    background: white;
+    border: 1px solid #f1f5f9;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.cc-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.cc-kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #e2e8f0;
+    border-radius: 3px 0 0 3px;
+}
+
+.cc-kpi-card--amber::before {
+    background: #f59e0b;
+}
+
+.cc-kpi-card--alert::before {
+    background: #ef4444;
+}
+
+.cc-kpi-card--featured::before {
+    background: #2afc8d;
+}
+
+.cc-kpi-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.cc-kpi-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.3;
+}
+
+.cc-kpi-icon {
+    font-size: 20px;
+    color: #cbd5e1;
+}
+
+.cc-kpi-card--amber .cc-kpi-icon {
+    color: #fcd34d;
+}
+
+.cc-kpi-card--alert .cc-kpi-icon {
+    color: #fca5a5;
+}
+
+.cc-kpi-card--featured .cc-kpi-icon {
+    color: #34d399;
+}
+
+.cc-kpi-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.cc-kpi-value--lg {
+    font-size: 1.3rem;
+}
+
+.cc-kpi-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-top: 0.5rem;
+}
+
+.cc-kpi-badge {
+    position: absolute;
+    top: 1rem;
+    right: -1.5rem;
+    background: #ef4444;
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 0.1rem 1.5rem;
+    transform: rotate(45deg);
+    text-transform: uppercase;
+}
+
+.cc-timeline {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.cc-timeline::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e2e8f0;
+}
+
+.cc-timeline-item {
+    position: relative;
+    margin-bottom: 1.25rem;
+}
+
+.cc-timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.cc-timeline-dot {
+    position: absolute;
+    left: -1.5rem;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid #94a3b8;
+}
+
+.cc-timeline-item.active .cc-timeline-dot {
+    border-color: #3b82f6;
+    background: #3b82f6;
+}
+
+.cc-timeline-item.success .cc-timeline-dot {
+    border-color: #10b981;
+    background: #10b981;
+}
+
+.cc-timeline-item.error .cc-timeline-dot {
+    border-color: #ef4444;
+    background: #ef4444;
+}
+
+.cc-timeline-content {
+    padding-left: 0.5rem;
+}
+
+/* Drawer Slide-in para Requisições */
+.drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    justify-content: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.drawer-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.drawer-panel {
+    width: 100%;
+    max-width: 600px;
+    height: 100%;
+    background: white;
+    box-shadow: -4px 0 24px rgba(15, 23, 42, 0.1);
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.drawer-overlay.open .drawer-panel {
+    transform: translateX(0);
+}
+
+.drawer-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.drawer-footer {
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid #f1f5f9;
+    background: #f8fafc;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}

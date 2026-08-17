@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { syncSupplierBankAccounts, supplierInclude } = require("../services/supplierBankAccounts");
 
@@ -32,7 +32,8 @@ const supplierBodySchema = z.object({
 
 const supplierRoutes = express.Router();
 supplierRoutes.use(authRequired);
-supplierRoutes.use(requireRole(["admin", "operador"]));
+// GET (listagem) acessível a todos os utilizadores autenticados (dados de referência)
+// POST/PUT/DELETE requerem admin ou operador (aplicado em cada rota de escrita)
 
 function resolveBankAccounts(body) {
   if (Array.isArray(body.bankAccounts) && body.bankAccounts.length) {
@@ -48,6 +49,7 @@ function resolveBankAccounts(body) {
 
 supplierRoutes.get(
   "/",
+  requirePermission("fornecedores", "view"),
   asyncHandler(async (req, res) => {
     const type = req.query.type ? String(req.query.type) : "";
     const items = await prisma.supplier.findMany({
@@ -63,6 +65,7 @@ supplierRoutes.get(
 
 supplierRoutes.post(
   "/",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
     const body = supplierBodySchema.parse(req.body);
     const { bankAccounts, ...supplierData } = body;
@@ -86,6 +89,7 @@ supplierRoutes.post(
 
 supplierRoutes.patch(
   "/:id",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = supplierBodySchema.partial().extend({
@@ -115,6 +119,7 @@ supplierRoutes.patch(
 
 supplierRoutes.delete(
   "/:id",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await prisma.supplier.delete({ where: { id } });
@@ -126,6 +131,7 @@ supplierRoutes.delete(
 
 supplierRoutes.get(
   "/:id/products",
+  requirePermission("fornecedores", "view"),
   asyncHandler(async (req, res) => {
     const supplierId = String(req.params.id);
     const items = await prisma.supplierProduct.findMany({
@@ -138,6 +144,7 @@ supplierRoutes.get(
 
 supplierRoutes.post(
   "/:id/products",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
     const supplierId = String(req.params.id);
     const body = z
@@ -175,9 +182,10 @@ supplierRoutes.post(
 );
 
 supplierRoutes.patch(
-  "/:id/products/:pId",
+  "/:id/products/:productId",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
-    const id = String(req.params.pId);
+    const id = String(req.params.productId);
     const body = z
       .object({
         name: z.string().min(1).optional(),
@@ -210,9 +218,10 @@ supplierRoutes.patch(
 );
 
 supplierRoutes.delete(
-  "/:id/products/:pId",
+  "/:id/products/:productId",
+  requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
-    const id = String(req.params.pId);
+    const id = String(req.params.productId);
     await prisma.supplierProduct.delete({ where: { id } });
     res.json({ ok: true });
   })

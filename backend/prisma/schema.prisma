@@ -1257,6 +1257,8 @@ model Supplier {
   payments      CostPayment[]
   freightOrders FreightOrder[]
   extraRequests ExtraRequest[]
+  purchaseOrders      PurchaseOrder[]
+  purchaseRequisitions PurchaseRequisition[]
 }
 
 enum SupplierType {
@@ -1441,4 +1443,195 @@ model PaymentInstallmentHistory {
   installment PaymentInstallment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
 
   @@index([installmentId])
+}
+
+// =============================================
+// MÓDULO: CENTRO DE COMPRAS
+// =============================================
+
+enum PurchaseOrderStatus {
+  RASCUNHO
+  PENDENTE_REQUISICAO
+  PENDENTE_APROVACAO
+  APROVADO
+  NAO_APROVADO
+  EM_PAGAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum PurchasePriority {
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum PurchaseType {
+  PEDIDO
+  ORCAMENTO
+}
+
+enum PurchasePaymentStatus {
+  PENDENTE
+  PARCIAL
+  PAGO
+  CANCELADO
+}
+
+enum PurchaseInstallmentStatus {
+  PENDENTE
+  PAGO
+  CANCELADO
+}
+
+model PurchaseOrder {
+  id              String              @id @default(cuid())
+  number          String              @unique
+  type            PurchaseType        @default(PEDIDO)
+  status          PurchaseOrderStatus @default(RASCUNHO)
+  priority        PurchasePriority    @default(NORMAL)
+  department      String?
+  requestedById   String?
+  requestedByName String
+  description     String
+  justification   String?
+  needDate        DateTime?
+  requiresQuote   Boolean             @default(true)
+  totalValue      Decimal?            @db.Decimal(16, 2)
+  currency        String              @default("AOA")
+  supplierId      String?
+  supplierName    String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items        PurchaseOrderItem[]
+  requisition  PurchaseRequisition?
+  approvals    PurchaseApproval[]
+  paymentPlan  PurchasePaymentPlan?
+  history      PurchaseHistoryLog[]
+
+  @@index([status])
+  @@index([requestedById])
+  @@index([createdAt])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  name            String
+  quantity        Decimal       @db.Decimal(16, 4)
+  unit            String?
+  unitPrice       Decimal?      @db.Decimal(16, 4)
+  totalPrice      Decimal?      @db.Decimal(16, 4)
+  notes           String?
+  order           Int           @default(0)
+  createdAt       DateTime      @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+}
+
+model PurchaseRequisition {
+  id              String        @id @default(cuid())
+  purchaseOrderId String        @unique
+  quotedValue     Decimal?      @db.Decimal(16, 2)
+  currency        String        @default("AOA")
+  supplierId      String?
+  supplierName    String?
+  notes           String?
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  purchaseOrder PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  supplier      Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  attachments   PurchaseAttachment[]
+
+  @@index([purchaseOrderId])
+}
+
+model PurchaseAttachment {
+  id                    String              @id @default(cuid())
+  purchaseRequisitionId String
+  fileName              String
+  mimeType              String
+  size                  Int
+  url                   String
+  uploadedById          String?
+  uploadedByName        String?
+  createdAt             DateTime            @default(now())
+
+  requisition PurchaseRequisition @relation(fields: [purchaseRequisitionId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseRequisitionId])
+}
+
+model PurchaseApproval {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  approverId      String
+  approverName    String
+  decision        String        // "APROVADO" | "NAO_APROVADO"
+  observations    String?
+  decidedAt       DateTime      @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+}
+
+model PurchasePaymentPlan {
+  id              String                     @id @default(cuid())
+  purchaseOrderId String                     @unique
+  totalValue      Decimal                    @db.Decimal(16, 2)
+  currency        String                     @default("AOA")
+  status          PurchasePaymentStatus      @default(PENDENTE)
+  notes           String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  purchaseOrder PurchaseOrder                @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  installments  PurchasePaymentInstallment[]
+
+  @@index([purchaseOrderId])
+}
+
+model PurchasePaymentInstallment {
+  id            String                    @id @default(cuid())
+  paymentPlanId String
+  number        Int
+  amount        Decimal                   @db.Decimal(16, 2)
+  currency      String                    @default("AOA")
+  dueDate       DateTime
+  paidAt        DateTime?
+  status        PurchaseInstallmentStatus @default(PENDENTE)
+  notes         String?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  paymentPlan PurchasePaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+
+  @@index([paymentPlanId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+model PurchaseHistoryLog {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  action          String
+  fromStatus      String?
+  toStatus        String?
+  userId          String?
+  userName        String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([createdAt])
 }

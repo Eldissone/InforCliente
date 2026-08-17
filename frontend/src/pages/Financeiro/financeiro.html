@@ -265,7 +265,7 @@
                 scrollbar-width: thin;
             }
 
-            .fin-toolbar-filters > * {
+            .fin-toolbar-filters>* {
                 flex-shrink: 0;
             }
         }
@@ -310,7 +310,7 @@
                 scrollbar-width: thin;
             }
 
-            .fin-toolbar-filters > * {
+            .fin-toolbar-filters>* {
                 flex-shrink: 0;
             }
 
@@ -877,7 +877,7 @@
                 </select>
                 <select id="finStatusFilter"
                     class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
-                    title="Filtrar pagamentos planeados e pedidos extra">
+                    title="Filtrar pagamentos planeados e pedidos de compra">
                     <option value="">Todos os estados</option>
                     <optgroup label="Pagamentos">
                         <option value="PENDENTE">Pendentes</option>
@@ -886,8 +886,8 @@
                         <option value="CONFIRMADO">Pagos</option>
                         <option value="CANCELADO">Rejeitados / cancelados</option>
                     </optgroup>
-                    <optgroup label="Pedidos Extra">
-                        <option value="EXTRA">Todos os pedidos extra</option>
+                    <optgroup label="Pedidos de Compra">
+                        <option value="EXTRA">Todos os pedidos de compra</option>
                         <option value="EXTRA_PENDENTE">Extra — Pendente aprovação</option>
                         <option value="EXTRA_A_LIQUIDAR">Extra — A liquidar</option>
                         <option value="EXTRA_PAGO">Extra — Pagos</option>
@@ -1032,7 +1032,7 @@
                         </div>
                         <div class="fin-status-divider" aria-hidden="true"></div>
                         <div>
-                            <p class="fin-status-block-title">Pedidos Extra</p>
+                            <p class="fin-status-block-title">Pedidos de Compra</p>
                             <div id="finDonutExtras" class="fin-donut-wrap">
                                 <div class="text-xs text-slate-400 w-full py-6 text-center">A carregar...</div>
                             </div>
@@ -1048,7 +1048,8 @@
                     <div class="fin-plan-header__title">
                         <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos
                         </h2>
-                        <p class="fin-plan-header__subtitle text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
+                        <p
+                            class="fin-plan-header__subtitle text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
                             Todas as obras · visão transversal</p>
                     </div>
                     <label
@@ -1068,11 +1069,13 @@
                             <div class="fin-plan-toolbar__group" role="group" aria-label="Modo de visualização">
                                 <button type="button" class="gantt-view-btn active" data-payment-view="gantt"
                                     title="Calendário">
-                                    <span class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span><span
+                                    <span
+                                        class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span><span
                                         class="gantt-view-btn-label">Calendário</span>
                                 </button>
                                 <button type="button" class="gantt-view-btn" data-payment-view="list" title="Lista">
-                                    <span class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span><span
+                                    <span
+                                        class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span><span
                                         class="gantt-view-btn-label">Lista</span>
                                 </button>
                             </div>
@@ -1237,36 +1240,54 @@
                         <div class="overflow-x-auto custom-scroll">
                             <div class="flex items-start gap-5 min-w-max">
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Qtd</span>
-                                    <span id="asideAcctQty" class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Qtd</span>
+                                    <span id="asideAcctQty"
+                                        class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">P. Unit.</span>
-                                    <span id="asideAcctUnitPrice" class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">P.
+                                        Unit.</span>
+                                    <span id="asideAcctUnitPrice"
+                                        class="text-xs font-bold text-slate-800 tabular-nums whitespace-nowrap">—</span>
                                 </div>
                                 <div class="flex flex-col gap-0.5 min-w-[5.5rem]">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">IVA</span>
-                                    <div id="asideAcctVat" class="flex flex-col gap-0.5 text-emerald-600 tabular-nums">—</div>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">IVA</span>
+                                    <div id="asideAcctVat" class="flex flex-col gap-0.5 text-emerald-600 tabular-nums">—
+                                    </div>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Desc</span>
-                                    <span id="asideAcctDesc" class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Desc</span>
+                                    <span id="asideAcctDesc"
+                                        class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Ret</span>
-                                    <span id="asideAcctRet" class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Ret</span>
+                                    <span id="asideAcctRet"
+                                        class="text-xs font-bold text-red-600 tabular-nums whitespace-nowrap">—</span>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Valor Previsto (base)</span>
-                                    <span id="asideAcctBase" class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Valor
+                                        Previsto (base)</span>
+                                    <span id="asideAcctBase"
+                                        class="text-sm font-black text-slate-900 tabular-nums whitespace-nowrap">—</span>
                                 </div>
                                 <div class="flex flex-col gap-0.5">
-                                    <span class="text-[9px] font-black uppercase tracking-widest text-emerald-700 whitespace-nowrap">Líquido a pagar</span>
-                                    <span id="asideAcctNet" class="text-sm font-black text-[#0f172a] tabular-nums whitespace-nowrap">—</span>
+                                    <span
+                                        class="text-[9px] font-black uppercase tracking-widest text-emerald-700 whitespace-nowrap">Líquido
+                                        a pagar</span>
+                                    <span id="asideAcctNet"
+                                        class="text-sm font-black text-[#0f172a] tabular-nums whitespace-nowrap">—</span>
                                 </div>
                             </div>
                         </div>
-                        <p id="asideAccountingNote" class="hidden text-[10px] text-slate-400 font-semibold">Não altera o valor base do orçamento.</p>
+                        <p id="asideAccountingNote" class="hidden text-[10px] text-slate-400 font-semibold">Não altera o
+                            valor base do orçamento.</p>
                     </div>
                 </div>
             </div>
@@ -1383,11 +1404,13 @@
                 </div>
                 <div>
                     <label for="liqConfirmedDate"
-                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data da liquidação
+                        class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data da
+                        liquidação
                         *</label>
                     <input id="liqConfirmedDate" type="date" required
                         class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
-                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Registe quando o pagamento foi efectivamente
+                    <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Registe quando o pagamento foi
+                        efectivamente
                         realizado (útil para liquidações de pedidos antigos).</p>
                 </div>
                 <div id="liqDocsBlock" class="flex flex-col gap-3">
@@ -1430,7 +1453,7 @@
             <div class="flex items-center justify-between mb-4">
                 <div>
                     <h2 class="text-lg font-bold text-slate-900">Lista de Pedidos</h2>
-                    <p class="text-xs text-slate-400 mt-0.5">Pedidos extra a liquidar e carregamentos de cartões a
+                    <p class="text-xs text-slate-400 mt-0.5">Pedidos de compra a liquidar e carregamentos de cartões a
                         aprovar
                     </p>
                 </div>

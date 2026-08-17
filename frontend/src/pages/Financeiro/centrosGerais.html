@@ -4,8 +4,9 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Info Gestor — Cartões, Centros Gerais e Pedidos Extra</title>
-    <meta name="description" content="Gestão de cartões pré-pagos, centros de custo gerais e pedidos extra.">
+    <title>Info Gestor — Cartões, Centros Gerais e Pedidos de Compra</title>
+    <meta name="description" content="Gestão de cartões pré-pagos, centros de custo gerais e pedidos de compra.">
+    <meta name="theme-color" content="#ffffff">
     <link rel="icon" href="../../assets/icon/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,497 +17,7 @@
         rel="stylesheet" />
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
-    <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-
-        /* Sticky footer: viewport real no mobile (100dvh) */
-        html {
-            min-height: 100%;
-        }
-
-        html,
-        body {
-            min-height: 100vh;
-        }
-
-        @supports (min-height: 100dvh) {
-
-            html,
-            body {
-                min-height: 100dvh;
-            }
-        }
-
-        .gcc-card {
-            background: white;
-            border: 1px solid #f1f5f9;
-            border-radius: 1rem;
-            padding: 1.25rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .gcc-card:hover {
-            border-color: #cbd5e1;
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-        }
-
-        .gcc-card--active {
-            border-color: #059669;
-            box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
-        }
-
-        .type-toggle-btn {
-            padding: 0.5rem 1rem;
-            font-size: 12px;
-            font-weight: 700;
-            border-radius: 0.75rem;
-            color: #64748b;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-
-        .type-toggle-btn.active {
-            background: #0f172a;
-            color: white;
-            border-color: #0f172a;
-        }
-
-        .fin-actions {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.35rem;
-        }
-
-        .fin-icon-btn {
-            width: 2rem;
-            height: 2rem;
-            border-radius: 0.5rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s;
-            cursor: pointer;
-            border: none;
-            background: #f1f5f9;
-            color: #64748b;
-        }
-
-        .fin-icon-btn:hover {
-            background: #e2e8f0;
-            color: #0f172a;
-        }
-
-        .fin-icon-btn--emerald:hover {
-            background: #d1fae5;
-            color: #047857;
-        }
-
-        .fin-icon-btn--blue:hover {
-            background: #dbeafe;
-            color: #1d4ed8;
-        }
-
-        .fin-icon-btn--amber:hover {
-            background: #fef3c7;
-            color: #b45309;
-        }
-
-        .fin-icon-btn--red:hover {
-            background: #fee2e2;
-            color: #b91c1c;
-        }
-
-        .fin-icon-btn:disabled,
-        .fin-icon-btn.fin-icon-btn--muted {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-
-        .fund-card,
-        .card-item {
-            background: white;
-            border: 1px solid #f1f5f9;
-            border-radius: 1rem;
-            padding: 1.25rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            text-align: left;
-        }
-
-        .fund-card:hover,
-        .card-item:hover {
-            border-color: #cbd5e1;
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-        }
-
-        .fund-card--active,
-        .card-item--active {
-            border-color: #059669;
-            box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
-            background: #ecfdf5;
-        }
-
-        .fund-card__hint {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-            margin-top: 0.75rem;
-            font-size: 10px;
-            font-weight: 700;
-            color: #059669;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-
-        .modal-box--wide {
-            max-width: 920px;
-        }
-
-        .modal-box__scroll {
-            overflow-y: auto;
-            max-height: calc(90vh - 7rem);
-        }
-
-        .section-panel {
-            background: white;
-            border: 1px solid #f1f5f9;
-            border-radius: 1rem;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-            overflow: hidden;
-        }
-
-        .section-panel__toggle {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 1rem 1.25rem;
-            text-align: left;
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-
-        .section-panel__toggle:hover {
-            background: #f8fafc;
-        }
-
-        .section-panel__chevron {
-            transition: transform 0.2s;
-            color: #94a3b8;
-        }
-
-        .section-panel.is-collapsed .section-panel__chevron {
-            transform: rotate(-90deg);
-        }
-
-        .section-panel.is-collapsed .section-panel__body {
-            display: none;
-        }
-
-        .section-panel__body {
-            border-top: 1px solid #f1f5f9;
-            padding: 1rem 1.25rem 1.25rem;
-        }
-
-        .centros-main-tab {
-            padding: 0.625rem 1.25rem;
-            font-size: 13px;
-            font-weight: 700;
-            border-radius: 0.75rem 0.75rem 0 0;
-            color: #64748b;
-            background: transparent;
-            border: none;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -1px;
-            cursor: pointer;
-            transition: color 0.15s, border-color 0.15s;
-        }
-
-        .centros-main-tab:hover {
-            color: #0f172a;
-        }
-
-        .centros-main-tab.active {
-            color: #059669;
-            border-bottom-color: #059669;
-        }
-
-        .debit-card-wrap {
-            display: block;
-            width: 100%;
-            padding: 0;
-            border: none;
-            background: transparent;
-            cursor: pointer;
-            text-align: left;
-            border-radius: 16px;
-            transition: transform 0.15s;
-        }
-
-        .debit-card-wrap:hover {
-            transform: translateY(-2px);
-        }
-
-        .debit-card-wrap--active .debit-card {
-            box-shadow: 0 0 0 3px #059669, 0 12px 28px rgba(15, 23, 42, 0.25);
-        }
-
-        .debit-card {
-            position: relative;
-            aspect-ratio: 1.586 / 1;
-            border-radius: 14px;
-            padding: 1rem 1.15rem 0.85rem;
-            color: #fff;
-            overflow: hidden;
-            font-family: Inter, system-ui, sans-serif;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-        }
-
-        .debit-card--compact {
-            max-width: 340px;
-        }
-
-        .debit-card__decor {
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            opacity: 0.35;
-        }
-
-        .debit-card--bai {
-            background: linear-gradient(115deg, #00a0e3 0%, #1a3b8b 100%);
-        }
-
-        .debit-card--bai .debit-card__decor {
-            background:
-                radial-gradient(circle at 55% 45%, rgba(255, 255, 255, 0.12) 0%, transparent 45%),
-                repeating-radial-gradient(circle at 88% 92%, rgba(255, 255, 255, 0.15) 0 2px, transparent 2px 8px);
-        }
-
-        .debit-card--bfa {
-            background: linear-gradient(135deg, #ff9100 0%, #e86a00 100%);
-        }
-
-        .debit-card--bfa .debit-card__decor {
-            background:
-                radial-gradient(ellipse 80% 60% at 20% 80%, rgba(255, 255, 255, 0.2) 0%, transparent 55%),
-                radial-gradient(ellipse 50% 40% at 70% 30%, rgba(255, 220, 160, 0.25) 0%, transparent 50%);
-        }
-
-        .debit-card--caixa {
-            background: linear-gradient(160deg, #0088d4 0%, #004a8d 100%);
-        }
-
-        .debit-card--caixa .debit-card__decor {
-            background:
-                radial-gradient(ellipse 70% 55% at 50% 42%, rgba(0, 40, 90, 0.45) 0%, transparent 60%),
-                linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%);
-        }
-
-        .debit-card--generic {
-            background: linear-gradient(135deg, #334155 0%, #0f172a 100%);
-        }
-
-        .debit-card__top {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 0.5rem;
-        }
-
-        .debit-card__brand {
-            display: flex;
-            align-items: center;
-            gap: 0.45rem;
-            min-width: 0;
-        }
-
-        .debit-card__logo-mark {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
-            background: #fff;
-            box-shadow: inset 0 0 0 2px rgba(0, 160, 227, 0.5);
-            flex-shrink: 0;
-        }
-
-        .debit-card__logo-mark--bfa {
-            border-radius: 4px;
-            background: linear-gradient(135deg, #fff 40%, #ffe0b2 100%);
-        }
-
-        .debit-card__logo-mark--caixa {
-            border-radius: 2px;
-            background: #fff;
-            clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
-            width: 26px;
-            height: 22px;
-        }
-
-        .debit-card__logo-text {
-            font-size: 1.15rem;
-            font-weight: 800;
-            letter-spacing: 0.04em;
-            line-height: 1;
-        }
-
-        .debit-card__logo-text--serif {
-            font-family: Georgia, "Times New Roman", serif;
-            font-weight: 700;
-        }
-
-        .debit-card__logo-text--caixa {
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            line-height: 1.15;
-            max-width: 5.5rem;
-        }
-
-        .debit-card__type-block {
-            text-align: center;
-            flex-shrink: 0;
-        }
-
-        .debit-card__type-icon {
-            display: block;
-            width: 22px;
-            height: 22px;
-            margin: 0 auto 2px;
-            border-radius: 50%;
-            border: 2px solid rgba(255, 255, 255, 0.85);
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 30%, transparent 70%);
-        }
-
-        .debit-card__type-label {
-            font-size: 0.62rem;
-            font-weight: 600;
-            text-transform: lowercase;
-            letter-spacing: 0.06em;
-            opacity: 0.95;
-        }
-
-        .debit-card__chip {
-            position: relative;
-            z-index: 1;
-            width: 38px;
-            height: 28px;
-            margin-top: 0.65rem;
-            border-radius: 5px;
-            background: linear-gradient(145deg, #e8c547 0%, #b8922a 50%, #d4af37 100%);
-            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
-        }
-
-        .debit-card__chip::before {
-            content: "";
-            position: absolute;
-            inset: 5px 4px;
-            border-radius: 2px;
-            border-top: 2px solid rgba(0, 0, 0, 0.12);
-            border-bottom: 2px solid rgba(255, 255, 255, 0.25);
-        }
-
-        .debit-card__number {
-            position: relative;
-            z-index: 1;
-            margin: 0.55rem 0 0;
-            font-family: "Share Tech Mono", ui-monospace, monospace;
-            font-size: clamp(0.95rem, 2.8vw, 1.15rem);
-            letter-spacing: 0.12em;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-        }
-
-        .debit-card__expiry {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: flex-end;
-            gap: 0.35rem;
-            margin-top: 0.35rem;
-            font-size: 0.55rem;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            opacity: 0.92;
-        }
-
-        .debit-card__exp-label--stack {
-            display: flex;
-            flex-direction: column;
-            line-height: 1.15;
-            font-size: 0.48rem;
-        }
-
-        .debit-card__exp-value {
-            font-family: "Share Tech Mono", ui-monospace, monospace;
-            font-size: 0.75rem;
-            letter-spacing: 0.08em;
-        }
-
-        .debit-card__holder {
-            position: relative;
-            z-index: 1;
-            margin: 0.45rem 0 0;
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .debit-card__disclaimer {
-            position: relative;
-            z-index: 1;
-            margin: 0.15rem 0 0;
-            font-size: 0.42rem;
-            letter-spacing: 0.12em;
-            opacity: 0.75;
-        }
-
-        .debit-card__app-meta {
-            position: absolute;
-            right: 0.85rem;
-            bottom: 0.65rem;
-            z-index: 2;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 0.25rem;
-            max-width: 55%;
-        }
-
-        .debit-card__balance-pill {
-            padding: 0.2rem 0.5rem;
-            border-radius: 999px;
-            background: rgba(15, 23, 42, 0.45);
-            backdrop-filter: blur(4px);
-            font-size: 0.65rem;
-            font-weight: 800;
-            letter-spacing: 0.02em;
-            white-space: nowrap;
-        }
-
-        .debit-card__scope-pill {
-            padding: 0.15rem 0.45rem;
-            border-radius: 6px;
-            background: rgba(255, 255, 255, 0.22);
-            font-size: 0.55rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-        }
-
-        #cardsGrid {
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        }
-    </style>
+    <link href="../../assets/styles/centros.css" rel="stylesheet" />
 </head>
 
 <body class="bg-slate-50 min-h-screen font-inter text-slate-900 flex flex-col">
@@ -601,105 +112,96 @@
     </nav>
 
     <main class="flex-1 w-full max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-16">
-        <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-6 mb-8">
-            <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-[#059669] mb-2">Financeiro</p>
-                <h1 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Cartões, Centros
-                    Gerais e Pedidos Extra</h1>
-                <p class="text-xs font-semibold text-slate-400 mt-1 max-w-2xl">
-                    Cartões pré-pagos com saldo próprio. Carregue fundos, registe gastos via pedidos extra e consulte o histórico por cartão.
-                </p>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 border-b border-slate-200 gap-4">
+            <div id="centrosMainTabs" class="flex flex-wrap gap-1" role="tablist" aria-label="Secções Centros Gerais">
+                <button type="button" id="centrosTabBtnCompras" data-centros-tab="compras"
+                    class="centros-main-tab active" role="tab" aria-selected="true" aria-controls="centrosPanelCompras">
+                    <span class="material-symbols-outlined text-sm align-middle" style="vertical-align:-2px">shopping_cart</span>
+                    Centro de Compras
+                </button>
+            </div>
+            <div class="flex flex-wrap gap-2 pb-2 sm:pb-0">
+                <button type="button" id="btnOpenModalCartoes" class="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                    <span class="material-symbols-outlined text-base text-emerald-600">credit_card</span>
+                    Gestão de Cartões
+                </button>
+                <button type="button" id="btnOpenModalCatalogo" class="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                    <span class="material-symbols-outlined text-base text-slate-500">category</span>
+                    Tipos de Custo
+                </button>
             </div>
         </div>
 
-        <div id="centrosMainTabs" class="flex flex-wrap gap-1 mb-6 border-b border-slate-200" role="tablist"
-            aria-label="Secções Centros Gerais">
-            <button type="button" id="centrosTabBtnCartoes" data-centros-tab="cartoes"
-                class="centros-main-tab active" role="tab" aria-selected="true" aria-controls="centrosPanelCartoes">Cartões</button>
-            <button type="button" id="centrosTabBtnCatalogo" data-centros-tab="catalogo"
-                class="centros-main-tab" role="tab" aria-selected="false" aria-controls="centrosPanelCatalogo">Tipos de custo</button>
-            <button type="button" id="centrosTabBtnExtras" data-centros-tab="extras"
-                class="centros-main-tab" role="tab" aria-selected="false" aria-controls="centrosPanelExtras">Pedidos Extra</button>
-        </div>
-
-        <div id="centrosPanelCartoes" role="tabpanel" aria-labelledby="centrosTabBtnCartoes">
-        <!-- ═══════════ SECÇÃO: CARTÕES ═══════════ -->
-        <section id="sectionCards" class="mb-6">
-            <div class="section-panel" id="panelCards">
-                <div class="flex items-center gap-2 pr-3">
-                    <button type="button" class="section-panel__toggle flex-1" data-section-toggle="panelCards"
-                        aria-expanded="true">
-                        <span class="flex items-center gap-3 min-w-0">
-                            <span
-                                class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                                <span class="material-symbols-outlined text-xl">credit_card</span>
-                            </span>
-                            <span class="min-w-0">
-                                <span class="block text-sm font-bold text-slate-900">Gestão de Cartões</span>
-                                <span id="cardsSectionMeta" class="block text-[11px] text-slate-400 truncate">A carregar...</span>
-                            </span>
-                        </span>
-                        <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
-                    </button>
-                    <button id="btnNewCard" type="button"
-                        class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shrink-0">
-                        <span class="material-symbols-outlined text-base">add</span>
-                        Novo Cartão
+        <div class="modal-overlay" id="modalCartoes">
+            <div class="modal-box modal-box--wide p-6 flex flex-col h-[90vh]">
+                <div class="flex items-center justify-between mb-6 shrink-0">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-emerald-600">credit_card</span>
+                            Gestão de Cartões
+                        </h3>
+                        <p id="cardsSectionMeta" class="text-xs text-slate-500 mt-1">A carregar...</p>
+                    </div>
+                    <button type="button" id="btnCloseModalCartoes" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                        <span class="material-symbols-outlined text-sm">close</span>
                     </button>
                 </div>
-                <div class="section-panel__body">
-                    <div class="flex flex-wrap items-center gap-2 mb-4">
-                        <select id="filterCardScope"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[140px]">
-                            <option value="">Todos os cartões</option>
-                            <option value="global">Só globais</option>
-                            <option value="obra">Só de obra</option>
-                        </select>
-                        <select id="filterCardProject"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
-                            <option value="">Todas as obras</option>
-                        </select>
+                <div class="flex-1 overflow-y-auto pr-2">
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <select id="filterCardScope"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[140px]">
+                                <option value="">Todos os cartões</option>
+                                <option value="global">Só globais</option>
+                                <option value="obra">Só de obra</option>
+                            </select>
+                            <select id="filterCardProject"
+                                class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
+                                <option value="">Todas as obras</option>
+                            </select>
+                        </div>
+                        <button id="btnNewCard" type="button"
+                            class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shrink-0">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Novo Cartão
+                        </button>
                     </div>
-                    <div id="cardsGrid" class="grid gap-5">
+                    <div id="cardsGrid" class="grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                         <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
                         <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
                         <div class="debit-card debit-card--generic animate-pulse min-h-[168px]"></div>
                     </div>
                 </div>
             </div>
-        </section>
         </div>
 
-        <div id="centrosPanelCatalogo" class="hidden" role="tabpanel" aria-labelledby="centrosTabBtnCatalogo">
-        <section id="sectionGcc" class="mb-6">
-            <div class="section-panel" id="panelGcc">
-                <div class="flex items-center gap-2 pr-3">
-                    <button type="button" class="section-panel__toggle flex-1" data-section-toggle="panelGcc"
-                        aria-expanded="true">
-                        <span class="flex items-center gap-3 min-w-0">
-                            <span
-                                class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-                                <span class="material-symbols-outlined text-xl">category</span>
-                            </span>
-                            <span class="min-w-0">
-                                <span class="block text-sm font-bold text-slate-900">Tipos de custo</span>
-                                <span id="gccSectionMeta" class="block text-[11px] text-slate-400 truncate">Catálogo CENTRO COMPRAS</span>
-                            </span>
-                        </span>
-                        <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
-                    </button>
-                    <button id="btnNewCostCategory" type="button"
-                        class="hidden h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shrink-0">
-                        <span class="material-symbols-outlined text-base">add</span>
-                        Nova rubrica
+        <div class="modal-overlay" id="modalCatalogo">
+            <div class="modal-box modal-box--wide p-6 flex flex-col h-[90vh]">
+                <div class="flex items-center justify-between mb-6 shrink-0">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-slate-500">category</span>
+                            Tipos de custo
+                        </h3>
+                        <p id="gccSectionMeta" class="text-xs text-slate-500 mt-1">Catálogo CENTRO COMPRAS</p>
+                    </div>
+                    <button type="button" id="btnCloseModalCatalogo" class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-colors">
+                        <span class="material-symbols-outlined text-sm">close</span>
                     </button>
                 </div>
-                <div class="section-panel__body">
-                    <div class="flex flex-wrap items-center gap-2 mb-3 border-b border-slate-100 pb-3">
-                        <button type="button" data-cost-tab="tipos"
-                            class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-900 text-white">Tipos de custo</button>
-                        <button type="button" data-cost-tab="estrutura"
-                            class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-600">Tipo 1 / Grupo</button>
+                <div class="flex-1 overflow-y-auto pr-2">
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-4">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" data-cost-tab="tipos"
+                                class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-900 text-white">Tipos de custo</button>
+                            <button type="button" data-cost-tab="estrutura"
+                                class="cost-catalog-tab h-9 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-600">Tipo 1 / Grupo</button>
+                        </div>
+                        <button id="btnNewCostCategory" type="button"
+                            class="hidden h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shrink-0">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Nova rubrica
+                        </button>
                     </div>
                     <div id="costCatalogToolbar" class="cost-catalog-toolbar flex flex-wrap items-center gap-2 mb-3">
                         <button type="button" id="btnCostCatalogNova" data-add-sheet-level="TIPO2"
@@ -751,85 +253,240 @@
                     </div>
                 </div>
             </div>
-        </section>
         </div>
 
-        <div id="centrosPanelExtras" class="hidden" role="tabpanel" aria-labelledby="centrosTabBtnExtras">
-        <section id="sectionExtras" class="mb-6">
-            <div class="section-panel" id="panelExtras">
-                <div class="flex items-center gap-2 pr-3">
-                    <button type="button" class="section-panel__toggle flex-1" data-section-toggle="panelExtras"
-                        aria-expanded="true">
-                        <span class="flex items-center gap-3 min-w-0">
-                            <span
-                                class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                                <span class="material-symbols-outlined text-xl">receipt_long</span>
+
+        <!-- ═══════════ PAINEL: CENTRO DE COMPRAS ═══════════ -->
+        <div id="centrosPanelCompras" class="hidden" role="tabpanel" aria-labelledby="centrosTabBtnCompras">
+
+            <div class="cc-layout">
+                <!-- ── Sidebar de navegação ── -->
+                <aside class="cc-sidebar" id="ccSidebar" role="navigation" aria-label="Navegação Centro de Compras">
+                    <div class="cc-sidebar-header">
+                        <span class="cc-sidebar-label">Compras</span>
+                        <button type="button" id="btnToggleCCSidebar" class="cc-sidebar-toggle" title="Ocultar/expandir menu" aria-expanded="true" aria-controls="ccSidebar">
+                            <span class="material-symbols-outlined" style="font-size:16px">menu_open</span>
+                        </button>
+                    </div>
+                    <div role="tablist" id="ccSubTabs" class="flex flex-col gap-0.5 mt-1">
+                        <button type="button" class="cc-sub-tab active" data-cc-tab="dashboard" id="ccTabDashboard" role="tab" aria-selected="true">
+                            <span class="material-symbols-outlined cc-tab-icon">dashboard</span>
+                            <span class="cc-tab-label">Dashboard</span>
+                        </button>
+                        <button type="button" class="cc-sub-tab" data-cc-tab="pedidos" id="ccTabPedidos" role="tab" aria-selected="false">
+                            <span class="material-symbols-outlined cc-tab-icon">receipt_long</span>
+                            <span class="cc-tab-label">Pedidos de Compra</span>
+                        </button>
+                        <button type="button" class="cc-sub-tab" data-cc-tab="requisicoes" id="ccTabRequisicoes" role="tab" aria-selected="false">
+                            <span class="material-symbols-outlined cc-tab-icon">assignment</span>
+                            <span class="cc-tab-label">Requisições</span>
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- ── Área de conteúdo principal ── -->
+                <div class="cc-main">
+
+            <!-- ── CC: Dashboard ── -->
+            <div id="ccPanelDashboard" role="tabpanel" class="cc-panel active">
+                <div class="cc-kpi-grid mb-6" id="ccKpiGrid">
+                    <div class="cc-kpi-card cc-kpi-card--amber">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Pedidos Pendentes</p><span class="material-symbols-outlined cc-kpi-icon">shopping_bag</span></div>
+                        <p id="ccKpiPedidos" class="cc-kpi-value">—</p>
+                        <p class="cc-kpi-sub">aguardam cotação/aprovação</p>
+                        <span id="ccKpiBadgeUrgent" class="hidden cc-kpi-badge cc-kpi-badge--urgent">Urgente</span>
+                    </div>
+                    <div class="cc-kpi-card">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Requisições em Análise</p><span class="material-symbols-outlined cc-kpi-icon">assignment</span></div>
+                        <p id="ccKpiReq" class="cc-kpi-value">—</p>
+                        <p class="cc-kpi-sub">com cotação anexada</p>
+                    </div>
+                    <div class="cc-kpi-card cc-kpi-card--alert">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Aprovações Pendentes</p><span class="material-symbols-outlined cc-kpi-icon">how_to_reg</span></div>
+                        <p id="ccKpiAprov" class="cc-kpi-value">—</p>
+                        <p class="cc-kpi-sub">aguardam decisão</p>
+                    </div>
+                    <div class="cc-kpi-card">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Pagamentos Pendentes</p><span class="material-symbols-outlined cc-kpi-icon">payments</span></div>
+                        <p id="ccKpiPag" class="cc-kpi-value">—</p>
+                        <p class="cc-kpi-sub">em plano de pagamento</p>
+                    </div>
+                    <div class="cc-kpi-card">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Compras em Andamento</p><span class="material-symbols-outlined cc-kpi-icon">local_shipping</span></div>
+                        <p id="ccKpiAndamento" class="cc-kpi-value">—</p>
+                        <p class="cc-kpi-sub">processos activos</p>
+                    </div>
+                    <div class="cc-kpi-card cc-kpi-card--featured">
+                        <div class="cc-kpi-top"><p class="cc-kpi-label">Valor Comprometido</p><span class="material-symbols-outlined cc-kpi-icon">account_balance_wallet</span></div>
+                        <p id="ccKpiValor" class="cc-kpi-value cc-kpi-value--lg">—</p>
+                        <p class="cc-kpi-sub">aprovados + em pagamento</p>
+                    </div>
+                </div>
+
+                <!-- Processos Recentes -->
+                <div class="section-panel">
+                    <div class="section-panel__toggle" style="cursor:default;pointer-events:none;">
+                        <span class="flex items-center gap-3">
+                            <span class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                <span class="material-symbols-outlined text-xl">list_alt</span>
                             </span>
-                            <span class="min-w-0">
-                                <span class="block text-sm font-bold text-slate-900">Pedidos Extra</span>
-                                <span id="extrasSectionMeta" class="block text-[11px] text-slate-400 truncate">A carregar...</span>
+                            <span>
+                                <span class="block text-sm font-bold text-slate-900">Processos Recentes</span>
+                                <span class="block text-[11px] text-slate-400">Últimos 10 processos do Centro de Compras</span>
                             </span>
                         </span>
-                        <span class="section-panel__chevron material-symbols-outlined shrink-0">expand_more</span>
-                    </button>
-                    <button id="btnNewExtra" type="button"
-                        class="h-9 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shrink-0">
-                        <span class="material-symbols-outlined text-base">add_circle</span>
-                        Pedido Extra
-                    </button>
-                </div>
-                <div class="section-panel__body">
-                    <div class="flex flex-wrap items-center gap-2 mb-4">
-                        <select id="filterType"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                            <option value="">Todos os tipos</option>
-                            <option value="GERAL">Geral</option>
-                            <option value="OBRA">Obra</option>
-                        </select>
-                        <select id="filterStatus"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                            <option value="">Todos os estados</option>
-                            <option value="PENDENTE">Pendentes</option>
-                            <option value="APROVADO">A liquidar</option>
-                            <option value="PAGO">Pagos</option>
-                            <option value="REJEITADO">Rejeitados</option>
-                            <option value="CANCELADO">Cancelados</option>
-                        </select>
-                        <select id="filterCostCategory"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
-                            <option value="">Todos os tipos de custo</option>
-                        </select>
-                        <select id="filterProject"
-                            class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none min-w-[160px]">
-                            <option value="">Todas as obras</option>
-                        </select>
+                        <button type="button" id="btnCCVerTodos" class="h-8 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-all pointer-events-auto">Ver Todos</button>
                     </div>
-                    <div class="overflow-x-auto -mx-1">
+                    <div class="section-panel__body overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                    <th class="px-5 py-3">Previsto</th>
-                                    <th class="px-5 py-3">Criado</th>
-                                    <th class="px-5 py-3">Tipo</th>
-                                    <th class="px-5 py-3">Referência</th>
-                                    <th class="px-5 py-3">Descrição</th>
-                                    <th class="px-5 py-3">Origem</th>
-                                    <th class="px-5 py-3 text-right">Valor</th>
-                                    <th class="px-5 py-3">Estado</th>
-                                    <th class="px-5 py-3 text-center">Acções</th>
+                                    <th class="px-4 py-3">Nº Req.</th>
+                                    <th class="px-4 py-3">Descrição</th>
+                                    <th class="px-4 py-3">Solicitante</th>
+                                    <th class="px-4 py-3 text-right">Valor</th>
+                                    <th class="px-4 py-3">Estado</th>
+                                    <th class="px-4 py-3">Data</th>
+                                    <th class="px-4 py-3 text-center">Acção</th>
                                 </tr>
                             </thead>
-                            <tbody id="extrasTableBody">
-                                <tr>
-                                    <td colspan="9" class="text-center py-12 text-slate-400 text-xs">A carregar...</td>
-                                </tr>
+                            <tbody id="ccRecentTable">
+                                <tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">A carregar...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-        </section>
-        </div>
+
+            <!-- ── CC: Pedidos ── -->
+            <div id="ccPanelPedidos" role="tabpanel" class="cc-panel hidden">
+                <div class="section-panel">
+                    <div class="flex items-center gap-2 pr-3">
+                        <div class="section-panel__toggle flex-1" style="cursor:default;pointer-events:none;">
+                            <span class="flex items-center gap-3">
+                                <span class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                    <span class="material-symbols-outlined text-xl">receipt_long</span>
+                                </span>
+                                <span>
+                                    <span class="block text-sm font-bold text-slate-900">Pedidos de Compra</span>
+                                    <span id="ccPedidosMeta" class="block text-[11px] text-slate-400">A carregar...</span>
+                                </span>
+                            </span>
+                        </div>
+                        <button id="btnNovoPedido" type="button"
+                            class="h-9 px-4 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Novo Pedido
+                        </button>
+                    </div>
+                    <div class="section-panel__body">
+                        <!-- Filtros -->
+                        <div class="flex flex-wrap items-center gap-2 mb-4">
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">search</span>
+                                <input type="search" id="ccPedidosSearch" placeholder="Pesquisar pedido..."
+                                    class="h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 w-48">
+                            </div>
+                            <select id="ccPedidosFilterStatus" class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todos os estados</option>
+                                <option value="RASCUNHO">Rascunho</option>
+                                <option value="PENDENTE_REQUISICAO">Pend. Requisição</option>
+                                <option value="PENDENTE_APROVACAO">Pend. Aprovação</option>
+                                <option value="APROVADO">Aprovado</option>
+                                <option value="NAO_APROVADO">Não Aprovado</option>
+                                <option value="EM_PAGAMENTO">Em Pagamento</option>
+                                <option value="CONCLUIDO">Concluído</option>
+                                <option value="CANCELADO">Cancelado</option>
+                            </select>
+                            <select id="ccPedidosFilterPriority" class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="">Todas as prioridades</option>
+                                <option value="URGENTE">Urgente</option>
+                                <option value="ALTA">Alta</option>
+                                <option value="NORMAL">Normal</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto -mx-1">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        <th class="px-4 py-3">Nº Req.</th>
+                                        <th class="px-4 py-3">Pedido Relacionado</th>
+                                        <th class="px-4 py-3">Solicitante</th>
+                                        <th class="px-4 py-3">Departamento</th>
+                                        <th class="px-4 py-3 text-right">Valor</th>
+                                        <th class="px-4 py-3">Prioridade</th>
+                                        <th class="px-4 py-3">Estado</th>
+                                        <th class="px-4 py-3 text-center">Acção</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ccPedidosTableBody">
+                                    <tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">A carregar...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="ccPedidosPagination" class="flex items-center justify-between mt-4 text-xs font-semibold text-slate-500"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── CC: Requisições ── -->
+            <div id="ccPanelRequisicoes" role="tabpanel" class="cc-panel hidden">
+                <div class="section-panel">
+                    <div class="flex items-center gap-2 pr-3">
+                        <div class="section-panel__toggle flex-1" style="cursor:default;pointer-events:none;">
+                            <span class="flex items-center gap-3">
+                                <span class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                    <span class="material-symbols-outlined text-xl">assignment</span>
+                                </span>
+                                <span>
+                                    <span class="block text-sm font-bold text-slate-900">Requisições</span>
+                                    <span id="ccReqMeta" class="block text-[11px] text-slate-400">A carregar...</span>
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="section-panel__body">
+                        <div class="flex flex-wrap items-center gap-2 mb-4">
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">search</span>
+                                <input type="search" id="ccReqSearch" placeholder="Pesquisar requisição..."
+                                    class="h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 w-48">
+                            </div>
+                            <select id="ccReqFilterStatus" class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                <option value="PENDENTE_REQUISICAO">Pend. Requisição</option>
+                                <option value="PENDENTE_APROVACAO">Pend. Aprovação</option>
+                                <option value="NAO_APROVADO">Não Aprovado</option>
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto -mx-1">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        <th class="px-4 py-3">Nº Req.</th>
+                                        <th class="px-4 py-3">Descrição</th>
+                                        <th class="px-4 py-3">Solicitante</th>
+                                        <th class="px-4 py-3">Fornecedor</th>
+                                        <th class="px-4 py-3 text-right">Valor Cotado</th>
+                                        <th class="px-4 py-3">Estado</th>
+                                        <th class="px-4 py-3">Data</th>
+                                        <th class="px-4 py-3 text-center">Acção</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ccReqTableBody">
+                                    <tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">A carregar...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+                </div><!-- /cc-main -->
+            </div><!-- /cc-layout -->
+        </div><!-- /centrosPanelCompras -->
+
     </main>
 
     <footer class="shrink-0 border-t border-slate-100 px-4 md:px-8 py-10 bg-white mt-auto">
@@ -1179,6 +836,237 @@
     </div>
 
     <div id="toast" class="fixed top-20 right-4 flex flex-col gap-2 pointer-events-none" style="z-index: 10000;"></div>
+
+    <!-- ═══════════ MODALS: CENTRO DE COMPRAS ═══════════ -->
+
+    <!-- Modal Novo/Editar Pedido -->
+    <div class="modal-overlay" id="modalNovoPedido">
+        <div class="modal-box modal-box--wide" style="max-width:760px">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                <h2 id="modalNovoPedidoTitle" class="text-lg font-bold text-slate-900">Novo Pedido de Compra</h2>
+                <button type="button" id="btnCloseNovoPedido" aria-label="Fechar"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formNovoPedido" class="flex flex-col gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo *</label>
+                        <select id="ccPedidoType" required class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="PEDIDO">Pedido</option>
+                            <option value="ORCAMENTO">Orçamento</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Prioridade *</label>
+                        <select id="ccPedidoPriority" required class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                            <option value="NORMAL">Normal</option>
+                            <option value="ALTA">Alta</option>
+                            <option value="URGENTE">Urgente</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Solicitante *</label>
+                        <input id="ccPedidoSolicitante" type="text" required class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Data Desejada</label>
+                        <input id="ccPedidoData" type="date" class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Resumo / Descrição do Pedido *</label>
+                        <input id="ccPedidoDesc" type="text" required placeholder="Ex: Aquisição de material de escritório" class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Justificação</label>
+                        <input id="ccPedidoJust" type="text" placeholder="Motivo da compra" class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="mt-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Itens do Pedido *</p>
+                        <button type="button" id="btnCCAddItem" class="h-8 px-3 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold inline-flex items-center gap-1 hover:bg-emerald-200">
+                            <span class="material-symbols-outlined text-sm">add</span> Adicionar Item
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left" id="ccItemsTable">
+                            <thead>
+                                <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
+                                    <th class="pb-2 w-2/5">Descrição</th>
+                                    <th class="pb-2 w-24">Qtd</th>
+                                    <th class="pb-2 w-24">Un.</th>
+                                    <th class="pb-2 w-32">Preço Unit. (Opcional)</th>
+                                    <th class="pb-2 w-12"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="ccItemsBody" class="divide-y divide-slate-100">
+                                <!-- Linhas geradas dinamicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                        <input id="ccPedidoRequerCotacao" type="checkbox" checked class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                        Pedido requer cotação (Requisição formal com proforma)
+                    </label>
+                </div>
+
+                <div class="flex gap-3 justify-end pt-4 border-t border-slate-100 mt-2">
+                    <button type="button" id="btnCancelNovoPedido"
+                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+                    <button type="submit" id="btnSubmitNovoPedido"
+                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Salvar Pedido</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Drawer Requisição (Workflow Completo) -->
+    <div class="drawer-overlay" id="drawerRequisicao">
+        <div class="drawer-panel">
+            <div class="drawer-header">
+                <div>
+                    <h2 id="ccReqDrawerTitle" class="text-lg font-bold text-slate-900">—</h2>
+                    <p id="ccReqDrawerSub" class="text-xs text-slate-500 mt-0.5">Detalhes da requisição e processo</p>
+                </div>
+                <button type="button" id="btnCloseReqDrawer" aria-label="Fechar"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <div class="drawer-body">
+                <div class="flex items-center gap-3 mb-6 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                    <div id="ccReqStatusIcon" class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                        <span class="material-symbols-outlined">schedule</span>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Estado Actual</p>
+                        <p id="ccReqStatusText" class="text-sm font-bold text-slate-800">—</p>
+                    </div>
+                </div>
+
+                <!-- Detalhes Base -->
+                <div class="mb-6">
+                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 pb-1 border-b border-slate-100">Informação Base</p>
+                    <div class="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                        <div><span class="block text-xs text-slate-400">Solicitante:</span><span id="ccReqDetailSol" class="font-semibold text-slate-700">—</span></div>
+                        <div><span class="block text-xs text-slate-400">Prioridade:</span><span id="ccReqDetailPri" class="font-semibold text-slate-700">—</span></div>
+                        <div class="col-span-2"><span class="block text-xs text-slate-400">Justificação:</span><span id="ccReqDetailJust" class="font-semibold text-slate-700">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Itens -->
+                <div class="mb-6">
+                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 pb-1 border-b border-slate-100">Itens Solicitados</p>
+                    <ul id="ccReqDetailItems" class="space-y-1.5 text-sm text-slate-700"></ul>
+                </div>
+
+                <!-- Secção de Cotação (Dinâmica baseada no estado) -->
+                <div id="ccReqQuoteSection" class="mb-6 p-4 border border-blue-100 bg-blue-50/30 rounded-xl hidden">
+                    <p class="text-[10px] font-black uppercase text-blue-500 tracking-widest mb-3 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">request_quote</span> Dados de Cotação
+                    </p>
+                    <form id="formCCQuote" class="flex flex-col gap-3">
+                        <input type="hidden" id="ccReqOrderId">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Fornecedor Seleccionado</label>
+                            <input id="ccReqFornecedor" type="text" placeholder="Nome do Fornecedor" class="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Valor Cotado (Total)</label>
+                            <input id="ccReqValorCotado" type="number" step="0.01" min="0" placeholder="0.00" class="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                        </div>
+                        <div class="pt-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Anexar Proforma (PDF/Img)</label>
+                            <input id="ccReqFile" type="file" accept=".pdf,image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                        <div id="ccReqAttachments" class="mt-2 space-y-1"></div>
+                        <div class="mt-2 pt-3 border-t border-blue-100 flex justify-end">
+                            <button type="submit" class="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">Salvar Cotação</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Histórico / Timeline -->
+                <div>
+                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 pb-1 border-b border-slate-100">Histórico</p>
+                    <div id="ccReqTimeline" class="cc-timeline">
+                        <!-- Gerado dinamicamente -->
+                    </div>
+                </div>
+            </div>
+            <div class="drawer-footer" id="ccReqFooterActions">
+                <button type="button" id="btnCCSubmitApproval" class="hidden h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm">
+                    Submeter para Aprovação
+                </button>
+                <button type="button" id="btnCCReject" class="hidden h-10 px-5 rounded-xl bg-red-50 text-red-600 text-sm font-bold hover:bg-red-100 transition-all border border-red-200">
+                    Não Aprovar
+                </button>
+                <button type="button" id="btnCCApprove" class="hidden h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-sm">
+                    Aprovar Compra
+                </button>
+                <button type="button" id="btnCCCreatePayment" class="hidden h-10 px-5 rounded-xl bg-teal-600 text-white text-sm font-bold hover:bg-teal-700 transition-all shadow-sm">
+                    Criar Plano Pagamento
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Plano Pagamento -->
+    <div class="modal-overlay" id="modalPlanoPagamento">
+        <div class="modal-box" style="max-width:500px">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                <h2 class="text-lg font-bold text-slate-900">Plano de Pagamento</h2>
+                <button type="button" id="btnClosePlano" class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <form id="formPlanoPagamento" class="flex flex-col gap-4">
+                <input type="hidden" id="ccPlanoOrderId">
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-2">
+                    <p class="text-xs text-slate-500 font-semibold mb-1">Valor Total a Pagar:</p>
+                    <input id="ccPlanoTotal" type="number" step="0.01" required class="w-full bg-transparent text-lg font-black text-slate-800 focus:outline-none">
+                </div>
+                
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest">Parcelas</label>
+                        <button type="button" id="btnCCAddParcela" class="text-xs font-bold text-emerald-600 hover:text-emerald-700">+ Add</button>
+                    </div>
+                    <div id="ccParcelasContainer" class="space-y-2">
+                        <!-- Gerado por JS -->
+                    </div>
+                </div>
+
+                <div class="flex gap-3 justify-end pt-4 border-t border-slate-100 mt-2">
+                    <button type="button" id="btnCancelPlano" class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200">Cancelar</button>
+                    <button type="submit" class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">Confirmar Plano</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Aprovação -->
+    <div class="modal-overlay" id="modalAprovacao">
+        <div class="modal-box" style="max-width:400px">
+            <h2 id="modalAprovacaoTitle" class="text-lg font-bold text-slate-900 mb-2">Confirmar Decisão</h2>
+            <p id="modalAprovacaoDesc" class="text-sm text-slate-500 mb-4">Tem a certeza que deseja aprovar este pedido?</p>
+            <input type="hidden" id="ccAprovOrderId">
+            <input type="hidden" id="ccAprovDecision">
+            <textarea id="ccAprovObs" rows="3" placeholder="Observações (opcional)" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm mb-4 focus:outline-none"></textarea>
+            <div class="flex justify-end gap-3">
+                <button type="button" id="btnCancelAprov" class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200">Cancelar</button>
+                <button type="button" id="btnConfirmAprov" class="h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="centrosGerais.js"></script>
 </body>

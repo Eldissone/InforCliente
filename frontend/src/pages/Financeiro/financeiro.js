@@ -276,9 +276,9 @@ function planRowDate(item, extra) {
       extra.status === "PAGO" && extra.paidAt
         ? extra.paidAt
         : extra.paymentDueDate ||
-          extra.approvedAt ||
-          extra.requestedAt ||
-          extra.createdAt;
+        extra.approvedAt ||
+        extra.requestedAt ||
+        extra.createdAt;
     if (!raw) return `<span class="text-slate-300">—</span>`;
     return `<span class="text-xs text-slate-600 whitespace-nowrap tabular-nums">${formatDateBR(raw)}</span>`;
   }
@@ -436,10 +436,10 @@ function renderPlanPaymentRow(p) {
       <td>${formatIbanCell(p.iban)}</td>
       <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(paymentPayableAmount(p), cur)}</td>
       ${renderPlanDocCells({
-        proformaUrl: p.proformaUrl,
-        comprovativoUrl: p.comprovativoUrl,
-        faturaUrl: p.faturaUrl,
-      })}
+    proformaUrl: p.proformaUrl,
+    comprovativoUrl: p.comprovativoUrl,
+    faturaUrl: p.faturaUrl,
+  })}
       <td class="text-center">${renderPaymentTypeBadge(p.paymentType)}</td>
       <td class="text-center">${renderStatusBadge(meta.label, meta.badge, icon)}</td>
       <td class="text-center">${renderPlanPaymentActions(p)}</td>
@@ -464,10 +464,10 @@ function renderPlanExtraRow(extra, p) {
       <td>${formatIbanCell(extra?.supplierIban || extra?.supplierRef?.iban)}</td>
       <td class="text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">${formatCurrency(extra?.amount, cur)}</td>
       ${renderPlanDocCells({
-        proformaUrl: extra?.proformaUrl,
-        comprovativoUrl: extra?.comprovativoUrl,
-        faturaUrl: extra?.faturaUrl,
-      })}
+    proformaUrl: extra?.proformaUrl,
+    comprovativoUrl: extra?.comprovativoUrl,
+    faturaUrl: extra?.faturaUrl,
+  })}
       <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">Extra</span></td>
       <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
       <td class="text-center">${renderPlanExtraActions(extra)}</td>
@@ -594,14 +594,14 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
   return `
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${gap}">
       ${fields
-        .map(
-          ({ label, value, wide, highlight, isHtml }) => `
+      .map(
+        ({ label, value, wide, highlight, isHtml }) => `
         <div class="${pad} rounded-xl border border-slate-100 ${wide ? "sm:col-span-2 lg:col-span-3" : ""} ${highlight ? "bg-emerald-50/60" : "bg-slate-50"}">
           <p class="${labelClass} font-black uppercase tracking-widest text-slate-400 mb-0.5">${label}</p>
           <div class="${valueClass} ${highlight ? "!text-base font-black text-emerald-700" : ""}">${isHtml ? value : escapeHtml(value)}</div>
         </div>`
-        )
-        .join("")}
+      )
+      .join("")}
     </div>`;
 }
 
@@ -945,46 +945,46 @@ function openExtraPayModal(extra) {
   btn.classList.toggle("cursor-not-allowed", !canPay);
   btn.onclick = canPay
     ? async () => {
-        const payAmount = Number(document.getElementById("extraPayAmount")?.value) || Number(extra.amount);
-        if (!confirm(`Confirmar liquidação de ${formatCurrency(payAmount, extra.currency || "AOA")}?`)) return;
-        try {
-          const fd = new FormData();
-          fd.append("paidAmount", String(payAmount));
+      const payAmount = Number(document.getElementById("extraPayAmount")?.value) || Number(extra.amount);
+      if (!confirm(`Confirmar liquidação de ${formatCurrency(payAmount, extra.currency || "AOA")}?`)) return;
+      try {
+        const fd = new FormData();
+        fd.append("paidAmount", String(payAmount));
 
-          const fiscalExtras = getLiquidationFiscalFormDataExtras();
-          if (fiscalExtras) appendFiscalFieldsToFormData(fd, fiscalExtras);
+        const fiscalExtras = getLiquidationFiscalFormDataExtras();
+        if (fiscalExtras) appendFiscalFieldsToFormData(fd, fiscalExtras);
 
-          if (needsComprovativo) {
-            const docRows = Array.from(document.querySelectorAll("#extraPayDocsList .extra-pay-doc-row"));
-            let hasComprovativo = false;
-            docRows.forEach((row) => {
-              const file = row.querySelector(".extra-pay-doc-file")?.files?.[0];
-              if (!file) return;
-              const kind = row.querySelector(".extra-pay-doc-kind")?.value || "outro";
-              if (kind === "comprovativo" && !hasComprovativo) {
-                fd.append("comprovativo", file);
-                hasComprovativo = true;
-              }
-            });
-            if (!hasComprovativo) {
-              toast("Anexe o comprovativo da transferência bancária.", { type: "error" });
-              return;
+        if (needsComprovativo) {
+          const docRows = Array.from(document.querySelectorAll("#extraPayDocsList .extra-pay-doc-row"));
+          let hasComprovativo = false;
+          docRows.forEach((row) => {
+            const file = row.querySelector(".extra-pay-doc-file")?.files?.[0];
+            if (!file) return;
+            const kind = row.querySelector(".extra-pay-doc-kind")?.value || "outro";
+            if (kind === "comprovativo" && !hasComprovativo) {
+              fd.append("comprovativo", file);
+              hasComprovativo = true;
             }
-            await apiUpload(`/extra-requests/${extra.id}/pay`, fd, "POST");
-          } else {
-            await apiRequest(`/extra-requests/${extra.id}/pay`, {
-              method: "POST",
-              body: { paidAmount: payAmount },
-            });
+          });
+          if (!hasComprovativo) {
+            toast("Anexe o comprovativo da transferência bancária.", { type: "error" });
+            return;
           }
-          toast("Pedido Extra liquidado com sucesso.", { type: "success" });
-          document.getElementById("modalExtraPay").classList.remove("open");
-          await loadPendingPaymentsQueue();
-          await reloadAll();
-        } catch (err) {
-          toast(err.message || "Erro ao liquidar pedido extra.", { type: "error" });
+          await apiUpload(`/extra-requests/${extra.id}/pay`, fd, "POST");
+        } else {
+          await apiRequest(`/extra-requests/${extra.id}/pay`, {
+            method: "POST",
+            body: { paidAmount: payAmount },
+          });
         }
+        toast("Pedido Extra liquidado com sucesso.", { type: "success" });
+        document.getElementById("modalExtraPay").classList.remove("open");
+        await loadPendingPaymentsQueue();
+        await reloadAll();
+      } catch (err) {
+        toast(err.message || "Erro ao liquidar pedido extra.", { type: "error" });
       }
+    }
     : null;
 
   document.getElementById("modalExtraPay").classList.add("open");
@@ -1088,7 +1088,7 @@ function renderPendingPaymentsList() {
     container.innerHTML = `
       <div class="py-12 text-center text-slate-400">
         <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">check_circle</span>
-        <p class="text-sm font-semibold">Sem pedidos extra, reforços ou itens a agendar.</p>
+        <p class="text-sm font-semibold">Sem pedidos de compra, reforços ou itens a agendar.</p>
       </div>`;
     return;
   }
@@ -1112,7 +1112,7 @@ function renderPendingPaymentsList() {
     <section class="mb-6">
       <h3 class="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
         <span class="material-symbols-outlined text-base text-emerald-600">payments</span>
-        Pedidos extra a liquidar
+        Pedidos de compra a liquidar
         <span class="text-[10px] font-bold text-slate-400 normal-case tracking-normal">(${pendingPaymentsCache.length})</span>
       </h3>
       <div class="flex flex-col gap-2">
@@ -1141,11 +1141,11 @@ function renderPendingPaymentsList() {
         </thead>
         <tbody>
           ${pendingReinforcementsCache
-            .map((r) => {
-              const cur = r.fund?.currency || "AOA";
-              const obra = r.fund?.project?.name || "—";
-              const fundLabel = [r.fund?.name, r.card?.label].filter(Boolean).join(" · ") || "—";
-              return `
+      .map((r) => {
+        const cur = r.fund?.currency || "AOA";
+        const obra = r.fund?.project?.name || "—";
+        const fundLabel = [r.fund?.name, r.card?.label].filter(Boolean).join(" · ") || "—";
+        return `
           <tr class="hover:bg-slate-50/80">
             <td class="text-xs font-bold text-slate-700 max-w-[120px] truncate" title="${escapeAttr(obra)}">${escapeAttr(obra)}</td>
             <td class="text-xs text-slate-600 max-w-[140px] truncate" title="${escapeAttr(fundLabel)}">${escapeAttr(fundLabel)}</td>
@@ -1163,8 +1163,8 @@ function renderPendingPaymentsList() {
               </button>
             </td>
           </tr>`;
-            })
-            .join("")}
+      })
+      .join("")}
         </tbody>
       </table>
     </section>`
@@ -1709,7 +1709,7 @@ function renderDashboardChartsFromExtras(extras) {
   renderBarChartFromExtras(extras);
   const payContainer = document.getElementById("finDonutPayments");
   if (payContainer) {
-    payContainer.innerHTML = `<p class="text-xs text-slate-400 w-full text-center py-6">Filtro activo: só pedidos extra.</p>`;
+    payContainer.innerHTML = `<p class="text-xs text-slate-400 w-full text-center py-6">Filtro activo: só pedidos de compra.</p>`;
   }
   renderExtrasDonut(extras);
   const subtitle = document.getElementById("finDonutSubtitle");
@@ -1823,7 +1823,7 @@ function renderExtrasDonut(extras) {
       { label: "Pagos", value: paid, color: "#10b981" },
       { label: "Rej./Cancel.", value: closed, color: "#94a3b8" },
     ],
-    "Sem pedidos extra no período."
+    "Sem pedidos de compra no período."
   );
 }
 
@@ -1856,7 +1856,7 @@ function renderBarChartFromExtras(extras) {
   if (max === 0) {
     container.innerHTML = `
       <p class="text-xs text-slate-400 w-full text-center py-10">
-        Sem pedidos extra nos últimos 7 dias.
+        Sem pedidos de compra nos últimos 7 dias.
       </p>`;
     return;
   }
@@ -1908,7 +1908,7 @@ function renderBarChartCombined(paymentDays, extras) {
   if (max === 0) {
     container.innerHTML = `
       <p class="text-xs text-slate-400 w-full text-center py-10">
-        Sem pagamentos nem pedidos extra nos últimos 7 dias.
+        Sem pagamentos nem pedidos de compra nos últimos 7 dias.
       </p>`;
     return;
   }
@@ -2090,7 +2090,7 @@ function renderExtrasPlanTable(extras) {
         <td colspan="${PLAN_TABLE_COLSPAN}">
           <div class="py-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">inventory_2</span>
-            <p class="text-sm font-semibold">Sem pedidos extra no período seleccionado.</p>
+            <p class="text-sm font-semibold">Sem pedidos de compra no período seleccionado.</p>
           </div>
         </td>
       </tr>`;
@@ -2220,7 +2220,7 @@ function renderPlanTable(days) {
         <td colspan="${PLAN_TABLE_COLSPAN}">
           <div class="py-12 text-center text-slate-400">
             <span class="material-symbols-outlined text-4xl text-slate-300 mb-2 block">event_busy</span>
-            <p class="text-sm font-semibold">Sem pagamentos nem pedidos extra no período seleccionado.</p>
+            <p class="text-sm font-semibold">Sem pagamentos nem pedidos de compra no período seleccionado.</p>
           </div>
         </td>
       </tr>`;
@@ -2307,13 +2307,13 @@ async function loadAuditList() {
         <td class="text-center">
           <div class="flex justify-center gap-1">
             ${renderIconBtn("visibility", "Ver detalhes", "slate", {
-              attrs: `onclick="viewAuditPayment('${p.id}')"`,
-            })}
+        attrs: `onclick="viewAuditPayment('${p.id}')"`,
+      })}
             ${p.certificationStatus === "PENDENTE" ? renderIconBtn("verified", "Certificar", "emerald", {
-              attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}')"`,
-            }) : renderIconBtn("info", "Ver certificação", "slate", {
-              attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}', true)"`,
-            })}
+        attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}')"`,
+      }) : renderIconBtn("info", "Ver certificação", "slate", {
+        attrs: `onclick="openAuditCertModal('${p.id}', '${ccId}', true)"`,
+      })}
           </div>
         </td>
       </tr>`;

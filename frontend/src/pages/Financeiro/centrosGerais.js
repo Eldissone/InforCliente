@@ -50,9 +50,13 @@ function switchCentrosMainTab(tab) {
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-selected", active ? "true" : "false");
   });
-  document.getElementById("centrosPanelCartoes")?.classList.toggle("hidden", tab !== "cartoes");
-  document.getElementById("centrosPanelCatalogo")?.classList.toggle("hidden", tab !== "catalogo");
   document.getElementById("centrosPanelExtras")?.classList.toggle("hidden", tab !== "extras");
+  document.getElementById("centrosPanelCompras")?.classList.toggle("hidden", tab !== "compras");
+
+  if (tab === "compras" && typeof loadCCDashboard === "function") {
+    loadCCDashboard();
+  }
+
   try {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", tab);
@@ -66,26 +70,72 @@ function bindCentrosMainTabs() {
   document.querySelectorAll("[data-centros-tab]").forEach((btn) => {
     btn.addEventListener("click", () => switchCentrosMainTab(btn.dataset.centrosTab));
   });
+
+  document.getElementById("btnOpenModalCartoes")?.addEventListener("click", () => {
+    const m = document.getElementById("modalCartoes");
+    if (m) m.classList.add("open");
+    // load cards if not loaded yet
+    if (managedCards.length === 0) loadCards();
+  });
+
+  document.getElementById("btnCloseModalCartoes")?.addEventListener("click", () => {
+    document.getElementById("modalCartoes")?.classList.remove("open");
+  });
+
+  document.getElementById("btnOpenModalCatalogo")?.addEventListener("click", () => {
+    const m = document.getElementById("modalCatalogo");
+    if (m) m.classList.add("open");
+    // load catalog if not loaded yet
+    if (costCategories.length === 0) loadCostCatalog();
+  });
+
+  document.getElementById("btnCloseModalCatalogo")?.addEventListener("click", () => {
+    document.getElementById("modalCatalogo")?.classList.remove("open");
+  });
+
+  // Sidebar CC toggle (ocultar/expandir)
+  document.getElementById("btnToggleCCSidebar")?.addEventListener("click", () => {
+    const sidebar = document.getElementById("ccSidebar");
+    const btn = document.getElementById("btnToggleCCSidebar");
+    if (!sidebar) return;
+    const isCollapsed = sidebar.classList.toggle("collapsed");
+    const icon = btn.querySelector(".material-symbols-outlined");
+    if (icon) icon.textContent = isCollapsed ? "menu" : "menu_open";
+    btn.setAttribute("aria-expanded", String(!isCollapsed));
+    try { localStorage.setItem("ccSidebarCollapsed", isCollapsed ? "1" : "0"); } catch {}
+  });
+
+  // Restore sidebar state from localStorage
+  try {
+    const saved = localStorage.getItem("ccSidebarCollapsed");
+    if (saved === "1") {
+      const sidebar = document.getElementById("ccSidebar");
+      const btn = document.getElementById("btnToggleCCSidebar");
+      if (sidebar) sidebar.classList.add("collapsed");
+      const icon = btn?.querySelector(".material-symbols-outlined");
+      if (icon) icon.textContent = "menu";
+      btn?.setAttribute("aria-expanded", "false");
+    }
+  } catch {}
 }
 
 function applyCentrosMainTabVisibility() {
   const hasCards = can("fundoManeio", "view");
   const hasPedidos = can("pedidosExtras", "view");
+  // Assumindo permissão geral de compras ou admin (usando view genérico para testes/demonstração)
+  const hasCompras = true; // Todo: usar uma permissão dedicada "centroCompras" quando existir
+
   const tabsEl = document.getElementById("centrosMainTabs");
 
-  document.getElementById("centrosTabBtnCartoes")?.classList.toggle("hidden", !hasCards);
-  document.getElementById("centrosTabBtnCatalogo")?.classList.toggle("hidden", !hasPedidos);
-  document.getElementById("centrosTabBtnExtras")?.classList.toggle("hidden", !hasPedidos);
-
-  const tabCount = (hasCards ? 1 : 0) + (hasPedidos ? 2 : 0);
-  tabsEl?.classList.toggle("hidden", tabCount <= 1);
+  document.getElementById("btnOpenModalCartoes")?.classList.toggle("hidden", !hasCards);
+  document.getElementById("btnOpenModalCatalogo")?.classList.toggle("hidden", !hasPedidos);
+  document.getElementById("centrosTabBtnCompras")?.classList.toggle("hidden", !hasCompras);
 
   const validTabs = [];
-  if (hasCards) validTabs.push("cartoes");
-  if (hasPedidos) validTabs.push("catalogo", "extras");
+  if (hasCompras) validTabs.push("compras");
 
   const urlTab = new URLSearchParams(window.location.search).get("tab");
-  const initial = validTabs.includes(urlTab) ? urlTab : validTabs[0] || "cartoes";
+  const initial = validTabs.includes(urlTab) ? urlTab : validTabs[0] || "compras";
   switchCentrosMainTab(initial);
 }
 
@@ -582,7 +632,7 @@ function bindTipo3DrillListEvents(list, group) {
       openTipo3DrillModal(group);
       loadExtras();
       if (selectedCostCategoryFilter) {
-        showToast("Filtro de pedidos extra aplicado a este tipo de custo.", "info");
+        showToast("Filtro de pedidos de compra aplicado a este tipo de custo.", "info");
       }
     });
     row.addEventListener("keydown", (e) => {
@@ -2363,6 +2413,7 @@ async function loadInitialData() {
   bindCentrosMainTabs();
   applySectionVisibility();
   applyCentrosMainTabVisibility();
+  initCentroCompras();
 
   // Catálogo: painéis expandidos na aba correspondente; cartões sempre expandidos na aba Cartões
   if (can("fundoManeio", "view")) {
@@ -2385,3 +2436,563 @@ async function loadInitialData() {
     showToast("Erro ao carregar dados: " + err.message, "error");
   }
 })();
+
+/* ==========================================================================
+   MÓDULO CENTRO DE COMPRAS
+   ========================================================================== */
+
+let ccCache = {
+    pedidos: [],
+    requisicoes: [],
+    pagamentos: [],
+    dashboard: null
+};
+
+// Configuração do Upload (Supabase via Backend)
+async function uploadCCFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    // Supondo rota de upload partilhada ou na própria requisição
+    const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + localStorage.getItem("token")
+        },
+        body: formData
+    });
+    if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Erro no upload");
+    }
+    const data = await res.json();
+    return data.url; // Retorna URL do supabase
+}
+
+function initCentroCompras() {
+    // Bind das sub-tabs
+    document.querySelectorAll(".cc-sub-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const tab = btn.dataset.ccTab;
+            // Tabs toggle
+            document.querySelectorAll(".cc-sub-tab").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            // Panels toggle
+            document.querySelectorAll(".cc-panel").forEach(p => p.classList.add("hidden"));
+            document.getElementById(`ccPanel${tab.charAt(0).toUpperCase() + tab.slice(1)}`)?.classList.remove("hidden");
+
+            // Load content based on tab
+            if (tab === "dashboard") loadCCDashboard();
+            if (tab === "pedidos") loadCCPedidos();
+            if (tab === "requisicoes") loadCCRequisicoes();
+        });
+    });
+
+    // Modal Novo Pedido
+    document.getElementById("btnNovoPedido")?.addEventListener("click", () => {
+        document.getElementById("modalNovoPedido").classList.add("open");
+        document.getElementById("formNovoPedido").reset();
+        document.getElementById("ccItemsBody").innerHTML = "";
+        addCCItemRow();
+    });
+    document.getElementById("btnCloseNovoPedido")?.addEventListener("click", () => {
+        document.getElementById("modalNovoPedido").classList.remove("open");
+    });
+    document.getElementById("btnCancelNovoPedido")?.addEventListener("click", () => {
+        document.getElementById("modalNovoPedido").classList.remove("open");
+    });
+    document.getElementById("btnCCAddItem")?.addEventListener("click", addCCItemRow);
+    document.getElementById("formNovoPedido")?.addEventListener("submit", submitNovoPedido);
+
+    // CC Dashboard link "Ver Todos" vai para tab de requisições
+    document.getElementById("btnCCVerTodos")?.addEventListener("click", () => {
+        document.getElementById("ccTabRequisicoes").click();
+    });
+
+    // Drawer Requisições
+    document.getElementById("btnCloseReqDrawer")?.addEventListener("click", () => {
+        document.getElementById("drawerRequisicao").classList.remove("open");
+    });
+    document.getElementById("formCCQuote")?.addEventListener("submit", submitCCQuote);
+
+    // Botões Acção Workflow
+    document.getElementById("btnCCSubmitApproval")?.addEventListener("click", () => updateCCStatus("PENDENTE_APROVACAO"));
+    document.getElementById("btnCCApprove")?.addEventListener("click", () => openCCAprovacaoModal("APROVAR"));
+    document.getElementById("btnCCReject")?.addEventListener("click", () => openCCAprovacaoModal("REJEITAR"));
+    document.getElementById("btnCCCreatePayment")?.addEventListener("click", openCCPlanoModal);
+
+    // Modal Aprovação
+    document.getElementById("btnCancelAprov")?.addEventListener("click", () => document.getElementById("modalAprovacao").classList.remove("active"));
+    document.getElementById("btnConfirmAprov")?.addEventListener("click", submitCCAprovacao);
+
+    // Modal Plano Pagamento
+    document.getElementById("btnClosePlano")?.addEventListener("click", () => document.getElementById("modalPlanoPagamento").classList.remove("active"));
+    document.getElementById("btnCancelPlano")?.addEventListener("click", () => document.getElementById("modalPlanoPagamento").classList.remove("active"));
+    document.getElementById("btnCCAddParcela")?.addEventListener("click", addCCParcelaRow);
+    document.getElementById("formPlanoPagamento")?.addEventListener("submit", submitCCPlano);
+}
+
+// ======================== API CALLS ========================
+
+window.loadCCDashboard = async function loadCCDashboard() {
+    try {
+        const data = await apiRequest("/purchase-orders/dashboard");
+        const stats = data.kpis || {};
+        const recents = data.recentes || [];
+        
+        // Populate KPIs
+        document.getElementById("ccKpiPedidos").textContent = stats.pedidosPendentes || 0;
+        document.getElementById("ccKpiReq").textContent = stats.requisicoesPendentes || 0;
+        document.getElementById("ccKpiAprov").textContent = stats.aprovacoesPendentes || 0;
+        document.getElementById("ccKpiPag").textContent = stats.pagamentosPendentes || 0;
+        document.getElementById("ccKpiAndamento").textContent = stats.emAndamento || 0;
+        document.getElementById("ccKpiValor").textContent = formatCurrency(stats.valorComprometido || 0);
+
+        if (stats.pedidosUrgentes > 0) {
+            const b = document.getElementById("ccKpiBadgeUrgent");
+            b.textContent = `${stats.pedidosUrgentes} Urgente(s)`;
+            b.classList.remove("hidden");
+        } else {
+            document.getElementById("ccKpiBadgeUrgent").classList.add("hidden");
+        }
+
+        // Populate Table
+        const tbody = document.getElementById("ccRecentTable");
+        if (!recents || recents.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">Sem processos recentes.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = recents.map(r => `
+            <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
+                <td class="px-4 py-3 text-xs font-semibold text-slate-900">${r.number || '—'}</td>
+                <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${r.description}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${r.requestedByName || '—'}</td>
+                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+                <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
+                <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
+                <td class="px-4 py-3 text-center">
+                    <button type="button" onclick="openCCReqDrawer('${r.id}')" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold underline">Detalhes</button>
+                </td>
+            </tr>
+        `).join('');
+
+    } catch (err) {
+        console.error(err);
+        showToast("Erro ao carregar Dashboard de Compras", "error");
+    }
+}
+
+async function loadCCPedidos() {
+    try {
+        const res = await apiRequest("/purchase-orders");
+        const data = res.items || [];
+        ccCache.pedidos = data;
+        renderCCPedidos(data);
+    } catch (err) {
+        showToast("Erro ao carregar Pedidos", "error");
+    }
+}
+
+function renderCCPedidos(data) {
+    const tbody = document.getElementById("ccPedidosTableBody");
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhum pedido encontrado.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.map(r => `
+        <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+            <td class="px-4 py-3 text-xs font-semibold text-slate-900">${r.requisitionNumber || '—'}</td>
+            <td class="px-4 py-3 text-xs text-slate-600 max-w-[200px] truncate">${r.description}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${r.requestedBy}</td>
+            <td class="px-4 py-3 text-xs text-slate-500">${r.department || '—'}</td>
+            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+            <td class="px-4 py-3 text-xs">
+                ${r.priority === 'URGENTE' ? '<span class="text-red-600 font-bold">Urgente</span>' : 
+                  r.priority === 'ALTA' ? '<span class="text-orange-500 font-bold">Alta</span>' : 
+                  '<span class="text-slate-500">Normal</span>'}
+            </td>
+            <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
+            <td class="px-4 py-3 text-center">
+                <button type="button" onclick="openCCReqDrawer('${r.id}')" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 inline-flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-sm">visibility</span>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function loadCCRequisicoes() {
+    try {
+        const res = await apiRequest("/purchase-orders");
+        const data = res.items || [];
+        // Filta apenas processos que passaram para requisição formal
+        const reqs = data.filter(r => r.status !== 'RASCUNHO' && r.requiresQuote);
+        ccCache.requisicoes = reqs;
+        renderCCRequisicoes(reqs);
+    } catch (err) {
+        showToast("Erro ao carregar Requisições", "error");
+    }
+}
+
+function renderCCRequisicoes(data) {
+    const tbody = document.getElementById("ccReqTableBody");
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhuma requisição encontrada.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.map(r => `
+        <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+            <td class="px-4 py-3 text-xs font-bold text-indigo-600">${r.requisitionNumber}</td>
+            <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[150px]">${r.description}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${r.requestedBy}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${r.supplier?.name || '—'}</td>
+            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+            <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
+            <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
+            <td class="px-4 py-3 text-center">
+                <button type="button" onclick="openCCReqDrawer('${r.id}')" class="h-8 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors">Tratar</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function loadCCPagamentos() {
+    try {
+        const res = await apiRequest("/purchase-orders?status=EM_PAGAMENTO");
+        const data = res.items || [];
+        ccCache.pagamentos = data;
+        const tbody = document.getElementById("ccPagTableBody");
+        if (!data.length) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-slate-400 text-xs">Nenhum pagamento pendente.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = data.map(r => `
+            <tr class="border-b border-slate-50 hover:bg-slate-50/50">
+                <td class="px-4 py-3 text-xs font-bold text-emerald-600">${r.requisitionNumber}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${r.description}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${r.supplier?.name || '—'}</td>
+                <td class="px-4 py-3 text-xs font-black text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+                <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
+                <td class="px-4 py-3 text-center">
+                    <button type="button" onclick="openCCReqDrawer('${r.id}')" class="h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100">Gerir Planos</button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (err) {
+        showToast("Erro ao carregar Pagamentos", "error");
+    }
+}
+
+// ======================== MODAL NOVO PEDIDO ========================
+
+function addCCItemRow() {
+    const tbody = document.getElementById("ccItemsBody");
+    const tr = document.createElement("tr");
+    tr.className = "cc-item-row";
+    tr.innerHTML = `
+        <td class="py-2 pr-2"><input type="text" required class="cc-item-desc w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="number" min="1" value="1" required class="cc-item-qty w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="text" placeholder="un, kg, cx" required class="cc-item-unit w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="number" step="0.01" min="0" placeholder="0.00" class="cc-item-price w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 text-right">
+            <button type="button" onclick="this.closest('tr').remove()" class="w-8 h-8 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center">
+                <span class="material-symbols-outlined text-sm">delete</span>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+async function submitNovoPedido(e) {
+    e.preventDefault();
+    const items = Array.from(document.querySelectorAll(".cc-item-row")).map(tr => ({
+        description: tr.querySelector(".cc-item-desc").value,
+        quantity: parseFloat(tr.querySelector(".cc-item-qty").value),
+        unit: tr.querySelector(".cc-item-unit").value,
+        unitPrice: parseFloat(tr.querySelector(".cc-item-price").value) || 0
+    }));
+
+    if (items.length === 0) {
+        showToast("Adicione pelo menos um item ao pedido", "error");
+        return;
+    }
+
+    const payload = {
+        type: document.getElementById("ccPedidoType").value,
+        priority: document.getElementById("ccPedidoPriority").value,
+        requestedBy: document.getElementById("ccPedidoSolicitante").value,
+        desiredDate: document.getElementById("ccPedidoData").value || null,
+        description: document.getElementById("ccPedidoDesc").value,
+        justification: document.getElementById("ccPedidoJust").value,
+        requiresQuote: document.getElementById("ccPedidoRequerCotacao").checked,
+        items
+    };
+
+    try {
+        const btn = document.getElementById("btnSubmitNovoPedido");
+        btn.disabled = true;
+        btn.textContent = "A salvar...";
+        
+        await apiRequest("POST", "/api/purchase-orders", payload);
+        showToast("Pedido criado com sucesso!", "success");
+        document.getElementById("modalNovoPedido").classList.remove("active");
+        
+        // Refresh 
+        const activeTab = document.querySelector(".cc-sub-tab.active").dataset.ccTab;
+        if (activeTab === "dashboard") loadCCDashboard();
+        if (activeTab === "pedidos") loadCCPedidos();
+        if (activeTab === "requisicoes") loadCCRequisicoes();
+        
+    } catch (err) {
+        showToast(err.message, "error");
+    } finally {
+        const btn = document.getElementById("btnSubmitNovoPedido");
+        btn.disabled = false;
+        btn.textContent = "Salvar Pedido";
+    }
+}
+
+// ======================== DRAWER REQUISIÇÃO E WORKFLOW ========================
+
+window.openCCReqDrawer = async function openCCReqDrawer(id) {
+    document.getElementById("drawerRequisicao").classList.add("open");
+    // Show skeleton or loading state
+    document.getElementById("ccReqDrawerTitle").textContent = "A carregar...";
+    
+    try {
+        const order = await apiRequest("GET", `/api/purchase-orders/${id}`);
+        // Populate Drawer Header
+        document.getElementById("ccReqDrawerTitle").textContent = order.requisitionNumber || 'Pedido sem número';
+        document.getElementById("ccReqDrawerSub").textContent = order.description;
+        
+        // Populate Base info
+        document.getElementById("ccReqStatusText").textContent = ccFormatStatus(order.status);
+        document.getElementById("ccReqDetailSol").textContent = order.requestedBy;
+        document.getElementById("ccReqDetailPri").textContent = order.priority;
+        document.getElementById("ccReqDetailJust").textContent = order.justification || 'Nenhuma justificação';
+
+        // Populate Items
+        document.getElementById("ccReqDetailItems").innerHTML = order.items.map(i => `
+            <li class="flex justify-between items-center py-1 border-b border-slate-50 last:border-0">
+                <span>${i.quantity} ${i.unit} - ${i.description}</span>
+                <span class="font-bold text-slate-900">${formatCurrency(i.totalPrice)}</span>
+            </li>
+        `).join('');
+
+        // Hidden input
+        document.getElementById("ccReqOrderId").value = order.id;
+
+        // Workflow / Form Logic
+        const quoteForm = document.getElementById("ccReqQuoteSection");
+        const actions = document.getElementById("ccReqFooterActions");
+        
+        // Reset all buttons
+        actions.querySelectorAll("button").forEach(b => b.classList.add("hidden"));
+        quoteForm.classList.add("hidden");
+
+        const hasEditPerm = true; // Todo: Add permission checks
+        const hasAprovPerm = true;
+
+        if (order.status === 'PENDENTE_REQUISICAO') {
+            if (hasEditPerm) {
+                quoteForm.classList.remove("hidden");
+                // Pre-fill if exists
+                document.getElementById("ccReqFornecedor").value = order.supplier?.name || "";
+                document.getElementById("ccReqValorCotado").value = order.totalValue || "";
+                document.getElementById("btnCCSubmitApproval").classList.remove("hidden");
+            }
+        } else if (order.status === 'PENDENTE_APROVACAO') {
+            if (hasAprovPerm) {
+                document.getElementById("btnCCApprove").classList.remove("hidden");
+                document.getElementById("btnCCReject").classList.remove("hidden");
+            }
+        } else if (order.status === 'APROVADO') {
+            if (hasEditPerm) {
+                document.getElementById("btnCCCreatePayment").classList.remove("hidden");
+            }
+        }
+
+        // Timeline (History)
+        const timeline = document.getElementById("ccReqTimeline");
+        if (order.history && order.history.length > 0) {
+            timeline.innerHTML = order.history.map((h, i) => {
+                const isLast = i === 0;
+                let c = isLast ? 'active' : '';
+                if (h.toStatus === 'APROVADO') c = 'success';
+                if (h.toStatus === 'NAO_APROVADO' || h.toStatus === 'CANCELADO') c = 'error';
+                return `
+                <div class="cc-timeline-item ${c}">
+                    <div class="cc-timeline-dot"></div>
+                    <div class="cc-timeline-content">
+                        <p class="text-xs font-bold text-slate-900">${ccFormatStatus(h.toStatus)}</p>
+                        <p class="text-[10px] text-slate-500">${formatDateBR(h.createdAt, true)} - ${h.userId || 'Sistema'}</p>
+                        ${h.notes ? `<p class="text-xs text-slate-600 mt-1 bg-slate-50 p-2 rounded">${h.notes}</p>` : ''}
+                    </div>
+                </div>
+                `;
+            }).join('');
+        } else {
+            timeline.innerHTML = `<p class="text-xs text-slate-500">Sem histórico registado.</p>`;
+        }
+
+    } catch (err) {
+        showToast("Erro ao carregar detalhes", "error");
+        document.getElementById("drawerRequisicao").classList.remove("open");
+    }
+}
+
+async function submitCCQuote(e) {
+    e.preventDefault();
+    const id = document.getElementById("ccReqOrderId").value;
+    const fornecedor = document.getElementById("ccReqFornecedor").value;
+    const val = parseFloat(document.getElementById("ccReqValorCotado").value);
+    const fileInput = document.getElementById("ccReqFile");
+
+    try {
+        let attachmentUrl = null;
+        if (fileInput.files.length > 0) {
+            showToast("A fazer upload do ficheiro...", "info");
+            attachmentUrl = await uploadCCFile(fileInput.files[0]);
+        }
+
+        const payload = {
+            supplierName: fornecedor,
+            totalValue: val
+        };
+
+        await apiRequest("PUT", `/api/purchase-orders/${id}`, payload);
+        
+        if (attachmentUrl) {
+            // Se tiver api de anexos, salvar:
+            // await apiRequest("POST", `/api/purchase-orders/${id}/attachments`, { fileUrl: attachmentUrl, fileName: fileInput.files[0].name });
+        }
+
+        showToast("Cotação guardada", "success");
+        openCCReqDrawer(id); // Reload drawer
+
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function updateCCStatus(status, notes = "") {
+    const id = document.getElementById("ccReqOrderId").value;
+    try {
+        await apiRequest("PUT", `/api/purchase-orders/${id}/status`, { status, notes });
+        showToast("Estado actualizado", "success");
+        openCCReqDrawer(id); // Reload drawer
+        loadCCDashboard(); // refresh behind
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+window.openCCAprovacaoModal = function(decision) {
+    document.getElementById("modalAprovacao").classList.add("active");
+    const id = document.getElementById("ccReqOrderId").value;
+    document.getElementById("ccAprovOrderId").value = id;
+    document.getElementById("ccAprovDecision").value = decision;
+    document.getElementById("ccAprovObs").value = "";
+
+    const title = document.getElementById("modalAprovacaoTitle");
+    const btn = document.getElementById("btnConfirmAprov");
+    
+    if (decision === "APROVAR") {
+        title.textContent = "Aprovar Requisição";
+        btn.className = "h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700";
+        btn.textContent = "Aprovar";
+    } else {
+        title.textContent = "Rejeitar Requisição";
+        btn.className = "h-10 px-5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700";
+        btn.textContent = "Rejeitar";
+    }
+}
+
+async function submitCCAprovacao() {
+    const decision = document.getElementById("ccAprovDecision").value;
+    const obs = document.getElementById("ccAprovObs").value;
+    const status = decision === "APROVAR" ? "APROVADO" : "NAO_APROVADO";
+    
+    await updateCCStatus(status, obs);
+    document.getElementById("modalAprovacao").classList.remove("active");
+}
+
+window.openCCPlanoModal = function() {
+    document.getElementById("modalPlanoPagamento").classList.add("active");
+    document.getElementById("ccPlanoOrderId").value = document.getElementById("ccReqOrderId").value;
+    // Auto-fill total se houver cotação
+    const currentVal = document.getElementById("ccReqValorCotado").value;
+    document.getElementById("ccPlanoTotal").value = currentVal;
+    
+    document.getElementById("ccParcelasContainer").innerHTML = "";
+    addCCParcelaRow();
+}
+
+function addCCParcelaRow() {
+    const container = document.getElementById("ccParcelasContainer");
+    const div = document.createElement("div");
+    div.className = "flex items-center gap-2 cc-parcela-row";
+    div.innerHTML = `
+        <input type="date" required class="cc-parc-date h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none flex-1">
+        <input type="number" step="0.01" required placeholder="Valor" class="cc-parc-val h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none w-32">
+        <button type="button" onclick="this.closest('.cc-parcela-row').remove()" class="w-8 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-sm">close</span>
+        </button>
+    `;
+    container.appendChild(div);
+}
+
+async function submitCCPlano(e) {
+    e.preventDefault();
+    const id = document.getElementById("ccPlanoOrderId").value;
+    const total = parseFloat(document.getElementById("ccPlanoTotal").value);
+    
+    const parcelas = Array.from(document.querySelectorAll(".cc-parcela-row")).map(row => ({
+        dueDate: row.querySelector(".cc-parc-date").value,
+        amount: parseFloat(row.querySelector(".cc-parc-val").value)
+    }));
+
+    const sum = parcelas.reduce((a,b) => a + b.amount, 0);
+    if (Math.abs(sum - total) > 0.01) {
+        showToast(`Soma das parcelas (${sum}) não bate com o total (${total})`, "error");
+        return;
+    }
+
+    try {
+        await apiRequest("POST", `/api/purchase-payments`, { purchaseOrderId: id, totalAmount: total, installments: parcelas });
+        await updateCCStatus("EM_PAGAMENTO", "Plano de pagamento gerado");
+        
+        document.getElementById("modalPlanoPagamento").classList.remove("active");
+        showToast("Plano de Pagamento Criado", "success");
+        loadCCPagamentos(); // Refresh tab se estiver aberta
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+// Helpers
+function ccFormatStatus(s) {
+    const map = {
+        'RASCUNHO': 'Rascunho',
+        'PENDENTE_REQUISICAO': 'Aguard. Requisição',
+        'PENDENTE_APROVACAO': 'Pendente Aprovação',
+        'APROVADO': 'Aprovado',
+        'NAO_APROVADO': 'Não Aprovado',
+        'EM_PAGAMENTO': 'Em Pagamento',
+        'CONCLUIDO': 'Concluído',
+        'CANCELADO': 'Cancelado'
+    };
+    return map[s] || s;
+}
+
+function ccGetStatusClass(s) {
+    const base = "px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ";
+    if (s === 'PENDENTE_REQUISICAO') return base + "bg-blue-50 text-blue-700";
+    if (s === 'PENDENTE_APROVACAO') return base + "bg-amber-50 text-amber-700";
+    if (s === 'APROVADO') return base + "bg-emerald-50 text-emerald-700";
+    if (s === 'NAO_APROVADO' || s === 'CANCELADO') return base + "bg-red-50 text-red-700";
+    if (s === 'EM_PAGAMENTO') return base + "bg-indigo-50 text-indigo-700";
+    if (s === 'CONCLUIDO') return base + "bg-slate-100 text-slate-700";
+    return base + "bg-slate-100 text-slate-600";
+}
+

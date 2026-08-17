@@ -1,0 +1,786 @@
+const express = require("express");
+const { z } = require("zod");
+const { prisma } = require("../db");
+const { authRequired, requireRole } = require("../middlewares/auth");
+const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase } = require("../utils/storage");
+const { createLog } = require("../services/logService");
+const multer = require("multer");
+
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB para proformas
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf" || file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Apenas PDF e imagens são permitidos"));
+    }
+  },
+});
+
+const purchaseRouter = express.Router();
+purchaseRouter.use(authRequired);
+
+// Roles que podem APROVAR
+const APPROVER_ROLES = ["admin", "financeiro", "supervisor"];
+// Roles que podem VER
+const VIEWER_ROLES = ["admin", "financeiro", "supervisor", "operador", "tecnico", "leitura"];
+
+async function logAction(req, { action, purchaseOrderId, details }) {
+  const u = req.user || {};
+  await createLog({
+    userId: u.sub || u.id || null,
+    userName: u.name || null,
+    userEmail: u.email || null,
+    action,
+    module: "centroCompras",
+    status: "success",
+    ipAddress: req.ip || null,
+    userAgent: String(req.headers["user-agent"] || ""),
+    details: { purchaseOrderId, ...(details || null) },
+  });
+}
+
+/** Gera número sequencial REQ-AAAAMMDD-NNNN */
+async function generateOrderNumber() {
+  const today = new Date();
+  const prefix = `REQ-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+  const count = await prisma.purchaseOrder.count({
+    where: { number: { startsWith: prefix } },
+  });
+  return `${prefix}-${String(count + 1).padStart(4, "0")}`;
+}
+
+const PURCHASE_ORDER_INCLUDE = {
+  items: { orderBy: { order: "asc" } },
+  supplier: { select: { id: true, name: true, nif: true } },
+  requisition: {
+    include: {
+      attachments: true,
+      supplier: { select: { id: true, name: true, nif: true } },
+    },
+  },
+  approvals: { orderBy: { decidedAt: "desc" } },
+  paymentPlan: { include: { installments: { orderBy: { number: "asc" } } } },
+  history: { orderBy: { createdAt: "asc" } },
+};
+
+function mapOrder(o) {
+  return {
+    ...o,
+    totalValue: o.totalValue != null ? String(o.totalValue) : null,
+    items: (o.items || []).map((i) => ({
+      ...i,
+      quantity: String(i.quantity),
+      unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
+      totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
+    })),
+    requisition: o.requisition
+      ? {
+          ...o.requisition,
+          quotedValue: o.requisition.quotedValue != null ? String(o.requisition.quotedValue) : null,
+        }
+      : null,
+    paymentPlan: o.paymentPlan
+      ? {
+          ...o.paymentPlan,
+          totalValue: String(o.paymentPlan.totalValue),
+          installments: (o.paymentPlan.installments || []).map((inst) => ({
+            ...inst,
+            amount: String(inst.amount),
+          })),
+        }
+      : null,
+  };
+}
+
+// ─── GET /purchase-orders — Listar ────────────────────────────────────────────
+purchaseRouter.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const { status, priority, type, search, page: pg, pageSize: ps } = req.query;
+    const page = Math.max(1, Number(pg || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(ps || 20)));
+
+    const where = {
+      ...(status ? { status } : {}),
+      ...(priority ? { priority } : {}),
+      ...(type ? { type } : {}),
+      ...(search
+        ? {
+            OR: [
+              { number: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+              { requestedByName: { contains: search, mode: "insensitive" } },
+              { department: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      prisma.purchaseOrder.count({ where }),
+      prisma.purchaseOrder.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: PURCHASE_ORDER_INCLUDE,
+      }),
+    ]);
+
+    return res.json({ page, pageSize, total, items: items.map(mapOrder) });
+  })
+);
+
+// ─── GET /purchase-orders/dashboard — KPIs ───────────────────────────────────
+purchaseRouter.get(
+  "/dashboard",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const [
+      pedidosPendentes,
+      requisicoesPendentes,
+      aprovacoesPendentes,
+      pagamentosPendentes,
+      emAndamento,
+      valorComprometido,
+      recentes,
+    ] = await Promise.all([
+      prisma.purchaseOrder.count({ where: { status: "PENDENTE_REQUISICAO" } }),
+      prisma.purchaseOrder.count({ where: { status: "PENDENTE_REQUISICAO" } }),
+      prisma.purchaseOrder.count({ where: { status: "PENDENTE_APROVACAO" } }),
+      prisma.purchaseOrder.count({ where: { status: "EM_PAGAMENTO" } }),
+      prisma.purchaseOrder.count({
+        where: {
+          status: { in: ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "APROVADO", "EM_PAGAMENTO"] },
+        },
+      }),
+      prisma.purchaseOrder.aggregate({
+        where: {
+          status: { in: ["APROVADO", "EM_PAGAMENTO"] },
+          totalValue: { not: null },
+        },
+        _sum: { totalValue: true },
+      }),
+      prisma.purchaseOrder.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: {
+          items: false,
+          supplier: { select: { id: true, name: true } },
+          requisition: { select: { id: true, quotedValue: true } },
+          approvals: { orderBy: { decidedAt: "desc" }, take: 1 },
+          paymentPlan: false,
+          history: false,
+        },
+      }),
+    ]);
+
+    return res.json({
+      kpis: {
+        pedidosPendentes,
+        requisicoesPendentes,
+        aprovacoesPendentes,
+        pagamentosPendentes,
+        emAndamento,
+        valorComprometido: valorComprometido._sum?.totalValue
+          ? String(valorComprometido._sum.totalValue)
+          : "0",
+      },
+      recentes: recentes.map((o) => ({
+        id: o.id,
+        number: o.number,
+        description: o.description,
+        requestedByName: o.requestedByName,
+        department: o.department,
+        status: o.status,
+        priority: o.priority,
+        type: o.type,
+        totalValue: o.totalValue != null ? String(o.totalValue) : null,
+        currency: o.currency,
+        createdAt: o.createdAt,
+        supplier: o.supplier,
+        requisition: o.requisition
+          ? { quotedValue: o.requisition.quotedValue != null ? String(o.requisition.quotedValue) : null }
+          : null,
+        lastApproval: o.approvals?.[0] || null,
+      })),
+    });
+  })
+);
+
+// ─── GET /purchase-orders/:id ─────────────────────────────────────────────────
+purchaseRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    return res.json(mapOrder(order));
+  })
+);
+
+// ─── POST /purchase-orders — Criar pedido ─────────────────────────────────────
+const createOrderSchema = z.object({
+  type: z.enum(["PEDIDO", "ORCAMENTO"]).default("PEDIDO"),
+  priority: z.enum(["NORMAL", "ALTA", "URGENTE"]).default("NORMAL"),
+  department: z.string().optional().nullable(),
+  requestedByName: z.string().min(1, "Solicitante obrigatório"),
+  requestedById: z.string().optional().nullable(),
+  description: z.string().min(1, "Descrição obrigatória"),
+  justification: z.string().optional().nullable(),
+  needDate: z.string().optional().nullable(),
+  requiresQuote: z.boolean().default(true),
+  supplierId: z.string().optional().nullable(),
+  supplierName: z.string().optional().nullable(),
+  currency: z.string().default("AOA"),
+  notes: z.string().optional().nullable(),
+  items: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        quantity: z.number().positive(),
+        unit: z.string().optional().nullable(),
+        unitPrice: z.number().optional().nullable(),
+        notes: z.string().optional().nullable(),
+      })
+    )
+    .min(1, "Pelo menos um item é obrigatório"),
+});
+
+purchaseRouter.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const parsed = createOrderSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const data = parsed.data;
+    const number = await generateOrderNumber();
+
+    // Calcula valor total se preços fornecidos
+    let totalValue = null;
+    const itemsWithTotals = data.items.map((item, idx) => {
+      const tp = item.unitPrice != null ? item.quantity * item.unitPrice : null;
+      if (tp != null) {
+        totalValue = (totalValue || 0) + tp;
+      }
+      return {
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit || null,
+        unitPrice: item.unitPrice || null,
+        totalPrice: tp,
+        notes: item.notes || null,
+        order: idx,
+      };
+    });
+
+    // Status inicial: sem cotação → vai directo para aprovação
+    const initialStatus = data.requiresQuote ? "PENDENTE_REQUISICAO" : "PENDENTE_APROVACAO";
+
+    const order = await prisma.purchaseOrder.create({
+      data: {
+        number,
+        type: data.type,
+        status: initialStatus,
+        priority: data.priority,
+        department: data.department || null,
+        requestedByName: data.requestedByName,
+        requestedById: data.requestedById || null,
+        description: data.description,
+        justification: data.justification || null,
+        needDate: data.needDate ? new Date(data.needDate) : null,
+        requiresQuote: data.requiresQuote,
+        supplierId: data.supplierId || null,
+        supplierName: data.supplierName || null,
+        currency: data.currency,
+        totalValue: totalValue,
+        notes: data.notes || null,
+        items: { create: itemsWithTotals },
+        history: {
+          create: {
+            action: "CRIADO",
+            toStatus: initialStatus,
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: `Pedido criado por ${data.requestedByName}`,
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+
+    await logAction(req, { action: "CREATE_PURCHASE_ORDER", purchaseOrderId: order.id });
+    return res.status(201).json(mapOrder(order));
+  })
+);
+
+// ─── PATCH /purchase-orders/:id — Actualizar pedido (rascunho/pendente) ──────
+purchaseRouter.patch(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    if (!["RASCUNHO", "PENDENTE_REQUISICAO"].includes(order.status)) {
+      return res.status(400).json({ error: "CANNOT_EDIT_IN_CURRENT_STATUS" });
+    }
+
+    const { description, justification, needDate, priority, notes, department } = req.body;
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: {
+        ...(description ? { description } : {}),
+        ...(justification !== undefined ? { justification } : {}),
+        ...(needDate !== undefined ? { needDate: needDate ? new Date(needDate) : null } : {}),
+        ...(priority ? { priority } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        ...(department !== undefined ? { department } : {}),
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+
+    return res.json(mapOrder(updated));
+  })
+);
+
+// ─── DELETE /purchase-orders/:id — Cancelar ──────────────────────────────────
+purchaseRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    if (["EM_PAGAMENTO", "CONCLUIDO"].includes(order.status)) {
+      return res.status(400).json({ error: "CANNOT_CANCEL_IN_CURRENT_STATUS" });
+    }
+
+    await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: {
+        status: "CANCELADO",
+        history: {
+          create: {
+            action: "CANCELADO",
+            fromStatus: order.status,
+            toStatus: "CANCELADO",
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+          },
+        },
+      },
+    });
+
+    return res.json({ ok: true });
+  })
+);
+
+// ─── POST /purchase-orders/:id/requisition — Criar/actualizar requisição ─────
+const requisitionSchema = z.object({
+  supplierId: z.string().optional().nullable(),
+  supplierName: z.string().optional().nullable(),
+  quotedValue: z.number().optional().nullable(),
+  currency: z.string().default("AOA"),
+  notes: z.string().optional().nullable(),
+});
+
+purchaseRouter.post(
+  "/:id/requisition",
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: true },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    if (order.status !== "PENDENTE_REQUISICAO") {
+      return res.status(400).json({ error: "ORDER_NOT_IN_REQUISITION_STATUS" });
+    }
+
+    const parsed = requisitionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const data = parsed.data;
+
+    let requisition;
+    if (order.requisition) {
+      requisition = await prisma.purchaseRequisition.update({
+        where: { purchaseOrderId: order.id },
+        data: {
+          supplierId: data.supplierId || null,
+          supplierName: data.supplierName || null,
+          quotedValue: data.quotedValue || null,
+          currency: data.currency,
+          notes: data.notes || null,
+        },
+        include: { attachments: true },
+      });
+    } else {
+      requisition = await prisma.purchaseRequisition.create({
+        data: {
+          purchaseOrderId: order.id,
+          supplierId: data.supplierId || null,
+          supplierName: data.supplierName || null,
+          quotedValue: data.quotedValue || null,
+          currency: data.currency,
+          notes: data.notes || null,
+        },
+        include: { attachments: true },
+      });
+
+      await prisma.purchaseHistoryLog.create({
+        data: {
+          purchaseOrderId: order.id,
+          action: "REQUISICAO_CRIADA",
+          userId: req.user?.sub || null,
+          userName: req.user?.name || null,
+          notes: "Requisição criada com cotação",
+        },
+      });
+    }
+
+    // Actualizar valor total do pedido se cotação fornecida
+    if (data.quotedValue != null) {
+      await prisma.purchaseOrder.update({
+        where: { id: order.id },
+        data: { totalValue: data.quotedValue, supplierName: data.supplierName || order.supplierName },
+      });
+    }
+
+    return res.json({
+      ...requisition,
+      quotedValue: requisition.quotedValue != null ? String(requisition.quotedValue) : null,
+    });
+  })
+);
+
+// ─── POST /purchase-orders/:id/requisition/upload — Upload proforma PDF ──────
+purchaseRouter.post(
+  "/:id/requisition/upload",
+  fileUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: true },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    if (!order.requisition) return res.status(400).json({ error: "REQUISITION_NOT_FOUND" });
+    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
+
+    let url;
+    try {
+      const filePath = `purchase-proformas/${order.id}/${Date.now()}-${req.file.originalname}`;
+      url = await uploadToSupabase(req.file.buffer, filePath, req.file.mimetype);
+    } catch (err) {
+      console.error("Upload proforma error:", err);
+      return res.status(500).json({ error: "UPLOAD_FAILED" });
+    }
+
+    const attachment = await prisma.purchaseAttachment.create({
+      data: {
+        purchaseRequisitionId: order.requisition.id,
+        fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        url,
+        uploadedById: req.user?.sub || null,
+        uploadedByName: req.user?.name || null,
+      },
+    });
+
+    await prisma.purchaseHistoryLog.create({
+      data: {
+        purchaseOrderId: order.id,
+        action: "ANEXO_ADICIONADO",
+        userId: req.user?.sub || null,
+        userName: req.user?.name || null,
+        notes: `Proforma anexada: ${req.file.originalname}`,
+      },
+    });
+
+    return res.status(201).json(attachment);
+  })
+);
+
+// ─── DELETE /purchase-orders/:orderId/requisition/attachments/:attachId ───────
+purchaseRouter.delete(
+  "/:orderId/requisition/attachments/:attachId",
+  asyncHandler(async (req, res) => {
+    const attachment = await prisma.purchaseAttachment.findUnique({
+      where: { id: req.params.attachId },
+    });
+    if (!attachment) return res.status(404).json({ error: "NOT_FOUND" });
+
+    await prisma.purchaseAttachment.delete({ where: { id: req.params.attachId } });
+    return res.json({ ok: true });
+  })
+);
+
+// ─── POST /purchase-orders/:id/submit-for-approval — Submeter para aprovação ─
+purchaseRouter.post(
+  "/:id/submit-for-approval",
+  asyncHandler(async (req, res) => {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { requisition: { include: { attachments: true } } },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    if (!["PENDENTE_REQUISICAO", "NAO_APROVADO"].includes(order.status)) {
+      return res.status(400).json({ error: "CANNOT_SUBMIT_IN_CURRENT_STATUS" });
+    }
+
+    // Se requer cotação, deve ter requisição
+    if (order.requiresQuote && !order.requisition) {
+      return res.status(400).json({ error: "REQUISITION_REQUIRED" });
+    }
+
+    await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: {
+        status: "PENDENTE_APROVACAO",
+        history: {
+          create: {
+            action: "SUBMETIDO_APROVACAO",
+            fromStatus: order.status,
+            toStatus: "PENDENTE_APROVACAO",
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+          },
+        },
+      },
+    });
+
+    return res.json({ ok: true, status: "PENDENTE_APROVACAO" });
+  })
+);
+
+// ─── POST /purchase-orders/:id/approve — Aprovar ou Rejeitar ─────────────────
+const approvalSchema = z.object({
+  decision: z.enum(["APROVADO", "NAO_APROVADO"]),
+  observations: z.string().optional().nullable(),
+});
+
+purchaseRouter.post(
+  "/:id/approve",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!APPROVER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const parsed = approvalSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    if (order.status !== "PENDENTE_APROVACAO") {
+      return res.status(400).json({ error: "ORDER_NOT_PENDING_APPROVAL" });
+    }
+
+    const { decision, observations } = parsed.data;
+    const newStatus = decision === "APROVADO" ? "APROVADO" : "NAO_APROVADO";
+
+    await prisma.$transaction([
+      prisma.purchaseApproval.create({
+        data: {
+          purchaseOrderId: order.id,
+          approverId: req.user?.sub || "unknown",
+          approverName: req.user?.name || "Desconhecido",
+          decision,
+          observations: observations || null,
+        },
+      }),
+      prisma.purchaseOrder.update({
+        where: { id: order.id },
+        data: {
+          status: newStatus,
+          history: {
+            create: {
+              action: decision === "APROVADO" ? "APROVADO" : "REJEITADO",
+              fromStatus: "PENDENTE_APROVACAO",
+              toStatus: newStatus,
+              userId: req.user?.sub || null,
+              userName: req.user?.name || null,
+              notes: observations || null,
+            },
+          },
+        },
+      }),
+    ]);
+
+    await logAction(req, {
+      action: `PURCHASE_${decision}`,
+      purchaseOrderId: order.id,
+      details: { observations },
+    });
+
+    return res.json({ ok: true, status: newStatus });
+  })
+);
+
+// ─── POST /purchase-orders/:id/payment-plan — Criar plano de pagamento ────────
+const paymentPlanSchema = z.object({
+  totalValue: z.number().positive("Valor total obrigatório"),
+  currency: z.string().default("AOA"),
+  notes: z.string().optional().nullable(),
+  installments: z
+    .array(
+      z.object({
+        number: z.number().int().positive(),
+        amount: z.number().positive(),
+        dueDate: z.string().min(1),
+        notes: z.string().optional().nullable(),
+      })
+    )
+    .min(1, "Pelo menos uma parcela é obrigatória"),
+});
+
+purchaseRouter.post(
+  "/:id/payment-plan",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!["admin", "financeiro"].includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const parsed = paymentPlanSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { paymentPlan: true },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+
+    if (!["APROVADO", "EM_PAGAMENTO"].includes(order.status)) {
+      return res.status(400).json({ error: "ORDER_NOT_APPROVED" });
+    }
+
+    const data = parsed.data;
+
+    // Remover plano existente se houver
+    if (order.paymentPlan) {
+      await prisma.purchasePaymentInstallment.deleteMany({
+        where: { paymentPlanId: order.paymentPlan.id },
+      });
+      await prisma.purchasePaymentPlan.delete({ where: { id: order.paymentPlan.id } });
+    }
+
+    const plan = await prisma.purchasePaymentPlan.create({
+      data: {
+        purchaseOrderId: order.id,
+        totalValue: data.totalValue,
+        currency: data.currency,
+        notes: data.notes || null,
+        installments: {
+          create: data.installments.map((inst) => ({
+            number: inst.number,
+            amount: inst.amount,
+            currency: data.currency,
+            dueDate: new Date(inst.dueDate),
+            notes: inst.notes || null,
+          })),
+        },
+      },
+      include: { installments: { orderBy: { number: "asc" } } },
+    });
+
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        status: "EM_PAGAMENTO",
+        history: {
+          create: {
+            action: "PLANO_PAGAMENTO_CRIADO",
+            fromStatus: order.status,
+            toStatus: "EM_PAGAMENTO",
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+          },
+        },
+      },
+    });
+
+    return res.status(201).json({
+      ...plan,
+      totalValue: String(plan.totalValue),
+      installments: plan.installments.map((i) => ({ ...i, amount: String(i.amount) })),
+    });
+  })
+);
+
+// ─── PATCH /purchase-orders/:id/payment-plan/installments/:instId — Marcar pago
+purchaseRouter.patch(
+  "/:id/payment-plan/installments/:instId",
+  asyncHandler(async (req, res) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (!["admin", "financeiro"].includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+
+    const inst = await prisma.purchasePaymentInstallment.findUnique({
+      where: { id: req.params.instId },
+      include: { paymentPlan: true },
+    });
+    if (!inst) return res.status(404).json({ error: "NOT_FOUND" });
+    if (inst.paymentPlan.purchaseOrderId !== req.params.id) {
+      return res.status(400).json({ error: "INSTALLMENT_NOT_FROM_ORDER" });
+    }
+
+    const { status, paidAt, notes } = req.body;
+    const validStatuses = ["PENDENTE", "PAGO", "CANCELADO"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: "INVALID_STATUS" });
+    }
+
+    const updated = await prisma.purchasePaymentInstallment.update({
+      where: { id: inst.id },
+      data: {
+        status,
+        paidAt: status === "PAGO" ? (paidAt ? new Date(paidAt) : new Date()) : null,
+        notes: notes || inst.notes,
+      },
+    });
+
+    // Verificar se todas as parcelas estão pagas → marcar pedido como concluído
+    const allInstallments = await prisma.purchasePaymentInstallment.findMany({
+      where: { paymentPlanId: inst.paymentPlanId },
+    });
+    const allPaid = allInstallments.every((i) => i.id === inst.id ? status === "PAGO" : i.status === "PAGO");
+
+    if (allPaid) {
+      await prisma.purchaseOrder.update({
+        where: { id: req.params.id },
+        data: {
+          status: "CONCLUIDO",
+          history: {
+            create: {
+              action: "CONCLUIDO",
+              fromStatus: "EM_PAGAMENTO",
+              toStatus: "CONCLUIDO",
+              userId: req.user?.sub || null,
+              userName: req.user?.name || null,
+              notes: "Todas as parcelas pagas",
+            },
+          },
+        },
+      });
+
+      await prisma.purchasePaymentPlan.update({
+        where: { id: inst.paymentPlanId },
+        data: { status: "PAGO" },
+      });
+    }
+
+    return res.json({ ...updated, amount: String(updated.amount) });
+  })
+);
+
+module.exports = { purchaseOrderRoutes: purchaseRouter };

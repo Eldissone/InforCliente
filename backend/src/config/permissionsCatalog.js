@@ -275,6 +275,13 @@ const PERMISSION_GROUPS = [
     actions: ["view", "create", "approve", "pay", "delete", "full_access"],
   },
   {
+    id: "fornecedores",
+    label: "Fornecedores",
+    icon: "local_shipping",
+    pages: [{ id: "fornecedores.main", label: "Fornecedores", route: "/Financeiro/centrosGerais.html" }],
+    actions: ["view", "create", "edit", "delete", "manage", "full_access"],
+  },
+  {
     id: "navlinks",
     label: "Links de Navegação (Header)",
     icon: "link",
