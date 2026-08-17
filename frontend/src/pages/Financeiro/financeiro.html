@@ -907,32 +907,10 @@
                     class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
                     title="Data final do filtro">
             </div>
-            <div class="fin-toolbar-actions">
-                <button id="btnPendingPayments" type="button"
-                    class="relative h-10 px-3 sm:px-4 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-bold flex items-center gap-1.5 sm:gap-2 shrink-0 transition-all shadow-md shadow-[#2afc8d]/20"
-                    title="Pedidos para Pagamento">
-                    <span class="material-symbols-outlined text-base shrink-0" aria-hidden="true">pending_actions</span>
-                    <span class="fin-pending-btn-label--short whitespace-nowrap">Pagamento</span>
-                    <span class="fin-pending-btn-label--full whitespace-nowrap">Pedidos para Pagamento</span>
-                    <span id="pendingPaymentsBadge"
-                        class="hidden min-w-[1.25rem] h-5 px-1.5 rounded-full bg-white text-indigo-700 text-[10px] font-black flex items-center justify-center shrink-0">0</span>
-                </button>
-            </div>
+
         </div>
 
-        <div class="fin-main-tabs" role="tablist" aria-label="Secções do financeiro">
-            <button type="button" id="finTabBtnDashboard" data-fin-main-tab="dashboard" class="fin-main-tab active"
-                role="tab" aria-selected="true" aria-controls="finDashboardPanel">
-                <span class="material-symbols-outlined" aria-hidden="true">dashboard</span>
-                Dashboard
-            </button>
-            <button type="button" id="finTabBtnPagamentos" data-fin-main-tab="pagamentos" class="fin-main-tab"
-                role="tab" aria-selected="false" aria-controls="fin-panel-pagamentos">
-                <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
-                <span class="fin-main-tab-label--long">Plano de Pagamentos</span>
-                <span class="fin-main-tab-label--short">Plano</span>
-            </button>
-        </div>
+
 
         <!-- Dashboard KPIs -->
         <section id="finDashboardPanel" class="fin-main-panel fin-dashboard mb-8 active" role="tabpanel"
@@ -1041,96 +1019,7 @@
             </div>
         </section>
 
-        <div id="fin-panel-pagamentos" class="fin-main-panel" role="tabpanel" aria-labelledby="finTabBtnPagamentos">
-            <header class="fin-plan-header">
-                <div class="fin-plan-header__top">
-                    <div class="fin-plan-header__title">
-                        <h2 class="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Plano de Pagamentos
-                        </h2>
-                        <p
-                            class="fin-plan-header__subtitle text-xs font-bold text-slate-400 mt-0.5 tracking-widest uppercase">
-                            Todas as obras · visão transversal</p>
-                    </div>
-                    <label
-                        class="fin-include-paid flex items-center gap-2 text-xs font-semibold text-slate-500 cursor-pointer bg-white px-3 h-10 rounded-xl border border-slate-200">
-                        <input id="finIncludePaid" type="checkbox" checked
-                            class="rounded border-slate-300 text-emerald-600">
-                        Incluir Pagos
-                    </label>
-                </div>
-            </header>
 
-            <!-- Plano de Pagamentos (Gantt + Lista) -->
-            <div id="tab-calendario">
-                <div class="fin-plan-card bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-6">
-                    <div class="fin-plan-toolbar mb-4">
-                        <div class="fin-plan-toolbar__scroll">
-                            <div class="fin-plan-toolbar__group" role="group" aria-label="Modo de visualização">
-                                <button type="button" class="gantt-view-btn active" data-payment-view="gantt"
-                                    title="Calendário">
-                                    <span
-                                        class="material-symbols-outlined text-sm align-middle mr-1">calendar_month</span><span
-                                        class="gantt-view-btn-label">Calendário</span>
-                                </button>
-                                <button type="button" class="gantt-view-btn" data-payment-view="list" title="Lista">
-                                    <span
-                                        class="material-symbols-outlined text-sm align-middle mr-1">table_rows</span><span
-                                        class="gantt-view-btn-label">Lista</span>
-                                </button>
-                            </div>
-                            <div class="fin-plan-toolbar__group" role="group" aria-label="Período do plano">
-                                <button type="button" class="gantt-view-btn" data-gantt-view="day">Dia</button>
-                                <button type="button" class="gantt-view-btn" data-gantt-view="week">Semana</button>
-                                <button type="button" class="gantt-view-btn active" data-gantt-view="month">Mês</button>
-                            </div>
-                            <div class="fin-plan-toolbar__group fin-plan-toolbar__nav items-center" role="group"
-                                aria-label="Navegação do calendário">
-                                <button id="calPrev" type="button" aria-label="Período anterior" class="gantt-nav-btn">
-                                    <span class="material-symbols-outlined text-base">chevron_left</span>
-                                </button>
-                                <button id="calToday" type="button" class="gantt-nav-today">Hoje</button>
-                                <button id="calNext" type="button" aria-label="Período seguinte" class="gantt-nav-btn">
-                                    <span class="material-symbols-outlined text-base">chevron_right</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="planGanttView">
-                        <div id="calendarGrid">
-                            <div class="spinner my-8"></div>
-                        </div>
-                    </div>
-                    <div id="planListView" class="hidden">
-                        <div class="overflow-x-auto -mx-2 md:mx-0">
-                            <table class="fin-table w-full min-w-[1100px]">
-                                <thead>
-                                    <tr>
-                                        <th title="Vencimento ou data de liquidação">Data</th>
-                                        <th>Material / Descrição</th>
-                                        <th>Fornecedor</th>
-                                        <th>IBAN</th>
-                                        <th class="text-right">Valor</th>
-                                        <th class="text-center" title="Proforma">Prof.</th>
-                                        <th class="text-center" title="Comprovativo">Comp.</th>
-                                        <th class="text-center" title="Fatura">Fat.</th>
-                                        <th class="text-center">Tipo</th>
-                                        <th class="text-center">Estado</th>
-                                        <th class="text-center">Acções</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="planTableBody">
-                                    <tr>
-                                        <td colspan="11">
-                                            <div class="spinner my-8"></div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- /fin-panel-pagamentos -->
 
     </main>
 
@@ -1446,31 +1335,7 @@
         </div>
     </div>
 
-    <!-- Modal: Pedidos para Pagamento (fila Financeiro) -->
-    <div class="modal-overlay" id="modalPendingPayments">
-        <div class="modal-box" style="max-width:900px">
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900">Lista de Pedidos</h2>
-                    <p class="text-xs text-slate-400 mt-0.5">Pedidos de compra a liquidar e carregamentos de cartões a
-                        aprovar
-                    </p>
-                </div>
-                <button type="button" onclick="document.getElementById('modalPendingPayments').classList.remove('open')"
-                    aria-label="Fechar"
-                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
-                    <span class="material-symbols-outlined text-base">close</span>
-                </button>
-            </div>
-            <div id="pendingPaymentsBody" class="max-h-[min(70vh,520px)] overflow-y-auto custom-scroll">
-                <div class="spinner my-8"></div>
-            </div>
-            <div class="flex justify-end mt-4 pt-4 border-t border-slate-100">
-                <button type="button" onclick="document.getElementById('modalPendingPayments').classList.remove('open')"
-                    class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-all">Fechar</button>
-            </div>
-        </div>
-    </div>
+
 
     <!-- Modal: Liquidar Pedido Extra -->
     <div class="modal-overlay" id="modalExtraPay">
