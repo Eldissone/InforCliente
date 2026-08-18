@@ -28,7 +28,7 @@ export async function resolvePostLoginPath(user) {
     { action: "nav_obras", path: "../Projectos/ProjectGeral.html" },
     { action: "nav_logistica", path: "../Stock/index.html" },
     { action: "nav_planeamento", path: "../Projectos/centroCustos.html" },
-    { action: "nav_financeiro", path: "../Financeiro/financeiro.html" },
+    { action: "nav_financeiro", path: "../Financeiro/centroDeCompras.html" },
     { action: "nav_cotacao", path: "../Projectos/Cotacao/index.html" },
     { action: "nav_centros_gerais", path: "../Financeiro/centroDeCompras.html" },
     { action: "nav_users", path: "../Users/index.html" },
