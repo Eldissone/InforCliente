@@ -13,6 +13,7 @@ const {
   assertPriceWithinPrevistoOrException,
   LOCKED_WORKFLOW_STATUSES,
 } = require("../services/needBudgetService");
+const { ensureQuotationNeedsForProject, ensureQuotationNeedsForGeral, isPedidoSourcedNeed, QUOTE_NEED_INCLUDE } = require("../services/quotationNeedService");
 const { notifyPaymentBatchCreated } = require("../services/paymentNotificationService");
 const { quoteFiscalSnapshot } = require("../services/needInstallmentSchedulingService");
 const { buildInstallmentFiscalFields } = require("../services/fiscalCalculationService");
@@ -81,15 +82,20 @@ function serializeQuote(quote) {
 
 async function applyProformaToNeed({ quote, need, req }) {
   const actorName = req.user?.name || req.user?.email || req.user?.sub || null;
-  const exceptionPatch =
-    assertPriceWithinPrevistoOrException(need, quote.quotedPrice, {
-      priceExceptionReason: req.body?.priceExceptionReason,
-      actorName,
-    }) || {
-      priceExceptionReason: null,
-      priceExceptionBy: null,
-      priceExceptionAt: null,
-    };
+  const exceptionPatch = isPedidoSourcedNeed(need)
+    ? {
+        priceExceptionReason: null,
+        priceExceptionBy: null,
+        priceExceptionAt: null,
+      }
+    : assertPriceWithinPrevistoOrException(need, quote.quotedPrice, {
+        priceExceptionReason: req.body?.priceExceptionReason,
+        actorName,
+      }) || {
+        priceExceptionReason: null,
+        priceExceptionBy: null,
+        priceExceptionAt: null,
+      };
 
   await syncNeedFromSelectedQuotes(prisma, quote.needId);
 
@@ -138,43 +144,52 @@ const quoteRoutes = express.Router();
 quoteRoutes.use(authRequired);
 quoteRoutes.use(requireRole(["admin", "operador"]));
 
+function quotationNeedWhere(status) {
+  const statuses = status ? [status] : null;
+  if (statuses) return { status: { in: statuses } };
+  return {
+    OR: [
+      { status: { in: ["IN_QUOTATION", "ORDERED", "EM_ANALISE"] } },
+      {
+        status: "APPROVED",
+        OR: [{ scheduled: true }, { quotes: { some: {} } }],
+      },
+    ],
+  };
+}
+
+quoteRoutes.get(
+  "/geral/needs",
+  asyncHandler(async (req, res) => {
+    const { status } = req.query;
+    await ensureQuotationNeedsForGeral(prisma);
+    const items = await prisma.workNeed.findMany({
+      where: {
+        projectId: null,
+        ...quotationNeedWhere(status),
+      },
+      include: QUOTE_NEED_INCLUDE,
+      orderBy: { createdAt: "desc" },
+    });
+    res.json({ items });
+  })
+);
+
 // Listar todos os itens Pendentes / Em Cotação da obra
 quoteRoutes.get(
   "/project/:projectId/needs",
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.projectId);
     const { status } = req.query;
-    
-    // Realizado: itens em cotação/encomenda ou já no fluxo de mercado
-    const statuses = status ? [status] : null;
+
+    await ensureQuotationNeedsForProject(prisma, projectId);
 
     const items = await prisma.workNeed.findMany({
       where: {
         projectId,
-        ...(statuses
-          ? { status: { in: statuses } }
-          : {
-              OR: [
-                { status: { in: ["IN_QUOTATION", "ORDERED", "EM_ANALISE"] } },
-                {
-                  status: "APPROVED",
-                  OR: [
-                    { scheduled: true },
-                    { quotes: { some: {} } },
-                  ],
-                },
-              ],
-            }),
+        ...quotationNeedWhere(status),
       },
-      include: {
-        costCenter: { select: { id: true, name: true, code: true } },
-        quotes: {
-          include: {
-            supplier: { select: { name: true, vatPercent: true, withholdingPercent: true, discountPercent: true } },
-          },
-          orderBy: { quotedPrice: "asc" },
-        },
-      },
+      include: QUOTE_NEED_INCLUDE,
       orderBy: { createdAt: "desc" },
     });
     

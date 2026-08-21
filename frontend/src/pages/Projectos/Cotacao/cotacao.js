@@ -14,6 +14,11 @@ let currentProjectId = null;
 let currentNeeds = [];
 let currentSuppliers = [];
 let allProjects = [];
+const GERAL_SCOPE = "__geral__";
+
+function isGeralScope() {
+  return !currentProjectId;
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   const ok = await guardPageAccess("obras", "view");
@@ -22,9 +27,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initPermissionLayer();
   wireLogout();
   wireUsersNav();
-  await initExtraRequestModal({ showToast });
+  await initExtraRequestModal({
+    showToast,
+    onSuccess: async () => {
+      await loadNeeds();
+    },
+  });
   wireExtraRequestButton("btnNewExtra", () => {
-    if (!currentProjectId) return { errorMessage: "Seleccione uma obra primeiro" };
+    if (isGeralScope()) {
+      return { type: "GERAL", lockType: true };
+    }
     return {
       type: "OBRA",
       projectId: currentProjectId,
@@ -34,31 +46,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   const urlParams = new URLSearchParams(window.location.search);
-  currentProjectId = urlParams.get("project") || localStorage.getItem("InfoCliente.currentProjectId");
+  const scope = urlParams.get("scope");
+  currentProjectId =
+    scope === "geral"
+      ? null
+      : urlParams.get("project") || localStorage.getItem("InfoCliente.currentProjectId");
 
   await loadProjects();
-
-  if (!currentProjectId) {
-    // Se não tiver obra, mostra apenas a gestão de fornecedores
-    const pendentesBtn = document.querySelector('[data-tab="pendentes"]');
-    if(pendentesBtn) pendentesBtn.style.display = "none";
-    
-    document.getElementById("btnBackToBudget").style.display = "none";
-    document.getElementById("selectedProjName").textContent = "Fornecedores";
-    
-    initTabs();
-    initEvents();
-    const forTab = document.querySelector('[data-tab="fornecedores"]');
-    if(forTab) forTab.click();
-    
-    await loadSuppliers();
-    return;
-  }
 
   initTabs();
   initEvents();
 
-  document.getElementById("btnBackToBudget").href = `../centroCustos.html?project=${currentProjectId}`;
+  const backBtn = document.getElementById("btnBackToBudget");
+  if (isGeralScope()) {
+    if (backBtn) backBtn.style.display = "none";
+    document.getElementById("selectedProjName").textContent = "Pedidos Gerais";
+  } else {
+    if (backBtn) backBtn.href = `../centroCustos.html?project=${currentProjectId}`;
+  }
 
   await loadSuppliers();
   await loadNeeds();
@@ -72,23 +77,28 @@ async function loadProjects() {
     const selector = document.getElementById("projectSelector");
     
     if (selector) {
-      selector.innerHTML = '<option value="">Selecionar Obra...</option>' + 
-        allProjects.map(p => `<option value="${p.id}" ${p.id === currentProjectId ? 'selected' : ''}>${p.name}</option>`).join("");
+      selector.innerHTML =
+        `<option value="${GERAL_SCOPE}" ${isGeralScope() ? "selected" : ""}>Pedidos Gerais</option>` +
+        allProjects
+          .map(
+            (p) =>
+              `<option value="${p.id}" ${p.id === currentProjectId ? "selected" : ""}>${p.name}</option>`
+          )
+          .join("");
       
       selector.classList.remove("hidden");
       
       selector.addEventListener("change", (e) => {
         const id = e.target.value;
-        if (id) {
-          localStorage.setItem("InfoCliente.currentProjectId", id);
-          window.location.href = `?project=${id}`;
-        } else {
+        if (id === GERAL_SCOPE || !id) {
           localStorage.removeItem("InfoCliente.currentProjectId");
-          window.location.href = `?`;
+          window.location.href = `?scope=geral`;
+          return;
         }
+        localStorage.setItem("InfoCliente.currentProjectId", id);
+        window.location.href = `?project=${id}`;
       });
       
-      // Update selected project name if we have a currentProjectId
       if (currentProjectId) {
         const p = allProjects.find(x => x.id === currentProjectId);
         if (p) {
@@ -148,23 +158,46 @@ function initEvents() {
 // ==========================================
 async function loadNeeds() {
   try {
-    const data = await apiRequest(`/quotes/project/${currentProjectId}/needs`);
+    const data = isGeralScope()
+      ? await apiRequest("/quotes/geral/needs")
+      : await apiRequest(`/quotes/project/${currentProjectId}/needs`);
     currentNeeds = data.items || [];
 
     const filterCc = document.getElementById("filterCentroCusto");
     if (filterCc) {
-      try {
-        const ccData = await apiRequest(`/cost-centers/project/${currentProjectId}`);
-        const ccs = ccData.items || [];
-        ccs.sort((a, b) => a.name.localeCompare(b.name));
+      if (isGeralScope()) {
+        const cats = [];
+        const seen = new Set();
+        currentNeeds.forEach((n) => {
+          const label =
+            n.extraRequest?.costCategory?.name ||
+            n.extraRequest?.generalCostCenter?.name ||
+            "Geral";
+          const key = String(label).toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          cats.push(label);
+        });
+        cats.sort((a, b) => a.localeCompare(b, "pt"));
         const currentVal = filterCc.value;
-        filterCc.innerHTML = '<option value="">Todos Centros de Custo</option>' + 
-          ccs.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-        if (ccs.some(c => c.id === currentVal)) {
-          filterCc.value = currentVal;
+        filterCc.innerHTML =
+          '<option value="">Todas as categorias</option>' +
+          cats.map((c) => `<option value="${c}">${c}</option>`).join("");
+        if (cats.includes(currentVal)) filterCc.value = currentVal;
+      } else {
+        try {
+          const ccData = await apiRequest(`/cost-centers/project/${currentProjectId}`);
+          const ccs = ccData.items || [];
+          ccs.sort((a, b) => a.name.localeCompare(b.name));
+          const currentVal = filterCc.value;
+          filterCc.innerHTML = '<option value="">Todos Centros de Custo</option>' + 
+            ccs.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+          if (ccs.some(c => c.id === currentVal)) {
+            filterCc.value = currentVal;
+          }
+        } catch (ccErr) {
+          console.error("Erro a carregar centros de custo:", ccErr);
         }
-      } catch (ccErr) {
-        console.error("Erro a carregar centros de custo:", ccErr);
       }
     }
 
@@ -191,7 +224,16 @@ function renderNeeds() {
   }
   
   if (ccId) {
-    filtered = filtered.filter(n => String(n.costCenter?.id || n.costCenterId) === String(ccId));
+    filtered = filtered.filter((n) => {
+      if (isGeralScope()) {
+        const label =
+          n.extraRequest?.costCategory?.name ||
+          n.extraRequest?.generalCostCenter?.name ||
+          "Geral";
+        return label === ccId;
+      }
+      return String(n.costCenter?.id || n.costCenterId) === String(ccId);
+    });
   }
 
   document.getElementById("pendentesCount").textContent = filtered.length;
@@ -232,12 +274,22 @@ function renderNeeds() {
     const isApproved = n.status === "APPROVED";
     const isOrdered = n.status === "ORDERED";
 
+    const isPedidoQuote = Boolean(n.extraRequestId || n.purchaseOrderId);
+    const sourceBadge = isPedidoQuote
+      ? `<span class="ml-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Pedido</span>`
+      : "";
+
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
         <td class="py-3 px-4 text-xs text-slate-500">${new Date(n.createdAt).toLocaleDateString("pt-PT")}</td>
-        <td class="py-3 px-4 text-xs font-bold text-slate-600">${n.costCenter?.name || "—"}</td>
+        <td class="py-3 px-4 text-xs font-bold text-slate-600">${
+          n.costCenter?.name ||
+          n.extraRequest?.costCategory?.name ||
+          n.extraRequest?.generalCostCenter?.name ||
+          (isGeralScope() ? "Geral" : "—")
+        }</td>
         <td class="py-3 px-4">
-          <div class="font-medium text-slate-900">${n.description}</div>
+          <div class="font-medium text-slate-900">${n.description}${sourceBadge}</div>
           <div class="text-xs text-slate-400 mt-0.5">${quotesCount} cotações recebidas</div>
           ${bestQuotePriceStr}
         </td>

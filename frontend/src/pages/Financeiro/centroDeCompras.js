@@ -3637,6 +3637,19 @@ async function submitNovoPedido(e) {
     }
 
     const classification = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
+    const projectId = classification === "OBRA" ? (document.getElementById("ccExtraProjectId")?.value || null) : null;
+    const costCenterId = classification === "OBRA" ? (document.getElementById("ccExtraCostCenterId")?.value || null) : null;
+    if (classification === "OBRA") {
+        if (!projectId) {
+            showToast("Seleccione o projecto (obra)", "error");
+            return;
+        }
+        if (!costCenterId) {
+            showToast("Seleccione o centro de custo da obra", "error");
+            return;
+        }
+    }
+
     const extraNotes = [
         document.getElementById("ccPedidoJust")?.value?.trim() || "",
         classification === "OBRA"
@@ -3667,6 +3680,8 @@ async function submitNovoPedido(e) {
         justification: document.getElementById("ccPedidoJust")?.value?.trim() || null,
         needDate: document.getElementById("ccPedidoData")?.value || null,
         requiresQuote: Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked ?? true),
+        projectId,
+        costCenterId,
         supplierId: requiresQuote ? null : (document.getElementById("ccExtraSupplierId")?.value || null),
         supplierName: requiresQuote ? null : (document.getElementById("ccExtraSupplierName")?.value?.trim() || null),
         currency: "AOA",
@@ -3682,7 +3697,14 @@ async function submitNovoPedido(e) {
         }
 
         const created = await apiRequest("/purchase-orders", { method: "POST", body: payload });
-        showToast(`Pedido ${created?.number || ""} criado com sucesso`, "success");
+        showToast(
+            created?.number
+                ? (payload.requiresQuote
+                    ? `Pedido ${created.number} criado e enviado para Cotação`
+                    : `Pedido ${created.number} criado com sucesso`)
+                : "Pedido criado com sucesso",
+            "success"
+        );
         closeCCModal("modalNovoPedido");
 
         const activeTab = document.querySelector(".cc-sub-tab.active")?.dataset?.ccTab;

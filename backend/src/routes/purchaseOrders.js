@@ -288,6 +288,8 @@ const createOrderSchema = z.object({
   justification: z.string().optional().nullable(),
   needDate: z.string().optional().nullable(),
   requiresQuote: z.boolean().default(true),
+  projectId: z.string().optional().nullable(),
+  costCenterId: z.string().optional().nullable(),
   supplierId: z.string().optional().nullable(),
   supplierName: z.string().optional().nullable(),
   currency: z.string().default("AOA"),
@@ -312,6 +314,18 @@ purchaseRouter.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const data = parsed.data;
+    if (data.projectId && data.costCenterId) {
+      const cc = await prisma.costCenter.findFirst({
+        where: { id: data.costCenterId, projectId: data.projectId },
+        select: { id: true },
+      });
+      if (!cc) return res.status(400).json({ error: "COST_CENTER_NOT_IN_PROJECT" });
+    } else if (data.requiresQuote && data.projectId && !data.costCenterId) {
+      return res.status(400).json({
+        error: "COST_CENTER_REQUIRED_FOR_QUOTE",
+        message: "Seleccione o centro de custo da obra para enviar à cotação.",
+      });
+    }
     const number = await generateOrderNumber();
 
     // Calcula valor total se preços fornecidos
@@ -348,6 +362,8 @@ purchaseRouter.post(
         justification: data.justification || null,
         needDate: data.needDate ? new Date(data.needDate) : null,
         requiresQuote: data.requiresQuote,
+        projectId: data.projectId || null,
+        costCenterId: data.costCenterId || null,
         supplierId: data.supplierId || null,
         supplierName: data.supplierName || null,
         currency: data.currency,
@@ -368,6 +384,19 @@ purchaseRouter.post(
     });
 
     await logAction(req, { action: "CREATE_PURCHASE_ORDER", purchaseOrderId: order.id });
+    if (order.requiresQuote) {
+      const { ensureQuotationNeedsFromPedido } = require("../services/quotationNeedService");
+      await ensureQuotationNeedsFromPedido(prisma, {
+        projectId: order.projectId || null,
+        costCenterId: order.costCenterId || null,
+        description: order.description,
+        items: order.items,
+        purchaseOrderId: order.id,
+        priority: order.priority,
+        responsible: order.requestedByName,
+        notes: order.notes,
+      });
+    }
     return res.status(201).json(mapOrder(order));
   })
 );

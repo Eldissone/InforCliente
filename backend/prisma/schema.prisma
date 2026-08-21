@@ -279,6 +279,7 @@ model Project {
   pettyCashFunds      PettyCashFund[]
   extraRequests       ExtraRequest[]
   freightAllocations  FreightAllocation[]
+  purchaseOrders      PurchaseOrder[]
 
   @@index([name])
   @@index([status])
@@ -866,6 +867,7 @@ model CostCenter {
   transactions  ProjectTransaction[]
   extraRequests ExtraRequest[]
   freightAllocations FreightAllocation[]
+  purchaseOrders PurchaseOrder[]
 
   @@unique([projectId, code])
   @@index([projectId])
@@ -873,8 +875,8 @@ model CostCenter {
 
 model WorkNeed {
   id                String               @id @default(cuid())
-  projectId         String
-  costCenterId      String
+  projectId         String?
+  costCenterId      String?
   budgetLineId      String?
   date              DateTime             @default(now())
   description       String
@@ -896,17 +898,23 @@ model WorkNeed {
   siteReceptionLocation  String?
   responsible       String?
   notes             String?
+  extraRequestId    String?
+  purchaseOrderId   String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
-  project           Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCenter        CostCenter           @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  project           Project?             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCenter        CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
   budgetLine        ProjectBudgetLine?   @relation(fields: [budgetLineId], references: [id], onDelete: SetNull)
+  extraRequest      ExtraRequest?        @relation(fields: [extraRequestId], references: [id], onDelete: SetNull)
+  purchaseOrder     PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   payments          CostPayment[]
   quotes            NeedQuote[]
   installments      PaymentInstallment[]
 
   @@index([projectId, costCenterId])
   @@index([budgetLineId])
+  @@index([extraRequestId])
+  @@index([purchaseOrderId])
 }
 
 model CostPayment {
@@ -1209,6 +1217,7 @@ model ExtraRequest {
   movement          PettyCashMovement?
   /// Itens do pedido (unificação com Pedido de Compra, múltiplas linhas)
   items             ExtraRequestItem[]
+  workNeeds         WorkNeed[]
 
   @@index([projectId])
   @@index([status])
@@ -1532,19 +1541,26 @@ model PurchaseOrder {
   supplierId      String?
   supplierName    String?
   notes           String?
+  projectId       String?
+  costCenterId    String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
   supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  project      Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter   CostCenter?               @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   items        PurchaseOrderItem[]
   requisition  PurchaseRequisition?
   approvals    PurchaseApproval[]
   paymentPlan  PurchasePaymentPlan?
   history      PurchaseHistoryLog[]
+  workNeeds    WorkNeed[]
 
   @@index([status])
   @@index([requestedById])
   @@index([createdAt])
+  @@index([projectId])
+  @@index([costCenterId])
 }
 
 model PurchaseOrderItem {

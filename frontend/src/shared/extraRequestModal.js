@@ -1733,7 +1733,12 @@ async function submitExtra(e) {
         fd.append("proforma", proformaFile);
         await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
       }
-      modalOptions.showToast("Pedido Extra criado", "success");
+      modalOptions.showToast(
+        extraRequiresQuote()
+          ? "Pedido criado e enviado para Cotação"
+          : "Pedido Extra criado",
+        "success"
+      );
     }
     closeExtraModal();
     await modalOptions.onSuccess?.();

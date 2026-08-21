@@ -855,6 +855,20 @@ extraRequestRoutes.post(
       include: EXTRA_INCLUDE,
     });
 
+    if (created.requiresQuote && (created.type === "GERAL" || (created.projectId && created.costCenterId))) {
+      const { ensureQuotationNeedsFromPedido } = require("../services/quotationNeedService");
+      await ensureQuotationNeedsFromPedido(prisma, {
+        projectId: created.type === "GERAL" ? null : created.projectId,
+        costCenterId: created.type === "GERAL" ? null : created.costCenterId,
+        description: created.description,
+        items: created.items,
+        extraRequestId: created.id,
+        priority: created.priority,
+        responsible: created.requestedBy,
+        notes: created.notes,
+      });
+    }
+
     await logExtraAction(req, {
       action: "extra_request_create",
       extraRequestId: created.id,
@@ -1045,6 +1059,20 @@ extraRequestRoutes.patch(
         where: { id },
         data: baseData,
         include: EXTRA_INCLUDE,
+      });
+    }
+
+    if (updated.requiresQuote && (updated.type === "GERAL" || (updated.projectId && updated.costCenterId))) {
+      const { ensureQuotationNeedsFromPedido } = require("../services/quotationNeedService");
+      await ensureQuotationNeedsFromPedido(prisma, {
+        projectId: updated.type === "GERAL" ? null : updated.projectId,
+        costCenterId: updated.type === "GERAL" ? null : updated.costCenterId,
+        description: updated.description,
+        items: updated.items,
+        extraRequestId: updated.id,
+        priority: updated.priority,
+        responsible: updated.requestedBy,
+        notes: updated.notes,
       });
     }
 
