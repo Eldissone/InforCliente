@@ -4,6 +4,11 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatSupplierFiscalSummary } from "/shared/supplierFiscal.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
+import {
+  bindNifLookup,
+  normalizeNif,
+  setNifLookupStatus,
+} from "/shared/supplierNifLookup.js";
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -112,6 +117,7 @@ function initTabs() {
 function initEvents() {
   document.getElementById("formSupplier").addEventListener("submit", submitSupplier);
   document.getElementById("btnAddSupplierBank")?.addEventListener("click", () => addSupplierBankRow());
+  bindCotacaoSupplierNifLookup();
   document.getElementById("btnShowNewProduct")?.addEventListener("click", () => {
     const panel = document.getElementById("supplierProductFormPanel");
     const isOpen = panel && !panel.classList.contains("hidden");
@@ -382,11 +388,62 @@ function parseOptionalPercentInput(id) {
   return Number.isFinite(n) ? n : null;
 }
 
+function applyAgtResultToSupplierForm(agt, existingSupplier = null) {
+  if (existingSupplier) {
+    document.getElementById("supplierId").value = existingSupplier.id || "";
+    document.getElementById("modalSupplierTitle").textContent = "Editar Fornecedor";
+  }
+  const nameEl = document.getElementById("supplierName");
+  const nifEl = document.getElementById("supplierNif");
+  const vatEl = document.getElementById("supplierVatPercent");
+  const statusEl = document.getElementById("supplierAgtStatus");
+  if (agt?.nome && nameEl) nameEl.value = agt.nome;
+  if (nifEl) {
+    nifEl.dataset.validatedNif = normalizeNif(nifEl.value);
+    nifEl.dataset.vatRegime = agt?.regimeIva || "";
+    nifEl.dataset.agtStatus = agt?.estado || "";
+    nifEl.dataset.agtType = agt?.tipo || "";
+  }
+  if (vatEl && agt?.vatPercent != null) vatEl.value = agt.vatPercent;
+  if (statusEl) statusEl.value = [agt?.estado, agt?.regimeIva].filter(Boolean).join(" · ");
+}
+
+function bindCotacaoSupplierNifLookup() {
+  bindNifLookup({
+    nifInput: "supplierNif",
+    button: "btnSupplierConsultarNif",
+    statusEl: "supplierNifStatus",
+    register: false,
+    onResult: ({ ok, agt, result }) => {
+      if (!ok) return;
+      const existing = result?.existingSupplier || null;
+      applyAgtResultToSupplierForm(agt, existing);
+      if (existing) {
+        showToast("Este NIF já está cadastrado. Foi usado o fornecedor existente.", "info");
+      }
+    },
+  });
+  document.getElementById("supplierNif")?.addEventListener("input", () => {
+    const el = document.getElementById("supplierNif");
+    if (el?.dataset?.validatedNif && el.dataset.validatedNif !== normalizeNif(el.value)) {
+      delete el.dataset.validatedNif;
+    }
+  });
+}
+
 function openSupplierModal(supplier = null) {
   document.getElementById("modalSupplierTitle").textContent = supplier ? "Editar Fornecedor" : "Novo Fornecedor";
   document.getElementById("supplierId").value = supplier?.id || "";
   document.getElementById("supplierName").value = supplier?.name || "";
   document.getElementById("supplierNif").value = supplier?.nif || "";
+  const nifEl = document.getElementById("supplierNif");
+  if (nifEl) {
+    if (supplier?.nif) nifEl.dataset.validatedNif = normalizeNif(supplier.nif);
+    else delete nifEl.dataset.validatedNif;
+    nifEl.dataset.vatRegime = supplier?.vatRegime || "";
+    nifEl.dataset.agtStatus = supplier?.agtStatus || "";
+    nifEl.dataset.agtType = supplier?.agtType || "";
+  }
   document.getElementById("supplierPhone").value = supplier?.phone || "";
   document.getElementById("supplierEmail").value = supplier?.email || "";
   document.getElementById("supplierCategory").value = supplier?.category || "";
@@ -395,6 +452,11 @@ function openSupplierModal(supplier = null) {
   document.getElementById("supplierVatPercent").value = supplier?.vatPercent ?? "";
   document.getElementById("supplierWithholdingPercent").value = supplier?.withholdingPercent ?? "";
   document.getElementById("supplierDiscountPercent").value = supplier?.discountPercent ?? "";
+  const agtStatusEl = document.getElementById("supplierAgtStatus");
+  if (agtStatusEl) {
+    agtStatusEl.value = [supplier?.agtStatus, supplier?.vatRegime].filter(Boolean).join(" · ");
+  }
+  setNifLookupStatus(document.getElementById("supplierNifStatus"), "");
 
   const accounts = supplier?.bankAccounts?.length
     ? supplier.bankAccounts.map((a) => ({ bankName: a.bankName, iban: a.iban }))
@@ -427,10 +489,21 @@ window.deleteSupplier = async function(id) {
 async function submitSupplier(e) {
   e.preventDefault();
   const id = document.getElementById("supplierId").value;
+  const nif = normalizeNif(document.getElementById("supplierNif").value);
+  const validated = document.getElementById("supplierNif")?.dataset?.validatedNif || "";
+  if (!id && !nif) {
+    showToast("Preencha o NIF e consulte a AGT para cadastrar o fornecedor.", "error");
+    return;
+  }
+  if (nif && validated !== nif) {
+    showToast("Consulte o NIF na AGT antes de gravar o fornecedor.", "error");
+    return;
+  }
+  const nifEl = document.getElementById("supplierNif");
   const bankAccounts = collectSupplierBankAccounts();
   const body = {
     name: document.getElementById("supplierName").value.trim(),
-    nif: document.getElementById("supplierNif").value.trim() || null,
+    nif: nif || null,
     phone: document.getElementById("supplierPhone").value.trim() || null,
     email: document.getElementById("supplierEmail").value.trim() || null,
     category: document.getElementById("supplierCategory").value.trim() || null,
@@ -439,6 +512,9 @@ async function submitSupplier(e) {
     vatPercent: parseOptionalPercentInput("supplierVatPercent"),
     withholdingPercent: parseOptionalPercentInput("supplierWithholdingPercent"),
     discountPercent: parseOptionalPercentInput("supplierDiscountPercent"),
+    vatRegime: nifEl?.dataset?.vatRegime || null,
+    agtStatus: nifEl?.dataset?.agtStatus || null,
+    agtType: nifEl?.dataset?.agtType || null,
     bankAccounts,
   };
 
@@ -452,6 +528,12 @@ async function submitSupplier(e) {
     document.getElementById("modalSupplier").classList.remove("open");
     loadSuppliers();
   } catch(err) {
+    if (err?.status === 409) {
+      showToast("Este NIF já está cadastrado. Não foi criado um fornecedor duplicado.", "info");
+      document.getElementById("modalSupplier").classList.remove("open");
+      loadSuppliers();
+      return;
+    }
     showToast("Erro: " + err.message, "error");
   }
 }

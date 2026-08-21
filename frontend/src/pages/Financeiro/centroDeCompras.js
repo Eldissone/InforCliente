@@ -1,4 +1,4 @@
-import { apiRequest } from "/services/api.js";
+import { apiRequest, apiUpload } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { getSessionUser } from "/services/auth.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
@@ -19,6 +19,7 @@ import {
   getCachedCategories,
   costIdKey,
   sameCostId,
+  normalizeCostLabel,
 } from "/shared/costCategoryCascade.js";
 import {
   buildCostCatalogSheetRows,
@@ -37,13 +38,22 @@ import {
   expiresAtToMonthInput,
   parseCardNumberInput,
 } from "/shared/bankCardVisual.js";
+import {
+  bindNifLookup,
+  normalizeNif,
+  setNifLookupStatus,
+} from "/shared/supplierNifLookup.js";
 
 let costCategories = [];
 let allProjects = [];
 let allCards = [];
-let centrosMainTab = "cartoes";
+let centrosMainTab = "compras";
 
 function switchCentrosMainTab(tab) {
+  // Só existe painel para as abas presentes no HTML; evita esconder tudo.
+  if (!document.getElementById(`centrosPanel${tab.charAt(0).toUpperCase()}${tab.slice(1)}`)) {
+    tab = "compras";
+  }
   centrosMainTab = tab;
   document.querySelectorAll("[data-centros-tab]").forEach((btn) => {
     const active = btn.dataset.centrosTab === tab;
@@ -53,7 +63,7 @@ function switchCentrosMainTab(tab) {
   document.getElementById("centrosPanelExtras")?.classList.toggle("hidden", tab !== "extras");
   document.getElementById("centrosPanelCompras")?.classList.toggle("hidden", tab !== "compras");
 
-  if (tab === "compras" && typeof loadCCDashboard === "function") {
+  if (tab === "compras") {
     loadCCDashboard();
   }
 
@@ -86,7 +96,7 @@ function bindCentrosMainTabs() {
     const m = document.getElementById("modalCatalogo");
     if (m) m.classList.add("open");
     // load catalog if not loaded yet
-    if (costCategories.length === 0) loadCostCatalog();
+    if (costCategories.length === 0) loadCostCategories();
   });
 
   document.getElementById("btnCloseModalCatalogo")?.addEventListener("click", () => {
@@ -507,7 +517,6 @@ function bindCatalogSheetRowEvents(container, items) {
         realTipo3[0]?.pickCategoryId ||
         group.variants?.[0]?.pickCategoryId ||
         group.tipo2Id;
-      switchCentrosMainTab("extras");
       const domain = group.domain;
       if (domain === "VIATURAS") {
         showToast("Custos de viaturas: em breve no pedido extra. Use filtro por agora.", "info");
@@ -650,7 +659,6 @@ function bindTipo3DrillListEvents(list, group) {
         return;
       }
       closeTipo3DrillModal();
-      switchCentrosMainTab("extras");
       await openExtraRequestModal({
         type: domain === "OBRA" ? "OBRA" : "GERAL",
         costCategoryId: btn.dataset.extraCategory,
@@ -1646,7 +1654,7 @@ function bindCatalogCrudEvents() {
     if (item) loadCostCategoryEditFields(item);
   });
 
-  document.getElementById("panelGcc")?.addEventListener("change", (e) => {
+  document.getElementById("modalCatalogo")?.addEventListener("change", (e) => {
     const sel = e.target.closest(".cost-sheet-filter");
     if (!sel) return;
     const cascadeFrom = {
@@ -1660,7 +1668,7 @@ function bindCatalogCrudEvents() {
     renderCostCatalogViews();
   });
 
-  document.getElementById("panelGcc")?.addEventListener("click", (e) => {
+  document.getElementById("modalCatalogo")?.addEventListener("click", (e) => {
     if (!e.target.closest(".cost-catalog-actions")) {
       document.querySelectorAll(".cost-catalog-actions__menu").forEach((m) => m.classList.add("hidden"));
     }
@@ -2388,9 +2396,12 @@ async function loadInitialData() {
   const urlParams = new URLSearchParams(window.location.search);
   const urlProjectId = urlParams.get("projectId");
   if (urlProjectId) {
-    document.getElementById("filterCardProject").value = urlProjectId;
-    document.getElementById("filterCardScope").value = "obra";
-    document.getElementById("filterProject").value = urlProjectId;
+    const cardProjectEl = document.getElementById("filterCardProject");
+    if (cardProjectEl) cardProjectEl.value = urlProjectId;
+    const cardScopeEl = document.getElementById("filterCardScope");
+    if (cardScopeEl) cardScopeEl.value = "obra";
+    const projectFilterEl = document.getElementById("filterProject");
+    if (projectFilterEl) projectFilterEl.value = urlProjectId;
   }
 
   if (can("fundoManeio", "view")) {
@@ -2450,7 +2461,11 @@ let ccCache = {
     pedidos: [],
     requisicoes: [],
     pagamentos: [],
-    dashboard: null
+    dashboard: null,
+    pedidosPage: 1,
+    pedidosTotal: 0,
+    suppliers: [],
+    tools: [],
 };
 
 // Configuração do Upload (Supabase via Backend)
@@ -2473,186 +2488,363 @@ async function uploadCCFile(file) {
     return data.url; // Retorna URL do supabase
 }
 
-function initCentroCompras() {
-    // Bind das sub-tabs
-    document.querySelectorAll(".cc-sub-tab").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const tab = btn.dataset.ccTab;
-            // Tabs toggle
-            document.querySelectorAll(".cc-sub-tab").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            // Panels toggle
-            document.querySelectorAll(".cc-panel").forEach(p => p.classList.add("hidden"));
-            document.getElementById(`ccPanel${tab.charAt(0).toUpperCase() + tab.slice(1)}`)?.classList.remove("hidden");
+function openCCModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("active");
+    el.classList.add("open");
+}
 
-            // Load content based on tab
-            if (tab === "dashboard") loadCCDashboard();
-            if (tab === "pedidos") loadCCPedidos();
-            if (tab === "requisicoes") loadCCRequisicoes();
-        });
+function closeCCModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove("open", "active");
+}
+
+function switchCCSubTab(tab) {
+    document.querySelectorAll(".cc-sub-tab").forEach((b) => {
+        const active = b.dataset.ccTab === tab;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    document.querySelectorAll(".cc-panel").forEach((p) => p.classList.add("hidden"));
+    const panelId = `ccPanel${tab.charAt(0).toUpperCase()}${tab.slice(1)}`;
+    document.getElementById(panelId)?.classList.remove("hidden");
+
+    if (tab === "dashboard") loadCCDashboard();
+    if (tab === "pedidos") loadCCPedidos();
+    if (tab === "requisicoes") loadCCRequisicoes();
+    if (tab === "planoPagamentos") loadCCPagamentos();
+}
+
+function initCentroCompras() {
+    document.querySelectorAll(".cc-sub-tab").forEach((btn) => {
+        btn.addEventListener("click", () => switchCCSubTab(btn.dataset.ccTab));
     });
 
-    // Modal Novo Pedido
     document.getElementById("btnNovoPedido")?.addEventListener("click", async () => {
-        document.getElementById("modalNovoPedido").classList.add("open");
-        document.getElementById("formNovoPedido").reset();
-        document.getElementById("ccItemsBody").innerHTML = "";
+        const form = document.getElementById("formNovoPedido");
+        form?.reset();
+        const itemsBody = document.getElementById("ccItemsBody");
+        if (itemsBody) itemsBody.innerHTML = "";
         addCCItemRow();
-        // Set defaults
-        const today = new Date();
-        const due = new Date(today);
+        const due = new Date();
         due.setDate(due.getDate() + 7);
         const desiredEl = document.getElementById("ccPedidoData");
-        if (desiredEl && !desiredEl.value) desiredEl.value = due.toISOString().slice(0, 10);
-        // Default payment due date same as desired
-        // Desired visibility
+        if (desiredEl) desiredEl.value = due.toISOString().slice(0, 10);
+        const user = getSessionUser();
+        const solicitante = document.getElementById("ccPedidoSolicitante");
+        if (solicitante && !solicitante.value) solicitante.value = user?.name || user?.email || "";
         applyCCTypeVisibility();
-        applyCCPaymentSourceVisibility();
-        try { await ensureCCReferenceDataLoaded(); } catch (_) { /* ignore */ }
+        applyCCQuoteRequirementVisibility();
+        ccCache.tools = [];
+        openCCModal("modalNovoPedido");
+        try { await ensureCCReferenceDataLoaded(); } catch { /* ignore */ }
     });
     document.getElementById("ccPedidoType")?.addEventListener("change", applyCCTypeVisibility);
+    document.getElementById("ccPedidoRequerCotacao")?.addEventListener("change", applyCCQuoteRequirementVisibility);
     document.getElementById("ccExtraSource")?.addEventListener("change", applyCCPaymentSourceVisibility);
-    document.getElementById("btnCloseNovoPedido")?.addEventListener("click", () => {
-        document.getElementById("modalNovoPedido").classList.remove("open");
+    bindCCSupplierNifLookup();
+    bindCCReqSupplierNifLookup();
+    document.addEventListener("click", (e) => {
+        if (e.target.closest(".cc-item-desc") || e.target.closest(".cc-item-suggest")) return;
+        hideAllCCItemSuggest();
     });
-    document.getElementById("btnCancelNovoPedido")?.addEventListener("click", () => {
-        document.getElementById("modalNovoPedido").classList.remove("open");
-    });
+    document.getElementById("btnCloseNovoPedido")?.addEventListener("click", () => closeCCModal("modalNovoPedido"));
+    document.getElementById("btnCancelNovoPedido")?.addEventListener("click", () => closeCCModal("modalNovoPedido"));
     document.getElementById("btnCCAddItem")?.addEventListener("click", addCCItemRow);
     document.getElementById("formNovoPedido")?.addEventListener("submit", submitNovoPedido);
 
-    // CC Dashboard link "Ver Todos" vai para tab de requisições
-    document.getElementById("btnCCVerTodos")?.addEventListener("click", () => {
-        document.getElementById("ccTabRequisicoes").click();
-    });
+    document.getElementById("btnCCVerTodos")?.addEventListener("click", () => switchCCSubTab("requisicoes"));
 
-    // Drawer Requisições
     document.getElementById("btnCloseReqDrawer")?.addEventListener("click", () => {
-        document.getElementById("drawerRequisicao").classList.remove("open");
+        document.getElementById("drawerRequisicao")?.classList.remove("open");
     });
     document.getElementById("formCCQuote")?.addEventListener("submit", submitCCQuote);
 
-    // Botões Acção Workflow
-    document.getElementById("btnCCSubmitApproval")?.addEventListener("click", () => updateCCStatus("PENDENTE_APROVACAO"));
+    document.getElementById("btnCCSubmitApproval")?.addEventListener("click", submitCCForApproval);
     document.getElementById("btnCCApprove")?.addEventListener("click", () => openCCAprovacaoModal("APROVAR"));
     document.getElementById("btnCCReject")?.addEventListener("click", () => openCCAprovacaoModal("REJEITAR"));
     document.getElementById("btnCCCreatePayment")?.addEventListener("click", openCCPlanoModal);
 
-    // Modal Aprovação
-    document.getElementById("btnCancelAprov")?.addEventListener("click", () => document.getElementById("modalAprovacao").classList.remove("active"));
+    document.getElementById("btnCancelAprov")?.addEventListener("click", () => closeCCModal("modalAprovacao"));
     document.getElementById("btnConfirmAprov")?.addEventListener("click", submitCCAprovacao);
 
-    // Modal Plano Pagamento
-    document.getElementById("btnClosePlano")?.addEventListener("click", () => document.getElementById("modalPlanoPagamento").classList.remove("active"));
-    document.getElementById("btnCancelPlano")?.addEventListener("click", () => document.getElementById("modalPlanoPagamento").classList.remove("active"));
+    document.getElementById("btnClosePlano")?.addEventListener("click", () => closeCCModal("modalPlanoPagamento"));
+    document.getElementById("btnCancelPlano")?.addEventListener("click", () => closeCCModal("modalPlanoPagamento"));
     document.getElementById("btnCCAddParcela")?.addEventListener("click", addCCParcelaRow);
     document.getElementById("formPlanoPagamento")?.addEventListener("submit", submitCCPlano);
+
+    const bindFilter = (id, fn) => {
+        document.getElementById(id)?.addEventListener("change", fn);
+        document.getElementById(id)?.addEventListener("input", fn);
+    };
+    let pedidosSearchTimer = null;
+    bindFilter("ccPedidosFilterStatus", () => { ccCache.pedidosPage = 1; loadCCPedidos(); });
+    bindFilter("ccPedidosFilterPriority", () => { ccCache.pedidosPage = 1; loadCCPedidos(); });
+    document.getElementById("ccPedidosSearch")?.addEventListener("input", () => {
+        clearTimeout(pedidosSearchTimer);
+        pedidosSearchTimer = setTimeout(() => { ccCache.pedidosPage = 1; loadCCPedidos(); }, 300);
+    });
+    let reqSearchTimer = null;
+    bindFilter("ccReqFilterStatus", () => loadCCRequisicoes());
+    document.getElementById("ccReqSearch")?.addEventListener("input", () => {
+        clearTimeout(reqSearchTimer);
+        reqSearchTimer = setTimeout(() => loadCCRequisicoes(), 300);
+    });
+
+    loadCCDashboard();
 }
 
 // ======================== API CALLS ========================
 
-window.loadCCDashboard = async function loadCCDashboard() {
+function ccApiError(err) {
+    const e = err?.data?.error;
+    if (e && typeof e === "object") {
+        const fields = e.fieldErrors
+            ? Object.entries(e.fieldErrors).flatMap(([k, msgs]) => (msgs || []).map((m) => `${k}: ${m}`))
+            : [];
+        const form = e.formErrors || [];
+        const all = [...form, ...fields].filter(Boolean);
+        if (all.length) return all.join(" · ");
+    }
+    if (typeof e === "string") {
+        const map = {
+            FORBIDDEN: "Sem permissão para esta acção",
+            NOT_FOUND: "Pedido não encontrado",
+            REQUISITION_REQUIRED: "Guarde a cotação antes de submeter para aprovação",
+            ORDER_NOT_IN_REQUISITION_STATUS: "Este pedido já não está em requisição",
+            CANNOT_SUBMIT_IN_CURRENT_STATUS: "Não é possível submeter neste estado",
+            ORDER_NOT_PENDING_APPROVAL: "Pedido não está pendente de aprovação",
+            ORDER_NOT_APPROVED: "Pedido ainda não está aprovado",
+            FILE_REQUIRED: "Seleccione um ficheiro",
+            UPLOAD_FAILED: "Falha no envio do ficheiro",
+        };
+        return map[e] || e;
+    }
+    return err?.data?.message || err?.message || "Erro desconhecido";
+}
+
+function ccOrderNumber(r) {
+    return r?.number || r?.requisitionNumber || "—";
+}
+
+function ccRequestedBy(r) {
+    return r?.requestedByName || r?.requestedBy || "—";
+}
+
+function ccOrderValue(r) {
+    return r?.requisition?.quotedValue ?? r?.totalValue ?? 0;
+}
+
+function ccParseItemTax(notes) {
+    const text = String(notes || "");
+    const pick = (re) => {
+        const m = text.match(re);
+        return m ? Number(String(m[1]).replace(",", ".")) : 0;
+    };
+    return {
+        vat: pick(/IVA\s+(\d+(?:[.,]\d+)?)\s*%/i),
+        discount: pick(/Desc\.?\s+(\d+(?:[.,]\d+)?)\s*%/i),
+    };
+}
+
+function ccItemGross(item) {
+    const qty = Number(item?.quantity) || 0;
+    const price = Number(item?.unitPrice) || 0;
+    const base = qty && price ? qty * price : Number(item?.totalPrice) || 0;
+    const { vat, discount } = ccParseItemTax(item?.notes);
+    return Math.round((base - (base * discount) / 100 + (base * vat) / 100) * 100) / 100;
+}
+
+function ccOrderTotalWithTax(r) {
+    if (r?.totalWithTax != null && r.totalWithTax !== "") return Number(r.totalWithTax) || 0;
+    const items = r?.items || [];
+    const fromItems = items.reduce((sum, item) => sum + ccItemGross(item), 0);
+    if (fromItems > 0) return fromItems;
+    return Number(ccOrderValue(r)) || 0;
+}
+
+function ccSupplierName(r) {
+    return r?.requisition?.supplierName || r?.supplier?.name || r?.supplierName || "—";
+}
+
+function ccItemName(i) {
+    return i?.name || i?.description || "—";
+}
+
+function ccPriorityHtml(priority) {
+    if (priority === "URGENTE") return '<span class="text-red-600 font-bold">Urgente</span>';
+    if (priority === "ALTA") return '<span class="text-orange-500 font-bold">Alta</span>';
+    return '<span class="text-slate-500">Normal</span>';
+}
+
+function ccOpenDetailsBtn(id, label, extraClass = "") {
+    return `<button type="button" onclick="openCCReqDrawer('${id}')" class="${extraClass}">${label}</button>`;
+}
+
+async function loadCCDashboard() {
     try {
         const data = await apiRequest("/purchase-orders/dashboard");
         const stats = data.kpis || {};
         const recents = data.recentes || [];
-        
-        // Populate KPIs
-        document.getElementById("ccKpiPedidos").textContent = stats.pedidosPendentes || 0;
-        document.getElementById("ccKpiReq").textContent = stats.requisicoesPendentes || 0;
-        document.getElementById("ccKpiAprov").textContent = stats.aprovacoesPendentes || 0;
-        document.getElementById("ccKpiPag").textContent = stats.pagamentosPendentes || 0;
-        document.getElementById("ccKpiAndamento").textContent = stats.emAndamento || 0;
-        document.getElementById("ccKpiValor").textContent = formatCurrency(stats.valorComprometido || 0);
 
-        if (stats.pedidosUrgentes > 0) {
-            const b = document.getElementById("ccKpiBadgeUrgent");
-            b.textContent = `${stats.pedidosUrgentes} Urgente(s)`;
-            b.classList.remove("hidden");
-        } else {
-            document.getElementById("ccKpiBadgeUrgent").classList.add("hidden");
+        const setText = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        setText("ccKpiPedidos", stats.pedidosPendentes || 0);
+        setText("ccKpiReq", stats.requisicoesPendentes || 0);
+        setText("ccKpiAprov", stats.aprovacoesPendentes || 0);
+        setText("ccKpiPag", stats.pagamentosPendentes || 0);
+        setText("ccKpiAndamento", stats.emAndamento || 0);
+        setText("ccKpiValor", formatCurrency(stats.valorComprometido || 0));
+
+        const badge = document.getElementById("ccKpiBadgeUrgent");
+        if (badge) {
+            if (stats.pedidosUrgentes > 0) {
+                badge.textContent = `${stats.pedidosUrgentes} Urgente(s)`;
+                badge.classList.remove("hidden");
+            } else {
+                badge.classList.add("hidden");
+            }
         }
 
-        // Populate Table
         const tbody = document.getElementById("ccRecentTable");
         if (!tbody) return;
-        
-        if (!recents || recents.length === 0) {
+
+        if (!recents.length) {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">Sem processos recentes.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = recents.map(r => `
+        tbody.innerHTML = recents.map((r) => `
             <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-                <td class="px-4 py-3 text-xs font-semibold text-slate-900">${r.number || '—'}</td>
-                <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${r.description}</td>
-                <td class="px-4 py-3 text-xs text-slate-600">${r.requestedByName || '—'}</td>
-                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+                <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
+                <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${escapeHtml(r.description || "—")}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
+                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
                 <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
                 <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
                 <td class="px-4 py-3 text-center">
-                    <button type="button" onclick="openCCReqDrawer('${r.id}')" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold underline">Detalhes</button>
+                    ${ccOpenDetailsBtn(r.id, "Detalhes", "text-indigo-600 hover:text-indigo-800 text-xs font-bold underline")}
                 </td>
             </tr>
-        `).join('');
-
+        `).join("");
     } catch (err) {
         console.error(err);
-        showToast("Erro ao carregar Dashboard de Compras", "error");
+        showToast("Erro ao carregar Dashboard de Compras: " + ccApiError(err), "error");
     }
 }
+window.loadCCDashboard = loadCCDashboard;
 
 async function loadCCPedidos() {
     try {
-        const res = await apiRequest("/purchase-orders");
+        const page = ccCache.pedidosPage || 1;
+        const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+        const status = document.getElementById("ccPedidosFilterStatus")?.value || "";
+        const priority = document.getElementById("ccPedidosFilterPriority")?.value || "";
+        const search = document.getElementById("ccPedidosSearch")?.value?.trim() || "";
+        if (status) params.set("status", status);
+        if (priority) params.set("priority", priority);
+        if (search) params.set("search", search);
+
+        const res = await apiRequest(`/purchase-orders?${params.toString()}`);
         const data = res.items || [];
         ccCache.pedidos = data;
+        ccCache.pedidosTotal = res.total || data.length;
         renderCCPedidos(data);
+        renderCCPedidosPagination(res.page || page, res.pageSize || 20, ccCache.pedidosTotal);
     } catch (err) {
-        showToast("Erro ao carregar Pedidos", "error");
+        showToast("Erro ao carregar Pedidos: " + ccApiError(err), "error");
+        const tbody = document.getElementById("ccPedidosTableBody");
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-red-500 text-xs">${escapeHtml(ccApiError(err))}</td></tr>`;
+        }
     }
+}
+
+function renderCCPedidosPagination(page, pageSize, total) {
+    const el = document.getElementById("ccPedidosPagination");
+    if (!el) return;
+    const pages = Math.max(1, Math.ceil((total || 0) / pageSize));
+    const meta = document.getElementById("ccPedidosMeta");
+    if (meta) {
+        meta.textContent = total
+            ? `${total} pedido${total === 1 ? "" : "s"}`
+            : "Nenhum pedido encontrado";
+    }
+    if (!total) {
+        el.innerHTML = "";
+        return;
+    }
+    el.innerHTML = `
+        <span>${Math.min((page - 1) * pageSize + 1, total)}–${Math.min(page * pageSize, total)} de ${total}</span>
+        <span class="flex gap-2">
+            <button type="button" class="h-8 px-3 rounded-lg border border-slate-200 bg-white disabled:opacity-40" data-cc-page="prev" ${page <= 1 ? "disabled" : ""}>Anterior</button>
+            <button type="button" class="h-8 px-3 rounded-lg border border-slate-200 bg-white disabled:opacity-40" data-cc-page="next" ${page >= pages ? "disabled" : ""}>Seguinte</button>
+        </span>`;
+    el.querySelector("[data-cc-page='prev']")?.addEventListener("click", () => {
+        if (ccCache.pedidosPage > 1) {
+            ccCache.pedidosPage -= 1;
+            loadCCPedidos();
+        }
+    });
+    el.querySelector("[data-cc-page='next']")?.addEventListener("click", () => {
+        ccCache.pedidosPage += 1;
+        loadCCPedidos();
+    });
 }
 
 function renderCCPedidos(data) {
     const tbody = document.getElementById("ccPedidosTableBody");
     if (!tbody) return;
-    
+
     if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhum pedido encontrado.</td></tr>`;
         return;
     }
-    tbody.innerHTML = data.map(r => `
+    tbody.innerHTML = data.map((r) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-            <td class="px-4 py-3 text-xs font-semibold text-slate-900">${r.requisitionNumber || '—'}</td>
-            <td class="px-4 py-3 text-xs text-slate-600 max-w-[200px] truncate">${r.description}</td>
-            <td class="px-4 py-3 text-xs text-slate-600">${r.requestedBy}</td>
-            <td class="px-4 py-3 text-xs text-slate-500">${r.department || '—'}</td>
-            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
-            <td class="px-4 py-3 text-xs">
-                ${r.priority === 'URGENTE' ? '<span class="text-red-600 font-bold">Urgente</span>' : 
-                  r.priority === 'ALTA' ? '<span class="text-orange-500 font-bold">Alta</span>' : 
-                  '<span class="text-slate-500">Normal</span>'}
-            </td>
+            <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
+            <td class="px-4 py-3 text-xs text-slate-600 max-w-[200px] truncate">${escapeHtml(r.description || "—")}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
+            <td class="px-4 py-3 text-xs text-slate-500 text-right">${formatCurrency(ccOrderValue(r))}</td>
+            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderTotalWithTax(r))}</td>
+            <td class="px-4 py-3 text-xs">${ccPriorityHtml(r.priority)}</td>
             <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
             <td class="px-4 py-3 text-center">
-                <button type="button" onclick="openCCReqDrawer('${r.id}')" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 inline-flex items-center justify-center transition-colors">
-                    <span class="material-symbols-outlined text-sm">visibility</span>
-                </button>
+                ${ccOpenDetailsBtn(r.id, `<span class="material-symbols-outlined text-sm">visibility</span>`, "w-8 h-8 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 inline-flex items-center justify-center transition-colors")}
             </td>
         </tr>
-    `).join('');
+    `).join("");
 }
 
 async function loadCCRequisicoes() {
     try {
-        const res = await apiRequest("/purchase-orders");
-        const data = res.items || [];
-        // Filta apenas processos que passaram para requisição formal
-        const reqs = data.filter(r => r.status !== 'RASCUNHO' && r.requiresQuote);
-        ccCache.requisicoes = reqs;
-        renderCCRequisicoes(reqs);
+        const params = new URLSearchParams({ pageSize: "50" });
+        const status = document.getElementById("ccReqFilterStatus")?.value || "";
+        const search = document.getElementById("ccReqSearch")?.value?.trim() || "";
+        if (status) params.set("status", status);
+        if (search) params.set("search", search);
+
+        const res = await apiRequest(`/purchase-orders?${params.toString()}`);
+        let data = res.items || [];
+        if (!status) {
+            data = data.filter((r) =>
+                ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO"].includes(r.status)
+            );
+        }
+        ccCache.requisicoes = data;
+        const meta = document.getElementById("ccReqMeta");
+        if (meta) {
+            meta.textContent = data.length
+                ? `${data.length} requisição${data.length === 1 ? "" : "ões"}`
+                : "Nenhuma requisição encontrada";
+        }
+        renderCCRequisicoes(data);
     } catch (err) {
-        showToast("Erro ao carregar Requisições", "error");
+        showToast("Erro ao carregar Requisições: " + ccApiError(err), "error");
     }
 }
 
@@ -2663,47 +2855,47 @@ function renderCCRequisicoes(data) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhuma requisição encontrada.</td></tr>`;
         return;
     }
-    tbody.innerHTML = data.map(r => `
+    tbody.innerHTML = data.map((r) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-            <td class="px-4 py-3 text-xs font-bold text-indigo-600">${r.requisitionNumber}</td>
-            <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[150px]">${r.description}</td>
-            <td class="px-4 py-3 text-xs text-slate-600">${r.requestedBy}</td>
-            <td class="px-4 py-3 text-xs text-slate-600">${r.supplier?.name || '—'}</td>
-            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+            <td class="px-4 py-3 text-xs font-bold text-indigo-600">${escapeHtml(ccOrderNumber(r))}</td>
+            <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[150px]">${escapeHtml(r.description || "—")}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
+            <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccSupplierName(r))}</td>
+            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
             <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
             <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
             <td class="px-4 py-3 text-center">
-                <button type="button" onclick="openCCReqDrawer('${r.id}')" class="h-8 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors">Tratar</button>
+                ${ccOpenDetailsBtn(r.id, "Tratar", "h-8 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors")}
             </td>
         </tr>
-    `).join('');
+    `).join("");
 }
 
 async function loadCCPagamentos() {
     try {
-        const res = await apiRequest("/purchase-orders?status=EM_PAGAMENTO");
+        const res = await apiRequest("/purchase-orders?status=EM_PAGAMENTO&pageSize=50");
         const data = res.items || [];
         ccCache.pagamentos = data;
-        const tbody = document.getElementById("ccPagTableBody");
+        const tbody = document.getElementById("ccPagTableBody") || document.getElementById("planTableBody");
         if (!tbody) return;
         if (!data.length) {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-slate-400 text-xs">Nenhum pagamento pendente.</td></tr>`;
             return;
         }
-        tbody.innerHTML = data.map(r => `
+        tbody.innerHTML = data.map((r) => `
             <tr class="border-b border-slate-50 hover:bg-slate-50/50">
-                <td class="px-4 py-3 text-xs font-bold text-emerald-600">${r.requisitionNumber}</td>
-                <td class="px-4 py-3 text-xs text-slate-600">${r.description}</td>
-                <td class="px-4 py-3 text-xs text-slate-600">${r.supplier?.name || '—'}</td>
-                <td class="px-4 py-3 text-xs font-black text-slate-900 text-right">${formatCurrency(r.totalValue || 0)}</td>
+                <td class="px-4 py-3 text-xs font-bold text-emerald-600">${escapeHtml(ccOrderNumber(r))}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(r.description || "—")}</td>
+                <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccSupplierName(r))}</td>
+                <td class="px-4 py-3 text-xs font-black text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
                 <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
                 <td class="px-4 py-3 text-center">
-                    <button type="button" onclick="openCCReqDrawer('${r.id}')" class="h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100">Gerir Planos</button>
+                    ${ccOpenDetailsBtn(r.id, "Gerir Planos", "h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100")}
                 </td>
             </tr>
-        `).join('');
+        `).join("");
     } catch (err) {
-        showToast("Erro ao carregar Pagamentos", "error");
+        showToast("Erro ao carregar Pagamentos: " + ccApiError(err), "error");
     }
 }
 
@@ -2711,13 +2903,23 @@ async function loadCCPagamentos() {
 
 function addCCItemRow() {
     const tbody = document.getElementById("ccItemsBody");
+    if (!tbody) return;
     const tr = document.createElement("tr");
     tr.className = "cc-item-row";
+    const tools = ccIsFerramentasCentro();
     tr.innerHTML = `
-        <td class="py-2 pr-2"><input type="text" required class="cc-item-desc w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2 relative">
+            <input type="text" required autocomplete="off"
+                class="cc-item-desc w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"
+                placeholder="${tools ? "Pesquisar no catálogo..." : ""}">
+            <div class="cc-item-suggest hidden absolute z-40 left-0 right-0 top-full mt-1 max-h-48 overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg text-xs"></div>
+        </td>
         <td class="py-2 pr-2"><input type="number" min="1" value="1" required class="cc-item-qty w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
         <td class="py-2 pr-2"><input type="text" placeholder="un, kg, cx" required class="cc-item-unit w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
         <td class="py-2 pr-2"><input type="number" step="0.01" min="0" placeholder="0.00" class="cc-item-price w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-vat w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-wh w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
+        <td class="py-2 pr-2"><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-disc w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
         <td class="py-2 text-right">
             <button type="button" onclick="this.closest('tr').remove()" class="w-8 h-8 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center">
                 <span class="material-symbols-outlined text-sm">delete</span>
@@ -2725,33 +2927,463 @@ function addCCItemRow() {
         </td>
     `;
     tbody.appendChild(tr);
+    bindCCItemDescSuggest(tr);
 }
 window.addCCItemRow = addCCItemRow;
+
+function ccIsFerramentasCentro() {
+    const key = document.getElementById("ccCentroGeralId")?.value || "";
+    const group = ccTipo2Groups().find((g) => catalogSheetGroupKey(g) === key);
+    if (group && normalizeCostLabel(group.tipo2).includes("ferrament")) return true;
+    const label = document.getElementById("ccCentroGeralId")?.selectedOptions?.[0]?.textContent || "";
+    return normalizeCostLabel(label).includes("ferrament");
+}
+
+function ccNormalizeToolName(value) {
+    return normalizeCostLabel(value).replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function ccFindCachedTool(name) {
+    const key = ccNormalizeToolName(name);
+    if (!key) return null;
+    return (ccCache.tools || []).find((p) => ccNormalizeToolName(p.name) === key) || null;
+}
+
+function ccUpsertCachedTool(product) {
+    if (!product?.id) return;
+    const list = ccCache.tools || [];
+    const idx = list.findIndex((p) => p.id === product.id);
+    if (idx >= 0) list[idx] = product;
+    else {
+        const dup = list.findIndex((p) => ccNormalizeToolName(p.name) === ccNormalizeToolName(product.name));
+        if (dup >= 0) list[dup] = product;
+        else list.push(product);
+    }
+    ccCache.tools = list;
+}
+
+const ccToolEnsureInflight = new Map();
+
+async function ensureCCToolProduct(name, unit) {
+    const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+    const key = ccNormalizeToolName(cleanName);
+    if (!key) return null;
+    const cached = ccFindCachedTool(cleanName);
+    if (cached) return { ...cached, created: false };
+    if (ccToolEnsureInflight.has(key)) return ccToolEnsureInflight.get(key);
+    const pending = apiRequest("/products/ensure-tool", {
+        method: "POST",
+        body: { name: cleanName, unit },
+    }).then((product) => {
+        ccUpsertCachedTool(product);
+        return product;
+    }).finally(() => {
+        ccToolEnsureInflight.delete(key);
+    });
+    ccToolEnsureInflight.set(key, pending);
+    return pending;
+}
+
+async function loadCCToolCatalog() {
+    if (ccCache.tools?.length) return ccCache.tools;
+    try {
+        const data = await apiRequest("/products/tools");
+        const seen = new Map();
+        for (const p of data.items || []) {
+            const key = ccNormalizeToolName(p.name);
+            if (!key || seen.has(key)) continue;
+            seen.set(key, p);
+        }
+        ccCache.tools = [...seen.values()];
+    } catch {
+        ccCache.tools = [];
+    }
+    return ccCache.tools;
+}
+
+function hideAllCCItemSuggest() {
+    document.querySelectorAll(".cc-item-suggest").forEach((el) => el.classList.add("hidden"));
+}
+
+function applyCCToolToItemRow(tr, product, { created = false } = {}) {
+    if (!tr || !product) return;
+    tr.dataset.productId = product.id || "";
+    const desc = tr.querySelector(".cc-item-desc");
+    const unit = tr.querySelector(".cc-item-unit");
+    if (desc) desc.value = product.name || desc.value;
+    if (unit && product.unit) unit.value = String(product.unit).toLowerCase();
+}
+
+function renderCCItemSuggest(tr, query) {
+    const box = tr.querySelector(".cc-item-suggest");
+    if (!box) return;
+    if (!ccIsFerramentasCentro()) {
+        box.classList.add("hidden");
+        return;
+    }
+    const q = ccNormalizeToolName(query);
+    const tools = ccCache.tools || [];
+    const matches = q
+        ? tools.filter((p) => ccNormalizeToolName(p.name).includes(q) || ccNormalizeToolName(p.sku || "").includes(q)).slice(0, 8)
+        : tools.slice(0, 8);
+    const exact = ccFindCachedTool(query);
+    const rows = matches.map((p) => `
+        <button type="button" data-product-id="${escapeHtml(p.id)}"
+            class="cc-suggest-hit w-full text-left px-3 py-2 hover:bg-emerald-50 flex items-center justify-between gap-2">
+            <span class="font-semibold text-slate-800">${escapeHtml(p.name)}</span>
+            <span class="text-[10px] text-slate-400 uppercase">${escapeHtml(p.unit || "un")}${p.sku ? " · " + escapeHtml(p.sku) : ""}</span>
+        </button>
+    `).join("");
+    const createRow = query.trim().length >= 2 && !exact
+        ? `<button type="button" data-create-name="${escapeHtml(query.trim())}"
+                class="cc-suggest-create w-full text-left px-3 py-2 hover:bg-amber-50 border-t border-slate-100 text-amber-800 font-semibold">
+                Criar e adicionar ao catálogo: “${escapeHtml(query.trim())}”
+           </button>`
+        : "";
+    if (!rows && !createRow) {
+        box.classList.add("hidden");
+        return;
+    }
+    box.innerHTML = rows + createRow;
+    box.classList.remove("hidden");
+}
+
+function bindCCItemDescSuggest(tr) {
+    const input = tr.querySelector(".cc-item-desc");
+    const box = tr.querySelector(".cc-item-suggest");
+    if (!input || input.dataset.suggestBound === "1") return;
+    input.dataset.suggestBound = "1";
+
+    input.addEventListener("input", () => {
+        delete tr.dataset.productId;
+        if (!ccIsFerramentasCentro()) {
+            box?.classList.add("hidden");
+            return;
+        }
+        renderCCItemSuggest(tr, input.value);
+    });
+    input.addEventListener("focus", async () => {
+        if (!ccIsFerramentasCentro()) return;
+        await loadCCToolCatalog();
+        renderCCItemSuggest(tr, input.value);
+    });
+    input.addEventListener("blur", () => {
+        if (!ccIsFerramentasCentro()) return;
+        const existing = ccFindCachedTool(input.value);
+        if (existing) applyCCToolToItemRow(tr, existing);
+    });
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && box && !box.classList.contains("hidden")) {
+            const first = box.querySelector("button");
+            if (first) {
+                e.preventDefault();
+                first.click();
+            }
+        }
+        if (e.key === "Escape") box?.classList.add("hidden");
+    });
+    box?.addEventListener("mousedown", (e) => e.preventDefault());
+    box?.addEventListener("click", async (e) => {
+        const hit = e.target.closest("[data-product-id]");
+        const createBtn = e.target.closest("[data-create-name]");
+        if (hit) {
+            const product = (ccCache.tools || []).find((p) => p.id === hit.dataset.productId);
+            applyCCToolToItemRow(tr, product);
+            box.classList.add("hidden");
+            return;
+        }
+        if (createBtn) {
+            if (box.dataset.ensuring === "1") return;
+            const name = createBtn.dataset.createName;
+            const existing = ccFindCachedTool(name);
+            if (existing) {
+                applyCCToolToItemRow(tr, existing);
+                box.classList.add("hidden");
+                return;
+            }
+            const unit = tr.querySelector(".cc-item-unit")?.value || "UN";
+            box.dataset.ensuring = "1";
+            try {
+                const product = await ensureCCToolProduct(name, unit);
+                if (product?.id) {
+                    applyCCToolToItemRow(tr, product, { created: true });
+                    showToast(
+                        product.created
+                            ? `Ferramenta “${product.name}” adicionada ao catálogo`
+                            : `Ferramenta “${product.name}” já existia no catálogo`,
+                        "success"
+                    );
+                }
+            } catch (err) {
+                showToast(ccApiError(err), "error");
+                input.value = name;
+            } finally {
+                delete box.dataset.ensuring;
+            }
+            box.classList.add("hidden");
+        }
+    });
+}
+
+async function syncCCItemToolSuggest() {
+    const tools = ccIsFerramentasCentro();
+    document.getElementById("ccItemsToolHint")?.classList.toggle("hidden", !tools);
+    document.querySelectorAll(".cc-item-desc").forEach((input) => {
+        input.placeholder = tools ? "Pesquisar no catálogo..." : "";
+        input.autocomplete = "off";
+    });
+    if (tools) await loadCCToolCatalog();
+    else hideAllCCItemSuggest();
+}
+
+async function ensureCCToolsInCatalog(itemRows) {
+    if (!ccIsFerramentasCentro()) return;
+    await loadCCToolCatalog();
+    const byKey = new Map();
+    for (const tr of itemRows) {
+        const name = tr.querySelector(".cc-item-desc")?.value?.trim() || "";
+        if (!name) continue;
+        const key = ccNormalizeToolName(name);
+        if (!key) continue;
+        if (!byKey.has(key)) {
+            byKey.set(key, {
+                name,
+                unit: tr.querySelector(".cc-item-unit")?.value || "UN",
+                rows: [],
+            });
+        }
+        byKey.get(key).rows.push(tr);
+    }
+    for (const group of byKey.values()) {
+        const product = ccFindCachedTool(group.name) || await ensureCCToolProduct(group.name, group.unit);
+        if (!product?.id) continue;
+        group.rows.forEach((tr) => applyCCToolToItemRow(tr, product));
+    }
+}
 
 function applyCCTypeVisibility() {
     const type = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
     const obraProj = document.getElementById("cc_rowObraProject");
     const obraCent = document.getElementById("cc_rowObraCenter");
-    const geralCent = document.getElementById("cc_rowGeralCenter");
-    const geralCat = document.getElementById("cc_rowGeralCategory");
     if (obraProj) obraProj.classList.toggle("hidden", type !== "OBRA");
     if (obraCent) obraCent.classList.toggle("hidden", type !== "OBRA");
-    if (geralCent) geralCent.classList.toggle("hidden", type !== "GERAL");
-    if (geralCat) geralCat.classList.toggle("hidden", type !== "GERAL");
+    populateCCCentrosGerais();
+}
+
+function applyCCQuoteRequirementVisibility() {
+    const requiresQuote = Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked);
+    document.getElementById("cc_extraSupplierBlock")?.classList.toggle("hidden", requiresQuote);
+    document.getElementById("cc_extraPaymentBlock")?.classList.toggle("hidden", requiresQuote);
+    if (!requiresQuote) applyCCPaymentSourceVisibility();
 }
 
 function applyCCPaymentSourceVisibility() {
     const src = document.getElementById("ccExtraSource")?.value || "SOLICITACAO_TRANSFERENCIA";
     const isCard = src === "CARTAO";
-    const isFund = src === "SOLICITACAO_TRANSFERENCIA" || src === "TRANSFERENCIA_INTERNA" || src === "BANCO";
-    const cardRow = document.getElementById("ccCardRow");
-    const fundRow = document.getElementById("ccFundRow");
-    const supplierRow = document.getElementById("ccSupplierRow");
-    const proformaRow = document.getElementById("ccProformaRow");
-    if (cardRow) cardRow.classList.toggle("hidden", !isCard);
-    if (fundRow) fundRow.classList.toggle("hidden", !(isFund || src === "CAIXA"));
-    if (supplierRow) supplierRow.classList.toggle("hidden", src !== "SOLICITACAO_TRANSFERENCIA");
-    if (proformaRow) proformaRow.classList.toggle("hidden", src !== "SOLICITACAO_TRANSFERENCIA");
+    document.getElementById("ccCardRow")?.classList.toggle("hidden", !isCard);
+    document.getElementById("ccIbanRow")?.classList.toggle("hidden", isCard);
+    document.getElementById("ccSupplierRow")?.classList.remove("hidden");
+    document.getElementById("ccProformaRow")?.classList.toggle("hidden", isCard);
+}
+
+function upsertCCSupplierOption(supplier) {
+    const sel = document.getElementById("ccExtraSupplierId");
+    if (!sel || !supplier?.id) return;
+    let opt = [...sel.options].find((o) => o.value === supplier.id);
+    const label = (supplier.name || supplier.id) + (supplier.nif ? " (" + supplier.nif + ")" : "");
+    if (!opt) {
+        opt = document.createElement("option");
+        opt.value = supplier.id;
+        sel.appendChild(opt);
+    }
+    opt.textContent = label;
+    sel.value = supplier.id;
+}
+
+function fillCCSupplierFields(supplier) {
+    if (!supplier) return;
+    const nameEl = document.getElementById("ccExtraSupplierName");
+    const nifEl = document.getElementById("ccExtraSupplierNif");
+    const ibanEl = document.getElementById("ccExtraSupplierIban");
+    if (nameEl) nameEl.value = supplier.name || "";
+    if (nifEl) {
+        nifEl.value = supplier.nif || "";
+        nifEl.dataset.validatedNif = normalizeNif(supplier.nif);
+    }
+    if (ibanEl) ibanEl.value = supplier.iban || supplier.bankAccounts?.[0]?.iban || ibanEl.value || "";
+}
+
+function bindCCSupplierNifLookup() {
+    bindNifLookup({
+        nifInput: "ccExtraSupplierNif",
+        button: "btnCcConsultarNif",
+        statusEl: "ccExtraSupplierNifStatus",
+        register: true,
+        extraBody: () => ({
+            iban: document.getElementById("ccExtraSupplierIban")?.value?.trim() || null,
+        }),
+        onResult: ({ ok, agt, supplier }) => {
+            if (!ok) return;
+            if (supplier) {
+                ccCache.suppliers = ccCache.suppliers || [];
+                const idx = ccCache.suppliers.findIndex((s) => s.id === supplier.id);
+                if (idx >= 0) ccCache.suppliers[idx] = supplier;
+                else ccCache.suppliers.push(supplier);
+                upsertCCSupplierOption(supplier);
+                fillCCSupplierFields(supplier);
+                return;
+            }
+            if (agt?.nome) {
+                const nameEl = document.getElementById("ccExtraSupplierName");
+                if (nameEl) nameEl.value = agt.nome;
+            }
+        },
+    });
+    document.getElementById("ccExtraSupplierNif")?.addEventListener("input", () => {
+        const el = document.getElementById("ccExtraSupplierNif");
+        if (el?.dataset?.validatedNif && el.dataset.validatedNif !== normalizeNif(el.value)) {
+            delete el.dataset.validatedNif;
+        }
+    });
+}
+
+function upsertCCReqSupplierOption(supplier) {
+    const sel = document.getElementById("ccReqSupplierId");
+    if (!sel || !supplier?.id) return;
+    let opt = [...sel.options].find((o) => o.value === supplier.id);
+    const label = (supplier.name || supplier.id) + (supplier.nif ? " (" + supplier.nif + ")" : "");
+    if (!opt) {
+        opt = document.createElement("option");
+        opt.value = supplier.id;
+        sel.appendChild(opt);
+    }
+    opt.textContent = label;
+    sel.value = supplier.id;
+}
+
+function bindCCReqSupplierNifLookup() {
+    bindNifLookup({
+        nifInput: "ccReqSupplierNif",
+        button: "btnCcReqConsultarNif",
+        statusEl: "ccReqSupplierNifStatus",
+        register: true,
+        onResult: ({ ok, agt, supplier }) => {
+            if (!ok) return;
+            const nameEl = document.getElementById("ccReqFornecedor");
+            if (supplier) {
+                ccCache.suppliers = ccCache.suppliers || [];
+                const idx = ccCache.suppliers.findIndex((s) => s.id === supplier.id);
+                if (idx >= 0) ccCache.suppliers[idx] = supplier;
+                else ccCache.suppliers.push(supplier);
+                upsertCCReqSupplierOption(supplier);
+                upsertCCSupplierOption(supplier);
+                if (nameEl) nameEl.value = supplier.name || "";
+                const nifEl = document.getElementById("ccReqSupplierNif");
+                if (nifEl) {
+                    nifEl.value = supplier.nif || "";
+                    nifEl.dataset.validatedNif = normalizeNif(supplier.nif);
+                }
+                return;
+            }
+            if (agt?.nome && nameEl) nameEl.value = agt.nome;
+        },
+    });
+}
+
+function ccPedidoDomain() {
+    const type = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
+    return type === "OBRA" ? "OBRA" : "GERAL";
+}
+
+function ccTipo2Groups() {
+    const rows = getCatalogSheetRows().filter((r) => r.domain === ccPedidoDomain());
+    return groupCatalogSheetDisplayRows(rows);
+}
+
+function ccSyncCostDetail(categoryId, requiresDetail) {
+    const hidden = document.getElementById("ccExtraCostCategorySelectedId");
+    if (hidden) hidden.value = categoryId || "";
+    const detailRow = document.getElementById("cc_rowCostDetailDesc");
+    if (!detailRow) return;
+    let show = Boolean(requiresDetail);
+    if (requiresDetail == null && categoryId) {
+        const cat = (costCategories.length ? costCategories : getCachedCategories())
+            .find((c) => sameCostId(c.id, categoryId));
+        show = Boolean(cat?.requiresDetailText);
+    }
+    detailRow.classList.toggle("hidden", !show);
+    if (!show) {
+        const ta = document.getElementById("ccExtraCostDetailDesc");
+        if (ta) ta.value = "";
+    }
+}
+
+function populateCCSubcustos() {
+    const centroSel = document.getElementById("ccCentroGeralId");
+    const catSel = document.getElementById("ccExtraCostCategoryId");
+    if (!catSel) return;
+    const key = centroSel?.value || "";
+    const group = ccTipo2Groups().find((g) => catalogSheetGroupKey(g) === key);
+    const prev = catSel.value;
+    const realTipo3 = (group?.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
+
+    if (!group) {
+        catSel.disabled = true;
+        catSel.innerHTML = `<option value="">Seleccione primeiro o centro geral</option>`;
+        ccSyncCostDetail("");
+        syncCCItemToolSuggest();
+        return;
+    }
+
+    if (!realTipo3.length) {
+        const pick = group.variants?.[0]?.pickCategoryId || group.tipo2Id;
+        catSel.disabled = true;
+        catSel.innerHTML = `<option value="${escapeHtml(costIdKey(pick))}">Sem subcustos — este centro é a categoria</option>`;
+        catSel.value = costIdKey(pick);
+        ccSyncCostDetail(pick, group.variants?.[0]?.requiresDetailText);
+        syncCCItemToolSuggest();
+        return;
+    }
+
+    catSel.disabled = false;
+    catSel.innerHTML =
+        `<option value="">Seleccione categoria...</option>` +
+        realTipo3
+            .map((v) => `<option value="${escapeHtml(costIdKey(v.pickCategoryId))}">${escapeHtml(formatCategoryDisplayName(v.tipo3))}</option>`)
+            .join("");
+    if (prev && realTipo3.some((v) => sameCostId(v.pickCategoryId, prev))) {
+        catSel.value = prev;
+    }
+    const pick = catSel.value;
+    const hit = realTipo3.find((v) => sameCostId(v.pickCategoryId, pick));
+    ccSyncCostDetail(pick, hit?.requiresDetailText);
+    syncCCItemToolSuggest();
+}
+
+function populateCCCentrosGerais() {
+    const sel = document.getElementById("ccCentroGeralId");
+    if (!sel) return;
+    const prev = sel.value;
+    const groups = ccTipo2Groups();
+    const nameCount = groups.reduce((acc, g) => {
+        acc[g.tipo2] = (acc[g.tipo2] || 0) + 1;
+        return acc;
+    }, {});
+    sel.innerHTML =
+        `<option value="">${groups.length ? "Seleccione centro geral..." : "Sem tipos de custo 2 no catálogo"}</option>` +
+        groups
+            .map((g) => {
+                const key = catalogSheetGroupKey(g);
+                const base = formatCategoryDisplayName(g.tipo2);
+                const label =
+                    nameCount[g.tipo2] > 1 && g.grupo
+                        ? `${base} (${formatCategoryDisplayName(g.grupo)})`
+                        : base;
+                return `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`;
+            })
+            .join("");
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    populateCCSubcustos();
 }
 
 async function ensureCCReferenceDataLoaded() {
@@ -2773,41 +3405,32 @@ async function ensureCCReferenceDataLoaded() {
         try {
             const sups = await apiRequest("/suppliers?limit=500");
             const arr = Array.isArray(sups) ? sups : (sups?.items || sups?.data || []);
+            ccCache.suppliers = arr;
             arr.forEach(s => {
                 const opt = document.createElement("option");
                 opt.value = s.id;
                 opt.textContent = (s.name || s.id) + (s.nif ? " (" + s.nif + ")" : "");
                 supSel.appendChild(opt);
+                upsertCCReqSupplierOption(s);
             });
         } catch (_) { /* ignore */ }
         supSel?.addEventListener("change", function () {
             const v = supSel.value;
-            if (v) {
-                try {
-                    apiRequest(`/suppliers/${encodeURIComponent(v)}`).then(s => {
-                        if (document.getElementById("ccExtraSupplierName"))
-                            document.getElementById("ccExtraSupplierName").value = s.name || "";
-                        if (document.getElementById("ccExtraSupplierNif"))
-                            document.getElementById("ccExtraSupplierNif").value = s.nif || "";
-                        if (document.getElementById("ccExtraSupplierIban"))
-                            document.getElementById("ccExtraSupplierIban").value = s.iban || (s.bankAccounts?.[0]?.iban) || "";
-                    }).catch(() => { });
-                } catch (_) { /* ignore */ }
+            const nifEl = document.getElementById("ccExtraSupplierNif");
+            if (!v) {
+                if (nifEl) delete nifEl.dataset.validatedNif;
+                setNifLookupStatus(document.getElementById("ccExtraSupplierNifStatus"), "");
+                return;
             }
+            const cached = (ccCache.suppliers || []).find((s) => s.id === v);
+            if (cached) {
+                fillCCSupplierFields(cached);
+                return;
+            }
+            apiRequest(`/suppliers/${encodeURIComponent(v)}`).then((s) => {
+                fillCCSupplierFields(s);
+            }).catch(() => { });
         });
-    }
-    const fundSel = document.getElementById("ccExtraFundId");
-    if (fundSel && fundSel.options.length <= 1) {
-        try {
-            const funds = await apiRequest("/petty-cash/funds?limit=500");
-            const arr = Array.isArray(funds) ? funds : (funds?.items || funds?.data || []);
-            arr.forEach(f => {
-                const opt = document.createElement("option");
-                opt.value = f.id;
-                opt.textContent = (f.name || f.id) + (f.currency ? " [" + f.currency + "]" : "");
-                fundSel.appendChild(opt);
-            });
-        } catch (_) { /* ignore */ }
     }
     const cardSel = document.getElementById("ccExtraCardId");
     if (cardSel && cardSel.options.length <= 1) {
@@ -2819,15 +3442,6 @@ async function ensureCCReferenceDataLoaded() {
                 opt.value = c.id;
                 opt.textContent = (c.label || c.name || c.id);
                 cardSel.appendChild(opt);
-            });
-            cardSel?.addEventListener("change", function () {
-                const v = cardSel.value;
-                if (!v || !fundSel) return;
-                try {
-                    apiRequest(`/petty-cash/cards/${encodeURIComponent(v)}`).then(c => {
-                        if (c.fundId) fundSel.value = c.fundId;
-                    }).catch(() => { });
-                } catch (_) { /* ignore */ }
             });
         } catch (_) { /* ignore */ }
     }
@@ -2844,428 +3458,458 @@ async function ensureCCReferenceDataLoaded() {
             });
         } catch (_) { /* ignore */ }
     }
-    const gccSel = document.getElementById("ccExtraGeneralCenterId");
-    if (gccSel && gccSel.options.length <= 1) {
+    const gccSel = document.getElementById("ccCentroGeralId");
+    if (gccSel && !gccSel.dataset.ccWired) {
+        gccSel.dataset.ccWired = "1";
+        gccSel.addEventListener("change", populateCCSubcustos);
+    }
+    if (!costCategories.length) {
         try {
-            const gcs = await apiRequest("/general-cost-centers?limit=500");
-            const arr = Array.isArray(gcs) ? gcs : (gcs?.items || gcs?.data || []);
-            arr.forEach(gc => {
-                const opt = document.createElement("option");
-                opt.value = gc.id;
-                opt.textContent = (gc.code ? gc.code + " — " : "") + (gc.name || gc.description || gc.id);
-                gccSel.appendChild(opt);
-            });
-        } catch (_) { /* ignore */ }
+            costCategories = await loadAllCostCategories("", { includeInactive: true });
+        } catch (_) {
+            costCategories = getCachedCategories();
+        }
     }
     const catSel = document.getElementById("ccExtraCostCategoryId");
-    if (catSel && catSel.options.length <= 1) {
-        try {
-            const cats = await apiRequest("/cost-categories?level=3&limit=1000");
-            const arr = Array.isArray(cats) ? cats : (cats?.items || cats?.data || []);
-            arr.forEach(cat => {
-                const opt = document.createElement("option");
-                opt.value = String(cat.id);
-                opt.textContent = (cat.code ? cat.code + " — " : "") + (cat.name || cat.id) + (cat.domain ? " [" + cat.domain + "]" : "");
-                catSel.appendChild(opt);
-            });
-            catSel?.addEventListener("change", function () {
-                const v = catSel.value;
-                const detailRow = document.getElementById("cc_rowCostDetailDesc");
-                const hiddenSel = document.getElementById("ccExtraCostCategorySelectedId");
-                if (hiddenSel) hiddenSel.value = v;
-                if (!detailRow) return;
-                if (!v) { detailRow.classList.add("hidden"); return; }
-                try {
-                    apiRequest(`/cost-categories/${encodeURIComponent(v)}`).then(cat => {
-                        detailRow.classList.toggle("hidden", !cat.requiresDetailText);
-                    }).catch(() => { detailRow.classList.add("hidden"); });
-                } catch (_) { detailRow.classList.add("hidden"); }
-            });
-        } catch (_) { /* ignore */ }
+    if (catSel && !catSel.dataset.ccWired) {
+        catSel.dataset.ccWired = "1";
+        catSel.addEventListener("change", function () {
+            const v = catSel.value;
+            const hiddenSel = document.getElementById("ccExtraCostCategorySelectedId");
+            if (hiddenSel) hiddenSel.value = v;
+            const centroKey = document.getElementById("ccCentroGeralId")?.value || "";
+            const group = ccTipo2Groups().find((g) => catalogSheetGroupKey(g) === centroKey);
+            const hit = (group?.variants || []).find((x) => sameCostId(x.pickCategoryId, v));
+            ccSyncCostDetail(v, hit?.requiresDetailText);
+        });
     }
-}
-
-function getCCFiscalFormData() {
-    const modeEl = document.querySelector('input[name="ccFiscalMode"]:checked');
-    const mode = modeEl?.value === "gross" ? "gross" : "base";
-    const applyVat = Boolean((document.getElementById("ccFiscalApplyVat"))?.checked);
-    const applyWithholding = Boolean((document.getElementById("ccFiscalApplyWithholding"))?.checked);
-    const applyDiscount = Boolean((document.getElementById("ccFiscalApplyDiscount"))?.checked);
-    const vatEl = document.getElementById("ccFiscalVatPercent");
-    const whEl = document.getElementById("ccFiscalWithholdingPercent");
-    const discEl = document.getElementById("ccFiscalDiscountPercent");
-    return {
-        fiscalInputMode: mode,
-        fiscalApplyVat: applyVat,
-        fiscalApplyWithholding: applyWithholding,
-        fiscalApplyDiscount: applyDiscount,
-        fiscalVatPercent: applyVat && vatEl?.value ? parseFloat(vatEl.value) : null,
-        fiscalWithholdingPercent: applyWithholding && whEl?.value ? parseFloat(whEl.value) : null,
-        fiscalDiscountPercent: applyDiscount && discEl?.value ? parseFloat(discEl.value) : null,
-    };
+    populateCCCentrosGerais();
 }
 
 async function submitNovoPedido(e) {
     e.preventDefault();
-    const typeEl = document.getElementById("ccPedidoType");
-    const type = (typeEl?.value || "GERAL").toUpperCase();
-    const source = document.getElementById("ccExtraSource")?.value || "SOLICITACAO_TRANSFERENCIA";
+    const requestedByName = document.getElementById("ccPedidoSolicitante")?.value?.trim() || "";
+    if (!requestedByName) {
+        showToast("Indique o solicitante", "error");
+        return;
+    }
 
-    const items = Array.from(document.querySelectorAll(".cc-item-row")).map(tr => ({
-        description: tr.querySelector(".cc-item-desc").value?.trim() || "",
-        quantity: parseFloat(tr.querySelector(".cc-item-qty").value || "0"),
-        unit: tr.querySelector(".cc-item-unit").value?.trim() || null,
-        unitPrice: (() => {
-            const v = tr.querySelector(".cc-item-price")?.value;
-            if (v === undefined || v === null || String(v).trim() === "") return null;
-            const n = parseFloat(String(v));
-            return Number.isFinite(n) && n >= 0 ? n : null;
-        })(),
-    })).filter(it => it.description && Number.isFinite(it.quantity) && it.quantity > 0);
+    const description = document.getElementById("ccPedidoDesc")?.value?.trim() || "";
+    if (!description) {
+        showToast("Indique a descrição do pedido", "error");
+        return;
+    }
 
-    if (items.length === 0) {
+    const items = Array.from(document.querySelectorAll(".cc-item-row")).map((tr) => {
+        const name = tr.querySelector(".cc-item-desc")?.value?.trim() || "";
+        const quantity = parseFloat(tr.querySelector(".cc-item-qty")?.value || "0");
+        const unit = tr.querySelector(".cc-item-unit")?.value?.trim() || null;
+        const priceRaw = tr.querySelector(".cc-item-price")?.value;
+        const unitPrice =
+            priceRaw === undefined || priceRaw === null || String(priceRaw).trim() === ""
+                ? null
+                : parseFloat(String(priceRaw));
+        const vat = parseFloat(tr.querySelector(".cc-item-vat")?.value || "");
+        const wh = parseFloat(tr.querySelector(".cc-item-wh")?.value || "");
+        const disc = parseFloat(tr.querySelector(".cc-item-disc")?.value || "");
+        const taxBits = [];
+        if (Number.isFinite(vat) && vat > 0) taxBits.push(`IVA ${vat}%`);
+        if (Number.isFinite(wh) && wh > 0) taxBits.push(`Ret. ${wh}%`);
+        if (Number.isFinite(disc) && disc > 0) taxBits.push(`Desc. ${disc}%`);
+        return {
+            name,
+            quantity,
+            unit,
+            unitPrice: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : null,
+            notes: taxBits.length ? taxBits.join(" · ") : null,
+        };
+    }).filter((it) => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
+
+    if (!items.length) {
         showToast("Adicione pelo menos um item ao pedido", "error");
         return;
     }
 
-    // Validation
-    if (type === "OBRA" && !document.getElementById("ccExtraProjectId")?.value) {
-        showToast("Seleccione a obra (projecto)", "error");
+    if (ccIsFerramentasCentro()) {
+        try {
+            await ensureCCToolsInCatalog(document.querySelectorAll(".cc-item-row"));
+        } catch (err) {
+            showToast("Não foi possível actualizar o catálogo de ferramentas: " + ccApiError(err), "error");
+            return;
+        }
+    }
+
+    const requiresQuote = Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked ?? true);
+    if (!requiresQuote) {
+        const supplierId = document.getElementById("ccExtraSupplierId")?.value || "";
+        const nif = normalizeNif(document.getElementById("ccExtraSupplierNif")?.value);
+        const validated = document.getElementById("ccExtraSupplierNif")?.dataset?.validatedNif || "";
+        const name = document.getElementById("ccExtraSupplierName")?.value?.trim() || "";
+        if (!supplierId && !nif) {
+            showToast("Indique o fornecedor registado ou consulte o NIF para cadastrar um novo.", "error");
+            return;
+        }
+        if (!supplierId && nif && validated !== nif) {
+            showToast("Consulte o NIF na AGT antes de gravar o pedido.", "error");
+            return;
+        }
+        if (!name) {
+            showToast("O nome do fornecedor é obrigatório. Consulte o NIF para o preencher.", "error");
+            return;
+        }
+        const src = document.getElementById("ccExtraSource")?.value || "SOLICITACAO_TRANSFERENCIA";
+        if (src === "SOLICITACAO_TRANSFERENCIA") {
+            const iban = document.getElementById("ccExtraSupplierIban")?.value?.trim() || "";
+            if (!iban) {
+                showToast("Indique o IBAN do fornecedor para a transferência.", "error");
+                return;
+            }
+        }
+        if (src === "CARTAO") {
+            const cardId = document.getElementById("ccExtraCardId")?.value || "";
+            if (!cardId) {
+                showToast("Seleccione o cartão multibanco.", "error");
+                return;
+            }
+        }
+    }
+
+    const centroSel = document.getElementById("ccCentroGeralId");
+    const group = ccTipo2Groups().find((g) => catalogSheetGroupKey(g) === (centroSel?.value || ""));
+    if (!group) {
+        showToast("Seleccione o centro geral", "error");
         return;
     }
-    if (type === "OBRA" && !document.getElementById("ccExtraCostCenterId")?.value) {
-        showToast("Seleccione o centro de custo da obra", "error");
+    const realTipo3 = (group.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
+    const categoryId =
+        document.getElementById("ccExtraCostCategoryId")?.value ||
+        document.getElementById("ccExtraCostCategorySelectedId")?.value ||
+        "";
+    if (realTipo3.length && !categoryId) {
+        showToast("Seleccione a categoria de custo", "error");
         return;
     }
-    if (type === "GERAL") {
-        const hasCat = document.getElementById("ccExtraCostCategoryId")?.value;
-        const hasGcc = document.getElementById("ccExtraGeneralCenterId")?.value;
-        if (!hasCat && !hasGcc) {
-            showToast("Seleccione a categoria de custo (ou centro geral)", "error");
-            return;
-        }
-    }
-    const desiredDate = document.getElementById("ccPedidoData")?.value || null;
-    if (!desiredDate) {
-        showToast("Indique a data desejada", "error");
-        return;
-    }
-    // paymentDueDate: default = desiredDate (7 days is already set as desiredDate above; user may want different).
-    // Here we set paymentDueDate = desiredDate unless the user has a separate explicit field.
-    const paymentDueDate = desiredDate;
 
-    const supplierId =
-        source === "SOLICITACAO_TRANSFERENCIA"
-            ? document.getElementById("ccExtraSupplierId")?.value || null
-            : null;
-    const supplierName =
-        source === "SOLICITACAO_TRANSFERENCIA"
-            ? document.getElementById("ccExtraSupplierName")?.value?.trim() || null
-            : null;
-    const supplierNif =
-        source === "SOLICITACAO_TRANSFERENCIA"
-            ? document.getElementById("ccExtraSupplierNif")?.value?.trim() || null
-            : null;
-    const supplierIban =
-        source === "SOLICITACAO_TRANSFERENCIA"
-            ? document.getElementById("ccExtraSupplierIban")?.value?.trim() || null
-            : null;
-
-    if (source === "SOLICITACAO_TRANSFERENCIA" && !supplierId) {
-        if (!supplierName || !supplierNif || !supplierIban) {
-            showToast("Seleccione o fornecedor ou preencha Nome, NIF e IBAN", "error");
-            return;
-        }
-    }
-
-    const fiscal = getCCFiscalFormData();
-    if (fiscal.fiscalInputMode === "gross") {
-        if (!fiscal.fiscalApplyVat && !fiscal.fiscalApplyWithholding && !fiscal.fiscalApplyDiscount) {
-            showToast("No modo Bruto, seleccione pelo menos um imposto incluído", "error");
-            return;
-        }
-        if (fiscal.fiscalApplyVat && !(Number(fiscal.fiscalVatPercent) > 0)) {
-            showToast("Indique a percentagem de IVA incluída", "error");
-            return;
-        }
-        if (fiscal.fiscalApplyWithholding && !(Number(fiscal.fiscalWithholdingPercent) > 0)) {
-            showToast("Indique a percentagem de retenção incluída", "error");
-            return;
-        }
-        if (fiscal.fiscalApplyDiscount && !(Number(fiscal.fiscalDiscountPercent) > 0)) {
-            showToast("Indique a percentagem de desconto incluída", "error");
-            return;
-        }
-    }
-
-    const amountFromItems = items.reduce((sum, it) => {
-        if (it.unitPrice != null && Number.isFinite(it.unitPrice)) {
-            return sum + (Number(it.quantity) * Number(it.unitPrice));
-        }
-        return sum;
-    }, 0);
-
-    const payload = {
-        type,
-        projectId: type === "OBRA" ? document.getElementById("ccExtraProjectId")?.value || null : null,
-        costCenterId: type === "OBRA" ? document.getElementById("ccExtraCostCenterId")?.value || null : null,
-        generalCostCenterId:
-            type === "GERAL"
-                ? document.getElementById("ccExtraGeneralCenterId")?.value || null
-                : null,
-        costCategoryId: document.getElementById("ccExtraCostCategoryId")?.value
-            ? Number(document.getElementById("ccExtraCostCategoryId").value)
+    const classification = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
+    const extraNotes = [
+        document.getElementById("ccPedidoJust")?.value?.trim() || "",
+        classification === "OBRA"
+            ? `Classificação: Obra${document.getElementById("ccExtraProjectId")?.selectedOptions?.[0]?.textContent ? " · " + document.getElementById("ccExtraProjectId").selectedOptions[0].textContent : ""}`
+            : "Classificação: Geral",
+        `Centro geral: ${centroSel?.selectedOptions?.[0]?.textContent || group.tipo2}`,
+        realTipo3.length
+            ? `Categoria: ${document.getElementById("ccExtraCostCategoryId")?.selectedOptions?.[0]?.textContent || ""}`
             : null,
-        costDetailDescription:
-            document.getElementById("ccExtraCostDetailDesc")?.value?.trim() || null,
-        description:
-            document.getElementById("ccPedidoDesc")?.value?.trim() ||
-            items[0]?.description ||
-            "Sem descrição",
-        notes: document.getElementById("ccPedidoJust")?.value?.trim() || null,
-        quantity: items.length === 1 ? items[0].quantity : items.length,
-        amount: amountFromItems > 0 ? amountFromItems : 0,
-        ...fiscal,
-        currency: "AOA",
-        paymentSource: source,
-        fundId:
-            source === "SOLICITACAO_TRANSFERENCIA" ||
-            source === "TRANSFERENCIA_INTERNA" ||
-            source === "BANCO" ||
-            source === "CAIXA"
-                ? document.getElementById("ccExtraFundId")?.value || null
-                : null,
-        cardId:
-            source === "CARTAO"
-                ? document.getElementById("ccExtraCardId")?.value || null
-                : null,
-        supplierId,
-        supplierName,
-        supplierNif,
-        supplierIban,
-        paymentDueDate,
+        document.getElementById("ccExtraCostDetailDesc")?.value?.trim() || null,
+        !Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked)
+            ? [
+                `Origem pagamento: ${document.getElementById("ccExtraSource")?.selectedOptions?.[0]?.textContent || document.getElementById("ccExtraSource")?.value || ""}`,
+                document.getElementById("ccExtraSource")?.value === "CARTAO"
+                    ? `Cartão: ${document.getElementById("ccExtraCardId")?.selectedOptions?.[0]?.textContent || ""}`
+                    : `IBAN fornecedor: ${document.getElementById("ccExtraSupplierIban")?.value?.trim() || ""}`,
+              ].filter(Boolean).join("\n")
+            : null,
+    ].filter(Boolean).join("\n");
+
+    const user = getSessionUser();
+    const payload = {
+        type: "PEDIDO",
         priority: document.getElementById("ccPedidoPriority")?.value || "NORMAL",
-        requestedBy: document.getElementById("ccPedidoSolicitante")?.value?.trim() || null,
-        desiredDate,
+        requestedByName,
+        requestedById: user?.id || user?.sub || null,
+        description,
+        justification: document.getElementById("ccPedidoJust")?.value?.trim() || null,
+        needDate: document.getElementById("ccPedidoData")?.value || null,
         requiresQuote: Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked ?? true),
+        supplierId: requiresQuote ? null : (document.getElementById("ccExtraSupplierId")?.value || null),
+        supplierName: requiresQuote ? null : (document.getElementById("ccExtraSupplierName")?.value?.trim() || null),
+        currency: "AOA",
+        notes: extraNotes || null,
         items,
     };
 
+    const btn = document.getElementById("btnSubmitNovoPedido");
     try {
-        const btn = document.getElementById("btnSubmitNovoPedido");
-        btn.disabled = true;
-        btn.textContent = "A salvar...";
-
-        const created = await apiRequest("/extra-requests", { method: "POST", body: payload });
-        const proformaFileEl = document.getElementById("ccExtraProformaFile");
-        const proformaFile = proformaFileEl?.files?.[0];
-        if (source === "SOLICITACAO_TRANSFERENCIA" && proformaFile && created?.id) {
-            try {
-                const fd = new FormData();
-                fd.append("proforma", proformaFile);
-                await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
-            } catch (pfErr) {
-                showToast("Pedido criado. Erro ao anexar proforma: " + (pfErr?.message || ""), "error");
-            }
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "A salvar...";
         }
 
-        showToast("Pedido Extra criado com sucesso!", "success");
-        document.getElementById("modalNovoPedido").classList.remove("open");
-        document.getElementById("modalNovoPedido").classList.remove("active");
+        const created = await apiRequest("/purchase-orders", { method: "POST", body: payload });
+        showToast(`Pedido ${created?.number || ""} criado com sucesso`, "success");
+        closeCCModal("modalNovoPedido");
 
-        // Refresh
-        const activeTabBtn = document.querySelector(".cc-sub-tab.active");
-        const activeTab = activeTabBtn?.dataset?.ccTab;
-        if (activeTab === "dashboard") loadCCDashboard();
-        if (activeTab === "pedidos") loadCCPedidos();
+        const activeTab = document.querySelector(".cc-sub-tab.active")?.dataset?.ccTab;
+        loadCCDashboard();
+        loadCCPedidos();
         if (activeTab === "requisicoes") loadCCRequisicoes();
     } catch (err) {
-        showToast(err?.data?.error || err?.data?.message || err.message || "Erro ao criar pedido", "error");
+        showToast(ccApiError(err), "error");
     } finally {
-        const btn = document.getElementById("btnSubmitNovoPedido");
-        btn.disabled = false;
-        btn.textContent = "Salvar Pedido";
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Salvar Pedido";
+        }
     }
 }
 
 // ======================== DRAWER REQUISIÇÃO E WORKFLOW ========================
 
-window.openCCReqDrawer = async function openCCReqDrawer(id) {
-    document.getElementById("drawerRequisicao").classList.add("open");
-    // Show skeleton or loading state
-    document.getElementById("ccReqDrawerTitle").textContent = "A carregar...";
-    
+async function openCCReqDrawer(id) {
+    const drawer = document.getElementById("drawerRequisicao");
+    if (!drawer) return;
+    drawer.classList.add("open");
+    const titleEl = document.getElementById("ccReqDrawerTitle");
+    if (titleEl) titleEl.textContent = "A carregar...";
+
     try {
         const order = await apiRequest(`/purchase-orders/${id}`);
-        // Populate Drawer Header
-        document.getElementById("ccReqDrawerTitle").textContent = order.requisitionNumber || 'Pedido sem número';
-        document.getElementById("ccReqDrawerSub").textContent = order.description;
-        
-        // Populate Base info
-        document.getElementById("ccReqStatusText").textContent = ccFormatStatus(order.status);
-        document.getElementById("ccReqDetailSol").textContent = order.requestedBy;
-        document.getElementById("ccReqDetailPri").textContent = order.priority;
-        document.getElementById("ccReqDetailJust").textContent = order.justification || 'Nenhuma justificação';
+        ccCache.currentOrder = order;
+        if (titleEl) titleEl.textContent = ccOrderNumber(order);
+        const sub = document.getElementById("ccReqDrawerSub");
+        if (sub) sub.textContent = order.description || "";
 
-        // Populate Items
-        document.getElementById("ccReqDetailItems").innerHTML = order.items.map(i => `
-            <li class="flex justify-between items-center py-1 border-b border-slate-50 last:border-0">
-                <span>${i.quantity} ${i.unit} - ${i.description}</span>
-                <span class="font-bold text-slate-900">${formatCurrency(i.totalPrice)}</span>
-            </li>
-        `).join('');
+        const setText = (elId, val) => {
+            const el = document.getElementById(elId);
+            if (el) el.textContent = val;
+        };
+        setText("ccReqStatusText", ccFormatStatus(order.status));
+        setText("ccReqDetailSol", ccRequestedBy(order));
+        setText("ccReqDetailPri", order.priority || "NORMAL");
+        setText("ccReqDetailJust", order.justification || "Nenhuma justificação");
 
-        // Hidden input
-        document.getElementById("ccReqOrderId").value = order.id;
+        const itemsEl = document.getElementById("ccReqDetailItems");
+        if (itemsEl) {
+            const items = order.items || [];
+            itemsEl.innerHTML = items.length
+                ? items.map((i) => `
+                    <li class="flex justify-between items-center py-1 border-b border-slate-50 last:border-0">
+                        <span>${escapeHtml(String(i.quantity))} ${escapeHtml(i.unit || "")} — ${escapeHtml(ccItemName(i))}</span>
+                        <span class="font-bold text-slate-900">${formatCurrency(i.totalWithTax ?? ccItemGross(i))}</span>
+                    </li>`).join("")
+                : `<li class="text-xs text-slate-400">Sem itens</li>`;
+        }
 
-        // Workflow / Form Logic
+        const orderIdEl = document.getElementById("ccReqOrderId");
+        if (orderIdEl) orderIdEl.value = order.id;
+
         const quoteForm = document.getElementById("ccReqQuoteSection");
         const actions = document.getElementById("ccReqFooterActions");
-        
-        // Reset all buttons
-        actions.querySelectorAll("button").forEach(b => b.classList.add("hidden"));
-        quoteForm.classList.add("hidden");
+        actions?.querySelectorAll("button").forEach((b) => b.classList.add("hidden"));
+        quoteForm?.classList.add("hidden");
 
-        const hasEditPerm = true; // Todo: Add permission checks
-        const hasAprovPerm = true;
+        const forn = document.getElementById("ccReqFornecedor");
+        const valor = document.getElementById("ccReqValorCotado");
+        const nifEl = document.getElementById("ccReqSupplierNif");
+        const reqSel = document.getElementById("ccReqSupplierId");
+        try { await ensureCCReferenceDataLoaded(); } catch { /* ignore */ }
+        if (reqSel && reqSel.options.length <= 1) {
+            (ccCache.suppliers || []).forEach((s) => upsertCCReqSupplierOption(s));
+        }
+        if (reqSel && !reqSel.dataset.ccWired) {
+            reqSel.dataset.ccWired = "1";
+            reqSel.addEventListener("change", () => {
+                const v = reqSel.value;
+                const cached = (ccCache.suppliers || []).find((s) => s.id === v);
+                if (!cached) return;
+                if (forn) forn.value = cached.name || "";
+                if (nifEl) {
+                    nifEl.value = cached.nif || "";
+                    nifEl.dataset.validatedNif = normalizeNif(cached.nif);
+                }
+            });
+        }
+        if (reqSel) reqSel.value = order.requisition?.supplierId || order.supplierId || "";
+        if (forn) forn.value = ccSupplierName(order) === "—" ? "" : ccSupplierName(order);
+        if (nifEl) {
+            nifEl.value = order.supplier?.nif || order.requisition?.supplier?.nif || "";
+            if (nifEl.value) nifEl.dataset.validatedNif = normalizeNif(nifEl.value);
+            else delete nifEl.dataset.validatedNif;
+        }
+        setNifLookupStatus(document.getElementById("ccReqSupplierNifStatus"), "");
+        if (valor) valor.value = order.requisition?.quotedValue || order.totalValue || "";
 
-        if (order.status === 'PENDENTE_REQUISICAO') {
-            if (hasEditPerm) {
-                quoteForm.classList.remove("hidden");
-                // Pre-fill if exists
-                document.getElementById("ccReqFornecedor").value = order.supplier?.name || "";
-                document.getElementById("ccReqValorCotado").value = order.totalValue || "";
-                document.getElementById("btnCCSubmitApproval").classList.remove("hidden");
-            }
-        } else if (order.status === 'PENDENTE_APROVACAO') {
-            if (hasAprovPerm) {
-                document.getElementById("btnCCApprove").classList.remove("hidden");
-                document.getElementById("btnCCReject").classList.remove("hidden");
-            }
-        } else if (order.status === 'APROVADO') {
-            if (hasEditPerm) {
-                document.getElementById("btnCCCreatePayment").classList.remove("hidden");
-            }
+        if (order.status === "PENDENTE_REQUISICAO") {
+            quoteForm?.classList.remove("hidden");
+            document.getElementById("btnCCSubmitApproval")?.classList.remove("hidden");
+        } else if (order.status === "PENDENTE_APROVACAO") {
+            document.getElementById("btnCCApprove")?.classList.remove("hidden");
+            document.getElementById("btnCCReject")?.classList.remove("hidden");
+        } else if (order.status === "APROVADO") {
+            document.getElementById("btnCCCreatePayment")?.classList.remove("hidden");
+        } else if (order.status === "NAO_APROVADO") {
+            quoteForm?.classList.remove("hidden");
+            document.getElementById("btnCCSubmitApproval")?.classList.remove("hidden");
         }
 
-        // Timeline (History)
+        const attachWrap = document.getElementById("ccReqAttachments");
+        const atts = order.requisition?.attachments || [];
+        if (attachWrap) {
+            attachWrap.innerHTML = atts.length
+                ? atts.map((a) => `<a class="block text-xs text-indigo-600 underline truncate" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.fileName)}</a>`).join("")
+                : "";
+        }
+
         const timeline = document.getElementById("ccReqTimeline");
-        if (order.history && order.history.length > 0) {
-            timeline.innerHTML = order.history.map((h, i) => {
-                const isLast = i === 0;
-                let c = isLast ? 'active' : '';
-                if (h.toStatus === 'APROVADO') c = 'success';
-                if (h.toStatus === 'NAO_APROVADO' || h.toStatus === 'CANCELADO') c = 'error';
-                return `
-                <div class="cc-timeline-item ${c}">
-                    <div class="cc-timeline-dot"></div>
-                    <div class="cc-timeline-content">
-                        <p class="text-xs font-bold text-slate-900">${ccFormatStatus(h.toStatus)}</p>
-                        <p class="text-[10px] text-slate-500">${formatDateBR(h.createdAt, true)} - ${h.userId || 'Sistema'}</p>
-                        ${h.notes ? `<p class="text-xs text-slate-600 mt-1 bg-slate-50 p-2 rounded">${h.notes}</p>` : ''}
-                    </div>
-                </div>
-                `;
-            }).join('');
-        } else {
-            timeline.innerHTML = `<p class="text-xs text-slate-500">Sem histórico registado.</p>`;
+        if (timeline) {
+            const history = [...(order.history || [])].reverse();
+            timeline.innerHTML = history.length
+                ? history.map((h, i) => {
+                    let c = i === 0 ? "active" : "";
+                    if (h.toStatus === "APROVADO") c = "success";
+                    if (h.toStatus === "NAO_APROVADO" || h.toStatus === "CANCELADO") c = "error";
+                    const label = h.toStatus ? ccFormatStatus(h.toStatus) : (h.action || "Evento");
+                    const who = h.userName || "Sistema";
+                    return `
+                    <div class="cc-timeline-item ${c}">
+                        <div class="cc-timeline-dot"></div>
+                        <div class="cc-timeline-content">
+                            <p class="text-xs font-bold text-slate-900">${escapeHtml(label)}</p>
+                            <p class="text-[10px] text-slate-500">${formatDateBR(h.createdAt)} — ${escapeHtml(who)}</p>
+                            ${h.notes ? `<p class="text-xs text-slate-600 mt-1 bg-slate-50 p-2 rounded">${escapeHtml(h.notes)}</p>` : ""}
+                        </div>
+                    </div>`;
+                }).join("")
+                : `<p class="text-xs text-slate-500">Sem histórico registado.</p>`;
         }
-
     } catch (err) {
-        showToast("Erro ao carregar detalhes", "error");
-        document.getElementById("drawerRequisicao").classList.remove("open");
+        showToast("Erro ao carregar detalhes: " + ccApiError(err), "error");
+        drawer.classList.remove("open");
     }
 }
+window.openCCReqDrawer = openCCReqDrawer;
 
 async function submitCCQuote(e) {
     e.preventDefault();
-    const id = document.getElementById("ccReqOrderId").value;
-    const fornecedor = document.getElementById("ccReqFornecedor").value;
-    const val = parseFloat(document.getElementById("ccReqValorCotado").value);
+    const id = document.getElementById("ccReqOrderId")?.value;
+    if (!id) return;
+    const fornecedor = document.getElementById("ccReqFornecedor")?.value?.trim() || "";
+    const supplierId = document.getElementById("ccReqSupplierId")?.value || null;
+    const nif = normalizeNif(document.getElementById("ccReqSupplierNif")?.value);
+    const validated = document.getElementById("ccReqSupplierNif")?.dataset?.validatedNif || "";
+    if (!supplierId && nif && validated !== nif) {
+        showToast("Consulte o NIF na AGT antes de gravar a cotação.", "error");
+        return;
+    }
+    if (!supplierId && !fornecedor) {
+        showToast("Indique o fornecedor ou consulte o NIF para cadastrar.", "error");
+        return;
+    }
+    const valRaw = document.getElementById("ccReqValorCotado")?.value;
+    const val = valRaw === "" || valRaw == null ? null : parseFloat(valRaw);
     const fileInput = document.getElementById("ccReqFile");
 
     try {
-        let attachmentUrl = null;
-        if (fileInput.files.length > 0) {
-            showToast("A fazer upload do ficheiro...", "info");
-            attachmentUrl = await uploadCCFile(fileInput.files[0]);
-        }
+        await apiRequest(`/purchase-orders/${id}/requisition`, {
+            method: "POST",
+            body: {
+                supplierId: supplierId || null,
+                supplierName: fornecedor || null,
+                quotedValue: Number.isFinite(val) ? val : null,
+            },
+        });
 
-        const payload = {
-            supplierName: fornecedor,
-            totalValue: val
-        };
-
-        await apiRequest(`/purchase-orders/${id}`, { method: "PUT", body: payload });
-        
-        if (attachmentUrl) {
-            // Se tiver api de anexos, salvar:
-            // await apiRequest("POST", `/api/purchase-orders/${id}/attachments`, { fileUrl: attachmentUrl, fileName: fileInput.files[0].name });
+        const file = fileInput?.files?.[0];
+        if (file) {
+            showToast("A anexar proforma...", "info");
+            await apiUpload(`/purchase-orders/${id}/requisition/upload`, { file, fieldName: "file" });
         }
 
         showToast("Cotação guardada", "success");
-        openCCReqDrawer(id); // Reload drawer
-
+        if (fileInput) fileInput.value = "";
+        await openCCReqDrawer(id);
+        loadCCRequisicoes();
+        loadCCDashboard();
     } catch (err) {
-        showToast(err.message, "error");
+        showToast(ccApiError(err), "error");
     }
 }
 
-async function updateCCStatus(status, notes = "") {
-    const id = document.getElementById("ccReqOrderId").value;
+async function submitCCForApproval() {
+    const id = document.getElementById("ccReqOrderId")?.value;
+    if (!id) return;
     try {
-        await apiRequest(`/purchase-orders/${id}/status`, { method: "PUT", body: { status, notes } });
-        showToast("Estado actualizado", "success");
-        openCCReqDrawer(id); // Reload drawer
-        loadCCDashboard(); // refresh behind
+        await apiRequest(`/purchase-orders/${id}/submit-for-approval`, { method: "POST" });
+        showToast("Submetido para aprovação", "success");
+        await openCCReqDrawer(id);
+        loadCCDashboard();
+        loadCCRequisicoes();
+        loadCCPedidos();
     } catch (err) {
-        showToast(err.message, "error");
+        showToast(ccApiError(err), "error");
     }
 }
 
-window.openCCAprovacaoModal = function(decision) {
-    document.getElementById("modalAprovacao").classList.add("active");
-    const id = document.getElementById("ccReqOrderId").value;
+function openCCAprovacaoModal(decision) {
+    const id = document.getElementById("ccReqOrderId")?.value;
+    if (!id) return;
     document.getElementById("ccAprovOrderId").value = id;
     document.getElementById("ccAprovDecision").value = decision;
     document.getElementById("ccAprovObs").value = "";
 
     const title = document.getElementById("modalAprovacaoTitle");
     const btn = document.getElementById("btnConfirmAprov");
-    
     if (decision === "APROVAR") {
-        title.textContent = "Aprovar Requisição";
-        btn.className = "h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700";
-        btn.textContent = "Aprovar";
+        if (title) title.textContent = "Aprovar Requisição";
+        if (btn) {
+            btn.className = "h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700";
+            btn.textContent = "Aprovar";
+        }
     } else {
-        title.textContent = "Rejeitar Requisição";
-        btn.className = "h-10 px-5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700";
-        btn.textContent = "Rejeitar";
+        if (title) title.textContent = "Rejeitar Requisição";
+        if (btn) {
+            btn.className = "h-10 px-5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700";
+            btn.textContent = "Rejeitar";
+        }
+    }
+    openCCModal("modalAprovacao");
+}
+window.openCCAprovacaoModal = openCCAprovacaoModal;
+
+async function submitCCAprovacao() {
+    const id = document.getElementById("ccAprovOrderId")?.value;
+    const uiDecision = document.getElementById("ccAprovDecision")?.value;
+    const observations = document.getElementById("ccAprovObs")?.value?.trim() || null;
+    if (!id) return;
+    const decision = uiDecision === "APROVAR" ? "APROVADO" : "NAO_APROVADO";
+    try {
+        await apiRequest(`/purchase-orders/${id}/approve`, {
+            method: "POST",
+            body: { decision, observations },
+        });
+        closeCCModal("modalAprovacao");
+        showToast(decision === "APROVADO" ? "Requisição aprovada" : "Requisição rejeitada", "success");
+        await openCCReqDrawer(id);
+        loadCCDashboard();
+        loadCCRequisicoes();
+        loadCCPedidos();
+    } catch (err) {
+        showToast(ccApiError(err), "error");
     }
 }
 
-async function submitCCAprovacao() {
-    const decision = document.getElementById("ccAprovDecision").value;
-    const obs = document.getElementById("ccAprovObs").value;
-    const status = decision === "APROVAR" ? "APROVADO" : "NAO_APROVADO";
-    
-    await updateCCStatus(status, obs);
-    document.getElementById("modalAprovacao").classList.remove("active");
-}
-
-window.openCCPlanoModal = function() {
-    document.getElementById("modalPlanoPagamento").classList.add("active");
-    document.getElementById("ccPlanoOrderId").value = document.getElementById("ccReqOrderId").value;
-    // Auto-fill total se houver cotação
-    const currentVal = document.getElementById("ccReqValorCotado").value;
-    document.getElementById("ccPlanoTotal").value = currentVal;
-    
-    document.getElementById("ccParcelasContainer").innerHTML = "";
+function openCCPlanoModal() {
+    const id = document.getElementById("ccReqOrderId")?.value;
+    if (!id) return;
+    document.getElementById("ccPlanoOrderId").value = id;
+    const cached = ccCache.currentOrder;
+    const currentVal =
+        document.getElementById("ccReqValorCotado")?.value ||
+        cached?.requisition?.quotedValue ||
+        cached?.totalValue ||
+        "";
+    const totalEl = document.getElementById("ccPlanoTotal");
+    if (totalEl) totalEl.value = currentVal || "";
+    const container = document.getElementById("ccParcelasContainer");
+    if (container) container.innerHTML = "";
     addCCParcelaRow();
+    openCCModal("modalPlanoPagamento");
 }
+window.openCCPlanoModal = openCCPlanoModal;
 
 function addCCParcelaRow() {
     const container = document.getElementById("ccParcelasContainer");
+    if (!container) return;
     const div = document.createElement("div");
     div.className = "flex items-center gap-2 cc-parcela-row";
     div.innerHTML = `
@@ -3280,29 +3924,43 @@ function addCCParcelaRow() {
 
 async function submitCCPlano(e) {
     e.preventDefault();
-    const id = document.getElementById("ccPlanoOrderId").value;
-    const total = parseFloat(document.getElementById("ccPlanoTotal").value);
-    
-    const parcelas = Array.from(document.querySelectorAll(".cc-parcela-row")).map(row => ({
-        dueDate: row.querySelector(".cc-parc-date").value,
-        amount: parseFloat(row.querySelector(".cc-parc-val").value)
+    const id = document.getElementById("ccPlanoOrderId")?.value;
+    const total = parseFloat(document.getElementById("ccPlanoTotal")?.value);
+    if (!id || !Number.isFinite(total) || total <= 0) {
+        showToast("Indique o valor total do plano", "error");
+        return;
+    }
+
+    const parcelas = Array.from(document.querySelectorAll(".cc-parcela-row")).map((row, idx) => ({
+        number: idx + 1,
+        dueDate: row.querySelector(".cc-parc-date")?.value,
+        amount: parseFloat(row.querySelector(".cc-parc-val")?.value),
     }));
 
-    const sum = parcelas.reduce((a,b) => a + b.amount, 0);
+    if (!parcelas.length || parcelas.some((p) => !p.dueDate || !Number.isFinite(p.amount) || p.amount <= 0)) {
+        showToast("Preencha data e valor de todas as parcelas", "error");
+        return;
+    }
+
+    const sum = parcelas.reduce((a, b) => a + b.amount, 0);
     if (Math.abs(sum - total) > 0.01) {
         showToast(`Soma das parcelas (${sum}) não bate com o total (${total})`, "error");
         return;
     }
 
     try {
-        await apiRequest(`/purchase-payments`, { method: "POST", body: { purchaseOrderId: id, totalAmount: total, installments: parcelas } });
-        await updateCCStatus("EM_PAGAMENTO", "Plano de pagamento gerado");
-        
-        document.getElementById("modalPlanoPagamento").classList.remove("active");
-        showToast("Plano de Pagamento Criado", "success");
-        loadCCPagamentos(); // Refresh tab se estiver aberta
+        await apiRequest(`/purchase-orders/${id}/payment-plan`, {
+            method: "POST",
+            body: { totalValue: total, currency: "AOA", installments: parcelas },
+        });
+        closeCCModal("modalPlanoPagamento");
+        showToast("Plano de pagamento criado", "success");
+        await openCCReqDrawer(id);
+        loadCCPagamentos();
+        loadCCDashboard();
+        loadCCPedidos();
     } catch (err) {
-        showToast(err.message, "error");
+        showToast(ccApiError(err), "error");
     }
 }
 

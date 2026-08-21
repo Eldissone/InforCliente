@@ -428,21 +428,35 @@
             <form id="formSupplier" class="flex flex-col gap-4">
                 <input type="hidden" id="supplierId">
                 <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">NIF *</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="supplierNif" inputmode="numeric" autocomplete="off"
+                            class="flex-1 h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50"
+                            placeholder="Preencha o NIF primeiro e consulte a AGT">
+                        <button type="button" id="btnSupplierConsultarNif"
+                            class="h-11 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">
+                            Consultar NIF
+                        </button>
+                    </div>
+                    <p id="supplierNifStatus" class="hidden mt-1 text-[11px] font-semibold"></p>
+                </div>
+                <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome *</label>
                     <input type="text" id="supplierName" required
-                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                        class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50"
+                        placeholder="Preenchido após consulta do NIF">
                 </div>
                 <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">NIF</label>
-                        <input type="text" id="supplierNif"
-                            class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
-                    </div>
                     <div>
                         <label
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Telefone</label>
                         <input type="text" id="supplierPhone"
                             class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Estado AGT</label>
+                        <input type="text" id="supplierAgtStatus" readonly
+                            class="w-full h-11 px-4 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600">
                     </div>
                 </div>
                 <div>

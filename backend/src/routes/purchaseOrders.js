@@ -66,16 +66,60 @@ const PURCHASE_ORDER_INCLUDE = {
   history: { orderBy: { createdAt: "asc" } },
 };
 
+function parseItemTaxNotes(notes) {
+  const text = String(notes || "");
+  const pick = (re) => {
+    const m = text.match(re);
+    return m ? Number(String(m[1]).replace(",", ".")) : 0;
+  };
+  return {
+    vat: pick(/IVA\s+(\d+(?:[.,]\d+)?)\s*%/i),
+    withholding: pick(/Ret\.?\s+(\d+(?:[.,]\d+)?)\s*%/i),
+    discount: pick(/Desc\.?\s+(\d+(?:[.,]\d+)?)\s*%/i),
+  };
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function itemBaseAmount(item) {
+  const qty = Number(item?.quantity) || 0;
+  const price = Number(item?.unitPrice) || 0;
+  if (qty && price) return qty * price;
+  return Number(item?.totalPrice) || 0;
+}
+
+/** Base − desconto + IVA (retenção não entra no preço com imposto). */
+function itemGrossAmount(item) {
+  const base = itemBaseAmount(item);
+  const { vat, discount } = parseItemTaxNotes(item?.notes);
+  return roundMoney(base - (base * discount) / 100 + (base * vat) / 100);
+}
+
+function orderTotalWithTax(order) {
+  const items = order?.items || [];
+  const fromItems = roundMoney(items.reduce((sum, item) => sum + itemGrossAmount(item), 0));
+  if (fromItems > 0) return fromItems;
+  const quoted = Number(order?.requisition?.quotedValue);
+  if (Number.isFinite(quoted) && quoted > 0) return roundMoney(quoted);
+  const total = Number(order?.totalValue);
+  return Number.isFinite(total) && total > 0 ? roundMoney(total) : 0;
+}
+
 function mapOrder(o) {
+  const items = (o.items || []).map((i) => ({
+    ...i,
+    quantity: String(i.quantity),
+    unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
+    totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
+    totalWithTax: String(itemGrossAmount(i)),
+  }));
   return {
     ...o,
     totalValue: o.totalValue != null ? String(o.totalValue) : null,
-    items: (o.items || []).map((i) => ({
-      ...i,
-      quantity: String(i.quantity),
-      unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
-      totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
-    })),
+    totalWithTax: String(orderTotalWithTax(o)),
+    items,
     requisition: o.requisition
       ? {
           ...o.requisition,
@@ -173,7 +217,7 @@ purchaseRouter.get(
         orderBy: { createdAt: "desc" },
         take: 10,
         include: {
-          items: false,
+          items: { select: { quantity: true, unitPrice: true, totalPrice: true, notes: true } },
           supplier: { select: { id: true, name: true } },
           requisition: { select: { id: true, quotedValue: true } },
           approvals: { orderBy: { decidedAt: "desc" }, take: 1 },
@@ -204,6 +248,7 @@ purchaseRouter.get(
         priority: o.priority,
         type: o.type,
         totalValue: o.totalValue != null ? String(o.totalValue) : null,
+        totalWithTax: String(orderTotalWithTax(o)),
         currency: o.currency,
         createdAt: o.createdAt,
         supplier: o.supplier,
@@ -451,10 +496,14 @@ purchaseRouter.post(
     }
 
     // Actualizar valor total do pedido se cotação fornecida
-    if (data.quotedValue != null) {
+    if (data.quotedValue != null || data.supplierId || data.supplierName) {
       await prisma.purchaseOrder.update({
         where: { id: order.id },
-        data: { totalValue: data.quotedValue, supplierName: data.supplierName || order.supplierName },
+        data: {
+          ...(data.quotedValue != null ? { totalValue: data.quotedValue } : {}),
+          supplierId: data.supplierId || order.supplierId,
+          supplierName: data.supplierName || order.supplierName,
+        },
       });
     }
 

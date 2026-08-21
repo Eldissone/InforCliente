@@ -39,6 +39,117 @@ productRoutes.get(
   })
 );
 
+productRoutes.get(
+  "/tools",
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.product.findMany({
+      where: {
+        active: true,
+        category: { in: ["TOOL", "EQUIPMENT"] },
+      },
+      select: { id: true, name: true, sku: true, category: true, unit: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({ items });
+  })
+);
+
+const PRODUCT_UNITS = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
+const ensureToolLocks = new Map();
+
+function normalizeToolName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function mapProductUnit(raw) {
+  const t = String(raw || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  if (!t) return "UN";
+  if (t.startsWith("kg")) return "KG";
+  if (t.startsWith("cx") || t.includes("caixa")) return "CX";
+  if (t.startsWith("lt") || t === "l" || t.startsWith("litro")) return "L";
+  if (t.startsWith("mt2") || t.includes("m2")) return "MT2";
+  if (t.startsWith("mt3") || t.includes("m3")) return "MT3";
+  if (t.startsWith("par")) return "PAR";
+  if (t === "m" || t.startsWith("metro")) return "M";
+  if (PRODUCT_UNITS.includes(t.toUpperCase())) return t.toUpperCase();
+  return "UN";
+}
+
+async function findExistingTool(name) {
+  const key = normalizeToolName(name);
+  if (!key) return null;
+  const items = await prisma.product.findMany({
+    where: { category: { in: ["TOOL", "EQUIPMENT"] } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return items.find((p) => normalizeToolName(p.name) === key) || null;
+}
+
+function withEnsureToolLock(key, fn) {
+  const prev = ensureToolLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn).finally(() => {
+    if (ensureToolLocks.get(key) === run) ensureToolLocks.delete(key);
+  });
+  ensureToolLocks.set(key, run);
+  return run;
+}
+
+productRoutes.post(
+  "/ensure-tool",
+  asyncHandler(async (req, res) => {
+    const body = z.object({
+      name: z.string().trim().min(2),
+      unit: z.string().optional().nullable(),
+    }).parse(req.body);
+
+    const name = body.name.replace(/\s+/g, " ").trim();
+    const key = normalizeToolName(name);
+    if (!key) {
+      return res.status(400).json({ error: "Indique um nome de ferramenta válido." });
+    }
+
+    const result = await withEnsureToolLock(key, async () => {
+      const existing = await findExistingTool(name);
+      if (existing) {
+        if (!existing.active) {
+          const revived = await prisma.product.update({
+            where: { id: existing.id },
+            data: { active: true },
+          });
+          return { product: revived, created: false, revived: true };
+        }
+        return { product: existing, created: false, revived: false };
+      }
+
+      const created = await prisma.product.create({
+        data: {
+          name,
+          category: "TOOL",
+          unit: mapProductUnit(body.unit),
+          minStock: 0,
+        },
+      });
+      return { product: created, created: true, revived: false };
+    });
+
+    return res.status(result.created ? 201 : 200).json({
+      ...result.product,
+      created: result.created,
+      revived: result.revived,
+    });
+  })
+);
+
 // POST - Criar produto
 productRoutes.post(
   "/",

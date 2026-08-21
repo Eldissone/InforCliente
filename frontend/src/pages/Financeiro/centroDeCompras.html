@@ -468,8 +468,8 @@
                                                 <th class="px-4 py-3">Nº Req.</th>
                                                 <th class="px-4 py-3">Pedido Relacionado</th>
                                                 <th class="px-4 py-3">Solicitante</th>
-                                                <th class="px-4 py-3">Departamento</th>
-                                                <th class="px-4 py-3 text-right">Valor</th>
+                                                <th class="px-4 py-3 text-right">Valor s/ impostos</th>
+                                                <th class="px-4 py-3 text-right">Preço total c/ impostos</th>
                                                 <th class="px-4 py-3">Prioridade</th>
                                                 <th class="px-4 py-3">Estado</th>
                                                 <th class="px-4 py-3 text-center">Acção</th>
@@ -1471,145 +1471,129 @@
 
                 <!-- Blocos Extra Unificados: Classificação de Custo -->
                 <div id="cc_extraClassificationBlock"
-                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
-                    <div>
-                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
-                            Classificação de Custo
-                        </p>
-                        <div id="ccCostCategoryCascade"
-                            class="flex flex-col gap-2">
-                            <div id="cc_rowObraProject" class="hidden">
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Projecto (Obra)</label>
-                                <select id="ccExtraProjectId"
-                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                                    <option value="">Seleccione projecto...</option>
-                                </select>
-                            </div>
-                            <div id="cc_rowObraCenter" class="hidden">
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Centro de Custo (Obra)</label>
-                                <select id="ccExtraCostCenterId"
-                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                                    <option value="">Seleccione centro...</option>
-                                </select>
-                            </div>
-                            <div id="cc_rowGeralCenter" class="hidden">
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Centro Geral</label>
-                                <select id="ccExtraGeneralCenterId"
-                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                                    <option value="">Seleccione centro geral...</option>
-                                </select>
-                            </div>
-                            <div id="cc_rowGeralCategory" class="hidden">
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Categoria de Custo</label>
-                                <select id="ccExtraCostCategoryId"
-                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                                    <option value="">Seleccione categoria...</option>
-                                </select>
-                            </div>
-                            <div id="cc_rowCostDetailDesc" class="hidden">
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Descrição Detalhe</label>
-                                <textarea id="ccExtraCostDetailDesc" rows="2"
-                                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
-                                    placeholder="Detalhe adicional..."></textarea>
-                            </div>
+                    class="mt-2 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-3">
+                        Classificação de Custo
+                    </p>
+                    <div id="ccCostCategoryCascade"
+                        class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div id="cc_rowObraProject" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Projecto (Obra)</label>
+                            <select id="ccExtraProjectId"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                <option value="">Seleccione projecto...</option>
+                            </select>
                         </div>
-                        <input type="hidden" id="ccExtraCostCategorySelectedId">
+                        <div id="cc_rowObraCenter" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Centro de Custo (Obra)</label>
+                            <select id="ccExtraCostCenterId"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                <option value="">Seleccione centro...</option>
+                            </select>
+                        </div>
+                        <div id="cc_rowGeralCenter">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Centro Geral</label>
+                            <select id="ccCentroGeralId"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                <option value="">Seleccione centro geral...</option>
+                            </select>
+                        </div>
+                        <div id="cc_rowGeralCategory">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Categoria de Custo</label>
+                            <select id="ccExtraCostCategoryId"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                <option value="">Seleccione primeiro o centro geral</option>
+                            </select>
+                        </div>
+                        <div id="cc_rowCostDetailDesc" class="hidden md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Descrição Detalhe</label>
+                            <textarea id="ccExtraCostDetailDesc" rows="2"
+                                class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                placeholder="Detalhe adicional..."></textarea>
+                        </div>
+                    </div>
+                    <input type="hidden" id="ccExtraCostCategorySelectedId">
+                </div>
+
+                <div class="mt-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Itens do Pedido *</p>
+                        <button type="button" id="btnCCAddItem"
+                            class="h-8 px-3 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold inline-flex items-center gap-1 hover:bg-emerald-200">
+                            <span class="material-symbols-outlined text-sm">add</span> Adicionar Item
+                        </button>
+                    </div>
+                    <p id="ccItemsToolHint" class="hidden text-[11px] text-emerald-700 font-semibold mb-3">
+                        Ferramentas: escreva para sugerir o catálogo. Se não existir, é criada automaticamente.
+                    </p>
+                    <div class="overflow-visible">
+                        <table class="w-full text-left" id="ccItemsTable">
+                            <thead>
+                                <tr
+                                    class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
+                                    <th class="pb-2 min-w-[10rem]">Descrição</th>
+                                    <th class="pb-2 w-16">Qtd</th>
+                                    <th class="pb-2 w-16">Un.</th>
+                                    <th class="pb-2 w-24">Preço Unit.</th>
+                                    <th class="pb-2 w-20">IVA %</th>
+                                    <th class="pb-2 w-20">Ret. %</th>
+                                    <th class="pb-2 w-20">Desc. %</th>
+                                    <th class="pb-2 w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="ccItemsBody" class="divide-y divide-slate-100">
+                                <!-- Linhas geradas dinamicamente -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <!-- Blocos Extra Unificados: Impostos -->
-                <div id="cc_extraFiscalBlock"
-                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
-                    <div>
-                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
-                            Impostos
-                        </p>
-                        <div class="flex gap-4 mb-3">
-                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input type="radio" name="ccFiscalMode" value="base" checked
-                                    class="text-emerald-600 focus:ring-emerald-500">
-                                Base
-                            </label>
-                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input type="radio" name="ccFiscalMode" value="gross"
-                                    class="text-emerald-600 focus:ring-emerald-500">
-                                Bruto / Completo
-                            </label>
-                        </div>
-                        <div class="grid grid-cols-3 gap-2 mb-2">
-                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input id="ccFiscalApplyVat" type="checkbox"
-                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-                                IVA
-                            </label>
-                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input id="ccFiscalApplyWithholding" type="checkbox"
-                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-                                Retenção
-                            </label>
-                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
-                                <input id="ccFiscalApplyDiscount" type="checkbox"
-                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-                                Desconto
-                            </label>
-                        </div>
-                        <div class="grid grid-cols-3 gap-2">
-                            <div>
-                                <input id="ccFiscalVatPercent" type="number" min="0" max="100" step="0.01" placeholder="IVA %"
-                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
-                            </div>
-                            <div>
-                                <input id="ccFiscalWithholdingPercent" type="number" min="0" max="100" step="0.01" placeholder="Ret. %"
-                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
-                            </div>
-                            <div>
-                                <input id="ccFiscalDiscountPercent" type="number" min="0" max="100" step="0.01" placeholder="Desc. %"
-                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
-                            </div>
-                        </div>
-                    </div>
+                <div class="flex flex-col gap-1">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                        <input id="ccPedidoRequerCotacao" type="checkbox" checked
+                            class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                        Pedido requer cotação (Requisição formal com proforma)
+                    </label>
+                    <p class="text-[11px] text-slate-500 pl-6">
+                        Se marcado, o fornecedor e a origem de pagamento são preenchidos na requisição.
+                        Caso contrário, preencha-os neste pedido.
+                    </p>
                 </div>
 
                 <!-- Blocos Extra Unificados: Fornecedor / Cartão / Proforma -->
                 <div id="cc_extraSupplierBlock"
-                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    class="hidden mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
                     <div class="md:col-span-2">
                         <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
-                            Fornecedor / Cartão / Proforma
+                            Fornecedor / Proforma
                         </p>
-                    </div>
-                    <div id="ccCardRow" class="hidden md:col-span-2">
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Cartão</label>
-                        <select id="ccExtraCardId"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                            <option value="">Seleccione cartão...</option>
-                        </select>
                     </div>
                     <div id="ccSupplierRow" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div class="md:col-span-2">
                             <label class="block text-xs font-semibold text-slate-600 mb-1">Fornecedor Registado</label>
                             <select id="ccExtraSupplierId"
                                 class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                                <option value="">Fornecedor manual...</option>
+                                <option value="">Fornecedor não cadastrado (consultar NIF)...</option>
                             </select>
                         </div>
-                        <div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">NIF</label>
+                            <div class="flex gap-2">
+                                <input id="ccExtraSupplierNif" type="text" inputmode="numeric" autocomplete="off"
+                                    class="flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                    placeholder="Preencha o NIF primeiro...">
+                                <button type="button" id="btnCcConsultarNif"
+                                    class="h-10 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">
+                                    Consultar NIF
+                                </button>
+                            </div>
+                            <p id="ccExtraSupplierNifStatus" class="hidden mt-1 text-[11px] font-semibold"></p>
+                        </div>
+                        <div class="md:col-span-2">
                             <label class="block text-xs font-semibold text-slate-600 mb-1">Nome do Fornecedor</label>
                             <input id="ccExtraSupplierName" type="text"
                                 class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
-                                placeholder="Nome...">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1">NIF</label>
-                            <input id="ccExtraSupplierNif" type="text"
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
-                                placeholder="NIF...">
-                        </div>
-                        <div class="md:col-span-2">
-                            <label class="block text-xs font-semibold text-slate-600 mb-1">IBAN</label>
-                            <input id="ccExtraSupplierIban" type="text"
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
-                                placeholder="IBAN...">
+                                placeholder="Preenchido após consulta do NIF">
                         </div>
                     </div>
                     <div id="ccProformaRow" class="md:col-span-2">
@@ -1622,63 +1606,32 @@
 
                 <!-- Blocos Extra Unificados: Origem do Pagamento -->
                 <div id="cc_extraPaymentBlock"
-                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
-                    <div>
+                    class="hidden mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div class="md:col-span-2">
                         <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
                             Origem do Pagamento
                         </p>
                         <select id="ccExtraSource"
                             class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                            <option value="SOLICITACAO_TRANSFERENCIA">Solicitação de Transferência</option>
-                            <option value="CARTAO">Cartão</option>
-                            <option value="TRANSFERENCIA_INTERNA">Transferência Interna</option>
-                            <option value="CAIXA">Caixa (compatibilidade)</option>
-                            <option value="BANCO">Banco (compatibilidade)</option>
+                            <option value="SOLICITACAO_TRANSFERENCIA">Transferência para o fornecedor</option>
+                            <option value="CARTAO">Cartão multibanco</option>
                         </select>
                     </div>
-                    <div id="ccFundRow" class="hidden">
-                        <label class="block text-xs font-semibold text-slate-600 mb-1">Fundo / Conta (Transferência)</label>
-                        <select id="ccExtraFundId"
+                    <div id="ccIbanRow" class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">IBAN do fornecedor *</label>
+                        <input id="ccExtraSupplierIban" type="text"
+                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                            placeholder="AO06 ...">
+                    </div>
+                    <div id="ccCardRow" class="hidden md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Cartão multibanco *</label>
+                        <select id="ccExtraCardId"
                             class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
-                            <option value="">Seleccione fundo...</option>
+                            <option value="">Seleccione o cartão...</option>
                         </select>
                     </div>
                 </div>
 
-                <div class="mt-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div class="flex justify-between items-center mb-3">
-                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Itens do Pedido *</p>
-                        <button type="button" id="btnCCAddItem"
-                            class="h-8 px-3 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-bold inline-flex items-center gap-1 hover:bg-emerald-200">
-                            <span class="material-symbols-outlined text-sm">add</span> Adicionar Item
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left" id="ccItemsTable">
-                            <thead>
-                                <tr
-                                    class="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
-                                    <th class="pb-2 w-2/5">Descrição</th>
-                                    <th class="pb-2 w-24">Qtd</th>
-                                    <th class="pb-2 w-24">Un.</th>
-                                    <th class="pb-2 w-32">Preço Unit. (Opcional)</th>
-                                    <th class="pb-2 w-12"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="ccItemsBody" class="divide-y divide-slate-100">
-                                <!-- Linhas geradas dinamicamente -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-                        <input id="ccPedidoRequerCotacao" type="checkbox" checked
-                            class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
-                        Pedido requer cotação (Requisição formal com proforma)
-                    </label>
-                </div>
 
                 <div class="flex gap-3 justify-end pt-4 border-t border-slate-100 mt-2">
                     <button type="button" id="btnCancelNovoPedido"
@@ -1747,6 +1700,26 @@
                     </p>
                     <form id="formCCQuote" class="flex flex-col gap-3">
                         <input type="hidden" id="ccReqOrderId">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Fornecedor Registado</label>
+                            <select id="ccReqSupplierId"
+                                class="w-full h-9 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                                <option value="">Fornecedor não cadastrado (consultar NIF)...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">NIF</label>
+                            <div class="flex gap-2">
+                                <input id="ccReqSupplierNif" type="text" inputmode="numeric" autocomplete="off"
+                                    class="flex-1 h-9 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                    placeholder="Preencha o NIF primeiro...">
+                                <button type="button" id="btnCcReqConsultarNif"
+                                    class="h-9 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 whitespace-nowrap">
+                                    Consultar NIF
+                                </button>
+                            </div>
+                            <p id="ccReqSupplierNifStatus" class="hidden mt-1 text-[11px] font-semibold"></p>
+                        </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 mb-1">Fornecedor Seleccionado</label>
                             <input id="ccReqFornecedor" type="text" placeholder="Nome do Fornecedor"

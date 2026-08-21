@@ -1,5 +1,5 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
-import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
+import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
 import { formatCurrency, formatDateBR, toDateKey, dateInputToUtcNoonIso } from "/shared/format.js";
@@ -827,12 +827,17 @@ function renderIconBtn(icon, title, variant = "slate", { attrs = "", disabled = 
 }
 
 (async () => {
-  const ok = await guardPageAccess("financeiro", "view");
-  if (!ok) return;
+  const onComprasPage = /centroDeCompras\.html/i.test(window.location.pathname);
   await initPermissionLayer();
-  wireLogout();
-  wireUsersNav();
-  initMobileMenu();
+  if (onComprasPage) {
+    if (!can("financeiro", "view")) return;
+  } else {
+    const ok = await guardPageAccess("financeiro", "view");
+    if (!ok) return;
+    wireLogout();
+    wireUsersNav();
+    initMobileMenu();
+  }
   initPaymentDetailAside({
     onLiquidated: reloadAll,
     showToast: (msg, type) => toast(msg, { type }),

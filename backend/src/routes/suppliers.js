@@ -4,6 +4,7 @@ const { prisma } = require("../db");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { syncSupplierBankAccounts, supplierInclude } = require("../services/supplierBankAccounts");
+const { consultarNifAgt, normalizeNif } = require("../services/agtNifLookup");
 
 const bankAccountInput = z.object({
   bankName: z.string().min(1),
@@ -18,7 +19,10 @@ const supplierBodySchema = z.object({
   nif: z.string().optional().nullable(),
   contact: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
-  email: z.string().email().optional().nullable(),
+  email: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.string().email().optional().nullable()
+  ),
   address: z.string().optional().nullable(),
   category: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
@@ -26,9 +30,56 @@ const supplierBodySchema = z.object({
   vatPercent: percentSchema,
   withholdingPercent: percentSchema,
   discountPercent: percentSchema,
+  vatRegime: z.string().optional().nullable(),
+  agtStatus: z.string().optional().nullable(),
+  agtType: z.string().optional().nullable(),
   type: z.enum(["MATERIAL", "SERVICO", "TRANSPORTADOR"]).optional(),
   bankAccounts: z.array(bankAccountInput).optional(),
 });
+
+const nifBodySchema = z.object({
+  nif: z.string().min(1),
+  type: z.enum(["MATERIAL", "SERVICO", "TRANSPORTADOR"]).optional(),
+  iban: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  email: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.string().email().optional().nullable()
+  ),
+});
+
+async function findSupplierByNif(nif) {
+  const digits = normalizeNif(nif);
+  if (!digits) return null;
+
+  const exact = await prisma.supplier.findFirst({
+    where: { nif: digits },
+    include: supplierInclude,
+    orderBy: { updatedAt: "desc" },
+  });
+  if (exact) return exact;
+
+  const rows = await prisma.$queryRaw`
+    SELECT id FROM "Supplier"
+    WHERE nif IS NOT NULL
+      AND regexp_replace(nif, '[^0-9]', '', 'g') = ${digits}
+    ORDER BY "updatedAt" DESC
+    LIMIT 1
+  `;
+  const id = rows?.[0]?.id;
+  if (!id) return null;
+  return prisma.supplier.findUnique({
+    where: { id },
+    include: supplierInclude,
+  });
+}
+
+function duplicateNifResponse(existing) {
+  return {
+    error: "Já existe um fornecedor cadastrado com este NIF.",
+    existingSupplier: existing,
+  };
+}
 
 const supplierRoutes = express.Router();
 supplierRoutes.use(authRequired);
@@ -69,10 +120,19 @@ supplierRoutes.post(
   asyncHandler(async (req, res) => {
     const body = supplierBodySchema.parse(req.body);
     const { bankAccounts, ...supplierData } = body;
+    const nif = supplierData.nif ? normalizeNif(supplierData.nif) : null;
+
+    if (nif) {
+      const existing = await findSupplierByNif(nif);
+      if (existing) {
+        return res.status(409).json(duplicateNifResponse(existing));
+      }
+    }
 
     const created = await prisma.supplier.create({
       data: {
         ...supplierData,
+        nif,
         iban: null,
       },
     });
@@ -87,6 +147,117 @@ supplierRoutes.post(
   })
 );
 
+supplierRoutes.post(
+  "/lookup-nif",
+  asyncHandler(async (req, res) => {
+    const { nif: rawNif } = nifBodySchema.pick({ nif: true }).parse(req.body);
+    const nif = normalizeNif(rawNif);
+    const existing = await findSupplierByNif(nif);
+    const agt = await consultarNifAgt(nif);
+    res.json({
+      success: true,
+      found: Boolean(agt.found),
+      alreadyRegistered: Boolean(existing),
+      data: agt,
+      existingSupplier: existing,
+    });
+  })
+);
+
+supplierRoutes.post(
+  "/from-nif",
+  asyncHandler(async (req, res) => {
+    const body = nifBodySchema.parse(req.body);
+    const nif = normalizeNif(body.nif);
+    const existing = await findSupplierByNif(nif);
+    let agt;
+    try {
+      agt = await consultarNifAgt(nif);
+    } catch (err) {
+      if (existing) {
+        return res.json({
+          success: true,
+          created: false,
+          alreadyRegistered: true,
+          found: false,
+          data: { found: false, nif },
+          supplier: existing,
+          existingSupplier: existing,
+        });
+      }
+      throw err;
+    }
+
+    if (existing) {
+      return res.json({
+        success: true,
+        created: false,
+        alreadyRegistered: true,
+        found: Boolean(agt.found),
+        data: agt,
+        supplier: existing,
+        existingSupplier: existing,
+      });
+    }
+
+    if (!agt.found) {
+      return res.status(404).json({
+        error: "NIF não encontrado no Portal da AGT. Confirme o número e tente novamente.",
+        found: false,
+        data: agt,
+        existingSupplier: null,
+      });
+    }
+
+    const created = await prisma.supplier.create({
+      data: {
+        name: agt.nome,
+        nif,
+        type: body.type || "MATERIAL",
+        phone: body.phone || null,
+        email: body.email || null,
+        vatRegime: agt.regimeIva,
+        agtStatus: agt.estado,
+        agtType: agt.tipo,
+        vatPercent: agt.vatPercent,
+        iban: null,
+      },
+    });
+
+    if (body.iban?.trim()) {
+      await syncSupplierBankAccounts(created.id, [
+        { bankName: "Principal", iban: body.iban.trim(), isPrimary: true },
+      ]);
+    }
+
+    const full = await prisma.supplier.findUnique({
+      where: { id: created.id },
+      include: supplierInclude,
+    });
+
+    res.status(201).json({
+      success: true,
+      created: true,
+      data: agt,
+      supplier: full,
+    });
+  })
+);
+
+supplierRoutes.get(
+  "/:id",
+  requirePermission("fornecedores", "view"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const item = await prisma.supplier.findUnique({
+      where: { id },
+      include: supplierInclude,
+    });
+    if (!item) return res.status(404).json({ error: "Fornecedor não encontrado." });
+    res.json(item);
+  })
+);
+
 supplierRoutes.patch(
   "/:id",
   requirePermission("fornecedores", "manage"),
@@ -97,6 +268,13 @@ supplierRoutes.patch(
     }).parse(req.body);
 
     const { bankAccounts, ...supplierData } = body;
+    if (supplierData.nif != null && supplierData.nif !== "") {
+      supplierData.nif = normalizeNif(supplierData.nif);
+      const existing = await findSupplierByNif(supplierData.nif);
+      if (existing && existing.id !== id) {
+        return res.status(409).json(duplicateNifResponse(existing));
+      }
+    }
 
     if (Object.keys(supplierData).length) {
       await prisma.supplier.update({

@@ -132,7 +132,12 @@ app.use((err, _req, res, _next) => {
   }
 
   const status = typeof err?.status === "number" ? err.status : 500;
-  const message = status >= 500 ? "INTERNAL_SERVER_ERROR" : err.message;
+  const message =
+    status === 503
+      ? err.message || "Serviço indisponível"
+      : status >= 500
+        ? "INTERNAL_SERVER_ERROR"
+        : err.message;
 
   if (status >= 500) {
 
