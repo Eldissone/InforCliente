@@ -17,7 +17,7 @@ generalCostCenterRoutes.get(
       where: { active: true },
       orderBy: { name: "asc" },
     });
-    return res.json({ total: items.length, items });
+    return res.json({ total: items.length, items, data: items });
   })
 );
 

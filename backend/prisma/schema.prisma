@@ -1177,6 +1177,12 @@ model ExtraRequest {
   requestedBy    String?
   requestedAt    DateTime           @default(now())
   paymentDueDate DateTime?
+  /// Prioridade do pedido (unificação com Pedido de Compra)
+  priority       PurchasePriority   @default(NORMAL)
+  /// Data desejada para entrega/realização (unificação com Pedido de Compra)
+  desiredDate    DateTime?
+  /// Se requer cotação / requisição formal com proforma
+  requiresQuote  Boolean            @default(true)
   approvedBy     String?
   approvedAt     DateTime?
   rejectedReason String?
@@ -1201,6 +1207,8 @@ model ExtraRequest {
   card              PettyCashCard?     @relation(fields: [cardId], references: [id], onDelete: SetNull)
   supplierRef       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   movement          PettyCashMovement?
+  /// Itens do pedido (unificação com Pedido de Compra, múltiplas linhas)
+  items             ExtraRequestItem[]
 
   @@index([projectId])
   @@index([status])
@@ -1209,6 +1217,25 @@ model ExtraRequest {
   @@index([generalCostCenterId])
   @@index([costCategoryId])
   @@index([supplierId])
+  @@index([priority])
+}
+
+/// Itens de um Pedido Extra (múltiplas linhas, como no Pedido de Compra).
+model ExtraRequestItem {
+  id              String        @id @default(cuid())
+  extraRequestId  String
+  description     String
+  quantity        Decimal       @db.Decimal(16, 4)
+  unit            String?
+  unitPrice       Decimal?      @db.Decimal(16, 4)
+  totalPrice      Decimal?      @db.Decimal(16, 4)
+  notes           String?
+  order           Int           @default(0)
+  createdAt       DateTime      @default(now())
+
+  extraRequest ExtraRequest @relation(fields: [extraRequestId], references: [id], onDelete: Cascade)
+
+  @@index([extraRequestId])
 }
 
 model SystemLog {

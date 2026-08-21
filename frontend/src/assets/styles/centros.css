@@ -838,3 +838,294 @@ body {
     justify-content: flex-end;
     gap: 0.75rem;
 }
+
+
+/* ── Plano de Pagamentos ── */
+.gantt-view-btn {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 0.625rem;
+    color: #64748b;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.gantt-view-btn:hover {
+    color: #0f172a;
+}
+
+.gantt-view-btn.active {
+    background: #0f172a;
+    color: white;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+.gantt-nav-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.625rem;
+    color: #64748b;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.gantt-nav-btn:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.gantt-nav-today {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 0.625rem;
+    color: #64748b;
+    transition: all 0.2s;
+    cursor: pointer;
+    background: transparent;
+}
+
+.gantt-nav-today:hover {
+    color: #0f172a;
+}
+
+.gantt-nav-today.active {
+    background: #0f172a;
+    color: white;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+.fin-table thead th {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    padding: 12px 16px;
+    background: #f8fafc;
+    white-space: nowrap;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fin-table tbody td {
+    padding: 12px 16px;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.fin-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s;
+}
+
+.fin-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.fin-table tbody tr.fin-day-header td {
+    background: #f1f5f9;
+    padding: 8px 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.fin-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.fin-status-badge .material-symbols-outlined {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.fin-icon-btn {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    cursor: pointer;
+    border: none;
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.fin-icon-btn:hover {
+    transform: translateY(-1px);
+}
+
+.fin-icon-btn--emerald:hover {
+    background: #059669;
+    color: #fff;
+}
+
+.fin-icon-btn--blue:hover {
+    background: #2563eb;
+    color: #fff;
+}
+
+.fin-icon-btn--amber:hover {
+    background: #d97706;
+    color: #fff;
+}
+
+.fin-icon-btn--slate:hover {
+    background: #334155;
+    color: #fff;
+}
+
+.fin-icon-btn:disabled,
+.fin-icon-btn.fin-icon-btn--muted {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.fin-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.fin-empty-cell {
+    color: #cbd5e1;
+    font-size: 11px;
+}
+
+#docAsideOverlay {
+    z-index: 120;
+}
+
+#docAside {
+    z-index: 130;
+}
+
+body.doc-viewer-open .overflow-x-auto thead th,
+body.doc-viewer-open .table-responsive thead th {
+    position: static;
+    z-index: auto;
+}
+
+.fin-plan-header {
+    margin-bottom: 1.5rem;
+}
+
+.fin-plan-header__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.fin-plan-header__title {
+    min-width: 0;
+}
+
+.fin-include-paid {
+    flex-shrink: 0;
+}
+
+.fin-plan-toolbar__scroll {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+}
+
+.fin-plan-toolbar__group {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    border-radius: 0.75rem;
+    background: #f1f5f9;
+    padding: 0.25rem;
+    gap: 0.125rem;
+}
+
+@media (min-width: 640px) {
+    .fin-plan-toolbar__scroll {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+}
+
+/* Toolbar de filtros do Plano */
+.fin-toolbar {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.fin-toolbar-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.fin-toolbar-filters>* {
+    flex-shrink: 0;
+}
+
+.fin-proj-filter {
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 11rem;
+    min-width: 8.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fin-toolbar-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    margin-left: auto;
+}
+
+.fin-pending-btn-label--full {
+    display: none;
+}
+
+.fin-pending-btn-label--short {
+    display: inline;
+}
+
+@media (min-width: 640px) {
+    .fin-pending-btn-label--full {
+        display: inline;
+    }
+
+    .fin-pending-btn-label--short {
+        display: none;
+    }
+}

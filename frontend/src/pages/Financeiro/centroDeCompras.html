@@ -18,296 +18,7 @@
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <link href="../../assets/styles/centros.css" rel="stylesheet" />
-    <style>
-        /* ── Plano de Pagamentos ── */
-        .gantt-view-btn {
-            padding: 8px 16px;
-            font-size: 11px;
-            font-weight: 700;
-            border-radius: 0.625rem;
-            color: #64748b;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-
-        .gantt-view-btn:hover {
-            color: #0f172a;
-        }
-
-        .gantt-view-btn.active {
-            background: #0f172a;
-            color: white;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
-        }
-
-        .gantt-nav-btn {
-            width: 2.25rem;
-            height: 2.25rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 0.625rem;
-            color: #64748b;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-
-        .gantt-nav-btn:hover {
-            color: #0f172a;
-            background: rgba(255, 255, 255, 0.6);
-        }
-
-        .gantt-nav-today {
-            padding: 8px 16px;
-            font-size: 11px;
-            font-weight: 700;
-            border-radius: 0.625rem;
-            color: #64748b;
-            transition: all 0.2s;
-            cursor: pointer;
-            background: transparent;
-        }
-
-        .gantt-nav-today:hover {
-            color: #0f172a;
-        }
-
-        .gantt-nav-today.active {
-            background: #0f172a;
-            color: white;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
-        }
-
-        .fin-table thead th {
-            font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #94a3b8;
-            padding: 12px 16px;
-            background: #f8fafc;
-            white-space: nowrap;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .fin-table tbody td {
-            padding: 12px 16px;
-            font-size: 13px;
-            vertical-align: middle;
-        }
-
-        .fin-table tbody tr {
-            border-bottom: 1px solid #f1f5f9;
-            transition: background 0.15s;
-        }
-
-        .fin-table tbody tr:hover {
-            background: #f8fafc;
-        }
-
-        .fin-table tbody tr.fin-day-header td {
-            background: #f1f5f9;
-            padding: 8px 16px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .fin-status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 10px;
-            font-weight: 700;
-            padding: 4px 10px;
-            border-radius: 9999px;
-            white-space: nowrap;
-            line-height: 1.2;
-        }
-
-        .fin-status-badge .material-symbols-outlined {
-            font-size: 14px;
-            line-height: 1;
-        }
-
-        .fin-icon-btn {
-            width: 2rem;
-            height: 2rem;
-            border-radius: 0.5rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.15s;
-            cursor: pointer;
-            border: none;
-            background: #f1f5f9;
-            color: #64748b;
-        }
-
-        .fin-icon-btn:hover {
-            transform: translateY(-1px);
-        }
-
-        .fin-icon-btn--emerald:hover {
-            background: #059669;
-            color: #fff;
-        }
-
-        .fin-icon-btn--blue:hover {
-            background: #2563eb;
-            color: #fff;
-        }
-
-        .fin-icon-btn--amber:hover {
-            background: #d97706;
-            color: #fff;
-        }
-
-        .fin-icon-btn--slate:hover {
-            background: #334155;
-            color: #fff;
-        }
-
-        .fin-icon-btn:disabled,
-        .fin-icon-btn.fin-icon-btn--muted {
-            opacity: 0.35;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        .fin-actions {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .fin-empty-cell {
-            color: #cbd5e1;
-            font-size: 11px;
-        }
-
-        #docAsideOverlay {
-            z-index: 120;
-        }
-
-        #docAside {
-            z-index: 130;
-        }
-
-        body.doc-viewer-open .overflow-x-auto thead th,
-        body.doc-viewer-open .table-responsive thead th {
-            position: static;
-            z-index: auto;
-        }
-
-        .fin-plan-header {
-            margin-bottom: 1.5rem;
-        }
-
-        .fin-plan-header__top {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 0.75rem;
-        }
-
-        .fin-plan-header__title {
-            min-width: 0;
-        }
-
-        .fin-include-paid {
-            flex-shrink: 0;
-        }
-
-        .fin-plan-toolbar__scroll {
-            display: flex;
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 0.5rem;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: thin;
-            padding-bottom: 2px;
-        }
-
-        .fin-plan-toolbar__group {
-            display: flex;
-            flex-shrink: 0;
-            align-items: center;
-            border-radius: 0.75rem;
-            background: #f1f5f9;
-            padding: 0.25rem;
-            gap: 0.125rem;
-        }
-
-        @media (min-width: 640px) {
-            .fin-plan-toolbar__scroll {
-                flex-wrap: wrap;
-                overflow-x: visible;
-                justify-content: space-between;
-                gap: 1rem;
-            }
-        }
-
-        /* Toolbar de filtros do Plano */
-        .fin-toolbar {
-            display: flex;
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-        }
-
-        .fin-toolbar-filters {
-            display: flex;
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 0.5rem;
-            flex: 1 1 auto;
-            min-width: 0;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: thin;
-        }
-
-        .fin-toolbar-filters>* {
-            flex-shrink: 0;
-        }
-
-        .fin-proj-filter {
-            flex: 0 1 auto;
-            width: 100%;
-            max-width: 11rem;
-            min-width: 8.75rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .fin-toolbar-actions {
-            display: flex;
-            flex-shrink: 0;
-            align-items: center;
-            margin-left: auto;
-        }
-
-        .fin-pending-btn-label--full {
-            display: none;
-        }
-
-        .fin-pending-btn-label--short {
-            display: inline;
-        }
-
-        @media (min-width: 640px) {
-            .fin-pending-btn-label--full {
-                display: inline;
-            }
-
-            .fin-pending-btn-label--short {
-                display: none;
-            }
-        }
-    </style>
+  
 </head>
 
 <body class="bg-slate-50 min-h-screen font-inter text-slate-900 flex flex-col">
@@ -503,13 +214,13 @@
                         <button type="button" id="btnCostCatalogNova" data-add-sheet-level="TIPO2"
                             class="cost-catalog-btn-nova hidden h-9 px-4 rounded-lg text-sm font-bold inline-flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-base">add</span>
-                            Novo tipo custo 2
+                            Novo
                         </button>
                         <div id="costCatalogEstruturaNova" class="hidden flex flex-wrap gap-1.5">
                             <button type="button" data-add-sheet-level="TIPO1"
                                 class="h-9 px-3 rounded-lg bg-slate-900 text-white text-xs font-bold inline-flex items-center gap-1 hover:bg-slate-800">
                                 <span class="material-symbols-outlined text-base">add</span>
-                                Tipo 1
+                                Tipo
                             </button>
                             <button type="button" data-add-sheet-level="GRUPO"
                                 class="h-9 px-3 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold inline-flex items-center gap-1 hover:bg-slate-200">
@@ -528,7 +239,7 @@
                         <button type="button" id="btnCostCatalogSelectDelete"
                             class="hidden h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 border border-slate-200 hover:bg-slate-200">
                             <span class="material-symbols-outlined text-base">checklist</span>
-                            Seleccionar para eliminar
+                            Eliminar
                         </button>
                         <button type="button" id="btnCostCatalogCancelSelect"
                             class="hidden h-9 px-3 rounded-lg bg-white text-slate-600 text-xs font-bold inline-flex items-center gap-1.5 border border-slate-200 hover:bg-slate-50">
@@ -871,12 +582,12 @@
                                 </select>
                                 <input id="finSearch" type="search" placeholder="Pagamentos, extras, obras..."
                                     class="h-10 shrink-0 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50 w-40 sm:w-52">
-                                <select id="finDateField"
+                                <!-- <select id="finDateField"
                                     class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
                                     title="Filtrar por data">
                                     <option value="due">Data: vencimento</option>
                                     <option value="confirmed">Data: liquidação</option>
-                                </select>
+                                </select> -->
                                 <input id="finDateFrom" type="date"
                                     class="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#2afc8d]/50"
                                     title="Data inicial do filtro">
@@ -1029,7 +740,7 @@
                 <button type="button" id="btnTipo3DrillAdd"
                     class="hidden h-9 px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:bg-emerald-700">
                     <span class="material-symbols-outlined text-base">add</span>
-                    Adicionar tipo custo 3
+                    novo
                 </button>
             </div>
             <div id="tipo3DrillList" class="cost-catalog-drill-list max-h-[420px] overflow-y-auto space-y-1"></div>
@@ -1715,8 +1426,8 @@
                             *</label>
                         <select id="ccPedidoType" required
                             class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
-                            <option value="PEDIDO">Pedido</option>
-                            <option value="ORCAMENTO">Orçamento</option>
+                            <option value="GERAL">Geral</option>
+                            <option value="OBRA">Obra</option>
                         </select>
                     </div>
                     <div>
@@ -1755,6 +1466,182 @@
                             class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Justificação</label>
                         <input id="ccPedidoJust" type="text" placeholder="Motivo da compra"
                             class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Blocos Extra Unificados: Classificação de Custo -->
+                <div id="cc_extraClassificationBlock"
+                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                            Classificação de Custo
+                        </p>
+                        <div id="ccCostCategoryCascade"
+                            class="flex flex-col gap-2">
+                            <div id="cc_rowObraProject" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Projecto (Obra)</label>
+                                <select id="ccExtraProjectId"
+                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                    <option value="">Seleccione projecto...</option>
+                                </select>
+                            </div>
+                            <div id="cc_rowObraCenter" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Centro de Custo (Obra)</label>
+                                <select id="ccExtraCostCenterId"
+                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                    <option value="">Seleccione centro...</option>
+                                </select>
+                            </div>
+                            <div id="cc_rowGeralCenter" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Centro Geral</label>
+                                <select id="ccExtraGeneralCenterId"
+                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                    <option value="">Seleccione centro geral...</option>
+                                </select>
+                            </div>
+                            <div id="cc_rowGeralCategory" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Categoria de Custo</label>
+                                <select id="ccExtraCostCategoryId"
+                                    class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                    <option value="">Seleccione categoria...</option>
+                                </select>
+                            </div>
+                            <div id="cc_rowCostDetailDesc" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Descrição Detalhe</label>
+                                <textarea id="ccExtraCostDetailDesc" rows="2"
+                                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                    placeholder="Detalhe adicional..."></textarea>
+                            </div>
+                        </div>
+                        <input type="hidden" id="ccExtraCostCategorySelectedId">
+                    </div>
+                </div>
+
+                <!-- Blocos Extra Unificados: Impostos -->
+                <div id="cc_extraFiscalBlock"
+                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                            Impostos
+                        </p>
+                        <div class="flex gap-4 mb-3">
+                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input type="radio" name="ccFiscalMode" value="base" checked
+                                    class="text-emerald-600 focus:ring-emerald-500">
+                                Base
+                            </label>
+                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input type="radio" name="ccFiscalMode" value="gross"
+                                    class="text-emerald-600 focus:ring-emerald-500">
+                                Bruto / Completo
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input id="ccFiscalApplyVat" type="checkbox"
+                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                                IVA
+                            </label>
+                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input id="ccFiscalApplyWithholding" type="checkbox"
+                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                                Retenção
+                            </label>
+                            <label class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input id="ccFiscalApplyDiscount" type="checkbox"
+                                    class="rounded border-slate-300 w-4 h-4 text-emerald-600 focus:ring-emerald-500">
+                                Desconto
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div>
+                                <input id="ccFiscalVatPercent" type="number" min="0" max="100" step="0.01" placeholder="IVA %"
+                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
+                            </div>
+                            <div>
+                                <input id="ccFiscalWithholdingPercent" type="number" min="0" max="100" step="0.01" placeholder="Ret. %"
+                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
+                            </div>
+                            <div>
+                                <input id="ccFiscalDiscountPercent" type="number" min="0" max="100" step="0.01" placeholder="Desc. %"
+                                    class="w-full h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Blocos Extra Unificados: Fornecedor / Cartão / Proforma -->
+                <div id="cc_extraSupplierBlock"
+                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                            Fornecedor / Cartão / Proforma
+                        </p>
+                    </div>
+                    <div id="ccCardRow" class="hidden md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Cartão</label>
+                        <select id="ccExtraCardId"
+                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                            <option value="">Seleccione cartão...</option>
+                        </select>
+                    </div>
+                    <div id="ccSupplierRow" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Fornecedor Registado</label>
+                            <select id="ccExtraSupplierId"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                                <option value="">Fornecedor manual...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Nome do Fornecedor</label>
+                            <input id="ccExtraSupplierName" type="text"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                placeholder="Nome...">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">NIF</label>
+                            <input id="ccExtraSupplierNif" type="text"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                placeholder="NIF...">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">IBAN</label>
+                            <input id="ccExtraSupplierIban" type="text"
+                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold"
+                                placeholder="IBAN...">
+                        </div>
+                    </div>
+                    <div id="ccProformaRow" class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Anexar Proforma / Documento</label>
+                        <input id="ccExtraProformaFile" type="file" accept=".pdf,image/*"
+                            class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        <div id="ccProformaAttachments" class="mt-2 space-y-1"></div>
+                    </div>
+                </div>
+
+                <!-- Blocos Extra Unificados: Origem do Pagamento -->
+                <div id="cc_extraPaymentBlock"
+                    class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                            Origem do Pagamento
+                        </p>
+                        <select id="ccExtraSource"
+                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                            <option value="SOLICITACAO_TRANSFERENCIA">Solicitação de Transferência</option>
+                            <option value="CARTAO">Cartão</option>
+                            <option value="TRANSFERENCIA_INTERNA">Transferência Interna</option>
+                            <option value="CAIXA">Caixa (compatibilidade)</option>
+                            <option value="BANCO">Banco (compatibilidade)</option>
+                        </select>
+                    </div>
+                    <div id="ccFundRow" class="hidden">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Fundo / Conta (Transferência)</label>
+                        <select id="ccExtraFundId"
+                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold">
+                            <option value="">Seleccione fundo...</option>
+                        </select>
                     </div>
                 </div>
 

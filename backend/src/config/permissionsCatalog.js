@@ -26,6 +26,8 @@ const ACTION_LABELS = {
   edit: "Editar",
   delete: "Eliminar",
   approve: "Aprovar",
+  reject: "Rejeitar",
+  cancel: "Cancelar",
   export: "Exportar",
   download_gallery: "Descarregar fotos da galeria",
   manage_permissions: "Gerir permissões",
@@ -272,7 +274,7 @@ const PERMISSION_GROUPS = [
     label: "Pedidos Extras",
     icon: "request_quote",
     pages: [{ id: "pedidosExtras.main", label: "Centro de Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" }],
-    actions: ["view", "create", "approve", "pay", "delete", "full_access"],
+    actions: ["view", "create", "edit", "approve", "pay", "delete", "reject", "cancel", "full_access"],
   },
   {
     id: "fornecedores",
@@ -351,7 +353,7 @@ function defaultAllowedFor(role, module, action) {
       configuracoes: { view: "view", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
-      pedidosExtras: { view: "true", create: "true", approve: "true", pay: "false", delete: "true", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", edit: "own", approve: "true", reject: "true", cancel: "true", pay: "false", delete: "true", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -382,7 +384,7 @@ function defaultAllowedFor(role, module, action) {
       configuracoes: { view: "false", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
-      pedidosExtras: { view: "true", create: "true", approve: "false", pay: "true", delete: "false", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "true", pay: "true", delete: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -416,7 +418,7 @@ function defaultAllowedFor(role, module, action) {
       configuracoes: { view: "false", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
-      pedidosExtras: { view: "true", create: "false", approve: "false", pay: "true", delete: "false", full_access: "false" },
+      pedidosExtras: { view: "true", create: "false", edit: "false", approve: "false", reject: "false", cancel: "false", pay: "true", delete: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -447,7 +449,7 @@ function defaultAllowedFor(role, module, action) {
       configuracoes: { view: "false", edit: "false", full_access: "false" },
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
-      pedidosExtras: { view: "true", create: "true", approve: "false", pay: "false", delete: "false", full_access: "false" },
+      pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "false", pay: "false", delete: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";

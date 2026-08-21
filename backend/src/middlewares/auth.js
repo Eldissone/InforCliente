@@ -63,4 +63,51 @@ function requirePermission(moduleName, action) {
   };
 }
 
-module.exports = { authRequired, requireRole, requirePermission };
+/**
+ * Fonte de verdade preferencial: sistema centralizado de permissões
+ * (checkUserPermission). Como fallback de migração gradual, aceita também
+ * roles antigos (igual de segurança ao existente). Ideal para substituir
+ * requireRole([...]) sem quebrar ambientes com permissões não sincronizadas.
+ */
+function requirePermissionOrLegacyRole(moduleName, action, legacyRoles = []) {
+  const legacyAllowed = Array.isArray(legacyRoles) ? legacyRoles : [legacyRoles];
+  const allowedSet = new Set(legacyAllowed.map((r) => r.toUpperCase()));
+
+  return async (req, res, next) => {
+    const userId = req.user?.sub;
+    const userRoleRaw = req.user?.role || "";
+    const userRole = String(userRoleRaw).toLowerCase();
+
+    if (!userId || !userRole) return res.status(401).json({ error: "UNAUTHORIZED" });
+
+    try {
+      const { allowed } = await checkUserPermission(userId, userRole, moduleName, action, req.method);
+
+      let passed = false;
+      if (allowed === "true") {
+        passed = true;
+      } else if (allowed === "own") {
+        req.permissionScope = "own";
+        passed = true;
+      } else if (allowed === "view" && req.method === "GET") {
+        req.permissionScope = "view";
+        passed = true;
+      }
+
+      if (passed) return next();
+
+      // Fallback legado por role (exatamente igual à antiga verificação)
+      if (allowedSet.size > 0 && allowedSet.has(userRoleRaw.toUpperCase())) {
+        req._permissionPassedByRole = true;
+        return next();
+      }
+
+      return res.status(403).json({ error: "FORBIDDEN" });
+    } catch (error) {
+      console.error("Permission check error:", error);
+      return res.status(500).json({ error: "PERMISSION_CHECK_FAILED" });
+    }
+  };
+}
+
+module.exports = { authRequired, requireRole, requirePermission, requirePermissionOrLegacyRole };

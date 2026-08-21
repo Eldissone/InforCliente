@@ -1225,6 +1225,67 @@ export async function openExtraRequestModal({
   document.getElementById("modalExtra").classList.add("open");
 }
 
+function collectCCItems() {
+  const rows = document.querySelectorAll(".cc-item-row");
+  if (!rows || rows.length === 0) return [];
+  const items = [];
+  rows.forEach((row) => {
+    const desc = row.querySelector(".cc-item-desc")?.value?.trim() || "";
+    const qtyRaw = row.querySelector(".cc-item-qty")?.value;
+    const unit = row.querySelector(".cc-item-unit")?.value?.trim() || "";
+    const priceRaw = row.querySelector(".cc-item-price")?.value;
+    if (!desc) return;
+    const qty = parseFloat(qtyRaw || "0");
+    const price =
+      priceRaw !== undefined && priceRaw !== null && String(priceRaw).trim() !== ""
+        ? parseFloat(String(priceRaw))
+        : null;
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    items.push({
+      description: desc,
+      quantity: Number.isFinite(qty) ? qty : 1,
+      unit: unit || null,
+      unitPrice: Number.isFinite(price) ? price : null,
+    });
+  });
+  return items;
+}
+
+function repopulateCCItems(items) {
+  const tbody = document.getElementById("ccItemsBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!items || items.length === 0) return;
+  items.forEach((it) => {
+    if (typeof window.addCCItemRow === "function") {
+      window.addCCItemRow();
+    } else {
+      const tr = document.createElement("tr");
+      tr.className = "cc-item-row";
+      tr.innerHTML =
+        '<td class="py-2"><input type="text" class="cc-item-desc w-full px-2 py-1 bg-white border border-slate-200 rounded text-sm font-semibold" placeholder="Descrição..."></td>' +
+        '<td class="py-2"><input type="number" step="0.01" min="0" class="cc-item-qty w-full px-2 py-1 bg-white border border-slate-200 rounded text-sm font-semibold" value="1"></td>' +
+        '<td class="py-2"><input type="text" class="cc-item-unit w-full px-2 py-1 bg-white border border-slate-200 rounded text-sm font-semibold" placeholder="un."></td>' +
+        '<td class="py-2"><input type="number" step="0.01" min="0" class="cc-item-price w-full px-2 py-1 bg-white border border-slate-200 rounded text-sm font-semibold" placeholder="0.00"></td>' +
+        '<td class="py-2"><button type="button" class="cc-item-del w-8 h-8 rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 inline-flex items-center justify-center"><span class="material-symbols-outlined text-sm">delete</span></button></td>';
+      tbody.appendChild(tr);
+      tr.querySelector(".cc-item-del")?.addEventListener("click", () => tr.remove());
+    }
+    const rows = tbody.querySelectorAll(".cc-item-row");
+    const lastRow = rows[rows.length - 1];
+    if (lastRow) {
+      const descEl = lastRow.querySelector(".cc-item-desc");
+      const qtyEl = lastRow.querySelector(".cc-item-qty");
+      const unitEl = lastRow.querySelector(".cc-item-unit");
+      const priceEl = lastRow.querySelector(".cc-item-price");
+      if (descEl) descEl.value = it.description || "";
+      if (qtyEl) qtyEl.value = it.quantity != null ? String(it.quantity) : "1";
+      if (unitEl) unitEl.value = it.unit || "";
+      if (priceEl) priceEl.value = it.unitPrice != null ? String(it.unitPrice) : "";
+    }
+  });
+}
+
 export async function openExtraRequestModalForEdit(id) {
   ensureModalMounted();
   let item = modalOptions.getEditItem?.(id);
@@ -1303,6 +1364,32 @@ export async function openExtraRequestModalForEdit(id) {
   if (proformaInput) proformaInput.required = false;
   syncExtraProformaAvailability();
 
+  if (document.getElementById("extraPriority")) {
+    document.getElementById("extraPriority").value = item.priority || "NORMAL";
+  }
+  if (document.getElementById("ccPedidoPriority")) {
+    document.getElementById("ccPedidoPriority").value = item.priority || "NORMAL";
+  }
+  if (document.getElementById("extraRequestedBy")) {
+    document.getElementById("extraRequestedBy").value = item.requestedBy || "";
+  }
+  if (document.getElementById("ccPedidoSolicitante")) {
+    document.getElementById("ccPedidoSolicitante").value = item.requestedBy || "";
+  }
+  if (document.getElementById("extraDesiredDate")) {
+    document.getElementById("extraDesiredDate").value = toDateInputValue(item.desiredDate || item.paymentDueDate);
+  }
+  if (document.getElementById("ccPedidoData")) {
+    document.getElementById("ccPedidoData").value = toDateInputValue(item.desiredDate || item.paymentDueDate);
+  }
+  if (document.getElementById("extraRequiresQuote")) {
+    document.getElementById("extraRequiresQuote").checked = Boolean(item.requiresQuote ?? true);
+  }
+  if (document.getElementById("ccPedidoRequerCotacao")) {
+    document.getElementById("ccPedidoRequerCotacao").checked = Boolean(item.requiresQuote ?? true);
+  }
+  repopulateCCItems(item.items || []);
+
   document.getElementById("modalExtra").classList.add("open");
 }
 
@@ -1312,10 +1399,15 @@ async function submitExtra(e) {
   const type = document.getElementById("extraType").value || "GERAL";
   const source = document.getElementById("extraSource").value;
   const supplierData = getExtraSupplierFormData();
+  const items = collectCCItems();
   const body = {
     type,
     projectId: type === "OBRA" ? document.getElementById("extraProjectId").value || null : null,
     costCenterId: type === "OBRA" ? document.getElementById("extraCostCenterId").value || null : null,
+    generalCostCenterId:
+      type === "GERAL"
+        ? document.getElementById("extraGeneralCostCenterId")?.value || null
+        : null,
     costCategoryId: document.getElementById("extraCostCategoryId").value || null,
     costDetailDescription:
       document.getElementById("extraCostDetailDescription")?.value.trim() || null,
@@ -1336,6 +1428,26 @@ async function submitExtra(e) {
     supplierName: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierName : null,
     supplierNif: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierNif : null,
     supplierIban: source === "SOLICITACAO_TRANSFERENCIA" ? supplierData.supplierIban : null,
+    priority:
+      document.getElementById("extraPriority")?.value ||
+      document.getElementById("ccPedidoPriority")?.value ||
+      undefined,
+    requestedBy:
+      document.getElementById("extraRequestedBy")?.value?.trim() ||
+      document.getElementById("ccPedidoSolicitante")?.value?.trim() ||
+      undefined,
+    desiredDate:
+      document.getElementById("extraDesiredDate")?.value ||
+      document.getElementById("ccPedidoData")?.value ||
+      document.getElementById("extraPaymentDueDate")?.value ||
+      undefined,
+    requiresQuote:
+      document.getElementById("extraRequiresQuote") !== null
+        ? Boolean(document.getElementById("extraRequiresQuote")?.checked)
+        : document.getElementById("ccPedidoRequerCotacao") !== null
+        ? Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked)
+        : true,
+    items: items && items.length ? items : undefined,
   };
 
   if (!editId) {
@@ -1463,6 +1575,16 @@ async function submitExtra(e) {
         supplierName: body.supplierName,
         supplierNif: body.supplierNif,
         supplierIban: body.supplierIban,
+        projectId: body.projectId,
+        costCenterId: body.costCenterId,
+        generalCostCenterId: body.generalCostCenterId,
+        costCategoryId: body.costCategoryId,
+        costDetailDescription: body.costDetailDescription,
+        priority: body.priority,
+        requestedBy: body.requestedBy,
+        desiredDate: body.desiredDate,
+        requiresQuote: body.requiresQuote,
+        items: body.items,
       };
       if (needsItemQuantity()) {
         const qty = Number(body.quantity);

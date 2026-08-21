@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const {
   ROLES,
@@ -96,7 +96,9 @@ permissionsRoutes.get(
 );
 
 permissionsRoutes.use(authRequired);
-permissionsRoutes.use(requireRole(["admin"]));
+// Fonte de verdade preferencial: permissões.manage_permissions.
+// Fallback gradual: role admin (mantém comportamento atual por segurança).
+permissionsRoutes.use(requirePermissionOrLegacyRole("permissoes", "manage_permissions", ["admin"]));
 
 async function ensureDefaults() {
   const count = await prisma.rolePermission.count();

@@ -1715,14 +1715,17 @@ function populateProjectSelects() {
   const opts = allProjects
     .map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`)
     .join("");
-  document.getElementById("extraProjectId").innerHTML =
-    `<option value="">Selecionar obra...</option>${opts}`;
-  document.getElementById("filterProject").innerHTML =
-    `<option value="">Todas as obras</option>${opts}`;
-  document.getElementById("filterCardProject").innerHTML =
-    `<option value="">Todas as obras</option>${opts}`;
-  document.getElementById("cardProjectId").innerHTML =
-    `<option value="">Selecionar obra...</option>${opts}`;
+  const extraProjectEl = document.getElementById("extraProjectId");
+  if (extraProjectEl) extraProjectEl.innerHTML = `<option value="">Selecionar obra...</option>${opts}`;
+  
+  const filterProjectEl = document.getElementById("filterProject");
+  if (filterProjectEl) filterProjectEl.innerHTML = `<option value="">Todas as obras</option>${opts}`;
+  
+  const filterCardProjectEl = document.getElementById("filterCardProject");
+  if (filterCardProjectEl) filterCardProjectEl.innerHTML = `<option value="">Todas as obras</option>${opts}`;
+  
+  const cardProjectEl = document.getElementById("cardProjectId");
+  if (cardProjectEl) cardProjectEl.innerHTML = `<option value="">Selecionar obra...</option>${opts}`;
 }
 
 function escapeAttr(value) {
@@ -1831,6 +1834,7 @@ function renderExtraRow(it) {
 
 async function loadExtras() {
   const tbody = document.getElementById("extrasTableBody");
+  if (!tbody) return;
   tbody.innerHTML = `<tr><td colspan="9" class="text-center py-12"><div class="spinner mx-auto"></div></td></tr>`;
 
   const type = document.getElementById("filterType")?.value || "";
@@ -2041,6 +2045,7 @@ async function loadCards() {
 
 function renderCardsGrid() {
   const grid = document.getElementById("cardsGrid");
+  if (!grid) return;
   const cards = getFilteredManagedCards();
   if (!cards.length) {
     grid.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
@@ -2488,12 +2493,25 @@ function initCentroCompras() {
     });
 
     // Modal Novo Pedido
-    document.getElementById("btnNovoPedido")?.addEventListener("click", () => {
+    document.getElementById("btnNovoPedido")?.addEventListener("click", async () => {
         document.getElementById("modalNovoPedido").classList.add("open");
         document.getElementById("formNovoPedido").reset();
         document.getElementById("ccItemsBody").innerHTML = "";
         addCCItemRow();
+        // Set defaults
+        const today = new Date();
+        const due = new Date(today);
+        due.setDate(due.getDate() + 7);
+        const desiredEl = document.getElementById("ccPedidoData");
+        if (desiredEl && !desiredEl.value) desiredEl.value = due.toISOString().slice(0, 10);
+        // Default payment due date same as desired
+        // Desired visibility
+        applyCCTypeVisibility();
+        applyCCPaymentSourceVisibility();
+        try { await ensureCCReferenceDataLoaded(); } catch (_) { /* ignore */ }
     });
+    document.getElementById("ccPedidoType")?.addEventListener("change", applyCCTypeVisibility);
+    document.getElementById("ccExtraSource")?.addEventListener("change", applyCCPaymentSourceVisibility);
     document.getElementById("btnCloseNovoPedido")?.addEventListener("click", () => {
         document.getElementById("modalNovoPedido").classList.remove("open");
     });
@@ -2557,6 +2575,8 @@ window.loadCCDashboard = async function loadCCDashboard() {
 
         // Populate Table
         const tbody = document.getElementById("ccRecentTable");
+        if (!tbody) return;
+        
         if (!recents || recents.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">Sem processos recentes.</td></tr>`;
             return;
@@ -2595,6 +2615,8 @@ async function loadCCPedidos() {
 
 function renderCCPedidos(data) {
     const tbody = document.getElementById("ccPedidosTableBody");
+    if (!tbody) return;
+    
     if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhum pedido encontrado.</td></tr>`;
         return;
@@ -2636,6 +2658,7 @@ async function loadCCRequisicoes() {
 
 function renderCCRequisicoes(data) {
     const tbody = document.getElementById("ccReqTableBody");
+    if (!tbody) return;
     if (!data.length) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhuma requisição encontrada.</td></tr>`;
         return;
@@ -2662,6 +2685,7 @@ async function loadCCPagamentos() {
         const data = res.items || [];
         ccCache.pagamentos = data;
         const tbody = document.getElementById("ccPagTableBody");
+        if (!tbody) return;
         if (!data.length) {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-slate-400 text-xs">Nenhum pagamento pendente.</td></tr>`;
             return;
@@ -2702,49 +2726,361 @@ function addCCItemRow() {
     `;
     tbody.appendChild(tr);
 }
+window.addCCItemRow = addCCItemRow;
+
+function applyCCTypeVisibility() {
+    const type = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
+    const obraProj = document.getElementById("cc_rowObraProject");
+    const obraCent = document.getElementById("cc_rowObraCenter");
+    const geralCent = document.getElementById("cc_rowGeralCenter");
+    const geralCat = document.getElementById("cc_rowGeralCategory");
+    if (obraProj) obraProj.classList.toggle("hidden", type !== "OBRA");
+    if (obraCent) obraCent.classList.toggle("hidden", type !== "OBRA");
+    if (geralCent) geralCent.classList.toggle("hidden", type !== "GERAL");
+    if (geralCat) geralCat.classList.toggle("hidden", type !== "GERAL");
+}
+
+function applyCCPaymentSourceVisibility() {
+    const src = document.getElementById("ccExtraSource")?.value || "SOLICITACAO_TRANSFERENCIA";
+    const isCard = src === "CARTAO";
+    const isFund = src === "SOLICITACAO_TRANSFERENCIA" || src === "TRANSFERENCIA_INTERNA" || src === "BANCO";
+    const cardRow = document.getElementById("ccCardRow");
+    const fundRow = document.getElementById("ccFundRow");
+    const supplierRow = document.getElementById("ccSupplierRow");
+    const proformaRow = document.getElementById("ccProformaRow");
+    if (cardRow) cardRow.classList.toggle("hidden", !isCard);
+    if (fundRow) fundRow.classList.toggle("hidden", !(isFund || src === "CAIXA"));
+    if (supplierRow) supplierRow.classList.toggle("hidden", src !== "SOLICITACAO_TRANSFERENCIA");
+    if (proformaRow) proformaRow.classList.toggle("hidden", src !== "SOLICITACAO_TRANSFERENCIA");
+}
+
+async function ensureCCReferenceDataLoaded() {
+    const projSel = document.getElementById("ccExtraProjectId");
+    if (projSel && projSel.options.length <= 1) {
+        try {
+            const projs = await apiRequest("/projects?limit=500");
+            const arr = Array.isArray(projs) ? projs : (projs?.items || projs?.data || []);
+            arr.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.id;
+                opt.textContent = (p.code ? p.code + " — " : "") + (p.name || p.id);
+                projSel.appendChild(opt);
+            });
+        } catch (_) { /* ignore */ }
+    }
+    const supSel = document.getElementById("ccExtraSupplierId");
+    if (supSel && supSel.options.length <= 1) {
+        try {
+            const sups = await apiRequest("/suppliers?limit=500");
+            const arr = Array.isArray(sups) ? sups : (sups?.items || sups?.data || []);
+            arr.forEach(s => {
+                const opt = document.createElement("option");
+                opt.value = s.id;
+                opt.textContent = (s.name || s.id) + (s.nif ? " (" + s.nif + ")" : "");
+                supSel.appendChild(opt);
+            });
+        } catch (_) { /* ignore */ }
+        supSel?.addEventListener("change", function () {
+            const v = supSel.value;
+            if (v) {
+                try {
+                    apiRequest(`/suppliers/${encodeURIComponent(v)}`).then(s => {
+                        if (document.getElementById("ccExtraSupplierName"))
+                            document.getElementById("ccExtraSupplierName").value = s.name || "";
+                        if (document.getElementById("ccExtraSupplierNif"))
+                            document.getElementById("ccExtraSupplierNif").value = s.nif || "";
+                        if (document.getElementById("ccExtraSupplierIban"))
+                            document.getElementById("ccExtraSupplierIban").value = s.iban || (s.bankAccounts?.[0]?.iban) || "";
+                    }).catch(() => { });
+                } catch (_) { /* ignore */ }
+            }
+        });
+    }
+    const fundSel = document.getElementById("ccExtraFundId");
+    if (fundSel && fundSel.options.length <= 1) {
+        try {
+            const funds = await apiRequest("/petty-cash/funds?limit=500");
+            const arr = Array.isArray(funds) ? funds : (funds?.items || funds?.data || []);
+            arr.forEach(f => {
+                const opt = document.createElement("option");
+                opt.value = f.id;
+                opt.textContent = (f.name || f.id) + (f.currency ? " [" + f.currency + "]" : "");
+                fundSel.appendChild(opt);
+            });
+        } catch (_) { /* ignore */ }
+    }
+    const cardSel = document.getElementById("ccExtraCardId");
+    if (cardSel && cardSel.options.length <= 1) {
+        try {
+            const cards = await apiRequest("/petty-cash/cards?limit=500");
+            const arr = Array.isArray(cards) ? cards : (cards?.items || cards?.data || []);
+            arr.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.id;
+                opt.textContent = (c.label || c.name || c.id);
+                cardSel.appendChild(opt);
+            });
+            cardSel?.addEventListener("change", function () {
+                const v = cardSel.value;
+                if (!v || !fundSel) return;
+                try {
+                    apiRequest(`/petty-cash/cards/${encodeURIComponent(v)}`).then(c => {
+                        if (c.fundId) fundSel.value = c.fundId;
+                    }).catch(() => { });
+                } catch (_) { /* ignore */ }
+            });
+        } catch (_) { /* ignore */ }
+    }
+    const ccSel = document.getElementById("ccExtraCostCenterId");
+    if (ccSel && ccSel.options.length <= 1) {
+        try {
+            const ccs = await apiRequest("/cost-centers?limit=1000");
+            const arr = Array.isArray(ccs) ? ccs : (ccs?.items || ccs?.data || []);
+            arr.forEach(cc => {
+                const opt = document.createElement("option");
+                opt.value = cc.id;
+                opt.textContent = (cc.code ? cc.code + " — " : "") + (cc.name || cc.id);
+                ccSel.appendChild(opt);
+            });
+        } catch (_) { /* ignore */ }
+    }
+    const gccSel = document.getElementById("ccExtraGeneralCenterId");
+    if (gccSel && gccSel.options.length <= 1) {
+        try {
+            const gcs = await apiRequest("/general-cost-centers?limit=500");
+            const arr = Array.isArray(gcs) ? gcs : (gcs?.items || gcs?.data || []);
+            arr.forEach(gc => {
+                const opt = document.createElement("option");
+                opt.value = gc.id;
+                opt.textContent = (gc.code ? gc.code + " — " : "") + (gc.name || gc.description || gc.id);
+                gccSel.appendChild(opt);
+            });
+        } catch (_) { /* ignore */ }
+    }
+    const catSel = document.getElementById("ccExtraCostCategoryId");
+    if (catSel && catSel.options.length <= 1) {
+        try {
+            const cats = await apiRequest("/cost-categories?level=3&limit=1000");
+            const arr = Array.isArray(cats) ? cats : (cats?.items || cats?.data || []);
+            arr.forEach(cat => {
+                const opt = document.createElement("option");
+                opt.value = String(cat.id);
+                opt.textContent = (cat.code ? cat.code + " — " : "") + (cat.name || cat.id) + (cat.domain ? " [" + cat.domain + "]" : "");
+                catSel.appendChild(opt);
+            });
+            catSel?.addEventListener("change", function () {
+                const v = catSel.value;
+                const detailRow = document.getElementById("cc_rowCostDetailDesc");
+                const hiddenSel = document.getElementById("ccExtraCostCategorySelectedId");
+                if (hiddenSel) hiddenSel.value = v;
+                if (!detailRow) return;
+                if (!v) { detailRow.classList.add("hidden"); return; }
+                try {
+                    apiRequest(`/cost-categories/${encodeURIComponent(v)}`).then(cat => {
+                        detailRow.classList.toggle("hidden", !cat.requiresDetailText);
+                    }).catch(() => { detailRow.classList.add("hidden"); });
+                } catch (_) { detailRow.classList.add("hidden"); }
+            });
+        } catch (_) { /* ignore */ }
+    }
+}
+
+function getCCFiscalFormData() {
+    const modeEl = document.querySelector('input[name="ccFiscalMode"]:checked');
+    const mode = modeEl?.value === "gross" ? "gross" : "base";
+    const applyVat = Boolean((document.getElementById("ccFiscalApplyVat"))?.checked);
+    const applyWithholding = Boolean((document.getElementById("ccFiscalApplyWithholding"))?.checked);
+    const applyDiscount = Boolean((document.getElementById("ccFiscalApplyDiscount"))?.checked);
+    const vatEl = document.getElementById("ccFiscalVatPercent");
+    const whEl = document.getElementById("ccFiscalWithholdingPercent");
+    const discEl = document.getElementById("ccFiscalDiscountPercent");
+    return {
+        fiscalInputMode: mode,
+        fiscalApplyVat: applyVat,
+        fiscalApplyWithholding: applyWithholding,
+        fiscalApplyDiscount: applyDiscount,
+        fiscalVatPercent: applyVat && vatEl?.value ? parseFloat(vatEl.value) : null,
+        fiscalWithholdingPercent: applyWithholding && whEl?.value ? parseFloat(whEl.value) : null,
+        fiscalDiscountPercent: applyDiscount && discEl?.value ? parseFloat(discEl.value) : null,
+    };
+}
 
 async function submitNovoPedido(e) {
     e.preventDefault();
+    const typeEl = document.getElementById("ccPedidoType");
+    const type = (typeEl?.value || "GERAL").toUpperCase();
+    const source = document.getElementById("ccExtraSource")?.value || "SOLICITACAO_TRANSFERENCIA";
+
     const items = Array.from(document.querySelectorAll(".cc-item-row")).map(tr => ({
-        description: tr.querySelector(".cc-item-desc").value,
-        quantity: parseFloat(tr.querySelector(".cc-item-qty").value),
-        unit: tr.querySelector(".cc-item-unit").value,
-        unitPrice: parseFloat(tr.querySelector(".cc-item-price").value) || 0
-    }));
+        description: tr.querySelector(".cc-item-desc").value?.trim() || "",
+        quantity: parseFloat(tr.querySelector(".cc-item-qty").value || "0"),
+        unit: tr.querySelector(".cc-item-unit").value?.trim() || null,
+        unitPrice: (() => {
+            const v = tr.querySelector(".cc-item-price")?.value;
+            if (v === undefined || v === null || String(v).trim() === "") return null;
+            const n = parseFloat(String(v));
+            return Number.isFinite(n) && n >= 0 ? n : null;
+        })(),
+    })).filter(it => it.description && Number.isFinite(it.quantity) && it.quantity > 0);
 
     if (items.length === 0) {
         showToast("Adicione pelo menos um item ao pedido", "error");
         return;
     }
 
+    // Validation
+    if (type === "OBRA" && !document.getElementById("ccExtraProjectId")?.value) {
+        showToast("Seleccione a obra (projecto)", "error");
+        return;
+    }
+    if (type === "OBRA" && !document.getElementById("ccExtraCostCenterId")?.value) {
+        showToast("Seleccione o centro de custo da obra", "error");
+        return;
+    }
+    if (type === "GERAL") {
+        const hasCat = document.getElementById("ccExtraCostCategoryId")?.value;
+        const hasGcc = document.getElementById("ccExtraGeneralCenterId")?.value;
+        if (!hasCat && !hasGcc) {
+            showToast("Seleccione a categoria de custo (ou centro geral)", "error");
+            return;
+        }
+    }
+    const desiredDate = document.getElementById("ccPedidoData")?.value || null;
+    if (!desiredDate) {
+        showToast("Indique a data desejada", "error");
+        return;
+    }
+    // paymentDueDate: default = desiredDate (7 days is already set as desiredDate above; user may want different).
+    // Here we set paymentDueDate = desiredDate unless the user has a separate explicit field.
+    const paymentDueDate = desiredDate;
+
+    const supplierId =
+        source === "SOLICITACAO_TRANSFERENCIA"
+            ? document.getElementById("ccExtraSupplierId")?.value || null
+            : null;
+    const supplierName =
+        source === "SOLICITACAO_TRANSFERENCIA"
+            ? document.getElementById("ccExtraSupplierName")?.value?.trim() || null
+            : null;
+    const supplierNif =
+        source === "SOLICITACAO_TRANSFERENCIA"
+            ? document.getElementById("ccExtraSupplierNif")?.value?.trim() || null
+            : null;
+    const supplierIban =
+        source === "SOLICITACAO_TRANSFERENCIA"
+            ? document.getElementById("ccExtraSupplierIban")?.value?.trim() || null
+            : null;
+
+    if (source === "SOLICITACAO_TRANSFERENCIA" && !supplierId) {
+        if (!supplierName || !supplierNif || !supplierIban) {
+            showToast("Seleccione o fornecedor ou preencha Nome, NIF e IBAN", "error");
+            return;
+        }
+    }
+
+    const fiscal = getCCFiscalFormData();
+    if (fiscal.fiscalInputMode === "gross") {
+        if (!fiscal.fiscalApplyVat && !fiscal.fiscalApplyWithholding && !fiscal.fiscalApplyDiscount) {
+            showToast("No modo Bruto, seleccione pelo menos um imposto incluído", "error");
+            return;
+        }
+        if (fiscal.fiscalApplyVat && !(Number(fiscal.fiscalVatPercent) > 0)) {
+            showToast("Indique a percentagem de IVA incluída", "error");
+            return;
+        }
+        if (fiscal.fiscalApplyWithholding && !(Number(fiscal.fiscalWithholdingPercent) > 0)) {
+            showToast("Indique a percentagem de retenção incluída", "error");
+            return;
+        }
+        if (fiscal.fiscalApplyDiscount && !(Number(fiscal.fiscalDiscountPercent) > 0)) {
+            showToast("Indique a percentagem de desconto incluída", "error");
+            return;
+        }
+    }
+
+    const amountFromItems = items.reduce((sum, it) => {
+        if (it.unitPrice != null && Number.isFinite(it.unitPrice)) {
+            return sum + (Number(it.quantity) * Number(it.unitPrice));
+        }
+        return sum;
+    }, 0);
+
     const payload = {
-        type: document.getElementById("ccPedidoType").value,
-        priority: document.getElementById("ccPedidoPriority").value,
-        requestedBy: document.getElementById("ccPedidoSolicitante").value,
-        desiredDate: document.getElementById("ccPedidoData").value || null,
-        description: document.getElementById("ccPedidoDesc").value,
-        justification: document.getElementById("ccPedidoJust").value,
-        requiresQuote: document.getElementById("ccPedidoRequerCotacao").checked,
-        items
+        type,
+        projectId: type === "OBRA" ? document.getElementById("ccExtraProjectId")?.value || null : null,
+        costCenterId: type === "OBRA" ? document.getElementById("ccExtraCostCenterId")?.value || null : null,
+        generalCostCenterId:
+            type === "GERAL"
+                ? document.getElementById("ccExtraGeneralCenterId")?.value || null
+                : null,
+        costCategoryId: document.getElementById("ccExtraCostCategoryId")?.value
+            ? Number(document.getElementById("ccExtraCostCategoryId").value)
+            : null,
+        costDetailDescription:
+            document.getElementById("ccExtraCostDetailDesc")?.value?.trim() || null,
+        description:
+            document.getElementById("ccPedidoDesc")?.value?.trim() ||
+            items[0]?.description ||
+            "Sem descrição",
+        notes: document.getElementById("ccPedidoJust")?.value?.trim() || null,
+        quantity: items.length === 1 ? items[0].quantity : items.length,
+        amount: amountFromItems > 0 ? amountFromItems : 0,
+        ...fiscal,
+        currency: "AOA",
+        paymentSource: source,
+        fundId:
+            source === "SOLICITACAO_TRANSFERENCIA" ||
+            source === "TRANSFERENCIA_INTERNA" ||
+            source === "BANCO" ||
+            source === "CAIXA"
+                ? document.getElementById("ccExtraFundId")?.value || null
+                : null,
+        cardId:
+            source === "CARTAO"
+                ? document.getElementById("ccExtraCardId")?.value || null
+                : null,
+        supplierId,
+        supplierName,
+        supplierNif,
+        supplierIban,
+        paymentDueDate,
+        priority: document.getElementById("ccPedidoPriority")?.value || "NORMAL",
+        requestedBy: document.getElementById("ccPedidoSolicitante")?.value?.trim() || null,
+        desiredDate,
+        requiresQuote: Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked ?? true),
+        items,
     };
 
     try {
         const btn = document.getElementById("btnSubmitNovoPedido");
         btn.disabled = true;
         btn.textContent = "A salvar...";
-        
-        await apiRequest("POST", "/api/purchase-orders", payload);
-        showToast("Pedido criado com sucesso!", "success");
+
+        const created = await apiRequest("/extra-requests", { method: "POST", body: payload });
+        const proformaFileEl = document.getElementById("ccExtraProformaFile");
+        const proformaFile = proformaFileEl?.files?.[0];
+        if (source === "SOLICITACAO_TRANSFERENCIA" && proformaFile && created?.id) {
+            try {
+                const fd = new FormData();
+                fd.append("proforma", proformaFile);
+                await apiUpload(`/extra-requests/${created.id}/proforma`, fd);
+            } catch (pfErr) {
+                showToast("Pedido criado. Erro ao anexar proforma: " + (pfErr?.message || ""), "error");
+            }
+        }
+
+        showToast("Pedido Extra criado com sucesso!", "success");
+        document.getElementById("modalNovoPedido").classList.remove("open");
         document.getElementById("modalNovoPedido").classList.remove("active");
-        
-        // Refresh 
-        const activeTab = document.querySelector(".cc-sub-tab.active").dataset.ccTab;
+
+        // Refresh
+        const activeTabBtn = document.querySelector(".cc-sub-tab.active");
+        const activeTab = activeTabBtn?.dataset?.ccTab;
         if (activeTab === "dashboard") loadCCDashboard();
         if (activeTab === "pedidos") loadCCPedidos();
         if (activeTab === "requisicoes") loadCCRequisicoes();
-        
     } catch (err) {
-        showToast(err.message, "error");
+        showToast(err?.data?.error || err?.data?.message || err.message || "Erro ao criar pedido", "error");
     } finally {
         const btn = document.getElementById("btnSubmitNovoPedido");
         btn.disabled = false;
@@ -2760,7 +3096,7 @@ window.openCCReqDrawer = async function openCCReqDrawer(id) {
     document.getElementById("ccReqDrawerTitle").textContent = "A carregar...";
     
     try {
-        const order = await apiRequest("GET", `/api/purchase-orders/${id}`);
+        const order = await apiRequest(`/purchase-orders/${id}`);
         // Populate Drawer Header
         document.getElementById("ccReqDrawerTitle").textContent = order.requisitionNumber || 'Pedido sem número';
         document.getElementById("ccReqDrawerSub").textContent = order.description;
@@ -2860,7 +3196,7 @@ async function submitCCQuote(e) {
             totalValue: val
         };
 
-        await apiRequest("PUT", `/api/purchase-orders/${id}`, payload);
+        await apiRequest(`/purchase-orders/${id}`, { method: "PUT", body: payload });
         
         if (attachmentUrl) {
             // Se tiver api de anexos, salvar:
@@ -2878,7 +3214,7 @@ async function submitCCQuote(e) {
 async function updateCCStatus(status, notes = "") {
     const id = document.getElementById("ccReqOrderId").value;
     try {
-        await apiRequest("PUT", `/api/purchase-orders/${id}/status`, { status, notes });
+        await apiRequest(`/purchase-orders/${id}/status`, { method: "PUT", body: { status, notes } });
         showToast("Estado actualizado", "success");
         openCCReqDrawer(id); // Reload drawer
         loadCCDashboard(); // refresh behind
@@ -2959,7 +3295,7 @@ async function submitCCPlano(e) {
     }
 
     try {
-        await apiRequest("POST", `/api/purchase-payments`, { purchaseOrderId: id, totalAmount: total, installments: parcelas });
+        await apiRequest(`/purchase-payments`, { method: "POST", body: { purchaseOrderId: id, totalAmount: total, installments: parcelas } });
         await updateCCStatus("EM_PAGAMENTO", "Plano de pagamento gerado");
         
         document.getElementById("modalPlanoPagamento").classList.remove("active");

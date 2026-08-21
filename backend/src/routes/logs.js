@@ -1,10 +1,12 @@
 const express = require("express");
 const { getLogs } = require("../services/logService");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const router = express.Router();
 
 router.use(authRequired);
-router.use(requireRole(["admin"])); // Apenas admins podem ver os logs
+// Fonte de verdade preferencial: sistema.view (logs são gestão administrativa).
+// Fallback gradual: role admin (mantém comportamento atual por segurança).
+router.use(requirePermissionOrLegacyRole("sistema", "view", ["admin"]));
 
 router.get("/", async (req, res, next) => {
   try {

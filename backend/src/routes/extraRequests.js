@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermissionOrLegacyRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { applyFundMovement, InsufficientBalanceError } = require("../services/pettyCashService");
 const {
@@ -64,6 +64,134 @@ function parseOptionalFiscalPercent(value) {
   return String(n);
 }
 
+/**
+ * Aplica filtro de scope à cláusula where de listagem de ExtraRequest.
+ * - scope "own" : utilizador interno vê só projetos onde está atribuído; cliente
+ *                 vê só obras do seu cliente. Permissões totais continuam sem
+ *                 restrição adicional.
+ * - scope "view": semanticamente igual para listagem, mas as ações de escrita
+ *                bloqueiam separadamente por assertExtraRequestAuthorized.
+ */
+async function applyExtraRequestScopeWhere(where, req) {
+  const scope = req.permissionScope;
+  if (scope !== "own" && scope !== "view") return where;
+
+  const userId = req.user?.sub;
+  const role = (req.user?.role || "").toLowerCase();
+
+  if (role === "cliente") {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { clientId: true, clients: { select: { clientId: true } } },
+    });
+    const clientIds = new Set([user?.clientId, ...(user?.clients?.map((c) => c.clientId) || [])].filter(Boolean));
+    if (clientIds.size === 0) {
+      // Fallback seguro: sem clientIds conhecidos, bloqueia.
+      return { ...where, id: null };
+    }
+    // Adiciona filtro por projetos pertencentes aos clientes do utilizador
+    return {
+      AND: [
+        where,
+        {
+          project: {
+            is: { clientId: { in: [...clientIds] } },
+          },
+        },
+      ],
+    };
+  }
+
+  // scope own/view para utilizadores internos: restringe a projetos onde está
+  // atribuído (assignedUsers). Para pedidos GERAL (sem projectId), mantemos
+  // visível apenas se o utilizador for criador, mas hoje o modelo não tem
+  // userId; nesse caso permitimos o GERAL cair no fallback por role legado.
+  const userProjects = await prisma.project.findMany({
+    where: { assignedUsers: { some: { id: userId } } },
+    select: { id: true },
+  });
+  const projectIds = new Set(userProjects.map((p) => p.id));
+  const projectFilter = projectIds.size
+    ? { OR: [{ projectId: null }, { projectId: { in: [...projectIds] } }] }
+    : { projectId: null };
+
+  return { AND: [where, projectFilter] };
+}
+
+/**
+ * Valida autorização de ações sobre um ExtraRequest quando a permissão é own
+ * ou view. Para "view" bloqueia qualquer escrita; para "own" exige que o
+ * pedido pertença aos projetos atribuídos (internos) ou ao cliente.
+ */
+async function assertExtraRequestAuthorized(item, req, options = {}) {
+  const scope = req.permissionScope;
+  if (scope !== "own" && scope !== "view") return true;
+
+  const writeOperation = options.write !== false;
+  if (scope === "view" && writeOperation) {
+    const err = new Error("VIEW_ONLY_CANNOT_WRITE");
+    err.status = 403;
+    throw err;
+  }
+
+  const userId = req.user?.sub;
+  const role = (req.user?.role || "").toLowerCase();
+
+  if (!item.projectId) {
+    // Pedido GERAL: sem owner implícito no modelo atual, só permite escrita
+    // se scope não for own (cairia em role fallback; se chegou aqui por own,
+    // bloqueamos por segurança, mas permitimos explicitamente para admin e
+    // fallback antigo. Como o requirePermissionOrLegacyRole já deu passagem
+    // por role quando a permissão central é "false", aqui usamos a flag de
+    // _permissionPassedByRole que o helper define mais tarde.
+    if (scope === "own" && req._permissionPassedByRole !== true && writeOperation) {
+      // Sem scope de obra para "own" em GERAL: só permitido se escreve o
+      // próprio requester; hoje o modelo não tem userId, bloqueamos escrita
+      // de users sem atribuição para evitar abusos. Permitimos só se a
+      // permissão realmente passou por role fallback.
+      const allowGenericWrite = req._permissionPassedByRole === true || role === "admin";
+      if (!allowGenericWrite) {
+        const err = new Error("GENERAL_SCOPE_NOT_OWNED");
+        err.status = 403;
+        throw err;
+      }
+    }
+    return true;
+  }
+
+  // Pedido com projeto: valida ownership.
+  if (role === "cliente") {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { clientId: true, clients: { select: { clientId: true } } },
+    });
+    const clientIds = new Set([user?.clientId, ...(user?.clients?.map((c) => c.clientId) || [])].filter(Boolean));
+    const project = await prisma.project.findUnique({
+      where: { id: item.projectId },
+      select: { clientId: true },
+    });
+    if (!project?.clientId || !clientIds.has(project.clientId)) {
+      const err = new Error("PROJECT_NOT_OWNED");
+      err.status = 403;
+      throw err;
+    }
+    return true;
+  }
+
+  const assigned = await prisma.project.count({
+    where: { id: item.projectId, assignedUsers: { some: { id: userId } } },
+  });
+  if (!assigned) {
+    // Fallback amigável: se a permissão foi concedida por role legado, deixa
+    // passar (igual ao comportamento antigo). Senão, bloqueia.
+    if (req._permissionPassedByRole === true || role === "admin") return true;
+    const err = new Error("PROJECT_NOT_ASSIGNED");
+    err.status = 403;
+    throw err;
+  }
+  return true;
+}
+
 function mapExtra(item) {
   return {
     ...item,
@@ -74,6 +202,18 @@ function mapExtra(item) {
       item.fiscalWithholdingPercent != null ? String(item.fiscalWithholdingPercent) : null,
     fiscalDiscountPercent:
       item.fiscalDiscountPercent != null ? String(item.fiscalDiscountPercent) : null,
+    desiredDate:
+      item.desiredDate != null
+        ? (typeof item.desiredDate.toISOString === "function"
+            ? item.desiredDate.toISOString().slice(0, 10)
+            : String(item.desiredDate).slice(0, 10))
+        : null,
+    items: (item.items || []).map((i) => ({
+      ...i,
+      quantity: String(i.quantity),
+      unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
+      totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
+    })),
   };
 }
 
@@ -137,10 +277,64 @@ function parsePaymentDueDate(value) {
   return d;
 }
 
+function parseDesiredDate(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? new Date(`${raw}T12:00:00`)
+    : new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 const paymentDueDateSchema = z
   .string()
   .min(1, "PAYMENT_DUE_DATE_REQUIRED")
   .refine((value) => Boolean(parsePaymentDueDate(value)), "INVALID_PAYMENT_DUE_DATE");
+
+const extraItemSchema = z.object({
+  description: z.string().min(1, "DESCRIPTION_REQUIRED"),
+  quantity: z.union([z.number(), z.string()]),
+  unit: z.string().optional().nullable(),
+  unitPrice: z.union([z.number(), z.string()]).optional().nullable(),
+});
+
+function normalizeItemsInput(items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return items.map((raw, idx) => {
+    const qty = Number(raw.quantity);
+    const price = raw.unitPrice != null && raw.unitPrice !== "" ? Number(raw.unitPrice) : null;
+    const qtySafe = Number.isFinite(qty) && qty > 0 ? qty : 1;
+    const priceSafe = Number.isFinite(price) && price >= 0 ? price : null;
+    return {
+      description: String(raw.description || "").trim(),
+      quantity: String(qtySafe),
+      unit: raw.unit ? String(raw.unit).trim() || null : null,
+      unitPrice: priceSafe != null ? String(priceSafe) : null,
+      totalPrice:
+        priceSafe != null && Number.isFinite(priceSafe)
+          ? String(qtySafe * priceSafe)
+          : null,
+      order: idx,
+    };
+  });
+}
+
+function computeAmountFromItems(items, fallback) {
+  const normalized = normalizeItemsInput(items);
+  if (!normalized) return fallback != null ? String(fallback) : "0";
+  let total = 0;
+  let hasAnyPrice = false;
+  for (const i of normalized) {
+    if (i.unitPrice != null) {
+      hasAnyPrice = true;
+      total += Number(i.quantity) * Number(i.unitPrice);
+    }
+  }
+  if (!hasAnyPrice) return fallback != null ? String(fallback) : "0";
+  return String(total);
+}
 
 const EXTRA_INCLUDE = {
   project: { select: { id: true, name: true, code: true } },
@@ -158,6 +352,7 @@ const EXTRA_INCLUDE = {
       bankAccounts: { select: { iban: true, isPrimary: true, bankName: true }, orderBy: { isPrimary: "desc" } },
     },
   },
+  items: { orderBy: { order: "asc" } },
 };
 
 const supplierFieldsSchema = {
@@ -265,7 +460,7 @@ extraRequestRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
 
-    const where = {
+    const baseWhere = {
       ...(type ? { type } : {}),
       ...(projectId ? { projectId } : {}),
       ...(generalCostCenterId ? { generalCostCenterId } : {}),
@@ -273,6 +468,7 @@ extraRequestRoutes.get(
       ...(status ? { status } : {}),
       ...(!projectId ? { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] } : {}),
     };
+    const where = await applyExtraRequestScopeWhere(baseWhere, req);
 
     const [total, items] = await Promise.all([
       prisma.extraRequest.count({ where }),
@@ -295,11 +491,13 @@ extraRequestRoutes.get(
   requirePermission("financeiro", "view"),
   asyncHandler(async (req, res) => {
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    const baseWhere = {
+      status: "APROVADO",
+      ...(projectId ? { projectId } : { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] }),
+    };
+    const where = await applyExtraRequestScopeWhere(baseWhere, req);
     const items = await prisma.extraRequest.findMany({
-      where: {
-        status: "APROVADO",
-        ...(projectId ? { projectId } : { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] }),
-      },
+      where,
       orderBy: [{ approvedAt: "desc" }, { createdAt: "desc" }],
       include: EXTRA_INCLUDE,
     });
@@ -497,7 +695,7 @@ extraRequestRoutes.get(
 // POST /extra-requests — Criar Pedido Extra (Obra ou Geral)
 extraRequestRoutes.post(
   "/",
-  requireRole(["admin", "operador", "supervisor", "tecnico"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "create", ["admin", "operador", "supervisor", "tecnico"]),
   asyncHandler(async (req, res) => {
     const body = z
       .object({
@@ -509,7 +707,7 @@ extraRequestRoutes.post(
         costDetailDescription: z.string().max(500).optional().nullable(),
         description: z.string().min(2),
         quantity: z.union([z.number(), z.string()]).optional().nullable(),
-        amount: z.union([z.number(), z.string()]),
+        amount: z.union([z.number(), z.string()]).optional(),
         fiscalInputMode: z.enum(["base", "gross"]).optional().default("base"),
         fiscalApplyVat: z.boolean().optional().default(false),
         fiscalApplyWithholding: z.boolean().optional().default(false),
@@ -524,6 +722,11 @@ extraRequestRoutes.post(
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
         paymentDueDate: paymentDueDateSchema,
+        priority: z.enum(["NORMAL", "ALTA", "URGENTE"]).optional().default("NORMAL"),
+        requestedBy: z.string().optional().nullable(),
+        desiredDate: z.string().optional().nullable(),
+        requiresQuote: z.boolean().optional().default(true),
+        items: z.array(extraItemSchema).optional().nullable(),
         ...supplierFieldsSchema,
       })
       .parse(req.body);
@@ -607,31 +810,46 @@ extraRequestRoutes.post(
     }
 
     const u = req.user || {};
+    const normalizedItems = normalizeItemsInput(body.items);
+    const finalAmount = computeAmountFromItems(body.items, body.amount);
+    const finalRequestedBy =
+      trimOrNull(body.requestedBy) || u.name || u.email || u.sub || null;
+    const finalDesiredDate = parseDesiredDate(body.desiredDate);
+
+    const createData = {
+      type: body.type,
+      projectId: body.type === "OBRA" ? body.projectId || null : null,
+      costCenterId: body.type === "OBRA" ? body.costCenterId || null : null,
+      generalCostCenterId:
+        body.type === "GERAL" && !body.costCategoryId ? body.generalCostCenterId || null : null,
+      costCategoryId: body.costCategoryId || null,
+      costDetailDescription: trimOrNull(body.costDetailDescription),
+      description: body.description,
+      quantity: quantityParsed,
+      amount: finalAmount,
+      ...fiscalFields,
+      currency: body.currency || "AOA",
+      paymentSource: body.paymentSource,
+      fundId: body.fundId || null,
+      cardId: body.cardId || null,
+      status: "PENDENTE",
+      requestedBy: finalRequestedBy,
+      paymentDueDate: parsePaymentDueDate(body.paymentDueDate),
+      priority: body.priority || "NORMAL",
+      desiredDate: finalDesiredDate,
+      requiresQuote: Boolean(body.requiresQuote),
+      notes: body.notes || null,
+      supplierId: supplierData.supplierId,
+      supplierName: supplierData.supplierName,
+      supplierNif: supplierData.supplierNif,
+      supplierIban: supplierData.supplierIban,
+    };
+    if (normalizedItems) {
+      createData.items = { create: normalizedItems };
+    }
+
     const created = await prisma.extraRequest.create({
-      data: {
-        type: body.type,
-        projectId: body.type === "OBRA" ? body.projectId || null : null,
-        costCenterId: body.type === "OBRA" ? body.costCenterId || null : null,
-        generalCostCenterId:
-          body.type === "GERAL" && !body.costCategoryId ? body.generalCostCenterId || null : null,
-        costCategoryId: body.costCategoryId || null,
-        costDetailDescription: trimOrNull(body.costDetailDescription),
-        description: body.description,
-        quantity: quantityParsed,
-        amount: String(body.amount),
-        ...fiscalFields,
-        currency: body.currency || "AOA",
-        paymentSource: body.paymentSource,
-        fundId: body.fundId || null,
-        cardId: body.cardId || null,
-        notes: body.notes || null,
-        paymentDueDate: parsePaymentDueDate(body.paymentDueDate),
-        requestedBy: u.name || u.email || u.sub || null,
-        supplierId: supplierData.supplierId,
-        supplierName: supplierData.supplierName,
-        supplierNif: supplierData.supplierNif,
-        supplierIban: supplierData.supplierIban,
-      },
+      data: createData,
       include: EXTRA_INCLUDE,
     });
 
@@ -648,7 +866,7 @@ extraRequestRoutes.post(
 // PATCH /extra-requests/:id — Editar pedido não liquidado (PENDENTE ou A liquidar)
 extraRequestRoutes.patch(
   "/:id",
-  requireRole(["admin", "operador", "supervisor", "tecnico"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "edit", ["admin", "operador", "supervisor", "tecnico"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
@@ -674,6 +892,11 @@ extraRequestRoutes.patch(
         cardId: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
         paymentDueDate: paymentDueDateSchema.optional(),
+        priority: z.enum(["NORMAL", "ALTA", "URGENTE"]).optional(),
+        requestedBy: z.string().optional().nullable(),
+        desiredDate: z.string().optional().nullable(),
+        requiresQuote: z.boolean().optional(),
+        items: z.array(extraItemSchema).optional().nullable(),
         ...supplierFieldsSchema,
       })
       .parse(req.body);
@@ -768,22 +991,59 @@ extraRequestRoutes.patch(
       fiscalPatch = fiscalFields;
     }
 
-    const updated = await prisma.extraRequest.update({
-      where: { id },
-      data: {
-        ...(body.description !== undefined ? { description: body.description } : {}),
-        ...quantityPatch,
-        ...(body.amount !== undefined ? { amount: String(body.amount) } : {}),
-        ...fiscalPatch,
-        ...(body.paymentSource !== undefined ? { paymentSource: body.paymentSource } : {}),
-        ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),
-        ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),
-        ...(body.notes !== undefined ? { notes: body.notes } : {}),
-        ...(paymentDueDate !== undefined ? { paymentDueDate } : {}),
-        ...supplierPatch,
-      },
-      include: EXTRA_INCLUDE,
-    });
+    const desiredDatePatch =
+      body.desiredDate !== undefined
+        ? body.desiredDate === null || body.desiredDate === ""
+          ? { desiredDate: null }
+          : { desiredDate: parseDesiredDate(body.desiredDate) }
+        : undefined;
+
+    const amountFallback =
+      body.amount !== undefined ? String(body.amount) : String(existing.amount);
+    const finalAmount =
+      body.items !== undefined
+        ? computeAmountFromItems(body.items, amountFallback)
+        : amountFallback;
+
+    const baseData = {
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...quantityPatch,
+      amount: finalAmount,
+      ...fiscalPatch,
+      ...(body.paymentSource !== undefined ? { paymentSource: body.paymentSource } : {}),
+      ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),
+      ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),
+      ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      ...(paymentDueDate !== undefined ? { paymentDueDate } : {}),
+      ...(body.priority !== undefined ? { priority: body.priority } : {}),
+      ...(body.requestedBy !== undefined ? { requestedBy: trimOrNull(body.requestedBy) } : {}),
+      ...(desiredDatePatch || {}),
+      ...(body.requiresQuote !== undefined ? { requiresQuote: Boolean(body.requiresQuote) } : {}),
+      ...supplierPatch,
+    };
+
+    let updated;
+    if (body.items !== undefined) {
+      const normalizedItems = normalizeItemsInput(body.items);
+      updated = await prisma.$transaction(async (tx) => {
+        await tx.extraRequestItem.deleteMany({ where: { extraRequestId: id } });
+        const patchPayload = { ...baseData };
+        if (normalizedItems) {
+          patchPayload.items = { create: normalizedItems };
+        }
+        return tx.extraRequest.update({
+          where: { id },
+          data: patchPayload,
+          include: EXTRA_INCLUDE,
+        });
+      });
+    } else {
+      updated = await prisma.extraRequest.update({
+        where: { id },
+        data: baseData,
+        include: EXTRA_INCLUDE,
+      });
+    }
 
     await logExtraAction(req, { action: "extra_request_update", extraRequestId: id, details: body });
     return res.json(mapExtra(updated));
@@ -793,7 +1053,7 @@ extraRequestRoutes.patch(
 // PATCH /extra-requests/:id/approve — Aprovar pedido
 extraRequestRoutes.patch(
   "/:id/approve",
-  requireRole(["admin", "supervisor"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "approve", ["admin", "supervisor"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
@@ -836,7 +1096,7 @@ extraRequestRoutes.patch(
 // PATCH /extra-requests/:id/reject — Rejeitar pedido
 extraRequestRoutes.patch(
   "/:id/reject",
-  requireRole(["admin", "supervisor"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "reject", ["admin", "supervisor"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const body = z.object({ reason: z.string().optional().nullable() }).parse(req.body || {});
@@ -860,7 +1120,7 @@ extraRequestRoutes.patch(
 // PATCH /extra-requests/:id/cancel — Cancelar pedido (antes de pago)
 extraRequestRoutes.patch(
   "/:id/cancel",
-  requireRole(["admin", "operador", "supervisor"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "cancel", ["admin", "operador", "supervisor"]),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
@@ -883,7 +1143,7 @@ extraRequestRoutes.patch(
 // POST /extra-requests/:id/proforma — Anexar proforma (transferência bancária, enquanto PENDENTE)
 extraRequestRoutes.post(
   "/:id/proforma",
-  requireRole(["admin", "operador", "supervisor", "tecnico"]),
+  requirePermissionOrLegacyRole("pedidosExtras", "edit", ["admin", "operador", "supervisor", "tecnico"]),
   fileUpload.single("proforma"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);

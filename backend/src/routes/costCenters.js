@@ -902,6 +902,23 @@ costCenterRoutes.get(
 
 // ─── Centros de Custo ─────────────────────────────────────────────────────────
 
+// GET /cost-centers — Listar todos os centros de custo globais (usado em combos)
+costCenterRoutes.get(
+  "/",
+  requirePermission("pedidosExtras", "view"),
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(1000, Math.max(1, Number(req.query.limit || 100)));
+    const items = await prisma.costCenter.findMany({
+      take: limit,
+      orderBy: { code: "asc" },
+      include: {
+        project: { select: { id: true, name: true } },
+      },
+    });
+    return res.json({ total: items.length, data: items });
+  })
+);
+
 // GET /cost-centers/project/:projectId — Listar todos os CCs de uma obra
 costCenterRoutes.get(
   "/project/:projectId",
