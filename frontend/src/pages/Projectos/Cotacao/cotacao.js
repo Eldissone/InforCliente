@@ -5,6 +5,11 @@ import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModa
 import { formatSupplierFiscalSummary } from "/shared/supplierFiscal.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 import {
+  generatePurchaseOrderPdf,
+  downloadPurchaseOrderPdf,
+  uploadBundlePurchaseOrderPdf,
+} from "/shared/quotePurchaseOrder.js";
+import {
   bindNifLookup,
   normalizeNif,
   setNifLookupStatus,
@@ -151,6 +156,22 @@ function initEvents() {
   const filterCc = document.getElementById("filterCentroCusto");
   if (searchInput) searchInput.addEventListener("input", renderNeeds);
   if (filterCc) filterCc.addEventListener("change", renderNeeds);
+  document.getElementById("selectAllPendentes")?.addEventListener("change", (e) => {
+    document.querySelectorAll(".need-batch-check").forEach((cb) => {
+      cb.checked = e.target.checked;
+    });
+    syncBatchQuoteButton();
+  });
+  document.getElementById("btnBatchQuote")?.addEventListener("click", openBatchQuoteModal);
+  document.getElementById("btnCloseBatchQuote")?.addEventListener("click", () => {
+    document.getElementById("modalBatchQuote")?.classList.remove("open");
+  });
+  document.getElementById("btnSaveBatchQuote")?.addEventListener("click", () => submitBatchQuote(false));
+  document.getElementById("btnSaveAndOrderBatch")?.addEventListener("click", () => submitBatchQuote(true));
+  document.getElementById("btnViewSupplierOrders")?.addEventListener("click", openSupplierOrdersModal);
+  document.getElementById("btnCloseSupplierOrders")?.addEventListener("click", () => {
+    document.getElementById("modalSupplierOrders")?.classList.remove("open");
+  });
 }
 
 // ==========================================
@@ -239,7 +260,7 @@ function renderNeeds() {
   document.getElementById("pendentesCount").textContent = filtered.length;
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium">Nenhum item em cotação.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8 text-slate-400 font-medium">Nenhum item em cotação.</td></tr>`;
     return;
   }
 
@@ -279,8 +300,16 @@ function renderNeeds() {
       ? `<span class="ml-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Pedido</span>`
       : "";
 
+    const efRef = needOrderRef(n);
+    const canBatch = ["IN_QUOTATION", "PENDING"].includes(n.status) && !efRef;
+
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+        <td class="py-3 px-3">
+          ${canBatch
+            ? `<input type="checkbox" class="need-batch-check rounded border-slate-300 accent-emerald-600" value="${n.id}">`
+            : ""}
+        </td>
         <td class="py-3 px-4 text-xs text-slate-500">${new Date(n.createdAt).toLocaleDateString("pt-PT")}</td>
         <td class="py-3 px-4 text-xs font-bold text-slate-600">${
           n.costCenter?.name ||
@@ -292,6 +321,7 @@ function renderNeeds() {
           <div class="font-medium text-slate-900">${n.description}${sourceBadge}</div>
           <div class="text-xs text-slate-400 mt-0.5">${quotesCount} cotações recebidas</div>
           ${bestQuotePriceStr}
+          ${efRef ? `<div class="text-[10px] font-black text-indigo-700 mt-1">${efRef} · ${(n.quotes || []).find((q) => q.orderNumber || q.supplierOrder?.orderNumber)?.supplier?.name || "Encomenda"}</div>` : ""}
         </td>
         <td class="py-3 px-4 text-center text-sm font-bold text-slate-700">${qty} ${n.unit || ""}</td>
         <td class="py-3 px-4 text-center">
@@ -307,6 +337,180 @@ function renderNeeds() {
       </tr>
     `;
   }).join("");
+  tbody.querySelectorAll(".need-batch-check").forEach((cb) => {
+    cb.addEventListener("change", syncBatchQuoteButton);
+  });
+  syncBatchQuoteButton();
+}
+
+function needOrderRef(n) {
+  const q = (n.quotes || []).find((x) => x.supplierOrder?.orderNumber || x.orderNumber);
+  const num = q?.supplierOrder?.orderNumber ?? q?.orderNumber;
+  if (num == null) return "";
+  return `EF${String(num).padStart(3, "0")}`;
+}
+
+function selectedBatchNeeds() {
+  return [...document.querySelectorAll(".need-batch-check:checked")]
+    .map((cb) => currentNeeds.find((n) => n.id === cb.value))
+    .filter(Boolean);
+}
+
+function syncBatchQuoteButton() {
+  const btn = document.getElementById("btnBatchQuote");
+  const n = selectedBatchNeeds().length;
+  if (btn) {
+    btn.disabled = n < 2;
+    btn.title = n < 2 ? "Seleccione pelo menos 2 itens" : `Precificar ${n} itens no mesmo fornecedor`;
+  }
+}
+
+function openBatchQuoteModal() {
+  const needs = selectedBatchNeeds();
+  if (needs.length < 2) {
+    showToast("Seleccione pelo menos dois itens", "warning");
+    return;
+  }
+  const sel = document.getElementById("batchQuoteSupplier");
+  if (sel) {
+    sel.innerHTML =
+      `<option value="">Seleccionar fornecedor...</option>` +
+      currentSuppliers
+        .filter((s) => s.active !== false)
+        .map((s) => `<option value="${s.id}">${s.name}</option>`)
+        .join("");
+  }
+  const body = document.getElementById("batchQuoteItemsBody");
+  if (body) {
+    body.innerHTML = needs
+      .map((n) => {
+        const qty = Number(n.quantity) || 1;
+        return `<tr class="border-t border-slate-100" data-need-id="${n.id}">
+          <td class="py-2 px-3 text-sm font-semibold text-slate-800">${n.description}</td>
+          <td class="py-2 px-3 text-center">
+            <input type="number" min="0" step="0.01" value="${qty}" data-qty
+              class="w-20 h-9 px-2 border border-slate-200 rounded-lg text-center text-sm">
+            <span class="text-[10px] text-slate-400 ml-1">${n.unit || ""}</span>
+          </td>
+          <td class="py-2 px-3 text-right">
+            <input type="number" min="0" step="0.01" value="" data-price required
+              class="w-28 h-9 px-2 border border-slate-200 rounded-lg text-right text-sm" placeholder="0,00">
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+  const notes = document.getElementById("batchQuoteNotes");
+  if (notes) notes.value = "";
+  const file = document.getElementById("batchQuoteProforma");
+  if (file) file.value = "";
+  document.getElementById("modalBatchQuote")?.classList.add("open");
+}
+
+async function submitBatchQuote(placeOrder) {
+  const supplierId = document.getElementById("batchQuoteSupplier")?.value;
+  if (!supplierId) {
+    showToast("Seleccione o fornecedor", "error");
+    return;
+  }
+  const rows = [...document.querySelectorAll("#batchQuoteItemsBody tr")];
+  const items = [];
+  for (const tr of rows) {
+    const needId = tr.dataset.needId;
+    const quotedPrice = parseFloat(tr.querySelector("[data-price]")?.value || "");
+    const quantity = parseFloat(tr.querySelector("[data-qty]")?.value || "");
+    if (!Number.isFinite(quotedPrice) || quotedPrice < 0) {
+      showToast("Indique o preço unitário de todos os itens", "error");
+      return;
+    }
+    items.push({
+      needId,
+      quotedPrice,
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+    });
+  }
+  const fd = new FormData();
+  fd.append(
+    "payload",
+    JSON.stringify({
+      supplierId,
+      projectId: isGeralScope() ? null : currentProjectId,
+      notes: document.getElementById("batchQuoteNotes")?.value?.trim() || null,
+      placeOrder,
+      items,
+    })
+  );
+  const file = document.getElementById("batchQuoteProforma")?.files?.[0];
+  if (file) fd.append("proforma", file);
+
+  try {
+    const order = await apiUpload("/quotes/bundle", fd, "POST");
+    document.getElementById("modalBatchQuote")?.classList.remove("open");
+    if (placeOrder && order?.orderNumber != null) {
+      const supplier = currentSuppliers.find((s) => s.id === supplierId) || order.supplier;
+      const quotes = (order.quotes || []).map((q) => ({ quote: q, need: q.need }));
+      const { doc, orderNo, documentId, issuedAt, issuedBy } = await generatePurchaseOrderPdf({
+        quote: order.quotes?.[0],
+        need: order.quotes?.[0]?.need,
+        supplier,
+        project: order.project,
+        quotes,
+      });
+      downloadPurchaseOrderPdf(doc, orderNo);
+      try {
+        await uploadBundlePurchaseOrderPdf(order.id, doc, orderNo, { documentId, issuedAt, issuedBy });
+      } catch (err) {
+        console.warn("Upload da encomenda falhou:", err);
+      }
+      showToast(`Encomenda ${orderNo} gerada com ${items.length} itens`, "success");
+    } else {
+      showToast(`Cotação conjunta guardada (${items.length} itens)`, "success");
+    }
+    await loadNeeds();
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Erro ao guardar o lote", "error");
+  }
+}
+
+async function openSupplierOrdersModal() {
+  const list = document.getElementById("supplierOrdersList");
+  if (!list) return;
+  list.innerHTML = `<p class="text-sm text-slate-400">A carregar...</p>`;
+  document.getElementById("modalSupplierOrders")?.classList.add("open");
+  try {
+    const qs = isGeralScope()
+      ? "/quotes/supplier-orders?geral=1"
+      : `/quotes/supplier-orders?projectId=${encodeURIComponent(currentProjectId)}`;
+    const data = await apiRequest(qs);
+    const items = data.items || [];
+    if (!items.length) {
+      list.innerHTML = `<p class="text-sm text-slate-400">Ainda não há encomendas agrupadas neste âmbito.</p>`;
+      return;
+    }
+    list.innerHTML = items
+      .map((o) => {
+        const ref = o.orderNumber != null ? `EF${String(o.orderNumber).padStart(3, "0")}` : "Rascunho";
+        const lines = (o.quotes || [])
+          .map((q) => `<li>${q.need?.description || "Item"} · ${q.quantity || "—"} × ${Number(q.quotedPrice || 0).toLocaleString("pt-PT")}</li>`)
+          .join("");
+        const pdf = o.purchaseOrderUrl
+          ? `<a href="${o.purchaseOrderUrl}" target="_blank" class="text-xs font-bold text-indigo-600 underline">PDF encomenda</a>`
+          : "";
+        return `<div class="rounded-xl border border-slate-200 p-4">
+          <div class="flex justify-between gap-3 items-start">
+            <div>
+              <p class="text-sm font-black text-slate-900">${ref} · ${o.supplier?.name || "Fornecedor"}</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">${o.status === "ORDERED" ? "Encomendado" : "Cotação conjunta"} · ${new Date(o.createdAt).toLocaleDateString("pt-PT")}</p>
+            </div>
+            ${pdf}
+          </div>
+          <ul class="mt-2 text-xs text-slate-700 list-disc pl-4 space-y-0.5">${lines}</ul>
+        </div>`;
+      })
+      .join("");
+  } catch (err) {
+    list.innerHTML = `<p class="text-sm text-red-500">${err.message}</p>`;
+  }
 }
 
 // ==========================================

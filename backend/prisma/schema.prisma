@@ -280,6 +280,7 @@ model Project {
   extraRequests       ExtraRequest[]
   freightAllocations  FreightAllocation[]
   purchaseOrders      PurchaseOrder[]
+  quoteSupplierOrders QuoteSupplierOrder[]
 
   @@index([name])
   @@index([status])
@@ -1298,6 +1299,7 @@ model Supplier {
   extraRequests ExtraRequest[]
   purchaseOrders      PurchaseOrder[]
   purchaseRequisitions PurchaseRequisition[]
+  quoteSupplierOrders QuoteSupplierOrder[]
 }
 
 enum SupplierType {
@@ -1407,7 +1409,8 @@ model NeedQuote {
   notes             String?
   proformaUrl       String?
   purchaseOrderUrl  String?
-  orderNumber       Int?      @unique
+  orderNumber       Int?
+  supplierOrderId   String?
   poDocumentId      String?
   poIssuedBy        String?
   poIssuedAt        DateTime?
@@ -1427,9 +1430,39 @@ model NeedQuote {
   need            WorkNeed             @relation(fields: [needId], references: [id], onDelete: Cascade)
   supplier        Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   supplierProduct SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  supplierOrder   QuoteSupplierOrder?  @relation(fields: [supplierOrderId], references: [id], onDelete: SetNull)
   installments    PaymentInstallment[]
   stockMovements  StockMovement[]
   freightAllocations FreightAllocation[]
+
+  @@index([orderNumber])
+  @@index([supplierOrderId])
+}
+
+/// Encomenda/requisição a um fornecedor com um ou vários itens cotados (mesmo EF).
+model QuoteSupplierOrder {
+  id                  String    @id @default(cuid())
+  supplierId          String
+  projectId           String?
+  orderNumber         Int?      @unique
+  status              String    @default("DRAFT")
+  notes               String?
+  proformaUrl         String?
+  purchaseOrderUrl    String?
+  poDocumentId        String?
+  poIssuedBy          String?
+  poIssuedAt          DateTime?
+  expectedReceiptDate DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  supplier Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  project  Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  quotes   NeedQuote[]
+
+  @@index([supplierId])
+  @@index([projectId])
+  @@index([status])
 }
 
 enum InstallmentStatus {

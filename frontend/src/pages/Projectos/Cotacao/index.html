@@ -208,6 +208,16 @@
                             class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">Carregando...</span>
                     </div>
                     <div class="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                        <button type="button" id="btnBatchQuote" disabled
+                            class="h-10 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                            <span class="material-symbols-outlined text-base">playlist_add</span>
+                            Precificar lote
+                        </button>
+                        <button type="button" id="btnViewSupplierOrders"
+                            class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                            <span class="material-symbols-outlined text-base">local_shipping</span>
+                            Encomendas
+                        </button>
                         <div class="relative w-full sm:w-64">
                             <span
                                 class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
@@ -225,6 +235,9 @@
                         <thead>
                             <tr
                                 class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                <th class="py-4 px-4 w-10">
+                                    <input type="checkbox" id="selectAllPendentes" class="rounded border-slate-300 accent-emerald-600">
+                                </th>
                                 <th class="py-4 px-4 w-32">Data</th>
                                 <th class="py-4 px-4 w-40">Centro Custo</th>
                                 <th class="py-4 px-4">Descrição do Item</th>
@@ -235,7 +248,7 @@
                         </thead>
                         <tbody id="pendentesTableBody" class="text-sm">
                             <tr>
-                                <td colspan="6">
+                                <td colspan="7">
                                     <div class="spinner my-8"></div>
                                 </td>
                             </tr>
@@ -281,6 +294,69 @@
             </div>
         </div>
     </main>
+
+    <div class="modal-overlay" id="modalBatchQuote">
+        <div class="modal-box modal-box--wide" style="max-width:820px">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900">Cotação conjunta ao fornecedor</h2>
+                    <p class="text-xs text-slate-500 mt-1">Vários produtos, um fornecedor, uma encomenda/requisição.</p>
+                </div>
+                <button type="button" id="btnCloseBatchQuote"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Fornecedor *</label>
+                    <select id="batchQuoteSupplier"
+                        class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Proforma (opcional)</label>
+                    <input id="batchQuoteProforma" type="file" accept=".pdf,image/*"
+                        class="w-full text-sm">
+                </div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200 mb-4 max-h-72">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <th class="py-2 px-3 text-left">Item</th>
+                            <th class="py-2 px-3 text-center w-24">Qtd</th>
+                            <th class="py-2 px-3 text-right w-36">Preço unit. *</th>
+                        </tr>
+                    </thead>
+                    <tbody id="batchQuoteItemsBody"></tbody>
+                </table>
+            </div>
+            <textarea id="batchQuoteNotes" rows="2" placeholder="Notas da requisição (opcional)"
+                class="w-full mb-4 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm"></textarea>
+            <div class="flex justify-end gap-2">
+                <button type="button" id="btnSaveBatchQuote"
+                    class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold">Guardar cotação</button>
+                <button type="button" id="btnSaveAndOrderBatch"
+                    class="h-10 px-5 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-black flex items-center gap-1">
+                    <span class="material-symbols-outlined text-base">local_shipping</span>
+                    Guardar e encomendar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalSupplierOrders">
+        <div class="modal-box modal-box--wide" style="max-width:760px">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                <h2 class="text-lg font-bold text-slate-900">Encomendas / requisições ao fornecedor</h2>
+                <button type="button" id="btnCloseSupplierOrders"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <div id="supplierOrdersList" class="flex flex-col gap-3 max-h-[70vh] overflow-y-auto"></div>
+        </div>
+    </div>
 
     <!-- Modal: Adicionar Cotação a Item -->
     <div class="modal-overlay" id="modalQuote">

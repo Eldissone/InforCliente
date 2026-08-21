@@ -136,7 +136,7 @@ function drawPartyBlock(doc, title, party, orderMeta, x, y, colW) {
   return y;
 }
 
-export async function generatePurchaseOrderPdf({ quote, need, supplier, project }) {
+export async function generatePurchaseOrderPdf({ quote, need, supplier, project, quotes }) {
   if (typeof window.jspdf === "undefined") {
     throw new Error("Biblioteca PDF não disponível.");
   }
@@ -145,14 +145,30 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-  const qty = Number(quote.quantity ?? need.quantity ?? 0);
-  const unitPrice = Number(quote.quotedPrice || 0);
-  const total = Number(quote.totalValue ?? qty * unitPrice);
-  const currency = quote.currency || need.costCenter?.currency || "AOA";
-  const orderNo = formatOrderNumber(quote.orderNumber);
+  const lineItems = (quotes && quotes.length ? quotes : [{ quote, need }]).map((row, idx) => {
+    const q = row.quote || row;
+    const n = row.need || q.need || need;
+    const qty = Number(q.quantity ?? n?.quantity ?? 0);
+    const unitPrice = Number(q.quotedPrice || 0);
+    const total = Number(q.totalValue ?? qty * unitPrice);
+    return {
+      idx: idx + 1,
+      description: n?.description || q.supplierProduct?.name || "—",
+      unit: n?.unit || q.supplierProduct?.unit || "uni",
+      qty,
+      unitPrice,
+      total,
+    };
+  });
+
+  const firstQuote = quote || quotes?.[0]?.quote || quotes?.[0];
+  const firstNeed = need || firstQuote?.need;
+  const total = lineItems.reduce((sum, l) => sum + (Number(l.total) || 0), 0);
+  const currency = firstQuote?.currency || firstNeed?.costCenter?.currency || "AOA";
+  const orderNo = formatOrderNumber(firstQuote?.orderNumber);
   const orderDate = new Date();
   const deliveryDate = deliveryEstimate(orderDate);
-  const deliverySite = need.siteReceptionLocation?.trim()
+  const deliverySite = firstNeed?.siteReceptionLocation?.trim()
     || [project?.location, project?.region].filter(Boolean).join(" - ")
     || project?.name
     || "—";
@@ -227,20 +243,17 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
   y = Math.max(leftEnd, rightEnd) + 4;
 
   // ── Tabela de itens ─────────────────────────────────────────────────────────
-  const description = need.description || quote.supplierProduct?.name || "—";
-  const unit = need.unit || quote.supplierProduct?.unit || "uni";
-
   if (typeof doc.autoTable === "function") {
     doc.autoTable({
       startY: y,
       head: [["Item", "Descrição", "QTD", "Preço unitário", "Total Price"]],
-      body: [[
-        "1",
-        description,
-        `${qty.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${unit}`,
-        fmtMoney(unitPrice, currency),
-        fmtMoney(total, currency),
-      ]],
+      body: lineItems.map((l) => [
+        String(l.idx),
+        l.description,
+        `${l.qty.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${l.unit}`,
+        fmtMoney(l.unitPrice, currency),
+        fmtMoney(l.total, currency),
+      ]),
       theme: "grid",
       styles: {
         fontSize: 8.5,
@@ -267,8 +280,11 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
     y = doc.lastAutoTable.finalY + 6;
   } else {
     doc.setFontSize(9);
-    doc.text(`${description} — ${qty} ${unit} × ${fmtMoney(unitPrice, currency)} = ${fmtMoney(total, currency)}`, margin, y);
-    y += 8;
+    lineItems.forEach((l) => {
+      doc.text(`${l.description} — ${l.qty} ${l.unit} × ${fmtMoney(l.unitPrice, currency)} = ${fmtMoney(l.total, currency)}`, margin, y);
+      y += 5;
+    });
+    y += 3;
   }
 
   // ── Totais ──────────────────────────────────────────────────────────────────
@@ -307,7 +323,7 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project 
   ];
 
 
-  if (quote.notes) notesParts.push(quote.notes);
+  if (firstQuote?.notes) notesParts.push(firstQuote.notes);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -359,6 +375,17 @@ export async function uploadPurchaseOrderPdf(quoteId, doc, orderNo, meta = {}) {
   if (meta.issuedBy) form.append("issuedBy", meta.issuedBy);
   if (meta.issuedAt) form.append("issuedAt", meta.issuedAt);
   const res = await apiUpload(`/quotes/${quoteId}/purchase-order`, form, "POST");
+  return res?.purchaseOrderUrl || null;
+}
+
+export async function uploadBundlePurchaseOrderPdf(orderId, doc, orderNo, meta = {}) {
+  const blob = doc.output("blob");
+  const form = new FormData();
+  form.append("file", blob, `${orderNo}.pdf`);
+  if (meta.documentId) form.append("documentId", meta.documentId);
+  if (meta.issuedBy) form.append("issuedBy", meta.issuedBy);
+  if (meta.issuedAt) form.append("issuedAt", meta.issuedAt);
+  const res = await apiUpload(`/quotes/supplier-orders/${orderId}/purchase-order`, form, "POST");
   return res?.purchaseOrderUrl || null;
 }
 
