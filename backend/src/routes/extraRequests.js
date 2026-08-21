@@ -298,6 +298,7 @@ const extraItemSchema = z.object({
   quantity: z.union([z.number(), z.string()]),
   unit: z.string().optional().nullable(),
   unitPrice: z.union([z.number(), z.string()]).optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
 function normalizeItemsInput(items) {
@@ -316,6 +317,7 @@ function normalizeItemsInput(items) {
         priceSafe != null && Number.isFinite(priceSafe)
           ? String(qtySafe * priceSafe)
           : null,
+      notes: raw.notes ? String(raw.notes).trim() || null : null,
       order: idx,
     };
   });
@@ -790,7 +792,7 @@ extraRequestRoutes.post(
       supplierNif: null,
       supplierIban: null,
     };
-    if (body.paymentSource === "SOLICITACAO_TRANSFERENCIA") {
+    if (body.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !body.requiresQuote) {
       try {
         supplierData = await resolveTransferSupplierFields(body, { required: true });
       } catch (err) {
@@ -925,8 +927,9 @@ extraRequestRoutes.patch(
       body.supplierIban !== undefined ||
       body.paymentSource !== undefined;
 
+    const nextRequiresQuote = body.requiresQuote !== undefined ? Boolean(body.requiresQuote) : existing.requiresQuote;
     let supplierPatch = {};
-    if (nextSource === "SOLICITACAO_TRANSFERENCIA" && supplierTouched) {
+    if (nextSource === "SOLICITACAO_TRANSFERENCIA" && supplierTouched && !nextRequiresQuote) {
       try {
         const resolved = await resolveTransferSupplierFields(
           {

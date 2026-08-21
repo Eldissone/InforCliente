@@ -26,6 +26,7 @@ import {
   applySheetFilters,
   sheetFilterOptions,
   groupCatalogSheetDisplayRows,
+  uniqueCatalogTipo2Groups,
   catalogSheetGroupKey,
   classifyCategorySheetLevel,
   SHEET_LEVEL_LABELS,
@@ -3296,8 +3297,8 @@ function ccPedidoDomain() {
 }
 
 function ccTipo2Groups() {
-    const rows = getCatalogSheetRows().filter((r) => r.domain === ccPedidoDomain());
-    return groupCatalogSheetDisplayRows(rows);
+    const rows = getCatalogSheetRows().filter((r) => r.domain === "GERAL");
+    return uniqueCatalogTipo2Groups(groupCatalogSheetDisplayRows(rows));
 }
 
 function ccSyncCostDetail(categoryId, requiresDetail) {
@@ -3360,28 +3361,80 @@ function populateCCSubcustos() {
     syncCCItemToolSuggest();
 }
 
+function uniqueCostCenterOptions(items = []) {
+    const seenId = new Set();
+    const seenLabel = new Set();
+    const out = [];
+    for (const cc of items) {
+        const id = String(cc?.id || "");
+        if (!id || seenId.has(id)) continue;
+        seenId.add(id);
+        const labelKey = `${cc.code || ""} ${cc.name || ""}`
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "");
+        if (labelKey && seenLabel.has(labelKey)) continue;
+        if (labelKey) seenLabel.add(labelKey);
+        out.push(cc);
+    }
+    return out;
+}
+
+async function loadCCCostCentersForProject(projectId, selectedId = "") {
+    const sel = document.getElementById("ccExtraCostCenterId");
+    if (!sel) return;
+    if (!projectId) {
+        sel.innerHTML = `<option value="">Seleccione primeiro o projecto...</option>`;
+        return;
+    }
+    sel.innerHTML = `<option value="">A carregar...</option>`;
+    try {
+        let arr = [];
+        try {
+            const data = await apiRequest(`/cost-centers/project/${encodeURIComponent(projectId)}`);
+            arr = data?.items || data?.data || [];
+        } catch (_) {
+            const ccs = await apiRequest("/cost-centers?limit=1000");
+            const all = Array.isArray(ccs) ? ccs : (ccs?.items || ccs?.data || []);
+            arr = all.filter((cc) => cc.projectId === projectId || cc.project?.id === projectId);
+        }
+        const items = uniqueCostCenterOptions(arr.filter((cc) => cc.active !== false));
+        sel.innerHTML =
+            `<option value="">${items.length ? "Seleccione centro..." : "Sem centros nesta obra"}</option>` +
+            items
+                .map((cc) => {
+                    const label = (cc.code ? `${cc.code} — ` : "") + (cc.name || cc.id);
+                    return `<option value="${escapeHtml(cc.id)}">${escapeHtml(label)}</option>`;
+                })
+                .join("");
+        if (selectedId && [...sel.options].some((o) => o.value === selectedId)) sel.value = selectedId;
+    } catch (_) {
+        sel.innerHTML = `<option value="">Erro ao carregar centros</option>`;
+    }
+}
+
 function populateCCCentrosGerais() {
     const sel = document.getElementById("ccCentroGeralId");
     if (!sel) return;
     const prev = sel.value;
     const groups = ccTipo2Groups();
-    const nameCount = groups.reduce((acc, g) => {
-        acc[g.tipo2] = (acc[g.tipo2] || 0) + 1;
-        return acc;
-    }, {});
+    const seen = new Set();
+    const options = [];
+    for (const g of groups) {
+        const label = formatCategoryDisplayName(g.tipo2).replace(/\s+/g, " ").trim();
+        const labelKey = String(label)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "");
+        if (!labelKey || seen.has(labelKey)) continue;
+        seen.add(labelKey);
+        options.push(`<option value="${escapeHtml(catalogSheetGroupKey(g))}">${escapeHtml(label)}</option>`);
+    }
     sel.innerHTML =
-        `<option value="">${groups.length ? "Seleccione centro geral..." : "Sem tipos de custo 2 no catálogo"}</option>` +
-        groups
-            .map((g) => {
-                const key = catalogSheetGroupKey(g);
-                const base = formatCategoryDisplayName(g.tipo2);
-                const label =
-                    nameCount[g.tipo2] > 1 && g.grupo
-                        ? `${base} (${formatCategoryDisplayName(g.grupo)})`
-                        : base;
-                return `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`;
-            })
-            .join("");
+        `<option value="">${options.length ? "Seleccione centro geral..." : "Sem tipos de custo 2 no catálogo"}</option>` +
+        options.join("");
     if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
     populateCCSubcustos();
 }
@@ -3445,19 +3498,12 @@ async function ensureCCReferenceDataLoaded() {
             });
         } catch (_) { /* ignore */ }
     }
-    const ccSel = document.getElementById("ccExtraCostCenterId");
-    if (ccSel && ccSel.options.length <= 1) {
-        try {
-            const ccs = await apiRequest("/cost-centers?limit=1000");
-            const arr = Array.isArray(ccs) ? ccs : (ccs?.items || ccs?.data || []);
-            arr.forEach(cc => {
-                const opt = document.createElement("option");
-                opt.value = cc.id;
-                opt.textContent = (cc.code ? cc.code + " — " : "") + (cc.name || cc.id);
-                ccSel.appendChild(opt);
-            });
-        } catch (_) { /* ignore */ }
+    const projIdSel = document.getElementById("ccExtraProjectId");
+    if (projIdSel && !projIdSel.dataset.ccCcWired) {
+        projIdSel.dataset.ccCcWired = "1";
+        projIdSel.addEventListener("change", () => loadCCCostCentersForProject(projIdSel.value));
     }
+    await loadCCCostCentersForProject(projIdSel?.value || "");
     const gccSel = document.getElementById("ccCentroGeralId");
     if (gccSel && !gccSel.dataset.ccWired) {
         gccSel.dataset.ccWired = "1";

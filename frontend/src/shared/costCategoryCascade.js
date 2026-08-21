@@ -3,6 +3,7 @@ import {
   buildCostCatalogSheetRows,
   applySheetFilters,
   groupCatalogSheetDisplayRows,
+  uniqueCatalogTipo2Groups,
   classifyCategorySheetLevel,
   uniqueSorted,
 } from "/shared/costCategorySheet.js";
@@ -380,7 +381,7 @@ export function mountRubricFirstCascade({
     state.tipo3PickId = "";
 
     const filtered = applySheetFilters(allRows, { domain, tipo1: state.tipo1 });
-    const groups = groupCatalogSheetDisplayRows(filtered);
+    const groups = uniqueCatalogTipo2Groups(groupCatalogSheetDisplayRows(filtered));
     if (!groups.length) {
       setPick("");
       const empty = document.createElement("p");
@@ -393,20 +394,24 @@ export function mountRubricFirstCascade({
       return;
     }
 
-    // Mesmo nome de tipo 2 em grupos diferentes → desambiguar no rótulo.
-    const nameCount = groups.reduce((acc, g) => {
-      acc[g.tipo2] = (acc[g.tipo2] || 0) + 1;
-      return acc;
-    }, {});
-
-    const options = groups.map((g) => {
-      const base = formatCategoryDisplayName(g.tipo2);
-      const label =
-        nameCount[g.tipo2] > 1 && g.grupo
-          ? `${base} (${formatCategoryDisplayName(g.grupo)})`
-          : base;
-      return { value: costIdKey(g.tipo2Id), label, tipo2: g.tipo2, grupo: g.grupo || "" };
-    });
+    const seenLabels = new Set();
+    const options = [];
+    for (const g of groups) {
+      const label = formatCategoryDisplayName(g.tipo2).replace(/\s+/g, " ").trim();
+      const labelKey = String(label)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+      if (!labelKey || seenLabels.has(labelKey)) continue;
+      seenLabels.add(labelKey);
+      options.push({
+        value: costIdKey(g.tipo2Id),
+        label,
+        tipo2: g.tipo2,
+        grupo: g.grupo || "",
+      });
+    }
 
     const presetValue = presetPickId
       ? ""

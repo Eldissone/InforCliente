@@ -315,6 +315,41 @@ export function catalogSheetGroupKey(row) {
   return `${row.domain}|${row.tipo1}|${row.grupo || ""}|${row.tipo2Id || row.tipo2}`;
 }
 
+function normalizeTipo2Name(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+/** Uma entrada por nome de tipo 2 (evita o mesmo centro duas vezes no select). */
+export function uniqueCatalogTipo2Groups(groups = []) {
+  const order = [];
+  const byName = new Map();
+  for (const g of groups) {
+    const key = normalizeTipo2Name(g.tipo2);
+    if (!byName.has(key)) {
+      byName.set(key, { ...g, variants: [...(g.variants || [])] });
+      order.push(key);
+      continue;
+    }
+    const acc = byName.get(key);
+    acc.variants.push(...(g.variants || []));
+  }
+  return order.map((key) => {
+    const g = byName.get(key);
+    const seen = new Set();
+    g.variants = (g.variants || []).filter((v) => {
+      const id = String(v.pickCategoryId || "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    return g;
+  });
+}
+
 /**
  * Agrupa linhas filtradas: uma linha de tabela por tipo custo 2, com variantes de tipo custo 3.
  */
