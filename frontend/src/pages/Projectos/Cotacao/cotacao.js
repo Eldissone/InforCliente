@@ -2,7 +2,11 @@ import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
-import { formatSupplierFiscalSummary } from "/shared/supplierFiscal.js";
+import {
+  formatSupplierFiscalSummary,
+  computeSupplierFiscalBreakdown,
+  formatFiscalAmount,
+} from "/shared/supplierFiscal.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 import {
   generatePurchaseOrderPdf,
@@ -168,6 +172,7 @@ function initEvents() {
   });
   document.getElementById("btnSaveBatchQuote")?.addEventListener("click", () => submitBatchQuote(false));
   document.getElementById("btnSaveAndOrderBatch")?.addEventListener("click", () => submitBatchQuote(true));
+  document.getElementById("batchQuoteSupplier")?.addEventListener("change", refreshBatchFiscalTotals);
   document.getElementById("btnViewSupplierOrders")?.addEventListener("click", openSupplierOrdersModal);
   document.getElementById("btnCloseSupplierOrders")?.addEventListener("click", () => {
     document.getElementById("modalSupplierOrders")?.classList.remove("open");
@@ -396,6 +401,7 @@ function openBatchQuoteModal() {
             <input type="number" min="0" step="0.01" value="" data-price required
               class="w-28 h-9 px-2 border border-slate-200 rounded-lg text-right text-sm" placeholder="0,00">
           </td>
+          <td class="py-2 px-3 text-right text-xs font-bold text-slate-700 tabular-nums" data-line-base>—</td>
         </tr>`;
       })
       .join("");
@@ -404,7 +410,62 @@ function openBatchQuoteModal() {
   if (notes) notes.value = "";
   const file = document.getElementById("batchQuoteProforma");
   if (file) file.value = "";
+  document.getElementById("batchQuoteItemsBody")?.querySelectorAll("[data-qty], [data-price]").forEach((el) => {
+    el.addEventListener("input", refreshBatchFiscalTotals);
+  });
   document.getElementById("modalBatchQuote")?.classList.add("open");
+  refreshBatchFiscalTotals();
+}
+
+function batchSelectedSupplier() {
+  const id = document.getElementById("batchQuoteSupplier")?.value;
+  return currentSuppliers.find((s) => s.id === id) || null;
+}
+
+function refreshBatchFiscalTotals() {
+  const supplier = batchSelectedSupplier();
+  const hint = document.getElementById("batchQuoteFiscalHint");
+  if (hint) {
+    hint.textContent = supplier
+      ? `Impostos do fornecedor: ${formatSupplierFiscalSummary(supplier)}`
+      : "Seleccione o fornecedor para ver IVA, retenção e desconto.";
+  }
+
+  let baseSum = 0;
+  document.querySelectorAll("#batchQuoteItemsBody tr").forEach((tr) => {
+    const qty = parseFloat(tr.querySelector("[data-qty]")?.value || "0") || 0;
+    const price = parseFloat(tr.querySelector("[data-price]")?.value || "0") || 0;
+    const base = qty * price;
+    baseSum += base;
+    const cell = tr.querySelector("[data-line-base]");
+    if (cell) {
+      cell.textContent = Number.isFinite(base)
+        ? base.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : "—";
+    }
+  });
+
+  const box = document.getElementById("batchQuoteTotals");
+  if (!box) return;
+  if (!supplier || baseSum <= 0) {
+    box.innerHTML = `<p class="text-xs text-slate-500 font-semibold">Preencha os preços para ver o total com impostos.</p>`;
+    return;
+  }
+
+  const br = computeSupplierFiscalBreakdown(supplier, baseSum);
+  const money = (n) => formatFiscalAmount(n, "AOA");
+  const extra = (br.lines || [])
+    .map((line) => {
+      const sign = line.amount >= 0 ? "+" : "−";
+      const color = line.amount >= 0 ? "text-emerald-700" : "text-red-600";
+      return `<div class="flex justify-between"><span class="text-slate-500">${line.label}</span><span class="font-bold tabular-nums ${color}">${sign}${money(line.amount)}</span></div>`;
+    })
+    .join("");
+  box.innerHTML = `
+    <div class="flex justify-between text-slate-600"><span>Base (s/ impostos)</span><span class="font-bold tabular-nums">${money(br.base)}</span></div>
+    ${extra || `<p class="text-[11px] text-slate-400">Este fornecedor não tem IVA, retenção ou desconto cadastrados.</p>`}
+    <div class="flex justify-between pt-1.5 border-t border-slate-200"><span class="font-black text-slate-800 uppercase text-[11px] tracking-wide">Líquido a pagar</span><span class="font-black tabular-nums text-[#0f172a]">${money(br.net)}</span></div>
+  `;
 }
 
 async function submitBatchQuote(placeOrder) {

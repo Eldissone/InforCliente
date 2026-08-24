@@ -2,6 +2,7 @@ const { LOCKED_WORKFLOW_STATUSES } = require("./needBudgetService");
 const { syncNeedFromSelectedQuotes, syncNeedOrderStatus } = require("./quoteAllocationService");
 const { setQuoteDeliveryPending } = require("./deliveryFieldBridge");
 const { normalizeDateOnly } = require("../utils/dateOnly");
+const { syncQuoteFiscalSnapshot } = require("./quoteFiscalSnapshotService");
 
 async function nextEfOrderNumber(prisma) {
   const seqResult = await prisma.$queryRawUnsafe(
@@ -149,6 +150,7 @@ async function createOrUpdateBundle(prisma, { supplierId, projectId, notes, item
       });
     }
     await syncNeedFromSelectedQuotes(prisma, need.id);
+    await syncQuoteFiscalSnapshot(quote.id, prisma);
   }
 
   let order = await prisma.quoteSupplierOrder.findFirst({
