@@ -12,10 +12,11 @@ ALTER TABLE "StockMovement"
 ADD COLUMN IF NOT EXISTS "dailyPlanId" TEXT;
 
 -- AddForeignKey
+ALTER TABLE "StockMovement" DROP CONSTRAINT IF EXISTS "StockMovement_dailyPlanId_fkey";
 ALTER TABLE "StockMovement"
 ADD CONSTRAINT "StockMovement_dailyPlanId_fkey"
 FOREIGN KEY ("dailyPlanId") REFERENCES "DailyPlan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- CreateIndex
-CREATE INDEX "StockMovement_dailyPlanId_idx" ON "StockMovement"("dailyPlanId");
-CREATE INDEX "StockMovement_projectId_productId_warehouseId_idx" ON "StockMovement"("projectId", "productId", "warehouseId");
+CREATE INDEX IF NOT EXISTS "StockMovement_dailyPlanId_idx" ON "StockMovement"("dailyPlanId");
+CREATE INDEX IF NOT EXISTS "StockMovement_projectId_productId_warehouseId_idx" ON "StockMovement"("projectId", "productId", "warehouseId");
