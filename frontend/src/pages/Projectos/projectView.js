@@ -14,6 +14,7 @@ import {
   buildStockInventoryOnlyHtml,
   computeStockTotals,
   pickPrimaryEntryMovement,
+  STOCK_TYPE_LABELS,
 } from "../../shared/stockDetail.js";
 import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
 import {
@@ -3502,7 +3503,9 @@ function renderStockSummary(items, movements = []) {
   const visible = (items || []).filter((item) => {
     const balance = Number(item.quantity || 0);
     const planned = Number(item.quantityPlanned || 0);
-    const { totalIn } = computeStockTotals(movements, item.productId, item.warehouseId);
+    const totalIn = item.totalIn != null
+      ? Number(item.totalIn || 0)
+      : computeStockTotals(movements, item.productId, item.warehouseId).totalIn;
     return balance > 0 || planned > 0 || totalIn > 0;
   });
 
@@ -3531,17 +3534,43 @@ function renderStockSummary(items, movements = []) {
   `;
 }
 
+function describeStockMovementType(type) {
+  const t = (type || "").toUpperCase();
+  if (t === "IN" || t === "ENTRY" || t === "ENTRADA" || t === "TRANSFER_IN") {
+    return { label: "ENTRADA", color: "text-emerald-600 bg-emerald-50" };
+  }
+  if (t === "RETURN") {
+    return { label: "DEVOLUÇÃO", color: "text-sky-600 bg-sky-50" };
+  }
+  if (t === "ALLOCATION") {
+    return { label: "ENTREGA A PLANO", color: "text-amber-600 bg-amber-50" };
+  }
+  if (t === "ADJUSTMENT") {
+    return { label: "AJUSTE", color: "text-slate-600 bg-slate-100" };
+  }
+  if (t === "LOSS") {
+    return { label: "PERDA", color: "text-red-600 bg-red-50" };
+  }
+  return { label: "SAÍDA", color: "text-amber-600 bg-amber-50" };
+}
+
 function movementMatchesStockTypeFilter(m, filterType) {
   if (!filterType) return true;
   const t = (m.type || "").toUpperCase();
   if (filterType === "ENTRADA") {
-    return t === "IN" || t === "ENTRY" || t === "TRANSFER_IN";
+    return t === "IN" || t === "ENTRY" || t === "ENTRADA" || t === "TRANSFER_IN";
   }
   if (filterType === "SAIDA") {
-    return t === "OUT" || t === "EXIT" || t === "TRANSFER_OUT";
+    return t === "OUT" || t === "EXIT" || t === "SAIDA" || t === "TRANSFER_OUT" || t === "LOSS";
   }
   if (filterType === "TRANSFERENCIA") {
     return t.includes("TRANSFER");
+  }
+  if (filterType === "ALOCACAO") {
+    return t === "ALLOCATION";
+  }
+  if (filterType === "DEVOLUCAO") {
+    return t === "RETURN";
   }
   return true;
 }
@@ -3557,9 +3586,7 @@ function renderStockMovements(items) {
   }
 
   tbody.innerHTML = (items || []).map((m, idx) => {
-    const isEntry = m.type === "IN" || m.type === "ENTRY" || m.type === "TRANSFER_IN";
-    const typeLabel = isEntry ? "ENTRADA" : "SAÍDA";
-    const typeColor = isEntry ? "text-emerald-600 bg-emerald-50" : "text-amber-600 bg-amber-50";
+    const { label: typeLabel, color: typeColor } = describeStockMovementType(m.type);
     const { driverInfo, vehicleInfo } = parseStockMovementLogistics(m);
 
     return `
@@ -3847,31 +3874,63 @@ function wireStockWorkflow() {
   // Removido o event listener de [data-view-stock] aqui pois ele jÃ¡ Ã© delegado via document no wireStock!
 }
 
-function openStockMovementDetailModal(moveId) {
+/**
+ * Histórico completo de um material num armazém. A lista global do Diário está limitada a um
+ * extracto recente, por isso os totais nunca podem ser recalculados a partir dela.
+ */
+async function fetchProductMovements(productId, warehouseId = null) {
+  if (!productId) return [];
+  const params = new URLSearchParams({ productId });
+  if (warehouseId) params.set("warehouseId", warehouseId);
+  else params.set("projectId", getProjectId());
+
+  try {
+    const { items } = await apiRequest(`/stock/movements?${params.toString()}`);
+    return items || [];
+  } catch {
+    const fallback = el("stock_inventory_content")?._movements || stockState.items || [];
+    return fallback.filter(
+      (m) => m.productId === productId && (!warehouseId || String(m.warehouseId || "") === String(warehouseId))
+    );
+  }
+}
+
+/** Totais oficiais do servidor para a linha de inventário de um material. */
+function getStockRowTotals(productId, warehouseId = null) {
+  const item = (stockState.summary || []).find(
+    (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
+  );
+  if (!item) return null;
+  return {
+    item,
+    planned: Number(item.quantityPlanned || 0),
+    received: Number(item.totalIn || 0),
+    consumed: Number(item.totalConsumed ?? item.totalOut ?? 0),
+    onSite: Number(item.totalOnSite || 0),
+    balance: Number(item.quantity || 0),
+  };
+}
+
+async function openStockMovementDetailModal(moveId) {
   const movements = el("stockMovementsTable")._movementsData || stockState.items || [];
   const m = movements.find((x) => x.id === moveId);
   if (!m) return;
 
-  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, m.productId, m.warehouseId);
-  const { entries } = pickPrimaryEntryMovement(pMovements);
-  const balance = Number(
-    stockState.summary?.find(
-      (s) => s.productId === m.productId && String(s.warehouseId || "") === String(m.warehouseId || "")
-    )?.quantity ?? totalIn - totalOut
+  const totals = getStockRowTotals(m.productId, m.warehouseId);
+  const history = await fetchProductMovements(m.productId, m.warehouseId);
+  const { entries } = pickPrimaryEntryMovement(
+    history.filter((x) => String(x.warehouseId || "") === String(m.warehouseId || ""))
   );
 
   openModal({
-    title: "Nova Operação Logística — Detalhes da Entrada",
+    title: `Movimento de Armazém — ${STOCK_TYPE_LABELS[m.type] || m.type}`,
     contentHtml: buildStockMovementDetailHtml(m, {
       stockSummary: {
-        planned: Number(
-          stockState.summary?.find(
-            (s) => s.productId === m.productId && String(s.warehouseId || "") === String(m.warehouseId || "")
-          )?.quantityPlanned || 0
-        ),
-        totalIn,
-        totalOut,
-        balance,
+        planned: totals?.planned ?? 0,
+        received: totals?.received ?? 0,
+        consumed: totals?.consumed ?? 0,
+        onSite: totals?.onSite ?? 0,
+        balance: totals?.balance ?? 0,
         warehouseName: m.warehouse?.name,
       },
       entryHistory: entries,
@@ -3881,26 +3940,29 @@ function openStockMovementDetailModal(moveId) {
   });
 }
 
-function openStockInventoryDetailModal(productId, warehouseId = null) {
-  const root = el("stock_inventory_content");
-  const summary = root?._summary || stockState.summary || [];
-  const movements = root?._movements || stockState.items || [];
-  const item = summary.find(
-    (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
-  );
-  if (!item) return;
+async function openStockInventoryDetailModal(productId, warehouseId = null) {
+  const totals = getStockRowTotals(productId, warehouseId);
+  if (!totals) return;
 
-  const product = item.product || {};
-  const planned = Number(item.quantityPlanned || 0);
-  const balance = Number(item.quantity || 0);
+  const { item } = totals;
   const warehouseName = item.warehouse?.name || (warehouseId ? "Geral" : "Obra (planeado)");
-  const { pMovements, totalIn, totalOut } = computeStockTotals(movements, productId, warehouseId);
-  const { primary, entries } = pickPrimaryEntryMovement(pMovements);
+  const stockSummary = {
+    planned: totals.planned,
+    received: totals.received,
+    consumed: totals.consumed,
+    onSite: totals.onSite,
+    balance: totals.balance,
+    warehouseName,
+  };
 
-  if (!primary) {
+  const history = warehouseId ? await fetchProductMovements(productId, warehouseId) : [];
+  const { primary, entries } = pickPrimaryEntryMovement(history);
+
+  // O aviso de "sem entrada registada" só é legítimo quando o servidor confirma zero recepções.
+  if (!primary || totals.received === 0) {
     openModal({
       title: "Material em Armazém",
-      contentHtml: buildStockInventoryOnlyHtml(item, { planned, totalIn, totalOut, balance, warehouseName }),
+      contentHtml: buildStockInventoryOnlyHtml(item, stockSummary),
       primaryLabel: "Fechar",
       onPrimary: async ({ close }) => close(),
     });
@@ -3910,7 +3972,7 @@ function openStockInventoryDetailModal(productId, warehouseId = null) {
   openModal({
     title: "Nova Operação Logística — Detalhes da Entrada",
     contentHtml: buildStockMovementDetailHtml(primary, {
-      stockSummary: { planned, totalIn, totalOut, balance, warehouseName },
+      stockSummary,
       entryHistory: entries,
     }),
     primaryLabel: "Fechar",
@@ -4207,7 +4269,7 @@ function renderStockInventory(movements, summary) {
     const msg = stockState.projectWarehouses?.length
       ? "Sem materiais com saldo ou planeados no armazém seleccionado."
       : "Sem stock disponível no armazém desta obra.";
-    tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="px-10 py-10 text-center text-slate-400 font-medium">${msg}</td></tr>`;
     return;
   }
 
@@ -4220,6 +4282,8 @@ function renderStockInventory(movements, summary) {
     const fallbackTotals = computeStockTotals(movements, item.productId, item.warehouseId);
     const totalIn = item.totalIn != null ? Number(item.totalIn || 0) : fallbackTotals.totalIn;
     const totalOut = item.totalOut != null ? Number(item.totalOut || 0) : fallbackTotals.totalOut;
+    const consumed = Number(item.totalConsumed ?? totalOut);
+    const onSite = Number(item.totalOnSite || 0);
 
     return `
       <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all cursor-pointer group" data-view-inventory="${item.productId}::${item.warehouseId || ""}" title="Clique para ver detalhes da entrada">
@@ -4241,7 +4305,8 @@ function renderStockInventory(movements, summary) {
         <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${product.unit || "un"}</td>
         <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn}</td>
-        <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${totalOut}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${consumed}</td>
+        <td class="px-10 py-5 text-center text-xs font-bold hidden lg:table-cell ${onSite > 0 ? "text-amber-600" : "text-slate-300"}">${onSite || "—"}</td>
         <td class="px-6 md:px-10 py-5 text-right font-black text-slate-900 text-sm">${balance}</td>
         <td class="px-6 md:px-10 py-5 text-right flex items-center justify-end gap-2">
            <button onclick="event.stopPropagation(); openEditPlannedModal('${item.productId}', '${escapeHtml(product.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
@@ -4656,14 +4721,18 @@ function wireStock() {
     const rowView = e.target.closest("[data-view-stock]");
     if (rowView && !e.target.closest("button")) {
       const mid = rowView.dataset.viewStock;
-      openStockMovementDetailModal(mid);
+      openStockMovementDetailModal(mid).catch(() =>
+        toast("Não foi possível carregar o detalhe do movimento.", { type: "error" })
+      );
       return;
     }
 
     const invRow = e.target.closest("[data-view-inventory]");
     if (invRow && !e.target.closest("button")) {
       const [productId, warehouseId] = String(invRow.dataset.viewInventory || "").split("::");
-      openStockInventoryDetailModal(productId, warehouseId || null);
+      openStockInventoryDetailModal(productId, warehouseId || null).catch(() =>
+        toast("Não foi possível carregar o detalhe do material.", { type: "error" })
+      );
     }
   });
 

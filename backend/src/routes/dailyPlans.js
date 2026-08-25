@@ -7,6 +7,23 @@ const dailyPlansRoutes = express.Router();
 
 dailyPlansRoutes.use(authRequired);
 
+/**
+ * Resolve o estaleiro da obra. Prefere sempre um armazém SITE para que a entrega e a
+ * devolução do mesmo plano nunca caiam em armazéns diferentes.
+ */
+async function resolveProjectEstaleiro(projectId, client = prisma) {
+  return (
+    (await client.warehouse.findFirst({
+      where: { projectId, type: "SITE" },
+      orderBy: { createdAt: "asc" },
+    })) ||
+    (await client.warehouse.findFirst({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+    }))
+  );
+}
+
 // GET /daily-plans/all-pending
 // Retorna planos pendentes de material globalmente (para o painel do armazém)
 dailyPlansRoutes.get(
@@ -403,9 +420,7 @@ dailyPlansRoutes.post(
     if (plan.status !== "PENDING_MATERIAL") return res.status(400).json({ error: "Estado do plano não permite esta ação." });
 
     // Descobrir qual é o armazém da Obra (Estaleiro)
-    const estaleiro = await prisma.warehouse.findFirst({
-      where: { projectId: plan.projectId }
-    });
+    const estaleiro = await resolveProjectEstaleiro(plan.projectId);
 
     if (!estaleiro) {
       return res.status(400).json({ error: "A obra não tem um estaleiro (armazém) associado." });
@@ -430,23 +445,6 @@ dailyPlansRoutes.post(
 
           const newTotalProvided = alreadyProvided + additionalQty;
 
-          await tx.dailyPlanMaterial.update({
-            where: { id: mat.id },
-            data: { providedQty: newTotalProvided }
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              warehouseId: estaleiro.id,
-              productId: mat.productId,
-              projectId: plan.projectId,
-              type: "EXIT",
-              quantity: additionalQty,
-              notes: `Disponibilizado para Plano Diario (ID: ${plan.id})${receivedBy ? ` - Recebido por: ${receivedBy}` : ''}`,
-              userId: activeUserId
-            }
-          });
-
           // Procurar qualquer stock deste produto no estaleiro (independente de owner para simplificar em obra)
           const existingStock = await tx.warehouseStock.findFirst({
             where: {
@@ -455,21 +453,40 @@ dailyPlansRoutes.post(
             }
           });
 
-          if (existingStock) {
-            await tx.warehouseStock.update({
-              where: { id: existingStock.id },
-              data: { quantity: { decrement: additionalQty } }
-            });
-          } else {
-            await tx.warehouseStock.create({
-              data: {
-                warehouseId: estaleiro.id,
-                productId: mat.productId,
-                quantity: -additionalQty,
-                ownerId: null
-              }
-            });
+          const available = Number(existingStock?.quantity || 0);
+          if (available < additionalQty) {
+            const product = await tx.product.findUnique({ where: { id: mat.productId } });
+            const err = new Error(
+              `Stock insuficiente de "${product?.name || mat.productId}" em ${estaleiro.name}: disponível ${available}, pedido ${additionalQty}.`
+            );
+            err.code = "INSUFFICIENT_STOCK";
+            throw err;
           }
+
+          await tx.dailyPlanMaterial.update({
+            where: { id: mat.id },
+            data: { providedQty: newTotalProvided }
+          });
+
+          // ALLOCATION: o material passa à custódia da equipa. Não é consumo — o consumo
+          // real é ALLOCATION menos a devolução (RETURN) confirmada.
+          await tx.stockMovement.create({
+            data: {
+              warehouseId: estaleiro.id,
+              productId: mat.productId,
+              projectId: plan.projectId,
+              dailyPlanId: plan.id,
+              type: "ALLOCATION",
+              quantity: additionalQty,
+              notes: `Disponibilizado para Plano Diario (ID: ${plan.id})${receivedBy ? ` - Recebido por: ${receivedBy}` : ''}`,
+              userId: activeUserId
+            }
+          });
+
+          await tx.warehouseStock.update({
+            where: { id: existingStock.id },
+            data: { quantity: { decrement: additionalQty } }
+          });
         }
 
         await tx.dailyPlan.update({
@@ -482,6 +499,9 @@ dailyPlansRoutes.post(
       });
       res.json({ success: true, message: "Materiais disponibilizados com sucesso." });
     } catch (error) {
+      if (error.code === "INSUFFICIENT_STOCK") {
+        return res.status(400).json({ error: error.message });
+      }
       console.error("ERRO NO TRANSACTION provide-materials:", error);
       return res.status(500).json({ error: "Erro ao processar stock: " + error.message });
     }
@@ -608,9 +628,7 @@ dailyPlansRoutes.post(
       return res.status(400).json({ error: "Este plano não está pendente de validação." });
     }
 
-    const estaleiro = await prisma.warehouse.findFirst({
-      where: { projectId: plan.projectId }
-    });
+    const estaleiro = await resolveProjectEstaleiro(plan.projectId);
 
     let hasReturns = false;
 
@@ -728,9 +746,7 @@ dailyPlansRoutes.post(
       return res.status(400).json({ error: "A devolução deste plano já foi confirmada anteriormente." });
     }
 
-    const estaleiro = await prisma.warehouse.findFirst({
-      where: { projectId: plan.projectId }
-    });
+    const estaleiro = await resolveProjectEstaleiro(plan.projectId);
 
     if (!estaleiro) {
       return res.status(400).json({ error: "O estaleiro não foi encontrado." });
@@ -746,38 +762,48 @@ dailyPlansRoutes.post(
           const product = await tx.product.findUnique({ where: { id: mat.productId } });
           const isTool = product?.category === 'TOOL' || product?.category === 'EQUIPMENT';
 
-          // If tool/equipment and some units were reported as lost, create an EXIT movement to audit the loss
-          if (isTool && consQty > 0) {
+          // Para ferramentas, consumedQty significa "extraviado": tudo o que saiu regressa
+          // ao estaleiro e o extravio sai como perda. Para materiais, o consumo fica em obra
+          // e só o excedente regressa. Em ambos os casos o efeito líquido é -consQty.
+          const retorno = isTool ? provided : provided - consQty;
+          const perda = isTool ? consQty : 0;
+
+          if (retorno > 0) {
+            // RETURN: devolve ao estaleiro o que foi alocado e não consumido. Não é uma
+            // recepção nova, por isso não conta como Entrada.
             await tx.stockMovement.create({
               data: {
                 warehouseId: estaleiro.id,
                 productId: mat.productId,
                 projectId: plan.projectId,
-                type: "EXIT",
-                quantity: consQty,
+                dailyPlanId: plan.id,
+                type: "RETURN",
+                quantity: retorno,
+                notes: isTool
+                  ? `Devolução de ferramenta/equipamento do Plano ${plan.id} - Devolvido por: ${returnedBy}`
+                  : `Devolução de material não consumido (Plano ${plan.id}) - Devolvido por: ${returnedBy}`,
+                userId: activeUserId
+              }
+            });
+          }
+
+          if (perda > 0) {
+            await tx.stockMovement.create({
+              data: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId,
+                projectId: plan.projectId,
+                dailyPlanId: plan.id,
+                type: "LOSS",
+                quantity: perda,
                 notes: `Ferramenta/Equipamento extraviado em obra (Plano Diário ${plan.id.slice(-6).toUpperCase()}) - Devolvido por: ${returnedBy}`,
                 userId: activeUserId
               }
             });
           }
 
-          if (consQty < provided) {
-            const retorno = provided - consQty;
-
-            await tx.stockMovement.create({
-              data: {
-                warehouseId: estaleiro.id,
-                productId: mat.productId,
-                projectId: plan.projectId,
-                type: "ENTRY",
-                quantity: retorno,
-                notes: isTool
-                  ? `Devolução de ferramenta/equipamento não extraviado (Plano ${plan.id}) - Devolvido por: ${returnedBy}`
-                  : `Devolução de material não consumido (Plano ${plan.id}) - Devolvido por: ${returnedBy}`,
-                userId: activeUserId
-              }
-            });
-
+          const delta = retorno - perda;
+          if (delta !== 0) {
             const existingStock = await tx.warehouseStock.findFirst({
               where: {
                 warehouseId: estaleiro.id,
@@ -788,14 +814,14 @@ dailyPlansRoutes.post(
             if (existingStock) {
               await tx.warehouseStock.update({
                 where: { id: existingStock.id },
-                data: { quantity: { increment: retorno } }
+                data: { quantity: { increment: delta } }
               });
             } else {
               await tx.warehouseStock.create({
                 data: {
                   warehouseId: estaleiro.id,
                   productId: mat.productId,
-                  quantity: retorno,
+                  quantity: delta,
                   ownerId: null
                 }
               });

@@ -9,7 +9,9 @@
     "build": "prisma generate && prisma migrate deploy",
     "postinstall": "prisma generate && prisma migrate deploy",
     "migrate:deploy": "prisma migrate deploy",
-    "seed": "node src/utils/startup.js"
+    "seed": "node src/utils/startup.js",
+    "stock:reclassify": "node scripts/reclassifyDailyPlanMovements.js",
+    "stock:reclassify:apply": "node scripts/reclassifyDailyPlanMovements.js --apply"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",

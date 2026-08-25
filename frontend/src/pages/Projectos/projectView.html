@@ -1227,8 +1227,10 @@
                         <select id="stockFilterType"
                             class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
                             <option value="">Todas Operações</option>
-                            <option value="ENTRADA">Entradas</option>
-                            <option value="SAIDA">Saídas / Aplicação</option>
+                            <option value="ENTRADA">Entradas (recepções)</option>
+                            <option value="SAIDA">Saídas / Perdas</option>
+                            <option value="ALOCACAO">Entregas a planos diários</option>
+                            <option value="DEVOLUCAO">Devoluções ao estaleiro</option>
                             <option value="TRANSFERENCIA">Transferências</option>
                         </select>
                     </div>
@@ -1314,11 +1316,17 @@
                                         <th class="px-6 md:px-10 py-5">Material</th>
                                         <th class="px-6 md:px-10 py-5 text-center">Armazém/Lote</th>
                                         <th class="px-10 py-5 text-center hidden sm:table-cell">Unidade</th>
-                                        <th class="px-10 py-5 text-center text-blue-500 hidden md:table-cell">Previsto
-                                        </th>
-                                        <th class="px-10 py-5 text-center text-emerald-600 hidden md:table-cell">
-                                            Entradas</th>
-                                        <th class="px-10 py-5 text-center text-red-600 hidden md:table-cell">Saídas</th>
+                                        <th class="px-10 py-5 text-center text-blue-500 hidden md:table-cell"
+                                            title="Quantidade planeada para a obra.">Previsto</th>
+                                        <th class="px-10 py-5 text-center text-emerald-600 hidden md:table-cell"
+                                            title="Recepções em armazém. Não inclui devoluções de planos diários.">
+                                            Recebido</th>
+                                        <th class="px-10 py-5 text-center text-red-600 hidden md:table-cell"
+                                            title="Material aplicado em planos diários já fechados, mais saídas e perdas directas.">
+                                            Consumido</th>
+                                        <th class="px-10 py-5 text-center text-amber-600 hidden lg:table-cell"
+                                            title="Entregue a planos diários ainda não fechados: está fora do armazém sem consumo confirmado nem devolução.">
+                                            Em Obra</th>
                                         <th class="px-6 md:px-10 py-5 text-right font-black">Saldo</th>
                                         <th class="px-6 md:px-10 py-5 text-right">Ação</th>
                                     </tr>

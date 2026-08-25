@@ -1870,6 +1870,8 @@ async function renderMovements(container) {
         'LOSS': { icon: 'remove_circle', color: '#ef4444', bg: '#fee2e2', label: 'Perda Registada', tag: 'PERDA' },
         'ASSIGNED': { icon: 'person_add', color: '#0891b2', bg: '#cffafe', label: 'Alocação de Ativo', tag: 'ALOCAÇÃO' },
         'RETURNED': { icon: 'assignment_return', color: '#7c3aed', bg: '#f5f3ff', label: 'Devolução de Ativo', tag: 'DEVOLUÇÃO' },
+        'ALLOCATION': { icon: 'engineering', color: '#f59e0b', bg: '#fef3c7', label: 'Entrega a Plano Diário', tag: 'ENTREGA A PLANO' },
+        'RETURN': { icon: 'assignment_return', color: '#0ea5e9', bg: '#e0f2fe', label: 'Devolução ao Estaleiro', tag: 'DEVOLUÇÃO' },
     };
 
     let html = `
@@ -1960,8 +1962,8 @@ async function renderMovements(container) {
             const timeStr = date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
             const dateStr = date.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' });
             const config = typeConfig[m.type] || { icon: 'history', color: '#94a3b8', bg: '#f1f5f9', label: m.type, tag: m.type };
-            const isPositive = m.type === 'ENTRY' || m.type === 'TRANSFER_IN';
-            const isNegative = m.type === 'EXIT' || m.type === 'TRANSFER_OUT' || m.type === 'LOSS';
+            const isPositive = m.type === 'ENTRY' || m.type === 'TRANSFER_IN' || m.type === 'RETURN';
+            const isNegative = m.type === 'EXIT' || m.type === 'TRANSFER_OUT' || m.type === 'LOSS' || m.type === 'ALLOCATION';
             const qtyColor = isPositive ? '#10b981' : isNegative ? '#ef4444' : '#64748b';
             const qtySign = isPositive ? '+' : isNegative ? '−' : '';
             const catIsAsset = m.product.category === 'TOOL' || m.product.category === 'EQUIPMENT';

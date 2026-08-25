@@ -48,6 +48,21 @@ function isClientVisibleStockMovement(m) {
   return isStockEntryMovement(m) && isClientStockMaterialProduct(m?.product);
 }
 
+/**
+ * Total recebido de um material. O servidor agrega o histórico completo; a lista de
+ * movimentos é apenas um extracto recente e só serve de recurso se o total faltar.
+ */
+function clientReceivedTotal(item, entryMovements = []) {
+  if (item?.totalIn != null) return Number(item.totalIn || 0);
+  return entryMovements
+    .filter(
+      (m) =>
+        m.productId === item?.productId &&
+        String(m.warehouseId || "") === String(item?.warehouseId || "")
+    )
+    .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+}
+
 let stockPageData = { summary: [], movements: [] };
 
 let dashboardData = null;
@@ -425,14 +440,11 @@ function renderStockSummaryCards(summary, movements) {
   const entryMovements = filterLogisticsEntries(movements || []);
   const visibleSummary = (summary || []).filter((item) => {
     const balance = Number(item.quantity || 0);
-    const totalIn = entryMovements
-      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
-      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    return balance > 0 || totalIn > 0;
+    return balance > 0 || clientReceivedTotal(item, entryMovements) > 0;
   });
 
   const uniqueProducts = visibleSummary.length;
-  const totalEntries = entryMovements.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const totalEntries = visibleSummary.reduce((acc, item) => acc + clientReceivedTotal(item, entryMovements), 0);
   const currentBalance = visibleSummary.reduce((acc, s) => acc + Number(s.quantity || 0), 0);
   container.innerHTML = `
         <div class="w-full bg-white p-6 rounded-2xl border border-slate-100 shadow-sm min-h-[118px] flex flex-col justify-between">
@@ -489,15 +501,10 @@ function buildClientEntryStockSummary(productId, warehouseId, warehouseName) {
   const item = stockPageData.summary?.find(
     (s) => s.productId === productId && String(s.warehouseId || "") === String(warehouseId || "")
   );
-  const productEntries = filterLogisticsEntries(
-    (stockPageData.movements || []).filter(
-      (m) => m.productId === productId && String(m.warehouseId || "") === String(warehouseId || "")
-    )
-  );
-  const totalIn = productEntries.reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+  const productEntries = filterLogisticsEntries(stockPageData.movements || []);
   return {
     planned: Number(item?.quantityPlanned || 0),
-    totalIn,
+    received: clientReceivedTotal(item, productEntries),
     balance: Number(item?.quantity || 0),
     warehouseName: warehouseName || item?.warehouse?.name || "Geral",
     entriesOnly: true,
@@ -640,10 +647,7 @@ function renderStockInventory(summary, movements) {
   const entryMovements = filterLogisticsEntries(movements);
   const visibleSummary = summary.filter((item) => {
     const balance = Number(item.quantity || 0);
-    const totalIn = entryMovements
-      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
-      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-    return balance > 0 || totalIn > 0;
+    return balance > 0 || clientReceivedTotal(item, entryMovements) > 0;
   });
 
   if (visibleSummary.length === 0) {
@@ -657,9 +661,7 @@ function renderStockInventory(summary, movements) {
     const warehouseName = item.warehouse?.name || "Geral";
     const colorClass = saldo < 0 ? "text-red-600" : "text-slate-900";
 
-    const totalIn = entryMovements
-      .filter((m) => m.productId === item.productId && String(m.warehouseId || "") === String(item.warehouseId || ""))
-      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+    const totalIn = clientReceivedTotal(item, entryMovements);
     const planned = Number(item.quantityPlanned || 0);
 
     return `

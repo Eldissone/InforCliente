@@ -144,10 +144,15 @@ stockRoutes.get(
   "/movements",
   requirePermission("stock", "view"),
   asyncHandler(async (req, res) => {
-    console.log("DEBUG: GET /stock/movements reached");
-    const { warehouseId, productId, type, projectId } = req.query;
+    const { warehouseId, productId, type, projectId, limit } = req.query;
     const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
     if (projectId) await assertProjectReadableForCliente(req, String(projectId));
+
+    // Sem filtro de produto a lista é só um extracto recente; filtrada por produto tem de
+    // ser completa, porque é dela que sai o histórico apresentado nos detalhes do material.
+    const defaultTake = productId ? 1000 : 100;
+    const parsedLimit = Number.parseInt(String(limit ?? ""), 10);
+    const take = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 2000) : defaultTake;
 
     const items = await prisma.stockMovement.findMany({
       where: {
@@ -161,7 +166,7 @@ stockRoutes.get(
         warehouse: true,
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take,
     });
 
     const userIds = [...new Set(items.map((m) => m.userId).filter(Boolean))];
@@ -337,34 +342,78 @@ stockRoutes.get(
     );
     const withImages = Object.values(grouped).map((item) => mergeProductImage(item, evidenceMap));
     
-    const totalsRows = await prisma.stockMovement.groupBy({
-      by: ["productId", "warehouseId", "type"],
-      where: {
-        projectId,
-        warehouseId: { in: selectedWarehouseIds },
-        productId: { in: productIds },
-        quantity: { gt: 0 },
-        type: { in: ["ENTRY", "EXIT", "TRANSFER_IN", "TRANSFER_OUT", "LOSS"] },
-      },
-      _sum: { quantity: true },
+    const movementScope = {
+      projectId,
+      warehouseId: { in: selectedWarehouseIds },
+      productId: { in: productIds },
+      quantity: { gt: 0 },
+    };
+
+    // ALLOCATION/RETURN representam a custódia do material pelas equipas nos planos
+    // diários. Não são recepções nem saídas de armazém, por isso ficam em buckets próprios.
+    const [totalsRows, openPlanRows] = await Promise.all([
+      prisma.stockMovement.groupBy({
+        by: ["productId", "warehouseId", "type"],
+        where: {
+          ...movementScope,
+          type: { in: ["ENTRY", "EXIT", "TRANSFER_IN", "TRANSFER_OUT", "LOSS", "ALLOCATION", "RETURN"] },
+        },
+        _sum: { quantity: true },
+      }),
+      prisma.stockMovement.groupBy({
+        by: ["productId", "warehouseId", "type"],
+        where: {
+          ...movementScope,
+          type: { in: ["ALLOCATION", "RETURN"] },
+          dailyPlan: { status: { not: "COMPLETED" } },
+        },
+        _sum: { quantity: true },
+      }),
+    ]);
+
+    const emptyTotals = () => ({
+      totalIn: 0,
+      totalOut: 0,
+      totalAllocated: 0,
+      totalReturned: 0,
+      totalOnSite: 0,
+      totalConsumed: 0,
     });
+
     const totalsByKey = {};
     for (const r of totalsRows) {
       const key = `${r.productId}_${r.warehouseId}`;
-      if (!totalsByKey[key]) totalsByKey[key] = { totalIn: 0, totalOut: 0 };
+      if (!totalsByKey[key]) totalsByKey[key] = emptyTotals();
       const qty = Number(r._sum?.quantity || 0);
       if (r.type === "ENTRY" || r.type === "TRANSFER_IN") {
         totalsByKey[key].totalIn += qty;
       } else if (r.type === "EXIT" || r.type === "TRANSFER_OUT" || r.type === "LOSS") {
         totalsByKey[key].totalOut += qty;
+      } else if (r.type === "ALLOCATION") {
+        totalsByKey[key].totalAllocated += qty;
+      } else if (r.type === "RETURN") {
+        totalsByKey[key].totalReturned += qty;
       }
     }
 
+    // Material alocado a planos ainda não concluídos: está fora do armazém mas o consumo
+    // ainda não foi confirmado nem devolvido.
+    for (const r of openPlanRows) {
+      const key = `${r.productId}_${r.warehouseId}`;
+      if (!totalsByKey[key]) totalsByKey[key] = emptyTotals();
+      const qty = Number(r._sum?.quantity || 0);
+      totalsByKey[key].totalOnSite += r.type === "ALLOCATION" ? qty : -qty;
+    }
+
+    for (const t of Object.values(totalsByKey)) {
+      t.totalOnSite = Math.max(0, t.totalOnSite);
+      t.totalConsumed = Math.max(0, t.totalAllocated - t.totalReturned - t.totalOnSite);
+    }
+
     const withTotals = withImages.map((item) => {
-      if (!item?.productId || !item?.warehouseId) return { ...item, totalIn: 0, totalOut: 0 };
+      if (!item?.productId || !item?.warehouseId) return { ...item, ...emptyTotals() };
       const key = `${item.productId}_${item.warehouseId}`;
-      const t = totalsByKey[key] || { totalIn: 0, totalOut: 0 };
-      return { ...item, totalIn: t.totalIn, totalOut: t.totalOut };
+      return { ...item, ...(totalsByKey[key] || emptyTotals()) };
     });
     let enriched = await enrichStockItemsWithOwners(withTotals);
     if (isClienteRole(req)) {
@@ -989,11 +1038,15 @@ stockRoutes.get(
       }
       
       const val = Number(m.quantity || 0);
-      if (m.type === "SAIDA" || m.type === "TRANSFER_OUT" || m.type === "LOSS") {
+      if (m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS" || m.type === "ALLOCATION") {
         stockMap[pId].totalOut += val;
         stockMap[pId].qty -= val;
-      } else if (m.type === "ENTRADA" || m.type === "TRANSFER_IN" || m.type === "ENTRY") {
+      } else if (m.type === "ENTRY" || m.type === "TRANSFER_IN") {
         stockMap[pId].totalIn += val;
+        stockMap[pId].qty += val;
+      } else if (m.type === "RETURN") {
+        // Devolução de material alocado: reduz o consumo, não é recepção nova.
+        stockMap[pId].totalOut -= val;
         stockMap[pId].qty += val;
       }
     });

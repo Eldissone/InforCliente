@@ -9,9 +9,14 @@ export const STOCK_TYPE_LABELS = {
   TRANSFER_OUT: "Transferência (Saída)",
   ADJUSTMENT: "Ajuste",
   LOSS: "Perda",
+  ALLOCATION: "Entrega a plano diário",
+  RETURN: "Devolução ao estaleiro",
   ENTRADA: "Entrada",
   SAIDA: "Saída",
 };
+
+/** Recepções reais em armazém (não inclui devoluções de planos diários). */
+export const STOCK_RECEIPT_TYPES = new Set(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
 
 export function parseStockMovementLogistics(m) {
   const notes = (m.notes || "").trim();
@@ -62,18 +67,35 @@ function renderEvidenceBlock(m, label = "Evidência / Guia / Viatura") {
 
 function renderStockSummaryStrip(summary) {
   if (!summary) return "";
-  const { planned, totalIn, totalOut, balance, warehouseName, entriesOnly } = summary;
-  const cols = entriesOnly ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-4";
-  const exitsCell = entriesOnly
-    ? ""
-    : `<div><p class="text-[9px] font-black uppercase text-slate-400">Saídas</p><p class="text-lg font-black text-red-400">${totalOut}</p></div>`;
+  const { planned, balance, warehouseName, entriesOnly } = summary;
+  const received = Number(summary.received ?? summary.totalIn ?? 0);
+  const consumed = Number(summary.consumed ?? summary.totalOut ?? 0);
+  const onSite = Number(summary.onSite ?? 0);
+
+  const cells = [
+    `<div><p class="text-[9px] font-black uppercase text-slate-400">Previsto</p><p class="text-lg font-black text-blue-300">${planned}</p></div>`,
+    `<div><p class="text-[9px] font-black uppercase text-slate-400">Recebido</p><p class="text-lg font-black text-emerald-400">${received}</p></div>`,
+  ];
+  if (!entriesOnly) {
+    cells.push(
+      `<div><p class="text-[9px] font-black uppercase text-slate-400">Consumido</p><p class="text-lg font-black text-red-400">${consumed}</p></div>`
+    );
+    if (onSite > 0) {
+      cells.push(
+        `<div><p class="text-[9px] font-black uppercase text-slate-400">Em obra</p><p class="text-lg font-black text-amber-400">${onSite}</p></div>`
+      );
+    }
+  }
+  cells.push(
+    `<div><p class="text-[9px] font-black uppercase text-slate-400">Saldo</p><p class="text-lg font-black text-[#2afc8d]">${balance}</p></div>`
+  );
+
+  const cols = cells.length >= 5 ? "grid-cols-3 sm:grid-cols-5" : cells.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
   return `
     <div class="grid ${cols} gap-3 p-4 bg-slate-900 rounded-2xl text-white">
-      <div><p class="text-[9px] font-black uppercase text-slate-400">Previsto</p><p class="text-lg font-black text-blue-300">${planned}</p></div>
-      <div><p class="text-[9px] font-black uppercase text-slate-400">Entradas</p><p class="text-lg font-black text-emerald-400">${totalIn}</p></div>
-      ${exitsCell}
-      <div><p class="text-[9px] font-black uppercase text-slate-400">Saldo</p><p class="text-lg font-black text-[#2afc8d]">${balance}</p></div>
+      ${cells.join("")}
     </div>
+    ${onSite > 0 && !entriesOnly ? `<p class="text-[10px] font-bold text-amber-600 text-center mt-2">${onSite} ${onSite === 1 ? "unidade está" : "unidades estão"} em obra com planos diários ainda não fechados.</p>` : ""}
     ${warehouseName ? `<p class="text-[10px] font-bold text-slate-500 text-center mt-2">Armazém: ${escapeHtml(warehouseName)}</p>` : ""}`;
 }
 
@@ -200,19 +222,24 @@ export function computeStockTotals(movements, productId, warehouseId = null) {
     if (warehouseId == null || warehouseId === "") return true;
     return String(m.warehouseId || "") === String(warehouseId);
   });
-  const totalIn = pMovements
-    .filter((m) => m.type === "ENTRY" || m.type === "TRANSFER_IN" || m.type === "ENTRADA")
-    .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-  const totalOut = pMovements
-    .filter((m) => m.type === "EXIT" || m.type === "TRANSFER_OUT" || m.type === "LOSS" || m.type === "SAIDA")
-    .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
-  return { pMovements, totalIn, totalOut };
+  const sumOf = (types) =>
+    pMovements
+      .filter((m) => types.includes(m.type))
+      .reduce((acc, m) => acc + Number(m.quantity || 0), 0);
+
+  const totalIn = sumOf(["ENTRY", "TRANSFER_IN", "ENTRADA"]);
+  const totalAllocated = sumOf(["ALLOCATION"]);
+  const totalReturned = sumOf(["RETURN"]);
+  const totalOut =
+    sumOf(["EXIT", "TRANSFER_OUT", "LOSS", "SAIDA"]) + Math.max(0, totalAllocated - totalReturned);
+
+  return { pMovements, totalIn, totalOut, totalAllocated, totalReturned };
 }
 
-/** Entradas registadas via Nova Operação Logística. */
+/** Recepções em armazém. Não inclui devoluções de planos diários. */
 export function filterLogisticsEntries(pMovements) {
   return pMovements
-    .filter((m) => m.type === "ENTRY" || m.type === "TRANSFER_IN" || m.type === "ENTRADA")
+    .filter((m) => STOCK_RECEIPT_TYPES.has(m.type))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
@@ -233,14 +260,7 @@ export function buildStockInventoryOnlyHtml(item, totals, options = {}) {
 
   return `
     <div class="space-y-6">
-      ${renderStockSummaryStrip({
-        planned: totals.planned,
-        totalIn: totals.totalIn,
-        totalOut: totals.totalOut,
-        balance: totals.balance,
-        warehouseName: totals.warehouseName,
-        entriesOnly: options.entriesOnly ?? totals.entriesOnly,
-      })}
+      ${renderStockSummaryStrip({ ...totals, entriesOnly: options.entriesOnly ?? totals.entriesOnly })}
       <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
         ${productImgHtml}
         <div>

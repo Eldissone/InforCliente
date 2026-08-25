@@ -561,6 +561,7 @@ model StockMovement {
   productId       String
   reference       String?
   sourceQuoteId   String?
+  dailyPlanId     String?
   userId          String
   warehouseId     String
   photos          ProjectPhoto[]
@@ -568,8 +569,11 @@ model StockMovement {
   project         Project?       @relation(fields: [projectId], references: [id])
   warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
   sourceQuote     NeedQuote?     @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
+  dailyPlan       DailyPlan?     @relation(fields: [dailyPlanId], references: [id], onDelete: SetNull)
 
   @@index([sourceQuoteId])
+  @@index([dailyPlanId])
+  @@index([projectId, productId, warehouseId])
 }
 
 model ProjectPhoto {
@@ -677,6 +681,10 @@ enum MovementType {
   TRANSFER_OUT
   ADJUSTMENT
   LOSS
+  // Entrega de material a um plano diário (custódia da equipa, não é consumo).
+  ALLOCATION
+  // Devolução ao estaleiro do material alocado e não consumido.
+  RETURN
 }
 
 enum Role {
@@ -806,9 +814,10 @@ model DailyPlan {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks     DailyPlanTask[]
-  materials DailyPlanMaterial[]
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks          DailyPlanTask[]
+  materials      DailyPlanMaterial[]
+  stockMovements StockMovement[]
 }
 
 model DailyPlanTask {
