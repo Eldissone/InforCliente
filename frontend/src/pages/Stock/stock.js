@@ -1005,6 +1005,27 @@ async function openProductModal(product = null) {
     });
 }
 
+const TOOL_SUMMARY_COLLAPSED_KEY = "InfoCliente.toolSummaryCollapsed";
+
+function isToolSummaryCollapsed() {
+    return localStorage.getItem(TOOL_SUMMARY_COLLAPSED_KEY) === "1";
+}
+
+function applyToolSummaryCollapsed(collapsed) {
+    const grid = document.getElementById("toolSummaryGrid");
+    const label = document.getElementById("btnToggleToolSummaryLabel");
+    const icon = document.getElementById("btnToggleToolSummaryIcon");
+    const btn = document.getElementById("btnToggleToolSummary");
+    const headingRow = btn?.parentElement;
+    if (!grid || !btn) return;
+
+    grid.classList.toggle("hidden", collapsed);
+    headingRow?.classList.toggle("mb-6", !collapsed);
+    if (label) label.textContent = collapsed ? "Expandir" : "Ocultar";
+    icon?.classList.toggle("rotate-180", !collapsed);
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
+
 async function renderTools(container) {
     const currentUser = await apiRequest("/users/me");
     const { items: allItems } = await apiRequest("/items");
@@ -1055,9 +1076,19 @@ async function renderTools(container) {
         </div>
 
         <!-- Resumo por Modelo (Quantidades) -->
-        <div class="mb-10 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 ml-4">Resumo por Modelo / Quantidades</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div id="toolSummaryPanel" class="mb-10 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+            <div class="flex items-center justify-between gap-4 ${isToolSummaryCollapsed() ? "" : "mb-6"} px-1 sm:px-2">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo por Modelo / Quantidades</h4>
+                <button type="button" id="btnToggleToolSummary"
+                    class="h-9 px-4 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors shrink-0"
+                    aria-expanded="${isToolSummaryCollapsed() ? "false" : "true"}"
+                    aria-controls="toolSummaryGrid"
+                    title="Ocultar ou expandir o resumo">
+                    <span id="btnToggleToolSummaryLabel">${isToolSummaryCollapsed() ? "Expandir" : "Ocultar"}</span>
+                    <span id="btnToggleToolSummaryIcon" class="material-symbols-outlined text-lg transition-transform ${isToolSummaryCollapsed() ? "" : "rotate-180"}">expand_more</span>
+                </button>
+            </div>
+            <div id="toolSummaryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isToolSummaryCollapsed() ? "hidden" : ""}">
                 ${Object.values(toolGroups).map(g => `
                     <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex justify-between items-center group hover:border-[#2afc8d] transition-all">
                         <div>
@@ -1236,6 +1267,12 @@ async function renderTools(container) {
             btnCreate.classList.add("hidden");
         }
     }
+
+    document.getElementById("btnToggleToolSummary")?.addEventListener("click", () => {
+        const collapsed = !isToolSummaryCollapsed();
+        localStorage.setItem(TOOL_SUMMARY_COLLAPSED_KEY, collapsed ? "1" : "0");
+        applyToolSummaryCollapsed(collapsed);
+    });
 
     // Lógica de Pesquisa e Filtros
     const searchInput = document.getElementById("searchTools");
