@@ -2,7 +2,7 @@ import { apiRequest, apiUpload } from "../services/api.js";
 import { getSessionUser } from "../services/auth.js";
 import { can } from "./permissions.js";
 import { formatCurrency } from "./format.js";
-import { computeFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
+import { computeFiscalBreakdown, formatFiscalAmount, pedidoTotalsPanelMarkup, refreshPedidoTotalsFromRows } from "./supplierFiscal.js";
 import {
   bindNifLookup,
 } from "./supplierNifLookup.js";
@@ -161,6 +161,7 @@ const EXTRA_MODAL_HTML = `
             <tbody id="extraItemsBody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
+        ${pedidoTotalsPanelMarkup("extra")}
       </div>
       <div class="flex flex-col gap-1">
         <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
@@ -333,12 +334,25 @@ function ensureModalMounted() {
       const cardRowHidden = document.getElementById("extraCardRow")?.classList.contains("hidden");
       cardSelect.required = !cardRowHidden && isExtraCardSource(document.getElementById("extraSource")?.value);
     }
+    ensureExtraTotalsPanel();
     return;
   }
   const root = document.createElement("div");
   root.id = "extraRequestModalRoot";
   root.innerHTML = EXTRA_MODAL_HTML;
   document.body.appendChild(root);
+}
+
+function ensureExtraTotalsPanel() {
+  if (document.getElementById("extraTotalsPanel")) return;
+  const table = document.getElementById("extraItemsTable");
+  const wrap = table?.parentElement;
+  if (!wrap) return;
+  wrap.insertAdjacentHTML("afterend", pedidoTotalsPanelMarkup("extra"));
+}
+
+function refreshExtraPedidoTotals() {
+  refreshPedidoTotalsFromRows("extra", "#extraItemsBody .extra-item-row");
 }
 
 function toDateInputValue(value) {
@@ -1321,6 +1335,7 @@ export async function openExtraRequestModal({
   if (dueInput) dueInput.value = desiredEl?.value || new Date().toISOString().slice(0, 10);
   addExtraItemRow();
   applyExtraQuoteRequirementVisibility();
+  refreshExtraPedidoTotals();
   document.getElementById("modalExtra").classList.add("open");
 }
 
@@ -1379,7 +1394,9 @@ function addExtraItemRow() {
   tbody.appendChild(tr);
   tr.querySelector(".extra-item-del")?.addEventListener("click", () => {
     if (tbody.querySelectorAll(".extra-item-row").length > 1) tr.remove();
+    refreshExtraPedidoTotals();
   });
+  refreshExtraPedidoTotals();
 }
 
 function parseTaxNote(notes, label) {
@@ -1524,6 +1541,7 @@ export async function openExtraRequestModalForEdit(id) {
   repopulateCCItems(item.items || []);
   applyExtraQuoteRequirementVisibility();
   syncExtraApprovalButtons(item);
+  refreshExtraPedidoTotals();
 
   document.getElementById("modalExtra").classList.add("open");
 }
@@ -1797,6 +1815,8 @@ function bindModalEvents() {
   document.getElementById("extraType")?.addEventListener("change", (e) => setExtraType(e.target.value));
   document.getElementById("extraRequiresQuote")?.addEventListener("change", applyExtraQuoteRequirementVisibility);
   document.getElementById("btnExtraAddItem")?.addEventListener("click", addExtraItemRow);
+  document.getElementById("extraItemsTable")?.addEventListener("input", refreshExtraPedidoTotals);
+  document.getElementById("extraItemsTable")?.addEventListener("change", refreshExtraPedidoTotals);
   document.getElementById("extraDesiredDate")?.addEventListener("change", () => {
     const due = document.getElementById("extraPaymentDueDate");
     if (due) due.value = document.getElementById("extraDesiredDate")?.value || "";

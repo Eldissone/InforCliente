@@ -1,22 +1,23 @@
 export function formatCurrency(value, currencyCode = "AOA") {
   const num = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(num)) return "-";
-  
+
   const code = (currencyCode || "AOA").toUpperCase();
-  
+
   if (code === "USD") {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(num);
   }
-  
-  return new Intl.NumberFormat("pt-AO", {
-    style: "currency",
-    currency: "AOA",
+
+  // Número decimal (não currency AOA): o ISO do Kwanza pode arredondar a 0 casas.
+  return `${num.toLocaleString("pt-PT", {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(num).replace('AOA', 'Kz').replace('kz', 'Kz');
+  })} Kz`;
 }
 
 export function formatCurrencyKZ(value) {

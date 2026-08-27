@@ -79,10 +79,6 @@ function parseItemTaxNotes(notes) {
   };
 }
 
-function roundMoney(value) {
-  return Math.round((Number(value) || 0) * 100) / 100;
-}
-
 function itemBaseAmount(item) {
   const qty = Number(item?.quantity) || 0;
   const price = Number(item?.unitPrice) || 0;
@@ -90,21 +86,21 @@ function itemBaseAmount(item) {
   return Number(item?.totalPrice) || 0;
 }
 
-/** Base − desconto + IVA (retenção não entra no preço com imposto). */
 function itemGrossAmount(item) {
   const base = itemBaseAmount(item);
   const { vat, discount } = parseItemTaxNotes(item?.notes);
-  return roundMoney(base - (base * discount) / 100 + (base * vat) / 100);
+  const liquido = base - (base * discount) / 100;
+  return liquido + (liquido * vat) / 100;
 }
 
 function orderTotalWithTax(order) {
   const items = order?.items || [];
-  const fromItems = roundMoney(items.reduce((sum, item) => sum + itemGrossAmount(item), 0));
+  const fromItems = items.reduce((sum, item) => sum + itemGrossAmount(item), 0);
   if (fromItems > 0) return fromItems;
   const quoted = Number(order?.requisition?.quotedValue);
-  if (Number.isFinite(quoted) && quoted > 0) return roundMoney(quoted);
+  if (Number.isFinite(quoted) && quoted > 0) return quoted;
   const total = Number(order?.totalValue);
-  return Number.isFinite(total) && total > 0 ? roundMoney(total) : 0;
+  return Number.isFinite(total) && total > 0 ? total : 0;
 }
 
 function mapOrder(o) {

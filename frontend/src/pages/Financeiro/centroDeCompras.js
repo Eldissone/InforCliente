@@ -44,6 +44,7 @@ import {
   normalizeNif,
   setNifLookupStatus,
 } from "/shared/supplierNifLookup.js";
+import { refreshPedidoTotalsFromRows } from "/shared/supplierFiscal.js";
 
 let costCategories = [];
 let allProjects = [];
@@ -2538,6 +2539,7 @@ function initCentroCompras() {
         const itemsBody = document.getElementById("ccItemsBody");
         if (itemsBody) itemsBody.innerHTML = "";
         addCCItemRow();
+        refreshCCPedidoTotals();
         const due = new Date();
         due.setDate(due.getDate() + 7);
         const desiredEl = document.getElementById("ccPedidoData");
@@ -2563,6 +2565,8 @@ function initCentroCompras() {
     document.getElementById("btnCloseNovoPedido")?.addEventListener("click", () => closeCCModal("modalNovoPedido"));
     document.getElementById("btnCancelNovoPedido")?.addEventListener("click", () => closeCCModal("modalNovoPedido"));
     document.getElementById("btnCCAddItem")?.addEventListener("click", addCCItemRow);
+    document.getElementById("ccItemsTable")?.addEventListener("input", refreshCCPedidoTotals);
+    document.getElementById("ccItemsTable")?.addEventListener("change", refreshCCPedidoTotals);
     document.getElementById("formNovoPedido")?.addEventListener("submit", submitNovoPedido);
 
     document.getElementById("btnCCVerTodos")?.addEventListener("click", () => switchCCSubTab("requisicoes"));
@@ -2664,14 +2668,15 @@ function ccItemGross(item) {
     const price = Number(item?.unitPrice) || 0;
     const base = qty && price ? qty * price : Number(item?.totalPrice) || 0;
     const { vat, discount } = ccParseItemTax(item?.notes);
-    return Math.round((base - (base * discount) / 100 + (base * vat) / 100) * 100) / 100;
+    const liquido = base - (base * discount) / 100;
+    return liquido + (liquido * vat) / 100;
 }
 
 function ccOrderTotalWithTax(r) {
-    if (r?.totalWithTax != null && r.totalWithTax !== "") return Number(r.totalWithTax) || 0;
     const items = r?.items || [];
     const fromItems = items.reduce((sum, item) => sum + ccItemGross(item), 0);
     if (fromItems > 0) return fromItems;
+    if (r?.totalWithTax != null && r.totalWithTax !== "") return Number(r.totalWithTax) || 0;
     return Number(ccOrderValue(r)) || 0;
 }
 
@@ -2708,6 +2713,15 @@ function mapExtraStatusToCC(extra) {
 }
 
 function mapExtraToCCPedido(extra) {
+    const items = extra.items || [];
+    const baseFromItems = items.reduce((sum, item) => {
+        const qty = Number(item?.quantity) || 0;
+        const price = Number(item?.unitPrice) || 0;
+        const line = qty && price ? qty * price : Number(item?.totalPrice) || 0;
+        return sum + line;
+    }, 0);
+    const withTaxFromItems = items.reduce((sum, item) => sum + ccItemGross(item), 0);
+    const amount = Number(extra.amount) || 0;
     return {
         ...extra,
         _isExtra: true,
@@ -2715,8 +2729,8 @@ function mapExtraToCCPedido(extra) {
         requestedByName: extra.requestedBy,
         status: mapExtraStatusToCC(extra),
         extraStatus: extra.status,
-        totalValue: extra.amount,
-        totalWithTax: extra.amount,
+        totalValue: baseFromItems > 0 ? baseFromItems : amount,
+        totalWithTax: withTaxFromItems > 0 ? withTaxFromItems : amount,
         supplierName: extra.supplierName || extra.supplierRef?.name || extra.supplier?.name || null,
     };
 }
@@ -2811,7 +2825,7 @@ async function loadCCDashboard() {
                 <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
                 <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${escapeHtml(r.description || "—")}</td>
                 <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
-                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
+                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderTotalWithTax(r))}</td>
                 <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
                 <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
                 <td class="px-4 py-3 text-center">
@@ -3029,13 +3043,22 @@ function addCCItemRow() {
         <td class="py-2 pr-2"><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-wh w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
         <td class="py-2 pr-2"><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-disc w-full h-8 px-2 bg-white border border-slate-200 rounded text-xs focus:outline-none"></td>
         <td class="py-2 text-right">
-            <button type="button" onclick="this.closest('tr').remove()" class="w-8 h-8 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center">
+            <button type="button" class="cc-item-del w-8 h-8 rounded bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center">
                 <span class="material-symbols-outlined text-sm">delete</span>
             </button>
         </td>
     `;
     tbody.appendChild(tr);
     bindCCItemDescSuggest(tr);
+    tr.querySelector(".cc-item-del")?.addEventListener("click", () => {
+        tr.remove();
+        refreshCCPedidoTotals();
+    });
+    refreshCCPedidoTotals();
+}
+
+function refreshCCPedidoTotals() {
+    refreshPedidoTotalsFromRows("ccPedido", "#ccItemsBody .cc-item-row");
 }
 window.addCCItemRow = addCCItemRow;
 

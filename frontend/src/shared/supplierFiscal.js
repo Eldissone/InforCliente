@@ -97,7 +97,13 @@ export function computeSupplierFiscalBreakdown(supplier, baseAmount, product = n
 }
 
 export function formatFiscalAmount(amount, currency = "AOA") {
-  return `${Math.abs(amount).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}`;
+  const n = Number(amount) || 0;
+  const formatted = Math.abs(n).toLocaleString("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const suffix = currency === "AOA" ? "Kz" : currency;
+  return `${n < 0 ? "−" : ""}${formatted} ${suffix}`;
 }
 
 /** Valor efectivo a pagar (líquido quando fiscal já aplicado no orçamento). */
@@ -202,6 +208,96 @@ export function defaultFiscalFlagsFromSupplier(supplier, product = null) {
     applyWithholding: pct.withholdingPercent > 0,
     applyDiscount: pct.discountPercent > 0,
   };
+}
+
+/** Totais de um pedido de compra (IVA sobre o líquido, após desconto). */
+export function computePedidoItemsTotals(lines = []) {
+  let iliquido = 0;
+  let descontos = 0;
+  let iva = 0;
+  for (const line of lines) {
+    const qty = Number(line.quantity) || 0;
+    const price = Number(line.unitPrice) || 0;
+    const discPct = Number(line.discountPercent) || 0;
+    const vatPct = Number(line.vatPercent) || 0;
+    const base = qty * price;
+    const discount = (base * discPct) / 100;
+    const liquidoLinha = base - discount;
+    iliquido += base;
+    descontos += discount;
+    iva += (liquidoLinha * vatPct) / 100;
+  }
+  const liquido = iliquido - descontos;
+  return {
+    iliquido,
+    descontos,
+    liquido,
+    iva,
+    doc: liquido + iva,
+  };
+}
+
+export function formatPedidoTotalNumber(value) {
+  return (Number(value) || 0).toLocaleString("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export function pedidoTotalsPanelMarkup(idPrefix) {
+  const rows = [
+    ["iliquido", "Total Iliquido:"],
+    ["descontos", "Total Descontos:"],
+    ["liquido", "Total Liquido:"],
+    ["iva", "Total IVA:"],
+    ["doc", "Total Doc.:"],
+  ];
+  return `
+  <div id="${idPrefix}TotalsPanel" class="mt-4 pt-1">
+    <p class="text-sm font-black uppercase text-slate-900 tracking-wide pb-2 mb-3 border-b-2 border-slate-800">Totais</p>
+    <div class="w-full max-w-[300px] ml-auto space-y-2.5">
+      ${rows
+        .map(
+          ([key, label]) => `
+        <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+          <span class="text-sm font-bold text-slate-800 text-right">${label}</span>
+          <span id="${idPrefix}Total_${key}" class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+        </div>`
+        )
+        .join("")}
+    </div>
+  </div>`;
+}
+
+export function collectPedidoTotalsFromItemRows(rowSelector) {
+  const lines = [];
+  document.querySelectorAll(rowSelector).forEach((row) => {
+    lines.push({
+      quantity: parseFloat(row.querySelector(".cc-item-qty")?.value || "0"),
+      unitPrice: parseFloat(row.querySelector(".cc-item-price")?.value || "0"),
+      vatPercent: parseFloat(row.querySelector(".cc-item-vat")?.value || "0"),
+      discountPercent: parseFloat(row.querySelector(".cc-item-disc")?.value || "0"),
+    });
+  });
+  return computePedidoItemsTotals(lines);
+}
+
+export function renderPedidoTotalsPanel(idPrefix, totals) {
+  const map = {
+    iliquido: totals.iliquido,
+    descontos: totals.descontos,
+    liquido: totals.liquido,
+    iva: totals.iva,
+    doc: totals.doc,
+  };
+  Object.entries(map).forEach(([key, val]) => {
+    const el = document.getElementById(`${idPrefix}Total_${key}`);
+    if (el) el.textContent = formatPedidoTotalNumber(val);
+  });
+}
+
+export function refreshPedidoTotalsFromRows(idPrefix, rowSelector) {
+  renderPedidoTotalsPanel(idPrefix, collectPedidoTotalsFromItemRows(rowSelector));
 }
 
 export function appendFiscalFieldsToFormData(fd, { inputMode, applyVat, applyWithholding, applyDiscount, grossAmount, baseAmount }) {

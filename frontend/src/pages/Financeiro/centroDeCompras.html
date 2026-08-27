@@ -390,7 +390,7 @@
                                             <th class="px-4 py-3">Nº Req.</th>
                                             <th class="px-4 py-3">Descrição</th>
                                             <th class="px-4 py-3">Solicitante</th>
-                                            <th class="px-4 py-3 text-right">Valor</th>
+                                            <th class="px-4 py-3 text-right">Valor c/ impostos</th>
                                             <th class="px-4 py-3">Estado</th>
                                             <th class="px-4 py-3">Data</th>
                                             <th class="px-4 py-3 text-center">Acção</th>
@@ -1544,6 +1544,38 @@
                                 <!-- Linhas geradas dinamicamente -->
                             </tbody>
                         </table>
+                    </div>
+                    <div id="ccPedidoTotalsPanel" class="mt-4 pt-1">
+                        <p
+                            class="text-sm font-black uppercase text-slate-900 tracking-wide pb-2 mb-3 border-b-2 border-slate-800">
+                            Totais</p>
+                        <div class="w-full max-w-[300px] ml-auto space-y-2.5">
+                            <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+                                <span class="text-sm font-bold text-slate-800 text-right">Total Iliquido:</span>
+                                <span id="ccPedidoTotal_iliquido"
+                                    class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+                            </div>
+                            <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+                                <span class="text-sm font-bold text-slate-800 text-right">Total Descontos:</span>
+                                <span id="ccPedidoTotal_descontos"
+                                    class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+                            </div>
+                            <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+                                <span class="text-sm font-bold text-slate-800 text-right">Total Liquido:</span>
+                                <span id="ccPedidoTotal_liquido"
+                                    class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+                            </div>
+                            <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+                                <span class="text-sm font-bold text-slate-800 text-right">Total IVA:</span>
+                                <span id="ccPedidoTotal_iva"
+                                    class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+                            </div>
+                            <div class="grid grid-cols-[1fr_8.5rem] items-baseline gap-3">
+                                <span class="text-sm font-bold text-slate-800 text-right">Total Doc.:</span>
+                                <span id="ccPedidoTotal_doc"
+                                    class="text-sm font-bold text-slate-900 text-right tabular-nums border-b border-slate-300 pb-0.5">0.00</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
