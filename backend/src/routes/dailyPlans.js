@@ -24,6 +24,126 @@ async function resolveProjectEstaleiro(projectId, client = prisma) {
   );
 }
 
+function isToolProduct(product) {
+  return product?.category === "TOOL" || product?.category === "EQUIPMENT";
+}
+
+function dailyPlanItemNote(planId) {
+  return `dailyPlan:${planId}`;
+}
+
+async function allocatePlanTools(tx, { product, estaleiro, qty, planId }) {
+  const availableItems = await tx.item.findMany({
+    where: {
+      productId: product.id,
+      warehouseId: estaleiro.id,
+      status: "AVAILABLE",
+    },
+    take: qty,
+    orderBy: { createdAt: "asc" },
+  });
+
+  let selected = [...availableItems];
+
+  if (selected.length < qty) {
+    const extraWhere = {
+      productId: product.id,
+      warehouseId: estaleiro.id,
+      status: "ASSIGNED",
+    };
+    if (selected.length) {
+      extraWhere.id = { notIn: selected.map((item) => item.id) };
+    }
+    const extra = await tx.item.findMany({
+      where: extraWhere,
+      take: qty - selected.length,
+      orderBy: { assignedAt: "asc" },
+    });
+    selected = selected.concat(extra);
+  }
+
+  if (selected.length < qty) {
+    const inTransit = await tx.item.count({
+      where: {
+        productId: product.id,
+        warehouseId: estaleiro.id,
+        status: { in: ["PENDING_RECEIPT", "PENDING_RETURN"] },
+      },
+    });
+    const suffix = inTransit > 0 ? ` (${inTransit} em trânsito ou a aguardar devolução).` : ".";
+    const err = new Error(
+      `Stock insuficiente de "${product.name}" em ${estaleiro.name}: ${selected.length} no estaleiro, pedido ${qty}${suffix}`
+    );
+    err.code = "INSUFFICIENT_STOCK";
+    throw err;
+  }
+
+  await tx.item.updateMany({
+    where: { id: { in: selected.map((item) => item.id) } },
+    data: {
+      status: "ASSIGNED",
+      assignedAt: new Date(),
+      lastStatusNote: dailyPlanItemNote(planId),
+      updatedAt: new Date(),
+    },
+  });
+}
+
+async function restorePlanTools(tx, { productId, estaleiroId, planId, restoreQty, loseQty }) {
+  const needed = restoreQty + loseQty;
+  if (needed <= 0) return;
+
+  let items = await tx.item.findMany({
+    where: {
+      productId,
+      lastStatusNote: dailyPlanItemNote(planId),
+    },
+    take: needed,
+    orderBy: { assignedAt: "asc" },
+  });
+
+  if (items.length < needed) {
+    const extra = await tx.item.findMany({
+      where: {
+        productId,
+        warehouseId: estaleiroId,
+        status: "ASSIGNED",
+        id: { notIn: items.map((item) => item.id) },
+      },
+      take: needed - items.length,
+      orderBy: { assignedAt: "asc" },
+    });
+    items = items.concat(extra);
+  }
+
+  const restoreIds = items.slice(0, restoreQty).map((item) => item.id);
+  const loseIds = items.slice(restoreQty, restoreQty + loseQty).map((item) => item.id);
+
+  if (restoreIds.length) {
+    await tx.item.updateMany({
+      where: { id: { in: restoreIds } },
+      data: {
+        status: "AVAILABLE",
+        responsibleId: null,
+        lastStatusNote: null,
+        returnedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  if (loseIds.length) {
+    await tx.item.updateMany({
+      where: { id: { in: loseIds } },
+      data: {
+        status: "LOST",
+        lastStatusNote: `Extraviado no plano ${planId}`,
+        updatedAt: new Date(),
+      },
+    });
+  }
+}
+
 // GET /daily-plans/all-pending
 // Retorna planos pendentes de material globalmente (para o painel do armazém)
 dailyPlansRoutes.get(
@@ -413,7 +533,7 @@ dailyPlansRoutes.post(
 
     const plan = await prisma.dailyPlan.findUnique({
       where: { id },
-      include: { materials: true, project: true }
+      include: { materials: { include: { product: true } }, project: true }
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
@@ -444,23 +564,38 @@ dailyPlansRoutes.post(
           }
 
           const newTotalProvided = alreadyProvided + additionalQty;
+          const product = mat.product || (await tx.product.findUnique({ where: { id: mat.productId } }));
+          const isTool = isToolProduct(product);
 
-          // Procurar qualquer stock deste produto no estaleiro (independente de owner para simplificar em obra)
-          const existingStock = await tx.warehouseStock.findFirst({
-            where: {
-              warehouseId: estaleiro.id,
-              productId: mat.productId
+          if (isTool) {
+            await allocatePlanTools(tx, {
+              product,
+              estaleiro,
+              qty: additionalQty,
+              planId: plan.id,
+            });
+          } else {
+            // Procurar qualquer stock deste produto no estaleiro (independente de owner para simplificar em obra)
+            const existingStock = await tx.warehouseStock.findFirst({
+              where: {
+                warehouseId: estaleiro.id,
+                productId: mat.productId
+              }
+            });
+
+            const available = Number(existingStock?.quantity || 0);
+            if (available < additionalQty) {
+              const err = new Error(
+                `Stock insuficiente de "${product?.name || mat.productId}" em ${estaleiro.name}: disponível ${available}, pedido ${additionalQty}.`
+              );
+              err.code = "INSUFFICIENT_STOCK";
+              throw err;
             }
-          });
 
-          const available = Number(existingStock?.quantity || 0);
-          if (available < additionalQty) {
-            const product = await tx.product.findUnique({ where: { id: mat.productId } });
-            const err = new Error(
-              `Stock insuficiente de "${product?.name || mat.productId}" em ${estaleiro.name}: disponível ${available}, pedido ${additionalQty}.`
-            );
-            err.code = "INSUFFICIENT_STOCK";
-            throw err;
+            await tx.warehouseStock.update({
+              where: { id: existingStock.id },
+              data: { quantity: { decrement: additionalQty } }
+            });
           }
 
           await tx.dailyPlanMaterial.update({
@@ -481,11 +616,6 @@ dailyPlansRoutes.post(
               notes: `Disponibilizado para Plano Diario (ID: ${plan.id})${receivedBy ? ` - Recebido por: ${receivedBy}` : ''}`,
               userId: activeUserId
             }
-          });
-
-          await tx.warehouseStock.update({
-            where: { id: existingStock.id },
-            data: { quantity: { decrement: additionalQty } }
           });
         }
 
@@ -735,7 +865,7 @@ dailyPlansRoutes.post(
 
     const plan = await prisma.dailyPlan.findUnique({
       where: { id },
-      include: { materials: true, project: true }
+      include: { materials: { include: { product: true } }, project: true }
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
@@ -758,9 +888,8 @@ dailyPlansRoutes.post(
           const consQty = Number(mat.consumedQty || 0);
           const provided = Number(mat.providedQty || 0);
 
-          // Fetch product to check category
-          const product = await tx.product.findUnique({ where: { id: mat.productId } });
-          const isTool = product?.category === 'TOOL' || product?.category === 'EQUIPMENT';
+          const product = mat.product || (await tx.product.findUnique({ where: { id: mat.productId } }));
+          const isTool = isToolProduct(product);
 
           // Para ferramentas, consumedQty significa "extraviado": tudo o que saiu regressa
           // ao estaleiro e o extravio sai como perda. Para materiais, o consumo fica em obra
@@ -803,7 +932,15 @@ dailyPlansRoutes.post(
           }
 
           const delta = retorno - perda;
-          if (delta !== 0) {
+          if (isTool) {
+            await restorePlanTools(tx, {
+              productId: mat.productId,
+              estaleiroId: estaleiro.id,
+              planId: plan.id,
+              restoreQty: Math.max(0, delta),
+              loseQty: perda,
+            });
+          } else if (delta !== 0) {
             const existingStock = await tx.warehouseStock.findFirst({
               where: {
                 warehouseId: estaleiro.id,

@@ -3192,6 +3192,62 @@ async function updateRequestsBadge() {
     } catch (err) { console.error("Erro ao atualizar badge:", err); }
 }
 
+function isToolOrEquipment(product) {
+    return product?.category === "TOOL" || product?.category === "EQUIPMENT";
+}
+
+function splitRequestedItems(items = []) {
+    const materials = [];
+    const tools = [];
+    for (const item of items) {
+        if (isToolOrEquipment(item.product)) tools.push(item);
+        else materials.push(item);
+    }
+    return { materials, tools };
+}
+
+function renderRequestItemChips(items, badgeClass) {
+    return items.map(m => `
+        <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-2">
+            <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
+            <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black shrink-0">${m.requestedQty} ${m.product?.unit || ""}</span>
+        </div>
+    `).join("");
+}
+
+function renderProvideItemRow(m, index, isTool) {
+    const alreadyProvided = Number(m.providedQty || 0);
+    const pendingQty = Math.max(0, Number(m.requestedQty) - alreadyProvided);
+    if (pendingQty <= 0) return "";
+
+    const fallbackName = isTool ? "Ferramenta Desconhecida" : "Material Desconhecido";
+    const qtyClass = isTool
+        ? "w-28 bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 text-center transition-all"
+        : "w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:ring-2 focus:ring-emerald-500 text-center transition-all";
+
+    return `
+        <div class="bg-white rounded-2xl p-4 border ${isTool ? "border-indigo-100" : "border-slate-100"} flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || fallbackName)}</p>
+                <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
+                    Solicitado: <span class="${isTool ? "text-indigo-600" : "text-amber-600"} font-black">${m.requestedQty} ${m.product?.unit || ""}</span>
+                    ${alreadyProvided > 0 ? `| Já Fornecido: <span class="text-emerald-600 font-black">${alreadyProvided}</span>` : ""}
+                </p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd. a Fornecer</label>
+                <input type="number"
+                    name="qty_${index}"
+                    data-product-id="${m.productId || m.product?.id || ""}"
+                    value="${pendingQty}"
+                    min="0"
+                    step="0.01"
+                    class="${qtyClass}">
+            </div>
+        </div>
+    `;
+}
+
 async function renderRequests(container) {
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
 
@@ -3249,18 +3305,31 @@ async function renderRequests(container) {
                         <p class="text-sm font-semibold text-slate-500">${p.tasks?.length || 0} Tarefas associadas</p>
                     </div>
 
-                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
-                        </h5>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            ${p.materials.map(m => `
-                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-                                    <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
-                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
+                        ${(() => {
+                            const { materials: reqMats, tools: reqTools } = splitRequestedItems(p.materials);
+                            const mats = reqMats.length > 0 ? `
+                                <div>
+                                    <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+                                    </h5>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        ${renderRequestItemChips(reqMats, "bg-amber-100 text-amber-800")}
+                                    </div>
                                 </div>
-                            `).join('')}
-                        </div>
+                            ` : "";
+                            const tools = reqTools.length > 0 ? `
+                                <div>
+                                    <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-sm">build</span> Ferramentas Requisitadas
+                                    </h5>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        ${renderRequestItemChips(reqTools, "bg-indigo-100 text-indigo-800")}
+                                    </div>
+                                </div>
+                            ` : "";
+                            return mats + tools;
+                        })()}
                     </div>
                 </div>
 
@@ -3295,37 +3364,49 @@ async function renderRequests(container) {
 window.providePlanMaterialsGlobal = async (id, event) => {
     // Procura o plano no cache
     const plan = _pendingPlans.find(p => p.id === id);
-    const materials = plan?.materials || [];
+    const allItems = plan?.materials || [];
+    const { materials: reqMats, tools: reqTools } = splitRequestedItems(allItems);
 
-    const materialsHtml = materials.length > 0
-        ? materials.map((m, i) => {
-            const alreadyProvided = Number(m.providedQty || 0);
-            const pendingQty = Math.max(0, m.requestedQty - alreadyProvided);
-            if (pendingQty <= 0) return ''; // Skip fully provided materials
+    const materialsRows = reqMats.map((m, i) => renderProvideItemRow(m, `m${i}`, false)).join("");
+    const toolsRows = reqTools.map((m, i) => renderProvideItemRow(m, `t${i}`, true)).join("");
+    const hasPendingRows = Boolean(materialsRows.trim() || toolsRows.trim());
 
-            return `
-            <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
-                    <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">
-                        Solicitado: <span class="text-amber-600 font-black">${m.requestedQty} ${m.product?.unit || ''}</span>
-                        ${alreadyProvided > 0 ? `| Já Fornecido: <span class="text-emerald-600 font-black">${alreadyProvided}</span>` : ''}
+    const materialsSection = materialsRows.trim() ? `
+                <div class="space-y-2">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">inventory_2</span>
+                        Materiais Solicitados
+                    </h5>
+                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        ${materialsRows}
+                    </div>
+                </div>
+    ` : "";
+
+    const toolsSection = toolsRows.trim() ? `
+                <div class="space-y-2 ${materialsRows.trim() ? "pt-2 border-t border-slate-100" : ""}">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">build</span>
+                        Ferramentas Solicitadas
+                    </h5>
+                    <p class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 leading-relaxed">
+                        As unidades saem do estaleiro desta obra (livres ou já em obra neste local). Ferramentas só no Armazém Geral têm de ser entregues/transferidas primeiro.
                     </p>
+                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        ${toolsRows}
+                    </div>
                 </div>
-                <div class="flex items-center gap-3 shrink-0">
-                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd. a Fornecer</label>
-                    <input type="number"
-                        name="qty_${i}"
-                        data-product-id="${m.productId || m.product?.id || ''}"
-                        value="${pendingQty}"
-                        min="0"
-                        step="0.01"
-                        class="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 focus:ring-2 focus:ring-emerald-500 text-center transition-all">
-                </div>
-            </div>
-            `;
-        }).join('')
-        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material associado a este pedido.</p>`;
+    ` : "";
+
+    const emptyState = !hasPendingRows
+        ? `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material ou ferramenta associado a este pedido.</p>`
+        : "";
+
+    const modalTitle = reqTools.length && reqMats.length
+        ? "Disponibilizar Stock para Obra"
+        : reqTools.length
+            ? "Disponibilizar Ferramentas para Obra"
+            : "Disponibilizar Materiais para Obra";
 
     const contentHtml = `
         <div class="space-y-5 pt-2">
@@ -3335,20 +3416,14 @@ window.providePlanMaterialsGlobal = async (id, event) => {
                 </div>
                 <div>
                     <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-0.5">Confirmação de Saída de Stock</p>
-                    <p class="text-xs text-amber-900 leading-relaxed">Confirme as quantidades a fornecer e registe quem recebeu o material antes de autorizar a saída.</p>
+                    <p class="text-xs text-amber-900 leading-relaxed">Confirme as quantidades a fornecer e registe quem recebeu o material ou a ferramenta antes de autorizar a saída.</p>
                 </div>
             </div>
 
             <form id="formProvideMaterials" class="space-y-5">
-                <div class="space-y-2">
-                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-sm">format_list_bulleted</span>
-                        Materiais Solicitados
-                    </h5>
-                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        ${materialsHtml}
-                    </div>
-                </div>
+                ${materialsSection}
+                ${toolsSection}
+                ${emptyState}
 
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
@@ -3357,7 +3432,7 @@ window.providePlanMaterialsGlobal = async (id, event) => {
                     <div class="relative">
                         <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">person</span>
                         <input type="text" name="receivedBy" required
-                            placeholder="Nome completo de quem recebeu o material..."
+                            placeholder="Nome completo de quem recebeu o stock..."
                             class="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder-slate-400">
                     </div>
                 </div>
@@ -3366,7 +3441,7 @@ window.providePlanMaterialsGlobal = async (id, event) => {
     `;
 
     const { close } = openModal({
-        title: "Disponibilizar Materiais para Obra",
+        title: modalTitle,
         contentHtml,
         primaryLabel: "Confirmar e Disponibilizar",
         onPrimary: async ({ body }) => {
