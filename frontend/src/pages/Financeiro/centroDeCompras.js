@@ -2422,7 +2422,13 @@ async function loadInitialData() {
   initMobileMenu();
   await initExtraRequestModal({
     showToast,
-    onSuccess: () => loadExtras(),
+    onSuccess: () => {
+      loadExtras();
+      loadCCDashboard();
+      loadCCPedidos();
+      loadCCRequisicoes();
+      if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
+    },
     getEditItem: (id) => extrasCache.find((e) => e.id === id),
   });
   bindEvents();
@@ -2515,7 +2521,10 @@ function switchCCSubTab(tab) {
     if (tab === "dashboard") loadCCDashboard();
     if (tab === "pedidos") loadCCPedidos();
     if (tab === "requisicoes") loadCCRequisicoes();
-    if (tab === "planoPagamentos") loadCCPagamentos();
+    if (tab === "planoPagamentos") {
+        if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
+        else loadCCPagamentos();
+    }
 }
 
 function initCentroCompras() {
@@ -2680,31 +2689,105 @@ function ccPriorityHtml(priority) {
     return '<span class="text-slate-500">Normal</span>';
 }
 
-function ccOpenDetailsBtn(id, label, extraClass = "") {
-    return `<button type="button" onclick="openCCReqDrawer('${id}')" class="${extraClass}">${label}</button>`;
+function ccOpenDetailsBtn(r, label, extraClass = "") {
+    const id = typeof r === "string" ? r : r?.id;
+    const isExtra = typeof r === "object" && r?._isExtra;
+    const handler = isExtra ? `openCCExtraPedido('${id}')` : `openCCReqDrawer('${id}')`;
+    return `<button type="button" onclick="${handler}" class="${extraClass}">${label}</button>`;
 }
+
+function mapExtraStatusToCC(extra) {
+    if (extra.status === "PENDENTE") {
+        return extra.requiresQuote ? "PENDENTE_REQUISICAO" : "PENDENTE_APROVACAO";
+    }
+    if (extra.status === "APROVADO") return "EM_PAGAMENTO";
+    if (extra.status === "PAGO") return "CONCLUIDO";
+    if (extra.status === "REJEITADO") return "NAO_APROVADO";
+    if (extra.status === "CANCELADO") return "CANCELADO";
+    return extra.status;
+}
+
+function mapExtraToCCPedido(extra) {
+    return {
+        ...extra,
+        _isExtra: true,
+        number: `PE-${String(extra.id || "").slice(-6).toUpperCase()}`,
+        requestedByName: extra.requestedBy,
+        status: mapExtraStatusToCC(extra),
+        extraStatus: extra.status,
+        totalValue: extra.amount,
+        totalWithTax: extra.amount,
+        supplierName: extra.supplierName || extra.supplierRef?.name || extra.supplier?.name || null,
+    };
+}
+
+function extraMatchesCCFilters(mapped, { status, priority, search }) {
+    if (status && mapped.status !== status) return false;
+    if (priority && mapped.priority !== priority) return false;
+    const q = String(search || "").trim().toLowerCase();
+    if (q) {
+        const hay = [
+            mapped.number,
+            mapped.description,
+            mapped.requestedByName,
+            mapped.requestedBy,
+            mapped.supplierName,
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+        if (!hay.includes(q)) return false;
+    }
+    return true;
+}
+
+async function fetchCCExtraPedidos() {
+    if (!can("pedidosExtras", "view")) return [];
+    try {
+        const res = await apiRequest("/extra-requests?pageSize=100");
+        const items = res.items || [];
+        extrasCache = items;
+        return items.map(mapExtraToCCPedido);
+    } catch {
+        return [];
+    }
+}
+
+window.openCCExtraPedido = function openCCExtraPedido(id) {
+    openExtraRequestModalForEdit(id);
+};
 
 async function loadCCDashboard() {
     try {
-        const data = await apiRequest("/purchase-orders/dashboard");
+        const [data, extraPedidos] = await Promise.all([
+            apiRequest("/purchase-orders/dashboard"),
+            fetchCCExtraPedidos(),
+        ]);
         const stats = data.kpis || {};
         const recents = data.recentes || [];
+
+        const extraPendentes = extraPedidos.filter((e) => e.extraStatus === "PENDENTE");
+        const extraReq = extraPendentes.filter((e) => e.status === "PENDENTE_REQUISICAO");
+        const extraAprov = extraPendentes.filter((e) => e.status === "PENDENTE_APROVACAO");
+        const extraPag = extraPedidos.filter((e) => e.extraStatus === "APROVADO");
+        const extraUrgentes = extraPendentes.filter((e) => e.priority === "URGENTE").length;
 
         const setText = (id, val) => {
             const el = document.getElementById(id);
             if (el) el.textContent = val;
         };
-        setText("ccKpiPedidos", stats.pedidosPendentes || 0);
-        setText("ccKpiReq", stats.requisicoesPendentes || 0);
-        setText("ccKpiAprov", stats.aprovacoesPendentes || 0);
-        setText("ccKpiPag", stats.pagamentosPendentes || 0);
-        setText("ccKpiAndamento", stats.emAndamento || 0);
+        setText("ccKpiPedidos", (stats.pedidosPendentes || 0) + extraPendentes.length);
+        setText("ccKpiReq", (stats.requisicoesPendentes || 0) + extraReq.length);
+        setText("ccKpiAprov", (stats.aprovacoesPendentes || 0) + extraAprov.length);
+        setText("ccKpiPag", (stats.pagamentosPendentes || 0) + extraPag.length);
+        setText("ccKpiAndamento", (stats.emAndamento || 0) + extraPendentes.length + extraPag.length);
         setText("ccKpiValor", formatCurrency(stats.valorComprometido || 0));
 
         const badge = document.getElementById("ccKpiBadgeUrgent");
         if (badge) {
-            if (stats.pedidosUrgentes > 0) {
-                badge.textContent = `${stats.pedidosUrgentes} Urgente(s)`;
+            const urgentes = (stats.pedidosUrgentes || 0) + extraUrgentes;
+            if (urgentes > 0) {
+                badge.textContent = `${urgentes} Urgente(s)`;
                 badge.classList.remove("hidden");
             } else {
                 badge.classList.add("hidden");
@@ -2714,12 +2797,16 @@ async function loadCCDashboard() {
         const tbody = document.getElementById("ccRecentTable");
         if (!tbody) return;
 
-        if (!recents.length) {
+        const mergedRecents = [...recents, ...extraPedidos]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 10);
+
+        if (!mergedRecents.length) {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">Sem processos recentes.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = recents.map((r) => `
+        tbody.innerHTML = mergedRecents.map((r) => `
             <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
                 <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
                 <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${escapeHtml(r.description || "—")}</td>
@@ -2728,7 +2815,7 @@ async function loadCCDashboard() {
                 <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
                 <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
                 <td class="px-4 py-3 text-center">
-                    ${ccOpenDetailsBtn(r.id, "Detalhes", "text-indigo-600 hover:text-indigo-800 text-xs font-bold underline")}
+                    ${ccOpenDetailsBtn(r, "Detalhes", "text-indigo-600 hover:text-indigo-800 text-xs font-bold underline")}
                 </td>
             </tr>
         `).join("");
@@ -2742,20 +2829,30 @@ window.loadCCDashboard = loadCCDashboard;
 async function loadCCPedidos() {
     try {
         const page = ccCache.pedidosPage || 1;
-        const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+        const pageSize = 20;
         const status = document.getElementById("ccPedidosFilterStatus")?.value || "";
         const priority = document.getElementById("ccPedidosFilterPriority")?.value || "";
-        const search = document.getElementById("ccPedidosSearch")?.value?.trim() || "";
-        if (status) params.set("status", status);
-        if (priority) params.set("priority", priority);
-        if (search) params.set("search", search);
+        const search = document.getElementById("ccPedidosSearch")?.value?.trim().toLowerCase() || "";
 
-        const res = await apiRequest(`/purchase-orders?${params.toString()}`);
-        const data = res.items || [];
+        const poParams = new URLSearchParams({ page: "1", pageSize: "100" });
+        if (status) poParams.set("status", status);
+        if (priority) poParams.set("priority", priority);
+        if (search) poParams.set("search", search);
+
+        const [res, extraPedidos] = await Promise.all([
+            apiRequest(`/purchase-orders?${poParams.toString()}`),
+            fetchCCExtraPedidos(),
+        ]);
+        const poItems = res.items || [];
+        const extrasFiltered = extraPedidos.filter((e) => extraMatchesCCFilters(e, { status, priority, search }));
+        const combined = [...poItems, ...extrasFiltered]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const total = combined.length;
+        const data = combined.slice((page - 1) * pageSize, page * pageSize);
         ccCache.pedidos = data;
-        ccCache.pedidosTotal = res.total || data.length;
+        ccCache.pedidosTotal = total;
         renderCCPedidos(data);
-        renderCCPedidosPagination(res.page || page, res.pageSize || 20, ccCache.pedidosTotal);
+        renderCCPedidosPagination(page, pageSize, total);
     } catch (err) {
         showToast("Erro ao carregar Pedidos: " + ccApiError(err), "error");
         const tbody = document.getElementById("ccPedidosTableBody");
@@ -2815,7 +2912,7 @@ function renderCCPedidos(data) {
             <td class="px-4 py-3 text-xs">${ccPriorityHtml(r.priority)}</td>
             <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
             <td class="px-4 py-3 text-center">
-                ${ccOpenDetailsBtn(r.id, `<span class="material-symbols-outlined text-sm">visibility</span>`, "w-8 h-8 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 inline-flex items-center justify-center transition-colors")}
+                ${ccOpenDetailsBtn(r, `<span class="material-symbols-outlined text-sm">visibility</span>`, "w-8 h-8 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 inline-flex items-center justify-center transition-colors")}
             </td>
         </tr>
     `).join("");
@@ -2825,17 +2922,27 @@ async function loadCCRequisicoes() {
     try {
         const params = new URLSearchParams({ pageSize: "50" });
         const status = document.getElementById("ccReqFilterStatus")?.value || "";
-        const search = document.getElementById("ccReqSearch")?.value?.trim() || "";
+        const search = document.getElementById("ccReqSearch")?.value?.trim().toLowerCase() || "";
         if (status) params.set("status", status);
         if (search) params.set("search", search);
 
-        const res = await apiRequest(`/purchase-orders?${params.toString()}`);
+        const [res, extraPedidos] = await Promise.all([
+            apiRequest(`/purchase-orders?${params.toString()}`),
+            fetchCCExtraPedidos(),
+        ]);
         let data = res.items || [];
         if (!status) {
             data = data.filter((r) =>
                 ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO"].includes(r.status)
             );
         }
+        const extrasFiltered = extraPedidos.filter((e) => {
+            if (!extraMatchesCCFilters(e, { status, search })) return false;
+            if (status) return true;
+            return ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO"].includes(e.status);
+        });
+        data = [...data, ...extrasFiltered]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         ccCache.requisicoes = data;
         const meta = document.getElementById("ccReqMeta");
         if (meta) {
@@ -2866,7 +2973,7 @@ function renderCCRequisicoes(data) {
             <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
             <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
             <td class="px-4 py-3 text-center">
-                ${ccOpenDetailsBtn(r.id, "Tratar", "h-8 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors")}
+                ${ccOpenDetailsBtn(r, "Tratar", "h-8 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors")}
             </td>
         </tr>
     `).join("");
@@ -2891,7 +2998,7 @@ async function loadCCPagamentos() {
                 <td class="px-4 py-3 text-xs font-black text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
                 <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
                 <td class="px-4 py-3 text-center">
-                    ${ccOpenDetailsBtn(r.id, "Gerir Planos", "h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100")}
+                    ${ccOpenDetailsBtn(r, "Gerir Planos", "h-8 px-3 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100")}
                 </td>
             </tr>
         `).join("");

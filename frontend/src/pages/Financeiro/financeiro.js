@@ -90,7 +90,7 @@ function mapExtraToTimelineItem(extra) {
   let timelineStatus = "CANCELADO";
   if (extra.status === "PAGO") {
     timelineStatus = "PAGO";
-  } else if (extra.status === "PENDENTE" || extra.status === "APROVADO") {
+  } else if (extra.status === "APROVADO") {
     // Atrasado só depois da data prevista — igual aos pagamentos normais.
     timelineStatus = resolveTimelineStatus({ status: "PENDENTE", paymentDate: refDate });
   }
@@ -161,14 +161,23 @@ function mergeTimelineDays(paymentDays, extras) {
   return [...dayMap.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
+function extraBelongsInPaymentPlan(extra) {
+  return extra.status === "APROVADO" || extra.status === "PAGO"
+    || extra.status === "REJEITADO" || extra.status === "CANCELADO";
+}
+
 function extraMatchesStatusFilter(extra) {
   const status = getFinStatusFilter();
-  if (!status || status === "EXTRA") return true;
-  if (status === "PENDENTE") return extra.status === "PENDENTE";
-  if (status === "VENCIDO" || status === "EXTRA_A_LIQUIDAR") return extra.status === "APROVADO";
+  if (extra.status === "PENDENTE") return false;
+  if (!status || status === "EXTRA") return extraBelongsInPaymentPlan(extra);
+  if (status === "PENDENTE" || status === "VENCIDO" || status === "EXTRA_A_LIQUIDAR") {
+    return extra.status === "APROVADO";
+  }
   if (status === "CONFIRMADO" || status === "EXTRA_PAGO") return extra.status === "PAGO";
-  if (status === "EXTRA_PENDENTE") return extra.status === "PENDENTE";
-  return true;
+  if (status === "CANCELADO") return extra.status === "REJEITADO" || extra.status === "CANCELADO";
+  if (status === "EXTRA_PENDENTE") return false;
+  if (status === "EM_ESPERA") return false;
+  return extraBelongsInPaymentPlan(extra);
 }
 
 function escapeAttr(value) {
@@ -1639,7 +1648,7 @@ function updateDashboardKPIsCombined(paymentData, extras) {
       monthlyAmount += amount;
       monthlyCount += 1;
     }
-    if (e.status === "APROVADO" || e.status === "PENDENTE") {
+    if (e.status === "APROVADO") {
       const st = resolveTimelineStatus({ status: "PENDENTE", paymentDate: e.paymentDueDate || e.approvedAt || e.requestedAt || e.createdAt });
       if (st === "VENCIDO") overdue += 1;
       else pending += 1;
@@ -2002,6 +2011,8 @@ async function fetchTimeline() {
   const params = getFilters();
   return apiRequest(`/cost-centers/payments/timeline?${params}`);
 }
+
+window.reloadFinanceiroPlan = reloadAll;
 
 async function reloadAll() {
   const grid = document.getElementById("calendarGrid");

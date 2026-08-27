@@ -238,6 +238,10 @@ const EXTRA_MODAL_HTML = `
       <div class="flex gap-3 justify-end pt-4 border-t border-slate-100 mt-2">
         <button type="button" id="btnCancelExtra"
           class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+        <button type="button" id="btnExtraReject"
+          class="hidden h-10 px-5 rounded-xl bg-red-50 text-red-600 text-sm font-bold hover:bg-red-100 border border-red-200">Não Aprovar</button>
+        <button type="button" id="btnExtraApprove"
+          class="hidden h-10 px-5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">Aprovar</button>
         <button type="submit" id="extraSubmitBtn"
           class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all">Salvar Pedido</button>
       </div>
@@ -1172,6 +1176,7 @@ function resetExtraFormState() {
   document.getElementById("extraEditId").value = "";
   document.getElementById("modalExtraTitle").textContent = "Novo Pedido de Compra";
   document.getElementById("extraSubmitBtn").textContent = "Salvar Pedido";
+  document.getElementById("extraSubmitBtn")?.classList.remove("hidden");
   document.getElementById("extraProformaHint")?.classList.add("hidden");
   document.getElementById("extraProformaBlockedHint")?.classList.add("hidden");
   clearExtraSupplierFields();
@@ -1189,6 +1194,7 @@ function resetExtraFormState() {
   applyExtraQuoteRequirementVisibility();
   const tbody = document.getElementById("extraItemsBody");
   if (tbody) tbody.innerHTML = "";
+  syncExtraApprovalButtons(null);
 }
 
 function setExtraType(type) {
@@ -1418,16 +1424,16 @@ export async function openExtraRequestModalForEdit(id) {
       return;
     }
   }
-  if (item.status !== "PENDENTE" && item.status !== "APROVADO") {
-    modalOptions.showToast("Só é possível editar pedidos não liquidados", "error");
-    return;
-  }
+  const canEdit = item.status === "PENDENTE" || item.status === "APROVADO";
 
   editingItemCache = item;
   document.getElementById("formExtra").reset();
   document.getElementById("extraEditId").value = item.id;
-  document.getElementById("modalExtraTitle").textContent = "Editar Pedido Extra";
+  document.getElementById("modalExtraTitle").textContent = canEdit
+    ? "Editar Pedido de Compra"
+    : "Pedido de Compra";
   document.getElementById("extraSubmitBtn").textContent = "Guardar alterações";
+  document.getElementById("extraSubmitBtn")?.classList.toggle("hidden", !canEdit);
 
   if (!costCategoriesLoaded) await loadAllCostCategories();
   setExtraType(item.type);
@@ -1517,6 +1523,7 @@ export async function openExtraRequestModalForEdit(id) {
   }
   repopulateCCItems(item.items || []);
   applyExtraQuoteRequirementVisibility();
+  syncExtraApprovalButtons(item);
 
   document.getElementById("modalExtra").classList.add("open");
 }
@@ -1735,8 +1742,8 @@ async function submitExtra(e) {
       }
       modalOptions.showToast(
         extraRequiresQuote()
-          ? "Pedido criado e enviado para Cotação"
-          : "Pedido Extra criado",
+          ? "Pedido criado. Aparece em Pedidos de Compra e na Cotação."
+          : "Pedido criado. Aparece em Pedidos de Compra até ser aprovado.",
         "success"
       );
     }
@@ -1744,6 +1751,40 @@ async function submitExtra(e) {
     await modalOptions.onSuccess?.();
   } catch (err) {
     modalOptions.showToast(err?.data?.message || err.message || "Erro ao guardar pedido", "error");
+  }
+}
+
+function syncExtraApprovalButtons(item) {
+  const show = Boolean(item && item.status === "PENDENTE" && can("pedidosExtras", "approve"));
+  document.getElementById("btnExtraApprove")?.classList.toggle("hidden", !show);
+  document.getElementById("btnExtraReject")?.classList.toggle("hidden", !show);
+}
+
+async function approveExtraFromModal() {
+  const id = document.getElementById("extraEditId")?.value;
+  if (!id) return;
+  if (!confirm("Aprovar este pedido? Depois segue para o plano de pagamentos.")) return;
+  try {
+    await apiRequest(`/extra-requests/${id}/approve`, { method: "PATCH" });
+    closeExtraModal();
+    modalOptions.showToast("Pedido aprovado — disponível no plano de pagamentos", "success");
+    await modalOptions.onSuccess?.();
+  } catch (err) {
+    modalOptions.showToast(err?.data?.message || err.message || "Erro ao aprovar pedido", "error");
+  }
+}
+
+async function rejectExtraFromModal() {
+  const id = document.getElementById("extraEditId")?.value;
+  if (!id) return;
+  const reason = prompt("Motivo da rejeição (opcional):") || "";
+  try {
+    await apiRequest(`/extra-requests/${id}/reject`, { method: "PATCH", body: { reason } });
+    closeExtraModal();
+    modalOptions.showToast("Pedido rejeitado", "success");
+    await modalOptions.onSuccess?.();
+  } catch (err) {
+    modalOptions.showToast(err?.data?.message || err.message || "Erro ao rejeitar pedido", "error");
   }
 }
 
@@ -1836,6 +1877,8 @@ function bindModalEvents() {
   );
   document.getElementById("btnCloseExtraModal")?.addEventListener("click", closeExtraModal);
   document.getElementById("btnCancelExtra")?.addEventListener("click", closeExtraModal);
+  document.getElementById("btnExtraApprove")?.addEventListener("click", approveExtraFromModal);
+  document.getElementById("btnExtraReject")?.addEventListener("click", rejectExtraFromModal);
   document.getElementById("modalExtra")?.addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeExtraModal();
   });
