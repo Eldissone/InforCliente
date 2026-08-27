@@ -3109,6 +3109,10 @@ window.editStockBalance = async (id) => {
     const stock = allStock.find(s => s.id === id);
     if (!stock) return;
 
+    const units = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
+    const currentUnit = String(stock.product.unit || "UN").toUpperCase();
+    const unitOptions = units.includes(currentUnit) ? units : [currentUnit, ...units];
+
     const contentHtml = `
         <form id="formEditStock" class="space-y-6 pt-4">
             <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4 mb-4">
@@ -3121,9 +3125,17 @@ window.editStockBalance = async (id) => {
                 </div>
             </div>
 
-            <div class="space-y-2">
-                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nova Quantidade (${stock.product.unit})</label>
-                <input type="number" name="quantity" value="${stock.quantity}" step="0.01" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nova Quantidade</label>
+                    <input type="number" name="quantity" value="${stock.quantity}" step="0.01" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Unidade</label>
+                    <select name="unit" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500">
+                        ${unitOptions.map((u) => `<option value="${u}" ${u === currentUnit ? "selected" : ""}>${u}</option>`).join("")}
+                    </select>
+                </div>
             </div>
 
             <div class="space-y-2">

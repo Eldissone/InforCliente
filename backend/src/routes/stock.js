@@ -1328,9 +1328,10 @@ stockRoutes.patch(
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { quantity, notes } = z.object({
+    const { quantity, notes, unit } = z.object({
       quantity: z.number(),
       notes: z.string().optional().nullable(),
+      unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]).optional(),
     }).parse(req.body);
 
     const oldStock = await prisma.warehouseStock.findUnique({
@@ -1344,7 +1345,16 @@ stockRoutes.patch(
       return res.status(403).json({ error: "FORBIDDEN" });
     }
 
+    const unitChanged = Boolean(unit && unit !== oldStock.product.unit);
+
     const updated = await prisma.$transaction(async (tx) => {
+      if (unitChanged) {
+        await tx.product.update({
+          where: { id: oldStock.productId },
+          data: { unit },
+        });
+      }
+
       // 1. Atualizar o saldo
       const stock = await tx.warehouseStock.update({
         where: { id },
@@ -1352,6 +1362,7 @@ stockRoutes.patch(
       });
 
       // 2. Registar como um movimento de AJUSTE para histórico
+      const unitNote = unitChanged ? ` Unidade: ${oldStock.product.unit} → ${unit}.` : "";
       await tx.stockMovement.create({
         data: {
           productId: oldStock.productId,
@@ -1360,7 +1371,7 @@ stockRoutes.patch(
           type: "ADJUSTMENT",
           quantity: Math.abs(quantity - Number(oldStock.quantity)),
           ownerId: oldStock.ownerId,
-          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}`,
+          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}.${unitNote}`,
         },
       });
 
