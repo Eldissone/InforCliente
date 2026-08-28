@@ -887,7 +887,7 @@ extraRequestRoutes.patch(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
-    if (existing.status !== "PENDENTE" && existing.status !== "APROVADO") {
+    if (existing.status !== "PENDENTE" && existing.status !== "APROVADO" && existing.status !== "REJEITADO") {
       return res.status(409).json({ error: "ONLY_UNLIQUIDATED_CAN_BE_EDITED" });
     }
 
@@ -1037,6 +1037,7 @@ extraRequestRoutes.patch(
       ...(desiredDatePatch || {}),
       ...(body.requiresQuote !== undefined ? { requiresQuote: Boolean(body.requiresQuote) } : {}),
       ...supplierPatch,
+      ...(existing.status === "REJEITADO" ? { status: "PENDENTE", rejectedReason: null } : {}),
     };
 
     let updated;

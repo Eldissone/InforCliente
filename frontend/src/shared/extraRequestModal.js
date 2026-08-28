@@ -1441,7 +1441,7 @@ export async function openExtraRequestModalForEdit(id) {
       return;
     }
   }
-  const canEdit = item.status === "PENDENTE" || item.status === "APROVADO";
+  const canEdit = item.status === "PENDENTE" || item.status === "APROVADO" || item.status === "REJEITADO";
 
   editingItemCache = item;
   document.getElementById("formExtra").reset();

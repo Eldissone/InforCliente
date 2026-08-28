@@ -1,5 +1,25 @@
 .material-symbols-outlined {
+    font-family: "Material Symbols Outlined";
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    -webkit-font-feature-settings: "liga";
+    font-feature-settings: "liga";
+    font-variant-ligatures: common-ligatures;
+}
+
+.fin-icon-btn .fin-icon-svg {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    display: block;
 }
 
 /* Sticky footer: viewport real no mobile (100dvh) */
@@ -75,6 +95,8 @@ body {
     border: none;
     background: #f1f5f9;
     color: #64748b;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .fin-icon-btn:hover {
@@ -961,6 +983,8 @@ body {
     border: none;
     background: #f1f5f9;
     color: #64748b;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .fin-icon-btn:hover {

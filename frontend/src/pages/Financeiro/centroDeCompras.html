@@ -360,7 +360,7 @@
                                         class="material-symbols-outlined cc-kpi-icon">account_balance_wallet</span>
                                 </div>
                                 <p id="ccKpiValor" class="cc-kpi-value cc-kpi-value--lg">—</p>
-                                <p class="cc-kpi-sub">aprovados + em pagamento</p>
+                                <p class="cc-kpi-sub">aprovados + em pagamento (c/ impostos)</p>
                             </div>
                         </div>
 
@@ -1419,6 +1419,7 @@
                 </button>
             </div>
             <form id="formNovoPedido" class="flex flex-col gap-4">
+                <input type="hidden" id="ccPedidoEditId" value="">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Tipo

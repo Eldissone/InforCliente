@@ -161,6 +161,94 @@ function mergeTimelineDays(paymentDays, extras) {
   return [...dayMap.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
+const PO_TO_EXTRA_STATUS = {
+  APROVADO: "APROVADO",
+  EM_PAGAMENTO: "APROVADO",
+  CONCLUIDO: "PAGO",
+  NAO_APROVADO: "REJEITADO",
+  CANCELADO: "CANCELADO",
+};
+
+const PLAN_PURCHASE_STATUSES = "APROVADO,EM_PAGAMENTO,CONCLUIDO,NAO_APROVADO,CANCELADO";
+
+function classifyPurchaseAttachments(attachments = []) {
+  const list = Array.isArray(attachments) ? attachments.filter((a) => a?.url) : [];
+  const used = new Set();
+  const take = (re) => {
+    const found = list.find((a) => !used.has(a.id) && re.test(`${a.fileName || ""} ${a.mimeType || ""}`));
+    if (found) used.add(found.id);
+    return found || null;
+  };
+  const rest = () => list.find((a) => !used.has(a.id)) || null;
+
+  const proforma = take(/proforma/i) || rest();
+  if (proforma) used.add(proforma.id);
+  const comprovativo = take(/comprov|recibo|proof/i);
+  const fatura = take(/fatur|factur|invoice/i) || rest();
+
+  return {
+    proformaUrl: proforma?.url || null,
+    comprovativoUrl: comprovativo?.url || null,
+    faturaUrl: fatura?.url || null,
+  };
+}
+
+function mapPurchaseOrderToPlanExtra(order) {
+  const extraStatus = PO_TO_EXTRA_STATUS[order.status];
+  if (!extraStatus) return null;
+
+  const approval =
+    (order.approvals || []).find((a) => a.decision === "APROVADO") ||
+    (order.approvals || [])[0];
+  const paidHistory = (order.history || []).find((h) => h.toStatus === "CONCLUIDO");
+  const installments = order.paymentPlan?.installments || [];
+  const paidInstallment = installments.find((i) => i.paidAt);
+  const pendingInstallment = installments.find((i) => i.status !== "PAGO");
+  const docs = classifyPurchaseAttachments(order.requisition?.attachments || []);
+  const amount = Number(order.totalWithTax || order.totalValue || 0);
+  const supplierName =
+    order.supplierName ||
+    order.supplier?.name ||
+    order.requisition?.supplierName ||
+    order.requisition?.supplier?.name ||
+    null;
+
+  return {
+    id: order.id,
+    _isPurchaseOrder: true,
+    number: order.number,
+    status: extraStatus,
+    type: order.projectId ? "OBRA" : "GERAL",
+    description: order.description,
+    amount,
+    currency: order.currency || "AOA",
+    requestedBy: order.requestedByName,
+    requestedAt: order.createdAt,
+    createdAt: order.createdAt,
+    approvedAt: approval?.decidedAt || null,
+    approvedBy: approval?.approverName || null,
+    paymentDueDate: pendingInstallment?.dueDate || approval?.decidedAt || order.createdAt,
+    paidAt:
+      extraStatus === "PAGO"
+        ? paidInstallment?.paidAt || paidHistory?.createdAt || order.updatedAt
+        : null,
+    paidBy: extraStatus === "PAGO" ? paidHistory?.userName || null : null,
+    project: order.project || null,
+    projectId: order.projectId || null,
+    costCenter: order.costCenter || null,
+    costCenterId: order.costCenterId || null,
+    supplierName,
+    supplierNif: order.supplier?.nif || order.requisition?.supplier?.nif || null,
+    supplierIban: order.supplier?.iban || order.requisition?.supplier?.iban || null,
+    supplierRef: order.supplier || order.requisition?.supplier || null,
+    proformaUrl: docs.proformaUrl,
+    comprovativoUrl: docs.comprovativoUrl,
+    faturaUrl: docs.faturaUrl,
+    paymentSource: "CAIXA",
+    notes: order.notes || order.justification || null,
+  };
+}
+
 function extraBelongsInPaymentPlan(extra) {
   return extra.status === "APROVADO" || extra.status === "PAGO"
     || extra.status === "REJEITADO" || extra.status === "CANCELADO";
@@ -194,14 +282,17 @@ function escapeHtml(value) {
 
 function extraRequestReference(extra) {
   const cost = formatExtraCostLabel(extra);
+  const orderRef = extra.number || "";
   if (extra.type === "GERAL") {
-    return cost !== "—" ? cost : extra.generalCostCenter?.name || "Geral";
+    const base = cost !== "—" ? cost : extra.generalCostCenter?.name || "Geral";
+    return orderRef ? `${orderRef} · ${base}` : base;
   }
   if (extra.project) {
     const obra = `${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`;
-    return cost !== "—" ? `${obra} · ${cost}` : obra;
+    const withCost = cost !== "—" ? `${obra} · ${cost}` : obra;
+    return orderRef ? `${orderRef} · ${withCost}` : withCost;
   }
-  return cost;
+  return orderRef || cost;
 }
 
 function extraRequestPaymentLabel(extra) {
@@ -466,8 +557,8 @@ function renderPlanExtraRow(extra, p) {
   return `
     <tr class="group">
       <td>${planRowDate(p, extra)}</td>
-      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(extra?.description)}">
-        <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || "—")}
+      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr([extra?.number, extra?.description].filter(Boolean).join(" · "))}">
+        <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || extra?.number || "—")}
       </td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
       <td>${formatIbanCell(extra?.supplierIban || extra?.supplierRef?.iban)}</td>
@@ -580,10 +671,36 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
       }
     );
   }
+  if (extra._isPurchaseOrder) {
+    fields.push({ label: "Nº pedido", value: extra.number || "—", wide: false });
+    if (extra.paymentSource !== "SOLICITACAO_TRANSFERENCIA") {
+      fields.push(
+        {
+          label: "Fornecedor",
+          value: extra.supplierName || extra.supplierRef?.name || "—",
+          wide: false,
+        },
+        {
+          label: "Proforma",
+          value: extra.proformaUrl ? renderExtraDocumentLink(extra.proformaUrl, "proforma") : "Não anexada",
+          wide: false,
+          isHtml: Boolean(extra.proformaUrl),
+        }
+      );
+    }
+  }
   if (extra.comprovativoUrl) {
     fields.push({
       label: "Comprovativo",
       value: renderExtraDocumentLink(extra.comprovativoUrl, "comprovativo"),
+      wide: false,
+      isHtml: true,
+    });
+  }
+  if (extra.faturaUrl) {
+    fields.push({
+      label: "Fatura",
+      value: renderExtraDocumentLink(extra.faturaUrl, "fatura"),
       wide: false,
       isHtml: true,
     });
@@ -908,11 +1025,12 @@ function renderExtraPayCardLoadSection(extra) {
 
 function openExtraPayModal(extra) {
   const needsComprovativo = extra.paymentSource === "SOLICITACAO_TRANSFERENCIA";
+  const showPoDocs = Boolean(extra._isPurchaseOrder);
   const isCardLoad = extra.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO";
   document.getElementById("extraPayBody").innerHTML =
     renderExtraDetailGrid(extra) +
     renderExtraPayFiscalBlock(extra) +
-    (needsComprovativo ? renderExtraPayComprovativoSection() : "") +
+    (needsComprovativo || showPoDocs ? renderExtraPayComprovativoSection() : "") +
     (isCardLoad ? renderExtraPayCardLoadSection(extra) : "");
 
   const fiscalMode = extra.fiscalInputMode === "gross" ? "gross" : "base";
@@ -939,8 +1057,8 @@ function openExtraPayModal(extra) {
     { prefix: "extraPay", amountField: "extraPayAmount", committedField: "extraPayCommitted" }
   );
 
-  if (needsComprovativo) {
-    resetExtraPayDocuments(true);
+  if (needsComprovativo || showPoDocs) {
+    resetExtraPayDocuments(needsComprovativo);
     const addBtn = document.getElementById("extraPayAddDocBtn");
     if (addBtn) {
       addBtn.onclick = () => {
@@ -985,6 +1103,34 @@ function openExtraPayModal(extra) {
             return;
           }
           await apiUpload(`/extra-requests/${extra.id}/pay`, fd, "POST");
+        } else if (extra._isPurchaseOrder) {
+          const docRows = Array.from(document.querySelectorAll("#extraPayDocsList .extra-pay-doc-row"));
+          let usedComprovativo = false;
+          let usedFatura = false;
+          let usedProforma = false;
+          docRows.forEach((row) => {
+            const file = row.querySelector(".extra-pay-doc-file")?.files?.[0];
+            if (!file) return;
+            const kind = row.querySelector(".extra-pay-doc-kind")?.value || "outro";
+            if (kind === "comprovativo" && !usedComprovativo) {
+              fd.append("comprovativo", file);
+              usedComprovativo = true;
+            } else if (kind === "fatura" && !usedFatura) {
+              fd.append("fatura", file);
+              usedFatura = true;
+            } else if (!usedProforma) {
+              fd.append("proforma", file);
+              usedProforma = true;
+            }
+          });
+          if (usedComprovativo || usedFatura || usedProforma) {
+            await apiUpload(`/purchase-orders/${extra.id}/pay`, fd, "POST");
+          } else {
+            await apiRequest(`/purchase-orders/${extra.id}/pay`, {
+              method: "POST",
+              body: { paidAmount: payAmount },
+            });
+          }
         } else {
           await apiRequest(`/extra-requests/${extra.id}/pay`, {
             method: "POST",
@@ -1051,8 +1197,9 @@ async function loadPendingPaymentsQueue() {
     projectId && projectId !== FIN_GENERAL_CENTERS
       ? `?projectId=${encodeURIComponent(projectId)}`
       : "";
-  const [extrasResult, reinforcementsResult, needsResult] = await Promise.allSettled([
+  const [extrasResult, purchaseOrdersResult, reinforcementsResult, needsResult] = await Promise.allSettled([
     apiRequest(`/extra-requests/pending-finance-payment${params}`),
+    fetchPurchaseOrdersForPlan(),
     isGeneralCentersFilter()
       ? Promise.resolve({ items: [] })
       : apiRequest(`/petty-cash/reinforcement-requests/pending-finance-approval${params}`),
@@ -1060,8 +1207,13 @@ async function loadPendingPaymentsQueue() {
       ? Promise.resolve({ items: [] })
       : apiRequest(`/cost-centers/pending-finance-scheduling${params}`),
   ]);
-  pendingPaymentsCache =
+  const extrasPending =
     extrasResult.status === "fulfilled" ? extrasResult.value.items || [] : [];
+  const purchasePending =
+    purchaseOrdersResult.status === "fulfilled"
+      ? (purchaseOrdersResult.value || []).filter((e) => e.status === "APROVADO")
+      : [];
+  pendingPaymentsCache = [...extrasPending, ...purchasePending];
   if (projectId === FIN_GENERAL_CENTERS) {
     pendingPaymentsCache = pendingPaymentsCache.filter((e) => e.type === "GERAL");
   }
@@ -1499,6 +1651,28 @@ async function loadDashboard() {
   renderDashboardChartsCombined(paymentData, extras);
 }
 
+function purchaseOrdersPlanParams() {
+  const params = new URLSearchParams();
+  const projectId = getProjectFilterValue();
+  if (projectId === FIN_GENERAL_CENTERS) {
+    params.set("projectId", "__null__");
+  } else if (projectId) {
+    params.set("projectId", projectId);
+  }
+  params.set("status", PLAN_PURCHASE_STATUSES);
+  params.set("pageSize", "100");
+  return params;
+}
+
+async function fetchPurchaseOrdersForPlan() {
+  try {
+    const data = await apiRequest(`/purchase-orders?${purchaseOrdersPlanParams()}`);
+    return (data.items || []).map(mapPurchaseOrderToPlanExtra).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function loadDashboardExtras() {
   const params = new URLSearchParams();
   const projectId = getProjectFilterValue();
@@ -1508,12 +1682,14 @@ async function loadDashboardExtras() {
     params.set("projectId", projectId);
   }
   params.set("pageSize", "100");
-  try {
-    const data = await apiRequest(`/extra-requests?${params}`);
-    extrasDashboardCache = filterDashboardExtras(data.items || []);
-  } catch {
-    extrasDashboardCache = [];
-  }
+  const [extrasResult, orders] = await Promise.all([
+    apiRequest(`/extra-requests?${params}`).catch(() => ({ items: [] })),
+    fetchPurchaseOrdersForPlan(),
+  ]);
+  extrasDashboardCache = filterDashboardExtras([
+    ...(extrasResult.items || []),
+    ...orders,
+  ]);
 }
 
 function filterDashboardExtras(items) {
@@ -1524,8 +1700,10 @@ function filterDashboardExtras(items) {
     if (!extraMatchesStatusFilter(e)) return false;
     if (search) {
       const hay = [
+        e.number,
         e.description,
         e.requestedBy,
+        e.supplierName,
         e.project?.name,
         e.project?.code,
         e.generalCostCenter?.name,
@@ -2216,7 +2394,12 @@ window.rejectExtraFromPlan = async function (extraId) {
 window.cancelExtraFromPlan = async function (extraId) {
   if (!confirm("Cancelar este pedido extra aprovado?")) return;
   try {
-    await apiRequest(`/extra-requests/${extraId}/cancel`, { method: "PATCH" });
+    const extra = extrasDashboardCache.find((e) => e.id === extraId);
+    if (extra?._isPurchaseOrder) {
+      await apiRequest(`/purchase-orders/${extraId}`, { method: "DELETE" });
+    } else {
+      await apiRequest(`/extra-requests/${extraId}/cancel`, { method: "PATCH" });
+    }
     toast("Pedido extra cancelado.", { type: "success" });
     await reloadAll();
   } catch (err) {
