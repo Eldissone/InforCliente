@@ -62,6 +62,19 @@
             display: block;
             animation: fadeIn 0.3s ease-out;
         }
+
+        tr.quote-bundle-head td {
+            background: #eef2ff;
+            border-top: 2px solid #c7d2fe;
+        }
+
+        tr.quote-bundle-child td {
+            background: #f8fafc;
+        }
+
+        tr.quote-bundle-last td {
+            border-bottom: 2px solid #c7d2fe;
+        }
     </style>
 </head>
 
@@ -358,6 +371,33 @@
                 </button>
             </div>
             <div id="supplierOrdersList" class="flex flex-col gap-3 max-h-[70vh] overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalBundleProforma">
+        <div class="modal-box" style="max-width:640px">
+            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h2 id="bundleProformaTitle" class="text-lg font-bold text-slate-900">Proforma do pedido</h2>
+                    <p class="text-xs text-slate-500 mt-1">Um único documento para todos os itens cotados em conjunto.</p>
+                </div>
+                <button type="button" id="btnCloseBundleProforma"
+                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+            <p id="bundleProformaSubtitle" class="text-sm font-semibold text-indigo-800 mb-3"></p>
+            <ul id="bundleProformaItems" class="mb-4 text-sm text-slate-700 list-disc pl-5 space-y-1 max-h-48 overflow-y-auto"></ul>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Ficheiro da proforma *</label>
+            <input id="bundleProformaFile" type="file" accept="image/*,.pdf"
+                class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm file:mr-3 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-800">
+            <div class="flex justify-end gap-2 mt-4">
+                <button type="button" id="btnSubmitBundleProforma"
+                    class="h-10 px-5 rounded-xl bg-amber-500 text-white text-xs font-black flex items-center gap-1 hover:bg-amber-600">
+                    <span class="material-symbols-outlined text-base">upload_file</span>
+                    Aplicar ao pedido
+                </button>
+            </div>
         </div>
     </div>
 

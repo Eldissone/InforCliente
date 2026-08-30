@@ -18,6 +18,7 @@ const {
   createOrUpdateBundle,
   placeSupplierOrder,
   attachSingleQuoteToOrder,
+  applyProformaUrlToOrder,
   serializeSupplierOrder,
   ORDER_INCLUDE,
 } = require("../services/quoteBundleService");
@@ -140,6 +141,82 @@ async function applyProformaToNeed({ quote, need, req }) {
   });
 
   return updatedNeed;
+}
+
+const QUOTE_NEED_FOR_PROFORMA = {
+  costCenter: { select: { name: true, code: true, currency: true } },
+  project: { select: { id: true, name: true, code: true, location: true, region: true } },
+};
+
+async function applyProformaToQuoteGroup({ quote, proformaUrl, req }) {
+  let quoteIds = [quote.id];
+  let orderId = quote.supplierOrderId || null;
+
+  if (orderId) {
+    const siblings = await prisma.needQuote.findMany({
+      where: { supplierOrderId: orderId },
+      select: { id: true },
+    });
+    quoteIds = siblings.map((s) => s.id);
+    if (!quoteIds.includes(quote.id)) quoteIds.push(quote.id);
+    await applyProformaUrlToOrder(prisma, orderId, proformaUrl);
+  } else if (quote.orderNumber != null) {
+    const siblings = await prisma.needQuote.findMany({
+      where: { orderNumber: quote.orderNumber },
+      select: { id: true, supplierOrderId: true },
+    });
+    quoteIds = siblings.map((s) => s.id);
+    orderId = siblings.find((s) => s.supplierOrderId)?.supplierOrderId || null;
+    if (orderId) {
+      await applyProformaUrlToOrder(prisma, orderId, proformaUrl);
+    } else {
+      await prisma.needQuote.updateMany({
+        where: { id: { in: quoteIds } },
+        data: { proformaUrl },
+      });
+    }
+  } else {
+    await prisma.needQuote.update({
+      where: { id: quote.id },
+      data: { proformaUrl },
+    });
+  }
+
+  const groupQuotes = await prisma.needQuote.findMany({
+    where: { id: { in: quoteIds } },
+    include: {
+      need: { include: QUOTE_NEED_FOR_PROFORMA },
+      supplier: { include: { bankAccounts: true } },
+      supplierProduct: {
+        select: {
+          name: true,
+          notes: true,
+          vatPercent: true,
+          withholdingPercent: true,
+          discountPercent: true,
+        },
+      },
+    },
+  });
+
+  const needsById = new Map();
+  for (const groupQuote of groupQuotes) {
+    await syncQuoteFiscalSnapshot(groupQuote.id);
+    if (needsById.has(groupQuote.needId)) continue;
+    const updatedNeed = await applyProformaToNeed({
+      quote: groupQuote,
+      need: groupQuote.need,
+      req,
+    });
+    needsById.set(groupQuote.needId, updatedNeed);
+  }
+
+  return {
+    quotes: groupQuotes,
+    needs: [...needsById.values()],
+    itemCount: groupQuotes.length,
+    orderId,
+  };
 }
 
 const fileUpload = multer({ 
@@ -332,6 +409,60 @@ quoteRoutes.post(
   })
 );
 
+quoteRoutes.post(
+  "/supplier-orders/:id/proforma",
+  fileUpload.single("proforma"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
+
+    const order = await prisma.quoteSupplierOrder.findUnique({
+      where: { id },
+      include: { quotes: { include: { need: { include: QUOTE_NEED_FOR_PROFORMA } } } },
+    });
+    if (!order) return res.status(404).json({ error: "ORDER_NOT_FOUND" });
+    if (!order.quotes.length) {
+      return res.status(400).json({ error: "ORDER_EMPTY", message: "Este pedido não tem itens." });
+    }
+
+    const invalid = order.quotes.find(
+      (q) => !["IN_QUOTATION", "ORDERED", "EM_ANALISE"].includes(q.need?.status)
+    );
+    if (invalid) {
+      return res.status(400).json({
+        error: "INVALID_NEED_STATUS_FOR_PROPOSAL",
+        message: "Há itens neste pedido que já não aceitam proforma.",
+      });
+    }
+
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const storagePath = `quotes/bundle/${id}/proforma-${Date.now()}${extension}`;
+    const proformaUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+
+    const group = await applyProformaToQuoteGroup({
+      quote: { ...order.quotes[0], supplierOrderId: id },
+      proformaUrl,
+      req,
+    });
+
+    const refreshed = await prisma.quoteSupplierOrder.findUnique({
+      where: { id },
+      include: ORDER_INCLUDE,
+    });
+
+    res.json({
+      ok: true,
+      inAnalysis: true,
+      appliedToOrder: true,
+      itemCount: group.itemCount,
+      order: serializeSupplierOrder(refreshed),
+      needs: group.needs.map(serializeNeed),
+      quote: serializeQuote(group.quotes.find((q) => q.id === order.quotes[0].id) || group.quotes[0]),
+      need: serializeNeed(group.needs[0] || null),
+    });
+  })
+);
+
 // Listar todos os itens Pendentes / Em Cotação da obra
 quoteRoutes.get(
   "/project/:projectId/needs",
@@ -400,6 +531,25 @@ quoteRoutes.get(
             vatPercent: true,
             withholdingPercent: true,
             discountPercent: true,
+          },
+        },
+        supplierOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            proformaUrl: true,
+            quotes: {
+              select: {
+                id: true,
+                needId: true,
+                quantity: true,
+                quotedPrice: true,
+                proformaUrl: true,
+                need: { select: { id: true, description: true, unit: true, status: true } },
+              },
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
@@ -1178,40 +1328,18 @@ quoteRoutes.post(
     const storagePath = `quotes/${quote.needId}/proforma-${Date.now()}${extension}`;
     const proformaUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
 
-    const updatedQuote = await prisma.needQuote.update({
-      where: { id },
-      data: { proformaUrl },
-    });
-
-    await syncQuoteFiscalSnapshot(id);
-
-    const refreshedQuote = await prisma.needQuote.findUnique({
-      where: { id },
-      include: {
-        supplier: { include: { bankAccounts: true } },
-        supplierProduct: {
-          select: {
-            name: true,
-            notes: true,
-            vatPercent: true,
-            withholdingPercent: true,
-            discountPercent: true,
-          },
-        },
-      },
-    });
-
-    const updatedNeed = await applyProformaToNeed({
-      quote: refreshedQuote,
-      need: quote.need,
-      req,
-    });
+    const group = await applyProformaToQuoteGroup({ quote, proformaUrl, req });
+    const refreshedQuote = group.quotes.find((q) => q.id === id) || group.quotes[0];
+    const updatedNeed = group.needs.find((n) => n.id === quote.needId) || group.needs[0];
 
     res.json({
       ok: true,
       inAnalysis: true,
+      appliedToOrder: group.itemCount > 1,
+      itemCount: group.itemCount,
       quote: serializeQuote(refreshedQuote),
       need: serializeNeed(updatedNeed),
+      needs: group.needs.map(serializeNeed),
     });
   })
 );

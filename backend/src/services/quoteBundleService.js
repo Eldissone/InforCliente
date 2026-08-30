@@ -284,6 +284,33 @@ async function attachSingleQuoteToOrder(prisma, quote) {
   });
 }
 
+async function applyProformaUrlToOrder(prisma, orderId, proformaUrl) {
+  const order = await prisma.quoteSupplierOrder.findUnique({
+    where: { id: orderId },
+    select: { id: true },
+  });
+  if (!order) {
+    const err = new Error("ORDER_NOT_FOUND");
+    err.code = "ORDER_NOT_FOUND";
+    throw err;
+  }
+
+  await prisma.quoteSupplierOrder.update({
+    where: { id: orderId },
+    data: { proformaUrl },
+  });
+
+  await prisma.needQuote.updateMany({
+    where: { supplierOrderId: orderId },
+    data: { proformaUrl },
+  });
+
+  return prisma.quoteSupplierOrder.findUnique({
+    where: { id: orderId },
+    include: ORDER_INCLUDE,
+  });
+}
+
 module.exports = {
   nextEfOrderNumber,
   ORDER_INCLUDE,
@@ -291,4 +318,5 @@ module.exports = {
   createOrUpdateBundle,
   placeSupplierOrder,
   attachSingleQuoteToOrder,
+  applyProformaUrlToOrder,
 };

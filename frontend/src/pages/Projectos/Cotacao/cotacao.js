@@ -23,6 +23,7 @@ let currentProjectId = null;
 let currentNeeds = [];
 let currentSuppliers = [];
 let allProjects = [];
+let pendingBundleProforma = null;
 const GERAL_SCOPE = "__geral__";
 
 function isGeralScope() {
@@ -177,6 +178,11 @@ function initEvents() {
   document.getElementById("btnCloseSupplierOrders")?.addEventListener("click", () => {
     document.getElementById("modalSupplierOrders")?.classList.remove("open");
   });
+  document.getElementById("btnCloseBundleProforma")?.addEventListener("click", () => {
+    document.getElementById("modalBundleProforma")?.classList.remove("open");
+    pendingBundleProforma = null;
+  });
+  document.getElementById("btnSubmitBundleProforma")?.addEventListener("click", submitBundleProforma);
 }
 
 // ==========================================
@@ -269,90 +275,308 @@ function renderNeeds() {
     return;
   }
 
-  const statusLabels = {
-    "PENDING": "Pendente",
-    "IN_QUOTATION": "Em Cotação",
-    "ORDERED": "Encomenda",
-    "EM_ANALISE": "Em Análise",
-    "APPROVED": "Aprovado",
-    "REJECTED": "Rejeitado"
-  };
-
-  const statusClasses = {
-    "PENDING": "bg-slate-100 text-slate-600",
-    "IN_QUOTATION": "bg-blue-100 text-blue-600",
-    "ORDERED": "bg-amber-100 text-amber-700",
-    "EM_ANALISE": "bg-sky-100 text-sky-700",
-    "APPROVED": "bg-[#2afc8d]/20 text-green-700",
-    "REJECTED": "bg-red-100 text-red-600"
-  };
-
-  tbody.innerHTML = filtered.map(n => {
-    const qty = n.quantity ? Number(n.quantity).toLocaleString("pt-PT", {minimumFractionDigits: 2}) : "—";
-    const quotesCount = n.quotes ? n.quotes.length : 0;
-    
-    let bestQuotePriceStr = "";
-    if (quotesCount > 0 && n.status === "IN_QUOTATION") {
-      const minPrice = Math.min(...n.quotes.map(q => Number(q.quotedPrice)));
-      bestQuotePriceStr = `<div class="text-[10px] text-amber-600 font-bold mt-1">Melhor Preço: ${Number(minPrice).toLocaleString("pt-PT")}</div>`;
-    }
-
-    const isApproved = n.status === "APPROVED";
-    const isOrdered = n.status === "ORDERED";
-
-    const isPedidoQuote = Boolean(n.extraRequestId || n.purchaseOrderId);
-    const sourceBadge = isPedidoQuote
-      ? `<span class="ml-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Pedido</span>`
-      : "";
-
-    const efRef = needOrderRef(n);
-    const canBatch = ["IN_QUOTATION", "PENDING"].includes(n.status) && !efRef;
-
-    return `
-      <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-        <td class="py-3 px-3">
-          ${canBatch
-            ? `<input type="checkbox" class="need-batch-check rounded border-slate-300 accent-emerald-600" value="${n.id}">`
-            : ""}
-        </td>
-        <td class="py-3 px-4 text-xs text-slate-500">${new Date(n.createdAt).toLocaleDateString("pt-PT")}</td>
-        <td class="py-3 px-4 text-xs font-bold text-slate-600">${
-          n.costCenter?.name ||
-          n.extraRequest?.costCategory?.name ||
-          n.extraRequest?.generalCostCenter?.name ||
-          (isGeralScope() ? "Geral" : "—")
-        }</td>
-        <td class="py-3 px-4">
-          <div class="font-medium text-slate-900">${n.description}${sourceBadge}</div>
-          <div class="text-xs text-slate-400 mt-0.5">${quotesCount} cotações recebidas</div>
-          ${bestQuotePriceStr}
-          ${efRef ? `<div class="text-[10px] font-black text-indigo-700 mt-1">${efRef} · ${(n.quotes || []).find((q) => q.orderNumber || q.supplierOrder?.orderNumber)?.supplier?.name || "Encomenda"}</div>` : ""}
-        </td>
-        <td class="py-3 px-4 text-center text-sm font-bold text-slate-700">${qty} ${n.unit || ""}</td>
-        <td class="py-3 px-4 text-center">
-          <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${statusClasses[n.status] || "bg-slate-100"}">${statusLabels[n.status] || n.status}</span>
-        </td>
-        <td class="py-3 px-4 text-center">
-          <button onclick="openQuoteModal('${n.id}')" 
-            class="h-8 px-3 rounded-lg ${isApproved ? 'bg-slate-100 text-slate-500' : isOrdered ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'} font-bold text-xs transition-all flex items-center justify-center gap-1 mx-auto">
-            <span class="material-symbols-outlined text-[14px]">${isApproved ? 'visibility' : isOrdered ? 'upload_file' : 'price_change'}</span>
-            ${isApproved ? 'Ver Cotação' : isOrdered ? 'Proforma' : 'Precificar'}
-          </button>
-        </td>
-      </tr>
-    `;
+  const groups = groupNeedsForTable(filtered);
+  tbody.innerHTML = groups.map((group) => {
+    if (group.type === "bundle") return renderBundleGroup(group);
+    return renderNeedRow(group.needs[0], { variant: "single" });
   }).join("");
+
   tbody.querySelectorAll(".need-batch-check").forEach((cb) => {
     cb.addEventListener("change", syncBatchQuoteButton);
   });
   syncBatchQuoteButton();
 }
 
-function needOrderRef(n) {
-  const q = (n.quotes || []).find((x) => x.supplierOrder?.orderNumber || x.orderNumber);
-  const num = q?.supplierOrder?.orderNumber ?? q?.orderNumber;
-  if (num == null) return "";
+const NEED_STATUS_LABELS = {
+  PENDING: "Pendente",
+  IN_QUOTATION: "Em Cotação",
+  ORDERED: "Encomenda",
+  EM_ANALISE: "Em Análise",
+  APPROVED: "Aprovado",
+  REJECTED: "Rejeitado",
+};
+
+const NEED_STATUS_CLASSES = {
+  PENDING: "bg-slate-100 text-slate-600",
+  IN_QUOTATION: "bg-blue-100 text-blue-600",
+  ORDERED: "bg-amber-100 text-amber-700",
+  EM_ANALISE: "bg-sky-100 text-sky-700",
+  APPROVED: "bg-[#2afc8d]/20 text-green-700",
+  REJECTED: "bg-red-100 text-red-600",
+};
+
+function formatEfRef(num) {
+  if (num == null || num === "") return "";
   return `EF${String(num).padStart(3, "0")}`;
+}
+
+function needBundleMeta(n) {
+  const q = (n.quotes || []).find((x) => x.supplierOrder?.id || x.supplierOrderId || x.orderNumber != null);
+  if (!q) return null;
+  return {
+    orderId: q.supplierOrder?.id || q.supplierOrderId || null,
+    orderNumber: q.supplierOrder?.orderNumber ?? q.orderNumber ?? null,
+    supplierName: q.supplier?.name || "Fornecedor",
+    proformaUrl: q.supplierOrder?.proformaUrl || q.proformaUrl || null,
+    quoteId: q.id,
+  };
+}
+
+function needBundleKey(n) {
+  const meta = needBundleMeta(n);
+  if (!meta) return null;
+  if (meta.orderId) return `so:${meta.orderId}`;
+  if (meta.orderNumber != null) return `ef:${meta.orderNumber}`;
+  return null;
+}
+
+function groupNeedsForTable(filtered) {
+  const used = new Set();
+  const groups = [];
+  for (const n of filtered) {
+    if (used.has(n.id)) continue;
+    const key = needBundleKey(n);
+    if (!key) {
+      used.add(n.id);
+      groups.push({ type: "single", needs: [n] });
+      continue;
+    }
+    const siblings = filtered.filter((x) => needBundleKey(x) === key);
+    siblings.forEach((x) => used.add(x.id));
+    if (siblings.length >= 2) {
+      groups.push({ type: "bundle", key, needs: siblings, meta: needBundleMeta(n) });
+    } else {
+      groups.push({ type: "single", needs: siblings });
+    }
+  }
+  return groups;
+}
+
+function costCenterLabel(n) {
+  return (
+    n.costCenter?.name ||
+    n.extraRequest?.costCategory?.name ||
+    n.extraRequest?.generalCostCenter?.name ||
+    (isGeralScope() ? "Geral" : "—")
+  );
+}
+
+function statusBadge(status) {
+  return `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${NEED_STATUS_CLASSES[status] || "bg-slate-100"}">${NEED_STATUS_LABELS[status] || status}</span>`;
+}
+
+function renderNeedRow(n, { variant = "single" } = {}) {
+  const qty = n.quantity ? Number(n.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) : "—";
+  const quotesCount = n.quotes ? n.quotes.length : 0;
+
+  let bestQuotePriceStr = "";
+  if (quotesCount > 0 && n.status === "IN_QUOTATION") {
+    const minPrice = Math.min(...n.quotes.map((q) => Number(q.quotedPrice)));
+    bestQuotePriceStr = `<div class="text-[10px] text-amber-600 font-bold mt-1">Melhor Preço: ${Number(minPrice).toLocaleString("pt-PT")}</div>`;
+  }
+
+  const isApproved = n.status === "APPROVED";
+  const isOrdered = n.status === "ORDERED";
+  const isPedidoQuote = Boolean(n.extraRequestId || n.purchaseOrderId);
+  const sourceBadge = isPedidoQuote
+    ? `<span class="ml-1 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Pedido</span>`
+    : "";
+
+  const meta = needBundleMeta(n);
+  const efRef = meta?.orderNumber != null ? formatEfRef(meta.orderNumber) : "";
+  const canBatch = ["IN_QUOTATION", "PENDING"].includes(n.status) && !efRef && variant === "single";
+  const isChild = variant === "child";
+
+  let actionBtn;
+  if (isChild) {
+    actionBtn = `<button type="button" onclick="openQuoteModal('${n.id}')"
+      class="h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-bold text-xs transition-all flex items-center justify-center gap-1 mx-auto">
+      <span class="material-symbols-outlined text-[14px]">visibility</span>
+      Ver
+    </button>`;
+  } else {
+    actionBtn = `<button type="button" onclick="openQuoteModal('${n.id}')"
+      class="h-8 px-3 rounded-lg ${isApproved ? "bg-slate-100 text-slate-500" : "bg-amber-100 text-amber-700 hover:bg-amber-200"} font-bold text-xs transition-all flex items-center justify-center gap-1 mx-auto">
+      <span class="material-symbols-outlined text-[14px]">${isApproved ? "visibility" : isOrdered ? "upload_file" : "price_change"}</span>
+      ${isApproved ? "Ver Cotação" : isOrdered ? "Proforma" : "Precificar"}
+    </button>`;
+  }
+
+  return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors ${isChild ? "quote-bundle-child" : ""}">
+        <td class="py-3 px-3">
+          ${canBatch
+            ? `<input type="checkbox" class="need-batch-check rounded border-slate-300 accent-emerald-600" value="${n.id}">`
+            : ""}
+        </td>
+        <td class="py-3 px-4 text-xs text-slate-500">${new Date(n.createdAt).toLocaleDateString("pt-PT")}</td>
+        <td class="py-3 px-4 text-xs font-bold text-slate-600">${costCenterLabel(n)}</td>
+        <td class="py-3 px-4 ${isChild ? "pl-8" : ""}">
+          <div class="font-medium text-slate-900">${isChild ? `<span class="text-indigo-400 mr-1">↳</span>` : ""}${n.description}${sourceBadge}</div>
+          <div class="text-xs text-slate-400 mt-0.5">${quotesCount} cotações recebidas</div>
+          ${bestQuotePriceStr}
+          ${!isChild && efRef ? `<div class="text-[10px] font-black text-indigo-700 mt-1">${efRef} · ${meta?.supplierName || "Encomenda"}</div>` : ""}
+        </td>
+        <td class="py-3 px-4 text-center text-sm font-bold text-slate-700">${qty} ${n.unit || ""}</td>
+        <td class="py-3 px-4 text-center">${statusBadge(n.status)}</td>
+        <td class="py-3 px-4 text-center">${actionBtn}</td>
+      </tr>
+    `;
+}
+
+function renderBundleGroup(group) {
+  const { needs, meta } = group;
+  const first = needs[0];
+  const ref = meta?.orderNumber != null ? formatEfRef(meta.orderNumber) : "Cotação conjunta";
+  const supplier = meta?.supplierName || "Fornecedor";
+  const allHaveProforma = needs.every((n) => {
+    const m = needBundleMeta(n);
+    return Boolean(m?.proformaUrl);
+  });
+  const statuses = [...new Set(needs.map((n) => n.status))];
+  const groupStatus = statuses.length === 1
+    ? statuses[0]
+    : statuses.includes("ORDERED")
+      ? "ORDERED"
+      : statuses.includes("EM_ANALISE")
+        ? "EM_ANALISE"
+        : first.status;
+  const leadId = first.id;
+  const action = allHaveProforma
+    ? `<button type="button" onclick="viewBundleProforma('${leadId}')"
+        class="h-8 px-3 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-bold text-xs transition-all flex items-center justify-center gap-1 mx-auto">
+        <span class="material-symbols-outlined text-[14px]">description</span>
+        Ver proforma
+      </button>`
+    : `<button type="button" onclick="openBundleProformaFromNeed('${leadId}')"
+        class="h-8 px-3 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 font-bold text-xs transition-all flex items-center justify-center gap-1 mx-auto">
+        <span class="material-symbols-outlined text-[14px]">upload_file</span>
+        Proforma
+      </button>`;
+
+  const head = `
+    <tr class="quote-bundle-head">
+      <td class="py-3 px-3"></td>
+      <td class="py-3 px-4 text-xs text-slate-500">${new Date(first.createdAt).toLocaleDateString("pt-PT")}</td>
+      <td class="py-3 px-4 text-xs font-bold text-slate-600">${costCenterLabel(first)}</td>
+      <td class="py-3 px-4">
+        <div class="font-black text-indigo-900">${ref} · ${supplier}</div>
+        <div class="text-[11px] text-indigo-700 font-semibold mt-0.5">${needs.length} itens cotados em conjunto — uma proforma para o pedido</div>
+      </td>
+      <td class="py-3 px-4 text-center text-xs font-bold text-indigo-700">${needs.length} itens</td>
+      <td class="py-3 px-4 text-center">${statusBadge(groupStatus)}</td>
+      <td class="py-3 px-4 text-center">${action}</td>
+    </tr>`;
+
+  const children = needs.map((n, idx) => {
+    const row = renderNeedRow(n, { variant: "child" });
+    return idx === needs.length - 1 ? row.replace('quote-bundle-child"', 'quote-bundle-child quote-bundle-last"') : row;
+  }).join("");
+
+  return head + children;
+}
+
+function bundlePayloadFromNeed(needId) {
+  const need = currentNeeds.find((n) => n.id === needId);
+  if (!need) return null;
+  const key = needBundleKey(need);
+  const siblings = key
+    ? currentNeeds.filter((n) => needBundleKey(n) === key)
+    : [need];
+  const meta = needBundleMeta(need);
+  return {
+    orderId: meta?.orderId || null,
+    orderNumber: meta?.orderNumber ?? null,
+    supplierName: meta?.supplierName || "Fornecedor",
+    quoteId: meta?.quoteId || null,
+    proformaUrl: meta?.proformaUrl || null,
+    items: siblings.map((n) => ({
+      description: n.description,
+      quantity: n.quantity,
+      unit: n.unit,
+    })),
+  };
+}
+
+window.openBundleProformaFromNeed = function (needId) {
+  const payload = bundlePayloadFromNeed(needId);
+  if (!payload) return;
+  openBundleProformaModal(payload);
+};
+
+window.viewBundleProforma = function (needId) {
+  const payload = bundlePayloadFromNeed(needId);
+  const url = payload?.proformaUrl ? getAssetUrl(payload.proformaUrl) : null;
+  if (!url) {
+    showToast("Este pedido ainda não tem proforma", "warning");
+    return;
+  }
+  window.openProformaViewer(url);
+};
+
+function openBundleProformaModal(payload) {
+  pendingBundleProforma = payload;
+  const ref = payload.orderNumber != null ? formatEfRef(payload.orderNumber) : "Cotação conjunta";
+  const title = document.getElementById("bundleProformaTitle");
+  const subtitle = document.getElementById("bundleProformaSubtitle");
+  const list = document.getElementById("bundleProformaItems");
+  const file = document.getElementById("bundleProformaFile");
+  if (title) title.textContent = `Proforma · ${ref}`;
+  if (subtitle) subtitle.textContent = `${payload.supplierName} — ${payload.items.length} item(ns) no mesmo pedido`;
+  if (list) {
+    list.innerHTML = payload.items
+      .map((item) => {
+        const qty = item.quantity != null ? Number(item.quantity).toLocaleString("pt-PT") : "—";
+        return `<li>${item.description} · ${qty} ${item.unit || ""}</li>`;
+      })
+      .join("");
+  }
+  if (file) file.value = "";
+  document.getElementById("modalBundleProforma")?.classList.add("open");
+}
+
+async function submitBundleProforma() {
+  if (!pendingBundleProforma) return;
+  const file = document.getElementById("bundleProformaFile")?.files?.[0];
+  if (!file) {
+    showToast("Seleccione o ficheiro da proforma", "error");
+    return;
+  }
+  const fd = new FormData();
+  fd.append("proforma", file);
+  const path = pendingBundleProforma.orderId
+    ? `/quotes/supplier-orders/${pendingBundleProforma.orderId}/proforma`
+    : pendingBundleProforma.quoteId
+      ? `/quotes/${pendingBundleProforma.quoteId}/proforma`
+      : null;
+  if (!path) {
+    showToast("Não foi possível identificar o pedido", "error");
+    return;
+  }
+  try {
+    const result = await apiUpload(path, fd, "POST");
+    document.getElementById("modalBundleProforma")?.classList.remove("open");
+    const count = result.itemCount || pendingBundleProforma.items.length;
+    showToast(`Proforma aplicada aos ${count} itens do pedido`, "success");
+    const url = result.order?.proformaUrl || result.quote?.proformaUrl;
+    pendingBundleProforma = null;
+    await loadNeeds();
+    if (url) {
+      setTimeout(() => {
+        if (confirm("Proforma carregada. Deseja visualizar agora?")) {
+          window.openProformaViewer(getAssetUrl(url));
+        }
+      }, 200);
+    }
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Erro ao carregar a proforma", "error");
+  }
+}
+
+function needOrderRef(n) {
+  const meta = needBundleMeta(n);
+  if (meta?.orderNumber == null) return "";
+  return formatEfRef(meta.orderNumber);
 }
 
 function selectedBatchNeeds() {
@@ -557,18 +781,44 @@ async function openSupplierOrdersModal() {
         const pdf = o.purchaseOrderUrl
           ? `<a href="${o.purchaseOrderUrl}" target="_blank" class="text-xs font-bold text-indigo-600 underline">PDF encomenda</a>`
           : "";
+        const proformaUrl = o.proformaUrl || (o.quotes || []).find((q) => q.proformaUrl)?.proformaUrl;
+        const proformaAction = proformaUrl
+          ? `<button type="button" class="text-xs font-bold text-emerald-700 underline" data-view-order-proforma="${getAssetUrl(proformaUrl)}">Ver proforma</button>`
+          : `<button type="button" class="h-8 px-3 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold" data-order-proforma="${o.id}">Proforma</button>`;
         return `<div class="rounded-xl border border-slate-200 p-4">
           <div class="flex justify-between gap-3 items-start">
             <div>
               <p class="text-sm font-black text-slate-900">${ref} · ${o.supplier?.name || "Fornecedor"}</p>
-              <p class="text-[11px] text-slate-500 mt-0.5">${o.status === "ORDERED" ? "Encomendado" : "Cotação conjunta"} · ${new Date(o.createdAt).toLocaleDateString("pt-PT")}</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">${o.status === "ORDERED" ? "Encomendado" : "Cotação conjunta"} · ${new Date(o.createdAt).toLocaleDateString("pt-PT")} · ${(o.quotes || []).length} item(ns)</p>
             </div>
-            ${pdf}
+            <div class="flex flex-col items-end gap-2">${pdf}${proformaAction}</div>
           </div>
           <ul class="mt-2 text-xs text-slate-700 list-disc pl-4 space-y-0.5">${lines}</ul>
         </div>`;
       })
       .join("");
+    list.querySelectorAll("[data-view-order-proforma]").forEach((btn) => {
+      btn.addEventListener("click", () => window.openProformaViewer(btn.dataset.viewOrderProforma));
+    });
+    list.querySelectorAll("[data-order-proforma]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const order = items.find((o) => o.id === btn.dataset.orderProforma);
+        if (!order) return;
+        document.getElementById("modalSupplierOrders")?.classList.remove("open");
+        openBundleProformaModal({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          supplierName: order.supplier?.name || "Fornecedor",
+          quoteId: order.quotes?.[0]?.id || null,
+          proformaUrl: order.proformaUrl || null,
+          items: (order.quotes || []).map((q) => ({
+            description: q.need?.description || "Item",
+            quantity: q.quantity,
+            unit: q.need?.unit,
+          })),
+        });
+      });
+    });
   } catch (err) {
     list.innerHTML = `<p class="text-sm text-red-500">${err.message}</p>`;
   }

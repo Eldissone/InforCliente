@@ -195,7 +195,9 @@ const QUOTE_NEED_INCLUDE = {
   quotes: {
     include: {
       supplier: { select: { name: true, vatPercent: true, withholdingPercent: true, discountPercent: true } },
-      supplierOrder: { select: { id: true, orderNumber: true, status: true, purchaseOrderUrl: true } },
+      supplierOrder: {
+        select: { id: true, orderNumber: true, status: true, purchaseOrderUrl: true, proformaUrl: true },
+      },
     },
     orderBy: { quotedPrice: "asc" },
   },

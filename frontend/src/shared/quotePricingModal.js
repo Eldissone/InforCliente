@@ -144,6 +144,24 @@ function formatOrderRef(orderNumber) {
   return `EF${String(n).padStart(3, "0")}`;
 }
 
+function renderBundleOrderNotice(quote) {
+  document.getElementById("quoteBundleNotice")?.remove();
+  const lines = quote?.supplierOrder?.quotes || [];
+  if (lines.length < 2) return;
+  const host = document.getElementById("quoteItemDesc");
+  if (!host) return;
+  const el = document.createElement("div");
+  el.id = "quoteBundleNotice";
+  el.className = "mt-3 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-900";
+  const ref = quote.supplierOrder?.orderNumber != null ? formatOrderRef(quote.supplierOrder.orderNumber) : "pedido conjunto";
+  el.innerHTML =
+    `Pedido <strong>${ref}</strong> · ${quote.supplier?.name || "Fornecedor"} — ${lines.length} itens. A proforma carregada aplica-se a todos:` +
+    `<ul class="mt-1 list-disc pl-4 font-medium space-y-0.5">${lines
+      .map((line) => `<li>${line.need?.description || "Item"}</li>`)
+      .join("")}</ul>`;
+  host.after(el);
+}
+
 function quoteHasProforma(quote) {
   const url = quote?.proformaUrl;
   return typeof url === "string" && url.trim().length > 0;
@@ -755,6 +773,7 @@ export async function loadPresentedPrices({
     const selectedQuote = selectedQuotes[0] || null;
     window.__quoteModalSelectedQuote = selectedQuote;
     window.__quoteModalSelectedQuotes = selectedQuotes;
+    renderBundleOrderNotice(selectedQuote || quotes.find((q) => (q.supplierOrder?.quotes || []).length > 1));
 
     if (isInAnalysis && selectedQuote) {
 
@@ -1325,9 +1344,12 @@ async function uploadOrderedProforma({
       selectedQuotes.length > 0 &&
       selectedQuotes.every((q) => (q.id === quoteId ? true : Boolean(q.proformaUrl)));
     const wentToAnalysis = result.need?.status === "EM_ANALISE";
+    const bundleCount = Number(result.itemCount) || 0;
 
     showToast?.(
-      wentToAnalysis
+      bundleCount > 1
+        ? `Proforma do pedido aplicada a ${bundleCount} itens.${wentToAnalysis ? " Itens em análise." : ""}`
+        : wentToAnalysis
         ? "Proformas completas — item em análise. O financeiro consultará estes documentos."
         : "Proforma carregada — documento disponível para o financeiro.",
       "success"
@@ -1590,6 +1612,7 @@ export async function openQuotePricingModal({
   document.getElementById("quoteNeedId").value = need.id;
 
   document.getElementById("quoteItemDesc").textContent = `${need.description} (${need.quantity || "0"} ${need.unit || ""})`;
+  document.getElementById("quoteBundleNotice")?.remove();
 
 
 
