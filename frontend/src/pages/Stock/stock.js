@@ -3218,6 +3218,49 @@ function splitRequestedItems(items = []) {
     return { materials, tools };
 }
 
+function leftoverQty(item) {
+    return Number(item.providedQty) - Number(item.consumedQty);
+}
+
+function itemsToReturn(items = []) {
+    return items.filter(m => leftoverQty(m) > 0);
+}
+
+function renderReturnItemChip(m, isTool) {
+    const leftover = leftoverQty(m);
+    const badgeClass = isTool ? "bg-indigo-100 text-indigo-800" : "bg-blue-100 text-blue-800";
+    const usageLabel = isTool ? "Extraviado" : "Usado";
+    const fallback = isTool ? "Ferramenta Desconhecida" : "Material Desconhecido";
+    return `
+        <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
+            <div class="flex flex-col min-w-0 flex-1">
+              <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || fallback)}</span>
+              <span class="text-[9px] font-bold text-slate-400">Entreg: ${m.providedQty} / ${usageLabel}: ${m.consumedQty}</span>
+            </div>
+            <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black shrink-0 ml-2">${leftover.toFixed(2)} ${esc(m.product?.unit || "")}</span>
+        </div>
+    `;
+}
+
+function renderReturnModalRow(m, isTool) {
+    const leftover = leftoverQty(m);
+    const fallback = isTool ? "Ferramenta Desconhecida" : "Material Desconhecido";
+    const qtyClass = isTool
+        ? "bg-indigo-50 border border-indigo-200"
+        : "bg-slate-50 border border-slate-200";
+    return `
+        <div class="bg-white rounded-2xl p-4 border ${isTool ? "border-indigo-100" : "border-slate-100"} flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || fallback)}</p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd a Devolver:</span>
+                <span class="${qtyClass} rounded-xl px-3 py-2 text-sm font-black text-slate-800 text-center">${leftover.toFixed(2)} ${esc(m.product?.unit || "")}</span>
+            </div>
+        </div>
+    `;
+}
+
 function renderRequestItemChips(items, badgeClass) {
     return items.map(m => `
         <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-2">
@@ -3528,7 +3571,7 @@ async function renderReturns(container) {
                 <div class="flex flex-col items-center justify-center py-20 text-center">
                     <span class="material-symbols-outlined text-6xl text-slate-200 mb-4">check_circle</span>
                     <h3 class="text-xl font-bold text-slate-800 mb-2">Sem devoluções pendentes!</h3>
-                    <p class="text-slate-500 font-medium max-w-md">Não há materiais para serem rececionados no armazém neste momento.</p>
+                    <p class="text-slate-500 font-medium max-w-md">Não há materiais nem ferramentas para serem rececionados no armazém neste momento.</p>
                 </div>
             `;
             return;
@@ -3563,21 +3606,31 @@ async function renderReturns(container) {
                         <h4 class="text-lg font-bold text-slate-900 mb-1">${esc(p.description || "Sem Descrição")}</h4>
                     </div>
 
-                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais a Devolver
-                        </h5>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            ${p.materials.filter(m => Number(m.providedQty) > Number(m.consumedQty)).map(m => `
-                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-                                    <div class="flex flex-col min-w-0 flex-1">
-                                      <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
-                                      <span class="text-[9px] font-bold text-slate-400">Entreg: ${m.providedQty} / Usado: ${m.consumedQty}</span>
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
+                        ${(() => {
+                            const { materials: retMats, tools: retTools } = splitRequestedItems(itemsToReturn(p.materials));
+                            const mats = retMats.length > 0 ? `
+                                <div>
+                                    <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais a Devolver
+                                    </h5>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        ${retMats.map(m => renderReturnItemChip(m, false)).join("")}
                                     </div>
-                                    <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg text-xs font-black shrink-0 ml-2">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
                                 </div>
-                            `).join('')}
-                        </div>
+                            ` : "";
+                            const tools = retTools.length > 0 ? `
+                                <div>
+                                    <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                                        <span class="material-symbols-outlined text-sm">build</span> Ferramentas a Devolver
+                                    </h5>
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        ${retTools.map(m => renderReturnItemChip(m, true)).join("")}
+                                    </div>
+                                </div>
+                            ` : "";
+                            return mats + tools;
+                        })()}
                     </div>
                 </div>
 
@@ -3598,7 +3651,7 @@ async function renderReturns(container) {
                     <span class="material-symbols-outlined text-3xl text-blue-500">undo</span>
                     Devoluções de Obra Pendentes
                 </h2>
-                <p class="text-slate-500 font-medium mt-1">Valide a receção dos materiais sobrantes dos Planos Diários de volta ao estaleiro.</p>
+                <p class="text-slate-500 font-medium mt-1">Valide a receção dos materiais sobrantes e das ferramentas dos Planos Diários de volta ao estaleiro.</p>
             </div>
             <div class="space-y-2">
                 ${plansHtml}
@@ -3611,21 +3664,37 @@ async function renderReturns(container) {
 
 window.confirmReturnGlobal = async (id, event) => {
     const plan = _pendingPlans.find(p => p.id === id);
-    const materials = plan?.materials?.filter(m => Number(m.providedQty) > Number(m.consumedQty)) || [];
+    const { materials: retMats, tools: retTools } = splitRequestedItems(itemsToReturn(plan?.materials || []));
 
-    const materialsHtml = materials.length > 0
-        ? materials.map((m) => `
-            <div class="bg-white rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-slate-900 truncate">${esc(m.product?.name || 'Material Desconhecido')}</p>
+    const materialsHtml = retMats.map((m) => renderReturnModalRow(m, false)).join("");
+    const toolsHtml = retTools.map((m) => renderReturnModalRow(m, true)).join("");
+    const emptyHtml = (!retMats.length && !retTools.length)
+        ? `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material nem ferramenta a devolver.</p>`
+        : "";
+
+    const materialsSection = retMats.length ? `
+                <div class="space-y-2">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">inventory_2</span>
+                        Materiais a Receber
+                    </h5>
+                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        ${materialsHtml}
+                    </div>
                 </div>
-                <div class="flex items-center gap-3 shrink-0">
-                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Qtd a Devolver:</span>
-                    <span class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-800 text-center">${(Number(m.providedQty) - Number(m.consumedQty)).toFixed(2)} ${esc(m.product?.unit || '')}</span>
+    ` : "";
+
+    const toolsSection = retTools.length ? `
+                <div class="space-y-2 ${retMats.length ? "pt-2 border-t border-slate-100" : ""}">
+                    <h5 class="text-[11px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-sm">build</span>
+                        Ferramentas a Receber
+                    </h5>
+                    <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        ${toolsHtml}
+                    </div>
                 </div>
-            </div>
-        `).join('')
-        : `<p class="text-sm text-slate-400 font-medium text-center py-6">Nenhum material a devolver.</p>`;
+    ` : "";
 
     const contentHtml = `
         <div class="space-y-5 pt-2">
@@ -3635,20 +3704,14 @@ window.confirmReturnGlobal = async (id, event) => {
                 </div>
                 <div>
                     <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Confirmação de Entrada de Stock</p>
-                    <p class="text-xs text-blue-900 leading-relaxed">Confirme a receção dos materiais e registe quem os devolveu.</p>
+                    <p class="text-xs text-blue-900 leading-relaxed">Confirme a receção dos materiais e ferramentas e registe quem os devolveu.</p>
                 </div>
             </div>
 
             <form id="formConfirmReturn" class="space-y-5">
-                <div class="space-y-2">
-                    <h5 class="text-[11px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <span class="material-symbols-outlined text-sm">format_list_bulleted</span>
-                        Materiais a Receber
-                    </h5>
-                    <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        ${materialsHtml}
-                    </div>
-                </div>
+                ${materialsSection}
+                ${toolsSection}
+                ${emptyHtml}
 
                 <div class="space-y-2">
                     <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">

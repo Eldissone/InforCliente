@@ -2745,6 +2745,7 @@ function ccPedidoActionsHtml(r, { requisition = false } = {}) {
       )
     );
   }
+  
   if (ccCanDeletePedido(r)) {
     actions.push(
       renderIconBtn("delete", "Eliminar / cancelar", "red", {

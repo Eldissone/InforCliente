@@ -341,6 +341,26 @@ function isStockMaterialProduct(product) {
   return cat === "MATERIAL" || cat === "CONSUMABLE" || cat === "BT" || cat === "MT";
 }
 
+function isLogisticsStockProduct(product) {
+  const cat = (product?.category || "").toUpperCase();
+  return isStockMaterialProduct(product) || cat === "TOOL" || cat === "EQUIPMENT";
+}
+
+function logisticsProductKindLabel(product) {
+  const cat = (product?.category || "").toUpperCase();
+  if (cat === "TOOL" || cat === "EQUIPMENT") return "Ferramenta";
+  return "Material";
+}
+
+function renderWarehouseOwnerOptionsHtml(warehouse, fallbackClient) {
+  const linkedClient = warehouse?.project?.client || fallbackClient;
+  let html = `<option value="">${escapeHtml(warehouse?.name || "Armazém")}</option>`;
+  if (linkedClient?.id && linkedClient?.name) {
+    html += `<option value="${escapeHtml(linkedClient.id)}">${escapeHtml(linkedClient.name)}</option>`;
+  }
+  return html;
+}
+
 function getSelectedProjectWarehouse() {
   const warehouses = stockState.projectWarehouses || [];
   if (!warehouses.length) return null;
@@ -4054,12 +4074,52 @@ async function openProjectWarehouseModal(warehouseId = null) {
   });
 }
 
+async function fillLogisticsProductOptions({ type, warehouseId, productSelect, catalogProducts, projectId }) {
+  if (!productSelect) return;
+
+  if (type === "EXIT") {
+    if (!warehouseId) {
+      productSelect.innerHTML = `<option value="">Seleccione o armazém da obra...</option>`;
+      return;
+    }
+    productSelect.innerHTML = `<option value="">A carregar stock do armazém...</option>`;
+    try {
+      const { items } = await apiRequest(
+        `/stock/project/${encodeURIComponent(projectId)}/balance?warehouseId=${encodeURIComponent(warehouseId)}`
+      );
+      const available = (items || []).filter(
+        (s) => isLogisticsStockProduct(s.product) && Number(s.quantity || 0) > 0
+      );
+      if (!available.length) {
+        productSelect.innerHTML = `<option value="">Nenhum material ou ferramenta neste armazém</option>`;
+        return;
+      }
+      productSelect.innerHTML = `<option value="">Selecionar...</option>` + available.map((s) => {
+        const unit = s.product?.unit || "un";
+        const kind = logisticsProductKindLabel(s.product);
+        const qty = Number(s.quantity || 0);
+        return `<option value="${s.productId}" data-max="${qty}">${escapeHtml(s.product?.name || "")} — ${qty} ${escapeHtml(unit)} (${kind})</option>`;
+      }).join("");
+    } catch {
+      productSelect.innerHTML = `<option value="">Erro ao carregar stock do armazém</option>`;
+    }
+    return;
+  }
+
+  const catalog = (catalogProducts || []).filter(isLogisticsStockProduct);
+  productSelect.innerHTML = `<option value="">Selecionar...</option>` + catalog.map((p) => {
+    const kind = logisticsProductKindLabel(p);
+    return `<option value="${p.id}">${escapeHtml(p.name)} (${escapeHtml(p.unit || "un")}) · ${kind}</option>`;
+  }).join("");
+}
+
 async function openStockMovementModal() {
   const warehouses = stockState.projectWarehouses || [];
   if (!warehouses.length) {
     return toast("Nenhum armazém configurado para esta obra.", { type: "error" });
   }
 
+  const projectId = getProjectId();
   const defaultWarehouseId = getSelectedProjectWarehouse()?.id || warehouses[0].id;
 
   try {
@@ -4068,32 +4128,27 @@ async function openStockMovementModal() {
       apiRequest("/warehouses"),
     ]);
 
-    const products = (productsRes.items || []).filter(
-      (p) => p.category === "MATERIAL" || p.category === "CONSUMABLE"
-    );
+    const catalogProducts = productsRes.items || [];
+    const allWarehouses = warehousesRes.items || [];
+    const warehouseById = Object.fromEntries(allWarehouses.map((w) => [w.id, w]));
+
     const warehouseOptions = warehouses.map((w) =>
       `<option value="${w.id}" ${w.id === defaultWarehouseId ? "selected" : ""}>${escapeHtml(w.name)}</option>`
     ).join("");
 
-    const warehouse = (warehousesRes.items || []).find((w) => w.id === defaultWarehouseId);
-    const linkedClient = warehouse?.project?.client || projectState?.client;
-    let ownerOptions = `<option value="">${escapeHtml(warehouse?.name || "Armazém")}</option>`;
-    if (linkedClient?.id && linkedClient?.name) {
-      ownerOptions += `<option value="${escapeHtml(linkedClient.id)}">${escapeHtml(linkedClient.name)}</option>`;
-    }
-
-    const productOptions = products.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit || 'un'})</option>`).join("");
+    const defaultWarehouse = warehouseById[defaultWarehouseId] || warehouses[0];
+    const ownerOptions = renderWarehouseOwnerOptionsHtml(defaultWarehouse, projectState?.client);
 
     const warehouseField = warehouses.length > 1
       ? `
           <div class="space-y-2 md:col-span-2">
-            <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Armazém de destino</label>
+            <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Armazém da obra</label>
             <select name="warehouseId" id="st_warehouseId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
               ${warehouseOptions}
             </select>
           </div>
         `
-      : `<input type="hidden" name="warehouseId" value="${defaultWarehouseId}">`;
+      : `<input type="hidden" name="warehouseId" id="st_warehouseId" value="${defaultWarehouseId}">`;
 
     openModal({
       title: "Nova Operação Logística",
@@ -4107,8 +4162,8 @@ async function openStockMovementModal() {
               <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Material / Referência</label>
               <select name="productId" id="st_mId" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 <option value="">Selecionar...</option>
-                ${productOptions}
               </select>
+              <p id="st_productHint" class="text-[10px] font-medium text-slate-400"></p>
             </div>
             <div class="space-y-2">
               <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Tipo de Operação</label>
@@ -4122,7 +4177,7 @@ async function openStockMovementModal() {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-2">
                <label class="text-[11px] font-black uppercase tracking-widest text-emerald-600">Quantidade</label>
-               <input type="number" step="0.01" name="quantity" id="st_qty" placeholder="0.00" required class="w-full bg-emerald-50/50 border-none rounded-2xl p-4 text-sm font-bold text-emerald-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+               <input type="number" step="0.01" min="0.01" name="quantity" id="st_qty" placeholder="0.00" required class="w-full bg-emerald-50/50 border-none rounded-2xl p-4 text-sm font-bold text-emerald-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
             </div>
             <div class="space-y-2">
                <label class="text-[11px] font-black uppercase tracking-widest text-slate-400">Proprietário</label>
@@ -4161,25 +4216,81 @@ async function openStockMovementModal() {
           </div>
         </form>
       `,
-      primaryText: "Registrar",
+      primaryLabel: "Salvar",
+      onRender: ({ panel }) => {
+        const form = panel.querySelector("#formStockMove");
+        const typeEl = form.querySelector("#st_type");
+        const productEl = form.querySelector("#st_mId");
+        const warehouseEl = form.querySelector("#st_warehouseId");
+        const ownerEl = form.querySelector("#st_ownerId");
+        const hintEl = form.querySelector("#st_productHint");
+        const qtyEl = form.querySelector("#st_qty");
+
+        const refreshHint = () => {
+          if (!hintEl) return;
+          hintEl.textContent = typeEl.value === "EXIT"
+            ? "Na saída só aparecem materiais e ferramentas com saldo neste armazém da obra."
+            : "Na entrada pode seleccionar qualquer material ou ferramenta do catálogo.";
+        };
+
+        const refreshOwner = () => {
+          if (!ownerEl) return;
+          const warehouse = warehouseById[warehouseEl?.value];
+          ownerEl.innerHTML = renderWarehouseOwnerOptionsHtml(warehouse, projectState?.client);
+        };
+
+        const refreshProducts = () => {
+          refreshHint();
+          return fillLogisticsProductOptions({
+            type: typeEl.value,
+            warehouseId: warehouseEl?.value,
+            productSelect: productEl,
+            catalogProducts,
+            projectId,
+          });
+        };
+
+        typeEl?.addEventListener("change", refreshProducts);
+        warehouseEl?.addEventListener("change", () => {
+          refreshOwner();
+          refreshProducts();
+        });
+        productEl?.addEventListener("change", () => {
+          const max = Number(productEl.selectedOptions[0]?.dataset.max || 0);
+          if (typeEl.value === "EXIT" && max > 0 && qtyEl) {
+            qtyEl.max = String(max);
+          } else if (qtyEl) {
+            qtyEl.removeAttribute("max");
+          }
+        });
+
+        refreshProducts();
+      },
       onPrimary: async ({ btn, close, panel }) => {
         const form = panel.querySelector("#formStockMove");
         const formData = new FormData(form);
 
         const mId = formData.get("productId");
         const qty = Number(formData.get("quantity") || 0);
+        const type = formData.get("type");
+        const max = Number(form.querySelector("#st_mId")?.selectedOptions[0]?.dataset.max || 0);
 
-        if (!mId) return toast("Selecione um material", { type: "error" });
+        if (!mId) return toast("Selecione um material ou ferramenta", { type: "error" });
         if (qty <= 0) return toast("Quantidade deve ser maior que 0", { type: "error" });
+        if (type === "EXIT" && max > 0 && qty > max) {
+          return toast(`Quantidade acima do saldo neste armazém (${max}).`, { type: "error" });
+        }
+
+        const driver = formData.get("driver");
+        const plate = formData.get("plate");
+        formData.delete("driver");
+        formData.delete("plate");
+        if (driver || plate) {
+          formData.set("notes", `Motorista: ${driver || "N/A"} | Matrícula: ${plate || "N/A"}`);
+        }
 
         setButtonLoading(btn, true);
         try {
-          const driver = formData.get("driver");
-          const plate = formData.get("plate");
-          if (driver || plate) {
-            formData.append("notes", `Motorista: ${driver || 'N/A'} | Matrícula: ${plate || 'N/A'}`);
-          }
-
           await apiUpload("/stock/move", formData, "POST");
 
           toast("Operação registada com sucesso", { type: "success" });
@@ -4190,15 +4301,6 @@ async function openStockMovementModal() {
           setButtonLoading(btn, false);
           toast(err.message || "Erro ao salvar", { type: "error" });
         }
-      }
-    });
-
-    // Auto-select Armazém do Cliente if entry type is cliente
-    const entryTypeEl = document.getElementById("st_entryType");
-    const warehouseEl = document.getElementById("st_warehouse");
-    entryTypeEl?.addEventListener("change", (e) => {
-      if (e.target.value === "cliente") {
-        warehouseEl.value = "Armazém do Cliente";
       }
     });
   } catch (err) {

@@ -63,6 +63,7 @@ const API_ERROR_MESSAGES = {
   QUOTE_ID_REQUIRED: "Seleccione o fornecedor ao definir parcelas.",
   INSTALLMENTS_ALREADY_DEFINED: "Este fornecedor já tem parcelas definidas.",
   INSTALLMENT_TOTAL_MISMATCH: "A soma das parcelas deve corresponder ao total do fornecedor.",
+  INSUFFICIENT_STOCK: "Stock insuficiente no armazém desta obra.",
 };
 
 function resolveApiErrorMessage(data, status) {

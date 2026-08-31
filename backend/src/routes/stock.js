@@ -60,6 +60,118 @@ function mergeProductImage(item, evidenceMap) {
   return { ...item, product: { ...item.product, image } };
 }
 
+function normalizeOwnerId(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function isToolProduct(product) {
+  const cat = String(product?.category || "").toUpperCase();
+  return cat === "TOOL" || cat === "EQUIPMENT";
+}
+
+function insufficientStockError(productName, available, requested) {
+  const label = productName ? `"${productName}"` : "este item";
+  const err = new Error(
+    `Stock insuficiente de ${label} no armazém da obra: disponível ${available}, pedido ${requested}.`
+  );
+  err.code = "INSUFFICIENT_STOCK";
+  return err;
+}
+
+/** Desconta saldo existente no armazém. Nunca cria linhas negativas. */
+async function decrementWarehouseStock(tx, { warehouseId, productId, quantity, preferredOwnerId, required = true }) {
+  const rows = await tx.warehouseStock.findMany({
+    where: { warehouseId, productId },
+    orderBy: { updatedAt: "asc" },
+  });
+
+  const withStock = rows.filter((row) => Number(row.quantity) > 0);
+  const total = withStock.reduce((sum, row) => sum + Number(row.quantity), 0);
+
+  if (required && total + 1e-9 < quantity) {
+    return { ok: false, available: total };
+  }
+
+  const sorted = [...withStock].sort((a, b) => {
+    const aMatch = (a.ownerId || null) === preferredOwnerId ? 0 : 1;
+    const bMatch = (b.ownerId || null) === preferredOwnerId ? 0 : 1;
+    return aMatch - bMatch;
+  });
+
+  let remaining = quantity;
+  for (const row of sorted) {
+    if (remaining <= 0) break;
+    const available = Number(row.quantity);
+    const take = Math.min(available, remaining);
+    await tx.warehouseStock.update({
+      where: { id: row.id },
+      data: { quantity: { decrement: take } },
+    });
+    remaining -= take;
+  }
+
+  return { ok: remaining <= 1e-9, available: total };
+}
+
+async function applyOutboundStock(tx, { product, warehouseId, productId, quantity, ownerId, type }) {
+  const name = product?.name || "";
+
+  if (isToolProduct(product)) {
+    const qtyToTake = Math.floor(Number(quantity));
+    if (qtyToTake < 1) {
+      throw insufficientStockError(name, 0, quantity);
+    }
+
+    const itemsToTake = await tx.item.findMany({
+      where: {
+        productId,
+        warehouseId,
+        status: { in: ["AVAILABLE", "ASSIGNED"] },
+      },
+      take: qtyToTake,
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (itemsToTake.length < qtyToTake) {
+      throw insufficientStockError(name, itemsToTake.length, qtyToTake);
+    }
+
+    const nextStatus = type === "LOSS" ? "LOST" : "RETIRED";
+    await tx.item.updateMany({
+      where: { id: { in: itemsToTake.map((item) => item.id) } },
+      data: {
+        status: nextStatus,
+        warehouseId: null,
+        lastStatusNote: type === "LOSS" ? "Perda registada na obra" : "Saída logística: aplicado na obra",
+        updatedAt: new Date(),
+      },
+    });
+
+    await decrementWarehouseStock(tx, {
+      warehouseId,
+      productId,
+      quantity,
+      preferredOwnerId: ownerId,
+      required: false,
+    });
+    return;
+  }
+
+  const result = await decrementWarehouseStock(tx, {
+    warehouseId,
+    productId,
+    quantity,
+    preferredOwnerId: ownerId,
+    required: true,
+  });
+
+  if (!result.ok) {
+    throw insufficientStockError(name, result.available, quantity);
+  }
+}
+
 function stockBalanceKey(item) {
   return `${item.productId}|${item.warehouseId}|${item.ownerId || ""}`;
 }
@@ -349,8 +461,8 @@ stockRoutes.get(
       quantity: { gt: 0 },
     };
 
-    // ALLOCATION/RETURN representam a custódia do material pelas equipas nos planos
-    // diários. Não são recepções nem saídas de armazém, por isso ficam em buckets próprios.
+    // ALLOCATION/RETURN: custódia nas equipas (planos diários).
+    // EXIT/LOSS: aplicação na obra / perda — consumo efectivo, não só saída de saldo.
     const [totalsRows, openPlanRows] = await Promise.all([
       prisma.stockMovement.groupBy({
         by: ["productId", "warehouseId", "type"],
@@ -387,7 +499,10 @@ stockRoutes.get(
       const qty = Number(r._sum?.quantity || 0);
       if (r.type === "ENTRY" || r.type === "TRANSFER_IN") {
         totalsByKey[key].totalIn += qty;
-      } else if (r.type === "EXIT" || r.type === "TRANSFER_OUT" || r.type === "LOSS") {
+      } else if (r.type === "EXIT" || r.type === "LOSS") {
+        totalsByKey[key].totalOut += qty;
+        totalsByKey[key].totalConsumed += qty;
+      } else if (r.type === "TRANSFER_OUT") {
         totalsByKey[key].totalOut += qty;
       } else if (r.type === "ALLOCATION") {
         totalsByKey[key].totalAllocated += qty;
@@ -405,9 +520,11 @@ stockRoutes.get(
       totalsByKey[key].totalOnSite += r.type === "ALLOCATION" ? qty : -qty;
     }
 
+    // Consumido = aplicado na obra (EXIT/LOSS) + o que os planos já confirmaram
+    // (alocado − devolvido − ainda em obra nos planos abertos).
     for (const t of Object.values(totalsByKey)) {
       t.totalOnSite = Math.max(0, t.totalOnSite);
-      t.totalConsumed = Math.max(0, t.totalAllocated - t.totalReturned - t.totalOnSite);
+      t.totalConsumed += Math.max(0, t.totalAllocated - t.totalReturned - t.totalOnSite);
     }
 
     const withTotals = withImages.map((item) => {
@@ -440,7 +557,10 @@ stockRoutes.post(
       warehouseId: z.string(),
       type: z.enum(["ENTRY", "EXIT", "ADJUSTMENT", "LOSS"]),
       quantity: z.preprocess((v) => parseFloat(v), z.number().positive()),
-      ownerId: z.string().optional().nullable(),
+      ownerId: z.preprocess(
+        (v) => (v == null || String(v).trim() === "" ? null : String(v)),
+        z.string().nullable().optional()
+      ),
       reference: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       sourceQuoteId: z.string().optional().nullable(),
@@ -476,8 +596,6 @@ stockRoutes.post(
       });
 
       const result = await prisma.$transaction(async (tx) => {
-        console.log("DEBUG: Starting stock move transaction", body);
-
         if (body.sourceQuoteId && body.type === "ENTRY") {
           const linkedQuote = await getQuoteDeliveryGuard(body.sourceQuoteId, tx);
           if (!linkedQuote || !linkedQuote.orderNumber) {
@@ -501,7 +619,7 @@ stockRoutes.post(
             userId: req.user.sub,
             type: body.type,
             quantity: body.quantity,
-            ownerId: body.ownerId || null,
+            ownerId: normalizeOwnerId(body.ownerId),
             reference: body.reference,
             notes: body.notes,
             evidenceUrl: evidenceUrl,
@@ -522,10 +640,10 @@ stockRoutes.post(
         }
 
         const product = await tx.product.findUnique({ where: { id: body.productId } });
-        console.log(`DEBUG: Product category: ${product?.category}, body.type: ${body.type}, quantity: ${body.quantity}`);
-        if (product && (product.category === 'TOOL' || product.category === 'EQUIPMENT') && body.type === 'ENTRY') {
+        const ownerId = normalizeOwnerId(body.ownerId);
+
+        if (product && isToolProduct(product) && body.type === "ENTRY") {
           const qtyToCreate = Math.floor(body.quantity);
-          console.log(`DEBUG: Creating ${qtyToCreate} individual items for tool product`);
           const itemsData = Array.from({ length: qtyToCreate }).map(() => ({
             productId: body.productId,
             warehouseId: body.warehouseId,
@@ -538,40 +656,39 @@ stockRoutes.post(
           }
         }
 
-        // 2. Calcular impacto no saldo
-        let change = body.quantity;
         if (body.type === "EXIT" || body.type === "LOSS") {
-          change = -body.quantity;
-        }
-
-        console.log("DEBUG: Updating balance with change:", change);
-
-        const ownerId = body.ownerId && body.ownerId.trim() !== "" ? body.ownerId : null;
-        console.log("DEBUG: Updating balance for owner:", ownerId);
-
-        // 3. Atualizar WarehouseStock (Usando findFirst + create/update para evitar problemas de NULL no upsert do Prisma)
-        const existingStock = await tx.warehouseStock.findFirst({
-          where: {
+          await applyOutboundStock(tx, {
+            product,
             warehouseId: body.warehouseId,
             productId: body.productId,
-            ownerId: ownerId,
-          },
-        });
-
-        if (existingStock) {
-          await tx.warehouseStock.update({
-            where: { id: existingStock.id },
-            data: { quantity: { increment: change } },
+            quantity: body.quantity,
+            ownerId,
+            type: body.type,
           });
         } else {
-          await tx.warehouseStock.create({
-            data: {
+          const existingStock = await tx.warehouseStock.findFirst({
+            where: {
               warehouseId: body.warehouseId,
               productId: body.productId,
               ownerId: ownerId,
-              quantity: change,
             },
           });
+
+          if (existingStock) {
+            await tx.warehouseStock.update({
+              where: { id: existingStock.id },
+              data: { quantity: { increment: body.quantity } },
+            });
+          } else {
+            await tx.warehouseStock.create({
+              data: {
+                warehouseId: body.warehouseId,
+                productId: body.productId,
+                ownerId: ownerId,
+                quantity: body.quantity,
+              },
+            });
+          }
         }
 
         return movement;
@@ -584,6 +701,9 @@ stockRoutes.post(
       }
       if (error.code === "DELIVERY_ALREADY_RECEIVED") {
         return res.status(400).json({ error: "DELIVERY_ALREADY_RECEIVED" });
+      }
+      if (error.code === "INSUFFICIENT_STOCK") {
+        return res.status(400).json({ error: "INSUFFICIENT_STOCK", message: error.message });
       }
       console.error("ERROR: Failed to move stock:", error);
       return res.status(500).json({ 
