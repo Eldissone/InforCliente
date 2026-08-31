@@ -6,7 +6,6 @@ import { initMobileMenu } from "/shared/ui.js";
 import { formatCurrency, formatDateBR } from "/shared/format.js";
 import {
   initExtraRequestModal,
-  openExtraRequestModalForEdit,
   openExtraRequestModal,
   wireExtraRequestButton,
   novoPedidoHref,
@@ -2696,11 +2695,19 @@ function ccPriorityHtml(priority) {
   return '<span class="text-slate-500">Normal</span>';
 }
 
+function ccPedidoPageHref(r) {
+  const id = typeof r === "string" ? r : r?.id;
+  const isExtra = typeof r === "object" && r?._isExtra;
+  return isExtra ? novoPedidoHref({ extraId: id }) : novoPedidoHref({ id });
+}
+
 function ccOpenDetailsBtn(r, label, extraClass = "") {
   const id = typeof r === "string" ? r : r?.id;
   const isExtra = typeof r === "object" && r?._isExtra;
-  const handler = isExtra ? `openCCExtraPedido('${id}')` : `openCCReqDrawer('${id}')`;
-  return `<button type="button" onclick="${handler}" class="${extraClass}">${label}</button>`;
+  if (isExtra) {
+    return `<a href="${escapeAttr(ccPedidoPageHref(r))}" class="${extraClass}">${label}</a>`;
+  }
+  return `<button type="button" onclick="openCCReqDrawer('${escapeAttr(id)}')" class="${extraClass}">${label}</button>`;
 }
 
 function ccCanEditPedido(r) {
@@ -2725,7 +2732,7 @@ function ccPedidoActionsHtml(r, { requisition = false } = {}) {
   const actions = [];
   actions.push(
     renderIconBtn("visibility", requisition ? "Ver requisição" : "Ver pedido", "slate", {
-      attrs: `data-cc-action="view" data-id="${escapeAttr(id)}" data-extra="${extra}"`,
+      attrs: `data-cc-action="view" data-id="${escapeAttr(id)}" data-extra="${extra}" data-req="${requisition ? "1" : "0"}"`,
     })
   );
 
@@ -2765,8 +2772,12 @@ async function onCCListActionClick(e) {
   if (!id || !action) return;
 
   if (action === "view") {
-    if (isExtra) openCCExtraPedido(id);
-    else openCCReqDrawer(id);
+    const isReq = btn.dataset.req === "1";
+    if (isExtra || !isReq) {
+      window.location.href = isExtra ? novoPedidoHref({ extraId: id }) : novoPedidoHref({ id });
+      return;
+    }
+    openCCReqDrawer(id);
     return;
   }
   if (action === "edit") {
@@ -2856,7 +2867,7 @@ async function fetchCCExtraPedidos() {
 }
 
 window.openCCExtraPedido = function openCCExtraPedido(id) {
-  openExtraRequestModalForEdit(id);
+  window.location.href = novoPedidoHref({ extraId: id });
 };
 
 async function loadCCDashboard() {

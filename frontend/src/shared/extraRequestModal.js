@@ -1435,6 +1435,10 @@ function repopulateCCItems(items) {
 }
 
 export async function openExtraRequestModalForEdit(id) {
+  window.location.href = novoPedidoHref({ extraId: id });
+}
+
+async function openExtraRequestModalForEditLegacy(id) {
   ensureModalMounted();
   let item = modalOptions.getEditItem?.(id);
   if (!item) {
