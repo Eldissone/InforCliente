@@ -6,6 +6,7 @@ module.exports = {
     "./src/pages/Users/**/*.{html,js}",
     " ./src/pages/Auth/**/*.{html,js}",
     "./src/pages/Stock/**/*.{html,js}",
+    "./src/pages/Financeiro/**/*.{html,js}",
     "./src/shared/**/*.{html,js}"
   ],
   theme: {

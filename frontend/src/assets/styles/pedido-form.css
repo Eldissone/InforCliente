@@ -1,0 +1,637 @@
+/* ══════════════════════════════════════════════════════════
+   Formulário de Pedido de Compra
+   Tokens e componentes do design (Figma 2036:207)
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  --pf-bg: #f8fafc;
+  --pf-surface: #ffffff;
+  --pf-field: #f8f9ff;
+  --pf-border: #bccac0;
+  --pf-divider: #e6eeff;
+  --pf-text: #0d1c2e;
+  --pf-muted: #3d4a42;
+  --pf-placeholder: #6b7280;
+  --pf-brand: #006948;
+  --pf-brand-dark: #00543a;
+  --pf-cancel: #f1f5f9;
+  --pf-row-border: rgba(188, 202, 192, 0.5);
+}
+
+/* ── Página ── */
+.pf-page {
+  background: var(--pf-bg);
+  color: var(--pf-text);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.pf-container {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 32px 128px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pf-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--pf-muted);
+  transition: color 0.15s;
+}
+
+.pf-back:hover {
+  color: var(--pf-brand);
+}
+
+.pf-back .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.pf-title {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.48px;
+  color: var(--pf-text);
+}
+
+/* ── Campos ── */
+.pf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  color: var(--pf-muted);
+}
+
+.pf-label--lg {
+  font-size: 20px;
+}
+
+.pf-input,
+.pf-select,
+.pf-textarea {
+  width: 100%;
+  background: var(--pf-field);
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  padding: 9px 13px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--pf-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.pf-select {
+  padding-right: 33px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233d4a42' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 16px 16px;
+}
+
+.pf-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.pf-input::placeholder,
+.pf-textarea::placeholder {
+  color: var(--pf-placeholder);
+}
+
+.pf-input:focus,
+.pf-select:focus,
+.pf-textarea:focus {
+  outline: none;
+  border-color: var(--pf-brand);
+  box-shadow: 0 0 0 3px rgba(0, 105, 72, 0.12);
+}
+
+.pf-input:disabled,
+.pf-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pf-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--pf-muted);
+  cursor: pointer;
+}
+
+.pf-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 3px;
+  border-color: var(--pf-border);
+  color: var(--pf-brand);
+  flex-shrink: 0;
+}
+
+.pf-checkbox-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--pf-text);
+}
+
+.pf-checkbox .pf-hint {
+  display: block;
+  margin-top: 2px;
+}
+
+.pf-hint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pf-placeholder);
+}
+
+/* ── Cartões ── */
+.pf-card {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.05));
+}
+
+.pf-section {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: 25px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.05));
+}
+
+.pf-section--pad {
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--pf-text);
+}
+
+.pf-card-title--divided {
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--pf-divider);
+}
+
+.pf-card-title .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--pf-brand);
+}
+
+/* ── Grelhas ── */
+.pf-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.pf-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pf-grid--12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.pf-col-8 {
+  grid-column: span 8 / span 8;
+}
+
+.pf-col-4 {
+  grid-column: span 4 / span 4;
+}
+
+.pf-col-full {
+  grid-column: 1 / -1;
+}
+
+.pf-selects-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 680px;
+}
+
+@media (max-width: 900px) {
+  .pf-grid--2,
+  .pf-grid--12,
+  .pf-selects-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pf-col-8,
+  .pf-col-4 {
+    grid-column: 1 / -1;
+  }
+
+  .pf-container {
+    padding: 16px 16px 140px;
+  }
+}
+
+/* ── Zona de anexos ── */
+.pf-dropzone {
+  background: var(--pf-field);
+  border: 2px dashed var(--pf-border);
+  border-radius: 4px;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 26px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.pf-dropzone:hover,
+.pf-dropzone.is-dragover {
+  border-color: var(--pf-brand);
+  background: rgba(0, 105, 72, 0.04);
+}
+
+.pf-dropzone .material-symbols-outlined {
+  font-size: 32px;
+  color: var(--pf-muted);
+}
+
+.pf-dropzone-text {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--pf-muted);
+}
+
+.pf-attach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-attach-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--pf-field);
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--pf-text);
+}
+
+.pf-attach-item .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--pf-muted);
+}
+
+.pf-attach-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-attach-size {
+  font-size: 11px;
+  color: var(--pf-placeholder);
+  white-space: nowrap;
+}
+
+.pf-attach-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--pf-placeholder);
+  transition: background 0.15s, color 0.15s;
+}
+
+.pf-attach-remove:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+/* ── Tabela de itens ── */
+.pf-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--pf-border);
+}
+
+.pf-table-scroll {
+  overflow-x: auto;
+  border-bottom-left-radius: 25px;
+  border-bottom-right-radius: 25px;
+}
+
+.pf-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.pf-table thead th {
+  background: var(--pf-divider);
+  border-bottom: 1px solid var(--pf-border);
+  padding: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  color: var(--pf-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pf-table thead th.pf-th-right {
+  text-align: right;
+}
+
+.pf-table tbody td {
+  border-bottom: 1px solid var(--pf-row-border);
+  padding: 8px;
+  vertical-align: middle;
+}
+
+.pf-table tbody tr:nth-child(even) {
+  background: var(--pf-bg);
+}
+
+.pf-cell-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 5px 9px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--pf-text);
+}
+
+.pf-cell-input:focus {
+  outline: none;
+  background: var(--pf-surface);
+  border-color: var(--pf-brand);
+}
+
+.pf-cell-input::placeholder {
+  color: var(--pf-placeholder);
+}
+
+.pf-cell-input--right {
+  text-align: right;
+}
+
+.pf-cell-total {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: right;
+  color: var(--pf-text);
+  white-space: nowrap;
+}
+
+.pf-row-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: var(--pf-placeholder);
+  transition: background 0.15s, color 0.15s;
+}
+
+.pf-row-remove:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.pf-row-remove .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* ── Totais ── */
+.pf-totals-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+
+.pf-totals {
+  width: 320px;
+  max-width: 100%;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  padding: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.05));
+}
+
+.pf-totals-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-totals-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.pf-totals-row dt {
+  color: var(--pf-muted);
+}
+
+.pf-totals-row dd {
+  color: var(--pf-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-totals-grand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 13px;
+  border-top: 1px solid var(--pf-border);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.pf-totals-grand dt {
+  color: var(--pf-text);
+}
+
+.pf-totals-grand dd {
+  color: var(--pf-brand);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Botões ── */
+.pf-btn-primary,
+.pf-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 24px;
+  border-radius: 25px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.6px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.05));
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.pf-btn-primary {
+  background: var(--pf-brand);
+  color: #fff;
+}
+
+.pf-btn-primary:hover {
+  background: var(--pf-brand-dark);
+}
+
+.pf-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pf-btn-ghost {
+  background: var(--pf-cancel);
+  color: #0f172a;
+}
+
+.pf-btn-ghost:hover {
+  background: #e2e8f0;
+}
+
+.pf-btn-primary .material-symbols-outlined,
+.pf-btn-ghost .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.pf-btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--pf-brand);
+  transition: opacity 0.15s;
+}
+
+.pf-btn-link:hover {
+  opacity: 0.75;
+}
+
+.pf-btn-link .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.pf-btn-inline {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 4px;
+  background: var(--pf-brand);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.pf-btn-inline:hover {
+  background: var(--pf-brand-dark);
+}
+
+/* ── Barra de acções fixa ── */
+.pf-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 17px 16px 16px;
+  background: var(--pf-surface);
+  border-top: 1px solid var(--pf-border);
+  box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* ── Sugestões de itens do catálogo ── */
+.pf-suggest {
+  position: absolute;
+  z-index: 60;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: 4px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* O bundle Tailwind é carregado antes desta folha, por isso `.hidden` perderia
+   para as classes .pf-* que definem display. Esta regra devolve-lhe a prioridade. */
+.pf-page .hidden {
+  display: none;
+}

@@ -655,8 +655,11 @@ purchaseRouter.post(
       include: { requisition: true },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
-    if (!order.requisition) return res.status(400).json({ error: "REQUISITION_NOT_FOUND" });
     if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
+
+    const requisition =
+      order.requisition ||
+      (await prisma.purchaseRequisition.create({ data: { purchaseOrderId: order.id } }));
 
     let url;
     try {
@@ -670,7 +673,7 @@ purchaseRouter.post(
 
     const attachment = await prisma.purchaseAttachment.create({
       data: {
-        purchaseRequisitionId: order.requisition.id,
+        purchaseRequisitionId: requisition.id,
         fileName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size,
