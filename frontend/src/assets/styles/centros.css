@@ -15,11 +15,37 @@
     font-variant-ligatures: common-ligatures;
 }
 
-.fin-icon-btn .fin-icon-svg {
-    width: 1rem;
-    height: 1rem;
+.fin-icon-btn .fin-icon-svg,
+.fin-icon-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px;
+    min-height: 16px;
+    max-width: none !important;
+    max-height: none !important;
     flex-shrink: 0;
     display: block;
+    fill: currentColor;
+    pointer-events: none;
+}
+
+.fin-icon-btn .material-symbols-outlined {
+    font-family: "Material Symbols Outlined";
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: 0;
+    width: 1em;
+    height: 1em;
+    overflow: visible;
+    pointer-events: none;
+    font-weight: normal;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    -webkit-font-feature-settings: "liga" 1;
+    font-feature-settings: "liga" 1;
+    font-variant-ligatures: common-ligatures;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
 }
 
 /* Sticky footer: viewport real no mobile (100dvh) */
@@ -95,7 +121,7 @@ body {
     border: none;
     background: #f1f5f9;
     color: #64748b;
-    overflow: hidden;
+    overflow: visible;
     flex-shrink: 0;
 }
 
@@ -983,7 +1009,7 @@ body {
     border: none;
     background: #f1f5f9;
     color: #64748b;
-    overflow: hidden;
+    overflow: visible;
     flex-shrink: 0;
 }
 

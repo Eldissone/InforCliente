@@ -947,6 +947,38 @@ export async function savePedido() {
   const payload = await buildPedidoPayload();
   if (!payload) return null;
 
+  const extraId = document.getElementById("ccPedidoExtraId")?.value || "";
+  if (extraId) {
+    const items = (payload.items || []).map((it) => ({
+      description: it.name,
+      quantity: it.quantity,
+      unit: it.unit,
+      unitPrice: it.unitPrice,
+      notes: it.notes,
+    }));
+    const amount = items.reduce(
+      (sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+      0
+    );
+    const saved = await apiRequest(`/extra-requests/${extraId}`, {
+      method: "PATCH",
+      body: {
+        description: payload.description,
+        notes: payload.justification,
+        amount,
+        priority: payload.priority,
+        requestedBy: payload.requestedByName,
+        desiredDate: payload.needDate,
+        paymentDueDate: payload.needDate,
+        requiresQuote: payload.requiresQuote,
+        supplierId: payload.supplierId,
+        supplierName: payload.supplierName,
+        items,
+      },
+    });
+    return { saved, isEdit: true, requiresQuote: payload.requiresQuote };
+  }
+
   const editId = document.getElementById("ccPedidoEditId")?.value || "";
   const saved = editId
     ? await apiRequest(`/purchase-orders/${editId}`, { method: "PATCH", body: payload })
@@ -967,13 +999,23 @@ export function resetPedidoForm() {
   document.getElementById("formNovoPedido")?.reset();
   const editId = document.getElementById("ccPedidoEditId");
   if (editId) editId.value = "";
+  const extraId = document.getElementById("ccPedidoExtraId");
+  if (extraId) extraId.value = "";
   const itemsBody = document.getElementById("ccItemsBody");
   if (itemsBody) itemsBody.innerHTML = "";
 }
 
 /** Preenche o formulário com um pedido existente. Devolve o pedido carregado. */
-export async function fillPedidoForm(order) {
-  document.getElementById("ccPedidoEditId").value = order.id;
+export async function fillPedidoForm(order, { extra = false } = {}) {
+  const extraEl = document.getElementById("ccPedidoExtraId");
+  const editEl = document.getElementById("ccPedidoEditId");
+  if (extra) {
+    if (extraEl) extraEl.value = order.id || "";
+    if (editEl) editEl.value = "";
+  } else {
+    if (editEl) editEl.value = order.id || "";
+    if (extraEl) extraEl.value = "";
+  }
   document.getElementById("ccPedidoPriority").value = order.priority || "NORMAL";
   document.getElementById("ccPedidoSolicitante").value = order.requestedByName || "";
   document.getElementById("ccPedidoData").value = toDateInput(order.needDate);

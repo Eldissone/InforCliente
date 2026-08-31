@@ -205,7 +205,10 @@ function setSubmitLabel(text, { busy = false } = {}) {
 
 async function onSubmit(e) {
     e.preventDefault();
-    const isEdit = Boolean(document.getElementById("ccPedidoEditId")?.value);
+    const isEdit = Boolean(
+        document.getElementById("ccPedidoEditId")?.value ||
+        document.getElementById("ccPedidoExtraId")?.value
+    );
     setSubmitLabel("A salvar...", { busy: true });
 
     try {
@@ -213,8 +216,11 @@ async function onSubmit(e) {
         if (!result) return;
 
         const { saved, requiresQuote } = result;
-        await attachmentUploads;
-        await flushAttachments(saved.id);
+        const extraId = document.getElementById("ccPedidoExtraId")?.value;
+        if (!extraId && saved?.id) {
+            await attachmentUploads;
+            await flushAttachments(saved.id);
+        }
 
         const number = saved?.number;
         showToast(
@@ -291,6 +297,55 @@ async function startEditPedido(id) {
     }
 }
 
+function extraAsPedido(extra) {
+    return {
+        id: extra.id,
+        number: extra.number || `PE-${String(extra.id || "").slice(-6).toUpperCase()}`,
+        priority: extra.priority,
+        requestedByName: extra.requestedBy,
+        needDate: extra.desiredDate,
+        description: extra.description,
+        justification: extra.notes,
+        requiresQuote: extra.requiresQuote,
+        projectId: extra.type === "OBRA" ? extra.projectId : extra.projectId,
+        costCenterId: extra.costCenterId,
+        costCategoryId: extra.costCategoryId,
+        supplierId: extra.supplierId,
+        supplierName: extra.supplierName || extra.supplierRef?.name,
+        supplier: extra.supplierRef,
+        items: (extra.items || []).map((it) => ({
+            name: it.description || it.name,
+            quantity: it.quantity,
+            unit: it.unit,
+            unitPrice: it.unitPrice,
+            notes: it.notes,
+        })),
+    };
+}
+
+async function startEditExtra(extraId) {
+    try {
+        const extra = await apiRequest(`/extra-requests/${extraId}`);
+        resetPedidoForm();
+        const order = extraAsPedido(extra);
+        await fillPedidoForm(order, { extra: true });
+        await applyPedidoPresets({
+            type: extra.type,
+            projectId: extra.projectId,
+            costCenterId: extra.costCenterId,
+            costCategoryId: extra.costCategoryId,
+        });
+
+        const title = document.getElementById("pedidoPageTitle");
+        if (title) title.textContent = `Editar ${order.number}`;
+        document.title = `Info Gestor — ${order.number}`;
+        setSubmitLabel("Guardar alterações");
+    } catch (err) {
+        showToast("Não foi possível abrir o pedido para edição: " + apiError(err), "error");
+        setTimeout(() => { window.location.href = returnToUrl(); }, 2000);
+    }
+}
+
 async function guardAccess() {
     const user = getSessionUser();
     if (!user) return false;
@@ -312,8 +367,11 @@ async function init() {
     wireBackLink();
     document.getElementById("formNovoPedido")?.addEventListener("submit", onSubmit);
 
-    const editId = new URLSearchParams(window.location.search).get("id");
+    const q = new URLSearchParams(window.location.search);
+    const editId = q.get("id");
+    const extraId = q.get("extraId");
     if (editId) await startEditPedido(editId);
+    else if (extraId) await startEditExtra(extraId);
     else await startNewPedido();
 }
 

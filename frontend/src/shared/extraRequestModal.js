@@ -1315,6 +1315,7 @@ export function sanitizeReturnTo(raw) {
 
 export function novoPedidoHref({
   id,
+  extraId,
   type,
   projectId,
   costCenterId,
@@ -1326,6 +1327,7 @@ export function novoPedidoHref({
 } = {}) {
   const params = new URLSearchParams();
   if (id) params.set("id", id);
+  if (extraId) params.set("extraId", extraId);
   if (type) params.set("type", type);
   if (projectId) params.set("projectId", projectId);
   if (costCenterId) params.set("costCenterId", costCenterId);
