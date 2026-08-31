@@ -4929,10 +4929,36 @@ function wireStock() {
   updateStockRequestsBadge();
 }
 
+function filterPendingMaterialPlans(plans) {
+  return (plans || []).filter(p => p.status === "PENDING_MATERIAL");
+}
+
+function splitPlanRequestItems(items = []) {
+  const materials = [];
+  const tools = [];
+  for (const item of items) {
+    const cat = (item.product?.category || "").toUpperCase();
+    if (cat === "TOOL" || cat === "EQUIPMENT") tools.push(item);
+    else materials.push(item);
+  }
+  return { materials, tools };
+}
+
+function renderPlanRequestChips(items, badgeClass) {
+  return items.map(m => `
+    <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
+      <span class="text-sm font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Desconhecido")}</span>
+      <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
+    </div>
+  `).join("");
+}
+
 async function updateStockRequestsBadge() {
   try {
     const id = getProjectId();
-    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(id)}`);
+    const plans = filterPendingMaterialPlans(
+      await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(id)}`)
+    );
     const badge = el("stock_requests_badge");
     if (badge) {
       if (plans.length > 0) {
@@ -4954,9 +4980,11 @@ async function loadStockRequests() {
 
   try {
     const id = getProjectId();
-    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(id)}`);
+    const plans = filterPendingMaterialPlans(
+      await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(id)}`)
+    );
 
-    if (!plans || plans.length === 0) {
+    if (!plans.length) {
       container.innerHTML = `
                 <div class="p-10 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100">
                     <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">fact_check</span>
@@ -4966,43 +4994,54 @@ async function loadStockRequests() {
       return;
     }
 
-    const esc = (t) => (t || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-    container.innerHTML = plans.map(p => `
+    container.innerHTML = plans.map(p => {
+      const { materials: reqMats, tools: reqTools } = splitPlanRequestItems(p.materials);
+      const mats = reqMats.length ? `
+                        <div>
+                            <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
+                            </h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                ${renderPlanRequestChips(reqMats, "bg-amber-100 text-amber-800")}
+                            </div>
+                        </div>
+      ` : "";
+      const tools = reqTools.length ? `
+                        <div>
+                            <h5 class="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-sm">build</span> Ferramentas Requisitadas
+                            </h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                ${renderPlanRequestChips(reqTools, "bg-indigo-100 text-indigo-800")}
+                            </div>
+                        </div>
+      ` : "";
+      return `
             <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col lg:flex-row">
                 <div class="p-6 flex-1">
                     <div class="flex items-center gap-3 mb-4">
                         <span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Aguardando Material</span>
                         <span class="text-xs font-bold text-slate-400">${formatDateBR(p.date)}</span>
                     </div>
-                    <h3 class="text-lg font-bold text-slate-900 mb-1">${esc(p.description || "Sem descrição")}</h3>
+                    <h3 class="text-lg font-bold text-slate-900 mb-1">${escapeHtml(p.description || "Sem descrição")}</h3>
                     <p class="text-xs text-slate-500 mb-4">${p.tasks.length} Tarefas associadas</p>
 
-                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-sm">inventory_2</span> Materiais Requisitados
-                        </h5>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            ${p.materials.map(m => `
-                                <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-                                    <span class="text-sm font-bold text-slate-800 line-clamp-1">${esc(m.product?.name || "Desconhecido")}</span>
-                                    <span class="bg-amber-100 text-amber-800 px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty}</span>
-                                </div>
-                            `).join('')}
-                        </div>
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-4">
+                        ${mats}${tools}
                     </div>
                 </div>
 
                 <div class="p-6 bg-slate-50 border-t lg:border-t-0 lg:border-l border-slate-100 flex items-center justify-center">
                     <button onclick="window.providePlanMaterialsGlobal('${p.id}', event)" 
                         style="background-color: #ea580c !important;"
-                        class="w-full lg:w-auto h-12 text-white px-8 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-600/20 active:scale-95 hover:brightness-110">
+                        class="w-full lg:w-auto h-12 text-white px-8 rounded-2xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-orange-600/20 active:scale-95 hover:brightness-110">
                         <span class="material-symbols-outlined text-lg">check_circle</span>
                         Disponibilizar Stock
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;
+    }).join("");
 
   } catch (err) {
     container.innerHTML = `<div class="p-8 text-center text-red-600 bg-red-50 rounded-2xl font-bold">Erro: ${err.message}</div>`;

@@ -1900,7 +1900,8 @@ function wireStockEvents() {
 async function updateStockRequestsBadge() {
   try {
     if (!state.projectId || state.projectId === "all") return;
-    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`);
+    const plans = (await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`) || [])
+      .filter(p => p.status === "PENDING_MATERIAL");
     const badge = document.getElementById("stock_requests_badge");
     if (badge) {
       if (plans.length > 0) {
@@ -1926,9 +1927,10 @@ async function loadStockRequests() {
   container.innerHTML = `<div class="p-10 text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mx-auto"></div></div>`;
 
   try {
-    const plans = await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`);
+    const plans = (await apiRequest(`/daily-plans/all-pending?projectId=${encodeURIComponent(state.projectId)}`) || [])
+      .filter(p => p.status === "PENDING_MATERIAL");
 
-    if (!plans || plans.length === 0) {
+    if (!plans.length) {
       container.innerHTML = `
                 <div class="p-10 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-100">
                     <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">fact_check</span>
