@@ -5,6 +5,12 @@ const { authRequired, requireRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const { createLog } = require("../services/logService");
+const {
+  applyRequisitionFromCotacao,
+  buildCotacaoSnapshot,
+  cotacaoFromOrder,
+  withSourceTag,
+} = require("../services/purchaseQuoteBridge");
 const multer = require("multer");
 
 const fileUpload = multer({
@@ -76,6 +82,29 @@ const PURCHASE_ORDER_INCLUDE = {
   approvals: { orderBy: { decidedAt: "desc" } },
   paymentPlan: { include: { installments: { orderBy: { number: "asc" } } } },
   history: { orderBy: { createdAt: "asc" } },
+  workNeeds: {
+    include: {
+      quotes: {
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              nif: true,
+              vatPercent: true,
+              withholdingPercent: true,
+              discountPercent: true,
+            },
+          },
+          supplierProduct: {
+            select: { vatPercent: true, withholdingPercent: true, discountPercent: true },
+          },
+          supplierOrder: { select: { proformaUrl: true } },
+        },
+        orderBy: [{ selected: "desc" }, { createdAt: "desc" }],
+      },
+    },
+  },
 };
 
 function parseItemTaxNotes(notes) {
@@ -143,8 +172,9 @@ function mapOrder(o) {
     totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
     totalWithTax: String(itemGrossAmount(i)),
   }));
+  const { workNeeds, ...rest } = o;
   return {
-    ...o,
+    ...rest,
     totalValue: o.totalValue != null ? String(o.totalValue) : null,
     totalWithTax: String(orderTotalWithTax(o)),
     items,
@@ -164,6 +194,7 @@ function mapOrder(o) {
           })),
         }
       : null,
+    cotacao: cotacaoFromOrder(o),
   };
 }
 
@@ -305,11 +336,16 @@ purchaseRouter.get(
     const role = (req.user?.role || "").toLowerCase();
     if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
 
-    const order = await prisma.purchaseOrder.findUnique({
+    let order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
       include: PURCHASE_ORDER_INCLUDE,
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    await applyRequisitionFromCotacao(prisma, order.id);
+    order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
     return res.json(mapOrder(order));
   })
 );
@@ -580,7 +616,7 @@ purchaseRouter.post(
       include: { requisition: true },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
-    if (order.status !== "PENDENTE_REQUISICAO") {
+    if (!["PENDENTE_REQUISICAO", "NAO_APROVADO"].includes(order.status)) {
       return res.status(400).json({ error: "ORDER_NOT_IN_REQUISITION_STATUS" });
     }
 
@@ -598,7 +634,7 @@ purchaseRouter.post(
           supplierName: data.supplierName || null,
           quotedValue: data.quotedValue || null,
           currency: data.currency,
-          notes: data.notes || null,
+          notes: withSourceTag(data.notes, "manual"),
         },
         include: { attachments: true },
       });
@@ -610,7 +646,7 @@ purchaseRouter.post(
           supplierName: data.supplierName || null,
           quotedValue: data.quotedValue || null,
           currency: data.currency,
-          notes: data.notes || null,
+          notes: withSourceTag(data.notes, "manual"),
         },
         include: { attachments: true },
       });
@@ -715,6 +751,9 @@ purchaseRouter.delete(
 purchaseRouter.post(
   "/:id/submit-for-approval",
   asyncHandler(async (req, res) => {
+    await applyRequisitionFromCotacao(prisma, req.params.id);
+    const cotacao = await buildCotacaoSnapshot(prisma, req.params.id);
+
     const order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
       include: { requisition: { include: { attachments: true } } },
@@ -725,11 +764,14 @@ purchaseRouter.post(
       return res.status(400).json({ error: "CANNOT_SUBMIT_IN_CURRENT_STATUS" });
     }
 
-    // Se requer cotação, deve ter requisição com proforma
-    if (order.requiresQuote && !order.requisition) {
+    const hasRequisition = Boolean(order.requisition || cotacao.quoted);
+    const hasProforma =
+      (order.requisition?.attachments || []).length > 0 || (cotacao.proformas || []).length > 0;
+
+    if (order.requiresQuote && !hasRequisition) {
       return res.status(400).json({ error: "REQUISITION_REQUIRED" });
     }
-    if (order.requiresQuote && !(order.requisition.attachments || []).length) {
+    if (order.requiresQuote && !hasProforma) {
       return res.status(400).json({
         error: "PROFORMA_REQUIRED",
         message: "Anexe a proforma na cotação antes de submeter para aprovação.",

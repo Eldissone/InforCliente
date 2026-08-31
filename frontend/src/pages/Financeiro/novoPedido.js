@@ -3,11 +3,13 @@ import { getSessionUser } from "/services/auth.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { initMobileMenu, toast } from "/shared/ui.js";
+import { sanitizeReturnTo } from "/shared/extraRequestModal.js";
 import {
     initPurchaseOrderForm,
     ensureReferenceDataLoaded,
     applyTypeVisibility,
     applyQuoteRequirementVisibility,
+    applyPedidoPresets,
     addItemRow,
     resetPedidoForm,
     fillPedidoForm,
@@ -15,8 +17,26 @@ import {
     uploadPedidoAttachment,
 } from "/shared/purchaseOrderForm.js";
 
-const LIST_URL = "centroDeCompras.html";
 const MAX_ATTACHMENT_MB = 20;
+
+function returnToUrl() {
+    const q = new URLSearchParams(window.location.search).get("returnTo");
+    if (q) return sanitizeReturnTo(q);
+    try {
+        if (document.referrer) {
+            const ref = new URL(document.referrer);
+            if (ref.origin === window.location.origin) {
+                return sanitizeReturnTo(`${ref.pathname}${ref.search}`);
+            }
+        }
+    } catch { /* ignore */ }
+    return sanitizeReturnTo("");
+}
+
+function wireBackLink() {
+    const link = document.querySelector(".pf-back");
+    if (link) link.href = returnToUrl();
+}
 
 function showToast(msg, type = "info") {
     toast(msg, { type });
@@ -207,7 +227,7 @@ async function onSubmit(e) {
                     : "Pedido criado com sucesso",
             "success"
         );
-        window.location.href = LIST_URL;
+        window.location.href = returnToUrl();
     } catch (err) {
         showToast(apiError(err), "error");
     } finally {
@@ -233,6 +253,23 @@ async function startNewPedido() {
     try {
         await ensureReferenceDataLoaded();
     } catch { /* dados de referência são melhor-esforço */ }
+    await applyPedidoPresets(readCreatePresets());
+}
+
+function readCreatePresets() {
+    const q = new URLSearchParams(window.location.search);
+    const flag = (key) => {
+        const v = q.get(key);
+        return v === "1" || v === "true";
+    };
+    return {
+        type: q.get("type") || "",
+        projectId: q.get("projectId") || "",
+        costCenterId: q.get("costCenterId") || "",
+        costCategoryId: q.get("costCategoryId") || q.get("generalCostCenterId") || "",
+        lockType: flag("lockType"),
+        lockProject: flag("lockProject"),
+    };
 }
 
 async function startEditPedido(id) {
@@ -250,7 +287,7 @@ async function startEditPedido(id) {
         renderAttachments();
     } catch (err) {
         showToast("Não foi possível abrir o pedido para edição: " + apiError(err), "error");
-        setTimeout(() => { window.location.href = LIST_URL; }, 2000);
+        setTimeout(() => { window.location.href = returnToUrl(); }, 2000);
     }
 }
 
@@ -272,6 +309,7 @@ async function init() {
 
     initPurchaseOrderForm({ showToast, apiError });
     bindAttachments();
+    wireBackLink();
     document.getElementById("formNovoPedido")?.addEventListener("submit", onSubmit);
 
     const editId = new URLSearchParams(window.location.search).get("id");

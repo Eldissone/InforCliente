@@ -3,8 +3,7 @@ import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import {
-  formatSupplierFiscalSummary,
-  computeSupplierFiscalBreakdown,
+  computeQuoteLineFiscalBreakdown,
   formatFiscalAmount,
 } from "/shared/supplierFiscal.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
@@ -618,12 +617,24 @@ function openBatchQuoteModal() {
           <td class="py-2 px-3 text-sm font-semibold text-slate-800">${n.description}</td>
           <td class="py-2 px-3 text-center">
             <input type="number" min="0" step="0.01" value="${qty}" data-qty
-              class="w-20 h-9 px-2 border border-slate-200 rounded-lg text-center text-sm">
+              class="w-16 h-9 px-2 border border-slate-200 rounded-lg text-center text-sm">
             <span class="text-[10px] text-slate-400 ml-1">${n.unit || ""}</span>
           </td>
           <td class="py-2 px-3 text-right">
             <input type="number" min="0" step="0.01" value="" data-price required
-              class="w-28 h-9 px-2 border border-slate-200 rounded-lg text-right text-sm" placeholder="0,00">
+              class="w-24 h-9 px-2 border border-slate-200 rounded-lg text-right text-sm" placeholder="0,00">
+          </td>
+          <td class="py-2 px-2 text-center">
+            <input type="number" min="0" max="100" step="0.01" value="" data-vat
+              class="w-16 h-9 px-1 border border-slate-200 rounded-lg text-center text-sm" placeholder="0">
+          </td>
+          <td class="py-2 px-2 text-center">
+            <input type="number" min="0" max="100" step="0.01" value="" data-wh
+              class="w-16 h-9 px-1 border border-slate-200 rounded-lg text-center text-sm" placeholder="0">
+          </td>
+          <td class="py-2 px-2 text-center">
+            <input type="number" min="0" max="100" step="0.01" value="" data-disc
+              class="w-16 h-9 px-1 border border-slate-200 rounded-lg text-center text-sm" placeholder="0">
           </td>
           <td class="py-2 px-3 text-right text-xs font-bold text-slate-700 tabular-nums" data-line-base>—</td>
         </tr>`;
@@ -634,33 +645,42 @@ function openBatchQuoteModal() {
   if (notes) notes.value = "";
   const file = document.getElementById("batchQuoteProforma");
   if (file) file.value = "";
-  document.getElementById("batchQuoteItemsBody")?.querySelectorAll("[data-qty], [data-price]").forEach((el) => {
+  document.getElementById("batchQuoteItemsBody")?.querySelectorAll("[data-qty], [data-price], [data-vat], [data-wh], [data-disc]").forEach((el) => {
     el.addEventListener("input", refreshBatchFiscalTotals);
   });
   document.getElementById("modalBatchQuote")?.classList.add("open");
   refreshBatchFiscalTotals();
 }
 
-function batchSelectedSupplier() {
-  const id = document.getElementById("batchQuoteSupplier")?.value;
-  return currentSuppliers.find((s) => s.id === id) || null;
+function readLinePercent(el) {
+  const raw = el?.value?.trim();
+  if (!raw) return 0;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 function refreshBatchFiscalTotals() {
-  const supplier = batchSelectedSupplier();
-  const hint = document.getElementById("batchQuoteFiscalHint");
-  if (hint) {
-    hint.textContent = supplier
-      ? `Impostos do fornecedor: ${formatSupplierFiscalSummary(supplier)}`
-      : "Seleccione o fornecedor para ver IVA, retenção e desconto.";
-  }
-
   let baseSum = 0;
+  let netSum = 0;
+  const extraByKind = { discount: 0, vat: 0, withholding: 0 };
+
   document.querySelectorAll("#batchQuoteItemsBody tr").forEach((tr) => {
     const qty = parseFloat(tr.querySelector("[data-qty]")?.value || "0") || 0;
     const price = parseFloat(tr.querySelector("[data-price]")?.value || "0") || 0;
     const base = qty * price;
     baseSum += base;
+    const br = computeQuoteLineFiscalBreakdown(
+      {
+        vatPercent: readLinePercent(tr.querySelector("[data-vat]")),
+        withholdingPercent: readLinePercent(tr.querySelector("[data-wh]")),
+        discountPercent: readLinePercent(tr.querySelector("[data-disc]")),
+      },
+      base
+    );
+    netSum += br.net;
+    extraByKind.discount += br.discount || 0;
+    extraByKind.vat += br.vat || 0;
+    extraByKind.withholding += br.withholding || 0;
     const cell = tr.querySelector("[data-line-base]");
     if (cell) {
       cell.textContent = Number.isFinite(base)
@@ -671,24 +691,20 @@ function refreshBatchFiscalTotals() {
 
   const box = document.getElementById("batchQuoteTotals");
   if (!box) return;
-  if (!supplier || baseSum <= 0) {
+  if (baseSum <= 0) {
     box.innerHTML = `<p class="text-xs text-slate-500 font-semibold">Preencha os preços para ver o total com impostos.</p>`;
     return;
   }
 
-  const br = computeSupplierFiscalBreakdown(supplier, baseSum);
   const money = (n) => formatFiscalAmount(n, "AOA");
-  const extra = (br.lines || [])
-    .map((line) => {
-      const sign = line.amount >= 0 ? "+" : "−";
-      const color = line.amount >= 0 ? "text-emerald-700" : "text-red-600";
-      return `<div class="flex justify-between"><span class="text-slate-500">${line.label}</span><span class="font-bold tabular-nums ${color}">${sign}${money(line.amount)}</span></div>`;
-    })
-    .join("");
+  const extras = [];
+  if (extraByKind.discount > 0) extras.push(`<div class="flex justify-between"><span class="text-slate-500">Desconto</span><span class="font-bold tabular-nums text-red-600">−${money(extraByKind.discount)}</span></div>`);
+  if (extraByKind.vat > 0) extras.push(`<div class="flex justify-between"><span class="text-slate-500">IVA</span><span class="font-bold tabular-nums text-emerald-700">+${money(extraByKind.vat)}</span></div>`);
+  if (extraByKind.withholding > 0) extras.push(`<div class="flex justify-between"><span class="text-slate-500">Retenção</span><span class="font-bold tabular-nums text-red-600">−${money(extraByKind.withholding)}</span></div>`);
   box.innerHTML = `
-    <div class="flex justify-between text-slate-600"><span>Base (s/ impostos)</span><span class="font-bold tabular-nums">${money(br.base)}</span></div>
-    ${extra || `<p class="text-[11px] text-slate-400">Este fornecedor não tem IVA, retenção ou desconto cadastrados.</p>`}
-    <div class="flex justify-between pt-1.5 border-t border-slate-200"><span class="font-black text-slate-800 uppercase text-[11px] tracking-wide">Líquido a pagar</span><span class="font-black tabular-nums text-[#0f172a]">${money(br.net)}</span></div>
+    <div class="flex justify-between text-slate-600"><span>Base (s/ impostos)</span><span class="font-bold tabular-nums">${money(baseSum)}</span></div>
+    ${extras.join("") || `<p class="text-[11px] text-slate-400">Sem IVA, retenção ou desconto neste lote.</p>`}
+    <div class="flex justify-between pt-1.5 border-t border-slate-200"><span class="font-black text-slate-800 uppercase text-[11px] tracking-wide">Líquido a pagar</span><span class="font-black tabular-nums text-[#0f172a]">${money(netSum)}</span></div>
   `;
 }
 
@@ -712,6 +728,9 @@ async function submitBatchQuote(placeOrder) {
       needId,
       quotedPrice,
       quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      vatPercent: readLinePercent(tr.querySelector("[data-vat]")),
+      withholdingPercent: readLinePercent(tr.querySelector("[data-wh]")),
+      discountPercent: readLinePercent(tr.querySelector("[data-disc]")),
     });
   }
   const fd = new FormData();
@@ -841,7 +860,7 @@ function renderSuppliers() {
   const tbody = document.getElementById("suppliersTableBody");
   
   if (currentSuppliers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
     return;
   }
 
@@ -860,7 +879,6 @@ function renderSuppliers() {
       </td>
       <td class="py-3 px-4 text-sm text-slate-600">${s.category || "—"}</td>
       <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—"}</td>
-      <td class="py-3 px-4 text-center text-[11px] font-semibold text-slate-500">${formatSupplierFiscalSummary(s)}</td>
       <td class="py-3 px-4 text-center font-bold text-slate-700">${s._count?.products || 0}</td>
       <td class="py-3 px-4 text-center">
         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
@@ -962,7 +980,6 @@ function applyAgtResultToSupplierForm(agt, existingSupplier = null) {
   }
   const nameEl = document.getElementById("supplierName");
   const nifEl = document.getElementById("supplierNif");
-  const vatEl = document.getElementById("supplierVatPercent");
   const statusEl = document.getElementById("supplierAgtStatus");
   if (agt?.nome && nameEl) nameEl.value = agt.nome;
   if (nifEl) {
@@ -971,7 +988,6 @@ function applyAgtResultToSupplierForm(agt, existingSupplier = null) {
     nifEl.dataset.agtStatus = agt?.estado || "";
     nifEl.dataset.agtType = agt?.tipo || "";
   }
-  if (vatEl && agt?.vatPercent != null) vatEl.value = agt.vatPercent;
   if (statusEl) statusEl.value = [agt?.estado, agt?.regimeIva].filter(Boolean).join(" · ");
 }
 
@@ -1016,9 +1032,6 @@ function openSupplierModal(supplier = null) {
   document.getElementById("supplierCategory").value = supplier?.category || "";
   document.getElementById("supplierType").value = supplier?.type || "MATERIAL";
   document.getElementById("supplierPaymentTerm").value = supplier?.paymentTerm || "";
-  document.getElementById("supplierVatPercent").value = supplier?.vatPercent ?? "";
-  document.getElementById("supplierWithholdingPercent").value = supplier?.withholdingPercent ?? "";
-  document.getElementById("supplierDiscountPercent").value = supplier?.discountPercent ?? "";
   const agtStatusEl = document.getElementById("supplierAgtStatus");
   if (agtStatusEl) {
     agtStatusEl.value = [supplier?.agtStatus, supplier?.vatRegime].filter(Boolean).join(" · ");
@@ -1076,9 +1089,6 @@ async function submitSupplier(e) {
     category: document.getElementById("supplierCategory").value.trim() || null,
     type: document.getElementById("supplierType").value || "MATERIAL",
     paymentTerm: document.getElementById("supplierPaymentTerm").value || null,
-    vatPercent: parseOptionalPercentInput("supplierVatPercent"),
-    withholdingPercent: parseOptionalPercentInput("supplierWithholdingPercent"),
-    discountPercent: parseOptionalPercentInput("supplierDiscountPercent"),
     vatRegime: nifEl?.dataset?.vatRegime || null,
     agtStatus: nifEl?.dataset?.agtStatus || null,
     agtType: nifEl?.dataset?.agtType || null,

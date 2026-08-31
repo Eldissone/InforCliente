@@ -17,7 +17,7 @@ function quoteLinePayableTotal(quote, need) {
   const base = quoteLineTotal(quote, need);
   const supplier = quote?.supplier || null;
   const product = quote?.supplierProduct || null;
-  const snapshot = buildQuoteFiscalSnapshot({ baseAmount: base, supplier, product });
+  const snapshot = buildQuoteFiscalSnapshot({ baseAmount: base, product, quote });
   return snapshot.net;
 }
 
@@ -25,8 +25,8 @@ function quoteFiscalSnapshot(quote, need) {
   const base = quoteLineTotal(quote, need);
   return buildQuoteFiscalSnapshot({
     baseAmount: base,
-    supplier: quote?.supplier || null,
     product: quote?.supplierProduct || null,
+    quote,
   });
 }
 

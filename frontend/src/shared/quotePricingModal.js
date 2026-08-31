@@ -465,7 +465,8 @@ function renderReadyToOrderBanner(selectedQuote) {
     selectedQuote.supplier,
     base,
     currency,
-    selectedQuote.supplierProduct
+    selectedQuote.supplierProduct,
+    selectedQuote
   );
   const payableLabel =
     Number.isFinite(net) && net > 0 && Math.abs(net - base) > 0.05
@@ -873,7 +874,7 @@ export async function loadPresentedPrices({
 
       const displayQty = q.quantity ?? need.quantity ?? "—";
       const currency = q.currency || "AOA";
-      const priceTotals = renderQuotePriceTotalsHtml(q.supplier, totalValue, currency, q.supplierProduct);
+      const priceTotals = renderQuotePriceTotalsHtml(q.supplier, totalValue, currency, q.supplierProduct, q);
 
 
 
@@ -1651,7 +1652,12 @@ export async function openQuotePricingModal({
 
 
   document.getElementById("quotePrice").value = "";
-
+  const vatEl = document.getElementById("quoteVatPercent");
+  const whEl = document.getElementById("quoteWithholdingPercent");
+  const discEl = document.getElementById("quoteDiscountPercent");
+  if (vatEl) vatEl.value = "";
+  if (whEl) whEl.value = "";
+  if (discEl) discEl.value = "";
   document.getElementById("quoteQuantity").value = need.quantity || "";
 
   wireQuoteSiteReception({ need, apiRequest, showToast });
@@ -1700,7 +1706,7 @@ export async function openQuotePricingModal({
 
         productSel.innerHTML = `<option value="">Selecionar produto...</option>` +
 
-          products.map((p) => `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}">${p.name} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency} / ${p.unit || "uni"}</option>`).join("");
+          products.map((p) => `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}" data-vat="${p.vatPercent ?? ""}" data-wh="${p.withholdingPercent ?? ""}" data-disc="${p.discountPercent ?? ""}">${p.name} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency} / ${p.unit || "uni"}</option>`).join("");
 
         productSel.onchange = function () {
 
@@ -1711,6 +1717,12 @@ export async function openQuotePricingModal({
             document.getElementById("quotePrice").value = opt.dataset.price;
 
             document.getElementById("quoteCurrency").value = opt.dataset.currency;
+            const vatEl = document.getElementById("quoteVatPercent");
+            const whEl = document.getElementById("quoteWithholdingPercent");
+            const discEl = document.getElementById("quoteDiscountPercent");
+            if (vatEl) vatEl.value = opt.dataset.vat || "";
+            if (whEl) whEl.value = opt.dataset.wh || "";
+            if (discEl) discEl.value = opt.dataset.disc || "";
 
           }
 
@@ -1787,6 +1799,9 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
   if (spId) form.append("supplierProductId", spId);
 
   form.append("quotedPrice", document.getElementById("quotePrice").value);
+  form.append("vatPercent", document.getElementById("quoteVatPercent")?.value || "0");
+  form.append("withholdingPercent", document.getElementById("quoteWithholdingPercent")?.value || "0");
+  form.append("discountPercent", document.getElementById("quoteDiscountPercent")?.value || "0");
 
   const qty = document.getElementById("quoteQuantity").value;
 
@@ -1809,6 +1824,10 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
     showToast?.("Preço adicionado à lista", "success");
 
     document.getElementById("quotePrice").value = "";
+    ["quoteVatPercent", "quoteWithholdingPercent", "quoteDiscountPercent"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
 
     document.getElementById("quoteSupplierProduct").innerHTML = `<option value="">Selecionar produto...</option>`;
 

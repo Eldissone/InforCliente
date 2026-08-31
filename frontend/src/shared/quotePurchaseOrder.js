@@ -1,6 +1,6 @@
 import { apiUpload, getAssetUrl } from "../services/api.js";
 import { getSessionUser } from "../services/auth.js";
-import { computeSupplierFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
+import { computeQuoteLineFiscalBreakdown, formatFiscalAmount } from "./supplierFiscal.js";
 
 const PDF_TEMPLATE_VERSION = "v1.1";
 
@@ -298,17 +298,34 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project,
   };
 
   drawTotalLine("Subtotal:", fmtMoney(total, currency));
-  const fiscal = computeSupplierFiscalBreakdown(supplier, total);
-  fiscal.lines.forEach((line) => {
-    const sign = line.amount >= 0 ? "+" : "−";
-    drawTotalLine(`${line.label}:`, `${sign}${formatFiscalAmount(line.amount, currency)}`);
+  const quotesForFiscal = quotes && quotes.length ? quotes : [{ quote, need }];
+  let vatTotal = 0;
+  let discTotal = 0;
+  let whTotal = 0;
+  quotesForFiscal.forEach((row) => {
+    const q = row.quote || row;
+    const n = row.need || q.need || need;
+    const qty = Number(q.quantity ?? n?.quantity ?? 0);
+    const unitPrice = Number(q.quotedPrice || 0);
+    const lineBase = Number(q.totalValue ?? qty * unitPrice);
+    const br = computeQuoteLineFiscalBreakdown(q, lineBase, q.supplierProduct);
+    vatTotal += br.vat || 0;
+    discTotal += br.discount || 0;
+    whTotal += br.withholding || 0;
   });
-  if (fiscal.vat > 0) {
-    drawTotalLine("Total IVA:", fmtMoney(fiscal.vat, currency));
+  if (discTotal > 0) drawTotalLine("Desconto:", `−${formatFiscalAmount(discTotal, currency)}`);
+  if (vatTotal > 0) {
+    drawTotalLine("IVA:", `+${formatFiscalAmount(vatTotal, currency)}`);
+    drawTotalLine("Total IVA:", fmtMoney(vatTotal, currency));
   } else {
     drawTotalLine("Total IVA:", "—");
   }
+  if (whTotal > 0) drawTotalLine("Retenção:", `−${formatFiscalAmount(whTotal, currency)}`);
+  const netTotal = total - discTotal + vatTotal - whTotal;
   drawTotalLine("Total (base):", fmtMoney(total, currency), true);
+  if (Math.abs(netTotal - total) > 0.005) {
+    drawTotalLine("Líquido a pagar:", fmtMoney(netTotal, currency), true);
+  }
   y += 4;
 
   // ── Observações ─────────────────────────────────────────────────────────────

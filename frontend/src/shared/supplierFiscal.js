@@ -5,17 +5,18 @@ export function parsePercent(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Produto tem prioridade; fornecedor é fallback. */
-export function resolveFiscalPercents({ product = null, supplier = null } = {}) {
-  const pick = (productVal, supplierVal) => {
+/** Produto tem prioridade sobre o fornecedor; o item cotado tem prioridade sobre ambos. */
+export function resolveFiscalPercents({ product = null, supplier = null, quote = null } = {}) {
+  const pick = (quoteVal, productVal, supplierVal) => {
+    if (quoteVal != null && quoteVal !== "") return parsePercent(quoteVal);
     const p = parsePercent(productVal);
     if (p > 0) return p;
     return parsePercent(supplierVal);
   };
   return {
-    vatPercent: pick(product?.vatPercent, supplier?.vatPercent),
-    withholdingPercent: pick(product?.withholdingPercent, supplier?.withholdingPercent),
-    discountPercent: pick(product?.discountPercent, supplier?.discountPercent),
+    vatPercent: pick(quote?.vatPercent, product?.vatPercent, supplier?.vatPercent),
+    withholdingPercent: pick(quote?.withholdingPercent, product?.withholdingPercent, supplier?.withholdingPercent),
+    discountPercent: pick(quote?.discountPercent, product?.discountPercent, supplier?.discountPercent),
   };
 }
 
@@ -37,6 +38,7 @@ function roundMoney(value) {
 export function computeFiscalBreakdown({
   supplier = null,
   product = null,
+  quote = null,
   fiscalPercents = null,
   baseAmount = 0,
   grossAmount = 0,
@@ -45,7 +47,7 @@ export function computeFiscalBreakdown({
   applyWithholding = false,
   applyDiscount = false,
 } = {}) {
-  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier });
+  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier, quote });
   const vatPct = applyVat ? pct.vatPercent : 0;
   const whPct = applyWithholding ? pct.withholdingPercent : 0;
   const discPct = applyDiscount ? pct.discountPercent : 0;
@@ -80,6 +82,30 @@ export function computeFiscalBreakdown({
     net: roundMoney(net),
     lines,
   };
+}
+
+export function resolveQuoteLinePercents(quote, product = null) {
+  const prod = product || quote?.supplierProduct || null;
+  const pick = (quoteVal, productVal) => {
+    if (quoteVal != null && quoteVal !== "") return parsePercent(quoteVal);
+    return parsePercent(productVal);
+  };
+  return {
+    vatPercent: pick(quote?.vatPercent, prod?.vatPercent),
+    withholdingPercent: pick(quote?.withholdingPercent, prod?.withholdingPercent),
+    discountPercent: pick(quote?.discountPercent, prod?.discountPercent),
+  };
+}
+
+export function computeQuoteLineFiscalBreakdown(quote, baseAmount, product = null) {
+  const pct = resolveQuoteLinePercents(quote, product);
+  return computeFiscalBreakdown({
+    fiscalPercents: pct,
+    baseAmount,
+    applyVat: pct.vatPercent > 0,
+    applyWithholding: pct.withholdingPercent > 0,
+    applyDiscount: pct.discountPercent > 0,
+  });
 }
 
 /** Compatibilidade: calcula breakdown informativo a partir da base e % do produto/fornecedor. */
@@ -132,11 +158,13 @@ export function renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency
   return `<div class="text-[10px] text-slate-400 mt-0.5">${text}</div>`;
 }
 
-/** Totais para linha de cotação: base + líquido (quando há fiscal) e valor para ordenação. */
-export function renderQuotePriceTotalsHtml(supplier, baseAmount, currency = "AOA", product = null) {
-  const breakdown = computeSupplierFiscalBreakdown(supplier, baseAmount, product);
+/** Totais para linha de cotação: impostos do item, não do fornecedor. */
+export function renderQuotePriceTotalsHtml(supplier, baseAmount, currency = "AOA", product = null, quote = null) {
+  const breakdown = computeQuoteLineFiscalBreakdown(quote || {}, baseAmount, product);
   const baseFmt = formatFiscalAmount(baseAmount, currency);
-  const fiscalBreakdownHtml = renderSupplierFiscalBreakdownHtml(supplier, baseAmount, currency, product);
+  const fiscalBreakdownHtml = breakdown.lines.length
+    ? renderFiscalBreakdownHtml(breakdown, currency, { showNet: false })
+    : "";
 
   if (!breakdown.lines.length) {
     return {

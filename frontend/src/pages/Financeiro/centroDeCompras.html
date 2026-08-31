@@ -1420,8 +1420,16 @@
                         class="text-[10px] font-black uppercase text-blue-500 tracking-widest mb-3 flex items-center gap-2">
                         <span class="material-symbols-outlined text-sm">request_quote</span> Dados de Cotação
                     </p>
+                    <div id="ccReqCotacaoBanner" class="hidden mb-3 p-3 rounded-lg border border-emerald-200 bg-emerald-50">
+                        <p id="ccReqCotacaoBannerText" class="text-xs font-semibold text-emerald-800"></p>
+                        <button type="button" id="btnCCAlterarCotacao"
+                            class="mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 underline">
+                            Alterar cotação
+                        </button>
+                    </div>
                     <form id="formCCQuote" class="flex flex-col gap-3">
                         <input type="hidden" id="ccReqOrderId">
+                        <div id="ccReqQuoteFields" class="flex flex-col gap-3">
                         <div>
                             <label class="block text-xs font-bold text-slate-500 mb-1">Fornecedor Registado</label>
                             <select id="ccReqSupplierId"
@@ -1457,8 +1465,9 @@
                             <input id="ccReqFile" type="file" accept=".pdf,image/*"
                                 class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                         </div>
+                        </div>
                         <div id="ccReqAttachments" class="mt-2 space-y-1"></div>
-                        <div class="mt-2 pt-3 border-t border-blue-100 flex justify-end">
+                        <div id="ccReqQuoteSaveRow" class="mt-2 pt-3 border-t border-blue-100 flex justify-end">
                             <button type="submit"
                                 class="h-8 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">Salvar
                                 Cotação</button>

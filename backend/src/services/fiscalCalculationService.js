@@ -5,17 +5,17 @@ function parsePercent(value) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Produto tem prioridade; fornecedor é fallback. */
-function resolveFiscalPercents({ product = null, supplier = null } = {}) {
-  const pick = (productVal, supplierVal) => {
+function resolveFiscalPercents({ product = null, supplier = null, quote = null } = {}) {
+  const pick = (quoteVal, productVal, supplierVal) => {
+    if (quoteVal != null && quoteVal !== "") return parsePercent(quoteVal);
     const p = parsePercent(productVal);
     if (p > 0) return p;
     return parsePercent(supplierVal);
   };
   return {
-    vatPercent: pick(product?.vatPercent, supplier?.vatPercent),
-    withholdingPercent: pick(product?.withholdingPercent, supplier?.withholdingPercent),
-    discountPercent: pick(product?.discountPercent, supplier?.discountPercent),
+    vatPercent: pick(quote?.vatPercent, product?.vatPercent, supplier?.vatPercent),
+    withholdingPercent: pick(quote?.withholdingPercent, product?.withholdingPercent, supplier?.withholdingPercent),
+    discountPercent: pick(quote?.discountPercent, product?.discountPercent, supplier?.discountPercent),
   };
 }
 
@@ -36,6 +36,7 @@ function roundMoney(value) {
 function computeFiscalBreakdown({
   supplier = null,
   product = null,
+  quote = null,
   fiscalPercents = null,
   baseAmount = 0,
   grossAmount = 0,
@@ -44,7 +45,7 @@ function computeFiscalBreakdown({
   applyWithholding = false,
   applyDiscount = false,
 } = {}) {
-  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier });
+  const pct = fiscalPercents || resolveFiscalPercents({ product, supplier, quote });
   const vatPct = applyVat ? pct.vatPercent : 0;
   const whPct = applyWithholding ? pct.withholdingPercent : 0;
   const discPct = applyDiscount ? pct.discountPercent : 0;
@@ -150,9 +151,9 @@ function mapStoredFiscalFields(payment) {
   };
 }
 
-/** Percentagens activas a partir do produto/fornecedor. */
-function defaultFiscalFlagsFromRefs({ supplier = null, product = null } = {}) {
-  const pct = resolveFiscalPercents({ product, supplier });
+/** Percentagens activas a partir do item cotado / produto. */
+function defaultFiscalFlagsFromRefs({ supplier = null, product = null, quote = null } = {}) {
+  const pct = resolveFiscalPercents({ product, supplier, quote });
   return {
     applyVat: pct.vatPercent > 0,
     applyWithholding: pct.withholdingPercent > 0,
@@ -161,10 +162,10 @@ function defaultFiscalFlagsFromRefs({ supplier = null, product = null } = {}) {
   };
 }
 
-/** Snapshot fiscal de uma linha de cotação (base + líquido a pagar). */
-function buildQuoteFiscalSnapshot({ baseAmount, supplier = null, product = null } = {}) {
+/** Snapshot fiscal de uma linha de cotação (base + líquido a pagar). Impostos vêm do item, não do fornecedor. */
+function buildQuoteFiscalSnapshot({ baseAmount, supplier = null, product = null, quote = null } = {}) {
   const base = roundMoney(baseAmount);
-  const flags = defaultFiscalFlagsFromRefs({ supplier, product });
+  const flags = defaultFiscalFlagsFromRefs({ product, quote });
   const hasFiscal = flags.applyVat || flags.applyWithholding || flags.applyDiscount;
 
   if (!hasFiscal) {
@@ -183,8 +184,9 @@ function buildQuoteFiscalSnapshot({ baseAmount, supplier = null, product = null 
   }
 
   const breakdown = computeFiscalBreakdown({
-    supplier,
     product,
+    quote,
+    fiscalPercents: flags.percents,
     baseAmount: base,
     applyVat: flags.applyVat,
     applyWithholding: flags.applyWithholding,

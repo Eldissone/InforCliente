@@ -1290,53 +1290,55 @@ function closeExtraModal() {
   resetExtraFormState();
 }
 
-export async function openExtraRequestModal({
-  type = "GERAL",
-  projectId = "",
-  costCenterId = "",
-  costCategoryId = "",
-  generalCostCenterId = "",
-  lockType = false,
-  lockProject = false,
+export const NOVO_PEDIDO_PATH = "/Financeiro/novoPedido";
+const DEFAULT_RETURN_TO = "/Financeiro/centroDeCompras";
+
+export function currentAppPath() {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+export function sanitizeReturnTo(raw) {
+  if (!raw) return DEFAULT_RETURN_TO;
+  let value = String(raw);
+  try {
+    value = decodeURIComponent(value);
+  } catch { /* keep raw */ }
+  if (!value.startsWith("/") || value.startsWith("//") || /:\/\//.test(value)) {
+    return DEFAULT_RETURN_TO;
+  }
+  const pathOnly = value.split("?")[0].replace(/\.html$/i, "");
+  if (pathOnly === NOVO_PEDIDO_PATH || pathOnly.endsWith("/novoPedido")) {
+    return DEFAULT_RETURN_TO;
+  }
+  return value;
+}
+
+export function novoPedidoHref({
+  id,
+  type,
+  projectId,
+  costCenterId,
+  costCategoryId,
+  generalCostCenterId,
+  lockType,
+  lockProject,
+  returnTo,
 } = {}) {
-  ensureModalMounted();
-  document.getElementById("formExtra").reset();
-  resetExtraFormState();
-  if (!costCategoriesLoaded) await loadAllCostCategories();
-  setExtraType(type);
+  const params = new URLSearchParams();
+  if (id) params.set("id", id);
+  if (type) params.set("type", type);
+  if (projectId) params.set("projectId", projectId);
+  if (costCenterId) params.set("costCenterId", costCenterId);
+  const category = costCategoryId || generalCostCenterId;
+  if (category) params.set("costCategoryId", category);
+  if (lockType) params.set("lockType", "1");
+  if (lockProject) params.set("lockProject", "1");
+  params.set("returnTo", returnTo || currentAppPath());
+  return `${NOVO_PEDIDO_PATH}?${params.toString()}`;
+}
 
-  if (type === "OBRA" && projectId) {
-    document.getElementById("extraProjectId").value = projectId;
-    await loadCostCentersForExtra(projectId, costCenterId || "");
-  }
-  const presetCategory = costCategoryId || generalCostCenterId;
-  if (presetCategory) {
-    refreshExtraCostCascade({ initialCategoryId: presetCategory });
-  }
-
-  if (lockType) {
-    const typeSel = document.getElementById("extraType");
-    if (typeSel) typeSel.disabled = true;
-    document.getElementById("btnTypeGeral").disabled = true;
-    document.getElementById("btnTypeObra").disabled = true;
-  }
-  if (lockProject && type === "OBRA") {
-    document.getElementById("extraProjectId").disabled = true;
-  }
-
-  const user = getSessionUser();
-  const solicitante = document.getElementById("extraRequestedBy");
-  if (solicitante && !solicitante.value) solicitante.value = user?.name || user?.email || "";
-  const due = new Date();
-  due.setDate(due.getDate() + 7);
-  const desiredEl = document.getElementById("extraDesiredDate");
-  if (desiredEl) desiredEl.value = due.toISOString().slice(0, 10);
-  const dueInput = document.getElementById("extraPaymentDueDate");
-  if (dueInput) dueInput.value = desiredEl?.value || new Date().toISOString().slice(0, 10);
-  addExtraItemRow();
-  applyExtraQuoteRequirementVisibility();
-  refreshExtraPedidoTotals();
-  document.getElementById("modalExtra").classList.add("open");
+export async function openExtraRequestModal(opts = {}) {
+  window.location.href = novoPedidoHref(opts);
 }
 
 function collectCCItems() {

@@ -3,6 +3,7 @@ const { syncNeedFromSelectedQuotes, syncNeedOrderStatus } = require("./quoteAllo
 const { setQuoteDeliveryPending } = require("./deliveryFieldBridge");
 const { normalizeDateOnly } = require("../utils/dateOnly");
 const { syncQuoteFiscalSnapshot } = require("./quoteFiscalSnapshotService");
+const { applyRequisitionFromCotacao } = require("./purchaseQuoteBridge");
 
 async function nextEfOrderNumber(prisma) {
   const seqResult = await prisma.$queryRawUnsafe(
@@ -40,6 +41,9 @@ function serializeSupplierOrder(order) {
       quotedPrice: String(q.quotedPrice),
       quantity: q.quantity != null ? String(q.quantity) : null,
       totalValue: q.totalValue != null ? String(q.totalValue) : null,
+      vatPercent: q.vatPercent != null ? String(q.vatPercent) : null,
+      withholdingPercent: q.withholdingPercent != null ? String(q.withholdingPercent) : null,
+      discountPercent: q.discountPercent != null ? String(q.discountPercent) : null,
       need: q.need
         ? {
             ...q.need,
@@ -51,7 +55,13 @@ function serializeSupplierOrder(order) {
   };
 }
 
-async function upsertNeedQuoteForSupplier(prisma, { need, supplierId, quotedPrice, quantity, currency, notes, proformaUrl }) {
+function coercePercent(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+async function upsertNeedQuoteForSupplier(prisma, { need, supplierId, quotedPrice, quantity, currency, notes, proformaUrl, vatPercent, withholdingPercent, discountPercent }) {
   const qty = quantity != null ? Number(quantity) : Number(need.quantity) || 1;
   const totalValue = qty * Number(quotedPrice);
 
@@ -67,6 +77,9 @@ async function upsertNeedQuoteForSupplier(prisma, { need, supplierId, quotedPric
     currency: currency || "AOA",
     notes: notes || null,
     selected: true,
+    vatPercent: coercePercent(vatPercent),
+    withholdingPercent: coercePercent(withholdingPercent),
+    discountPercent: coercePercent(discountPercent),
     ...(proformaUrl ? { proformaUrl } : {}),
   };
 
@@ -135,6 +148,9 @@ async function createOrUpdateBundle(prisma, { supplierId, projectId, notes, item
       currency: line.currency,
       notes: line.notes || notes,
       proformaUrl,
+      vatPercent: line.vatPercent,
+      withholdingPercent: line.withholdingPercent,
+      discountPercent: line.discountPercent,
     });
     quoteIds.push(quote.id);
 
@@ -151,6 +167,11 @@ async function createOrUpdateBundle(prisma, { supplierId, projectId, notes, item
     }
     await syncNeedFromSelectedQuotes(prisma, need.id);
     await syncQuoteFiscalSnapshot(quote.id, prisma);
+  }
+
+  const pedidoIds = [...new Set(needs.map((n) => n.purchaseOrderId).filter(Boolean))];
+  for (const pedidoId of pedidoIds) {
+    await applyRequisitionFromCotacao(prisma, pedidoId);
   }
 
   let order = await prisma.quoteSupplierOrder.findFirst({

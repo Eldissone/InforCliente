@@ -1,0 +1,3 @@
+ALTER TABLE "NeedQuote" ADD COLUMN IF NOT EXISTS "vatPercent" DECIMAL(5,2);
+ALTER TABLE "NeedQuote" ADD COLUMN IF NOT EXISTS "withholdingPercent" DECIMAL(5,2);
+ALTER TABLE "NeedQuote" ADD COLUMN IF NOT EXISTS "discountPercent" DECIMAL(5,2);

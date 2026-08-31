@@ -1413,6 +1413,9 @@ model NeedQuote {
   fiscalApplyVat         Boolean @default(false)
   fiscalApplyWithholding Boolean @default(false)
   fiscalApplyDiscount    Boolean @default(false)
+  vatPercent         Decimal? @db.Decimal(5, 2)
+  withholdingPercent Decimal? @db.Decimal(5, 2)
+  discountPercent    Decimal? @db.Decimal(5, 2)
   currency          String    @default("AOA")
   selected          Boolean   @default(false)
   notes             String?

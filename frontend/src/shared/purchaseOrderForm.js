@@ -499,6 +499,56 @@ export function applyTypeVisibility() {
   populateCentrosGerais();
 }
 
+function selectCostCategory(categoryId) {
+  if (!categoryId) return;
+  const group = tipo2Groups().find((g) => {
+    if (sameCostId(g.tipo2Id, categoryId)) return true;
+    return (g.variants || []).some(
+      (v) => sameCostId(v.pickCategoryId, categoryId) || sameCostId(v.tipo2Id, categoryId)
+    );
+  });
+  if (!group) return;
+  const centroSel = document.getElementById("ccCentroGeralId");
+  if (centroSel) centroSel.value = catalogSheetGroupKey(group);
+  populateSubcustos();
+  const catSel = document.getElementById("ccExtraCostCategoryId");
+  if (!catSel) return;
+  const match = [...catSel.options].find((o) => o.value && sameCostId(o.value, categoryId));
+  if (match) catSel.value = match.value;
+  const hiddenSel = document.getElementById("ccExtraCostCategorySelectedId");
+  if (hiddenSel) hiddenSel.value = catSel.value || costIdKey(categoryId);
+  const hit = (group.variants || []).find((x) => sameCostId(x.pickCategoryId, catSel.value || categoryId));
+  syncCostDetail(catSel.value || categoryId, hit?.requiresDetailText);
+}
+
+/** Aplica valores iniciais vindos de outra página (tipo, obra, categoria). */
+export async function applyPedidoPresets({
+  type,
+  projectId,
+  costCenterId,
+  costCategoryId,
+  lockType,
+  lockProject,
+} = {}) {
+  const typeSel = document.getElementById("ccPedidoType");
+  if (type && typeSel) {
+    typeSel.value = String(type).toUpperCase() === "OBRA" ? "OBRA" : "GERAL";
+  }
+  if (lockType && typeSel) typeSel.disabled = true;
+  applyTypeVisibility();
+
+  if (costCategoryId) selectCostCategory(costCategoryId);
+
+  if (projectId) {
+    const projSel = document.getElementById("ccExtraProjectId");
+    if (projSel) {
+      projSel.value = projectId;
+      if (lockProject) projSel.disabled = true;
+    }
+    await loadCostCentersForProject(projectId, costCenterId || "");
+  }
+}
+
 export function applyQuoteRequirementVisibility() {
   const requiresQuote = Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked);
   document.getElementById("cc_extraSupplierBlock")?.classList.toggle("hidden", requiresQuote);

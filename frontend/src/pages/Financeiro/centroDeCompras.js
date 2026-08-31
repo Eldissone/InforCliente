@@ -9,6 +9,7 @@ import {
   openExtraRequestModalForEdit,
   openExtraRequestModal,
   wireExtraRequestButton,
+  novoPedidoHref,
 } from "/shared/extraRequestModal.js";
 
 import {
@@ -2541,7 +2542,7 @@ function initCentroCompras() {
     });
 
     document.getElementById("btnNovoPedido")?.addEventListener("click", () => {
-        window.location.href = "novoPedido.html";
+        window.location.href = novoPedidoHref();
     });
     bindCCReqSupplierNifLookup();
     document.getElementById("ccPedidosTableBody")?.addEventListener("click", onCCListActionClick);
@@ -2553,6 +2554,12 @@ function initCentroCompras() {
         document.getElementById("drawerRequisicao")?.classList.remove("open");
     });
     document.getElementById("formCCQuote")?.addEventListener("submit", submitCCQuote);
+    document.getElementById("btnCCAlterarCotacao")?.addEventListener("click", () => {
+        document.getElementById("ccReqQuoteFields")?.classList.remove("hidden");
+        document.getElementById("ccReqQuoteSaveRow")?.classList.remove("hidden");
+        const btn = document.getElementById("btnCCAlterarCotacao");
+        if (btn) btn.classList.add("hidden");
+    });
 
     document.getElementById("btnCCSubmitApproval")?.addEventListener("click", submitCCForApproval);
     document.getElementById("btnCCApprove")?.addEventListener("click", () => openCCAprovacaoModal("APROVAR"));
@@ -2565,6 +2572,7 @@ function initCentroCompras() {
     document.getElementById("btnClosePlano")?.addEventListener("click", () => closeCCModal("modalPlanoPagamento"));
     document.getElementById("btnCancelPlano")?.addEventListener("click", () => closeCCModal("modalPlanoPagamento"));
     document.getElementById("btnCCAddParcela")?.addEventListener("click", addCCParcelaRow);
+    document.getElementById("ccPlanoTotal")?.addEventListener("input", redistributeCCParcelas);
     document.getElementById("formPlanoPagamento")?.addEventListener("submit", submitCCPlano);
 
     const bindFilter = (id, fn) => {
@@ -2628,6 +2636,10 @@ function ccRequestedBy(r) {
 }
 
 function ccOrderValue(r) {
+    const cotacaoVal = Number(r?.cotacao?.quotedValue);
+    if (r?.cotacao?.quoted && Number.isFinite(cotacaoVal) && cotacaoVal > 0 && !r.cotacao.overridden) {
+        return cotacaoVal;
+    }
     return r?.requisition?.quotedValue ?? r?.totalValue ?? 0;
 }
 
@@ -2648,7 +2660,35 @@ function ccOrderTotalWithTax(r) {
     return Number(ccOrderValue(r)) || 0;
 }
 
+/** Valor inicial do campo "Valor Cotado": cotação da página Cotação, senão requisição, senão itens. */
+function ccQuoteInputDefault(order) {
+    const fromCotacao = Number(order?.cotacao?.quotedValue);
+    if (order?.cotacao?.quoted && Number.isFinite(fromCotacao) && fromCotacao > 0 && !order.cotacao.overridden) {
+        return String(Math.round(fromCotacao * 100) / 100);
+    }
+    const quoted = Number(order?.requisition?.quotedValue);
+    const base = Number(order?.totalValue);
+    const withTax = ccOrderTotalWithTax(order);
+    const quotedLooksLikePedidoBase =
+        Number.isFinite(quoted) &&
+        quoted > 0 &&
+        Number.isFinite(base) &&
+        Math.abs(quoted - base) < 0.01 &&
+        withTax > 0 &&
+        Math.abs(quoted - withTax) >= 0.01;
+    if (Number.isFinite(quoted) && quoted > 0 && !quotedLooksLikePedidoBase) {
+        return quoted;
+    }
+    if (withTax > 0) return String(Math.round(withTax * 100) / 100);
+    if (Number.isFinite(quoted) && quoted > 0) return quoted;
+    if (Number.isFinite(base) && base > 0) return base;
+    return "";
+}
+
 function ccSupplierName(r) {
+    if (r?.cotacao?.quoted && r.cotacao.supplierName && !r.cotacao.overridden) {
+        return r.cotacao.supplierName;
+    }
     return r?.requisition?.supplierName || r?.supplier?.name || r?.supplierName || "—";
 }
 
@@ -2734,7 +2774,7 @@ async function onCCListActionClick(e) {
             openCCReqDrawer(id);
             return;
         }
-        window.location.href = `novoPedido.html?id=${encodeURIComponent(id)}`;
+        window.location.href = novoPedidoHref({ id });
         return;
     }
     if (action === "delete") {
@@ -3188,15 +3228,56 @@ async function openCCReqDrawer(id) {
                 }
             });
         }
-        if (reqSel) reqSel.value = order.requisition?.supplierId || order.supplierId || "";
-        if (forn) forn.value = ccSupplierName(order) === "—" ? "" : ccSupplierName(order);
+        const cotacao = order.cotacao || {};
+        const fromCotacao = Boolean(cotacao.quoted && !cotacao.overridden);
+        const supplierId = fromCotacao
+            ? cotacao.supplierId || ""
+            : order.requisition?.supplierId || order.supplierId || "";
+        const supplierName = fromCotacao
+            ? (cotacao.supplierName || "")
+            : (ccSupplierName(order) === "—" ? "" : ccSupplierName(order));
+        const supplierNif = fromCotacao
+            ? (cotacao.supplierNif || "")
+            : (order.supplier?.nif || order.requisition?.supplier?.nif || "");
+
+        if (fromCotacao && cotacao.supplierId) {
+            upsertCCReqSupplierOption({
+                id: cotacao.supplierId,
+                name: cotacao.supplierName,
+                nif: cotacao.supplierNif,
+            });
+        }
+        if (reqSel) reqSel.value = supplierId;
+        if (forn) forn.value = supplierName;
         if (nifEl) {
-            nifEl.value = order.supplier?.nif || order.requisition?.supplier?.nif || "";
+            nifEl.value = supplierNif;
             if (nifEl.value) nifEl.dataset.validatedNif = normalizeNif(nifEl.value);
             else delete nifEl.dataset.validatedNif;
         }
         setNifLookupStatus(document.getElementById("ccReqSupplierNifStatus"), "");
-        if (valor) valor.value = order.requisition?.quotedValue || order.totalValue || "";
+        if (valor) valor.value = ccQuoteInputDefault(order);
+
+        const banner = document.getElementById("ccReqCotacaoBanner");
+        const bannerText = document.getElementById("ccReqCotacaoBannerText");
+        const quoteFields = document.getElementById("ccReqQuoteFields");
+        const quoteSave = document.getElementById("ccReqQuoteSaveRow");
+        const alterarBtn = document.getElementById("btnCCAlterarCotacao");
+        if (fromCotacao) {
+            banner?.classList.remove("hidden");
+            const fornLabel = cotacao.supplierName || "fornecedor seleccionado";
+            const valLabel = formatCurrency(cotacao.quotedValue);
+            if (bannerText) {
+                bannerText.textContent = `Cotação importada de Cotação: ${fornLabel} · ${valLabel}. Pode submeter para aprovação ou alterar se quiser.`;
+            }
+            quoteFields?.classList.add("hidden");
+            quoteSave?.classList.add("hidden");
+            alterarBtn?.classList.remove("hidden");
+        } else {
+            banner?.classList.add("hidden");
+            quoteFields?.classList.remove("hidden");
+            quoteSave?.classList.remove("hidden");
+            alterarBtn?.classList.add("hidden");
+        }
 
         if (order.status === "PENDENTE_REQUISICAO") {
             quoteForm?.classList.remove("hidden");
@@ -3212,7 +3293,17 @@ async function openCCReqDrawer(id) {
         }
 
         const attachWrap = document.getElementById("ccReqAttachments");
-        const atts = order.requisition?.attachments || [];
+        const reqAtts = order.requisition?.attachments || [];
+        const cotacaoAtts = (cotacao.proformas || []).map((p) => ({
+            url: p.url,
+            fileName: p.fileName || "Proforma",
+        }));
+        const seenUrls = new Set();
+        const atts = [...reqAtts, ...cotacaoAtts].filter((a) => {
+            if (!a?.url || seenUrls.has(a.url)) return false;
+            seenUrls.add(a.url);
+            return true;
+        });
         if (attachWrap) {
             attachWrap.innerHTML = atts.length
                 ? atts.map((a) => `<a class="block text-xs text-indigo-600 underline truncate" href="${escapeHtml(getAssetUrl(a.url) || a.url)}" target="_blank" rel="noopener">${escapeHtml(a.fileName)}</a>`).join("")
@@ -3298,7 +3389,10 @@ async function submitCCForApproval() {
     const id = document.getElementById("ccReqOrderId")?.value;
     if (!id) return;
     const cached = ccCache.currentOrder;
-    if (cached?.requiresQuote && !(cached.requisition?.attachments || []).length) {
+    const hasProforma =
+        (cached?.requisition?.attachments || []).length > 0 ||
+        (cached?.cotacao?.proformas || []).length > 0;
+    if (cached?.requiresQuote && !hasProforma) {
         showToast("Anexe a proforma na cotação antes de submeter para aprovação.", "error");
         return;
     }
@@ -3362,6 +3456,87 @@ async function submitCCAprovacao() {
     }
 }
 
+function parseCCPlanoTotal() {
+    const raw = String(document.getElementById("ccPlanoTotal")?.value || "").replace(",", ".");
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function parseCCParcelaAmount(raw) {
+    const n = parseFloat(String(raw || "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+}
+
+function setCCParcelaAmount(input, cents) {
+    if (!input) return;
+    input.value = (Math.max(0, cents) / 100).toFixed(2);
+}
+
+function ccParcelaRows() {
+    return Array.from(document.querySelectorAll("#ccParcelasContainer .cc-parcela-row"));
+}
+
+function ccParcelaValueInputs() {
+    return ccParcelaRows().map((row) => row.querySelector(".cc-parc-val")).filter(Boolean);
+}
+
+function syncCCParcelaRemoveButtons() {
+    const rows = ccParcelaRows();
+    rows.forEach((row) => {
+        const btn = row.querySelector(".cc-parc-del");
+        if (!btn) return;
+        const only = rows.length <= 1;
+        btn.disabled = only;
+        btn.classList.toggle("opacity-30", only);
+        btn.classList.toggle("pointer-events-none", only);
+    });
+}
+
+function splitCents(cents, count) {
+    if (count <= 0) return [];
+    const safe = Math.max(0, cents);
+    const base = Math.floor(safe / count);
+    let remainder = safe - base * count;
+    return Array.from({ length: count }, () => {
+        const extra = remainder > 0 ? 1 : 0;
+        remainder -= extra;
+        return base + extra;
+    });
+}
+
+function redistributeCCParcelas() {
+    const inputs = ccParcelaValueInputs();
+    if (!inputs.length) return;
+    const total = parseCCPlanoTotal();
+    if (!total) {
+        inputs.forEach((input) => { input.value = ""; });
+        return;
+    }
+    splitCents(Math.round(total * 100), inputs.length).forEach((cents, i) => {
+        setCCParcelaAmount(inputs[i], cents);
+    });
+}
+
+function syncCCParcelasFromEdited(editedInput) {
+    const inputs = ccParcelaValueInputs();
+    if (!inputs.length || !editedInput) return;
+    const totalCents = Math.round(parseCCPlanoTotal() * 100);
+    if (!totalCents) return;
+
+    const others = inputs.filter((el) => el !== editedInput);
+    if (!others.length) {
+        setCCParcelaAmount(editedInput, totalCents);
+        return;
+    }
+
+    let editedCents = Math.round(parseCCParcelaAmount(editedInput.value) * 100);
+    editedCents = Math.max(0, Math.min(editedCents, totalCents));
+    setCCParcelaAmount(editedInput, editedCents);
+    splitCents(totalCents - editedCents, others.length).forEach((cents, i) => {
+        setCCParcelaAmount(others[i], cents);
+    });
+}
+
 function openCCPlanoModal() {
     const id = document.getElementById("ccReqOrderId")?.value;
     if (!id) return;
@@ -3389,11 +3564,21 @@ function addCCParcelaRow() {
     div.innerHTML = `
         <input type="date" required class="cc-parc-date h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none flex-1">
         <input type="number" step="0.01" required placeholder="Valor" class="cc-parc-val h-9 px-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none w-32">
-        <button type="button" onclick="this.closest('.cc-parcela-row').remove()" class="w-8 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center shrink-0">
+        <button type="button" class="cc-parc-del w-8 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center shrink-0">
             <span class="material-symbols-outlined text-sm">close</span>
         </button>
     `;
+    const valInput = div.querySelector(".cc-parc-val");
+    valInput?.addEventListener("change", () => syncCCParcelasFromEdited(valInput));
+    div.querySelector(".cc-parc-del")?.addEventListener("click", () => {
+        if (ccParcelaRows().length <= 1) return;
+        div.remove();
+        syncCCParcelaRemoveButtons();
+        redistributeCCParcelas();
+    });
     container.appendChild(div);
+    syncCCParcelaRemoveButtons();
+    redistributeCCParcelas();
 }
 
 async function submitCCPlano(e) {

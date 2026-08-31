@@ -36,6 +36,7 @@ const {
   syncNeedFromSelectedQuotes,
   syncNeedOrderStatus,
 } = require("../services/quoteAllocationService");
+const { syncPurchaseRequisitionFromNeed } = require("../services/purchaseQuoteBridge");
 const {
   fetchDeliveryFieldsByQuoteIds,
   setQuoteDeliveryPending,
@@ -85,6 +86,9 @@ function serializeQuote(quote) {
     vatAmount: quote.vatAmount != null ? String(quote.vatAmount) : null,
     withholdingAmount: quote.withholdingAmount != null ? String(quote.withholdingAmount) : null,
     discountAmount: quote.discountAmount != null ? String(quote.discountAmount) : null,
+    vatPercent: quote.vatPercent != null ? String(quote.vatPercent) : null,
+    withholdingPercent: quote.withholdingPercent != null ? String(quote.withholdingPercent) : null,
+    discountPercent: quote.discountPercent != null ? String(quote.discountPercent) : null,
   };
 }
 
@@ -106,6 +110,7 @@ async function applyProformaToNeed({ quote, need, req }) {
       };
 
   await syncNeedFromSelectedQuotes(prisma, quote.needId);
+  await syncPurchaseRequisitionFromNeed(prisma, quote.needId);
 
   const selectedQuotes = await prisma.needQuote.findMany({
     where: { needId: quote.needId, selected: true },
@@ -310,6 +315,9 @@ quoteRoutes.post(
               quantity: z.coerce.number().min(0).optional().nullable(),
               currency: z.string().optional(),
               notes: z.string().optional().nullable(),
+              vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+              withholdingPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+              discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
             })
           )
           .min(1),
@@ -752,6 +760,9 @@ quoteRoutes.post(
         quantity: z.coerce.number().min(0).optional().nullable(),
         currency: z.string().default("AOA"),
         notes: z.string().optional().nullable(),
+        vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        withholdingPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
       })
       .parse(req.body);
 
@@ -783,10 +794,15 @@ quoteRoutes.post(
           totalValue,
           currency: body.currency,
           notes: body.notes,
+          vatPercent: body.vatPercent ?? null,
+          withholdingPercent: body.withholdingPercent ?? null,
+          discountPercent: body.discountPercent ?? null,
           ...(proformaUrl ? { proformaUrl } : {}),
         },
       });
-      return res.status(200).json(updated);
+      await syncQuoteFiscalSnapshot(updated.id);
+      await syncPurchaseRequisitionFromNeed(prisma, needId);
+      return res.status(200).json(serializeQuote(updated));
     }
 
     // Se é a primeira cotação, mudar o status do need para IN_QUOTATION se estiver PENDING
@@ -812,10 +828,15 @@ quoteRoutes.post(
         currency: body.currency,
         notes: body.notes,
         proformaUrl,
+        vatPercent: body.vatPercent ?? null,
+        withholdingPercent: body.withholdingPercent ?? null,
+        discountPercent: body.discountPercent ?? null,
       },
     });
 
-    res.status(201).json(created);
+    await syncQuoteFiscalSnapshot(created.id);
+    await syncPurchaseRequisitionFromNeed(prisma, needId);
+    res.status(201).json(serializeQuote(created));
   })
 );
 
@@ -876,6 +897,7 @@ quoteRoutes.patch(
 
     await syncQuoteFiscalSnapshot(id);
     await syncNeedFromSelectedQuotes(prisma, quote.needId);
+    await syncPurchaseRequisitionFromNeed(prisma, quote.needId);
 
     const refreshedQuote = await prisma.needQuote.findUnique({
       where: { id },
@@ -942,6 +964,7 @@ quoteRoutes.patch(
 
     await syncQuoteFiscalSnapshot(id);
     await syncNeedFromSelectedQuotes(prisma, quote.needId);
+    await syncPurchaseRequisitionFromNeed(prisma, quote.needId);
 
     const refreshedQuote = await prisma.needQuote.findUnique({ where: { id } });
 
@@ -977,6 +1000,7 @@ quoteRoutes.patch(
     });
 
     await syncNeedFromSelectedQuotes(prisma, quote.needId);
+    await syncPurchaseRequisitionFromNeed(prisma, quote.needId);
 
     await logQuoteAction(req, {
       action: "quote_deselect",
