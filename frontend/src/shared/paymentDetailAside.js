@@ -1,11 +1,6 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { formatCurrency, formatDateBR, toDateKey, dateInputToUtcNoonIso } from "./format.js";
-import { appendFiscalFieldsToFormData, computeFiscalBreakdown, resolveFiscalPercents, paymentPayableAmount } from "./supplierFiscal.js";
-import {
-  initLiquidationFiscalHandlers,
-  setupLiquidationFiscalModal,
-  getLiquidationFiscalFormDataExtras,
-} from "./liquidationFiscal.js";
+import { computeFiscalBreakdown, resolveFiscalPercents, paymentPayableAmount } from "./supplierFiscal.js";
 import { openDocumentViewer, closeDocumentViewer } from "./documentViewer.js";
 
 let liqAlreadyConfirmed = false;
@@ -374,8 +369,7 @@ function openLiquidateModal(payment) {
   document.getElementById("liqTxId").value = data.id;
   document.getElementById("liqDesc").textContent = data.description || "";
   document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
-  document.getElementById("liqAmount").value = data.netAmount ?? amount;
-  setupLiquidationFiscalModal(data, { lockFiscal: false });
+  document.getElementById("liqAmount").value = paymentPayableAmount(data) || amount;
 
   let ccInput = document.getElementById("liqCcId");
   if (!ccInput) {
@@ -469,11 +463,6 @@ async function submitLiquidation(e) {
 
   if (anexoDescricoes.length) {
     fd.append("anexoDescricoes", JSON.stringify(anexoDescricoes));
-  }
-
-  const fiscalExtras = getLiquidationFiscalFormDataExtras();
-  if (fiscalExtras) {
-    appendFiscalFieldsToFormData(fd, fiscalExtras);
   }
 
   const recipientIds = getSelectedLiqRecipientIds();
@@ -670,7 +659,6 @@ export function initPaymentDetailAside({ onLiquidated, showToast } = {}) {
   window.closeDocumentAside = closeDocumentAside;
 
   document.getElementById("formLiq")?.addEventListener("submit", submitLiquidation);
-  initLiquidationFiscalHandlers("liq");
   document.getElementById("liqAddDocBtn")?.addEventListener("click", () => {
     const list = document.getElementById("liqDocsList");
     if (!list) return;

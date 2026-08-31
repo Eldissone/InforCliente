@@ -1137,8 +1137,8 @@ function toggleExtraFiscalFlags() {
   flags?.classList.toggle("hidden", !isGross);
   if (hint) {
     hint.textContent = isGross
-      ? "Indique as % incluídas no valor para obter a base na liquidação."
-      : "Na liquidação o cálculo fiscal usa esta indicação (base ou bruto).";
+      ? "Indique as percentagens já incluídas neste valor."
+      : "Valor sem impostos. Os impostos do pedido aplicam-se no total.";
   }
   if (isGross) {
     const vat = document.getElementById("extraFiscalApplyVat");

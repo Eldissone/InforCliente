@@ -10,11 +10,6 @@ import {
 import { renderPaymentGantt, getDateRangeForView } from "/shared/paymentGantt.js";
 import { initPaymentDetailAside } from "/shared/paymentDetailAside.js";
 import { formatExtraCostLabel } from "/shared/costCategoryCascade.js";
-import {
-  renderFiscalSectionHtml,
-  setupLiquidationFiscalModal,
-  getLiquidationFiscalFormDataExtras,
-} from "/shared/liquidationFiscal.js";
 import { paymentPayableAmount } from "/shared/supplierFiscal.js";
 
 let allProjects = [];
@@ -746,24 +741,30 @@ function renderExtraPayComprovativoSection() {
     </div>`;
 }
 
-function renderExtraPayFiscalBlock(extra) {
+function extraPayCommittedLabel(extra) {
+  if (extra._isPurchaseOrder || extra.fiscalInputMode === "gross") {
+    return "Valor do pedido (já com impostos)";
+  }
+  return "Valor base do pedido";
+}
+
+function renderExtraPayAmountBlock(extra) {
   const cur = extra.currency || "AOA";
-  const isGross = extra.fiscalInputMode === "gross";
-  const committedLabel = isGross ? "Valor do pedido (já com impostos)" : "Valor base do pedido";
+  const payable = Number(extra.amount) || 0;
   return `
     <div class="flex flex-col gap-4">
       <div>
-        <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">${committedLabel}</label>
+        <label class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">${extraPayCommittedLabel(extra)}</label>
         <input id="extraPayCommitted" type="text" disabled
           class="w-full px-4 h-12 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed"
-          value="${escapeAttr(formatCurrency(extra.amount, cur))}" />
+          value="${escapeAttr(formatCurrency(payable, cur))}" />
       </div>
-      ${renderFiscalSectionHtml("extraPay")}
       <div>
         <label for="extraPayAmount" class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Valor líquido a pagar *</label>
         <input id="extraPayAmount" type="number" min="0" step="0.01" required
-          value="${escapeAttr(String(Number(extra.amount) || 0))}"
+          value="${escapeAttr(String(payable))}"
           class="w-full px-4 h-12 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 focus:bg-white transition-all" />
+        <p class="text-[10px] text-slate-400 mt-1.5 font-semibold">Os impostos já estão no pedido. Ajuste apenas se o valor pago for diferente.</p>
       </div>
     </div>`;
 }
@@ -1029,33 +1030,9 @@ function openExtraPayModal(extra) {
   const isCardLoad = extra.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO";
   document.getElementById("extraPayBody").innerHTML =
     renderExtraDetailGrid(extra) +
-    renderExtraPayFiscalBlock(extra) +
+    renderExtraPayAmountBlock(extra) +
     (needsComprovativo || showPoDocs ? renderExtraPayComprovativoSection() : "") +
     (isCardLoad ? renderExtraPayCardLoadSection(extra) : "");
-
-  const fiscalMode = extra.fiscalInputMode === "gross" ? "gross" : "base";
-  const amountNum = Number(extra.amount) || 0;
-  setupLiquidationFiscalModal(
-    {
-      amount: amountNum,
-      budgetedAmount: amountNum,
-      grossAmount: amountNum,
-      fiscalInputMode: fiscalMode,
-      fiscalApplyVat: Boolean(extra.fiscalApplyVat),
-      fiscalApplyWithholding: Boolean(extra.fiscalApplyWithholding),
-      fiscalApplyDiscount: Boolean(extra.fiscalApplyDiscount),
-      fiscalVatPercent: extra.fiscalVatPercent,
-      fiscalWithholdingPercent: extra.fiscalWithholdingPercent,
-      fiscalDiscountPercent: extra.fiscalDiscountPercent,
-      supplierRef: extra.supplierRef || {
-        vatPercent: null,
-        withholdingPercent: null,
-        discountPercent: null,
-      },
-      currency: extra.currency,
-    },
-    { prefix: "extraPay", amountField: "extraPayAmount", committedField: "extraPayCommitted" }
-  );
 
   if (needsComprovativo || showPoDocs) {
     resetExtraPayDocuments(needsComprovativo);
@@ -1082,9 +1059,6 @@ function openExtraPayModal(extra) {
       try {
         const fd = new FormData();
         fd.append("paidAmount", String(payAmount));
-
-        const fiscalExtras = getLiquidationFiscalFormDataExtras();
-        if (fiscalExtras) appendFiscalFieldsToFormData(fd, fiscalExtras);
 
         if (needsComprovativo) {
           const docRows = Array.from(document.querySelectorAll("#extraPayDocsList .extra-pay-doc-row"));

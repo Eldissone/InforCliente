@@ -5,12 +5,7 @@ import { wireLogout, wireUsersNav } from "/shared/session.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import { formatCurrency, formatDateBR, formatDateOnlyBR, toDateKey, dateInputToUtcNoonIso } from "/shared/format.js";
 import { renderGroupedListRows, TIMELINE_STATUS, formatTimelineDayLabel } from "/shared/paymentTimeline.js";
-import { appendFiscalFieldsToFormData, computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFiscal.js";
-import {
-  initLiquidationFiscalHandlers,
-  setupLiquidationFiscalModal,
-  getLiquidationFiscalFormDataExtras,
-} from "/shared/liquidationFiscal.js";
+import { computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFiscal.js";
 import { renderAsideProductSection, renderAsideAccountingLine } from "/shared/paymentDetailAside.js";
 import { initMobileMenu } from "/shared/ui.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
@@ -1918,7 +1913,6 @@ function bindEvents() {
 
   // Transaction form
   document.getElementById("formLiq").addEventListener("submit", submitLiquidation);
-  initLiquidationFiscalHandlers();
 }
 
 // ── CC Modal ───────────────────────────────────────────────────────────────────
@@ -2813,8 +2807,7 @@ window.openLiquidateModal = function (payment) {
   document.getElementById("liqTxId").value = data.id;
   document.getElementById("liqDesc").textContent = data.description || "";
   document.getElementById("liqCommitted").value = formatCurrency(data.budgetedAmount ?? amount, "AOA");
-  document.getElementById("liqAmount").value = data.netAmount ?? amount;
-  setupLiquidationFiscalModal(data);
+  document.getElementById("liqAmount").value = paymentPayableAmount(data) || amount;
 
   // Create or update a hidden field for ccId
   let ccInput = document.getElementById("liqCcId");
@@ -2898,11 +2891,6 @@ async function submitLiquidation(e) {
   const fatInput = document.getElementById("liqFatura");
   if (fatInput && fatInput.files[0]) {
     fd.append("fatura", fatInput.files[0]);
-  }
-
-  const fiscalExtras = getLiquidationFiscalFormDataExtras();
-  if (fiscalExtras) {
-    appendFiscalFieldsToFormData(fd, fiscalExtras);
   }
 
   const recipientIds = getSelectedLiqRecipientIds();
