@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 
-const UPLOADS_ROOT = path.resolve("uploads");
+const UPLOADS_ROOT = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, "..", "..", "uploads"));
 
 const MIME_BY_EXT = {
   ".jpg": "image/jpeg",
@@ -38,6 +38,14 @@ function toStoredPath(storagePath) {
   return `uploads/${key}`;
 }
 
+function decodeObjectKey(rel) {
+  try {
+    return decodeURIComponent(rel);
+  } catch {
+    return rel;
+  }
+}
+
 /**
  * Extrai a chave do ficheiro a partir de caminho relativo, URL /uploads
  * ou URL antiga do bucket Supabase (registos legados na BD).
@@ -53,9 +61,9 @@ function parseStoredObjectKey(raw) {
       const supabaseMatch = u.pathname.match(
         /\/storage\/v1\/object\/(?:public|sign|authenticated)\/infor-cliente\/(.+)$/i
       );
-      if (supabaseMatch) return decodeURIComponent(supabaseMatch[1]);
+      if (supabaseMatch) return decodeObjectKey(supabaseMatch[1]);
       const uploadsMatch = u.pathname.match(/\/uploads\/(.+)$/);
-      if (uploadsMatch) return decodeURIComponent(uploadsMatch[1]);
+      if (uploadsMatch) return decodeObjectKey(uploadsMatch[1]);
     } catch {
       return null;
     }
@@ -64,17 +72,40 @@ function parseStoredObjectKey(raw) {
 
   let rel = trimmed.replace(/^\/+/, "");
   if (rel.startsWith("uploads/")) rel = rel.slice("uploads/".length);
+  rel = decodeObjectKey(rel);
   if (!rel || rel.includes("\0") || rel.split(/[/\\]/).includes("..")) return null;
   return rel;
 }
 
-function safeLocalPath(objectKey) {
+function resolveWritableLocalPath(objectKey) {
   const key = parseStoredObjectKey(objectKey);
   if (!key) return null;
   const resolved = path.resolve(UPLOADS_ROOT, key);
-  const root = UPLOADS_ROOT.endsWith(path.sep) ? UPLOADS_ROOT : `${UPLOADS_ROOT}${path.sep}`;
-  if (resolved !== UPLOADS_ROOT && !resolved.startsWith(root)) return null;
+  const rootPrefix = UPLOADS_ROOT.endsWith(path.sep) ? UPLOADS_ROOT : `${UPLOADS_ROOT}${path.sep}`;
+  if (resolved !== UPLOADS_ROOT && !resolved.startsWith(rootPrefix)) return null;
   return resolved;
+}
+
+function findExistingLocalFile(objectKey) {
+  const key = parseStoredObjectKey(objectKey);
+  if (!key) return null;
+  const encoded = String(objectKey || "")
+    .replace(/^\/+/, "")
+    .replace(/^uploads\//, "");
+  const keys = [...new Set([key, encoded].filter(Boolean))];
+  const roots = [...new Set([UPLOADS_ROOT, path.resolve("uploads"), path.join(process.cwd(), "uploads")])];
+
+  for (const root of roots) {
+    const rootAbs = path.resolve(root);
+    const rootPrefix = rootAbs.endsWith(path.sep) ? rootAbs : `${rootAbs}${path.sep}`;
+    for (const candidateKey of keys) {
+      if (candidateKey.split(/[/\\]/).includes("..")) continue;
+      const resolved = path.resolve(rootAbs, candidateKey);
+      if (resolved !== rootAbs && !resolved.startsWith(rootPrefix)) continue;
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
+    }
+  }
+  return null;
 }
 
 function ensureUploadsDir() {
@@ -99,7 +130,7 @@ async function uploadToSupabase(storagePath, fileBuffer) {
   }
 
   ensureUploadsDir();
-  const fullPath = safeLocalPath(objectKey);
+  const fullPath = resolveWritableLocalPath(objectKey);
   if (!fullPath) throw new Error("INVALID_STORAGE_PATH");
   const dir = path.dirname(fullPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -111,16 +142,13 @@ async function readStoredFile(rawPath) {
   const objectKey = parseStoredObjectKey(rawPath);
   if (!objectKey) return null;
 
-  const localPath = safeLocalPath(objectKey);
-  if (localPath && fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
-    return {
-      buffer: fs.readFileSync(localPath),
-      contentType: contentTypeForKey(objectKey),
-      filename: path.basename(objectKey),
-    };
-  }
-
-  return null;
+  const localPath = findExistingLocalFile(objectKey);
+  if (!localPath) return null;
+  return {
+    buffer: fs.readFileSync(localPath),
+    contentType: contentTypeForKey(objectKey),
+    filename: path.basename(objectKey),
+  };
 }
 
 async function streamStoredFile(res, rawPath) {
@@ -130,18 +158,18 @@ async function streamStoredFile(res, rawPath) {
     return;
   }
 
-  const localPath = safeLocalPath(objectKey);
-  if (localPath && fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "private, max-age=60");
-    res.setHeader("Content-Type", contentTypeForKey(objectKey));
-    await new Promise((resolve, reject) => {
-      res.sendFile(localPath, (err) => (err ? reject(err) : resolve()));
-    });
+  const localPath = findExistingLocalFile(objectKey);
+  if (!localPath) {
+    res.status(404).json({ error: "FILE_NOT_FOUND" });
     return;
   }
 
-  res.status(404).json({ error: "FILE_NOT_FOUND" });
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, max-age=60");
+  res.setHeader("Content-Type", contentTypeForKey(objectKey));
+  await new Promise((resolve, reject) => {
+    res.sendFile(localPath, (err) => (err ? reject(err) : resolve()));
+  });
 }
 
 module.exports = {
