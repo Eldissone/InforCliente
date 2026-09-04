@@ -5,7 +5,7 @@
 - Postgres
 
 ## Configuração
-1. Copie `./.env.example` para `./.env` e ajuste `DATABASE_URL` e `JWT_SECRET`.
+1. Copie `./.env.example` para `./.env` e defina `DATABASE_URL` e um `JWT_SECRET` aleatório (placeholders como `change-me` são recusados). Para o primeiro admin, use `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD`.
 2. Instale dependências:
    - `npm install`
 3. Gere e migre:

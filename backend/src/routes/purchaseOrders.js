@@ -1,7 +1,7 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole } = require("../middlewares/auth");
+const { authRequired, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const { createLog } = require("../services/logService");
@@ -27,11 +27,37 @@ const fileUpload = multer({
 
 const purchaseRouter = express.Router();
 purchaseRouter.use(authRequired);
+purchaseRouter.use((req, res, next) => {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role === "cliente") {
+    return res.status(403).json({ error: "FORBIDDEN" });
+  }
+  return next();
+});
 
 // Roles que podem APROVAR
 const APPROVER_ROLES = ["admin", "financeiro", "supervisor"];
 // Roles que podem VER
 const VIEWER_ROLES = ["admin", "financeiro", "supervisor", "operador", "tecnico", "leitura"];
+const WRITER_ROLES = ["admin", "financeiro", "supervisor", "operador", "tecnico"];
+const FINANCE_ROLES = ["admin", "financeiro"];
+
+const requirePurchaseView = requirePermissionOrLegacyRole("pedidosExtras", "view", VIEWER_ROLES);
+const requirePurchaseCreate = requirePermissionOrLegacyRole("pedidosExtras", "create", WRITER_ROLES);
+const requirePurchaseEdit = requirePermissionOrLegacyRole("pedidosExtras", "edit", WRITER_ROLES);
+const requirePurchaseCancel = requirePermissionOrLegacyRole("pedidosExtras", "cancel", WRITER_ROLES);
+const requirePurchaseApprove = requirePermissionOrLegacyRole("pedidosExtras", "approve", APPROVER_ROLES);
+const requirePurchasePay = requirePermissionOrLegacyRole("pedidosExtras", "pay", FINANCE_ROLES);
+
+function assertOwnPurchaseOrder(req, order) {
+  if (req.permissionScope !== "own") return;
+  const userId = req.user?.sub;
+  if (userId && order?.requestedById === userId) return;
+  const err = new Error("FORBIDDEN");
+  err.status = 403;
+  throw err;
+}
+
 const PURCHASE_ORDER_STATUSES = [
   "RASCUNHO",
   "PENDENTE_REQUISICAO",
@@ -201,6 +227,7 @@ function mapOrder(o) {
 // ─── GET /purchase-orders — Listar ────────────────────────────────────────────
 purchaseRouter.get(
   "/",
+  requirePurchaseView,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
     if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -250,6 +277,7 @@ purchaseRouter.get(
 // ─── GET /purchase-orders/dashboard — KPIs ───────────────────────────────────
 purchaseRouter.get(
   "/dashboard",
+  requirePurchaseView,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
     if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -332,6 +360,7 @@ purchaseRouter.get(
 // ─── GET /purchase-orders/:id ─────────────────────────────────────────────────
 purchaseRouter.get(
   "/:id",
+  requirePurchaseView,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
     if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -382,6 +411,7 @@ const createOrderSchema = z.object({
 
 purchaseRouter.post(
   "/",
+  requirePurchaseCreate,
   asyncHandler(async (req, res) => {
     const parsed = createOrderSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -477,12 +507,14 @@ purchaseRouter.post(
 // ─── PATCH /purchase-orders/:id — Actualizar pedido (rascunho/pendente/rejeitado)
 purchaseRouter.patch(
   "/:id",
+  requirePurchaseEdit,
   asyncHandler(async (req, res) => {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
       include: { items: true },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    assertOwnPurchaseOrder(req, order);
 
     if (!["RASCUNHO", "PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO", "APROVADO"].includes(order.status)) {
       return res.status(400).json({ error: "CANNOT_EDIT_IN_CURRENT_STATUS" });
@@ -571,9 +603,11 @@ purchaseRouter.patch(
 // ─── DELETE /purchase-orders/:id — Cancelar ──────────────────────────────────
 purchaseRouter.delete(
   "/:id",
+  requirePurchaseCancel,
   asyncHandler(async (req, res) => {
     const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    assertOwnPurchaseOrder(req, order);
 
     if (["EM_PAGAMENTO", "CONCLUIDO"].includes(order.status)) {
       return res.status(400).json({ error: "CANNOT_CANCEL_IN_CURRENT_STATUS" });
@@ -610,12 +644,14 @@ const requisitionSchema = z.object({
 
 purchaseRouter.post(
   "/:id/requisition",
+  requirePurchaseEdit,
   asyncHandler(async (req, res) => {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
       include: { requisition: true },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    assertOwnPurchaseOrder(req, order);
     if (!["PENDENTE_REQUISICAO", "NAO_APROVADO"].includes(order.status)) {
       return res.status(400).json({ error: "ORDER_NOT_IN_REQUISITION_STATUS" });
     }
@@ -684,6 +720,7 @@ purchaseRouter.post(
 // ─── POST /purchase-orders/:id/requisition/upload — Upload proforma PDF ──────
 purchaseRouter.post(
   "/:id/requisition/upload",
+  requirePurchaseEdit,
   fileUpload.single("file"),
   asyncHandler(async (req, res) => {
     const order = await prisma.purchaseOrder.findUnique({
@@ -691,6 +728,7 @@ purchaseRouter.post(
       include: { requisition: true },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    assertOwnPurchaseOrder(req, order);
     if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
 
     const requisition =
@@ -736,11 +774,17 @@ purchaseRouter.post(
 // ─── DELETE /purchase-orders/:orderId/requisition/attachments/:attachId ───────
 purchaseRouter.delete(
   "/:orderId/requisition/attachments/:attachId",
+  requirePurchaseEdit,
   asyncHandler(async (req, res) => {
     const attachment = await prisma.purchaseAttachment.findUnique({
       where: { id: req.params.attachId },
+      include: { requisition: { select: { purchaseOrderId: true, purchaseOrder: { select: { requestedById: true } } } } },
     });
     if (!attachment) return res.status(404).json({ error: "NOT_FOUND" });
+    if (attachment.requisition?.purchaseOrderId !== req.params.orderId) {
+      return res.status(400).json({ error: "ATTACHMENT_NOT_FROM_ORDER" });
+    }
+    assertOwnPurchaseOrder(req, attachment.requisition?.purchaseOrder);
 
     await prisma.purchaseAttachment.delete({ where: { id: req.params.attachId } });
     return res.json({ ok: true });
@@ -750,6 +794,7 @@ purchaseRouter.delete(
 // ─── POST /purchase-orders/:id/submit-for-approval — Submeter para aprovação ─
 purchaseRouter.post(
   "/:id/submit-for-approval",
+  requirePurchaseEdit,
   asyncHandler(async (req, res) => {
     await applyRequisitionFromCotacao(prisma, req.params.id);
     const cotacao = await buildCotacaoSnapshot(prisma, req.params.id);
@@ -759,6 +804,7 @@ purchaseRouter.post(
       include: { requisition: { include: { attachments: true } } },
     });
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    assertOwnPurchaseOrder(req, order);
 
     if (!["PENDENTE_REQUISICAO", "NAO_APROVADO"].includes(order.status)) {
       return res.status(400).json({ error: "CANNOT_SUBMIT_IN_CURRENT_STATUS" });
@@ -806,6 +852,7 @@ const approvalSchema = z.object({
 
 purchaseRouter.post(
   "/:id/approve",
+  requirePurchaseApprove,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
     if (!APPROVER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -864,6 +911,7 @@ purchaseRouter.post(
 // ─── POST /purchase-orders/:id/pay — Liquidar no plano de pagamentos ──────────
 purchaseRouter.post(
   "/:id/pay",
+  requirePurchasePay,
   fileUpload.fields([
     { name: "comprovativo", maxCount: 1 },
     { name: "fatura", maxCount: 1 },
@@ -871,7 +919,7 @@ purchaseRouter.post(
   ]),
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
-    if (!["admin", "financeiro"].includes(role)) {
+    if (!FINANCE_ROLES.includes(role)) {
       return res.status(403).json({ error: "FORBIDDEN" });
     }
 
@@ -1007,9 +1055,10 @@ const paymentPlanSchema = z.object({
 
 purchaseRouter.post(
   "/:id/payment-plan",
+  requirePurchasePay,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
-    if (!["admin", "financeiro"].includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+    if (!FINANCE_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
 
     const parsed = paymentPlanSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -1080,9 +1129,10 @@ purchaseRouter.post(
 // ─── PATCH /purchase-orders/:id/payment-plan/installments/:instId — Marcar pago
 purchaseRouter.patch(
   "/:id/payment-plan/installments/:instId",
+  requirePurchasePay,
   asyncHandler(async (req, res) => {
     const role = (req.user?.role || "").toLowerCase();
-    if (!["admin", "financeiro"].includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
+    if (!FINANCE_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
 
     const inst = await prisma.purchasePaymentInstallment.findUnique({
       where: { id: req.params.instId },

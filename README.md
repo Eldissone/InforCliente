@@ -67,11 +67,13 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Página inicial: `/` → redireciona para `/Auth/login.html`
 
-## Login (usuários seed)
-Após `npm run seed` no backend, você pode usar:
-- **admin**: `admin@InfoCliente.local` / `admin123`
-- **operador**: `operador@InfoCliente.local` / `admin123`
-- **leitura**: `leitura@InfoCliente.local` / `admin123`
+## Primeiro acesso
+O arranque **não** cria um admin com senha conhecida. Para o primeiro utilizador, defina no `backend/.env`:
+
+- `BOOTSTRAP_ADMIN_EMAIL`
+- `BOOTSTRAP_ADMIN_PASSWORD` (mínimo 12 caracteres; valores como `admin123` são recusados)
+
+Depois remova essas variáveis. `JWT_SECRET` é obrigatório e não pode ser um placeholder (`change-me`, etc.).
 
 ## Permissões (roles)
 - **leitura**: apenas `GET`.
@@ -118,7 +120,8 @@ As páginas abaixo já consomem a API:
 
 ### Backend (`backend/.env`)
 - `DATABASE_URL`: conexão Postgres
-- `JWT_SECRET`: segredo do JWT
+- `JWT_SECRET`: segredo do JWT (string aleatória ≥ 16 caracteres; placeholders são recusados)
+- `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`: opcional, só para criar o primeiro admin
 - `PORT`: porta da API (default 4000)
 - `FRONTEND_ORIGIN`: origem permitida no CORS (default `http://localhost:5173`)
 

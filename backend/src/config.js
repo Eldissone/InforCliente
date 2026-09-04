@@ -2,15 +2,41 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
+const WEAK_JWT_SECRETS = new Set([
+  "change-me",
+  "changeme",
+  "secret",
+  "jwtsecret",
+  "jwt-secret",
+  "jwt_secret",
+  "your-secret",
+  "your_jwt_secret",
+  "password",
+  "admin123",
+  "dev",
+  "development",
+]);
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing env var ${name}`);
   return value;
 }
 
+function requireJwtSecret() {
+  const value = requireEnv("JWT_SECRET").trim();
+  if (value.length < 16) {
+    throw new Error("JWT_SECRET demasiado curto (mínimo 16 caracteres).");
+  }
+  if (WEAK_JWT_SECRETS.has(value.toLowerCase())) {
+    throw new Error("JWT_SECRET inválido: substitua o valor de exemplo por uma string aleatória.");
+  }
+  return value;
+}
+
 const config = {
   port: process.env.PORT || 4000,
-  jwtSecret: requireEnv("JWT_SECRET"),
+  jwtSecret: requireJwtSecret(),
   frontendOrigin: process.env.FRONTEND_ORIGIN || "*",
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
