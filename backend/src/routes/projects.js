@@ -1,14 +1,14 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
-const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
+const { authRequired, requireRole, requirePermission, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
 const { parseBudgetSheet } = require("../utils/budgetImport");
 const { parseTaskSheet } = require("../utils/taskImport");
 const { getTemplateForProjectType } = require("../utils/projectTemplates");
-const { getStaffOwnProjectCondition, enforceOwnProjectScope } = require("../services/scopeService");
+const { getAccessibleProjectWhere, enforceOwnProjectScope } = require("../services/scopeService");
 const { checkUserPermission } = require("../services/permissionResolver");
 const {
   softDeleteProject,
@@ -128,26 +128,10 @@ async function ensureClientExists(clientId) {
 }
 
 async function ensureProjectReadable(req, projectId) {
-  const role = (req.user?.role || "").toLowerCase();
-  const scopedClientId = getScopedClientId(req);
-
-  const where = { id: projectId };
-
-  // Scoping para clientes (comportamento existente, inalterado)
-  if (role === "cliente") {
-    where.OR = [
-      ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
-      { assignedUsers: { some: { id: req.user.sub } } }
-    ];
-  } else {
-    // Enforcement real do escopo "own" para staff interno: só tem efeito
-    // quando a permissão efetiva para este pedido é "own" (definida por
-    // requirePermission). Para escopo "true" nada muda.
-    const ownCondition = getStaffOwnProjectCondition(req);
-    if (ownCondition) {
-      where.AND = [ownCondition];
-    }
-  }
+  const condition = getAccessibleProjectWhere(req);
+  const where = condition
+    ? { AND: [{ id: String(projectId) }, condition] }
+    : { id: String(projectId) };
 
   const project = await prisma.project.findFirst({
     where,
@@ -461,7 +445,8 @@ projectRoutes.get(
 
 projectRoutes.get(
   "/:id",
-  requirePermission("obras", "view"),
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     const project = await ensureProjectReadable(req, id);
@@ -544,8 +529,10 @@ projectRoutes.get(
 projectRoutes.patch(
   "/:id",
   requirePermission("obras", "edit"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
     const body = z
       .object({
         name: z.string().min(2).optional(),
@@ -682,6 +669,7 @@ projectRoutes.post(
   fileUpload.single("photo"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    await ensureProjectReadable(req, id);
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
     const extension = path.extname(req.file.originalname).toLowerCase();
@@ -705,6 +693,7 @@ projectRoutes.post(
   fileUpload.single("photo"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
+    await ensureProjectReadable(req, id);
     if (!req.file) return res.status(400).json({ error: "NO_FILE_UPLOADED" });
 
     const extension = path.extname(req.file.originalname).toLowerCase();
@@ -719,8 +708,10 @@ projectRoutes.post(
 projectRoutes.delete(
   "/:id",
   requirePermission("obras", "delete"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
     await softDeleteProject(id);
 
     return res.json({ ok: true });
@@ -731,8 +722,10 @@ projectRoutes.delete(
 projectRoutes.post(
   "/:id/restore",
   requirePermission("obras", "manage"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
     await restoreProject(id);
     return res.json({ ok: true });
   })
@@ -742,8 +735,10 @@ projectRoutes.post(
 projectRoutes.delete(
   "/:id/permanent",
   requirePermission("obras", "delete"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
+    await ensureProjectReadable(req, id);
     await permanentDeleteProject(id);
 
     return res.json({ ok: true });
@@ -752,6 +747,8 @@ projectRoutes.delete(
 
 projectRoutes.get(
   "/:id/transactions",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProjectReadable(req, projectId);
@@ -813,6 +810,7 @@ projectRoutes.post(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const body = z
       .object({
         date: z.string().datetime().optional(),
@@ -886,6 +884,7 @@ projectRoutes.patch(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const txId = String(req.params.txId);
 
     const body = z.object({
@@ -943,6 +942,7 @@ projectRoutes.patch(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const txId = String(req.params.txId);
 
     const body = z
@@ -1040,6 +1040,7 @@ projectRoutes.delete(
   requireRole(["admin", "operador"]),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
+    await ensureProjectReadable(req, projectId);
     const txId = String(req.params.txId);
 
     const oldTx = await prisma.projectTransaction.findUnique({
@@ -1084,6 +1085,8 @@ projectRoutes.delete(
 
 projectRoutes.get(
   "/:id/budget/lines",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProjectReadable(req, projectId);
@@ -1129,6 +1132,8 @@ projectRoutes.get(
 // preservar a comparação previsto x real ao longo do tempo.
 projectRoutes.get(
   "/:id/budget/versions",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProjectReadable(req, projectId);
@@ -1238,6 +1243,8 @@ projectRoutes.post(
 
 projectRoutes.get(
   "/:id/files",
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { folderId } = req.query;
@@ -1389,6 +1396,8 @@ async function folderIsDescendantOf(folderId, ancestorId) {
 // GET — listar pastas de um nível (raiz ou dentro de outra pasta)
 projectRoutes.get(
   "/:id/folders",
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { parentId, all } = req.query;
@@ -1521,6 +1530,8 @@ projectRoutes.delete(
 // GET — lista de pagamentos + resumo financeiro
 projectRoutes.get(
   "/:id/payments",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     await ensureProjectReadable(req, projectId);
@@ -1676,6 +1687,8 @@ projectRoutes.delete(
 );
 projectRoutes.get(
   "/:id/photos",
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
@@ -1695,6 +1708,7 @@ projectRoutes.get(
 projectRoutes.get(
   "/:id/photos/:photoId/download",
   requireGalleryDownload,
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const { id, photoId } = req.params;
     await ensureProjectReadable(req, id);
@@ -1846,6 +1860,8 @@ async function recalculateTaskRollup(parentId, projectId) {
 // Progress Tasks Routes
 projectRoutes.get(
   "/:id/progress-tasks",
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
@@ -1976,6 +1992,8 @@ projectRoutes.patch(
 
 projectRoutes.get(
   "/:id/progress-history",
+  requirePermissionOrLegacyRole("obras", "view", ["cliente"]),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
@@ -2137,6 +2155,8 @@ const { buildMeasurementSnapshot, getNextReportNumber } = require("../utils/meas
 
 projectRoutes.get(
   "/:id/measurement-reports",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await ensureProjectReadable(req, id);
@@ -2253,6 +2273,8 @@ projectRoutes.patch(
 
 projectRoutes.get(
   "/:id/measurement-reports/:reportId",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("id"),
   asyncHandler(async (req, res) => {
     const { id, reportId } = req.params;
     await ensureProjectReadable(req, id);
