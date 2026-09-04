@@ -110,4 +110,26 @@ function requirePermissionOrLegacyRole(moduleName, action, legacyRoles = []) {
   };
 }
 
-module.exports = { authRequired, requireRole, requirePermission, requirePermissionOrLegacyRole };
+/**
+ * Leitura de armazém/stock no portal do cliente.
+ * Staff continua a precisar de stock.view. Cliente não é perfil de armazém:
+ * entra com obras.read (ou papel cliente) e o isolamento fica nas queries
+ * (visibleToClient + obras do JWT).
+ */
+function requireStockViewOrClientePortal() {
+  return (req, res, next) => {
+    const role = (req.user?.role || "").toLowerCase();
+    if (role === "cliente") {
+      return requirePermissionOrLegacyRole("obras", "read", ["cliente"])(req, res, next);
+    }
+    return requirePermission("stock", "view")(req, res, next);
+  };
+}
+
+module.exports = {
+  authRequired,
+  requireRole,
+  requirePermission,
+  requirePermissionOrLegacyRole,
+  requireStockViewOrClientePortal,
+};

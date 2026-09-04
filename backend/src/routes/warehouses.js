@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermission, requireStockViewOrClientePortal } = require("../middlewares/auth");
 const {
   buildWarehouseListWhere,
   assertWarehouseAccessible,
@@ -15,7 +15,7 @@ warehouseRoutes.use(authRequired);
 // GET - Listar armazéns
 warehouseRoutes.get(
   "/",
-  requirePermission("stock", "view"),
+  requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
     const { includeDeleted } = req.query;
     const baseWhere = {

@@ -1,8 +1,8 @@
 const express = require("express");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { requirePermission, authRequired } = require("../middlewares/auth");
-const { assertOwnProjectAccess, enforceOwnProjectScope } = require("../services/scopeService");
+const { requirePermission, requirePermissionOrLegacyRole, authRequired } = require("../middlewares/auth");
+const { assertOwnProjectAccess, enforceOwnProjectScope, getAccessibleProjectWhere } = require("../services/scopeService");
 const dailyPlansRoutes = express.Router();
 
 dailyPlansRoutes.use(authRequired);
@@ -145,16 +145,32 @@ async function restorePlanTools(tx, { productId, estaleiroId, planId, restoreQty
 }
 
 // GET /daily-plans/all-pending
-// Retorna planos pendentes de material globalmente (para o painel do armazém)
+// Armazém (stock.view): fila global. Portal do cliente: só com projectId e obras.read.
+function requireAllPendingAccess(req, res, next) {
+  const role = (req.user?.role || "").toLowerCase();
+  if (role === "cliente") {
+    if (!req.query.projectId) {
+      return res.status(403).json({ error: "FORBIDDEN_SCOPE" });
+    }
+    return requirePermissionOrLegacyRole("obras", "read", ["cliente"])(req, res, next);
+  }
+  return requirePermission("stock", "view")(req, res, next);
+}
+
 dailyPlansRoutes.get(
   "/all-pending",
-  requirePermission("stock", "view"), // O armazém precisa ter acesso ao stock para ver
+  requireAllPendingAccess,
   asyncHandler(async (req, res) => {
     const { projectId } = req.query;
+    if (projectId) {
+      await assertOwnProjectAccess(req, String(projectId));
+    }
+    const accessibleProject = getAccessibleProjectWhere(req);
     const plans = await prisma.dailyPlan.findMany({
       where: { 
         status: { in: ["PENDING_MATERIAL", "PENDING_RETURN", "PENDING_VALIDATION"] },
-        projectId: projectId || undefined
+        ...(projectId ? { projectId: String(projectId) } : {}),
+        ...(accessibleProject ? { project: accessibleProject } : {}),
       },
       include: {
         project: true,
@@ -250,7 +266,7 @@ dailyPlansRoutes.post(
 // GET /daily-plans?projectId=...
 dailyPlansRoutes.get(
   "/",
-  requirePermission("obras", "read"),
+  requirePermissionOrLegacyRole("obras", "read", ["cliente"]),
   enforceOwnProjectScope("projectId"),
   asyncHandler(async (req, res) => {
     const { projectId } = req.query;

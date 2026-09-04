@@ -35,14 +35,13 @@
       overflow: hidden;
     }
 
-    /* Full-screen Immersive Background */
     .splash-overlay {
       position: fixed;
       inset: 0;
-      background: url('/src/assets/images/auth-bg.png') center/cover no-repeat;
-      /* Se não houver imagem, o gradiente do body assume */
+      background: url('/assets/images/auth-bg.png') center/cover no-repeat;
       opacity: 0.15;
       z-index: -1;
+      pointer-events: none;
     }
 
     .glow-blob {

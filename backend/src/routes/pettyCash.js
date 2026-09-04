@@ -11,6 +11,7 @@ const {
   syncFundBalanceFromCards,
 } = require("../services/pettyCashService");
 const { createLog } = require("../services/logService");
+const { getAccessibleProjectWhere, isClienteRole, assertOwnProjectAccess } = require("../services/scopeService");
 
 const pettyCashRoutes = express.Router();
 pettyCashRoutes.use(authRequired);
@@ -61,6 +62,31 @@ async function logReinforcementAction(req, { action, requestId, details }) {
   });
 }
 
+function fundAccessibleWhere(req) {
+  const accessible = getAccessibleProjectWhere(req);
+  if (!accessible) return null;
+  if (isClienteRole(req)) return { project: accessible };
+  return { OR: [{ projectId: null }, { project: accessible }] };
+}
+
+function applyFundProjectScope(req, baseWhere = {}) {
+  const extra = fundAccessibleWhere(req);
+  if (!extra) return baseWhere;
+  return { AND: [baseWhere, extra] };
+}
+
+async function assertFundAccessible(req, fund) {
+  if (!fund) return;
+  if (isClienteRole(req) && !fund.projectId) {
+    const err = new Error("FORBIDDEN_SCOPE");
+    err.status = 403;
+    throw err;
+  }
+  if (fund.projectId) {
+    await assertOwnProjectAccess(req, fund.projectId);
+  }
+}
+
 // GET /petty-cash/funds — Lista fundos (globais ou de uma obra)
 pettyCashRoutes.get(
   "/funds",
@@ -68,13 +94,14 @@ pettyCashRoutes.get(
   asyncHandler(async (req, res) => {
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
     const includeInactive = req.query.includeInactive === "true";
+    if (projectId) await assertOwnProjectAccess(req, projectId);
 
-    const where = {
+    const where = applyFundProjectScope(req, {
       ...(projectId
         ? { projectId }
         : { OR: [{ projectId: null }, { project: { active: true } }] }),
       ...(includeInactive ? {} : { active: true }),
-    };
+    });
 
     const funds = await prisma.pettyCashFund.findMany({
       where,
@@ -157,6 +184,7 @@ pettyCashRoutes.get(
       },
     });
     if (!fund) return res.status(404).json({ error: "FUND_NOT_FOUND" });
+    await assertFundAccessible(req, fund);
 
     if (fund.cards.length > 0) {
       const expected = fundBalanceFromCards(fund);
@@ -480,11 +508,14 @@ pettyCashRoutes.get(
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+    if (projectId) await assertOwnProjectAccess(req, projectId);
 
-    const where = {
+    const extra = fundAccessibleWhere(req);
+    const base = {
       ...(status ? { status } : {}),
       ...(projectId ? { fund: { projectId } } : {}),
     };
+    const where = extra ? { AND: [base, { fund: extra }] } : base;
 
     const [total, items] = await Promise.all([
       prisma.pettyCashReinforcementRequest.count({ where }),
@@ -507,11 +538,14 @@ pettyCashRoutes.get(
   requirePermission("financeiro", "view"),
   asyncHandler(async (req, res) => {
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    if (projectId) await assertOwnProjectAccess(req, projectId);
+    const extra = fundAccessibleWhere(req);
+    const base = {
+      status: "PENDENTE",
+      ...(projectId ? { fund: { projectId } } : {}),
+    };
     const items = await prisma.pettyCashReinforcementRequest.findMany({
-      where: {
-        status: "PENDENTE",
-        ...(projectId ? { fund: { projectId } } : {}),
-      },
+      where: extra ? { AND: [base, { fund: extra }] } : base,
       orderBy: { requestedAt: "desc" },
       include: REINFORCEMENT_INCLUDE,
     });
@@ -526,6 +560,9 @@ pettyCashRoutes.get(
   asyncHandler(async (req, res) => {
     const fundId = String(req.params.id);
     const status = req.query.status ? String(req.query.status) : "";
+    const fund = await prisma.pettyCashFund.findUnique({ where: { id: fundId } });
+    if (!fund) return res.status(404).json({ error: "FUND_NOT_FOUND" });
+    await assertFundAccessible(req, fund);
 
     const items = await prisma.pettyCashReinforcementRequest.findMany({
       where: { fundId, ...(status ? { status } : {}) },
@@ -694,8 +731,9 @@ pettyCashRoutes.get(
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
     const scope = req.query.scope ? String(req.query.scope) : "";
     const includeInactive = req.query.includeInactive === "true";
+    if (projectId) await assertOwnProjectAccess(req, projectId);
 
-    const fundWhere = {
+    const fundWhere = applyFundProjectScope(req, {
       active: true,
       ...(projectId
         ? { OR: [{ projectId }, { projectId: null }] }
@@ -704,7 +742,7 @@ pettyCashRoutes.get(
           : scope === "obra"
             ? { projectId: { not: null } }
             : { OR: [{ projectId: null }, { project: { active: true } }] }),
-    };
+    });
 
     const cards = await prisma.pettyCashCard.findMany({
       where: {
@@ -818,6 +856,7 @@ pettyCashRoutes.get(
       },
     });
     if (!card) return res.status(404).json({ error: "CARD_NOT_FOUND" });
+    await assertFundAccessible(req, card.fund);
 
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));

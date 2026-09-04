@@ -13,6 +13,7 @@ const {
   resolveAllowedFromMap,
 } = require("../services/permissionResolver");
 const { createLog } = require("../services/logService");
+const { getAccessibleProjectWhere, isClienteRole, assertOwnProjectAccess } = require("../services/scopeService");
 const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
@@ -73,49 +74,21 @@ function parseOptionalFiscalPercent(value) {
  *                bloqueiam separadamente por assertExtraRequestAuthorized.
  */
 async function applyExtraRequestScopeWhere(where, req) {
-  const scope = req.permissionScope;
-  if (scope !== "own" && scope !== "view") return where;
+  const accessible = getAccessibleProjectWhere(req);
+  const viewOwn =
+    !accessible && req.permissionScope === "view" && req.user?.sub
+      ? { assignedUsers: { some: { id: req.user.sub } } }
+      : null;
+  const projectWhere = accessible || viewOwn;
+  if (!projectWhere) return where;
 
-  const userId = req.user?.sub;
-  const role = (req.user?.role || "").toLowerCase();
-
-  if (role === "cliente") {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { clientId: true, clients: { select: { clientId: true } } },
-    });
-    const clientIds = new Set([user?.clientId, ...(user?.clients?.map((c) => c.clientId) || [])].filter(Boolean));
-    if (clientIds.size === 0) {
-      // Fallback seguro: sem clientIds conhecidos, bloqueia.
-      return { ...where, id: null };
-    }
-    // Adiciona filtro por projetos pertencentes aos clientes do utilizador
-    return {
-      AND: [
-        where,
-        {
-          project: {
-            is: { clientId: { in: [...clientIds] } },
-          },
-        },
-      ],
-    };
+  if (isClienteRole(req)) {
+    return { AND: [where, { project: projectWhere }] };
   }
 
-  // scope own/view para utilizadores internos: restringe a projetos onde está
-  // atribuído (assignedUsers). Para pedidos GERAL (sem projectId), mantemos
-  // visível apenas se o utilizador for criador, mas hoje o modelo não tem
-  // userId; nesse caso permitimos o GERAL cair no fallback por role legado.
-  const userProjects = await prisma.project.findMany({
-    where: { assignedUsers: { some: { id: userId } } },
-    select: { id: true },
-  });
-  const projectIds = new Set(userProjects.map((p) => p.id));
-  const projectFilter = projectIds.size
-    ? { OR: [{ projectId: null }, { projectId: { in: [...projectIds] } }] }
-    : { projectId: null };
-
-  return { AND: [where, projectFilter] };
+  return {
+    AND: [where, { OR: [{ projectId: null }, { project: projectWhere }] }],
+  };
 }
 
 /**
@@ -125,30 +98,29 @@ async function applyExtraRequestScopeWhere(where, req) {
  */
 async function assertExtraRequestAuthorized(item, req, options = {}) {
   const scope = req.permissionScope;
-  if (scope !== "own" && scope !== "view") return true;
-
   const writeOperation = options.write !== false;
+  const role = (req.user?.role || "").toLowerCase();
+
   if (scope === "view" && writeOperation) {
     const err = new Error("VIEW_ONLY_CANNOT_WRITE");
     err.status = 403;
     throw err;
   }
 
-  const userId = req.user?.sub;
-  const role = (req.user?.role || "").toLowerCase();
+  if (isClienteRole(req)) {
+    if (!item.projectId) {
+      const err = new Error("GENERAL_SCOPE_NOT_OWNED");
+      err.status = 403;
+      throw err;
+    }
+    await assertOwnProjectAccess(req, item.projectId);
+    return true;
+  }
+
+  if (scope !== "own" && scope !== "view") return true;
 
   if (!item.projectId) {
-    // Pedido GERAL: sem owner implícito no modelo atual, só permite escrita
-    // se scope não for own (cairia em role fallback; se chegou aqui por own,
-    // bloqueamos por segurança, mas permitimos explicitamente para admin e
-    // fallback antigo. Como o requirePermissionOrLegacyRole já deu passagem
-    // por role quando a permissão central é "false", aqui usamos a flag de
-    // _permissionPassedByRole que o helper define mais tarde.
     if (scope === "own" && req._permissionPassedByRole !== true && writeOperation) {
-      // Sem scope de obra para "own" em GERAL: só permitido se escreve o
-      // próprio requester; hoje o modelo não tem userId, bloqueamos escrita
-      // de users sem atribuição para evitar abusos. Permitimos só se a
-      // permissão realmente passou por role fallback.
       const allowGenericWrite = req._permissionPassedByRole === true || role === "admin";
       if (!allowGenericWrite) {
         const err = new Error("GENERAL_SCOPE_NOT_OWNED");
@@ -159,34 +131,22 @@ async function assertExtraRequestAuthorized(item, req, options = {}) {
     return true;
   }
 
-  // Pedido com projeto: valida ownership.
-  if (role === "cliente") {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { clientId: true, clients: { select: { clientId: true } } },
+  if (scope === "view") {
+    const assigned = await prisma.project.count({
+      where: { id: item.projectId, assignedUsers: { some: { id: req.user?.sub } } },
     });
-    const clientIds = new Set([user?.clientId, ...(user?.clients?.map((c) => c.clientId) || [])].filter(Boolean));
-    const project = await prisma.project.findUnique({
-      where: { id: item.projectId },
-      select: { clientId: true },
-    });
-    if (!project?.clientId || !clientIds.has(project.clientId)) {
-      const err = new Error("PROJECT_NOT_OWNED");
+    if (!assigned && req._permissionPassedByRole !== true && role !== "admin") {
+      const err = new Error("PROJECT_NOT_ASSIGNED");
       err.status = 403;
       throw err;
     }
     return true;
   }
 
-  const assigned = await prisma.project.count({
-    where: { id: item.projectId, assignedUsers: { some: { id: userId } } },
-  });
-  if (!assigned) {
-    // Fallback amigável: se a permissão foi concedida por role legado, deixa
-    // passar (igual ao comportamento antigo). Senão, bloqueia.
+  try {
+    await assertOwnProjectAccess(req, item.projectId);
+  } catch (err) {
     if (req._permissionPassedByRole === true || role === "admin") return true;
-    const err = new Error("PROJECT_NOT_ASSIGNED");
-    err.status = 403;
     throw err;
   }
   return true;
@@ -461,6 +421,7 @@ extraRequestRoutes.get(
     const status = req.query.status ? String(req.query.status) : "";
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 20)));
+    if (projectId) await assertOwnProjectAccess(req, projectId);
 
     const baseWhere = {
       ...(type ? { type } : {}),
@@ -493,6 +454,7 @@ extraRequestRoutes.get(
   requirePermission("financeiro", "view"),
   asyncHandler(async (req, res) => {
     const projectId = req.query.projectId ? String(req.query.projectId) : "";
+    if (projectId) await assertOwnProjectAccess(req, projectId);
     const baseWhere = {
       status: "APROVADO",
       ...(projectId ? { projectId } : { OR: [{ projectId: null }, { project: activeProjectRelationFilter() }] }),
@@ -533,6 +495,7 @@ extraRequestRoutes.get(
           message: "Seleccione a obra para listar itens do orçamento.",
         });
       }
+      await assertOwnProjectAccess(req, projectId);
 
       // Necessidades do centro de custo (orçamento / planificação)
       let costCenterIds = [];
@@ -690,6 +653,7 @@ extraRequestRoutes.get(
       include: EXTRA_INCLUDE,
     });
     if (!item) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(item, req, { write: false });
     return res.json(mapExtra(item));
   })
 );
@@ -735,6 +699,9 @@ extraRequestRoutes.post(
 
     if (body.type === "OBRA" && !body.projectId) {
       return res.status(400).json({ error: "PROJECT_REQUIRED_FOR_OBRA" });
+    }
+    if (body.projectId) {
+      await assertOwnProjectAccess(req, body.projectId);
     }
     if (body.type === "OBRA" && !body.costCenterId) {
       return res.status(400).json({ error: "COST_CENTER_REQUIRED_FOR_OBRA" });
@@ -887,6 +854,7 @@ extraRequestRoutes.patch(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status !== "PENDENTE" && existing.status !== "APROVADO" && existing.status !== "REJEITADO") {
       return res.status(409).json({ error: "ONLY_UNLIQUIDATED_CAN_BE_EDITED" });
     }
@@ -1090,6 +1058,7 @@ extraRequestRoutes.patch(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status !== "PENDENTE") {
       return res.status(409).json({ error: "ONLY_PENDING_CAN_BE_APPROVED" });
     }
@@ -1134,6 +1103,7 @@ extraRequestRoutes.patch(
     const body = z.object({ reason: z.string().optional().nullable() }).parse(req.body || {});
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status !== "PENDENTE") {
       return res.status(409).json({ error: "ONLY_PENDING_CAN_BE_REJECTED" });
     }
@@ -1157,6 +1127,7 @@ extraRequestRoutes.patch(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status === "PAGO" || existing.status === "CANCELADO") {
       return res.status(409).json({ error: "CANNOT_CANCEL_IN_CURRENT_STATUS" });
     }
@@ -1181,6 +1152,7 @@ extraRequestRoutes.post(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.paymentSource !== "SOLICITACAO_TRANSFERENCIA") {
       return res.status(400).json({ error: "PROFORMA_ONLY_FOR_TRANSFER" });
     }
@@ -1223,6 +1195,7 @@ extraRequestRoutes.post(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status !== "APROVADO") {
       return res.status(409).json({ error: "ONLY_APPROVED_CAN_BE_PAID" });
     }
@@ -1321,6 +1294,7 @@ extraRequestRoutes.delete(
     const id = String(req.params.id);
     const existing = await prisma.extraRequest.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: "EXTRA_REQUEST_NOT_FOUND" });
+    await assertExtraRequestAuthorized(existing, req);
     if (existing.status === "PAGO" || existing.status === "APROVADO") {
       return res.status(409).json({ error: "CANNOT_DELETE_IN_CURRENT_STATUS" });
     }

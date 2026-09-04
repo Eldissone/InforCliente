@@ -1,23 +1,30 @@
 const { prisma } = require("../db");
 
 /**
- * Serviço central de enforcement de escopo de dados (`own`/`view`).
+ * Serviço central de enforcement de escopo de dados (`own`/`view` + papel cliente).
  *
- * O middleware `requirePermission` já resolve a permissão efetiva e define
- * `req.permissionScope` ("own" | "view") quando aplicável, mas até aqui essa
- * informação só era realmente aplicada em pontos isolados (ex.: listagem de
- * projectos). Este serviço concentra a lógica de "o que conta como recurso
- * próprio do utilizador" para que qualquer rota possa aplicá-la de forma
- * consistente, sem duplicar regras.
- *
- * Importante: estas funções só restringem o acesso quando o escopo efetivo é
- * "own" (ou quando o papel é "cliente"). Para qualquer outro caso (`true`,
- * sem `permissionScope`) o comportamento existente é mantido inalterado.
+ * O middleware `requirePermission` define `req.permissionScope` ("own" | "view")
+ * quando aplicável. Estas funções só restringem quando o escopo é `own`/`view`
+ * **ou** quando o papel é `cliente`. Staff com permissão `true` continua a ver
+ * todas as obras (desenho de ERP interno).
  */
 
+function isClienteRole(req) {
+  return (req?.user?.role || "").toLowerCase() === "cliente";
+}
+
+function getClienteClientId(req) {
+  if (!isClienteRole(req)) return null;
+  return req.user?.clientId || null;
+}
+
+/** Condição Prisma que não corresponde a nenhum projecto (negação segura). */
+function noProjectMatch() {
+  return { id: "__none__" };
+}
+
 /**
- * Condição Prisma que define "obra própria" para um utilizador com escopo
- * `own` (staff interno atribuído à obra via `assignedUsers`).
+ * Condição Prisma que define "obra própria" para staff com escopo `own`.
  */
 function getStaffOwnProjectCondition(req) {
   if (req?.permissionScope !== "own") return null;
@@ -27,9 +34,26 @@ function getStaffOwnProjectCondition(req) {
 }
 
 /**
- * Condição Prisma que define "cliente próprio" para um utilizador com
- * escopo `own` (staff interno com pelo menos uma obra atribuída desse
- * cliente).
+ * Condição Prisma sobre Project visível ao chamador.
+ * - cliente: clientId activo no JWT e/ou obras atribuídas
+ * - staff own: assignedUsers
+ * - resto: null (sem filtro extra)
+ */
+function getAccessibleProjectWhere(req) {
+  if (isClienteRole(req)) {
+    const clientId = getClienteClientId(req);
+    const userId = req.user?.sub;
+    const or = [
+      ...(clientId ? [{ clientId }] : []),
+      ...(userId ? [{ assignedUsers: { some: { id: userId } } }] : []),
+    ];
+    return or.length ? { OR: or } : noProjectMatch();
+  }
+  return getStaffOwnProjectCondition(req);
+}
+
+/**
+ * Condição Prisma que define "cliente próprio" para staff com escopo `own`.
  */
 function getStaffOwnClientCondition(req) {
   if (req?.permissionScope !== "own") return null;
@@ -38,19 +62,12 @@ function getStaffOwnClientCondition(req) {
   return { projects: { some: { assignedUsers: { some: { id: userId } } } } };
 }
 
-/**
- * Uso inline (dentro de um handler) para rotas que só conhecem o `projectId`
- * depois de irem buscar o recurso principal à base de dados (ex.: um plano
- * diário, uma transação). Lança um erro com `.status = 403` quando o escopo
- * efetivo é `own` e o projecto não está atribuído ao utilizador; não faz
- * nada quando o escopo é `true`.
- */
 async function assertOwnProjectAccess(req, projectId) {
-  const condition = getStaffOwnProjectCondition(req);
+  const condition = getAccessibleProjectWhere(req);
   if (!condition || !projectId) return;
 
   const match = await prisma.project.findFirst({
-    where: { id: projectId, ...condition },
+    where: { AND: [{ id: String(projectId) }, condition] },
     select: { id: true },
   });
 
@@ -61,23 +78,17 @@ async function assertOwnProjectAccess(req, projectId) {
   }
 }
 
-/**
- * Middleware reutilizável para rotas que recebem um `projectId` no path e já
- * usam `requirePermission("obras", ...)`. Quando o escopo efetivo é `own`,
- * bloqueia o acesso a obras não atribuídas ao utilizador. Não tem qualquer
- * efeito quando o escopo é `true` (comportamento atual preservado).
- */
 function enforceOwnProjectScope(paramName = "projectId") {
   return async (req, res, next) => {
     try {
-      const condition = getStaffOwnProjectCondition(req);
+      const condition = getAccessibleProjectWhere(req);
       if (!condition) return next();
 
       const projectId = req.params?.[paramName] || req.query?.[paramName];
       if (!projectId) return next();
 
       const match = await prisma.project.findFirst({
-        where: { id: String(projectId), ...condition },
+        where: { AND: [{ id: String(projectId) }, condition] },
         select: { id: true },
       });
 
@@ -94,6 +105,9 @@ function enforceOwnProjectScope(paramName = "projectId") {
 }
 
 module.exports = {
+  isClienteRole,
+  getClienteClientId,
+  getAccessibleProjectWhere,
   getStaffOwnProjectCondition,
   getStaffOwnClientCondition,
   assertOwnProjectAccess,

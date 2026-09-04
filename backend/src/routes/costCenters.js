@@ -31,7 +31,7 @@ const {
   certifyPayment,
   getAuditSummary,
 } = require("../services/certificationService");
-const { enforceOwnProjectScope, getStaffOwnProjectCondition } = require("../services/scopeService");
+const { enforceOwnProjectScope, getAccessibleProjectWhere } = require("../services/scopeService");
 const { activeProjectRelationFilter } = require("../services/projectLifecycleService");
 const {
   computeFiscalFromPaymentInput,
@@ -135,16 +135,15 @@ function buildGlobalPaymentWhere(query, req) {
   const ccId = query.costCenterId ? String(query.costCenterId) : "";
   const week = query.week ? String(query.week) : "";
 
-  // Enforcement real do escopo "own": só restringe quando a permissão
-  // efetiva do pedido é "own" (staff com obras atribuídas); para "true"
-  // (comportamento atual da generalidade dos perfis) nada muda.
-  const ownProjectCondition = req ? getStaffOwnProjectCondition(req) : null;
+  // Isolamento: cliente (sempre) e staff com escopo "own". Permissão "true"
+  // do staff interno continua sem filtro extra (desenho de ERP).
+  const accessibleProject = req ? getAccessibleProjectWhere(req) : null;
 
   const projectScope = projectId
-    ? ownProjectCondition
-      ? { project: ownProjectCondition }
+    ? accessibleProject
+      ? { project: accessibleProject }
       : {}
-    : { project: activeProjectRelationFilter(ownProjectCondition || {}) };
+    : { project: activeProjectRelationFilter(accessibleProject || {}) };
 
   return {
     ...(projectId ? { projectId } : {}),
@@ -884,12 +883,12 @@ costCenterRoutes.get(
   requirePermission("obras", "view"),
   asyncHandler(async (req, res) => {
     const payId = String(req.params.payId);
-    const ownProjectCondition = getStaffOwnProjectCondition(req);
+    const accessibleProject = getAccessibleProjectWhere(req);
 
     const payment = await prisma.costPayment.findFirst({
       where: {
         id: payId,
-        ...(ownProjectCondition ? { project: ownProjectCondition } : {}),
+        ...(accessibleProject ? { project: accessibleProject } : {}),
       },
       include: PAYMENT_DETAIL_INCLUDE,
     });
@@ -1297,12 +1296,12 @@ costCenterRoutes.get(
     const page = Math.max(1, Number(req.query.page || 1));
     const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize || 20)));
 
-    const ownProjectCondition = getStaffOwnProjectCondition(req);
+    const accessibleProject = getAccessibleProjectWhere(req);
     const where = {
       costCenterId,
       ...(status ? { status } : {}),
       ...(priority ? { priority } : {}),
-      ...(ownProjectCondition ? { costCenter: { project: ownProjectCondition } } : {}),
+      ...(accessibleProject ? { costCenter: { project: accessibleProject } } : {}),
     };
 
     const [total, items] = await Promise.all([

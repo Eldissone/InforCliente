@@ -9,6 +9,8 @@ const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
 const { serializeUser, USER_PUBLIC_SELECT, buildChatUserSearchWhere } = require("../services/chatService");
 
+const STAFF_ROLES = ["admin", "operador", "financeiro", "supervisor", "tecnico"];
+
 const avatarUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
@@ -90,6 +92,7 @@ userRoutes.get(
 // Rota pública para listar destinatários (usada em transferências de stock/ativos)
 userRoutes.get(
   "/receivers",
+  requireRole(STAFF_ROLES),
   asyncHandler(async (_req, res) => {
     const items = await prisma.user.findMany({
       where: {
@@ -111,7 +114,7 @@ userRoutes.get(
 // pontos do sistema (ex.: participantes de chat).
 userRoutes.get(
   "/notification-recipients",
-  authRequired,
+  requireRole(STAFF_ROLES),
   asyncHandler(async (_req, res) => {
     const items = await prisma.user.findMany({
       where: { role: { in: ["admin", "operador", "financeiro", "supervisor", "tecnico"] } },
@@ -140,6 +143,7 @@ userRoutes.get(
 
 userRoutes.get(
   "/technicians",
+  requireRole(STAFF_ROLES),
   asyncHandler(async (_req, res) => {
     const items = await prisma.user.findMany({
       where: {

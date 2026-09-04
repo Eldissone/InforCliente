@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermission, requireStockViewOrClientePortal } = require("../middlewares/auth");
 const { uploadToSupabase } = require("../utils/storage");
 const multer = require("multer");
 const path = require("path");
@@ -254,7 +254,7 @@ async function enrichStockItemsWithOwners(items) {
 // GET - Histórico de Movimentações
 stockRoutes.get(
   "/movements",
-  requirePermission("stock", "view"),
+  requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
     const { warehouseId, productId, type, projectId, limit } = req.query;
     const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
@@ -329,7 +329,7 @@ stockRoutes.get(
 // GET - Saldo de stock por Projecto (encontra o armazém SITE do projecto)
 stockRoutes.get(
   "/project/:projectId/balance",
-  requirePermission("stock", "view"),
+  requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
     const requestedWarehouseId = req.query.warehouseId ? String(req.query.warehouseId) : null;
@@ -1093,7 +1093,7 @@ async function resolveWarehouseFilter(req, warehouseId) {
 // GET - Resumo de stock para um projecto específico
 stockRoutes.get(
   "/:id/summary",
-  requirePermission("stock", "view"),
+  requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     const role = (req.user?.role || "").toLowerCase();
@@ -1178,7 +1178,7 @@ stockRoutes.get(
 // GET - Movimentações de stock para um projecto específico
 stockRoutes.get(
   "/:id/movements",
-  requirePermission("stock", "view"),
+  requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
     const projectId = String(req.params.id);
     const role = (req.user?.role || "").toLowerCase();
