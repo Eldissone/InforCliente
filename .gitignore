@@ -35,5 +35,6 @@ backend/uploads/
 
 #planos
 .plans
+docs
 
 .cursor
