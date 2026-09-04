@@ -1,6 +1,6 @@
 import { apiRequest, apiUpload, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { openModal, toast, initMobileMenu, setButtonLoading } from "../../shared/ui.js";
+import { openModal, toast, initMobileMenu, setButtonLoading, escapeHtml } from "../../shared/ui.js";
 import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
 checkAuth(); // apenas verifica sessão válida
@@ -41,17 +41,17 @@ function renderRow(c) {
                </div>`
     }
           <div>
-            <p class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${c.name}</p>
-            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${c.code}</p>
+            <p class="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">${escapeHtml(c.name)}</p>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">ID: ${escapeHtml(c.code)}</p>
           </div>
         </div>
       </td>
       <td class="px-8 py-5 text-center">
         <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">
-          ${c.industry || "-"}
+          ${escapeHtml(c.industry || "-")}
         </span>
       </td>
-      <td class="px-8 py-5 text-sm font-semibold text-slate-600">${c.region || "-"}</td>
+      <td class="px-8 py-5 text-sm font-semibold text-slate-600">${escapeHtml(c.region || "-")}</td>
       <td class="px-8 py-5">${renderStatusPill(c.status)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1 transition-opacity duration-200">
@@ -131,7 +131,7 @@ async function loadIndustries(items) {
   if (!sel) return;
   const industries = Array.from(new Set(items.map((c) => c.industry).filter(Boolean))).sort();
   const current = state.industry;
-  sel.innerHTML = `<option value="">Todas</option>` + industries.map((i) => `<option value="${i}">${i}</option>`).join("");
+  sel.innerHTML = `<option value="">Todas</option>` + industries.map((i) => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join("");
   sel.value = current;
 }
 
@@ -270,7 +270,7 @@ async function openEdit(id) {
     primaryLabel: "Salvar",
     contentHtml: `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome</label><input id="e_name" class="w-full rounded-lg border-slate-300" value="${c.name || ""}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome</label><input id="e_name" class="w-full rounded-lg border-slate-300" value="${escapeHtml(c.name || "")}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label>
           <select id="e_status" class="w-full rounded-lg border-slate-300">
             <option value="ACTIVE" ${c.status === "ACTIVE" ? "selected" : ""}>Ativo</option>
@@ -278,10 +278,10 @@ async function openEdit(id) {
             <option value="INACTIVE" ${c.status === "INACTIVE" ? "selected" : ""}>Inativo</option>
           </select>
         </div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="e_industry" class="w-full rounded-lg border-slate-300" value="${c.industry || ""}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="e_region" class="w-full rounded-lg border-slate-300" value="${c.region || ""}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Indústria</label><input id="e_industry" class="w-full rounded-lg border-slate-300" value="${escapeHtml(c.industry || "")}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Região</label><input id="e_region" class="w-full rounded-lg border-slate-300" value="${escapeHtml(c.region || "")}" /></div>
         <div class="md:col-span-2"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Atualizar Foto de Perfil</label><input id="e_profilePicFile" type="file" accept="image/*" class="w-full rounded-lg border-slate-300 bg-white" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email de Acesso</label><input id="e_email" type="email" class="w-full rounded-lg border-slate-300" value="${c.accountEmail || ""}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email de Acesso</label><input id="e_email" type="email" class="w-full rounded-lg border-slate-300" value="${escapeHtml(c.accountEmail || "")}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nova Senha (opcional)</label><input id="e_password" type="password" class="w-full rounded-lg border-slate-300" placeholder="Deixe em branco para manter" /></div>
       </div>
     `,

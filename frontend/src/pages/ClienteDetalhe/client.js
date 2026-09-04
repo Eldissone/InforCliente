@@ -1,6 +1,6 @@
 import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { guardPageAccess } from "../../shared/permissions.js";
 
 checkAuth(); // apenas verifica sessão válida
@@ -37,8 +37,8 @@ function renderLinkedProjectCard(project, exchangeRate) {
             <span class="material-symbols-outlined text-xl">construction</span>
           </div>
           <div>
-            <div class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">${project.code}</div>
-            <h4 class="text-lg font-bold text-slate-900 leading-tight">${project.name}</h4>
+            <div class="text-[10px] font-black uppercase tracking-widest text-[#0d3fd1]">${escapeHtml(project.code)}</div>
+            <h4 class="text-lg font-bold text-slate-900 leading-tight">${escapeHtml(project.name)}</h4>
           </div>
         </div>
         <button data-open-project="${project.id}" class="h-10 px-5 rounded-xl bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-[#2afc8d] transition-all">
@@ -91,13 +91,13 @@ function renderTimelineItem(item) {
     <div class="relative pl-6 border-l-2 ${isPriority ? 'border-blue-200' : 'border-slate-200'} group pb-8 last:pb-0">
       <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 ${isPriority ? 'border-blue-600' : 'border-[#2afc8d]'} group-hover:scale-125 transition-transform duration-300 shadow-sm"></div>
       <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">${formatDateBR(item.occurredAt)}</span>
-      <h4 class="font-bold text-slate-900 text-sm mb-1 leading-tight">${item.title}</h4>
-      <p class="text-xs text-slate-500 mb-3 leading-relaxed">${item.description || ""}</p>
+      <h4 class="font-bold text-slate-900 text-sm mb-1 leading-tight">${escapeHtml(item.title)}</h4>
+      <p class="text-xs text-slate-500 mb-3 leading-relaxed">${escapeHtml(item.description || "")}</p>
       ${
         item.leadName
           ? `<div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 w-fit">
                <span class="material-symbols-outlined text-xs text-slate-400">person</span>
-               <span class="text-[10px] font-bold text-slate-500">${item.leadName}</span>
+               <span class="text-[10px] font-bold text-slate-500">${escapeHtml(item.leadName)}</span>
              </div>`
           : ""
       }

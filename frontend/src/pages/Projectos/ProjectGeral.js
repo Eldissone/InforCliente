@@ -189,19 +189,19 @@ function renderRow(p, idx = 1) {
             </span>
           </div>
           <div>
-            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${p.name}</h4>
-            <span class="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${p.code}</span>
+            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${escapeHtml(p.name)}</h4>
+            <span class="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${escapeHtml(p.code)}</span>
           </div>
         </div>
       </td>
       <td class="px-8 py-5">
-        <span class="text-xs font-bold text-slate-700">${p.client?.name || "-"}</span>
+        <span class="text-xs font-bold text-slate-700">${escapeHtml(p.client?.name || "-")}</span>
       </td>
       <td class="px-8 py-5">
-        <span class="text-[11px] text-slate-400 font-medium">${p.contact || "-"}</span>
+        <span class="text-[11px] text-slate-400 font-medium">${escapeHtml(p.contact || "-")}</span>
       </td>
       <td class="px-8 py-5">
-        <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${p.location || "-"}</div>
+        <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${escapeHtml(p.location || "-")}</div>
       </td>
       <td class="px-8 py-5 text-right font-black text-xs text-slate-900">
         ${formatCurrency(p.budgetTotal || 0, p.currency)}

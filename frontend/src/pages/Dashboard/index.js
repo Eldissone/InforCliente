@@ -1,6 +1,6 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
+import { openModal, setText, toast, setButtonLoading, renderLoadingRow, initMobileMenu, escapeHtml } from "../../shared/ui.js";
 import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.js";
 
 // Verifica se tem sessão — roles são geridas pelas permissões do servidor
@@ -57,8 +57,8 @@ function renderObraRow(p) {
             ${initials(p.name)}
           </div>
           <div>
-            <div class="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">${p.name}</div>
-            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${p.code} &bull; ${clientName}</div>
+            <div class="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">${escapeHtml(p.name)}</div>
+            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${escapeHtml(p.code)} &bull; ${escapeHtml(clientName)}</div>
           </div>
         </div>
       </td>

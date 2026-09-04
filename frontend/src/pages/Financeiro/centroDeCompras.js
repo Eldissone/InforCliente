@@ -1712,7 +1712,7 @@ function populateCostCategoryFilter() {
   const opts = leaves
     .map((c) => {
       const path = buildCategoryPath(c.id, costCategories);
-      return `<option value="${c.id}">${path || c.name}</option>`;
+      return `<option value="${escapeHtml(c.id)}">${escapeHtml(path || c.name)}</option>`;
     })
     .join("");
   select.innerHTML = `<option value="">Todos os tipos de custo</option>${opts}`;
@@ -1720,7 +1720,7 @@ function populateCostCategoryFilter() {
 
 function populateProjectSelects() {
   const opts = allProjects
-    .map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`)
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.code ? ` (${escapeHtml(p.code)})` : ""}</option>`)
     .join("");
   const extraProjectEl = document.getElementById("extraProjectId");
   if (extraProjectEl) extraProjectEl.innerHTML = `<option value="">Selecionar obra...</option>${opts}`;
@@ -1778,7 +1778,7 @@ function renderExtraRow(it) {
       : it.paymentSource === "TRANSFERENCIA_INTERNA_CARTAO"
         ? `Carregar: ${it.card?.label || "—"}`
         : EXTRA_SOURCE_LABELS[it.paymentSource] || it.paymentSource;
-  const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${EXTRA_STATUS_STYLES[it.status] || ""}">${EXTRA_STATUS_LABELS[it.status] || it.status}</span>`;
+  const statusBadge = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${EXTRA_STATUS_STYLES[it.status] || ""}">${escapeHtml(EXTRA_STATUS_LABELS[it.status] || it.status)}</span>`;
   const typeBadge =
     it.type === "GERAL"
       ? `<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-violet-100 text-violet-700">Geral</span>`
@@ -1830,12 +1830,12 @@ function renderExtraRow(it) {
     <td class="px-5 py-3 text-xs font-bold text-slate-800">${it.paymentDueDate ? formatDateBR(it.paymentDueDate) : "—"}</td>
     <td class="px-5 py-3 text-xs text-slate-500">${formatDateBR(it.createdAt)}</td>
     <td class="px-5 py-3">${typeBadge}</td>
-    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[180px] truncate">${extraReferenceLabel(it)}</td>
-    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[200px] truncate">${it.description}${it.quantity != null && it.quantity !== ""
+    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[180px] truncate">${escapeHtml(extraReferenceLabel(it))}</td>
+    <td class="px-5 py-3 text-xs font-semibold text-slate-700 max-w-[200px] truncate">${escapeHtml(it.description)}${it.quantity != null && it.quantity !== ""
       ? ` <span class="text-slate-400 font-bold">× ${escapeHtml(String(it.quantity))}</span>`
       : ""
     }</td>
-    <td class="px-5 py-3 text-xs text-slate-500">${sourceLabel}</td>
+    <td class="px-5 py-3 text-xs text-slate-500">${escapeHtml(sourceLabel)}</td>
     <td class="px-5 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(it.amount, it.currency)}</td>
     <td class="px-5 py-3">${statusBadge}</td>
     <td class="px-5 py-3 text-center">${actionsHtml}</td>
@@ -2117,9 +2117,9 @@ async function selectCard(cardId) {
           const sign = m.type === "DEBITO" ? "-" : "+";
           return `<tr class="border-t border-slate-50">
             <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(m.createdAt)}</td>
-            <td class="px-4 py-3 text-xs font-bold ${typeColor}">${m.type}</td>
-            <td class="px-4 py-3 text-xs text-slate-700">${m.description}</td>
-            <td class="px-4 py-3 text-xs text-slate-500">${movementReferenceLabel(m)}</td>
+            <td class="px-4 py-3 text-xs font-bold ${typeColor}">${escapeHtml(m.type)}</td>
+            <td class="px-4 py-3 text-xs text-slate-700">${escapeHtml(m.description)}</td>
+            <td class="px-4 py-3 text-xs text-slate-500">${escapeHtml(movementReferenceLabel(m))}</td>
             <td class="px-4 py-3 text-xs font-bold ${typeColor} text-right">${sign}${formatCurrency(m.amount, card.currency)}</td>
             <td class="px-4 py-3 text-xs text-slate-500 text-right">${formatCurrency(m.balanceAfter, card.currency)}</td>
           </tr>`;

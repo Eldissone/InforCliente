@@ -17,6 +17,7 @@ import {
   normalizeNif,
   setNifLookupStatus,
 } from "/shared/supplierNifLookup.js";
+import { escapeHtml } from "/shared/ui.js";
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -91,7 +92,7 @@ async function loadProjects() {
         allProjects
           .map(
             (p) =>
-              `<option value="${p.id}" ${p.id === currentProjectId ? "selected" : ""}>${p.name}</option>`
+              `<option value="${escapeHtml(p.id)}" ${p.id === currentProjectId ? "selected" : ""}>${escapeHtml(p.name)}</option>`
           )
           .join("");
       
@@ -213,7 +214,7 @@ async function loadNeeds() {
         const currentVal = filterCc.value;
         filterCc.innerHTML =
           '<option value="">Todas as categorias</option>' +
-          cats.map((c) => `<option value="${c}">${c}</option>`).join("");
+          cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
         if (cats.includes(currentVal)) filterCc.value = currentVal;
       } else {
         try {
@@ -222,7 +223,7 @@ async function loadNeeds() {
           ccs.sort((a, b) => a.name.localeCompare(b.name));
           const currentVal = filterCc.value;
           filterCc.innerHTML = '<option value="">Todos Centros de Custo</option>' + 
-            ccs.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+            ccs.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join("");
           if (ccs.some(c => c.id === currentVal)) {
             filterCc.value = currentVal;
           }
@@ -235,7 +236,7 @@ async function loadNeeds() {
     renderNeeds();
   } catch (err) {
     console.error("Erro a carregar needs:", err);
-    document.getElementById("pendentesTableBody").innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+    document.getElementById("pendentesTableBody").innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">Erro: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -352,7 +353,7 @@ function groupNeedsForTable(filtered) {
 }
 
 function costCenterLabel(n) {
-  return (
+  return escapeHtml(
     n.costCenter?.name ||
     n.extraRequest?.costCategory?.name ||
     n.extraRequest?.generalCostCenter?.name ||
@@ -361,7 +362,7 @@ function costCenterLabel(n) {
 }
 
 function statusBadge(status) {
-  return `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${NEED_STATUS_CLASSES[status] || "bg-slate-100"}">${NEED_STATUS_LABELS[status] || status}</span>`;
+  return `<span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${NEED_STATUS_CLASSES[status] || "bg-slate-100"}">${escapeHtml(NEED_STATUS_LABELS[status] || status)}</span>`;
 }
 
 function renderNeedRow(n, { variant = "single" } = {}) {
@@ -411,12 +412,12 @@ function renderNeedRow(n, { variant = "single" } = {}) {
         <td class="py-3 px-4 text-xs text-slate-500">${new Date(n.createdAt).toLocaleDateString("pt-PT")}</td>
         <td class="py-3 px-4 text-xs font-bold text-slate-600">${costCenterLabel(n)}</td>
         <td class="py-3 px-4 ${isChild ? "pl-8" : ""}">
-          <div class="font-medium text-slate-900">${isChild ? `<span class="text-indigo-400 mr-1">↳</span>` : ""}${n.description}${sourceBadge}</div>
+          <div class="font-medium text-slate-900">${isChild ? `<span class="text-indigo-400 mr-1">↳</span>` : ""}${escapeHtml(n.description)}${sourceBadge}</div>
           <div class="text-xs text-slate-400 mt-0.5">${quotesCount} cotações recebidas</div>
           ${bestQuotePriceStr}
-          ${!isChild && efRef ? `<div class="text-[10px] font-black text-indigo-700 mt-1">${efRef} · ${meta?.supplierName || "Encomenda"}</div>` : ""}
+          ${!isChild && efRef ? `<div class="text-[10px] font-black text-indigo-700 mt-1">${escapeHtml(efRef)} · ${escapeHtml(meta?.supplierName || "Encomenda")}</div>` : ""}
         </td>
-        <td class="py-3 px-4 text-center text-sm font-bold text-slate-700">${qty} ${n.unit || ""}</td>
+        <td class="py-3 px-4 text-center text-sm font-bold text-slate-700">${qty} ${escapeHtml(n.unit || "")}</td>
         <td class="py-3 px-4 text-center">${statusBadge(n.status)}</td>
         <td class="py-3 px-4 text-center">${actionBtn}</td>
       </tr>
@@ -459,7 +460,7 @@ function renderBundleGroup(group) {
       <td class="py-3 px-4 text-xs text-slate-500">${new Date(first.createdAt).toLocaleDateString("pt-PT")}</td>
       <td class="py-3 px-4 text-xs font-bold text-slate-600">${costCenterLabel(first)}</td>
       <td class="py-3 px-4">
-        <div class="font-black text-indigo-900">${ref} · ${supplier}</div>
+        <div class="font-black text-indigo-900">${escapeHtml(ref)} · ${escapeHtml(supplier)}</div>
         <div class="text-[11px] text-indigo-700 font-semibold mt-0.5">${needs.length} itens cotados em conjunto — uma proforma para o pedido</div>
       </td>
       <td class="py-3 px-4 text-center text-xs font-bold text-indigo-700">${needs.length} itens</td>
@@ -526,7 +527,7 @@ function openBundleProformaModal(payload) {
     list.innerHTML = payload.items
       .map((item) => {
         const qty = item.quantity != null ? Number(item.quantity).toLocaleString("pt-PT") : "—";
-        return `<li>${item.description} · ${qty} ${item.unit || ""}</li>`;
+        return `<li>${escapeHtml(item.description)} · ${qty} ${escapeHtml(item.unit || "")}</li>`;
       })
       .join("");
   }
@@ -605,7 +606,7 @@ function openBatchQuoteModal() {
       `<option value="">Seleccionar fornecedor...</option>` +
       currentSuppliers
         .filter((s) => s.active !== false)
-        .map((s) => `<option value="${s.id}">${s.name}</option>`)
+        .map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`)
         .join("");
   }
   const body = document.getElementById("batchQuoteItemsBody");
@@ -614,11 +615,11 @@ function openBatchQuoteModal() {
       .map((n) => {
         const qty = Number(n.quantity) || 1;
         return `<tr class="border-t border-slate-100" data-need-id="${n.id}">
-          <td class="py-2 px-3 text-sm font-semibold text-slate-800">${n.description}</td>
+          <td class="py-2 px-3 text-sm font-semibold text-slate-800">${escapeHtml(n.description)}</td>
           <td class="py-2 px-3 text-center">
             <input type="number" min="0" step="0.01" value="${qty}" data-qty
               class="w-16 h-9 px-2 border border-slate-200 rounded-lg text-center text-sm">
-            <span class="text-[10px] text-slate-400 ml-1">${n.unit || ""}</span>
+            <span class="text-[10px] text-slate-400 ml-1">${escapeHtml(n.unit || "")}</span>
           </td>
           <td class="py-2 px-3 text-right">
             <input type="number" min="0" step="0.01" value="" data-price required
@@ -795,7 +796,7 @@ async function openSupplierOrdersModal() {
       .map((o) => {
         const ref = o.orderNumber != null ? `EF${String(o.orderNumber).padStart(3, "0")}` : "Rascunho";
         const lines = (o.quotes || [])
-          .map((q) => `<li>${q.need?.description || "Item"} · ${q.quantity || "—"} × ${Number(q.quotedPrice || 0).toLocaleString("pt-PT")}</li>`)
+          .map((q) => `<li>${escapeHtml(q.need?.description || "Item")} · ${q.quantity || "—"} × ${Number(q.quotedPrice || 0).toLocaleString("pt-PT")}</li>`)
           .join("");
         const pdf = o.purchaseOrderUrl
           ? `<a href="${o.purchaseOrderUrl}" target="_blank" class="text-xs font-bold text-indigo-600 underline">PDF encomenda</a>`
@@ -807,7 +808,7 @@ async function openSupplierOrdersModal() {
         return `<div class="rounded-xl border border-slate-200 p-4">
           <div class="flex justify-between gap-3 items-start">
             <div>
-              <p class="text-sm font-black text-slate-900">${ref} · ${o.supplier?.name || "Fornecedor"}</p>
+              <p class="text-sm font-black text-slate-900">${escapeHtml(ref)} · ${escapeHtml(o.supplier?.name || "Fornecedor")}</p>
               <p class="text-[11px] text-slate-500 mt-0.5">${o.status === "ORDERED" ? "Encomendado" : "Cotação conjunta"} · ${new Date(o.createdAt).toLocaleDateString("pt-PT")} · ${(o.quotes || []).length} item(ns)</p>
             </div>
             <div class="flex flex-col items-end gap-2">${pdf}${proformaAction}</div>
@@ -839,7 +840,7 @@ async function openSupplierOrdersModal() {
       });
     });
   } catch (err) {
-    list.innerHTML = `<p class="text-sm text-red-500">${err.message}</p>`;
+    list.innerHTML = `<p class="text-sm text-red-500">${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -871,14 +872,14 @@ function renderSuppliers() {
 
   tbody.innerHTML = currentSuppliers.map(s => `
     <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-      <td class="py-3 px-4 font-bold text-slate-800">${s.name}</td>
-      <td class="py-3 px-4 text-sm text-slate-600">${s.nif || "—"}</td>
+      <td class="py-3 px-4 font-bold text-slate-800">${escapeHtml(s.name)}</td>
+      <td class="py-3 px-4 text-sm text-slate-600">${escapeHtml(s.nif || "—")}</td>
       <td class="py-3 px-4">
-        <div class="text-sm font-medium text-slate-700">${s.contact || "—"}</div>
-        <div class="text-xs text-slate-400">${s.email || ""}</div>
+        <div class="text-sm font-medium text-slate-700">${escapeHtml(s.contact || "—")}</div>
+        <div class="text-xs text-slate-400">${escapeHtml(s.email || "")}</div>
       </td>
-      <td class="py-3 px-4 text-sm text-slate-600">${s.category || "—"}</td>
-      <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—"}</td>
+      <td class="py-3 px-4 text-sm text-slate-600">${escapeHtml(s.category || "—")}</td>
+      <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${escapeHtml(s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—")}</td>
       <td class="py-3 px-4 text-center font-bold text-slate-700">${s._count?.products || 0}</td>
       <td class="py-3 px-4 text-center">
         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
@@ -887,19 +888,33 @@ function renderSuppliers() {
       </td>
       <td class="py-3 px-4 text-center">
         <div class="flex justify-center gap-2">
-          <button onclick="openSupplierProducts('${s.id}', '${s.name.replace(/'/g, '')}')" class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-all text-blue-500" title="Catálogo de Produtos">
+          <button type="button" data-open-products="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-all text-blue-500" title="Catálogo de Produtos">
             <span class="material-symbols-outlined text-base">inventory_2</span>
           </button>
-          <button onclick="editSupplier('${s.id}')" data-supplier='${JSON.stringify(s).replace(/'/g, "&#39;")}' class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-500">
+          <button type="button" data-edit-supplier="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-500">
             <span class="material-symbols-outlined text-base">edit</span>
           </button>
-          <button onclick="deleteSupplier('${s.id}')" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
+          <button type="button" data-delete-supplier="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
             <span class="material-symbols-outlined text-base">delete</span>
           </button>
         </div>
       </td>
     </tr>
   `).join("");
+
+  tbody.querySelectorAll("[data-open-products]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-open-products");
+      const s = currentSuppliers.find((x) => x.id === id);
+      window.openSupplierProducts(id, s?.name || "Fornecedor");
+    });
+  });
+  tbody.querySelectorAll("[data-edit-supplier]").forEach((btn) => {
+    btn.addEventListener("click", () => window.editSupplier(btn.getAttribute("data-edit-supplier")));
+  });
+  tbody.querySelectorAll("[data-delete-supplier]").forEach((btn) => {
+    btn.addEventListener("click", () => window.deleteSupplier(btn.getAttribute("data-delete-supplier")));
+  });
 
   // Update Quote modal select if open
   updateQuoteSupplierSelect();
@@ -915,9 +930,9 @@ function renderSupplierBankAccounts(accounts = []) {
 
   container.innerHTML = rows.map((acc, index) => `
     <div class="supplier-bank-row grid grid-cols-[1fr_1.2fr_auto] gap-2 items-center" data-index="${index}">
-      <input type="text" data-bank-name placeholder="Banco (ex: BAI)" value="${acc.bankName || ""}"
+      <input type="text" data-bank-name placeholder="Banco (ex: BAI)" value="${escapeHtml(acc.bankName || "")}"
         class="h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
-      <input type="text" data-bank-iban placeholder="AO06..." value="${acc.iban || ""}"
+      <input type="text" data-bank-iban placeholder="AO06..." value="${escapeHtml(acc.iban || "")}"
         class="h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/50">
       <button type="button" data-remove-bank title="Remover conta"
         class="w-9 h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center">
@@ -1049,9 +1064,8 @@ function openSupplierModal(supplier = null) {
 }
 
 window.editSupplier = function(id) {
-  const btn = document.querySelector(`[onclick="editSupplier('${id}')"]`);
-  if (!btn) return;
-  const supplier = JSON.parse(btn.getAttribute("data-supplier"));
+  const supplier = currentSuppliers.find((x) => x.id === id);
+  if (!supplier) return;
   openSupplierModal(supplier);
 }
 
@@ -1164,7 +1178,7 @@ async function loadSupplierProducts() {
     currentCatalogProducts = data.items || [];
     renderSupplierProducts();
   } catch(err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -1191,10 +1205,10 @@ function renderSupplierProducts() {
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
         <td class="py-3 px-5">
-          <div class="font-bold text-slate-800 text-sm">${p.name}</div>
-          ${p.description ? `<div class="text-xs text-slate-400 mt-0.5">${p.description}</div>` : ""}
+          <div class="font-bold text-slate-800 text-sm">${escapeHtml(p.name)}</div>
+          ${p.description ? `<div class="text-xs text-slate-400 mt-0.5">${escapeHtml(p.description)}</div>` : ""}
         </td>
-        <td class="py-3 px-5 text-center text-sm text-slate-500">${p.unit || "—"}</td>
+        <td class="py-3 px-5 text-center text-sm text-slate-500">${escapeHtml(p.unit || "—")}</td>
         <td class="py-3 px-5 text-right font-bold text-slate-800">${fmt(p.price, p.currency)}</td>
         <td class="py-3 px-3 text-center text-xs text-slate-600">${fmtPct(p.vatPercent)}</td>
         <td class="py-3 px-3 text-center text-xs text-slate-600">${fmtPct(p.withholdingPercent)}</td>
@@ -1308,7 +1322,7 @@ function updateQuoteSupplierSelect() {
       let termStr = "";
       if (s.paymentTerm === "CREDITO") termStr = " (Crédito)";
       else if (s.paymentTerm === "PRONTO_PAGAMENTO") termStr = " (PP)";
-      return `<option value="${s.id}">${s.name}${termStr}</option>`;
+      return `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}${termStr}</option>`;
     }).join("");
 }
 
@@ -1338,13 +1352,13 @@ function showToast(msg, type = "info") {
   
   if (type === "success") {
     toast.classList.add("bg-emerald-500", "shadow-emerald-500/20");
-    toast.innerHTML = `<span class="material-symbols-outlined text-lg">check_circle</span> ${msg}`;
+    toast.innerHTML = `<span class="material-symbols-outlined text-lg">check_circle</span> ${escapeHtml(msg)}`;
   } else if (type === "error") {
     toast.classList.add("bg-red-500", "shadow-red-500/20");
-    toast.innerHTML = `<span class="material-symbols-outlined text-lg">error</span> ${msg}`;
+    toast.innerHTML = `<span class="material-symbols-outlined text-lg">error</span> ${escapeHtml(msg)}`;
   } else {
     toast.classList.add("bg-[#0f172a]", "shadow-slate-900/20");
-    toast.innerHTML = `<span class="material-symbols-outlined text-lg">info</span> ${msg}`;
+    toast.innerHTML = `<span class="material-symbols-outlined text-lg">info</span> ${escapeHtml(msg)}`;
   }
 
   container.appendChild(toast);

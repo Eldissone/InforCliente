@@ -599,8 +599,8 @@ async function openNewConversationPrompt() {
             <button type="button" data-user-id="${u.id}" class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors text-left group border border-transparent hover:border-slate-100">
               <img src="${getAssetUrl(u.profilePic) || '/assets/img/placeholder-user.png'}" class="w-10 h-10 rounded-full object-cover bg-slate-100 shrink-0" onerror="this.src='/assets/img/placeholder-user.png'" />
               <div class="min-w-0 flex-1">
-                <div class="font-bold text-sm text-slate-900 truncate group-hover:text-[#0d3fd1] transition-colors">${u.name || u.email}</div>
-                <div class="text-xs text-slate-500 truncate capitalize">${(u.role || 'Utilizador').toLowerCase()}</div>
+                <div class="font-bold text-sm text-slate-900 truncate group-hover:text-[#0d3fd1] transition-colors">${escapeHtml(u.name || u.email)}</div>
+                <div class="text-xs text-slate-500 truncate capitalize">${escapeHtml((u.role || "Utilizador").toLowerCase())}</div>
               </div>
             </button>
           `).join('');
