@@ -79,6 +79,18 @@ function getCurrentUserId() {
   return getSessionUser()?.id || null;
 }
 
+function isMineMessage(m) {
+  const me = getCurrentUserId();
+  if (!me || !m) return false;
+  return m.sender?.id === me || m.senderId === me;
+}
+
+function receiptLabel(status) {
+  if (status === "READ") return "Lida";
+  if (status === "DELIVERED") return "Entregue";
+  return "Enviada";
+}
+
 function isCurrentUserCliente() {
   return String(getSessionUser()?.role || "").toLowerCase() === "cliente";
 }
@@ -389,7 +401,8 @@ function renderConversationList() {
 function renderMessages() {
   const host = el("globalChatMessages");
   if (!host) return;
-  const me = getCurrentUserId();
+  const conv = state.conversations.find((c) => c.id === state.activeId);
+  const isDirect = (conv?.type || "DIRECT") !== "GROUP";
 
   if (!state.messages.length) {
     host.innerHTML = `<p class="text-center text-xs text-slate-400 py-8">Sem mensagens. Envie a primeira!</p>`;
@@ -398,18 +411,28 @@ function renderMessages() {
   }
 
   host.innerHTML = state.messages
-    .map((m) => {
-      const mine = m.sender?.id === me;
+    .map((m, i) => {
+      const mine = isMineMessage(m);
+      const prev = state.messages[i - 1];
+      const sameAsPrev =
+        prev &&
+        isMineMessage(prev) === mine &&
+        (prev.sender?.id || prev.senderId) === (m.sender?.id || m.senderId);
+      const showIncomingMeta = !mine && !sameAsPrev && !isDirect;
+      const showAvatar = !mine && !sameAsPrev;
+      const statusLine = mine
+        ? `${formatTime(m.createdAt)} · ${receiptLabel(m.status)}`
+        : formatTime(m.createdAt);
       return `
-        <div class="flex ${mine ? "justify-end" : "justify-start"} gap-2">
-          ${mine ? "" : `<div class="shrink-0 self-end">${userAvatar(m.sender, "w-8 h-8")}</div>`}
-          <div class="max-w-[75%]">
-            ${!mine ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
+        <div class="flex ${mine ? "justify-end" : "justify-start"} gap-2 ${sameAsPrev ? "mt-0.5" : "mt-3"}">
+          ${mine ? "" : showAvatar ? `<div class="shrink-0 self-end">${userAvatar(m.sender, "w-8 h-8")}</div>` : `<div class="w-8 shrink-0" aria-hidden="true"></div>`}
+          <div class="max-w-[75%] ${mine ? "items-end" : ""}">
+            ${showIncomingMeta ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
             <div class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
-              ${m.body ? renderMentionBody(m.body) : ''}
+              ${m.body ? renderMentionBody(m.body) : ""}
               ${renderAttachments(m.attachments, mine)}
             </div>
-            <p class="text-[9px] text-slate-400 mt-1 ${mine ? "text-right" : "ml-1"}">${formatTime(m.createdAt)} · ${m.status === "READ" ? "Lida" : m.status === "DELIVERED" ? "Entregue" : "Enviada"}</p>
+            <p class="text-[9px] text-slate-400 mt-1 ${mine ? "text-right" : "ml-1"}">${statusLine}</p>
           </div>
         </div>`;
     })
@@ -417,9 +440,8 @@ function renderMessages() {
 
   host.scrollTop = host.scrollHeight;
 
-  // Delegated click for image lightbox
   host.onclick = (e) => {
-    const img = e.target.closest('img[data-lightbox-url]');
+    const img = e.target.closest("img[data-lightbox-url]");
     if (img) openImageLightbox(img.dataset.lightboxUrl, img.dataset.lightboxName);
   };
 }
@@ -447,7 +469,12 @@ async function handleSend() {
   el("globalChatSend").disabled = true;
 
   const result = await sendSocketMessage({ conversationId: state.activeId, body });
-  if (!result?.ok) {
+  if (result?.ok && result.message) {
+    if (!state.messages.some((m) => m.id === result.message.id)) {
+      state.messages.push(result.message);
+      renderMessages();
+    }
+  } else if (!result?.ok) {
     const { sendMessageRest } = await import("../services/chatApi.js");
     try {
       const fallback = await sendMessageRest(state.activeId, body);
@@ -660,7 +687,7 @@ function wireSocketEvents() {
     if (conv) {
       conv.lastMessage = message;
       conv.updatedAt = message.createdAt;
-      if (message.conversationId !== state.activeId && message.sender?.id !== getCurrentUserId()) {
+      if (message.conversationId !== state.activeId && !isMineMessage(message)) {
         conv.unreadCount = (conv.unreadCount || 0) + 1;
       }
     } else {
@@ -668,9 +695,11 @@ function wireSocketEvents() {
     }
 
     if (message.conversationId === state.activeId) {
-      state.messages.push(message);
-      renderMessages();
-      if (message.sender?.id !== getCurrentUserId()) {
+      if (!state.messages.some((m) => m.id === message.id)) {
+        state.messages.push(message);
+        renderMessages();
+      }
+      if (!isMineMessage(message)) {
         markMessagesRead(state.activeId, message.id);
       }
     }
@@ -686,6 +715,15 @@ function wireSocketEvents() {
     if (isTyping) set.add(userName || "Alguém");
     else set.delete(userName || "Alguém");
     if (conversationId === state.activeId) updateTypingIndicator();
+  });
+
+  onSocketEvent("message:status", ({ messageId, conversationId, status }) => {
+    if (status !== "READ" || !messageId) return;
+    const msg = state.messages.find((m) => m.id === messageId);
+    if (msg) msg.status = "READ";
+    const conv = state.conversations.find((c) => c.id === conversationId);
+    if (conv?.lastMessage?.id === messageId) conv.lastMessage.status = "READ";
+    if (conversationId === state.activeId) renderMessages();
   });
 
   onSocketEvent("presence:changed", ({ userId, status }) => {

@@ -4,7 +4,7 @@ const path = require("path");
 const multer = require("multer");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
-const { authRequired, requirePermission } = require("../middlewares/auth");
+const { authRequired, requirePermission, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const { uploadToSupabase } = require("../utils/storage");
 
 const upload = multer({
@@ -41,6 +41,7 @@ productRoutes.get(
 
 productRoutes.get(
   "/tools",
+  requirePermission("ferramentas", "view"),
   asyncHandler(async (_req, res) => {
     const items = await prisma.product.findMany({
       where: {
@@ -106,6 +107,7 @@ function withEnsureToolLock(key, fn) {
 
 productRoutes.post(
   "/ensure-tool",
+  requirePermissionOrLegacyRole("ferramentas", "manage", ["admin", "operador", "supervisor", "tecnico"]),
   asyncHandler(async (req, res) => {
     const body = z.object({
       name: z.string().trim().min(2),

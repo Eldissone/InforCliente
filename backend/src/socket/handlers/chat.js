@@ -2,6 +2,8 @@ const { prisma } = require("../../db");
 const {
   sendMessage,
   markConversationRead,
+  markMessageRead,
+  emitMessagesRead,
   assertConversationAccess,
   parseMentionIds,
 } = require("../../services/chatService");
@@ -81,20 +83,16 @@ function registerChatHandlers(io, socket) {
 
   socket.on("message:read", async ({ conversationId, messageId }, ack) => {
     try {
-      if (messageId) {
-        await prisma.messageRead.upsert({
-          where: { messageId_userId: { messageId, userId } },
-          create: { messageId, userId },
-          update: { readAt: new Date() },
-        });
-        io.to(`conversation:${conversationId}`).emit("message:status", {
-          messageId,
-          userId,
-          status: "READ",
-        });
-      } else if (conversationId) {
-        await markConversationRead(conversationId, userId);
-      }
+      const result = messageId
+        ? await markMessageRead(messageId, userId)
+        : conversationId
+          ? await markConversationRead(conversationId, userId)
+          : null;
+      emitMessagesRead(io, {
+        conversationId: result?.conversationId || conversationId,
+        messageIds: result?.messageIds || [],
+        userId,
+      });
       if (typeof ack === "function") ack({ ok: true });
     } catch (err) {
       if (typeof ack === "function") ack({ ok: false, error: err.message });

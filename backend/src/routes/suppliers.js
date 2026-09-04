@@ -149,6 +149,7 @@ supplierRoutes.post(
 
 supplierRoutes.post(
   "/lookup-nif",
+  requirePermission("fornecedores", "view"),
   asyncHandler(async (req, res) => {
     const { nif: rawNif } = nifBodySchema.pick({ nif: true }).parse(req.body);
     const nif = normalizeNif(rawNif);
@@ -166,6 +167,7 @@ supplierRoutes.post(
 
 supplierRoutes.post(
   "/from-nif",
+  requirePermission("fornecedores", "create"),
   asyncHandler(async (req, res) => {
     const body = nifBodySchema.parse(req.body);
     const nif = normalizeNif(body.nif);

@@ -46,6 +46,7 @@ function serializeMessage(message) {
   return {
     id: message.id,
     conversationId: message.conversationId,
+    senderId: message.senderId,
     body: message.body,
     status: message.status,
     createdAt: message.createdAt,
@@ -362,7 +363,55 @@ async function markConversationRead(conversationId, userId) {
     }),
   ]);
 
-  return { marked: unread.length };
+  return { marked: unread.length, messageIds: unread.map((m) => m.id), conversationId };
+}
+
+async function markMessageRead(messageId, userId) {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, conversationId: true, senderId: true },
+  });
+  if (!message) {
+    const err = new Error("NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  await assertConversationAccess(userId, message.conversationId);
+
+  if (message.senderId === userId) {
+    return { marked: 0, messageIds: [], conversationId: message.conversationId };
+  }
+
+  await prisma.$transaction([
+    prisma.messageRead.upsert({
+      where: { messageId_userId: { messageId, userId } },
+      create: { messageId, userId },
+      update: { readAt: new Date() },
+    }),
+    prisma.message.update({
+      where: { id: messageId },
+      data: { status: "READ" },
+    }),
+    prisma.conversationParticipant.update({
+      where: { conversationId_userId: { conversationId: message.conversationId, userId } },
+      data: { lastReadAt: new Date() },
+    }),
+  ]);
+
+  return { marked: 1, messageIds: [message.id], conversationId: message.conversationId };
+}
+
+function emitMessagesRead(io, { conversationId, messageIds, userId }) {
+  if (!io || !conversationId || !messageIds?.length) return;
+  for (const id of messageIds) {
+    io.to(`conversation:${conversationId}`).emit("message:status", {
+      messageId: id,
+      conversationId,
+      userId,
+      status: "READ",
+    });
+  }
 }
 
 module.exports = {
@@ -379,5 +428,7 @@ module.exports = {
   getMessages,
   sendMessage,
   markConversationRead,
+  markMessageRead,
+  emitMessagesRead,
   parseMentionIds,
 };

@@ -13,6 +13,7 @@ const {
   getMessages,
   sendMessage,
   markConversationRead,
+  emitMessagesRead,
   assertClientChatPolicy,
   assertConversationAccess,
   serializeUser,
@@ -127,6 +128,11 @@ conversationRoutes.patch(
   asyncHandler(async (req, res) => {
     const conversationId = String(req.params.id);
     const result = await markConversationRead(conversationId, req.user.sub);
+    emitMessagesRead(req.app.get("io"), {
+      conversationId,
+      messageIds: result.messageIds || [],
+      userId: req.user.sub,
+    });
     return res.json(result);
   })
 );
