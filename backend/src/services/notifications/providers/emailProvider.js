@@ -16,6 +16,14 @@ function isConfigured() {
 async function fetchAttachmentBuffer(url) {
   if (!url) return null;
   try {
+    const { readStoredFile } = require("../../../utils/storage");
+    const stored = await readStoredFile(url);
+    if (stored?.buffer?.length) return stored.buffer;
+  } catch {
+    // fallback abaixo para URLs realmente externas
+  }
+  if (!/^https?:\/\//i.test(String(url))) return null;
+  try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());

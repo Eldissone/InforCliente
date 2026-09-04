@@ -20,16 +20,34 @@ app.get("/services/config.js", (req, res) => {
   res.send(`export const config = ${JSON.stringify(config)};`);
 });
 
-// Proxy de uploads para o backend (miniaturas de produtos/movimentos em dev)
+// Proxy de uploads para o backend (miniaturas; reencaminha JWT em header ou ?token=)
 app.use("/uploads", (req, res) => {
   const target = `${apiBase}${req.originalUrl}`;
-  const lib = target.startsWith("https") ? https : http;
-  lib
-    .get(target, (proxyRes) => {
+  let u;
+  try {
+    u = new URL(target);
+  } catch {
+    return res.status(502).send("Erro ao carregar ficheiro do servidor API.");
+  }
+  const lib = u.protocol === "https:" ? https : http;
+  const headers = {};
+  if (req.headers.authorization) headers.authorization = req.headers.authorization;
+  const proxyReq = lib.request(
+    {
+      protocol: u.protocol,
+      hostname: u.hostname,
+      port: u.port || (u.protocol === "https:" ? 443 : 80),
+      path: `${u.pathname}${u.search}`,
+      method: "GET",
+      headers,
+    },
+    (proxyRes) => {
       res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
       proxyRes.pipe(res);
-    })
-    .on("error", () => res.status(502).send("Erro ao carregar ficheiro do servidor API."));
+    }
+  );
+  proxyReq.on("error", () => res.status(502).send("Erro ao carregar ficheiro do servidor API."));
+  proxyReq.end();
 });
 
 // Remove .html da URL para SEO e consistência

@@ -29,8 +29,8 @@ async function notifyDocumentArchiveOnPayment(payment) {
     `Valor: ${amount}`,
     `Data pagamento: ${new Date(payment.paymentDate).toLocaleDateString("pt-PT")}`,
     payment.docNumber ? `N.º documento: ${payment.docNumber}` : null,
-    payment.comprovativoUrl ? `Comprovativo: ${payment.comprovativoUrl}` : null,
-    payment.faturaUrl ? `Fatura: ${payment.faturaUrl}` : null,
+    payment.comprovativoUrl ? "Comprovativo: em anexo" : null,
+    payment.faturaUrl ? "Fatura: em anexo" : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -47,7 +47,7 @@ async function notifyDocumentArchiveOnPayment(payment) {
     user: { id: "document-archive", email: archiveEmail },
     title,
     body,
-    link: payment.comprovativoUrl || payment.faturaUrl || null,
+    link: null,
     attachments,
   });
 

@@ -38,8 +38,6 @@ const config = {
   port: process.env.PORT || 4000,
   jwtSecret: requireJwtSecret(),
   frontendOrigin: process.env.FRONTEND_ORIGIN || "*",
-  supabaseUrl: process.env.SUPABASE_URL,
-  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   // Canais de notificação externos — opcionais. Enquanto não configurados,
   // os respetivos providers ficam em modo "not configured" (no-op seguro).
   notifications: {

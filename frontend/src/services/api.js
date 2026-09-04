@@ -11,22 +11,66 @@ export function setApiBaseUrl(url) {
   localStorage.setItem("InfoCliente.apiBaseUrl", url);
 }
 
+function getStorageObjectKey(path) {
+  if (path == null) return null;
+  const trimmed = String(path).trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const u = new URL(trimmed);
+      const supabaseMatch = u.pathname.match(
+        /\/storage\/v1\/object\/(?:public|sign|authenticated)\/infor-cliente\/(.+)$/i
+      );
+      if (supabaseMatch) return decodeURIComponent(supabaseMatch[1]);
+      const uploadsMatch = u.pathname.match(/\/uploads\/(.+)$/);
+      if (uploadsMatch) return decodeURIComponent(uploadsMatch[1]);
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  let rel = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
+  if (rel.split("/").includes("..")) return null;
+  if (rel.startsWith("uploads/")) rel = rel.slice("uploads/".length);
+  return rel || null;
+}
+
+function encodeStorageKey(key) {
+  return String(key)
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
+function withAccessToken(url) {
+  const token = getToken();
+  if (!token || !url) return url;
+  if (/[?&](?:token|access_token)=/.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+}
+
 export function getAssetUrl(path) {
   if (path == null) return null;
   const trimmed = String(path).trim();
   if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  let rel = trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
-  if (!rel.startsWith("uploads/")) rel = `uploads/${rel}`;
+
+  const objectKey = getStorageObjectKey(trimmed);
+  if (!objectKey) {
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return null;
+  }
+
+  const rel = `uploads/${encodeStorageKey(objectKey)}`;
   const baseUrl = getApiBaseUrl().replace(/\/$/, "");
   if (typeof window !== "undefined") {
     const origin = window.location.origin.replace(/\/$/, "");
-    // Dev: frontend em :5173 com proxy /uploads → mesmo origin
     if (origin === baseUrl || /localhost:5173|127\.0\.0\.1:5173/.test(origin)) {
-      return `/${rel}`;
+      return withAccessToken(`/${rel}`);
     }
   }
-  return `${baseUrl}/${rel}`;
+  return withAccessToken(`${baseUrl}/${rel}`);
 }
 
 /** URL da imagem do produto (catálogo, evidência de movimento ou item). */

@@ -2,17 +2,37 @@ const jwt = require("jsonwebtoken");
 const { config } = require("../config");
 const { checkUserPermission } = require("../services/permissionResolver");
 
-function authRequired(req, res, next) {
+function readBearerToken(req) {
   const header = req.headers.authorization || "";
   const [type, token] = header.split(" ");
+  if (type === "Bearer" && token) return token;
+  return null;
+}
 
-  if (type !== "Bearer" || !token) {
+function authRequired(req, res, next) {
+  const token = readBearerToken(req);
+  if (!token) {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
 
   try {
-    const payload = jwt.verify(token, config.jwtSecret);
-    req.user = payload;
+    req.user = jwt.verify(token, config.jwtSecret);
+    return next();
+  } catch {
+    return res.status(401).json({ error: "UNAUTHORIZED" });
+  }
+}
+
+/** Downloads (<img>, <iframe>): JWT no header ou em ?token= */
+function authRequiredAllowQuery(req, res, next) {
+  const q = req.query?.token || req.query?.access_token;
+  const token = readBearerToken(req) || (typeof q === "string" ? q.trim() : "");
+  if (!token) {
+    return res.status(401).json({ error: "UNAUTHORIZED" });
+  }
+
+  try {
+    req.user = jwt.verify(token, config.jwtSecret);
     return next();
   } catch {
     return res.status(401).json({ error: "UNAUTHORIZED" });
@@ -128,6 +148,7 @@ function requireStockViewOrClientePortal() {
 
 module.exports = {
   authRequired,
+  authRequiredAllowQuery,
   requireRole,
   requirePermission,
   requirePermissionOrLegacyRole,

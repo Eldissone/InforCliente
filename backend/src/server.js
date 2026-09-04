@@ -26,7 +26,9 @@ const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
 const { costCategoryRoutes } = require("./routes/costCategories");
 const { freightOrderRoutes } = require("./routes/freightOrders");
 const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
+const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
+const { ensureUploadsDir } = require("./utils/storage");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 const { createSocketServer } = require("./socket");
 const { scanDueAndOverduePayments } = require("./services/paymentNotificationService");
@@ -88,7 +90,7 @@ app.use(
 app.options(/(.*)/, cors()); // Handle ALL preflight requests
 
 app.use(express.json({ limit: "10mb" }));
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", uploadsRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
@@ -156,6 +158,7 @@ server.listen(config.port, async () => {
   console.log("WebSocket (Socket.IO) enabled at /socket.io");
 
   await initialize();
+  ensureUploadsDir();
 
   const io = app.get("io");
   const scanPayments = () => {
