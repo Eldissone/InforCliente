@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { config } = require("../config");
+const { getLiveUser } = require("../services/sessionUser");
 
 function verifySocketToken(token) {
   if (!token) return null;
@@ -18,7 +19,7 @@ function verifySocketToken(token) {
 }
 
 function attachSocketAuth(io) {
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
@@ -28,8 +29,20 @@ function attachSocketAuth(io) {
       return next(new Error("UNAUTHORIZED"));
     }
 
-    socket.user = user;
-    return next();
+    try {
+      const live = await getLiveUser(user.id);
+      if (!live) return next(new Error("UNAUTHORIZED"));
+      socket.user = {
+        id: live.id,
+        email: live.email,
+        role: live.role,
+        name: live.name,
+      };
+      return next();
+    } catch (error) {
+      console.error("Socket session revalidation error:", error);
+      return next(new Error("UNAUTHORIZED"));
+    }
   });
 }
 

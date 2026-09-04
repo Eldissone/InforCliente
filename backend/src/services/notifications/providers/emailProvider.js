@@ -1,6 +1,24 @@
 const { config } = require("../../../config");
 const { CHANNELS, DELIVERY_STATUS } = require("../channels");
 
+function escapeHtml(unsafe) {
+  return String(unsafe ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isSafeHttpUrl(url) {
+  try {
+    const parsed = new URL(String(url));
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function isConfigured() {
   const e = config.notifications.email;
   if (!e.fromAddress) return false;
@@ -127,10 +145,12 @@ async function send({ user, title, body, link, attachments }) {
   }
 
   const subject = title || "Info Gestor";
-  const text = [body, link ? `\n\nVer: ${link}` : ""].filter(Boolean).join("");
-  const html = link
-    ? `<p>${(body || "").replace(/\n/g, "<br>")}</p><p><a href="${link}">Abrir documento</a></p>`
-    : `<p>${(body || "").replace(/\n/g, "<br>")}</p>`;
+  const text = [body, link && isSafeHttpUrl(link) ? `\n\nVer: ${link}` : ""].filter(Boolean).join("");
+  const bodyHtml = escapeHtml(body || "").replace(/\n/g, "<br>");
+  const html =
+    link && isSafeHttpUrl(link)
+      ? `<p>${bodyHtml}</p><p><a href="${escapeHtml(link)}">Abrir documento</a></p>`
+      : `<p>${bodyHtml}</p>`;
 
   const attList = Array.isArray(attachments) ? attachments : [];
 

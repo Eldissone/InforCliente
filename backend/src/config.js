@@ -34,10 +34,24 @@ function requireJwtSecret() {
   return value;
 }
 
+function resolveFrontendOrigin() {
+  const raw = process.env.FRONTEND_ORIGIN;
+  const value =
+    raw == null || String(raw).trim() === ""
+      ? "http://localhost:5173"
+      : String(raw).trim();
+  if (value === "*" && String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+    throw new Error(
+      "FRONTEND_ORIGIN=* não é permitido em produção. Liste origens explícitas, separadas por vírgula."
+    );
+  }
+  return value;
+}
+
 const config = {
   port: process.env.PORT || 4000,
   jwtSecret: requireJwtSecret(),
-  frontendOrigin: process.env.FRONTEND_ORIGIN || "*",
+  frontendOrigin: resolveFrontendOrigin(),
   // Canais de notificação externos — opcionais. Enquanto não configurados,
   // os respetivos providers ficam em modo "not configured" (no-op seguro).
   notifications: {

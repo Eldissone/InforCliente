@@ -109,12 +109,11 @@ function resolveAllowedWithAliases(map, moduleName, action, method = "GET") {
   return allowed;
 }
 
-async function checkUserPermission(userId, userRole, moduleName, action, method = "GET") {
-  const role = (userRole || "").toLowerCase();
-  if (role === "admin") return { allowed: "true", scope: null };
-
+async function checkUserPermission(userId, _userRole, moduleName, action, method = "GET") {
   const data = await getEffectivePermissionsForUser(userId);
   if (!data) return { allowed: "false", scope: null };
+
+  if (data.user.role === "admin") return { allowed: "true", scope: null };
 
   const allowed = resolveAllowedWithAliases(data.effectiveMap, moduleName, action, method);
   return { allowed, scope: null };

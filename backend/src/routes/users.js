@@ -4,6 +4,7 @@ const multer = require("multer");
 const path = require("path");
 const { z } = require("zod");
 const { prisma } = require("../db");
+const { invalidateLiveUserCache } = require("../services/sessionUser");
 const { authRequired, requireRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase } = require("../utils/storage");
@@ -458,6 +459,8 @@ userRoutes.patch(
       await prisma.userPermission.deleteMany({ where: { userId: id } });
     }
 
+    invalidateLiveUserCache(id);
+
     return res.json({ id: updated.id });
   })
 );
@@ -480,6 +483,7 @@ userRoutes.delete(
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
     await prisma.user.delete({ where: { id } });
+    invalidateLiveUserCache(id);
     return res.json({ ok: true });
   })
 );

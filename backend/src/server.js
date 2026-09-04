@@ -54,14 +54,16 @@ app.use(
         `CORS check - Origin: ${sanitizedOrigin}`
       );
 
-      // Permitir requests sem origin
-      // (Postman, curl, mobile apps)
+      // Pedidos sem Origin (curl, healthchecks, apps nativas) não são um
+      // browser CORS; o risco está em origens web não listadas.
       if (!sanitizedOrigin) {
         return callback(null, true);
       }
 
-      // Permitir tudo se configurado com *
-      if (config.frontendOrigin === "*") {
+      if (allowedOrigins.includes("*")) {
+        if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+          return callback(new Error("Not allowed by CORS"));
+        }
         return callback(null, true);
       }
 

@@ -1,12 +1,27 @@
 const jwt = require("jsonwebtoken");
 const { config } = require("../config");
 const { checkUserPermission } = require("../services/permissionResolver");
+const { getLiveUser, applyLiveUser } = require("../services/sessionUser");
 
 function readBearerToken(req) {
   const header = req.headers.authorization || "";
   const [type, token] = header.split(" ");
   if (type === "Bearer" && token) return token;
   return null;
+}
+
+async function attachLiveUser(req, res, next) {
+  const userId = req.user?.sub;
+  if (!userId) return res.status(401).json({ error: "UNAUTHORIZED" });
+  try {
+    const live = await getLiveUser(userId);
+    if (!live) return res.status(401).json({ error: "UNAUTHORIZED" });
+    applyLiveUser(req.user, live);
+    return next();
+  } catch (error) {
+    console.error("Session revalidation error:", error);
+    return res.status(500).json({ error: "SESSION_CHECK_FAILED" });
+  }
 }
 
 function authRequired(req, res, next) {
@@ -17,7 +32,7 @@ function authRequired(req, res, next) {
 
   try {
     req.user = jwt.verify(token, config.jwtSecret);
-    return next();
+    return attachLiveUser(req, res, next);
   } catch {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
@@ -33,7 +48,7 @@ function authRequiredAllowQuery(req, res, next) {
 
   try {
     req.user = jwt.verify(token, config.jwtSecret);
-    return next();
+    return attachLiveUser(req, res, next);
   } catch {
     return res.status(401).json({ error: "UNAUTHORIZED" });
   }
