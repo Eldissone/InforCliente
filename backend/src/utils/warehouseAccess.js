@@ -1,4 +1,5 @@
 const { prisma } = require("../db");
+const { assertOwnProjectAccess } = require("../services/scopeService");
 
 function getUserRole(req) {
   return (req.user?.role || "").toLowerCase();
@@ -50,6 +51,12 @@ async function getAccessibleWarehouseIds(req, extraWhere = {}) {
   return warehouses.map((w) => w.id);
 }
 
+function forbidWarehouse(code = "FORBIDDEN") {
+  const err = new Error(code);
+  err.status = 403;
+  throw err;
+}
+
 async function assertWarehouseAccessible(req, warehouseId) {
   if (!warehouseId || !isClienteRole(req)) return;
 
@@ -62,9 +69,37 @@ async function assertWarehouseAccessible(req, warehouseId) {
   });
 
   if (!warehouse) {
-    const err = new Error("FORBIDDEN");
-    err.status = 403;
-    throw err;
+    forbidWarehouse();
+  }
+}
+
+/**
+ * Mutações de item (receção/devolução): o portal cliente nunca escreve.
+ * Staff com escopo `own` só toca itens da obra atribuída.
+ */
+async function assertItemWarehousesAccessible(req, item) {
+  if (!item) forbidWarehouse();
+  if (isClienteRole(req)) forbidWarehouse();
+
+  const warehouseIds = [item.warehouseId, item.targetWarehouseId].filter(Boolean);
+  for (const id of warehouseIds) {
+    await assertWarehouseAccessible(req, id);
+  }
+
+  if (req.permissionScope !== "own") return;
+
+  const projectIds = [
+    ...new Set(
+      [item.projectId, item.warehouse?.projectId, item.targetWarehouse?.projectId].filter(Boolean)
+    ),
+  ];
+
+  if (!projectIds.length && item.responsibleId !== req.user?.sub) {
+    forbidWarehouse("FORBIDDEN_SCOPE");
+  }
+
+  for (const projectId of projectIds) {
+    await assertOwnProjectAccess(req, projectId);
   }
 }
 
@@ -100,6 +135,7 @@ module.exports = {
   buildWarehouseListWhere,
   getAccessibleWarehouseIds,
   assertWarehouseAccessible,
+  assertItemWarehousesAccessible,
   assertProjectReadableForCliente,
   getAccessibleWarehouseIdsForProject,
 };

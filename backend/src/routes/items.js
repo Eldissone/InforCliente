@@ -3,6 +3,7 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
 const { authRequired, requirePermission } = require("../middlewares/auth");
+const { checkUserPermission } = require("../services/permissionResolver");
 const multer = require("multer");
 const path = require("path");
 const { uploadToSupabase } = require("../utils/storage");
@@ -16,10 +17,72 @@ const {
   isClienteRole,
   getAccessibleWarehouseIds,
   assertWarehouseAccessible,
+  assertItemWarehousesAccessible,
 } = require("../utils/warehouseAccess");
 
 const itemRoutes = express.Router();
 itemRoutes.use(authRequired);
+
+const ITEM_WITH_WAREHOUSES = {
+  warehouse: { select: { id: true, projectId: true } },
+  targetWarehouse: { select: { id: true, projectId: true } },
+};
+
+/**
+ * Receção/devolução: cliente e leitura ficam de fora.
+ * stock.manage confirma qualquer item acessível; técnico com stock.view só o que lhe está atribuído.
+ */
+async function requireItemLifecyclePermission(req, res, next) {
+  const userId = req.user?.sub;
+  const role = (req.user?.role || "").toLowerCase();
+  if (!userId || !role) return res.status(401).json({ error: "UNAUTHORIZED" });
+  if (role === "cliente" || role === "leitura") {
+    return res.status(403).json({ error: "FORBIDDEN" });
+  }
+
+  try {
+    const { allowed: manage } = await checkUserPermission(userId, role, "stock", "manage", req.method);
+    if (manage === "true" || manage === "own") {
+      if (manage === "own") req.permissionScope = "own";
+      req.itemLifecycle = "manage";
+      return next();
+    }
+
+    const { allowed: view } = await checkUserPermission(userId, role, "stock", "view", req.method);
+    if (view === "true" || view === "own") {
+      if (view === "own") req.permissionScope = "own";
+      req.itemLifecycle = "assigned";
+      return next();
+    }
+
+    return res.status(403).json({ error: "FORBIDDEN_BY_PERMISSION" });
+  } catch (error) {
+    console.error("Item lifecycle permission check error:", error);
+    return res.status(500).json({ error: "PERMISSION_CHECK_FAILED" });
+  }
+}
+
+async function loadAuthorizedItem(req, id) {
+  const item = await prisma.item.findUnique({
+    where: { id },
+    include: ITEM_WITH_WAREHOUSES,
+  });
+  if (!item) {
+    const err = new Error("ITEM_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  await assertItemWarehousesAccessible(req, item);
+
+  if (req.itemLifecycle !== "manage" && item.responsibleId !== req.user.sub) {
+    const err = new Error("FORBIDDEN");
+    err.status = 403;
+    throw err;
+  }
+
+  return item;
+}
 
 // GET - Listar itens individuais (Ferramentas/Equipamentos)
 itemRoutes.get(
@@ -209,13 +272,15 @@ itemRoutes.patch(
 // PATCH - Confirmar Receção (Técnico)
 itemRoutes.patch(
   "/:id/confirm-receipt",
+  requireItemLifecyclePermission,
   asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const item = await prisma.item.findUnique({ where: { id } });
-    if (!item) return res.status(404).json({ error: "ITEM_NOT_FOUND" });
+    const item = await loadAuthorizedItem(req, req.params.id);
+    if (item.status !== "PENDING_RECEIPT") {
+      return res.status(409).json({ error: "ITEM_INVALID_STATUS" });
+    }
 
     const updated = await prisma.item.update({
-      where: { id },
+      where: { id: item.id },
       data: {
         status: "ASSIGNED",
         warehouseId: item.targetWarehouseId || item.warehouseId, // Move para o destino confirmado
@@ -231,11 +296,16 @@ itemRoutes.patch(
 // PATCH - Solicitar Devolução (Técnico)
 itemRoutes.patch(
   "/:id/request-return",
+  requireItemLifecyclePermission,
   asyncHandler(async (req, res) => {
-    const { id } = req.params;
     const { notes } = z.object({ notes: z.string().optional() }).parse(req.body);
+    const item = await loadAuthorizedItem(req, req.params.id);
+    if (item.status !== "ASSIGNED") {
+      return res.status(409).json({ error: "ITEM_INVALID_STATUS" });
+    }
+
     const updated = await prisma.item.update({
-      where: { id },
+      where: { id: item.id },
       data: {
         status: "PENDING_RETURN",
         lastStatusNote: notes,
