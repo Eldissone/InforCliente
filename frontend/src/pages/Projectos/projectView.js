@@ -4414,9 +4414,6 @@ function renderStockInventory(movements, summary) {
            <button onclick="event.stopPropagation(); openEditPlannedModal('${item.productId}', '${escapeHtml(product.name)}', ${planned})" class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 inline-flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Editar Quantidade Prevista">
               <span class="material-symbols-outlined text-sm">edit_square</span>
            </button>
-           <button onclick="event.stopPropagation()" data-adjust-stock="${item.productId}" data-warehouse="${escapeHtml(warehouseName)}" class="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all">
-             Ajustar
-           </button>
         </td>
       </tr>
     `;
@@ -4625,72 +4622,6 @@ async function openMaterialManagerModal() {
   loadMaterials();
 }
 
-async function openStockAdjustmentModal(materialId, warehouse) {
-  const materialsRes = await apiRequest("/products");
-  const mat = materialsRes.items.find(i => i.id === materialId);
-  if (!mat) return;
-
-  openModal({
-    title: "Ajuste de Saldo de Stock",
-    contentHtml: `
-       <div class="space-y-6">
-          <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-             <h4 class="text-[10px] font-black uppercase text-blue-600 mb-1">Material a Ajustar</h4>
-             <p class="text-xs font-bold text-slate-800">${escapeHtml(mat.name)}</p>
-             <p class="text-[9px] font-black uppercase text-slate-500 mt-1">Armazém: <span class="text-slate-900">${warehouse}</span></p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-             <div class="space-y-1.5">
-                <label class="text-[10px] font-black uppercase tracking-widest text-emerald-600 pl-1">Dif. Quant. BOA</label>
-                <input type="number" id="adjGood" placeholder="+/- 0.00" class="w-full h-12 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-emerald-500">
-             </div>
-             <div class="space-y-1.5">
-                <label class="text-[10px] font-black uppercase tracking-widest text-red-600 pl-1">Dif. Quant. DANIFICADA</label>
-                <input type="number" id="adjBad" placeholder="+/- 0.00" class="w-full h-12 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-red-500">
-             </div>
-          </div>
-
-          <div class="p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3">
-             <span class="material-symbols-outlined text-amber-500 text-sm">warning</span>
-             <p class="text-[10px] text-amber-800 font-medium leading-relaxed">
-                Este ajuste criará um movimento do tipo <span class="font-bold">AJUSTE</span> aprovado automaticamente. Use para corrigir erros de inventÃ¡rio fÃ­sico.
-             </p>
-          </div>
-       </div>
-    `,
-    primaryLabel: "Aplicar Ajuste",
-    onPrimary: async ({ btn, close, panel }) => {
-      const g = Number(panel.querySelector("#adjGood").value || 0);
-      const b = Number(panel.querySelector("#adjBad").value || 0);
-
-      if (g === 0 && b === 0) return toast("Informe uma diferenÃ§a", { type: "warning" });
-
-      setButtonLoading(btn, true);
-      try {
-        await apiRequest(`/stock/${encodeURIComponent(getProjectId())}/movements`, {
-          method: "POST",
-          body: {
-            materialId,
-            type: "AJUSTE",
-            quantityGood: g,
-            quantityDamaged: b,
-            batch: warehouse,
-            notes: "Ajuste manual administrativo."
-          }
-        });
-        toast("Ajuste concluí­do", { type: "success" });
-        close();
-        loadStock();
-      } catch (err) {
-        setButtonLoading(btn, false);
-        toast(err.message || "Erro no ajuste", { type: "error" });
-      }
-    }
-  });
-}
-
-
 function updateBulkDeleteBtnStock() {
   const btn = el("btnDeleteSelectedStock");
   const countEl = el("selectedStockCount");
@@ -4810,13 +4741,6 @@ function wireStock() {
     if (btnDel) {
       e.stopPropagation();
       deleteStockMovement(btnDel.dataset.deleteStockMove);
-      return;
-    }
-
-    const btnAdj = e.target.closest("[data-adjust-stock]");
-    if (btnAdj) {
-      e.stopPropagation();
-      openStockAdjustmentModal(btnAdj.dataset.adjustStock, btnAdj.dataset.warehouse);
       return;
     }
 
