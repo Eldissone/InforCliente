@@ -2274,26 +2274,26 @@ async function renderWarehouseDetail(container, warehouseId) {
                 <span class="material-symbols-outlined text-lg">arrow_back</span> Voltar aos armazéns
             </button>
             
-            <div class="flex flex-col md:flex-row justify-between items-start gap-8">
-                <div class="flex items-center gap-6">
-                    <div class="w-20 h-20 ${isCentral ? 'bg-slate-900 text-[#2afc8d]' : 'bg-emerald-50 text-emerald-600'} rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-slate-200">
+            <div class="flex items-start justify-between gap-6">
+                <div class="flex items-center gap-6 min-w-0 flex-1">
+                    <div class="w-20 h-20 shrink-0 ${isCentral ? 'bg-slate-900 text-[#2afc8d]' : 'bg-emerald-50 text-emerald-600'} rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-slate-200">
                         <span class="material-symbols-outlined text-4xl">${isCentral ? 'warehouse' : 'construction'}</span>
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">${isCentral ? 'Gestão Central' : 'Estaleiro de Obra'}</h4>
-                        <h2 class="text-4xl font-black text-slate-900 tracking-tighter">${esc(warehouse.name)}</h2>
+                        <h2 class="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter">${esc(warehouse.name)}</h2>
                         <p class="text-sm text-slate-400 font-medium mt-1">${warehouse.project ? `Vinculado a: ${esc(warehouse.project.name)}` : 'Operação Logística Geral'}</p>
                     </div>
                 </div>
                 
-                <div class="flex flex-wrap gap-3">
-                    <button onclick="window.openMovement('${warehouseId}')" class="h-12 bg-[#2afc8d] text-slate-900 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-[#2afc8d]/20">
+                <div class="flex flex-nowrap items-center justify-end gap-3 shrink-0 ml-auto">
+                    <button onclick="window.openMovement('${warehouseId}')" class="h-12 bg-[#2afc8d] text-slate-900 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-[#2afc8d]/20 whitespace-nowrap">
                         Entrada de Stock
                     </button>
-                    <button onclick="window.openTransfer('${warehouseId}')" class="h-12 bg-white text-slate-900 border border-slate-200 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all">
+                    <button onclick="window.openTransfer('${warehouseId}')" class="h-12 bg-white text-slate-900 border border-slate-200 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all whitespace-nowrap">
                         Transferir
                     </button>
-                    <button id="btnExportWarehouseExcel" type="button" title="Exportar inventário detalhado em Excel" class="h-12 bg-white text-slate-900 border border-slate-200 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2">
+                    <button id="btnExportWarehouseExcel" type="button" title="Exportar inventário detalhado em Excel" class="h-12 bg-white text-slate-900 border border-slate-200 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 whitespace-nowrap">
                         <span class="material-symbols-outlined text-xl">download</span>
                         Excel
                     </button>
