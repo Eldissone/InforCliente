@@ -2106,6 +2106,140 @@ async function renderMovements(container) {
 
 
 
+const WAREHOUSE_MOVEMENT_LABELS = {
+    ENTRY: "Entrada de Stock",
+    EXIT: "Saída de Stock",
+    TRANSFER_OUT: "Transferência (Saída)",
+    TRANSFER_IN: "Transferência (Entrada)",
+    ADJUSTMENT: "Ajuste de Stock",
+    LOSS: "Perda Registada",
+    ASSIGNED: "Alocação de Ativo",
+    RETURNED: "Devolução de Ativo",
+    ALLOCATION: "Entrega a Plano Diário",
+    RETURN: "Devolução ao Estaleiro",
+};
+
+const TOOL_STATUS_LABELS = {
+    AVAILABLE: "Em Stock",
+    PENDING_RECEIPT: "Pendente Receção",
+    ASSIGNED: "Em Obra",
+    PENDING_RETURN: "Aguardando Validação",
+    MAINTENANCE: "Manutenção",
+};
+
+function productCategoryLabel(category) {
+    return {
+        MATERIAL: "Material de Obra",
+        CONSUMABLE: "Consumível Geral",
+        TOOL: "Ferramenta",
+        EQUIPMENT: "Equipamento Pesado",
+    }[category] || category || "—";
+}
+
+function warehouseTypeLabel(type) {
+    return type === "CENTRAL" ? "Gestão Central" : "Estaleiro de Obra";
+}
+
+function safeExcelFilename(name) {
+    return String(name || "armazem")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\w]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60) || "armazem";
+}
+
+function autoFitExcelColumns(ws, rows, headers) {
+    const keys = headers || Object.keys(rows[0] || {});
+    ws["!cols"] = keys.map((key) => {
+        const max = Math.max(
+            String(key).length,
+            ...rows.map((row) => String(row[key] ?? "").length)
+        );
+        return { wch: Math.min(Math.max(max + 2, 12), 48) };
+    });
+}
+
+function excelSheetFromRows(rows, headers) {
+    const ws = rows.length
+        ? window.XLSX.utils.json_to_sheet(rows, { header: headers })
+        : window.XLSX.utils.aoa_to_sheet([headers]);
+    autoFitExcelColumns(ws, rows, headers);
+    return ws;
+}
+
+function exportWarehouseInventoryExcel({ warehouse, stock, groupedTools, movements }) {
+    if (typeof window.XLSX === "undefined") {
+        throw new Error("EXCEL_LIBRARY_MISSING");
+    }
+
+    const exportedAt = new Date();
+    const dateLabel = exportedAt.toLocaleString("pt-PT");
+    const materialHeaders = ["Material", "SKU", "Categoria", "Propriedade", "Quantidade", "Unidade", "Stock Baixo"];
+    const toolHeaders = ["Ativo", "SKU", "Categoria", "Quantidade", "Estado", "Responsável", "Desde"];
+    const movementHeaders = ["Data", "Tipo", "Artigo", "SKU", "Quantidade", "Unidade", "Utilizador", "Notas"];
+
+    const materialRows = stock.map((s) => ({
+        Material: s.product?.name || "—",
+        SKU: s.product?.sku || "N/A",
+        Categoria: productCategoryLabel(s.product?.category),
+        Propriedade: stockOwnershipLabel(s),
+        Quantidade: Number(s.quantity) || 0,
+        Unidade: s.product?.unit || "UN",
+        "Stock Baixo": Number(s.quantity) < 5 ? "Sim" : "Não",
+    }));
+
+    const toolRows = groupedTools.map((t) => ({
+        Ativo: t.product?.name || "—",
+        SKU: t.product?.sku || "---",
+        Categoria: productCategoryLabel(t.product?.category),
+        Quantidade: Number(t.quantity) || 0,
+        Estado: TOOL_STATUS_LABELS[t.status] || t.status || "—",
+        Responsável: t.responsible?.name || "Indefinido",
+        Desde: t.assignedAt ? new Date(t.assignedAt).toLocaleDateString("pt-PT") : "",
+    }));
+
+    const movementRows = movements.map((m) => ({
+        Data: m.createdAt ? new Date(m.createdAt).toLocaleString("pt-PT") : "",
+        Tipo: WAREHOUSE_MOVEMENT_LABELS[m.type] || m.type || "—",
+        Artigo: m.product?.name || "—",
+        SKU: m.product?.sku || "N/A",
+        Quantidade: Number(m.quantity) || 0,
+        Unidade: m.product?.unit || "UN",
+        Utilizador: m.user?.name || m.user?.email || "—",
+        Notas: m.notes || "",
+    }));
+
+    const summaryRows = [
+        ["Inventário detalhado do armazém"],
+        [],
+        ["Armazém", warehouse?.name || "—"],
+        ["Tipo", warehouseTypeLabel(warehouse?.type)],
+        ["Obra associada", warehouse?.project?.name || "Operação logística geral"],
+        ["Data de extração", dateLabel],
+        [],
+        ["Resumo"],
+        ["Artigos de material", stock.length],
+        ["Ferramentas / ativos", groupedTools.length],
+        ["Movimentos", movements.length],
+        ["Quantidade total de material", stock.reduce((acc, s) => acc + (Number(s.quantity) || 0), 0)],
+        ["Artigos com stock baixo (< 5)", stock.filter((s) => Number(s.quantity) < 5).length],
+    ];
+
+    const wb = window.XLSX.utils.book_new();
+    const summarySheet = window.XLSX.utils.aoa_to_sheet(summaryRows);
+    summarySheet["!cols"] = [{ wch: 36 }, { wch: 42 }];
+    window.XLSX.utils.book_append_sheet(wb, summarySheet, "Resumo");
+
+    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(materialRows, materialHeaders), "Material de Consumo");
+    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(toolRows, toolHeaders), "Ferramentas");
+    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(movementRows, movementHeaders), "Movimentos");
+
+    const dateStamp = exportedAt.toISOString().slice(0, 10);
+    const fname = `inventario_${safeExcelFilename(warehouse?.name)}_${dateStamp}.xlsx`;
+    window.XLSX.writeFile(wb, fname);
+}
+
 async function renderWarehouseDetail(container, warehouseId) {
     const warehouses = (await apiRequest("/warehouses")).items;
     const warehouse = warehouses.find(w => w.id === warehouseId);
@@ -2137,7 +2271,7 @@ async function renderWarehouseDetail(container, warehouseId) {
     container.innerHTML = `
         <div class="mb-10">
             <button onclick="window.backToWarehouses()" class="flex items-center gap-2 text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-all mb-8">
-                <span class="material-symbols-outlined text-lg">arrow_back</span> Voltar à Rede
+                <span class="material-symbols-outlined text-lg">arrow_back</span> Voltar aos armazéns
             </button>
             
             <div class="flex flex-col md:flex-row justify-between items-start gap-8">
@@ -2152,12 +2286,16 @@ async function renderWarehouseDetail(container, warehouseId) {
                     </div>
                 </div>
                 
-                <div class="flex gap-3">
+                <div class="flex flex-wrap gap-3">
                     <button onclick="window.openMovement('${warehouseId}')" class="h-12 bg-[#2afc8d] text-slate-900 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-[#2afc8d]/20">
                         Entrada de Stock
                     </button>
                     <button onclick="window.openTransfer('${warehouseId}')" class="h-12 bg-white text-slate-900 border border-slate-200 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all">
                         Transferir
+                    </button>
+                    <button id="btnExportWarehouseExcel" type="button" title="Exportar inventário detalhado em Excel" class="h-12 bg-white text-slate-900 border border-slate-200 px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2">
+                        <span class="material-symbols-outlined text-xl">download</span>
+                        Excel
                     </button>
                 </div>
             </div>
@@ -2288,6 +2426,29 @@ async function renderWarehouseDetail(container, warehouseId) {
     window.backToWarehouses = () => { currentTab = "warehouses"; loadTabContent(currentTab); };
     window.openMovement = (id) => openMovementModal("ENTRY", id);
     window.openTransfer = (id) => openTransferModal(id);
+
+    document.getElementById("btnExportWarehouseExcel")?.addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        setButtonLoading(btn, true);
+        try {
+            const { items: exportMovements } = await apiRequest(`/stock/movements?warehouseId=${warehouseId}&limit=2000`);
+            exportWarehouseInventoryExcel({
+                warehouse,
+                stock,
+                groupedTools,
+                movements: exportMovements,
+            });
+            toast("Inventário exportado em Excel.", { type: "success" });
+        } catch (error) {
+            if (error.message === "EXCEL_LIBRARY_MISSING") {
+                toast("Biblioteca Excel não encontrada.", { type: "error" });
+            } else {
+                toast("Não foi possível exportar o inventário.", { type: "error" });
+            }
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    });
 
     const materialBody = document.getElementById("warehouseMaterialTableBody");
     const toolsBody = document.getElementById("warehouseToolsTableBody");
