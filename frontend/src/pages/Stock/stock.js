@@ -2103,42 +2103,12 @@ async function renderMovements(container) {
 }
 
 
-
-
-
-const WAREHOUSE_MOVEMENT_LABELS = {
-    ENTRY: "Entrada de Stock",
-    EXIT: "Saída de Stock",
-    TRANSFER_OUT: "Transferência (Saída)",
-    TRANSFER_IN: "Transferência (Entrada)",
-    ADJUSTMENT: "Ajuste de Stock",
-    LOSS: "Perda Registada",
-    ASSIGNED: "Alocação de Ativo",
-    RETURNED: "Devolução de Ativo",
-    ALLOCATION: "Entrega a Plano Diário",
-    RETURN: "Devolução ao Estaleiro",
-};
-
-const TOOL_STATUS_LABELS = {
-    AVAILABLE: "Em Stock",
-    PENDING_RECEIPT: "Pendente Receção",
-    ASSIGNED: "Em Obra",
-    PENDING_RETURN: "Aguardando Validação",
-    MAINTENANCE: "Manutenção",
-};
-
-function productCategoryLabel(category) {
-    return {
-        MATERIAL: "Material de Obra",
-        CONSUMABLE: "Consumível Geral",
-        TOOL: "Ferramenta",
-        EQUIPMENT: "Equipamento Pesado",
-    }[category] || category || "—";
-}
-
-function warehouseTypeLabel(type) {
-    return type === "CENTRAL" ? "Gestão Central" : "Estaleiro de Obra";
-}
+const WAREHOUSE_EXCEL_HEADERS = ["Produto", "Descrição", "Armazém", "Qtd.", "Un."];
+const WAREHOUSE_EXCEL_GREEN = "FF8A9B4E";
+const WAREHOUSE_EXCEL_PEACH = "FFF8CBAD";
+const WAREHOUSE_EXCEL_HEADER = "FF808080";
+const WAREHOUSE_EXCEL_WHITE = "FFFFFFFF";
+const WAREHOUSE_EXCEL_BORDER = "FFB0B0B0";
 
 function safeExcelFilename(name) {
     return String(name || "armazem")
@@ -2149,93 +2119,151 @@ function safeExcelFilename(name) {
         .slice(0, 60) || "armazem";
 }
 
-function autoFitExcelColumns(ws, rows, headers) {
-    const keys = headers || Object.keys(rows[0] || {});
-    ws["!cols"] = keys.map((key) => {
-        const max = Math.max(
-            String(key).length,
-            ...rows.map((row) => String(row[key] ?? "").length)
-        );
-        return { wch: Math.min(Math.max(max + 2, 12), 48) };
+function excelSafeText(value) {
+    return String(value ?? "")
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+        .trim();
+}
+
+function excelThinBorder() {
+    const side = { style: "thin", color: { rgb: WAREHOUSE_EXCEL_BORDER } };
+    return { top: side, bottom: side, left: side, right: side };
+}
+
+function warehouseExcelCellStyle({ highlighted, peach, align, fontColor } = {}) {
+    const fillRgb = peach ? WAREHOUSE_EXCEL_PEACH : highlighted ? WAREHOUSE_EXCEL_GREEN : WAREHOUSE_EXCEL_WHITE;
+    return {
+        fill: { patternType: "solid", fgColor: { rgb: fillRgb } },
+        font: { name: "Calibri", sz: 11, color: { rgb: fontColor || "FF000000" } },
+        alignment: { horizontal: align || "left", vertical: "center" },
+        border: excelThinBorder(),
+    };
+}
+
+function warehouseExcelQty(qty) {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Number.isInteger(n) ? n : Math.round(n * 10000) / 10000;
+}
+
+function productSkuOrRef(product) {
+    return excelSafeText(product?.sku || product?.referencia || product?.ref);
+}
+
+function warehouseProductRow(product, qty, armazemName) {
+    const name = excelSafeText(product?.name);
+    const qtyValue = warehouseExcelQty(qty);
+    const highlighted = qtyValue != null;
+    return {
+        produto: productSkuOrRef(product),
+        descricao: name,
+        armazem: armazemName,
+        qty: qtyValue == null ? "" : qtyValue,
+        unidade: excelSafeText(product?.unit) || "UN",
+        highlighted,
+    };
+}
+
+function buildWarehouseExcelRows({ warehouse, stock, groupedTools }) {
+    const armazemName = excelSafeText(warehouse?.name) || "Armazém";
+    const qtyByProduct = new Map();
+    const productById = new Map();
+
+    (stock || []).forEach((s) => {
+        const id = s.productId || s.product?.id;
+        if (!id || !s.product) return;
+        qtyByProduct.set(id, (qtyByProduct.get(id) || 0) + (Number(s.quantity) || 0));
+        productById.set(id, s.product);
+    });
+
+    const rows = [];
+    qtyByProduct.forEach((qty, id) => {
+        if (qty <= 0) return;
+        rows.push(warehouseProductRow(productById.get(id), qty, armazemName));
+    });
+
+    (groupedTools || []).forEach((t) => {
+        const id = t.productId || t.product?.id;
+        const qty = Number(t.quantity) || 0;
+        if (!id || qty <= 0 || !t.product || qtyByProduct.has(id)) return;
+        qtyByProduct.set(id, qty);
+        rows.push(warehouseProductRow(t.product, qty, armazemName));
+    });
+
+    return rows.sort((a, b) => {
+        const byCode = String(a.produto).localeCompare(String(b.produto), "pt", { numeric: true });
+        if (byCode) return byCode;
+        return String(a.descricao).localeCompare(String(b.descricao), "pt");
     });
 }
 
-function excelSheetFromRows(rows, headers) {
-    const ws = rows.length
-        ? window.XLSX.utils.json_to_sheet(rows, { header: headers })
-        : window.XLSX.utils.aoa_to_sheet([headers]);
-    autoFitExcelColumns(ws, rows, headers);
-    return ws;
-}
-
-function exportWarehouseInventoryExcel({ warehouse, stock, groupedTools, movements }) {
+function exportWarehouseInventoryExcel({ warehouse, stock, groupedTools }) {
     if (typeof window.XLSX === "undefined") {
         throw new Error("EXCEL_LIBRARY_MISSING");
     }
 
-    const exportedAt = new Date();
-    const dateLabel = exportedAt.toLocaleString("pt-PT");
-    const materialHeaders = ["Material", "SKU", "Categoria", "Propriedade", "Quantidade", "Unidade", "Stock Baixo"];
-    const toolHeaders = ["Ativo", "SKU", "Categoria", "Quantidade", "Estado", "Responsável", "Desde"];
-    const movementHeaders = ["Data", "Tipo", "Artigo", "SKU", "Quantidade", "Unidade", "Utilizador", "Notas"];
-
-    const materialRows = stock.map((s) => ({
-        Material: s.product?.name || "—",
-        SKU: s.product?.sku || "N/A",
-        Categoria: productCategoryLabel(s.product?.category),
-        Propriedade: stockOwnershipLabel(s),
-        Quantidade: Number(s.quantity) || 0,
-        Unidade: s.product?.unit || "UN",
-        "Stock Baixo": Number(s.quantity) < 5 ? "Sim" : "Não",
-    }));
-
-    const toolRows = groupedTools.map((t) => ({
-        Ativo: t.product?.name || "—",
-        SKU: t.product?.sku || "---",
-        Categoria: productCategoryLabel(t.product?.category),
-        Quantidade: Number(t.quantity) || 0,
-        Estado: TOOL_STATUS_LABELS[t.status] || t.status || "—",
-        Responsável: t.responsible?.name || "Indefinido",
-        Desde: t.assignedAt ? new Date(t.assignedAt).toLocaleDateString("pt-PT") : "",
-    }));
-
-    const movementRows = movements.map((m) => ({
-        Data: m.createdAt ? new Date(m.createdAt).toLocaleString("pt-PT") : "",
-        Tipo: WAREHOUSE_MOVEMENT_LABELS[m.type] || m.type || "—",
-        Artigo: m.product?.name || "—",
-        SKU: m.product?.sku || "N/A",
-        Quantidade: Number(m.quantity) || 0,
-        Unidade: m.product?.unit || "UN",
-        Utilizador: m.user?.name || m.user?.email || "—",
-        Notas: m.notes || "",
-    }));
-
-    const summaryRows = [
-        ["Inventário detalhado do armazém"],
-        [],
-        ["Armazém", warehouse?.name || "—"],
-        ["Tipo", warehouseTypeLabel(warehouse?.type)],
-        ["Obra associada", warehouse?.project?.name || "Operação logística geral"],
-        ["Data de extração", dateLabel],
-        [],
-        ["Resumo"],
-        ["Artigos de material", stock.length],
-        ["Ferramentas / ativos", groupedTools.length],
-        ["Movimentos", movements.length],
-        ["Quantidade total de material", stock.reduce((acc, s) => acc + (Number(s.quantity) || 0), 0)],
-        ["Artigos com stock baixo (< 5)", stock.filter((s) => Number(s.quantity) < 5).length],
+    const rows = buildWarehouseExcelRows({ warehouse, stock, groupedTools });
+    const aoa = [
+        WAREHOUSE_EXCEL_HEADERS,
+        ...rows.map((row) => [
+            row.produto,
+            row.descricao,
+            row.armazem,
+            row.qty,
+            row.unidade,
+        ]),
     ];
+    const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+
+    const headerStyle = {
+        fill: { patternType: "solid", fgColor: { rgb: WAREHOUSE_EXCEL_HEADER } },
+        font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FF000000" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: excelThinBorder(),
+    };
+    WAREHOUSE_EXCEL_HEADERS.forEach((_, c) => {
+        const ref = window.XLSX.utils.encode_cell({ r: 0, c });
+        if (ws[ref]) ws[ref].s = headerStyle;
+    });
+
+    rows.forEach((row, i) => {
+        const r = i + 1;
+        const hi = row.highlighted;
+        const left = warehouseExcelCellStyle({ highlighted: hi, align: "left" });
+        const center = warehouseExcelCellStyle({ highlighted: hi, align: "center" });
+        const peachRed = warehouseExcelCellStyle({
+            highlighted: hi,
+            peach: hi,
+            align: "left",
+            fontColor: hi ? "FFFF0000" : "FF000000",
+        });
+        const styles = [left, left, peachRed, center, center];
+        styles.forEach((style, c) => {
+            const ref = window.XLSX.utils.encode_cell({ r, c });
+            if (!ws[ref]) return;
+            ws[ref].s = style;
+            if (c === 3 && typeof row.qty === "number") {
+                ws[ref].t = "n";
+                ws[ref].v = row.qty;
+            } else {
+                ws[ref].t = "s";
+                ws[ref].v = String(ws[ref].v ?? "");
+            }
+        });
+    });
+
+    ws["!cols"] = [
+        { wch: 22 },
+        { wch: 36 },
+        { wch: 28 },
+        { wch: 10 },
+        { wch: 8 },
+    ];
+    ws["!rows"] = [{ hpt: 20 }, ...rows.map(() => ({ hpt: 18 }))];
 
     const wb = window.XLSX.utils.book_new();
-    const summarySheet = window.XLSX.utils.aoa_to_sheet(summaryRows);
-    summarySheet["!cols"] = [{ wch: 36 }, { wch: 42 }];
-    window.XLSX.utils.book_append_sheet(wb, summarySheet, "Resumo");
-
-    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(materialRows, materialHeaders), "Material de Consumo");
-    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(toolRows, toolHeaders), "Ferramentas");
-    window.XLSX.utils.book_append_sheet(wb, excelSheetFromRows(movementRows, movementHeaders), "Movimentos");
-
-    const dateStamp = exportedAt.toISOString().slice(0, 10);
+    window.XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+    const dateStamp = new Date().toISOString().slice(0, 10);
     const fname = `inventario_${safeExcelFilename(warehouse?.name)}_${dateStamp}.xlsx`;
     window.XLSX.writeFile(wb, fname);
 }
@@ -2293,7 +2321,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                     <button onclick="window.openTransfer('${warehouseId}')" class="h-12 bg-white text-slate-900 border border-slate-200 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all whitespace-nowrap">
                         Transferir
                     </button>
-                    <button id="btnExportWarehouseExcel" type="button" title="Exportar inventário detalhado em Excel" class="h-12 bg-white text-slate-900 border border-slate-200 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 whitespace-nowrap">
+                    <button id="btnExportWarehouseExcel" type="button" title="Exportar inventário no formato de armazém" class="h-12 bg-white text-slate-900 border border-slate-200 px-5 xl:px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 whitespace-nowrap">
                         <span class="material-symbols-outlined text-xl">download</span>
                         Excel
                     </button>
@@ -2431,12 +2459,10 @@ async function renderWarehouseDetail(container, warehouseId) {
         const btn = e.currentTarget;
         setButtonLoading(btn, true);
         try {
-            const { items: exportMovements } = await apiRequest(`/stock/movements?warehouseId=${warehouseId}&limit=2000`);
             exportWarehouseInventoryExcel({
                 warehouse,
                 stock,
                 groupedTools,
-                movements: exportMovements,
             });
             toast("Inventário exportado em Excel.", { type: "success" });
         } catch (error) {
