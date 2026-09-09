@@ -251,8 +251,110 @@ async function loadToolCatalog() {
   return cache.tools;
 }
 
+let activeSuggestRow = null;
+let suggestPortalBound = false;
+
+function getItemSuggestBox() {
+  let box = document.getElementById("ccItemSuggestPortal");
+  if (box) return box;
+  box = document.createElement("div");
+  box.id = "ccItemSuggestPortal";
+  box.className = "cc-item-suggest pf-suggest hidden";
+  box.setAttribute("role", "listbox");
+  document.body.appendChild(box);
+  bindItemSuggestPortal(box);
+  return box;
+}
+
 export function hideAllItemSuggest() {
+  activeSuggestRow = null;
+  const box = document.getElementById("ccItemSuggestPortal");
+  if (box) box.classList.add("hidden");
   document.querySelectorAll(".cc-item-suggest").forEach((el) => el.classList.add("hidden"));
+}
+
+function positionItemSuggest(input) {
+  const box = getItemSuggestBox();
+  if (!input || box.classList.contains("hidden")) return;
+  const rect = input.getBoundingClientRect();
+  const gutter = 12;
+  const width = Math.min(Math.max(rect.width, 280), window.innerWidth - gutter * 2);
+  let left = rect.left;
+  if (left + width > window.innerWidth - gutter) left = window.innerWidth - gutter - width;
+  if (left < gutter) left = gutter;
+  const spaceBelow = window.innerHeight - rect.bottom - gutter;
+  const spaceAbove = rect.top - gutter;
+  const preferUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+  box.style.left = `${Math.round(left)}px`;
+  box.style.width = `${Math.round(width)}px`;
+  box.style.right = "auto";
+  if (preferUp) {
+    box.style.top = "auto";
+    box.style.bottom = `${Math.round(window.innerHeight - rect.top + 4)}px`;
+    box.style.maxHeight = `${Math.round(Math.min(280, spaceAbove))}px`;
+  } else {
+    box.style.bottom = "auto";
+    box.style.top = `${Math.round(rect.bottom + 4)}px`;
+    box.style.maxHeight = `${Math.round(Math.min(280, Math.max(120, spaceBelow)))}px`;
+  }
+}
+
+function onItemSuggestReposition() {
+  if (!activeSuggestRow) return;
+  const input = activeSuggestRow.querySelector(".cc-item-desc");
+  const box = document.getElementById("ccItemSuggestPortal");
+  if (!input || !box || box.classList.contains("hidden")) return;
+  positionItemSuggest(input);
+}
+
+function bindItemSuggestPortal(box) {
+  if (suggestPortalBound) return;
+  suggestPortalBound = true;
+  box.addEventListener("mousedown", (e) => e.preventDefault());
+  box.addEventListener("click", async (e) => {
+    const tr = activeSuggestRow;
+    if (!tr) return;
+    const input = tr.querySelector(".cc-item-desc");
+    const hit = e.target.closest("[data-product-id]");
+    const createBtn = e.target.closest("[data-create-name]");
+    if (hit) {
+      const product = (cache.tools || []).find((p) => p.id === hit.dataset.productId);
+      applyToolToItemRow(tr, product);
+      hideAllItemSuggest();
+      return;
+    }
+    if (!createBtn) return;
+    if (box.dataset.ensuring === "1") return;
+    const name = createBtn.dataset.createName;
+    const existing = findCachedTool(name);
+    if (existing) {
+      applyToolToItemRow(tr, existing);
+      hideAllItemSuggest();
+      return;
+    }
+    const unit = tr.querySelector(".cc-item-unit")?.value || "UN";
+    box.dataset.ensuring = "1";
+    try {
+      const product = await ensureToolProduct(name, unit);
+      if (product?.id) {
+        applyToolToItemRow(tr, product);
+        notify(
+          product.created
+            ? `Ferramenta “${product.name}” adicionada ao catálogo`
+            : `Ferramenta “${product.name}” já existia no catálogo`,
+          "success"
+        );
+      }
+    } catch (err) {
+      notify(describeError(err), "error");
+      if (input) input.value = name;
+    } finally {
+      delete box.dataset.ensuring;
+    }
+    hideAllItemSuggest();
+  });
+  window.addEventListener("resize", onItemSuggestReposition);
+  document.addEventListener("scroll", onItemSuggestReposition, true);
 }
 
 function applyToolToItemRow(tr, product) {
@@ -265,10 +367,9 @@ function applyToolToItemRow(tr, product) {
 }
 
 function renderItemSuggest(tr, query) {
-  const box = tr.querySelector(".cc-item-suggest");
-  if (!box) return;
+  const box = getItemSuggestBox();
   if (!isFerramentasCentro()) {
-    box.classList.add("hidden");
+    hideAllItemSuggest();
     return;
   }
   const q = normalizeToolName(query);
@@ -291,23 +392,25 @@ function renderItemSuggest(tr, query) {
        </button>`
     : "";
   if (!rows && !createRow) {
-    box.classList.add("hidden");
+    hideAllItemSuggest();
     return;
   }
+  activeSuggestRow = tr;
   box.innerHTML = rows + createRow;
   box.classList.remove("hidden");
+  positionItemSuggest(tr.querySelector(".cc-item-desc"));
 }
 
 function bindItemDescSuggest(tr) {
   const input = tr.querySelector(".cc-item-desc");
-  const box = tr.querySelector(".cc-item-suggest");
   if (!input || input.dataset.suggestBound === "1") return;
   input.dataset.suggestBound = "1";
+  getItemSuggestBox();
 
   input.addEventListener("input", () => {
     delete tr.dataset.productId;
     if (!isFerramentasCentro()) {
-      box?.classList.add("hidden");
+      hideAllItemSuggest();
       return;
     }
     renderItemSuggest(tr, input.value);
@@ -323,55 +426,15 @@ function bindItemDescSuggest(tr) {
     if (existing) applyToolToItemRow(tr, existing);
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && box && !box.classList.contains("hidden")) {
+    const box = document.getElementById("ccItemSuggestPortal");
+    if (e.key === "Enter" && box && !box.classList.contains("hidden") && activeSuggestRow === tr) {
       const first = box.querySelector("button");
       if (first) {
         e.preventDefault();
         first.click();
       }
     }
-    if (e.key === "Escape") box?.classList.add("hidden");
-  });
-  box?.addEventListener("mousedown", (e) => e.preventDefault());
-  box?.addEventListener("click", async (e) => {
-    const hit = e.target.closest("[data-product-id]");
-    const createBtn = e.target.closest("[data-create-name]");
-    if (hit) {
-      const product = (cache.tools || []).find((p) => p.id === hit.dataset.productId);
-      applyToolToItemRow(tr, product);
-      box.classList.add("hidden");
-      return;
-    }
-    if (createBtn) {
-      if (box.dataset.ensuring === "1") return;
-      const name = createBtn.dataset.createName;
-      const existing = findCachedTool(name);
-      if (existing) {
-        applyToolToItemRow(tr, existing);
-        box.classList.add("hidden");
-        return;
-      }
-      const unit = tr.querySelector(".cc-item-unit")?.value || "UN";
-      box.dataset.ensuring = "1";
-      try {
-        const product = await ensureToolProduct(name, unit);
-        if (product?.id) {
-          applyToolToItemRow(tr, product);
-          notify(
-            product.created
-              ? `Ferramenta “${product.name}” adicionada ao catálogo`
-              : `Ferramenta “${product.name}” já existia no catálogo`,
-            "success"
-          );
-        }
-      } catch (err) {
-        notify(describeError(err), "error");
-        input.value = name;
-      } finally {
-        delete box.dataset.ensuring;
-      }
-      box.classList.add("hidden");
-    }
+    if (e.key === "Escape") hideAllItemSuggest();
   });
 }
 
@@ -416,10 +479,9 @@ export function addItemRow() {
   tr.className = "cc-item-row";
   const tools = isFerramentasCentro();
   tr.innerHTML = `
-    <td style="position:relative">
+    <td>
       <input type="text" required autocomplete="off" class="cc-item-desc pf-cell-input"
         placeholder="${tools ? "Pesquisar no catálogo..." : "Item description"}">
-      <div class="cc-item-suggest pf-suggest hidden"></div>
     </td>
     <td><input type="number" min="1" value="1" required class="cc-item-qty pf-cell-input pf-cell-input--right"></td>
     <td><input type="text" placeholder="un" required class="cc-item-unit pf-cell-input"></td>
@@ -437,6 +499,7 @@ export function addItemRow() {
   tbody.appendChild(tr);
   bindItemDescSuggest(tr);
   tr.querySelector(".cc-item-del")?.addEventListener("click", () => {
+    if (activeSuggestRow === tr) hideAllItemSuggest();
     tr.remove();
     if (!tbody.querySelector(".cc-item-row")) addItemRow();
     refreshTotals();
@@ -467,6 +530,7 @@ export function refreshTotals() {
 export function fillItemRows(items) {
   const tbody = document.getElementById("ccItemsBody");
   if (!tbody) return;
+  hideAllItemSuggest();
   tbody.innerHTML = "";
   const list = items && items.length ? items : [{}];
   list.forEach((it) => {
@@ -1001,6 +1065,7 @@ export function resetPedidoForm() {
   if (editId) editId.value = "";
   const extraId = document.getElementById("ccPedidoExtraId");
   if (extraId) extraId.value = "";
+  hideAllItemSuggest();
   const itemsBody = document.getElementById("ccItemsBody");
   if (itemsBody) itemsBody.innerHTML = "";
 }

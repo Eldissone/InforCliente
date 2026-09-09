@@ -356,7 +356,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
+  padding: 20px;
   border-bottom: 1px solid var(--pf-border);
 }
 
@@ -375,7 +375,7 @@
 .pf-table thead th {
   background: var(--pf-divider);
   border-bottom: 1px solid var(--pf-border);
-  padding: 12px;
+  padding: 12px 25px;
   font-size: 12px;
   font-weight: 600;
   line-height: 16px;
@@ -391,7 +391,7 @@
 
 .pf-table tbody td {
   border-bottom: 1px solid var(--pf-row-border);
-  padding: 8px;
+  padding: 18px;
   vertical-align: middle;
 }
 
@@ -614,24 +614,23 @@
   box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
-/* ── Sugestões de itens do catálogo ── */
+/* ── Sugestões de itens do catálogo ──
+   Renderizado em portal (body) para não ficar preso ao overflow da tabela. */
 .pf-suggest {
-  position: absolute;
-  z-index: 60;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 2px;
+  position: fixed;
+  z-index: 80;
+  margin: 0;
   background: var(--pf-surface);
   border: 1px solid var(--pf-border);
-  border-radius: 4px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  max-height: 220px;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(13, 28, 46, 0.16);
+  max-height: 280px;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-/* O bundle Tailwind é carregado antes desta folha, por isso `.hidden` perderia
-   para as classes .pf-* que definem display. Esta regra devolve-lhe a prioridade. */
+.pf-suggest.hidden,
 .pf-page .hidden {
   display: none;
 }
