@@ -15,6 +15,18 @@ const upload = multer({
 const productRoutes = express.Router();
 productRoutes.use(authRequired);
 
+function normalizeProductName(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleUpperCase("pt-PT");
+}
+
+function withUppercaseProductName(product) {
+  if (!product) return product;
+  return { ...product, name: normalizeProductName(product.name) };
+}
+
 // GET - Listar cat?logo de produtos/materiais
 productRoutes.get(
   "/",
@@ -35,7 +47,7 @@ productRoutes.get(
       },
       orderBy: { name: "asc" },
     });
-    return res.json({ items });
+    return res.json({ items: items.map(withUppercaseProductName) });
   })
 );
 
@@ -51,7 +63,7 @@ productRoutes.get(
       select: { id: true, name: true, sku: true, category: true, unit: true },
       orderBy: { name: "asc" },
     });
-    return res.json({ items });
+    return res.json({ items: items.map(withUppercaseProductName) });
   })
 );
 
@@ -114,7 +126,7 @@ productRoutes.post(
       unit: z.string().optional().nullable(),
     }).parse(req.body);
 
-    const name = body.name.replace(/\s+/g, " ").trim();
+    const name = normalizeProductName(body.name);
     const key = normalizeToolName(name);
     if (!key) {
       return res.status(400).json({ error: "Indique um nome de ferramenta válido." });
@@ -145,7 +157,7 @@ productRoutes.post(
     });
 
     return res.status(result.created ? 201 : 200).json({
-      ...result.product,
+      ...withUppercaseProductName(result.product),
       created: result.created,
       revived: result.revived,
     });
@@ -166,6 +178,8 @@ productRoutes.post(
       unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]),
       minStock: z.number().default(0),
     }).parse(req.body);
+
+    body.name = normalizeProductName(body.name);
 
     try {
       const product = await prisma.product.create({
@@ -204,6 +218,8 @@ productRoutes.patch(
       minStock: z.number().optional(),
       image: z.string().optional().nullable(),
     }).parse(req.body);
+
+    if (body.name != null) body.name = normalizeProductName(body.name);
 
     try {
       const updated = await prisma.product.update({

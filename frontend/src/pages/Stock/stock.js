@@ -305,7 +305,7 @@ async function renderInventory(container) {
             html += `
                 <tr class="inventory-row group hover:bg-slate-50/50 transition-colors" data-type="${isTool ? 'ASSET' : 'MATERIAL'}">
                     <td class="px-10 py-6">
-                        <div class="font-bold text-slate-900 text-base">${esc(item.product.name)}</div>
+                        <div class="font-bold text-slate-900 text-base uppercase">${esc(item.product.name)}</div>
                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(item.product.sku || 'N/A')}</div>
                     </td>
                     <td class="px-10 py-6">
@@ -503,7 +503,7 @@ async function renderCatalog(container) {
                                     </td>
                                     <td class="px-4 py-4 text-center">${renderProductImageThumb(p)}</td>
                                     <td class="px-8 py-4">
-                                        <div class="font-bold text-slate-900 text-sm">${esc(p.name)}</div>
+                                        <div class="font-bold text-slate-900 text-sm uppercase">${esc(p.name)}</div>
                                         <div class="text-[9px] font-black text-slate-300 uppercase tracking-widest">${esc(p.category)}</div>
                                     </td>
                                     <td class="px-8 py-4 text-xs font-bold text-slate-500">${esc(p.sku || '---')}</td>
@@ -839,7 +839,7 @@ async function openExcelImportModal() {
                             const row = rows[i];
                             if (!row || !row[nameIdx] || String(row[nameIdx]).trim() === '') continue;
 
-                            const name = String(row[nameIdx]).trim();
+                            const name = String(row[nameIdx]).trim().toLocaleUpperCase("pt-PT");
                             const sku = skuIdx !== -1 && row[skuIdx] ? String(row[skuIdx]).trim() : null;
 
                             let unitStr = unitIdx !== -1 && row[unitIdx] ? String(row[unitIdx]).toUpperCase().trim() : 'UN';
@@ -938,7 +938,7 @@ async function openProductModal(product = null) {
             </div>
             <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Produto</label>
-                <input type="text" name="name" value="${esc(product?.name || '')}" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                <input type="text" name="name" value="${esc(product?.name || '')}" required class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 uppercase focus:ring-2 focus:ring-[#2afc8d] transition-all">
             </div>
             <div class="grid grid-cols-2 gap-6">
                 <div class="space-y-2">
@@ -978,6 +978,7 @@ async function openProductModal(product = null) {
             const photoFile = formData.get("photo");
             const data = Object.fromEntries(formData.entries());
             delete data.photo;
+            if (data.name) data.name = String(data.name).replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-PT");
             try {
                 let saved = await apiRequest(product ? `/products/${product.id}` : "/products", {
                     method: product ? "PATCH" : "POST",
@@ -1092,7 +1093,7 @@ async function renderTools(container) {
                 ${Object.values(toolGroups).map(g => `
                     <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex justify-between items-center group hover:border-[#2afc8d] transition-all">
                         <div>
-                            <p class="font-bold text-slate-900 text-sm mb-1">${esc(g.product.name)}</p>
+                            <p class="font-bold text-slate-900 text-sm mb-1 uppercase">${esc(g.product.name)}</p>
                             <div class="flex gap-3">
                                 <span class="text-[10px] font-black text-emerald-500 uppercase">${g.available} Livres</span>
                                 <span class="text-[10px] font-black text-slate-400 uppercase">${g.assigned} Em Obra</span>
@@ -1174,7 +1175,7 @@ async function renderTools(container) {
                 <div class="p-5 sm:p-6 flex flex-col flex-grow bg-white relative">
                     <!-- Title & SKU -->
                     <div class="mb-5">
-                        <h3 class="font-bold text-slate-900 text-sm sm:text-base leading-tight mb-1.5 group-hover:text-[#2afc8d] transition-colors line-clamp-2">${esc(group.product.name)}</h3>
+                        <h3 class="font-bold text-slate-900 text-sm sm:text-base leading-tight mb-1.5 group-hover:text-[#2afc8d] transition-colors line-clamp-2 uppercase">${esc(group.product.name)}</h3>
                         <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                             <span class="material-symbols-outlined text-[12px]">qr_code_2</span>
                             ${esc(group.product.sku || '---')}
@@ -2024,7 +2025,7 @@ async function renderMovements(container) {
                         </div>
                     </td>
                     <td class="px-6 py-5">
-                        <p class="text-sm font-bold text-slate-900">${esc(m.product.name)}</p>
+                        <p class="text-sm font-bold text-slate-900 uppercase">${esc(m.product.name)}</p>
                         <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${catIsAsset ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-600'}">${catIsAsset ? 'Ativo' : 'Material'}</span>
                     </td>
                     <td class="px-6 py-5">
@@ -2501,7 +2502,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                 <tr class="group hover:bg-slate-50/50 transition-colors">
                     <td class="px-4 py-6 text-center">${renderProductImageThumb(s.product)}</td>
                     <td class="px-10 py-6">
-                        <div class="font-bold text-slate-900 text-base">${esc(s.product.name)}</div>
+                        <div class="font-bold text-slate-900 text-base uppercase">${esc(s.product.name)}</div>
                         <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(s.product.sku || 'N/A')}</div>
                     </td>
                     <td class="px-10 py-6">
@@ -2557,7 +2558,7 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <img src="${imgUrl}" class="w-full h-full object-cover">
                         </div>
                         <div>
-                            <div class="font-bold text-slate-900 text-base">${esc(t.product.name)}</div>
+                            <div class="font-bold text-slate-900 text-base uppercase">${esc(t.product.name)}</div>
                             <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Modelo: ${esc(t.product.sku || '---')}</div>
                         </div>
                     </td>

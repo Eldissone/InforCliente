@@ -215,7 +215,7 @@ function upsertCachedTool(product) {
 const toolEnsureInflight = new Map();
 
 async function ensureToolProduct(name, unit) {
-  const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+  const cleanName = String(name || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-PT");
   const key = normalizeToolName(cleanName);
   if (!key) return null;
   const cached = findCachedTool(cleanName);

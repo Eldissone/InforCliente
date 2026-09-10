@@ -4397,7 +4397,7 @@ function renderStockInventory(movements, summary) {
         </td>
         <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
         <td class="px-3 md:px-10 py-5">
-           <div class="text-xs font-bold text-slate-900">${escapeHtml(product.name || "Desconhecido")}</div>
+           <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
         </td>
         <td class="px-6 md:px-10 py-5 text-center">
@@ -4449,7 +4449,7 @@ async function openMaterialManagerModal() {
               </div>
               <div class="space-y-2">
                   <label class="text-[11px] font-black uppercase tracking-widest text-slate-400 pl-1">Nome do Material</label>
-                  <input id="mt_name" placeholder="Descrição completa" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
+                  <input id="mt_name" placeholder="Descrição completa" class="w-full bg-white border-none rounded-2xl p-4 text-sm font-bold text-slate-700 uppercase focus:ring-2 focus:ring-[#2afc8d] shadow-sm transition-all">
               </div>
            </div>
            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4503,7 +4503,7 @@ async function openMaterialManagerModal() {
         <tr class="border-b border-slate-50 hover:bg-slate-50/80 transition-all group">
           <td class="py-5 px-4 text-center">${renderProductImageThumb(m, { sizeClass: "w-10 h-10" })}</td>
           <td class="py-5 px-4">
-             <div class="text-sm font-bold text-slate-900 mb-0.5">${escapeHtml(m.name)}</div>
+             <div class="text-sm font-bold text-slate-900 mb-0.5 uppercase">${escapeHtml(m.name)}</div>
              <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${m.sku || m.code || ""}</div>
           </td>
           <td class="py-5 px-4">
@@ -4588,7 +4588,7 @@ async function openMaterialManagerModal() {
     const mId = el("mt_id").value;
     const body = {
       code: el("mt_code").value,
-      name: el("mt_name").value,
+      name: String(el("mt_name").value || "").replace(/\s+/g, " ").trim().toLocaleUpperCase("pt-PT"),
       category: el("mt_cat").value,
       unit: el("mt_unit").value
     };
