@@ -177,19 +177,19 @@
     <!-- Table Container -->
     <section id="projectsTableContainer"
       class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mb-12">
-      <div class="h-[700px]">
+      <div class="max-h-[calc(100vh-280px)] overflow-auto">
         <table class="w-full text-left">
-          <thead>
+          <thead class="sticky top-0 z-10">
             <tr
-              class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest text-center md:text-left">
-              <th class="px-8 py-5">Obra</th>
-              <th class="px-8 py-5">Cliente</th>
-              <th class="px-8 py-5">Contacto</th>
-              <th class="px-8 py-5">Morada</th>
-              <th class="px-8 py-5 text-right">Orçamento</th>
-              <th class="px-8 py-5 text-center">Progresso</th>
-              <th class="px-8 py-5 text-center">Status</th>
-              <th class="px-8 py-5 text-right">Acção</th>
+              class="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest text-center md:text-left">
+              <th class="px-8 py-5 bg-slate-50">Obra</th>
+              <th class="px-8 py-5 bg-slate-50">Cliente</th>
+              <th class="px-8 py-5 bg-slate-50">Contacto</th>
+              <th class="px-8 py-5 bg-slate-50">Morada</th>
+              <th class="px-8 py-5 text-right bg-slate-50">Orçamento</th>
+              <th class="px-8 py-5 text-center bg-slate-50">Progresso</th>
+              <th class="px-8 py-5 text-center bg-slate-50">Status</th>
+              <th class="px-8 py-5 text-right bg-slate-50">Acção</th>
             </tr>
           </thead>
           <tbody id="projectsTbody" class="divide-y divide-slate-50"></tbody>
