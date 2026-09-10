@@ -296,7 +296,10 @@ function bindCatalogCheckboxEvents(container, visibleIds) {
 }
 
 function catalogGroupPathLabel(g) {
-  return [g.tipo1, g.grupo || null, g.tipo2].filter(Boolean).join(" › ");
+  return [g.tipo1, g.grupo || null, g.tipo2]
+    .filter(Boolean)
+    .map((part) => formatCategoryDisplayName(part))
+    .join(" › ");
 }
 
 function catalogGroupMatchesSearch(g, query) {
@@ -333,7 +336,7 @@ function addCostCategoryBatchLine(value = "") {
 
 function collectCostCategoryBatchNames() {
   return [...document.querySelectorAll(".cost-category-batch-name")]
-    .map((el) => el.value.trim())
+    .map((el) => formatCategoryDisplayName(el.value.trim()))
     .filter((n) => n.length >= 2);
 }
 
@@ -441,12 +444,20 @@ function renderCatalogFilterBar() {
     </label>`;
   };
 
-  const tipo1Entries = [{ v: "", label: "Centro custo — todos" }, ...opts.tipo1.map((t) => ({ v: t, label: t }))];
+  const tipo1Entries = [
+    { v: "", label: "Centro custo — todos" },
+    ...opts.tipo1.map((t) => ({ v: t, label: formatCategoryDisplayName(t) })),
+  ];
   const grupoValues = opts.grupo;
   const grupoEntries = [{ v: "", label: "Grupo — todos" }];
   if (grupoValues.includes("")) grupoEntries.push({ v: "__EMPTY__", label: "(sem grupo)" });
-  grupoValues.filter(Boolean).forEach((g) => grupoEntries.push({ v: g, label: g }));
-  const tipo2Entries = [{ v: "", label: "Categoria — todas" }, ...opts.tipo2.map((t) => ({ v: t, label: t }))];
+  grupoValues
+    .filter(Boolean)
+    .forEach((g) => grupoEntries.push({ v: g, label: formatCategoryDisplayName(g) }));
+  const tipo2Entries = [
+    { v: "", label: "Categoria — todas" },
+    ...opts.tipo2.map((t) => ({ v: t, label: formatCategoryDisplayName(t) })),
+  ];
 
   bar.innerHTML = `<div class="flex flex-nowrap items-end gap-2 mb-3 p-3 bg-slate-50/90 border border-slate-100 rounded-xl overflow-x-auto">
     ${mkSelect("filterSheetTipo1", "Centro custo", tipo1Entries, catalogSheetFilters.tipo1)}
@@ -560,7 +571,7 @@ function openTipo3DrillModal(group) {
   const addBtn = document.getElementById("btnTipo3DrillAdd");
   if (!modal || !list) return;
 
-  if (title) title.textContent = group.tipo2 || "—";
+  if (title) title.textContent = formatCategoryDisplayName(group.tipo2) || "—";
   if (path) path.textContent = catalogGroupPathLabel(group);
   const variants = getTipo3VariantsForGroup(group);
   const hasRealTipo3 = variants.some((v) => v.tipo3 && v.tipo3 !== "—");
@@ -866,7 +877,10 @@ function renderCostCatalogTipos() {
             (g.variants || []).some((v) => sameCostId(v.pickCategoryId, selectedCostCategoryFilter))
             ? " cost-catalog-table__row--selected"
             : "";
-        const parentPath = [g.tipo1, g.grupo || null].filter(Boolean).join(" › ");
+        const parentPath = [g.tipo1, g.grupo || null]
+          .filter(Boolean)
+          .map((part) => formatCategoryDisplayName(part))
+          .join(" › ");
         const countLabel =
           count > 0
             ? `${count} subcategoria${count === 1 ? "" : "s"}`
@@ -1128,7 +1142,9 @@ function populateCatalogLineContextUI(group, activeEditId) {
   }
   activeCatalogLineForModal = group;
   block.classList.remove("hidden");
-  const parts = [group.tipo1, group.grupo || null, group.tipo2].filter(Boolean);
+  const parts = [group.tipo1, group.grupo || null, group.tipo2]
+    .filter(Boolean)
+    .map((part) => formatCategoryDisplayName(part));
   if (bc) bc.textContent = parts.join(" › ");
   const targets = catalogLineEditTargets(group);
   if (sel) {
@@ -1202,7 +1218,7 @@ function loadCostCategoryEditFields(item) {
   document.getElementById("costCategoryEditId").value = costIdKey(item.id);
   setCostCategoryDomainValue(item.domain);
   document.getElementById("costCategorySheetLevel").value = level;
-  document.getElementById("costCategoryName").value = item.name;
+  document.getElementById("costCategoryName").value = formatCategoryDisplayName(item.name);
   document.getElementById("costCategorySelectable").checked = item.isSelectable !== false;
   document.getElementById("costCategoryRequiresDetail").checked = Boolean(item.requiresDetailText);
   document.getElementById("costCategorySortOrder").value = item.sortOrder ?? "";
@@ -1392,7 +1408,7 @@ async function submitCostCategory(e) {
   const editId = (document.getElementById("costCategoryEditId").value || "").trim();
   const domain = getCostCategoryDomainValue();
   const sheetLevel = document.getElementById("costCategorySheetLevel").value;
-  const name = document.getElementById("costCategoryName").value.trim();
+  const name = formatCategoryDisplayName(document.getElementById("costCategoryName").value);
   const isSelectable = document.getElementById("costCategorySelectable").checked;
   const requiresDetailText = document.getElementById("costCategoryRequiresDetail").checked;
   const sortRaw = document.getElementById("costCategorySortOrder").value;

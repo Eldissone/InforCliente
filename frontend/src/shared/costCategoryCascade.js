@@ -97,12 +97,7 @@ export function sameCostId(a, b) {
 
 export function formatCategoryDisplayName(name) {
   if (!name) return "";
-  const s = String(name).trim();
-  if (!s) return "";
-  // Não usar \b — em JS só [A-Z0-9_] conta como "palavra", logo acentos (í, ç, ã…) geram maiúsculas a meio termo.
-  return s
-    .toLocaleLowerCase("pt-PT")
-    .replace(/(^|[\s/(-]+)(\p{L})/gu, (_, sep, ch) => sep + ch.toLocaleUpperCase("pt-PT"));
+  return String(name).trim().toLocaleUpperCase("pt-PT");
 }
 
 export function buildCategoryPath(categoryId, items = categoriesCache || []) {
