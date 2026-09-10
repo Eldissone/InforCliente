@@ -590,7 +590,10 @@ function openTipo3DrillModal(group) {
   list.innerHTML = variants.length
     ? variants
       .map((v) => {
-        const label = v.tipo3 && v.tipo3 !== "—" ? v.tipo3 : group.tipo2;
+        const label =
+          v.tipo3 && v.tipo3 !== "—"
+            ? formatCategoryDisplayName(v.tipo3)
+            : formatCategoryDisplayName(group.tipo2);
         const badge = v.tipo3 && v.tipo3 !== "—" ? "Subcategoria" : "Categoria (directo)";
         const desc = v.requiresDetailText ? "Descrição obrigatória no pedido" : "Sem descrição extra";
         const selected =
@@ -904,7 +907,7 @@ function renderCostCatalogTipos() {
                     <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Categoria</span>
                     ${countBadge}
                   </span>
-                  <span class="block text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(g.tipo2)}</span>
+                  <span class="block text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(formatCategoryDisplayName(g.tipo2))}</span>
                   <span class="block text-xs text-slate-500 mt-0.5">${escapeHtml(parentPath || "—")}</span>
                 </span>
               </div>
@@ -1123,10 +1126,10 @@ function catalogLineEditTargets(group) {
     seen.add(id);
     targets.push({ id, label });
   };
-  push(group.tipo2Id, `Categoria — ${group.tipo2}`);
+  push(group.tipo2Id, `Categoria — ${formatCategoryDisplayName(group.tipo2)}`);
   for (const v of group.variants || []) {
     if (v.tipo3 && v.tipo3 !== "—") {
-      push(v.pickCategoryId, `Subcategoria — ${v.tipo3}`);
+      push(v.pickCategoryId, `Subcategoria — ${formatCategoryDisplayName(v.tipo3)}`);
     }
   }
   return targets;
