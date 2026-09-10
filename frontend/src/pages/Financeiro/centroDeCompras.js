@@ -324,7 +324,7 @@ function addCostCategoryBatchLine(value = "") {
   if (!wrap) return;
   const row = document.createElement("div");
   row.className = "flex gap-2 items-center cost-catalog-batch-line";
-  row.innerHTML = `<input type="text" class="cost-category-batch-name flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none" placeholder="Nome do subcusto" maxlength="120" value="${escapeHtml(value)}">
+  row.innerHTML = `<input type="text" class="cost-category-batch-name flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none" placeholder="Nome da subcategoria" maxlength="120" value="${escapeHtml(value)}">
     <button type="button" class="cost-catalog-batch-remove shrink-0 w-10 h-10 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-red-600 flex items-center justify-center" aria-label="Remover linha">
       <span class="material-symbols-outlined text-lg">close</span>
     </button>`;
@@ -340,13 +340,14 @@ function collectCostCategoryBatchNames() {
 function setCostCategoryModalTitles({ editId, sheetLevel }) {
   const title = document.getElementById("modalCostCategoryTitle");
   const sub = document.getElementById("modalCostCategorySubtitle");
+  const article = sheetLevel === "TIPO2" || sheetLevel === "SUBCUSTO" ? "Nova" : "Novo";
+  const label = SHEET_LEVEL_LABELS[sheetLevel] || "entrada";
   if (editId) {
     if (title) title.textContent = "Editar tipo de custo";
-    if (sub) sub.textContent = SHEET_LEVEL_LABELS[sheetLevel] || "Entrada do catálogo";
+    if (sub) sub.textContent = label;
   } else {
     if (title) title.textContent = "Adicionar tipo de custo";
-    if (sub)
-      sub.textContent = `Novo ${(SHEET_LEVEL_LABELS[sheetLevel] || "entrada").toLowerCase()} — preencha a classificação abaixo`;
+    if (sub) sub.textContent = `${article} ${label.toLowerCase()} — preencha a classificação abaixo`;
   }
 }
 
@@ -361,7 +362,7 @@ function focusCreatedCatalogItem(categoryId) {
     const cat = costCategories.find((c) => sameCostId(c.id, categoryId));
     const lvl = cat ? classifyCategorySheetLevel(cat) : "";
     if (lvl === "TIPO1" || lvl === "GRUPO") {
-      showToast("Estrutura criada. Veja na aba «Tipo 1 / Grupo».", "info");
+      showToast("Estrutura criada. Veja na aba «Centros de custo».", "info");
       setCostCatalogTab("estrutura");
     } else {
       showToast("Tipo criado na base de dados. Recarregue a página se não aparecer na tabela.", "info");
@@ -369,7 +370,7 @@ function focusCreatedCatalogItem(categoryId) {
     return;
   }
   if (sameCostId(hit.tipo2Id, categoryId) && !hit.tipo3Id) {
-    showToast("Tipo custo 2 adicionado. Clique na linha para gerir tipos custo 3.", "info");
+    showToast("Categoria adicionada. Clique na linha para gerir subcategorias.", "info");
   }
   catalogSheetFilters = { tipo1: "", grupo: "", tipo2: "", tipo3: "" };
   const gkey = catalogSheetGroupKey({
@@ -440,17 +441,17 @@ function renderCatalogFilterBar() {
     </label>`;
   };
 
-  const tipo1Entries = [{ v: "", label: "Tipo custo 1 — todos" }, ...opts.tipo1.map((t) => ({ v: t, label: t }))];
+  const tipo1Entries = [{ v: "", label: "Centro custo — todos" }, ...opts.tipo1.map((t) => ({ v: t, label: t }))];
   const grupoValues = opts.grupo;
   const grupoEntries = [{ v: "", label: "Grupo — todos" }];
   if (grupoValues.includes("")) grupoEntries.push({ v: "__EMPTY__", label: "(sem grupo)" });
   grupoValues.filter(Boolean).forEach((g) => grupoEntries.push({ v: g, label: g }));
-  const tipo2Entries = [{ v: "", label: "Tipo custo 2 — todos" }, ...opts.tipo2.map((t) => ({ v: t, label: t }))];
+  const tipo2Entries = [{ v: "", label: "Categoria — todas" }, ...opts.tipo2.map((t) => ({ v: t, label: t }))];
 
   bar.innerHTML = `<div class="flex flex-nowrap items-end gap-2 mb-3 p-3 bg-slate-50/90 border border-slate-100 rounded-xl overflow-x-auto">
-    ${mkSelect("filterSheetTipo1", "Tipo custo 1", tipo1Entries, catalogSheetFilters.tipo1)}
+    ${mkSelect("filterSheetTipo1", "Centro custo", tipo1Entries, catalogSheetFilters.tipo1)}
     ${mkSelect("filterSheetGrupo", "Grupo", grupoEntries, catalogSheetFilters.grupo)}
-    ${mkSelect("filterSheetTipo2", "Tipo custo 2", tipo2Entries, catalogSheetFilters.tipo2)}
+    ${mkSelect("filterSheetTipo2", "Categoria", tipo2Entries, catalogSheetFilters.tipo2)}
     <button type="button" id="btnClearSheetFilters" class="h-9 px-3 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-600 hover:bg-slate-50 shrink-0 whitespace-nowrap">Limpar filtros</button>
   </div>`;
 }
@@ -512,7 +513,7 @@ function bindCatalogSheetRowEvents(container, items) {
       const realTipo3 = (group.variants || []).filter((v) => v.tipo3 && v.tipo3 !== "—");
       if (realTipo3.length > 1) {
         openTipo3DrillModal(group);
-        showToast("Escolha o tipo custo 3 no modal e use «Pedido extra».", "info");
+        showToast("Escolha a subcategoria no modal e use «Pedido extra».", "info");
         return;
       }
       const pickId =
@@ -565,8 +566,8 @@ function openTipo3DrillModal(group) {
   const hasRealTipo3 = variants.some((v) => v.tipo3 && v.tipo3 !== "—");
   if (meta) {
     meta.textContent = hasRealTipo3
-      ? `${variants.length} Subcustos${variants.length === 1 ? "" : "s"}`
-      : "Sem subcustos — este tipo 2 é seleccionável directamente";
+      ? `${variants.length} subcategoria${variants.length === 1 ? "" : "s"}`
+      : "Sem subcategorias — esta categoria é seleccionável directamente";
   }
   if (addBtn) {
     addBtn.classList.toggle("hidden", !canManageCostCatalog());
@@ -579,7 +580,7 @@ function openTipo3DrillModal(group) {
     ? variants
       .map((v) => {
         const label = v.tipo3 && v.tipo3 !== "—" ? v.tipo3 : group.tipo2;
-        const badge = v.tipo3 && v.tipo3 !== "—" ? "Subcusto" : "Tipo 2 (directo)";
+        const badge = v.tipo3 && v.tipo3 !== "—" ? "Subcategoria" : "Categoria (directo)";
         const desc = v.requiresDetailText ? "Descrição obrigatória no pedido" : "Sem descrição extra";
         const selected =
           sameCostId(selectedCostCategoryFilter, v.pickCategoryId)
@@ -617,7 +618,7 @@ function openTipo3DrillModal(group) {
           </div>`;
       })
       .join("")
-    : `<p class="text-sm text-slate-400 text-center py-8">Nenhum tipo custo 3. Use «Adicionar tipo custo 3».</p>`;
+    : `<p class="text-sm text-slate-400 text-center py-8">Nenhuma subcategoria. Use «Adicionar subcategoria».</p>`;
 
   modal.classList.add("open");
   bindTipo3DrillListEvents(list, group);
@@ -722,14 +723,14 @@ function catalogEstruturaActionsHtml(categoryId) {
 function catalogRowActionsHtml(g) {
   if (!canManageCostCatalog()) return "";
   const del = canDeleteCostCatalog()
-    ? `<button type="button" class="cost-catalog-actions__item cost-catalog-actions__item--danger" data-delete-category="${g.tipo2Id}">Eliminar tipo 2</button>`
+    ? `<button type="button" class="cost-catalog-actions__item cost-catalog-actions__item--danger" data-delete-category="${g.tipo2Id}">Eliminar categoria</button>`
     : "";
   return `<div class="cost-catalog-actions relative inline-block text-left">
       <button type="button" class="cost-catalog-actions__btn">Acções <span class="material-symbols-outlined text-sm align-middle">expand_more</span></button>
       <div class="cost-catalog-actions__menu hidden">
-        <button type="button" class="cost-catalog-actions__item" data-edit-category="${g.tipo2Id}">Editar tipo 2</button>
-        <button type="button" class="cost-catalog-actions__item" data-add-child-category="${g.tipo2Id}">Adicionar tipo custo 3</button>
-        <button type="button" class="cost-catalog-actions__item" data-open-tipo3-drill="${escapeHtml(catalogSheetGroupKey(g))}">Ver tipos custo 3</button>
+        <button type="button" class="cost-catalog-actions__item" data-edit-category="${g.tipo2Id}">Editar categoria</button>
+        <button type="button" class="cost-catalog-actions__item" data-add-child-category="${g.tipo2Id}">Adicionar subcategoria</button>
+        <button type="button" class="cost-catalog-actions__item" data-open-tipo3-drill="${escapeHtml(catalogSheetGroupKey(g))}">Ver subcategorias</button>
         ${del}
       </div>
     </div>`;
@@ -835,12 +836,12 @@ function renderCostCatalogTipos() {
 
   if (meta) {
     meta.textContent = allSheet.length
-      ? `${displayRows.length} tipos custo 2 (${allSheet.length} linhas no catálogo)`
+      ? `${displayRows.length} categoria${displayRows.length === 1 ? "" : "s"} (${allSheet.length} linhas no catálogo)`
       : "Catálogo indisponível";
   }
   if (summaryEl) {
     summaryEl.textContent = displayRows.length
-      ? `${displayRows.length} tipos custo 2`
+      ? `${displayRows.length} categoria${displayRows.length === 1 ? "" : "s"}`
       : catalogSearchQuery.trim()
         ? "Nenhum resultado"
         : "";
@@ -868,16 +869,16 @@ function renderCostCatalogTipos() {
         const parentPath = [g.tipo1, g.grupo || null].filter(Boolean).join(" › ");
         const countLabel =
           count > 0
-            ? `${count} tipo${count === 1 ? "" : "s"} custo 3`
-            : "Sem subcustos";
+            ? `${count} subcategoria${count === 1 ? "" : "s"}`
+            : "Sem subcategorias";
         const countBadge =
           count > 0
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">${count} subcustos</span>`
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">${count} subcategoria${count === 1 ? "" : "s"}</span>`
             : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">Directo</span>`;
         const actions = canManageCostCatalog()
           ? `<td class="px-3 py-2.5 text-right align-middle">${catalogRowActionsHtml(g)}</td>`
           : "";
-        return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0" title="Clique para ver tipos custo 3">
+        return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0" title="Clique para ver subcategorias">
             ${catalogCheckboxCellHtml(g.tipo2Id)}
             <td class="px-4 py-3 align-middle">
               <div class="cost-catalog-desc-cell flex items-start gap-3">
@@ -886,7 +887,7 @@ function renderCostCatalogTipos() {
                 </span>
                 <span class="min-w-0">
                   <span class="inline-flex items-center gap-2">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Tipo custo 2</span>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Categoria</span>
                     ${countBadge}
                   </span>
                   <span class="block text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(g.tipo2)}</span>
@@ -902,7 +903,7 @@ function renderCostCatalogTipos() {
           </tr>`;
       })
       .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-10 text-center text-sm text-slate-400">Nenhum tipo custo 2 com estes filtros ou pesquisa.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-10 text-center text-sm text-slate-400">Nenhuma categoria com estes filtros ou pesquisa.</td></tr>`;
 
   container.innerHTML = `
     <div class="cost-catalog-extrato-wrap overflow-x-auto border border-slate-200 rounded-xl bg-white max-h-[560px] overflow-y-auto">
@@ -910,8 +911,8 @@ function renderCostCatalogTipos() {
         <thead class="sticky top-0 z-[1]">
           <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
             ${checkHead}
-            <th class="px-4 py-3">Tipo custo 2</th>
-            <th class="px-3 py-3 border-l border-slate-200 w-40">Tipo custo 3</th>
+            <th class="px-4 py-3">Categoria</th>
+            <th class="px-3 py-3 border-l border-slate-200 w-40">Subcategoria</th>
             <th class="px-3 py-3 border-l border-slate-200 w-24">Estado</th>
             ${actionsHead}
           </tr>
@@ -981,7 +982,7 @@ function populateCostCategoryGrupoSelect(domain, tipo1Id, selectedId = "") {
   const select = document.getElementById("costCategoryGrupoId");
   if (!select) return;
   if (!tipo1Id) {
-    select.innerHTML = `<option value="">— Directamente sob tipo 1 —</option>`;
+    select.innerHTML = `<option value="">— Directamente sob o centro de custo —</option>`;
     return;
   }
   const grupos = costCategories.filter(
@@ -992,7 +993,7 @@ function populateCostCategoryGrupoSelect(domain, tipo1Id, selectedId = "") {
       classifyCategorySheetLevel(c) === "GRUPO"
   );
   select.innerHTML =
-    `<option value="">— Directamente sob tipo 1 —</option>` +
+    `<option value="">— Directamente sob o centro de custo —</option>` +
     grupos
       .map(
         (c) =>
@@ -1016,7 +1017,7 @@ function populateCostCategoryTipo2ParentSelect(domain, selectedId = "") {
       return `<option value="${c.id}"${sameCostId(c.id, selectedId) ? " selected" : ""}>${path || formatCategoryDisplayName(c.name)}</option>`;
     })
     .join("");
-  select.innerHTML = `<option value="">— Seleccione o tipo custo 2 —</option>${opts}`;
+  select.innerHTML = `<option value="">— Seleccione a categoria —</option>${opts}`;
 }
 
 function syncCostCategoryFormForLevel() {
@@ -1108,10 +1109,10 @@ function catalogLineEditTargets(group) {
     seen.add(id);
     targets.push({ id, label });
   };
-  push(group.tipo2Id, `Tipo custo 2 — ${group.tipo2}`);
+  push(group.tipo2Id, `Categoria — ${group.tipo2}`);
   for (const v of group.variants || []) {
     if (v.tipo3 && v.tipo3 !== "—") {
-      push(v.pickCategoryId, `Tipo custo 3 — ${v.tipo3}`);
+      push(v.pickCategoryId, `Subcategoria — ${v.tipo3}`);
     }
   }
   return targets;
@@ -1292,7 +1293,7 @@ function renderEstruturaCatalog() {
           </tr>`;
       })
       .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos 1. Use «Tipo 1» acima; o grupo é opcional e fica dentro de cada tipo 1.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem centros de custo. Use «Centro custo» acima; o grupo é opcional e fica dentro de cada centro.</td></tr>`;
 
   container.innerHTML = `
     <div class="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1300,7 +1301,7 @@ function renderEstruturaCatalog() {
         <thead>
           <tr class="bg-slate-200/90 text-[10px] font-black uppercase text-slate-700">
             ${checkHead}
-            <th class="px-3 py-2.5">Tipo custo 1</th>
+            <th class="px-3 py-2.5">Centro custo</th>
             <th class="px-3 py-2.5">Grupos <span class="font-semibold normal-case text-slate-500">(opcional)</span></th>
             ${actionsHead}
           </tr>
@@ -1411,19 +1412,19 @@ async function submitCostCategory(e) {
     return;
   }
   if (!editId && sheetLevel === "TIPO2" && domain === "GERAL" && !parentId) {
-    showToast("Seleccione tipo custo 1 ou grupo", "error");
+    showToast("Seleccione o centro de custo ou o grupo", "error");
     return;
   }
   if (editId && sheetLevel === "GRUPO" && !parentId) {
-    showToast("Seleccione o tipo custo 1", "error");
+    showToast("Seleccione o centro de custo", "error");
     return;
   }
   if (editId && sheetLevel === "SUBCUSTO" && !parentId) {
-    showToast("Seleccione o tipo custo 2", "error");
+    showToast("Seleccione a categoria", "error");
     return;
   }
   if (editId && sheetLevel === "TIPO2" && domain === "GERAL" && !parentId) {
-    showToast("Seleccione tipo custo 1 ou grupo", "error");
+    showToast("Seleccione o centro de custo ou o grupo", "error");
     return;
   }
 
@@ -1476,8 +1477,8 @@ async function submitCostCategory(e) {
     const msg =
       err?.data?.message ||
       ({
-        PARENT_TIPO1_REQUIRED: "Seleccione o tipo custo 1.",
-        PARENT_TIPO2_REQUIRED: "Seleccione o tipo custo 2.",
+        PARENT_TIPO1_REQUIRED: "Seleccione o centro de custo.",
+        PARENT_TIPO2_REQUIRED: "Seleccione a categoria.",
         COST_CATEGORY_DUPLICATE_NAME: "Já existe um tipo com este nome neste nível.",
       }[err?.data?.error] ||
         err?.data?.message ||

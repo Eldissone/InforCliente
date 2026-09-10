@@ -7,10 +7,10 @@ export const SHEET_TIPO1_FLAT = {
 };
 
 export const SHEET_LEVEL_LABELS = {
-  TIPO1: "Tipo custo 1",
+  TIPO1: "Centro custo",
   GRUPO: "Grupo",
-  TIPO2: "Tipo custo 2",
-  SUBCUSTO: "Subcusto (tipo 3)",
+  TIPO2: "Categoria",
+  SUBCUSTO: "Subcategoria",
 };
 
 export function classifyCategorySheetLevel(cat) {

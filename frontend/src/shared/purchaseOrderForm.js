@@ -133,7 +133,7 @@ function populateSubcustos() {
   if (!realTipo3.length) {
     const pick = group.variants?.[0]?.pickCategoryId || group.tipo2Id;
     catSel.disabled = true;
-    catSel.innerHTML = `<option value="${escapeHtml(costIdKey(pick))}">Sem subcustos — este centro é a categoria</option>`;
+    catSel.innerHTML = `<option value="${escapeHtml(costIdKey(pick))}">Sem subcategorias — esta categoria é seleccionável directamente</option>`;
     catSel.value = costIdKey(pick);
     syncCostDetail(pick, group.variants?.[0]?.requiresDetailText);
     syncItemToolSuggest();

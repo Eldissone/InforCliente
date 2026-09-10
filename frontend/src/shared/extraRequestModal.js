@@ -1625,7 +1625,7 @@ async function submitExtra(e) {
 
   if (!editId) {
     if (type === "GERAL" && !body.costCategoryId) {
-      modalOptions.showToast("Seleccione o tipo de custo até ao subcusto (tipo 3), se existir", "error");
+      modalOptions.showToast("Seleccione o tipo de custo até à subcategoria, se existir", "error");
       return;
     }
     const detailEl = document.getElementById("extraCostDetailDescription");

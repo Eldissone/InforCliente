@@ -146,7 +146,7 @@ export function sheetRubricsForDomain(domain, items = categoriesCache || []) {
 }
 
 function emptyCascadeHint() {
-  return "Seleccione tipo 1, tipo 2 e, se existir, o subcusto (tipo 3).";
+  return "Seleccione o centro de custo, a categoria e, se existir, a subcategoria.";
 }
 
 /** Normaliza rótulos da folha para comparações (ex.: Produto / Ferramentas). */
@@ -342,8 +342,8 @@ export function mountRubricFirstCascade({
     }
 
     const { wrap, sel } = makeCascadeSelect({
-      label: "Subcusto (tipo 3)",
-      placeholder: "Seleccionar subcusto...",
+      label: "Subcategoria",
+      placeholder: "Seleccionar subcategoria...",
       disabled,
       value: presetPickId,
       options: realTipo3.map((v) => ({
@@ -389,7 +389,7 @@ export function mountRubricFirstCascade({
         "text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2";
       empty.id = "extraCascadeEmptyTipo2";
       empty.textContent =
-        "Este tipo custo 1 ainda não tem tipo custo 2 cadastrado. Cadastre na aba «Tipos de custo».";
+        "Este centro de custo ainda não tem categoria cadastrada. Cadastre na aba «Categorias».";
       container.appendChild(empty);
       return;
     }
@@ -423,8 +423,8 @@ export function mountRubricFirstCascade({
         : "";
 
     const { wrap, sel } = makeCascadeSelect({
-      label: "Tipo custo 2",
-      placeholder: "Seleccionar tipo custo 2...",
+      label: "Categoria",
+      placeholder: "Seleccionar categoria...",
       disabled,
       value: presetValue,
       options: options.map((o) => ({ value: o.value, label: o.label })),
@@ -473,14 +473,14 @@ export function mountRubricFirstCascade({
 
     const tipo1Opts = listTipo1NamesForDomain(domain, items, allRows);
     if (!tipo1Opts.length) {
-      container.innerHTML = `<p class="text-xs text-slate-400">Sem tipo custo 1 para este domínio.</p>`;
+      container.innerHTML = `<p class="text-xs text-slate-400">Sem centro de custo para este domínio.</p>`;
       setPick("");
       return;
     }
 
     const { wrap, sel } = makeCascadeSelect({
-      label: "Tipo custo 1",
-      placeholder: "Seleccionar tipo custo 1...",
+      label: "Centro custo",
+      placeholder: "Seleccionar centro de custo...",
       disabled,
       value: preset?.tipo1 || "",
       options: tipo1Opts.map((name) => ({
