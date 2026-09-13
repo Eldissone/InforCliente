@@ -24,6 +24,7 @@ const {
   markQuoteReceived,
   setMovementSourceQuote,
 } = require("../services/deliveryFieldBridge");
+const { repairConsumedPlanAllocations } = require("../services/planAllocationConsumption");
 
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
@@ -273,6 +274,17 @@ stockRoutes.get(
     const { warehouseId, productId, type, projectId, limit, dateFrom, dateTo } = req.query;
     const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
     if (projectId) await assertProjectReadableForCliente(req, String(projectId));
+
+    if (!isClienteRole(req) && (projectId || warehouseId)) {
+      try {
+        await repairConsumedPlanAllocations({
+          projectId: projectId ? String(projectId) : null,
+          warehouseId: warehouseId ? String(warehouseId) : null,
+        });
+      } catch (err) {
+        console.error("Falha a actualizar entregas consumidas para saída:", err);
+      }
+    }
 
     const createdAt = {};
     const fromBound = parseStockMovementDateBound(dateFrom, false);

@@ -3,6 +3,9 @@ const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
 const { requirePermission, requirePermissionOrLegacyRole, authRequired } = require("../middlewares/auth");
 const { assertOwnProjectAccess, enforceOwnProjectScope, getAccessibleProjectWhere } = require("../services/scopeService");
+const {
+  convertConsumedPlanAllocationsToExit,
+} = require("../services/planAllocationConsumption");
 const dailyPlansRoutes = express.Router();
 
 dailyPlansRoutes.use(authRequired);
@@ -765,7 +768,7 @@ dailyPlansRoutes.post(
 
     const plan = await prisma.dailyPlan.findUnique({
       where: { id },
-      include: { tasks: true, materials: true }
+      include: { tasks: true, materials: { include: { product: true } } }
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
@@ -837,11 +840,20 @@ dailyPlansRoutes.post(
 
             const consQty = Number(cm.consumedQty || 0);
             const provided = Number(planMat.providedQty);
+            const product = planMat.product || (await tx.product.findUnique({ where: { id: planMat.productId } }));
             
             await tx.dailyPlanMaterial.update({
               where: { id: planMat.id },
               data: { consumedQty: consQty }
             });
+
+            if (!isToolProduct(product) && consQty > 0) {
+              await convertConsumedPlanAllocationsToExit(tx, {
+                planId: plan.id,
+                productId: planMat.productId,
+                consumedQty: consQty,
+              });
+            }
 
             // Se o consumo real foi inferior ao provido, marcamos como tendo devoluções
             if (consQty < provided) {
@@ -906,6 +918,14 @@ dailyPlansRoutes.post(
 
           const product = mat.product || (await tx.product.findUnique({ where: { id: mat.productId } }));
           const isTool = isToolProduct(product);
+
+          if (!isTool && consQty > 0) {
+            await convertConsumedPlanAllocationsToExit(tx, {
+              planId: plan.id,
+              productId: mat.productId,
+              consumedQty: consQty,
+            });
+          }
 
           // Para ferramentas, consumedQty significa "extraviado": tudo o que saiu regressa
           // ao estaleiro e o extravio sai como perda. Para materiais, o consumo fica em obra
