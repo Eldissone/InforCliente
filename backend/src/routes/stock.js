@@ -35,6 +35,20 @@ function filterStockMovementsForCliente(items, userRole) {
   return items.filter((m) => CLIENT_STOCK_PRODUCT_CATEGORIES.has((m.product?.category || "").toUpperCase()));
 }
 
+function parseStockMovementDateBound(value, endOfDay) {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-").map(Number);
+    return endOfDay
+      ? new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999))
+      : new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 /** Última foto de evidência por produto (movimentos de stock). */
 async function getLatestEvidenceByProduct(productIds, warehouseId = null) {
   if (!productIds?.length) return {};
@@ -256,13 +270,21 @@ stockRoutes.get(
   "/movements",
   requireStockViewOrClientePortal(),
   asyncHandler(async (req, res) => {
-    const { warehouseId, productId, type, projectId, limit } = req.query;
+    const { warehouseId, productId, type, projectId, limit, dateFrom, dateTo } = req.query;
     const warehouseFilter = await resolveWarehouseFilter(req, warehouseId ? String(warehouseId) : null);
     if (projectId) await assertProjectReadableForCliente(req, String(projectId));
 
+    const createdAt = {};
+    const fromBound = parseStockMovementDateBound(dateFrom, false);
+    const toBound = parseStockMovementDateBound(dateTo, true);
+    if (fromBound) createdAt.gte = fromBound;
+    if (toBound) createdAt.lte = toBound;
+    const hasDateFilter = Boolean(fromBound || toBound);
+
     // Sem filtro de produto a lista é só um extracto recente; filtrada por produto tem de
     // ser completa, porque é dela que sai o histórico apresentado nos detalhes do material.
-    const defaultTake = productId ? 1000 : 100;
+    // Com intervalo de datas, alarga-se o tecto para o Diário mostrar o período pedido.
+    const defaultTake = productId ? 1000 : hasDateFilter ? 2000 : 100;
     const parsedLimit = Number.parseInt(String(limit ?? ""), 10);
     const take = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 2000) : defaultTake;
 
@@ -272,6 +294,7 @@ stockRoutes.get(
         ...(productId && { productId }),
         ...(type && { type }),
         ...(projectId && { projectId }),
+        ...(hasDateFilter && { createdAt }),
       },
       include: {
         product: true,

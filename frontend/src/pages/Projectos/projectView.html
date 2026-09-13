@@ -1228,11 +1228,22 @@
                             class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
                             <option value="">Todas Operações</option>
                             <option value="ENTRADA">Entradas (recepções)</option>
-                            <option value="SAIDA">Saídas / Perdas</option>
-                            <option value="ALOCACAO">Entregas a planos diários</option>
+                            <option value="SAIDA">Saídas</option>
+                            <option value="PERDA">Perdas</option>
                             <option value="DEVOLUCAO">Devoluções ao estaleiro</option>
                             <option value="TRANSFERENCIA">Transferências</option>
                         </select>
+                    </div>
+                    <!-- Datas -->
+                    <div class="flex items-center w-full sm:flex-1 lg:w-auto h-12 bg-slate-50 rounded-2xl px-2 gap-1"
+                        title="Filtrar o Diário de Armazém por intervalo de datas">
+                        <input type="date" id="stockFilterDateFrom"
+                            class="bg-transparent border-none text-xs font-semibold text-slate-600 focus:ring-2 focus:ring-emerald-500 w-full min-w-[8.5rem] lg:w-[8.5rem] h-full rounded-xl"
+                            title="Data inicial">
+                        <span class="text-slate-300 font-black px-1 shrink-0">–</span>
+                        <input type="date" id="stockFilterDateTo"
+                            class="bg-transparent border-none text-xs font-semibold text-slate-600 focus:ring-2 focus:ring-emerald-500 w-full min-w-[8.5rem] lg:w-[8.5rem] h-full rounded-xl"
+                            title="Data final">
                     </div>
                 </div>
             </div>

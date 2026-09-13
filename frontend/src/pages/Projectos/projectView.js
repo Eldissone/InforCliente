@@ -330,7 +330,7 @@ let stockState = {
   summary: [],
   projectWarehouses: [],
   selectedStockWarehouseId: null,
-  filters: { search: "", category: "", condition: "", status: "", warehouse: "" },
+  filters: { search: "", category: "", condition: "", status: "", warehouse: "", dateFrom: "", dateTo: "" },
   isSelectionModeStock: false,
   selectedStockItems: new Set(),
   duplicateDebits: { groups: [], selections: {} },
@@ -3487,9 +3487,7 @@ async function loadStock() {
       ? `/stock/project/${id}/balance?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`
       : `/stock/project/${id}/balance`;
 
-    const movementsUrl = selectedWarehouse
-      ? `/stock/movements?warehouseId=${encodeURIComponent(selectedWarehouse.id)}`
-      : `/stock/movements?projectId=${encodeURIComponent(id)}`;
+    const movementsUrl = buildProjectStockMovementsUrl(id, selectedWarehouse);
 
     const [balanceRes, movementsRes] = await Promise.all([
       apiRequest(balanceUrl),
@@ -3581,18 +3579,74 @@ function movementMatchesStockTypeFilter(m, filterType) {
     return t === "IN" || t === "ENTRY" || t === "ENTRADA" || t === "TRANSFER_IN";
   }
   if (filterType === "SAIDA") {
-    return t === "OUT" || t === "EXIT" || t === "SAIDA" || t === "TRANSFER_OUT" || t === "LOSS";
+    return t === "OUT" || t === "EXIT" || t === "SAIDA" || t === "TRANSFER_OUT" || t === "ALLOCATION";
+  }
+  if (filterType === "PERDA") {
+    return t === "LOSS";
   }
   if (filterType === "TRANSFERENCIA") {
     return t.includes("TRANSFER");
-  }
-  if (filterType === "ALOCACAO") {
-    return t === "ALLOCATION";
   }
   if (filterType === "DEVOLUCAO") {
     return t === "RETURN";
   }
   return true;
+}
+
+function getStockFilterDateRange() {
+  const dateFrom = el("stockFilterDateFrom")?.value?.trim() || stockState.filters.dateFrom || "";
+  const dateTo = el("stockFilterDateTo")?.value?.trim() || stockState.filters.dateTo || "";
+  return { dateFrom, dateTo };
+}
+
+function stockFilterLocalDayMs(dateStr, endOfDay) {
+  const [year, month, day] = String(dateStr || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
+    : new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+}
+
+function movementMatchesStockDateFilter(m, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return true;
+  const ts = new Date(m.createdAt).getTime();
+  if (!Number.isFinite(ts)) return false;
+  if (dateFrom) {
+    const start = stockFilterLocalDayMs(dateFrom, false);
+    if (start != null && ts < start) return false;
+  }
+  if (dateTo) {
+    const end = stockFilterLocalDayMs(dateTo, true);
+    if (end != null && ts > end) return false;
+  }
+  return true;
+}
+
+function syncStockFilterDateBounds() {
+  const fromEl = el("stockFilterDateFrom");
+  const toEl = el("stockFilterDateTo");
+  if (!fromEl || !toEl) return;
+  toEl.min = fromEl.value || "";
+  fromEl.max = toEl.value || "";
+}
+
+function buildProjectStockMovementsUrl(projectId, selectedWarehouse) {
+  const params = new URLSearchParams();
+  if (selectedWarehouse?.id) params.set("warehouseId", selectedWarehouse.id);
+  else params.set("projectId", projectId);
+
+  const { dateFrom, dateTo } = getStockFilterDateRange();
+  if (dateFrom) {
+    const start = stockFilterLocalDayMs(dateFrom, false);
+    if (start != null) params.set("dateFrom", new Date(start).toISOString());
+  }
+  if (dateTo) {
+    const end = stockFilterLocalDayMs(dateTo, true);
+    if (end != null) params.set("dateTo", new Date(end).toISOString());
+  }
+  if (dateFrom || dateTo) params.set("limit", "2000");
+
+  return `/stock/movements?${params.toString()}`;
 }
 
 function renderStockMovements(items) {
@@ -4311,6 +4365,7 @@ async function openStockMovementModal() {
 function applyStockFilters() {
   const { search, condition, status, category, warehouse } = stockState.filters;
   const typeFilter = el("stockFilterType")?.value?.trim() || stockState.filters.type || "";
+  const { dateFrom, dateTo } = getStockFilterDateRange();
 
   const filteredMovements = stockState.items.filter((m) => {
     const s = search.toLowerCase();
@@ -4326,8 +4381,9 @@ function applyStockFilters() {
     const matchesCat = !category || m.product?.category === category;
     const matchesWarehouse = !warehouse || m.warehouse?.name === warehouse;
     const matchesType = movementMatchesStockTypeFilter(m, typeFilter);
+    const matchesDate = movementMatchesStockDateFilter(m, dateFrom, dateTo);
 
-    return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse && matchesType;
+    return matchesSearch && matchesCond && matchesStatus && matchesCat && matchesWarehouse && matchesType && matchesDate;
   });
 
   let filteredSummary = (stockState.summary || []).filter((item) => isStockMaterialProduct(item.product));
@@ -4733,6 +4789,15 @@ function wireStock() {
         applyStockFilters();
       });
     }
+  });
+
+  ["stockFilterDateFrom", "stockFilterDateTo"].forEach((id) => {
+    el(id)?.addEventListener("change", (e) => {
+      const key = id === "stockFilterDateFrom" ? "dateFrom" : "dateTo";
+      stockState.filters[key] = (e.target.value || "").trim();
+      syncStockFilterDateBounds();
+      loadStock();
+    });
   });
 
   // Delegated events for dynamic buttons
