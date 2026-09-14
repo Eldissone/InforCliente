@@ -3682,7 +3682,7 @@ function renderStockMovements(items) {
            <div class="uppercase text-[9px] font-black text-slate-400">${escapeHtml(vehicleInfo)}</div>
         </td>
         <td class="px-6 md:px-10 py-5 text-right">
-           <button class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all">
+           <button type="button" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all" title="Ver detalhe">
              <span class="material-symbols-outlined text-sm">visibility</span>
            </button>
         </td>
@@ -3988,7 +3988,10 @@ function getStockRowTotals(productId, warehouseId = null) {
 async function openStockMovementDetailModal(moveId) {
   const movements = el("stockMovementsTable")._movementsData || stockState.items || [];
   const m = movements.find((x) => x.id === moveId);
-  if (!m) return;
+  if (!m) {
+    toast("Movimento não encontrado na lista actual.", { type: "error" });
+    return;
+  }
 
   const totals = getStockRowTotals(m.productId, m.warehouseId);
   const history = await fetchProductMovements(m.productId, m.warehouseId);
@@ -4810,7 +4813,7 @@ function wireStock() {
     }
 
     const rowView = e.target.closest("[data-view-stock]");
-    if (rowView && !e.target.closest("button")) {
+    if (rowView) {
       const mid = rowView.dataset.viewStock;
       openStockMovementDetailModal(mid).catch(() =>
         toast("Não foi possível carregar o detalhe do movimento.", { type: "error" })
