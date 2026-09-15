@@ -218,6 +218,8 @@ projectRoutes.get(
         OR: [
           { name: { contains: search, mode: "insensitive" } },
           { code: { contains: search, mode: "insensitive" } },
+          { referencia: { contains: search, mode: "insensitive" } },
+          { client: { name: { contains: search, mode: "insensitive" } } },
         ],
       });
     }

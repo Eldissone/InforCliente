@@ -173,6 +173,11 @@ function iconFor(name) {
   return "engineering";
 }
 
+function displayReferencia(p) {
+  const ref = String(p?.referencia || "").trim();
+  return ref || "—";
+}
+
 function renderRow(p, idx = 1) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
   const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
@@ -190,7 +195,7 @@ function renderRow(p, idx = 1) {
           </div>
           <div>
             <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${escapeHtml(p.name)}</h4>
-            <span class="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 rounded tracking-widest">${escapeHtml(p.code)}</span>
+            <span class="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">${escapeHtml(displayReferencia(p))}</span>
           </div>
         </div>
       </td>
@@ -249,7 +254,7 @@ function renderGridItem(p, idx = 1) {
         </div>
         <div class="flex flex-col items-end gap-2">
             ${renderStatusPill(p.status)}
-            <span class="text-[10px] font-black text-slate-400 tracking-widest uppercase">${p.code}</span>
+            <span class="text-[10px] font-bold text-slate-400">${escapeHtml(displayReferencia(p))}</span>
         </div>
       </div>
       
@@ -396,7 +401,7 @@ async function load() {
                 <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
                     <div class="truncate mr-2">
                         <p class="font-bold text-slate-900 text-sm truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</p>
-                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${escapeHtml(p.code)}</p>
+                        <p class="text-[9px] font-bold text-slate-400 truncate">${escapeHtml(displayReferencia(p))}</p>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
                         <button onclick="window.restoreProject('${p.id}')" class="h-8 px-3 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1">
@@ -549,7 +554,7 @@ async function openEdit(id) {
   ].map(t => `<option value="${t}" ${p.projectType === t ? 'selected' : ''}>${t}</option>`).join("");
 
   openModal({
-    title: `Editar Obra: ${p.code}`,
+    title: `Editar Obra: ${p.referencia || p.name}`,
     primaryLabel: "Salvar Alterações",
     dangerLabel: "Excluir Obra",
     onDanger: async ({ close }) => {
@@ -562,6 +567,7 @@ async function openEdit(id) {
     contentHtml: `
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.name)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referência</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" value="${escapeHtml(p.referencia)}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contacto</label><input id="p_contact" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.contact)}" /></div>
@@ -587,8 +593,6 @@ async function openEdit(id) {
              </div>
           </div>
         </div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" value="${escapeHtml(p.referencia)}" /></div>
-
         <div class="col-span-1 md:col-span-2 mt-2">
           <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2 mb-2">
             <h3 class="text-xs font-bold text-primary uppercase tracking-widest">Equipa Técnica Adicional</h3>
@@ -792,6 +796,7 @@ async function openCreate() {
     contentHtml: `
 
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referência</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contacto</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
@@ -817,7 +822,6 @@ async function openCreate() {
 
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Telefone do Dir.</label><input id="p_dir_phone" class="w-full rounded-lg border-slate-300" placeholder="9xxxxxxxx" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email do Dir.</label><input id="p_dir_email" class="w-full rounded-lg border-slate-300" placeholder="email@exemplo.com" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referências</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2">
           <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2 mb-2">
