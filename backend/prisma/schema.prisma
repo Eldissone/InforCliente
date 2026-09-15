@@ -506,6 +506,19 @@ model Product {
   stock              WarehouseStock[]
   dailyPlanMaterials DailyPlanMaterial[]
   projectPlans       ProjectMaterialPlan[]
+  aliases            ProductAlias[]
+  supplierProducts   SupplierProduct[]
+}
+
+model ProductAlias {
+  id          String   @id @default(cuid())
+  productId   String
+  alias       String
+  normalized  String   @unique
+  createdAt   DateTime @default(now())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 }
 
 model WarehouseStock {
@@ -1381,6 +1394,7 @@ model SupplierBankAccount {
 model SupplierProduct {
   id          String    @id @default(cuid())
   supplierId  String
+  productId   String?
   name        String
   description String?
   unit        String?
@@ -1395,7 +1409,11 @@ model SupplierProduct {
   updatedAt   DateTime  @updatedAt
 
   supplier Supplier    @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product  Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   quotes   NeedQuote[]
+
+  @@unique([supplierId, productId])
+  @@index([productId])
 }
 
 model NeedQuote {

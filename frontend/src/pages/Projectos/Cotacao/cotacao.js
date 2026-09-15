@@ -65,6 +65,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadProjects();
 
   initTabs();
+  initSubTabs();
   initEvents();
 
   const backBtn = document.getElementById("btnBackToBudget");
@@ -134,6 +135,20 @@ function initTabs() {
   });
 }
 
+function initSubTabs() {
+  const btns = document.querySelectorAll(".sub-tab-btn");
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btns.forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".sub-tab-panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      const target = btn.getAttribute("data-subtab");
+      document.getElementById(`subtab-${target}`)?.classList.add("active");
+      if (target === "catalogo") loadMaterialCatalog();
+    });
+  });
+}
+
 function initEvents() {
   document.getElementById("formSupplier").addEventListener("submit", submitSupplier);
   document.getElementById("btnAddSupplierBank")?.addEventListener("click", () => addSupplierBankRow());
@@ -145,6 +160,21 @@ function initEvents() {
       cancelProductEdit();
     } else {
       openNewSupplierProductForm();
+    }
+  });
+  document.getElementById("searchSuppliers")?.addEventListener("input", renderSuppliers);
+  document.getElementById("filterSupplierStatus")?.addEventListener("change", renderSuppliers);
+  document.getElementById("searchMaterialCatalog")?.addEventListener("input", () => {
+    clearTimeout(materialCatalogSearchTimer);
+    materialCatalogSearchTimer = setTimeout(() => loadMaterialCatalog(), 250);
+  });
+  document.getElementById("catalogProductSearch")?.addEventListener("input", onCatalogProductSearchInput);
+  document.getElementById("catalogProductSearch")?.addEventListener("focus", onCatalogProductSearchInput);
+  document.addEventListener("click", (e) => {
+    const box = document.getElementById("catalogProductResults");
+    const input = document.getElementById("catalogProductSearch");
+    if (box && input && !box.contains(e.target) && e.target !== input) {
+      box.classList.add("hidden");
     }
   });
   document.getElementById("formAddQuote").addEventListener("submit", (e) =>
@@ -857,45 +887,70 @@ async function loadSuppliers() {
   }
 }
 
+function filteredSuppliers() {
+  const term = (document.getElementById("searchSuppliers")?.value || "").trim().toLowerCase();
+  const status = document.getElementById("filterSupplierStatus")?.value || "";
+  return currentSuppliers.filter((s) => {
+    if (status === "active" && s.active === false) return false;
+    if (status === "inactive" && s.active !== false) return false;
+    if (!term) return true;
+    const hay = [s.name, s.nif, s.phone, s.email, s.contact, s.category]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(term);
+  });
+}
+
 function renderSuppliers() {
   const tbody = document.getElementById("suppliersTableBody");
-  
+  const items = filteredSuppliers();
+
   if (currentSuppliers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor registado.</td></tr>`;
+    updateQuoteSupplierSelect();
+    return;
+  }
+
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium">Nenhum fornecedor corresponde à pesquisa.</td></tr>`;
+    updateQuoteSupplierSelect();
     return;
   }
 
   const paymentTermLabels = {
-    "PRONTO_PAGAMENTO": "Pronto Pagamento",
-    "CREDITO": "Crédito"
+    PRONTO_PAGAMENTO: "Pronto Pagamento",
+    CREDITO: "Crédito",
   };
 
-  tbody.innerHTML = currentSuppliers.map(s => `
+  tbody.innerHTML = items.map((s) => `
     <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+      <td class="py-3 px-4 text-sm font-semibold text-slate-600">${escapeHtml(s.nif || "—")}</td>
       <td class="py-3 px-4 font-bold text-slate-800">${escapeHtml(s.name)}</td>
-      <td class="py-3 px-4 text-sm text-slate-600">${escapeHtml(s.nif || "—")}</td>
       <td class="py-3 px-4">
-        <div class="text-sm font-medium text-slate-700">${escapeHtml(s.contact || "—")}</div>
+        <div class="text-sm font-medium text-slate-700">${escapeHtml(s.phone || s.contact || "—")}</div>
         <div class="text-xs text-slate-400">${escapeHtml(s.email || "")}</div>
       </td>
-      <td class="py-3 px-4 text-sm text-slate-600">${escapeHtml(s.category || "—")}</td>
-      <td class="py-3 px-4 text-center text-sm font-bold text-slate-600">${escapeHtml(s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—")}</td>
-      <td class="py-3 px-4 text-center font-bold text-slate-700">${s._count?.products || 0}</td>
+      <td class="py-3 px-4 text-sm font-bold text-slate-600">${escapeHtml(s.paymentTerm ? paymentTermLabels[s.paymentTerm] || s.paymentTerm : "—")}</td>
       <td class="py-3 px-4 text-center">
-        <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
-          ${s.active ? 'Activo' : 'Inactivo'}
+        <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${s.active !== false ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}">
+          ${s.active !== false ? "Activo" : "Inactivo"}
         </span>
       </td>
-      <td class="py-3 px-4 text-center">
-        <div class="flex justify-center gap-2">
-          <button type="button" data-open-products="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center hover:bg-blue-100 transition-all text-blue-500" title="Catálogo de Produtos">
-            <span class="material-symbols-outlined text-base">inventory_2</span>
+      <td class="py-3 px-4 text-right">
+        <div class="flex justify-end flex-wrap gap-1">
+          <button type="button" data-open-products="${escapeHtml(s.id)}" class="supplier-action-link">
+            <span class="material-symbols-outlined">inventory_2</span> Catálogo
           </button>
-          <button type="button" data-edit-supplier="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-all text-slate-500">
-            <span class="material-symbols-outlined text-base">edit</span>
+          <button type="button" data-edit-supplier="${escapeHtml(s.id)}" class="supplier-action-link">
+            <span class="material-symbols-outlined">edit</span> Editar
           </button>
-          <button type="button" data-delete-supplier="${escapeHtml(s.id)}" class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-100 hover:text-red-600 transition-all text-slate-500">
-            <span class="material-symbols-outlined text-base">delete</span>
+          <button type="button" data-toggle-supplier="${escapeHtml(s.id)}" class="supplier-action-link">
+            <span class="material-symbols-outlined">${s.active !== false ? "pause_circle" : "play_circle"}</span>
+            ${s.active !== false ? "Suspender" : "Activar"}
+          </button>
+          <button type="button" data-delete-supplier="${escapeHtml(s.id)}" class="supplier-action-link is-danger">
+            <span class="material-symbols-outlined">delete</span> Excluir
           </button>
         </div>
       </td>
@@ -912,11 +967,13 @@ function renderSuppliers() {
   tbody.querySelectorAll("[data-edit-supplier]").forEach((btn) => {
     btn.addEventListener("click", () => window.editSupplier(btn.getAttribute("data-edit-supplier")));
   });
+  tbody.querySelectorAll("[data-toggle-supplier]").forEach((btn) => {
+    btn.addEventListener("click", () => toggleSupplierActive(btn.getAttribute("data-toggle-supplier")));
+  });
   tbody.querySelectorAll("[data-delete-supplier]").forEach((btn) => {
     btn.addEventListener("click", () => window.deleteSupplier(btn.getAttribute("data-delete-supplier")));
   });
 
-  // Update Quote modal select if open
   updateQuoteSupplierSelect();
 }
 
@@ -1080,6 +1137,21 @@ window.deleteSupplier = async function(id) {
   }
 }
 
+async function toggleSupplierActive(id) {
+  const supplier = currentSuppliers.find((x) => x.id === id);
+  if (!supplier) return;
+  const nextActive = supplier.active === false;
+  const label = nextActive ? "Activar" : "Suspender";
+  if (!confirm(`${label} este fornecedor?`)) return;
+  try {
+    await apiRequest(`/suppliers/${id}`, { method: "PATCH", body: { active: nextActive } });
+    showToast(nextActive ? "Fornecedor activado" : "Fornecedor suspenso", "success");
+    await loadSuppliers();
+  } catch (err) {
+    showToast("Erro: " + err.message, "error");
+  }
+}
+
 async function submitSupplier(e) {
   e.preventDefault();
   const id = document.getElementById("supplierId").value;
@@ -1135,6 +1207,11 @@ async function submitSupplier(e) {
 
 let currentCatalogSupplierId = null;
 let currentCatalogProducts = [];
+let selectedCatalogProduct = null;
+let nomenclatureSearchTimer = null;
+let materialCatalogSearchTimer = null;
+let materialCatalogItems = [];
+let expandedCatalogId = null;
 
 function setSupplierProductFormVisible(visible) {
   const panel = document.getElementById("supplierProductFormPanel");
@@ -1156,7 +1233,7 @@ function setSupplierProductFormVisible(visible) {
 function openNewSupplierProductForm() {
   cancelProductEdit(false);
   setSupplierProductFormVisible(true);
-  document.getElementById("productName")?.focus();
+  document.getElementById("catalogProductSearch")?.focus();
 }
 
 window.openSupplierProducts = async function(supplierId, supplierName) {
@@ -1193,7 +1270,7 @@ function renderSupplierProducts() {
   };
 
   if (currentCatalogProducts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-medium">Nenhum produto registado. Clique em <strong>Novo Produto</strong> para adicionar.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-slate-400 font-medium">Nenhuma oferta registada. Consulte o Catálogo em <strong>Novo Produto</strong>.</td></tr>`;
     return;
   }
 
@@ -1202,10 +1279,14 @@ function renderSupplierProducts() {
 
   tbody.innerHTML = currentCatalogProducts.map(p => {
     const expired = p.validUntil && new Date(p.validUntil) < new Date();
+    const catalogName = p.product?.name || p.name;
+    const commercial = p.product?.name && p.name && p.name !== p.product.name ? p.name : "";
     return `
       <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
         <td class="py-3 px-5">
-          <div class="font-bold text-slate-800 text-sm">${escapeHtml(p.name)}</div>
+          <div class="font-bold text-slate-800 text-sm">${escapeHtml(catalogName)}</div>
+          ${commercial ? `<div class="text-[11px] text-slate-500 mt-0.5">Nome comercial: ${escapeHtml(commercial)}</div>` : ""}
+          ${p.product?.sku ? `<div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">${escapeHtml(p.product.sku)}</div>` : ""}
           ${p.description ? `<div class="text-xs text-slate-400 mt-0.5">${escapeHtml(p.description)}</div>` : ""}
         </td>
         <td class="py-3 px-5 text-center text-sm text-slate-500">${escapeHtml(p.unit || "—")}</td>
@@ -1229,16 +1310,187 @@ function renderSupplierProducts() {
   }).join("");
 }
 
+function setCatalogProductHint(message, isError = false) {
+  const hint = document.getElementById("catalogProductHint");
+  if (!hint) return;
+  hint.textContent = message || "";
+  hint.classList.toggle("text-amber-600", Boolean(isError));
+  hint.classList.toggle("text-slate-500", !isError);
+}
+
+function applySelectedCatalogProduct(product) {
+  selectedCatalogProduct = product || null;
+  const idEl = document.getElementById("catalogProductId");
+  const searchEl = document.getElementById("catalogProductSearch");
+  const unitEl = document.getElementById("productUnit");
+  if (idEl) idEl.value = product?.id || "";
+  if (searchEl && product) {
+    searchEl.value = product.sku ? `${product.name} · ${product.sku}` : product.name;
+  }
+  if (unitEl) unitEl.value = product?.unit || "";
+  document.getElementById("catalogProductResults")?.classList.add("hidden");
+  setCatalogProductHint(product ? "Material seleccionado do Catálogoda Logística." : "");
+}
+
+function onCatalogProductSearchInput() {
+  const input = document.getElementById("catalogProductSearch");
+  const term = input?.value.trim() || "";
+  if (selectedCatalogProduct && input?.value !== `${selectedCatalogProduct.name}${selectedCatalogProduct.sku ? ` · ${selectedCatalogProduct.sku}` : ""}`) {
+    selectedCatalogProduct = null;
+    const idEl = document.getElementById("catalogProductId");
+    if (idEl) idEl.value = "";
+  }
+  clearTimeout(nomenclatureSearchTimer);
+  if (term.length < 2) {
+    document.getElementById("catalogProductResults")?.classList.add("hidden");
+    setCatalogProductHint(term ? "Escreva pelo menos 2 caracteres para consultar Catálogo." : "");
+    return;
+  }
+  nomenclatureSearchTimer = setTimeout(() => searchNomenclature(term), 220);
+}
+
+async function searchNomenclature(term) {
+  const box = document.getElementById("catalogProductResults");
+  if (!box) return;
+  box.classList.remove("hidden");
+  box.innerHTML = `<div class="px-4 py-3 text-xs text-slate-400">A consultar Catálogo...</div>`;
+  try {
+    const data = await apiRequest(`/suppliers/nomenclature?search=${encodeURIComponent(term)}&limit=20`);
+    const items = data.items || [];
+    if (!items.length) {
+      box.innerHTML = `<div class="px-4 py-3 text-xs font-semibold text-amber-700">Este material não está no catalogo da Logística. Adicione-o primeiro em Logística → Catálogo.</div>`;
+      setCatalogProductHint("Este material não está no catalogo da Logística. Adicione-o primeiro em Logística → Catálogo.", true);
+      return;
+    }
+    setCatalogProductHint(`${items.length} resultado${items.length === 1 ? "" : "s"} no Catálogo.`);
+    box.innerHTML = items.map((p) => {
+      const aliases = (p.aliases || []).map((a) => a.alias).filter(Boolean).join(", ");
+      return `
+        <button type="button" data-nomenclature-id="${escapeHtml(p.id)}"
+          class="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+          <div class="text-sm font-bold text-slate-800">${escapeHtml(p.name)}</div>
+          <div class="text-[11px] text-slate-500">${escapeHtml([p.sku, p.unit, aliases].filter(Boolean).join(" · "))}</div>
+        </button>
+      `;
+    }).join("");
+    box.querySelectorAll("[data-nomenclature-id]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const product = items.find((x) => x.id === btn.getAttribute("data-nomenclature-id"));
+        applySelectedCatalogProduct(product);
+      });
+    });
+  } catch (err) {
+    box.innerHTML = `<div class="px-4 py-3 text-xs text-red-500">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadMaterialCatalog() {
+  const tbody = document.getElementById("materialCatalogBody");
+  if (!tbody) return;
+  const term = document.getElementById("searchMaterialCatalog")?.value.trim() || "";
+  tbody.innerHTML = `<tr><td colspan="6"><div class="spinner my-8"></div></td></tr>`;
+  try {
+    const qs = term ? `?search=${encodeURIComponent(term)}` : "";
+    const data = await apiRequest(`/suppliers/material-catalog${qs}`);
+    materialCatalogItems = data.items || [];
+    renderMaterialCatalog();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderMaterialCatalog() {
+  const tbody = document.getElementById("materialCatalogBody");
+  if (!tbody) return;
+  if (!materialCatalogItems.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium">Nenhum material no catálogo da Logística.</td></tr>`;
+    return;
+  }
+
+  const fmt = (v, cur = "AOA") =>
+    Number(v).toLocaleString("pt-PT", { minimumFractionDigits: 2 }) + " " + cur;
+
+  tbody.innerHTML = materialCatalogItems.map((p) => {
+    const aliases = (p.aliases || []).map((a) => a.alias).filter(Boolean);
+    const expanded = expandedCatalogId === p.id;
+    const offers = p.offers || [];
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50">
+        <td class="py-3 px-4 text-xs font-bold text-slate-500">${escapeHtml(p.sku || "—")}</td>
+        <td class="py-3 px-4">
+          <div class="font-bold text-slate-800">${escapeHtml(p.name)}</div>
+          ${aliases.length ? `<div class="text-[11px] text-slate-400 mt-0.5">Também: ${escapeHtml(aliases.join(", "))}</div>` : ""}
+        </td>
+        <td class="py-3 px-4 text-center text-sm text-slate-600">${escapeHtml(p.unit || "—")}</td>
+        <td class="py-3 px-4 text-center font-bold text-slate-700">${p.supplierCount || 0}</td>
+        <td class="py-3 px-4 text-right font-bold text-slate-800">${p.bestPrice != null ? fmt(p.bestPrice, p.bestCurrency) : "—"}</td>
+        <td class="py-3 px-4 text-center">
+          <button type="button" data-expand-catalog="${escapeHtml(p.id)}" class="supplier-action-link">
+            <span class="material-symbols-outlined">${expanded ? "expand_less" : "expand_more"}</span>
+            ${expanded ? "Fechar" : "Ofertas"}
+          </button>
+        </td>
+      </tr>
+      ${expanded ? `
+        <tr class="bg-slate-50/80">
+          <td colspan="6" class="px-6 py-3">
+            ${offers.length ? `
+              <div class="flex flex-col gap-2">
+                ${offers.map((o) => `
+                  <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div>
+                      <span class="font-bold text-slate-800">${escapeHtml(o.supplier?.name || "Fornecedor")}</span>
+                      ${o.name && o.name !== p.name ? `<span class="text-slate-400"> · ${escapeHtml(o.name)}</span>` : ""}
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <span class="font-bold text-slate-800">${fmt(o.price, o.currency)}</span>
+                      <button type="button" data-open-offer-supplier="${escapeHtml(o.supplier?.id || "")}" class="supplier-action-link">Ver fornecedor</button>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            ` : `<p class="text-sm text-slate-400">Ainda sem ofertas de fornecedores para este material.</p>`}
+          </td>
+        </tr>
+      ` : ""}
+    `;
+  }).join("");
+
+  tbody.querySelectorAll("[data-expand-catalog]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-expand-catalog");
+      expandedCatalogId = expandedCatalogId === id ? null : id;
+      renderMaterialCatalog();
+    });
+  });
+  tbody.querySelectorAll("[data-open-offer-supplier]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-open-offer-supplier");
+      const s = currentSuppliers.find((x) => x.id === id);
+      if (!id) return;
+      window.openSupplierProducts(id, s?.name || "Fornecedor");
+    });
+  });
+}
+
 document.getElementById("formSupplierProduct").addEventListener("submit", async function(e) {
   e.preventDefault();
   const id = document.getElementById("supplierProductId").value;
   const supplierId = document.getElementById("supplierProductSupplierId").value;
+  const catalogProductId = document.getElementById("catalogProductId")?.value || selectedCatalogProduct?.id;
+  if (!catalogProductId) {
+    showToast("Consulte e seleccione um material da nomenclatura da Logística.", "error");
+    document.getElementById("catalogProductSearch")?.focus();
+    return;
+  }
+  const commercialName = document.getElementById("productName").value.trim();
   const body = {
-    name: document.getElementById("productName").value.trim(),
+    productId: catalogProductId,
+    name: commercialName || selectedCatalogProduct?.name || undefined,
     description: document.getElementById("productDescription").value.trim() || null,
     price: parseFloat(document.getElementById("productPrice").value),
     currency: document.getElementById("productCurrency").value,
-    unit: document.getElementById("productUnit").value.trim() || null,
+    unit: document.getElementById("productUnit").value.trim() || selectedCatalogProduct?.unit || null,
     validUntil: document.getElementById("productValidUntil").value
       ? new Date(document.getElementById("productValidUntil").value).toISOString()
       : null,
@@ -1253,11 +1505,14 @@ document.getElementById("formSupplierProduct").addEventListener("submit", async 
       showToast("Produto actualizado", "success");
     } else {
       await apiRequest(`/suppliers/${supplierId}/products`, { method: "POST", body });
-      showToast("Produto adicionado ao catálogo", "success");
+      showToast("Oferta ligada ao catálogo da Logística", "success");
     }
     cancelProductEdit();
     await loadSupplierProducts();
-    loadSuppliers(); // refresh o contador de produtos na tabela
+    loadSuppliers();
+    if (document.getElementById("subtab-catalogo")?.classList.contains("active")) {
+      loadMaterialCatalog();
+    }
   } catch(err) {
     showToast("Erro: " + err.message, "error");
   }
@@ -1269,11 +1524,18 @@ window.editSupplierProduct = function(productOrId) {
     : productOrId;
   if (!product) return;
   document.getElementById("supplierProductId").value = product.id;
-  document.getElementById("productName").value = product.name || "";
+  applySelectedCatalogProduct(product.product || {
+    id: product.productId,
+    name: product.product?.name || product.name,
+    sku: product.product?.sku,
+    unit: product.unit || product.product?.unit,
+  });
+  document.getElementById("productName").value =
+    product.product?.name && product.name !== product.product.name ? product.name : "";
   document.getElementById("productDescription").value = product.description || "";
   document.getElementById("productPrice").value = product.price || "";
   document.getElementById("productCurrency").value = product.currency || "AOA";
-  document.getElementById("productUnit").value = product.unit || "";
+  document.getElementById("productUnit").value = product.unit || product.product?.unit || "";
   document.getElementById("productValidUntil").value = product.validUntil
     ? product.validUntil.substring(0, 10)
     : "";
@@ -1285,7 +1547,7 @@ window.editSupplierProduct = function(productOrId) {
   const titleEl = document.getElementById("formProductTitle");
   if (titleEl) titleEl.textContent = "Editar Produto";
   setSupplierProductFormVisible(true);
-  document.getElementById("productName").focus();
+  document.getElementById("catalogProductSearch")?.focus();
 };
 
 window.deleteSupplierProduct = async function(id) {
@@ -1304,6 +1566,11 @@ window.cancelProductEdit = function(hidePanel = true) {
   document.getElementById("formSupplierProduct").reset();
   document.getElementById("supplierProductId").value = "";
   document.getElementById("supplierProductSupplierId").value = currentCatalogSupplierId || "";
+  const catalogId = document.getElementById("catalogProductId");
+  if (catalogId) catalogId.value = "";
+  selectedCatalogProduct = null;
+  document.getElementById("catalogProductResults")?.classList.add("hidden");
+  setCatalogProductHint("");
   document.getElementById("supplierProductSubmitLabel").textContent = "Guardar Produto";
   document.getElementById("supplierProductCancelEdit").style.display = "none";
   const titleEl = document.getElementById("formProductTitle");

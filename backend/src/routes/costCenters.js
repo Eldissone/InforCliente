@@ -484,7 +484,15 @@ costCenterRoutes.get(
       },
       include: {
         supplier: { select: { id: true, name: true } },
-        supplierProduct: { select: { id: true, name: true, unit: true } },
+        supplierProduct: {
+          select: {
+            id: true,
+            name: true,
+            unit: true,
+            productId: true,
+            product: { select: { id: true, name: true, sku: true, unit: true } },
+          },
+        },
         need: {
           select: {
             id: true,
@@ -504,7 +512,7 @@ costCenterRoutes.get(
 
     const products = await prisma.product.findMany({
       where: { active: true },
-      select: { id: true, name: true },
+      select: { id: true, name: true, aliases: { select: { alias: true } } },
     });
     const warehouses = await prisma.warehouse.findMany({
       select: { id: true, name: true, projectId: true },
@@ -531,7 +539,9 @@ costCenterRoutes.get(
 
     const enrichedQuotes = mergedQuotes.map((q) => ({
       ...q,
-      suggestedProductId: suggestProductId(q.supplierProduct?.name || q.need?.description, products),
+      suggestedProductId:
+        q.supplierProduct?.productId ||
+        suggestProductId(q.supplierProduct?.product?.name || q.supplierProduct?.name || q.need?.description, products),
       suggestedWarehouseId:
         warehouses.find((w) => w.projectId === q.need?.projectId)?.id ||
         warehouses.find((w) => !w.projectId)?.id ||

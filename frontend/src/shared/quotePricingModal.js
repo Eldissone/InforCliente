@@ -925,7 +925,14 @@ export async function loadPresentedPrices({
 
           supplierBadges: `${paymentTermBadge(q.supplier)} ${winnerBadge}`,
 
-          productName: q.supplierProduct?.name ? `(${q.supplierProduct.name})` : "",
+          productName: (() => {
+            const catalogName = q.supplierProduct?.product?.name || q.supplierProduct?.name;
+            if (!catalogName) return "";
+            const commercial = q.supplierProduct?.name;
+            return commercial && commercial !== catalogName
+              ? `(${catalogName} · ${commercial})`
+              : `(${catalogName})`;
+          })(),
 
           detailLine: `${displayQty} uni × ${price} ${currency}`,
 
@@ -1706,7 +1713,12 @@ export async function openQuotePricingModal({
 
         productSel.innerHTML = `<option value="">Selecionar produto...</option>` +
 
-          products.map((p) => `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}" data-vat="${p.vatPercent ?? ""}" data-wh="${p.withholdingPercent ?? ""}" data-disc="${p.discountPercent ?? ""}">${p.name} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency} / ${p.unit || "uni"}</option>`).join("");
+          products.map((p) => {
+            const catalogName = p.product?.name || p.name;
+            const extra = p.product?.name && p.name && p.name !== p.product.name ? ` (${p.name})` : "";
+            const label = `${catalogName}${extra} — ${Number(p.price).toLocaleString("pt-PT")} ${p.currency} / ${p.unit || p.product?.unit || "uni"}`;
+            return `<option value="${p.id}" data-price="${p.price}" data-currency="${p.currency}" data-vat="${p.vatPercent ?? ""}" data-wh="${p.withholdingPercent ?? ""}" data-disc="${p.discountPercent ?? ""}">${label}</option>`;
+          }).join("");
 
         productSel.onchange = function () {
 

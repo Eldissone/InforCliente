@@ -5,6 +5,11 @@ const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { syncSupplierBankAccounts, supplierInclude } = require("../services/supplierBankAccounts");
 const { consultarNifAgt, normalizeNif } = require("../services/agtNifLookup");
+const {
+  normalizeSearchKey,
+  withUppercaseProductName,
+  productSearchWhere,
+} = require("../utils/productName");
 
 const bankAccountInput = z.object({
   bankName: z.string().min(1),
@@ -81,6 +86,42 @@ function duplicateNifResponse(existing) {
   };
 }
 
+const catalogProductSelect = {
+  id: true,
+  name: true,
+  sku: true,
+  unit: true,
+  category: true,
+  aliases: { select: { id: true, alias: true }, orderBy: { alias: "asc" } },
+};
+
+const supplierProductInclude = {
+  product: { select: { id: true, name: true, sku: true, unit: true, category: true } },
+};
+
+async function ensureCommercialAlias(product, commercialName) {
+  const display = String(commercialName || "").replace(/\s+/g, " ").trim();
+  if (!display || !product?.id) return;
+  const key = normalizeSearchKey(display);
+  if (!key || key === normalizeSearchKey(product.name)) return;
+  const existing = await prisma.productAlias.findUnique({ where: { normalized: key } });
+  if (existing) return;
+  try {
+    await prisma.productAlias.create({
+      data: { productId: product.id, alias: display, normalized: key },
+    });
+  } catch (err) {
+    if (err.code !== "P2002") throw err;
+  }
+}
+
+function duplicateCatalogOfferResponse(existing) {
+  return {
+    error: "Este fornecedor já tem uma oferta para este material do catálogo da Logística.",
+    existingProduct: existing,
+  };
+}
+
 const supplierRoutes = express.Router();
 supplierRoutes.use(authRequired);
 // GET (listagem) acessível a todos os utilizadores autenticados (dados de referência)
@@ -111,6 +152,72 @@ supplierRoutes.get(
       include: supplierInclude,
     });
     res.json({ items });
+  })
+);
+
+supplierRoutes.get(
+  "/nomenclature",
+  requirePermission("fornecedores", "view"),
+  asyncHandler(async (req, res) => {
+    const search = req.query.search ? String(req.query.search) : "";
+    const take = Math.min(Number(req.query.limit) || (search ? 40 : 200), 300);
+    const items = await prisma.product.findMany({
+      where: {
+        active: true,
+        ...productSearchWhere(search),
+      },
+      select: catalogProductSelect,
+      orderBy: { name: "asc" },
+      take,
+    });
+    res.json({ items: items.map(withUppercaseProductName) });
+  })
+);
+
+supplierRoutes.get(
+  "/material-catalog",
+  requirePermission("fornecedores", "view"),
+  asyncHandler(async (req, res) => {
+    const search = req.query.search ? String(req.query.search) : "";
+    const items = await prisma.product.findMany({
+      where: {
+        active: true,
+        ...productSearchWhere(search),
+      },
+      select: {
+        ...catalogProductSelect,
+        supplierProducts: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            currency: true,
+            unit: true,
+            validUntil: true,
+            supplier: { select: { id: true, name: true, active: true } },
+          },
+          orderBy: { price: "asc" },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    res.json({
+      items: items.map((item) => {
+        const offers = item.supplierProducts || [];
+        const { supplierProducts, ...product } = item;
+        const prices = offers
+          .map((o) => Number(o.price))
+          .filter((n) => Number.isFinite(n));
+        return {
+          ...withUppercaseProductName(product),
+          offers,
+          supplierCount: offers.length,
+          bestPrice: prices.length ? Math.min(...prices) : null,
+          bestCurrency: offers[0]?.currency || "AOA",
+        };
+      }),
+    });
   })
 );
 
@@ -316,6 +423,7 @@ supplierRoutes.get(
     const supplierId = String(req.params.id);
     const items = await prisma.supplierProduct.findMany({
       where: { supplierId },
+      include: supplierProductInclude,
       orderBy: { name: "asc" },
     });
     res.json({ items });
@@ -329,7 +437,8 @@ supplierRoutes.post(
     const supplierId = String(req.params.id);
     const body = z
       .object({
-        name: z.string().min(1),
+        productId: z.string().min(1),
+        name: z.string().optional().nullable(),
         description: z.string().optional().nullable(),
         unit: z.string().optional().nullable(),
         price: z.coerce.number().min(0),
@@ -342,22 +451,50 @@ supplierRoutes.post(
       })
       .parse(req.body);
 
-    const created = await prisma.supplierProduct.create({
-      data: {
-        supplierId,
-        name: body.name,
-        description: body.description,
-        unit: body.unit,
-        price: body.price,
-        currency: body.currency,
-        validUntil: body.validUntil ? new Date(body.validUntil) : null,
-        notes: body.notes,
-        vatPercent: body.vatPercent ?? null,
-        withholdingPercent: body.withholdingPercent ?? null,
-        discountPercent: body.discountPercent ?? null,
-      },
+    const catalogProduct = await prisma.product.findFirst({
+      where: { id: body.productId, active: true },
     });
-    res.status(201).json(created);
+    if (!catalogProduct) {
+      return res.status(400).json({
+        error: "Seleccione um material do Catálogo. Se não existir, adicione-o primeiro em Logística → Catálogo.",
+      });
+    }
+
+    const duplicate = await prisma.supplierProduct.findFirst({
+      where: { supplierId, productId: catalogProduct.id },
+    });
+    if (duplicate) {
+      return res.status(409).json(duplicateCatalogOfferResponse(duplicate));
+    }
+
+    const commercialName = String(body.name || "").replace(/\s+/g, " ").trim() || catalogProduct.name;
+
+    try {
+      const created = await prisma.supplierProduct.create({
+        data: {
+          supplierId,
+          productId: catalogProduct.id,
+          name: commercialName,
+          description: body.description,
+          unit: body.unit || catalogProduct.unit,
+          price: body.price,
+          currency: body.currency,
+          validUntil: body.validUntil ? new Date(body.validUntil) : null,
+          notes: body.notes,
+          vatPercent: body.vatPercent ?? null,
+          withholdingPercent: body.withholdingPercent ?? null,
+          discountPercent: body.discountPercent ?? null,
+        },
+        include: supplierProductInclude,
+      });
+      await ensureCommercialAlias(catalogProduct, commercialName);
+      res.status(201).json(created);
+    } catch (err) {
+      if (err.code === "P2002") {
+        return res.status(409).json(duplicateCatalogOfferResponse(null));
+      }
+      throw err;
+    }
   })
 );
 
@@ -365,9 +502,11 @@ supplierRoutes.patch(
   "/:id/products/:productId",
   requirePermission("fornecedores", "manage"),
   asyncHandler(async (req, res) => {
+    const supplierId = String(req.params.id);
     const id = String(req.params.productId);
     const body = z
       .object({
+        productId: z.string().min(1).optional(),
         name: z.string().min(1).optional(),
         description: z.string().optional().nullable(),
         unit: z.string().optional().nullable(),
@@ -381,7 +520,14 @@ supplierRoutes.patch(
       })
       .parse(req.body);
 
+    const current = await prisma.supplierProduct.findFirst({
+      where: { id, supplierId },
+      include: supplierProductInclude,
+    });
+    if (!current) return res.status(404).json({ error: "Produto do fornecedor não encontrado." });
+
     const data = { ...body };
+    delete data.productId;
     if (body.validUntil !== undefined) {
       data.validUntil = body.validUntil ? new Date(body.validUntil) : null;
     }
@@ -389,11 +535,41 @@ supplierRoutes.patch(
     if (body.withholdingPercent === null) data.withholdingPercent = null;
     if (body.discountPercent === null) data.discountPercent = null;
 
-    const updated = await prisma.supplierProduct.update({
-      where: { id },
-      data,
-    });
-    res.json(updated);
+    let catalogProduct = current.product;
+    if (body.productId && body.productId !== current.productId) {
+      catalogProduct = await prisma.product.findFirst({
+        where: { id: body.productId, active: true },
+      });
+      if (!catalogProduct) {
+        return res.status(400).json({
+          error: "Seleccione um material do Catálogo.",
+        });
+      }
+      const duplicate = await prisma.supplierProduct.findFirst({
+        where: { supplierId, productId: catalogProduct.id, id: { not: id } },
+      });
+      if (duplicate) {
+        return res.status(409).json(duplicateCatalogOfferResponse(duplicate));
+      }
+      data.productId = catalogProduct.id;
+      if (!body.name) data.name = catalogProduct.name;
+      if (body.unit === undefined) data.unit = catalogProduct.unit;
+    }
+
+    try {
+      const updated = await prisma.supplierProduct.update({
+        where: { id },
+        data,
+        include: supplierProductInclude,
+      });
+      await ensureCommercialAlias(catalogProduct || updated.product, updated.name);
+      res.json(updated);
+    } catch (err) {
+      if (err.code === "P2002") {
+        return res.status(409).json(duplicateCatalogOfferResponse(null));
+      }
+      throw err;
+    }
   })
 );
 

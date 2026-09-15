@@ -6,6 +6,12 @@ const { prisma } = require("../db");
 const { asyncHandler } = require("../utils/http");
 const { authRequired, requirePermission, requirePermissionOrLegacyRole } = require("../middlewares/auth");
 const { uploadToSupabase } = require("../utils/storage");
+const {
+  normalizeProductName,
+  normalizeSearchKey,
+  withUppercaseProductName,
+  productSearchWhere,
+} = require("../utils/productName");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,19 +21,44 @@ const upload = multer({
 const productRoutes = express.Router();
 productRoutes.use(authRequired);
 
-function normalizeProductName(value) {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleUpperCase("pt-PT");
+async function findNomenclatureConflict(name, excludeProductId = null) {
+  const displayName = normalizeProductName(name);
+  const key = normalizeSearchKey(name);
+  if (!key) return null;
+
+  const byName = await prisma.product.findFirst({
+    where: {
+      name: { equals: displayName, mode: "insensitive" },
+      ...(excludeProductId ? { id: { not: excludeProductId } } : {}),
+    },
+    select: { id: true, name: true, sku: true },
+  });
+  if (byName) return byName;
+
+  const alias = await prisma.productAlias.findUnique({
+    where: { normalized: key },
+    include: { product: { select: { id: true, name: true, sku: true } } },
+  });
+  if (alias?.product && alias.product.id !== excludeProductId) {
+    return alias.product;
+  }
+  return null;
 }
 
-function withUppercaseProductName(product) {
-  if (!product) return product;
-  return { ...product, name: normalizeProductName(product.name) };
+function nomenclatureConflictResponse(existing) {
+  return {
+    error: `Já existe este material no catálogo da Logística: ${existing.name}${existing.sku ? ` (${existing.sku})` : ""}.`,
+    existingProduct: existing,
+  };
 }
 
-// GET - Listar cat?logo de produtos/materiais
+const productAliasSelect = {
+  id: true,
+  alias: true,
+  normalized: true,
+};
+
+// GET - Listar catálogo de produtos/materiais
 productRoutes.get(
   "/",
   requirePermission("materiais", "view"),
@@ -38,13 +69,9 @@ productRoutes.get(
       where: {
         ...(showAll ? {} : { active: true }),
         ...(category && { category }),
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { sku: { contains: search, mode: "insensitive" } },
-          ],
-        }),
+        ...productSearchWhere(search),
       },
+      include: { aliases: { select: productAliasSelect, orderBy: { alias: "asc" } } },
       orderBy: { name: "asc" },
     });
     return res.json({ items: items.map(withUppercaseProductName) });
@@ -181,6 +208,11 @@ productRoutes.post(
 
     body.name = normalizeProductName(body.name);
 
+    const conflict = await findNomenclatureConflict(body.name);
+    if (conflict) {
+      return res.status(409).json(nomenclatureConflictResponse(conflict));
+    }
+
     try {
       const product = await prisma.product.create({
         data: body,
@@ -219,7 +251,13 @@ productRoutes.patch(
       image: z.string().optional().nullable(),
     }).parse(req.body);
 
-    if (body.name != null) body.name = normalizeProductName(body.name);
+    if (body.name != null) {
+      body.name = normalizeProductName(body.name);
+      const conflict = await findNomenclatureConflict(body.name, id);
+      if (conflict) {
+        return res.status(409).json(nomenclatureConflictResponse(conflict));
+      }
+    }
 
     try {
       const updated = await prisma.product.update({
@@ -266,6 +304,50 @@ productRoutes.post(
     });
 
     return res.json(updated);
+  })
+);
+
+productRoutes.post(
+  "/:id/aliases",
+  requirePermission("materiais", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { alias } = z.object({ alias: z.string().trim().min(2) }).parse(req.body);
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!product) return res.status(404).json({ error: "Produto não encontrado." });
+
+    const displayAlias = String(alias).replace(/\s+/g, " ").trim();
+    const normalized = normalizeSearchKey(displayAlias);
+    if (!normalized) {
+      return res.status(400).json({ error: "Indique um nome comercial válido." });
+    }
+    if (normalizeSearchKey(product.name) === normalized) {
+      return res.status(400).json({ error: "Este nome já é a nomenclatura do catálogo." });
+    }
+
+    const conflict = await findNomenclatureConflict(displayAlias, id);
+    if (conflict) {
+      return res.status(409).json(nomenclatureConflictResponse(conflict));
+    }
+
+    const created = await prisma.productAlias.create({
+      data: { productId: id, alias: displayAlias, normalized },
+    });
+    return res.status(201).json(created);
+  })
+);
+
+productRoutes.delete(
+  "/:id/aliases/:aliasId",
+  requirePermission("materiais", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id, aliasId } = req.params;
+    const existing = await prisma.productAlias.findFirst({
+      where: { id: String(aliasId), productId: String(id) },
+    });
+    if (!existing) return res.status(404).json({ error: "Nome comercial não encontrado." });
+    await prisma.productAlias.delete({ where: { id: existing.id } });
+    return res.json({ ok: true });
   })
 );
 

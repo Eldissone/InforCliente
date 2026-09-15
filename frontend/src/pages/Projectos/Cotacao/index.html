@@ -75,6 +75,95 @@
         tr.quote-bundle-last td {
             border-bottom: 2px solid #c7d2fe;
         }
+
+        .sub-tab-btn {
+            height: 40px;
+            padding: 0 16px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .sub-tab-btn:hover { color: #0f172a; }
+
+        .sub-tab-btn.active {
+            color: #0f172a;
+            border-bottom-color: #2afc8d;
+        }
+
+        .sub-tab-panel { display: none; }
+        .sub-tab-panel.active { display: block; }
+
+        .catalog-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .catalog-toolbar__title {
+            flex: 1 1 auto;
+            min-width: 220px;
+        }
+
+        .catalog-toolbar__search {
+            position: relative;
+            flex: 0 0 320px;
+            width: 320px;
+            max-width: 100%;
+        }
+
+        @media (max-width: 640px) {
+            .catalog-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .catalog-toolbar__title { min-width: 0; }
+
+            .catalog-toolbar__search {
+                flex-basis: auto;
+                width: 100%;
+            }
+        }
+
+        .supplier-action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            background: none;
+            border: 0;
+            padding: 4px 6px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .supplier-action-link:hover { background: #f1f5f9; color: #0f172a; }
+        .supplier-action-link.is-danger:hover { background: #fef2f2; color: #dc2626; }
+        .supplier-action-link .material-symbols-outlined { font-size: 16px; }
+
+        .nomenclature-results {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 4px);
+            z-index: 30;
+            max-height: 220px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        }
     </style>
 </head>
 
@@ -272,36 +361,92 @@
 
             <!-- TAB: FORNECEDORES -->
             <div class="tab-panel" id="tab-fornecedores">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                    <h2 class="text-lg font-bold text-slate-800">Lista de Fornecedores</h2>
-                    <button onclick="openSupplierModal()"
-                        class="h-10 px-4 rounded-xl bg-[#0f172a] text-white text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md">
-                        <span class="material-symbols-outlined text-lg">add</span> Novo Fornecedor
+              
+                <div class="flex items-center gap-1 mb-5 border-b border-slate-200">
+                    <button type="button" class="sub-tab-btn active" data-subtab="lista">
+                        <span class="material-symbols-outlined text-base">storefront</span>
+                        Fornecedores
+                    </button>
+                    <button type="button" class="sub-tab-btn" data-subtab="catalogo">
+                        <span class="material-symbols-outlined text-base">menu_book</span>
+                        Catálogo
                     </button>
                 </div>
-                <div class="overflow-x-auto rounded-xl border border-slate-200">
-                    <table class="w-full text-left border-collapse min-w-[800px]">
-                        <thead>
-                            <tr
-                                class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                <th class="py-4 px-4">Nome</th>
-                                <th class="py-4 px-4 w-32">NIF</th>
-                                <th class="py-4 px-4 w-48">Contacto / Email</th>
-                                <th class="py-4 px-4 w-32">Categoria</th>
-                                <th class="py-4 px-4 text-center w-24">Mod. Pag.</th>
-                                <th class="py-4 px-4 text-center w-24">Produtos</th>
-                                <th class="py-4 px-4 text-center w-24">Estado</th>
-                                <th class="py-4 px-4 text-center w-32"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="suppliersTableBody" class="text-sm">
-                            <tr>
-                                <td colspan="8">
-                                    <div class="spinner my-8"></div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+
+                <div class="sub-tab-panel active" id="subtab-lista">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+                        <div class="flex flex-col sm:flex-row gap-3 w-full md:flex-1">
+                            <div class="relative flex-1 max-w-md">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                                <input type="text" id="searchSuppliers" placeholder="Pesquisar fornecedor..."
+                                    class="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                            </div>
+                            <select id="filterSupplierStatus"
+                                class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                                <option value="">Todos os estados</option>
+                                <option value="active">Activo</option>
+                                <option value="inactive">Inactivo</option>
+                            </select>
+                        </div>
+                        <button onclick="openSupplierModal()"
+                            class="h-10 px-4 rounded-xl bg-[#0f172a] text-white text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shrink-0">
+                            <span class="material-symbols-outlined text-lg">add</span> Novo fornecedor
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-200">
+                        <table class="w-full text-left border-collapse min-w-[860px]">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    <th class="py-4 px-4 w-36">NIF</th>
+                                    <th class="py-4 px-4">Nome</th>
+                                    <th class="py-4 px-4 w-52">Contacto</th>
+                                    <th class="py-4 px-4 w-36">Termos</th>
+                                    <th class="py-4 px-4 text-center w-28">Status</th>
+                                    <th class="py-4 px-4 text-right w-72">Acções</th>
+                                </tr>
+                            </thead>
+                            <tbody id="suppliersTableBody" class="text-sm">
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="spinner my-8"></div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="sub-tab-panel" id="subtab-catalogo">
+                    <div class="catalog-toolbar">
+                        <div class="catalog-toolbar__title">
+                            <h2 class="text-lg font-bold text-slate-800 whitespace-nowrap">Nomenclatura da Logística</h2>
+                            <p class="text-xs text-slate-500 mt-1">Lista única de materiais. Registros em Logística → Catálogo.</p>
+                        </div>
+                        <div class="catalog-toolbar__search">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                            <input type="text" id="searchMaterialCatalog" placeholder="Pesquisar material..."
+                                class="w-full h-10 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto rounded-xl border border-slate-200">
+                        <table class="w-full text-left border-collapse min-w-[800px]">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    <th class="py-4 px-4 w-32">SKU</th>
+                                    <th class="py-4 px-4">Nome</th>
+                                    <th class="py-4 px-4 w-24 text-center">Und.</th>
+                                    <th class="py-4 px-4 w-32 text-center">Fornecedores</th>
+                                    <th class="py-4 px-4 w-40 text-right">Melhor preço</th>
+                                    <th class="py-4 px-4 w-28 text-center">Acções</th>
+                                </tr>
+                            </thead>
+                            <tbody id="materialCatalogBody" class="text-sm">
+                                <tr>
+                                    <td colspan="6" class="text-center py-8 text-slate-400">Abra esta aba para carregar o catálogo.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -687,28 +832,32 @@
                     <form id="formSupplierProduct">
                         <input type="hidden" id="supplierProductId">
                         <input type="hidden" id="supplierProductSupplierId">
+                        <input type="hidden" id="catalogProductId">
                         <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                            <!-- Nome -->
+                            <div class="md:col-span-3 relative">
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Produto*</label>
+                                <input type="text" id="catalogProductSearch" autocomplete="off"
+                                    placeholder="Consultar material no catálogo da Logística..."
+                                    class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
+                                <div id="catalogProductResults" class="nomenclature-results hidden"></div>
+                                <p id="catalogProductHint" class="text-[11px] text-slate-500 font-semibold mt-1.5"></p>
+                            </div>
                             <div class="md:col-span-2">
-                                <label
-                                    class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Nome
-                                    do Produto *</label>
-                                <input type="text" id="productName" required placeholder="Ex: Pedra, Cimento, Areia..."
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Nome comercial (opcional)</label>
+                                <input type="text" id="productName" placeholder="Se o fornecedor usa outro nome"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
-                            <!-- Descrição -->
                             <div class="md:col-span-2">
                                 <label
                                     class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Descrição</label>
                                 <input type="text" id="productDescription" placeholder="Opcional"
                                     class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
                             </div>
-                            <!-- Unidade -->
                             <div>
                                 <label
                                     class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Unidade</label>
-                                <input type="text" id="productUnit" placeholder="m³, un, kg..."
-                                    class="w-full h-11 px-4 bg-white border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-[#2afc8d] focus:ring-2 focus:ring-[#2afc8d]/20 transition-all">
+                                <input type="text" id="productUnit" readonly
+                                    class="w-full h-11 px-4 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600">
                             </div>
                             <!-- Preço -->
                             <div class="md:col-span-1">

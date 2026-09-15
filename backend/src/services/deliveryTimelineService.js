@@ -146,7 +146,10 @@ function suggestProductId(supplierProductName, products) {
       .replace(/[\u0300-\u036f]/g, "")
       .trim();
   const target = norm(supplierProductName);
-  const exact = products.find((p) => norm(p.name) === target);
+  const exact = products.find((p) => {
+    if (norm(p.name) === target) return true;
+    return (p.aliases || []).some((a) => norm(a.alias || a.normalized || a) === target);
+  });
   if (exact) return exact.id;
   const partial = products.find((p) => {
     const n = norm(p.name);
