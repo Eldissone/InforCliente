@@ -79,6 +79,11 @@ async function loadProjects() {
   }
 }
 
+function displayReferencia(p) {
+  const ref = String(p?.referencia || "").trim();
+  return ref || "—";
+}
+
 function renderProjectList(projects) {
   const list = document.getElementById("projList");
   const count = document.getElementById("projCount");
@@ -99,7 +104,7 @@ function renderProjectList(projects) {
       </div>
       <div class="flex-1 min-w-0">
         <p class="text-sm font-bold text-slate-900 truncate">${p.name}</p>
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">${p.code || ""}</p>
+        <p class="text-[10px] font-bold text-slate-400 truncate">${displayReferencia(p)}</p>
       </div>
       <span class="w-2 h-2 rounded-full flex-shrink-0 ${statusColor}"></span>
     </div>`;
@@ -204,7 +209,7 @@ async function selectProject(project) {
   document.getElementById("emptyProjectView")?.classList.add("hidden");
   document.getElementById("projectContent").classList.remove("hidden");
   document.getElementById("selectedProjName").textContent = project.name;
-  document.getElementById("selectedProjCode").textContent = project.code || "";
+  document.getElementById("selectedProjCode").textContent = displayReferencia(project);
   document.getElementById("viewProjectBtn").href = `./projectView.html?id=${project.id}`;
 
   // Re-render list to highlight
@@ -1841,7 +1846,9 @@ function bindEvents() {
   document.getElementById("projSearch").addEventListener("input", (e) => {
     const q = e.target.value.toLowerCase();
     renderProjectList(allProjects.filter((p) =>
-      p.name.toLowerCase().includes(q) || (p.code || "").toLowerCase().includes(q)
+      p.name.toLowerCase().includes(q) ||
+      (p.referencia || "").toLowerCase().includes(q) ||
+      (p.code || "").toLowerCase().includes(q)
     ));
   });
 
