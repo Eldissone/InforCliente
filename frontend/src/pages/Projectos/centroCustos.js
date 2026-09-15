@@ -71,7 +71,7 @@ let currentSuppliers = [];
 // ── Load Projects ──────────────────────────────────────────────────────────────
 async function loadProjects() {
   try {
-    const data = await apiRequest("/projects?pageSize=100&sort=updatedAt_desc");
+    const data = await apiRequest("/projects?pageSize=100&sort=created_asc");
     allProjects = data.items || [];
     renderProjectList(allProjects);
   } catch (err) {
