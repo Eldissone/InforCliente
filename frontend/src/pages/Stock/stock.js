@@ -969,26 +969,24 @@ async function renderTools(container) {
     };
 
     container.innerHTML = `
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-            <div>
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Ferramentas & Equipamento</h2>
-            </div>
-            <div class="flex flex-wrap gap-3 w-full md:w-auto">
-                <div class="relative flex-grow md:flex-grow-0 min-w-[240px]">
-                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+        <div class="flex flex-row items-center justify-between gap-4 mb-8 min-w-0 overflow-x-auto">
+            <h2 class="text-2xl lg:text-3xl font-black text-slate-900 tracking-tighter leading-tight shrink-0 whitespace-nowrap">Ferramentas & Equipamento</h2>
+            <div class="flex flex-nowrap items-center gap-3 min-w-0 flex-1 justify-end">
+                <div class="relative min-w-0 w-40 lg:w-52 shrink">
+                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+                    <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-10 pr-3 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
-                <select id="filterToolsLocation" class="h-10 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px] max-w-[260px]">
+                <select id="filterToolsLocation" class="h-10 px-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-0 w-44 lg:w-56 shrink truncate">
                     <option value="ALL">Todas as obras</option>
                     ${projects.map((p) => `<option value="proj:${p.id}">${esc(p.name)}</option>`).join("")}
                 </select>
-                <select id="filterTools" class="h-10 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px]">
+                <select id="filterTools" class="h-10 px-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer w-40 lg:w-48 shrink-0">
                     <option value="ALL">Todos</option>
                     <option value="AVAILABLE">Disponíveis (${available})</option>
                     <option value="ASSIGNED">Em Obra / Trânsito (${assignedCount})</option>
                     <option value="MAINTENANCE">Manutenção (${maintenanceCount})</option>
                 </select>
-                <button id="btnCreateTool" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
+                <button id="btnCreateTool" class="h-10 bg-slate-900 text-white px-4 lg:px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all shrink-0 whitespace-nowrap">
                     <span class="material-symbols-outlined text-xl">add</span> Cadastrar
                 </button>
             </div>
