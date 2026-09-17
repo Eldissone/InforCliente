@@ -291,7 +291,7 @@ async function loadProject() {
 
   el("projectTitle").textContent = p.name;
   if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
-  el("projectBreadcrumb").textContent = p.code;
+  el("projectBreadcrumb").textContent = String(p.referencia || "").trim() || "—";
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   el("projectClientCode").textContent = p.client?.code || "Sem código";
   el("projectContact").textContent = p.contact || "-";
