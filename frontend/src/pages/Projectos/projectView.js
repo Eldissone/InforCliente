@@ -4472,7 +4472,7 @@ function renderStockInventory(movements, summary) {
     const msg = stockState.projectWarehouses?.length
       ? "Sem materiais com saldo ou planeados no armazém seleccionado."
       : "Sem stock disponível no armazém desta obra.";
-    tbody.innerHTML = `<tr><td colspan="12" class="px-10 py-10 text-center text-slate-400 font-medium">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="px-10 py-10 text-center text-slate-400 font-medium">${msg}</td></tr>`;
     return;
   }
 
@@ -4480,7 +4480,6 @@ function renderStockInventory(movements, summary) {
     const balance = Number(item.quantity || 0);
     const product = item.product || {};
     const planned = Number(item.quantityPlanned || 0);
-    const warehouseName = item.warehouse?.name || "Obra (planeado)";
 
     const fallbackTotals = computeStockTotals(movements, item.productId, item.warehouseId);
     const totalIn = item.totalIn != null ? Number(item.totalIn || 0) : fallbackTotals.totalIn;
@@ -4500,10 +4499,6 @@ function renderStockInventory(movements, summary) {
         <td class="px-3 md:px-10 py-5">
            <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
-        </td>
-        <td class="px-6 md:px-10 py-5 text-center">
-           <span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-[9px] font-black uppercase tracking-widest">${escapeHtml(warehouseName)}</span>
-           ${item.warehouse?.visibleToClient === false ? `<span class="block mt-1 text-[8px] font-black uppercase text-slate-400">Só gestão</span>` : ""}
         </td>
         <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${product.unit || "un"}</td>
         <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
