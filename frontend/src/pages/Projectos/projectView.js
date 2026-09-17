@@ -4133,7 +4133,7 @@ async function openProjectWarehouseModal(warehouseId = null) {
         <input type="hidden" name="type" value="SITE">
         <div class="space-y-2">
           <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Nome do Armazém</label>
-          <input type="text" name="name" value="${escapeHtml(warehouse?.name || "")}" required placeholder="Ex: Consumo Cozinha"
+          <input type="text" name="name" value="${escapeHtml(warehouse?.name || "")}" required placeholder="Ex: Armazém de Consumo"
             class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
         </div>
         <label class="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 cursor-pointer">

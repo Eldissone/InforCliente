@@ -222,7 +222,7 @@ function renderRow(p, idx = 1) {
       <td class="px-8 py-5 text-center">${renderStatusPill(p.status)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1">
-          <a href="./centroCustos.html?projectId=${p.id}" title="Centro de Custos" onclick="event.stopPropagation()"
+          <a href="./centroCustos.html?projectId=${p.id}" title="Planeamento" onclick="event.stopPropagation()"
             class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#2afc8d]/10 text-slate-400 hover:text-[#059669] transition-all">
             <span class="material-symbols-outlined text-lg">account_balance</span>
           </a>
