@@ -21,6 +21,92 @@ function canManageWarehouses() {
     return can("stock", "manage");
 }
 
+/** Paginação no estilo da lista geral de obras. */
+function renderGeralPagination(container, { page, pageSize, total, onPage }) {
+    if (!container) return;
+    container.innerHTML = "";
+    const totalCount = Number(total) || 0;
+    const size = Math.max(1, Number(pageSize) || 1);
+    const totalPages = Math.max(1, Math.ceil(totalCount / size) || 1);
+    if (totalCount <= 0 || totalPages <= 1) return;
+
+    const current = Math.min(Math.max(1, Number(page) || 1), totalPages);
+    const wrap = document.createElement("div");
+    wrap.className = "flex items-center justify-center gap-2 flex-wrap";
+
+    const goTo = (next) => {
+        if (typeof onPage === "function") onPage(next);
+    };
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.disabled = current === 1;
+    prevBtn.className = current === 1
+        ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+        : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+    prevBtn.innerHTML = `<span class="material-symbols-outlined text-sm">chevron_left</span> Anterior`;
+    if (current > 1) prevBtn.addEventListener("click", () => goTo(current - 1));
+    wrap.appendChild(prevBtn);
+
+    const buildNumBtn = (label, target, disabled, isActive) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = label;
+        btn.disabled = disabled;
+        if (isActive) {
+            btn.className = "w-10 h-10 rounded-xl bg-slate-900 text-[#2afc8d] font-black text-sm shadow-lg flex items-center justify-center";
+        } else if (disabled) {
+            btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-sm flex items-center justify-center cursor-not-allowed";
+        } else {
+            btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-50 hover:border-slate-200 transition-all flex items-center justify-center shadow-sm";
+        }
+        if (!disabled && !isActive) btn.addEventListener("click", () => goTo(target));
+        return btn;
+    };
+
+    const delta = 2;
+    const range = [];
+    for (let i = Math.max(1, current - delta); i <= Math.min(totalPages, current + delta); i++) range.push(i);
+    if (range[0] > 1) {
+        wrap.appendChild(buildNumBtn("1", 1, false, false));
+        if (range[0] > 2) {
+            const dots = document.createElement("span");
+            dots.textContent = "...";
+            dots.className = "text-slate-400 font-bold text-sm px-1";
+            wrap.appendChild(dots);
+        }
+    }
+    range.forEach((p) => wrap.appendChild(buildNumBtn(String(p), p, false, p === current)));
+    if (range[range.length - 1] < totalPages) {
+        if (range[range.length - 1] < totalPages - 1) {
+            const dots = document.createElement("span");
+            dots.textContent = "...";
+            dots.className = "text-slate-400 font-bold text-sm px-1";
+            wrap.appendChild(dots);
+        }
+        wrap.appendChild(buildNumBtn(String(totalPages), totalPages, false, false));
+    }
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.disabled = current === totalPages;
+    nextBtn.className = current === totalPages
+        ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+        : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+    nextBtn.innerHTML = `Próximo <span class="material-symbols-outlined text-sm">chevron_right</span>`;
+    if (current < totalPages) nextBtn.addEventListener("click", () => goTo(current + 1));
+    wrap.appendChild(nextBtn);
+
+    const from = (current - 1) * size + 1;
+    const to = Math.min(current * size, totalCount);
+    const info = document.createElement("span");
+    info.className = "text-xs font-bold text-slate-400 ml-2 hidden md:inline";
+    info.textContent = `${from}–${to} de ${totalCount}`;
+    wrap.appendChild(info);
+
+    container.appendChild(wrap);
+}
+
 function openProductImageLightbox(url, title) {
     const lightbox = document.getElementById("imageLightbox");
     const img = document.getElementById("lightboxImage");
@@ -1008,34 +1094,22 @@ async function renderTools(container) {
                     <tbody id="toolsTableBody" class="divide-y divide-slate-50"></tbody>
                 </table>
             </div>
-            <div id="toolsPager" class="px-8 py-4 border-t border-slate-100"></div>
         </div>
+        <div id="toolsPager" class="flex items-center justify-center gap-2 mb-12 mt-8"></div>
     `;
 
     const body = document.getElementById("toolsTableBody");
     const pager = document.getElementById("toolsPager");
 
-    const renderPager = (page, totalPages) => {
-        if (!pager) return;
-        if (totalPages <= 1) {
-            pager.innerHTML = `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${displayGroups.length ? "1 página" : ""}</p>`;
-            return;
-        }
-        pager.innerHTML = `
-            <div class="flex items-center justify-between gap-4">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
-                <div class="flex gap-2">
-                    <button type="button" data-tools-page="${page - 1}" ${page <= 1 ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
-                    <button type="button" data-tools-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
-                </div>
-            </div>
-        `;
-        pager.querySelectorAll("[data-tools-page]").forEach((btn) => {
-            if (btn.disabled) return;
-            btn.addEventListener("click", () => {
-                currentPage = Math.max(1, Number(btn.getAttribute("data-tools-page")) || 1);
+    const renderPager = (page, totalPages, total) => {
+        renderGeralPagination(pager, {
+            page,
+            pageSize: PAGE_SIZE,
+            total,
+            onPage: (next) => {
+                currentPage = next;
                 renderTable();
-            });
+            },
         });
     };
 
@@ -1048,7 +1122,7 @@ async function renderTools(container) {
 
         if (!pageItems.length) {
             body.innerHTML = `<tr><td colspan="6" class="p-16 text-center text-slate-400 font-medium italic">${items.length === 0 ? "Nenhuma ferramenta registada." : "Nenhuma ferramenta encontrada."}</td></tr>`;
-            renderPager(1, 1);
+            renderPager(1, 1, 0);
             return;
         }
 
@@ -1090,7 +1164,7 @@ async function renderTools(container) {
                 </tr>
             `;
         }).join('');
-        renderPager(currentPage, totalPages);
+        renderPager(currentPage, totalPages, filtered.length);
     };
 
     const btnCreate = document.getElementById("btnCreateTool");
@@ -1568,7 +1642,7 @@ async function renderWarehouses(container) {
         </div>
 
         <div id="warehousesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-        <div id="warehousesPager" class="mt-8 mb-12"></div>
+        <div id="warehousesPager" class="flex items-center justify-center gap-2 mt-8 mb-12"></div>
 
         ${deletedWarehouses.length > 0 ? `
         <div class="mt-12 p-10 bg-slate-50 rounded-[2.5rem] border border-slate-100 border-dashed">
@@ -1606,27 +1680,15 @@ async function renderWarehouses(container) {
     const grid = document.getElementById("warehousesGrid");
     const pager = document.getElementById("warehousesPager");
 
-    const renderPager = (page, totalPages) => {
-        if (!pager) return;
-        if (totalPages <= 1) {
-            pager.innerHTML = warehouses.length ? `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">1 página</p>` : "";
-            return;
-        }
-        pager.innerHTML = `
-            <div class="flex items-center justify-between gap-4">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
-                <div class="flex gap-2">
-                    <button type="button" data-wh-page="${page - 1}" ${page <= 1 ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
-                    <button type="button" data-wh-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
-                </div>
-            </div>
-        `;
-        pager.querySelectorAll("[data-wh-page]").forEach((btn) => {
-            if (btn.disabled) return;
-            btn.addEventListener("click", () => {
-                currentPage = Math.max(1, Number(btn.getAttribute("data-wh-page")) || 1);
+    const renderPager = (page, totalPages, total) => {
+        renderGeralPagination(pager, {
+            page,
+            pageSize: PAGE_SIZE,
+            total,
+            onPage: (next) => {
+                currentPage = next;
                 renderGrid();
-            });
+            },
         });
     };
 
@@ -1634,14 +1696,14 @@ async function renderWarehouses(container) {
         const filtered = warehouses.filter(matchesSearch);
         if (!filtered.length) {
             grid.innerHTML = `<div class="col-span-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-16 text-center"><span class="material-symbols-outlined text-5xl text-slate-300 mb-4">warehouse</span><p class="text-slate-500 font-bold">${warehouses.length === 0 ? "Nenhum armazém registado." : "Nenhum armazém encontrado."}</p></div>`;
-            renderPager(1, 1);
+            renderPager(1, 1, 0);
             return;
         }
         const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
         currentPage = Math.min(Math.max(1, currentPage), totalPages);
         const start = (currentPage - 1) * PAGE_SIZE;
         grid.innerHTML = filtered.slice(start, start + PAGE_SIZE).map(warehouseCardHtml).join("");
-        renderPager(currentPage, totalPages);
+        renderPager(currentPage, totalPages, filtered.length);
     };
 
     document.getElementById("btnCreateWarehouse")?.addEventListener("click", () => openWarehouseModal());
@@ -2223,8 +2285,8 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <tbody id="warehouseMaterialTableBody" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
-                    <div id="warehouseMaterialPagination" class="px-10 py-4 border-t border-slate-50"></div>
                 </div>
+                <div id="warehouseMaterialPagination" class="flex items-center justify-center gap-2 mt-6"></div>
 
                 <!-- Ferramentas -->
                 <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden w-full shadow-sm mt-4">
@@ -2251,8 +2313,8 @@ async function renderWarehouseDetail(container, warehouseId) {
                             <tbody id="warehouseToolsTableBody" class="divide-y divide-slate-50"></tbody>
                         </table>
                     </div>
-                    <div id="warehouseToolsPagination" class="px-10 py-4 border-t border-slate-50"></div>
                 </div>
+                <div id="warehouseToolsPagination" class="flex items-center justify-center gap-2 mt-6 mb-12"></div>
             </div>
 
             <!-- Sidebar Informativa -->
@@ -2339,21 +2401,13 @@ async function renderWarehouseDetail(container, warehouseId) {
         'PENDING_RETURN': { label: 'Aguardando Validação', color: 'text-indigo-600 bg-indigo-50' },
         'MAINTENANCE': { label: 'Manutenção', color: 'text-red-600 bg-red-50' }
     };
-    const renderPager = (el, page, totalPages, onPageFnName) => {
-        if (!el) return;
-        if (totalPages <= 1) {
-            el.innerHTML = `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">1 página</p>`;
-            return;
-        }
-        el.innerHTML = `
-            <div class="flex items-center justify-between">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
-                <div class="flex gap-2">
-                    <button ${page <= 1 ? "disabled" : ""} onclick="${onPageFnName}(${page - 1})" class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
-                    <button ${page >= totalPages ? "disabled" : ""} onclick="${onPageFnName}(${page + 1})" class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
-                </div>
-            </div>
-        `;
+    const renderPager = (el, page, total, onPage) => {
+        renderGeralPagination(el, {
+            page,
+            pageSize: PAGE_SIZE,
+            total,
+            onPage,
+        });
     };
     const renderMaterialsTable = () => {
         const term = materialSearch.trim().toLowerCase();
@@ -2403,7 +2457,10 @@ async function renderWarehouseDetail(container, warehouseId) {
                 </tr>
             `;
         }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum material registado neste local.</td></tr>';
-        renderPager(materialPager, materialPage, totalPages, "window.changeWarehouseMaterialPage");
+        renderPager(materialPager, materialPage, filtered.length, (p) => {
+            materialPage = Math.max(1, p);
+            renderMaterialsTable();
+        });
     };
     const renderToolsTable = () => {
         const term = toolsSearch.trim().toLowerCase();
@@ -2463,7 +2520,10 @@ async function renderWarehouseDetail(container, warehouseId) {
                 </tr>
             `;
         }).join('') || '<tr><td colspan="5" class="p-20 text-center text-slate-400 font-medium italic">Nenhum ativo alocado a este local.</td></tr>';
-        renderPager(toolsPager, toolsPage, totalPages, "window.changeWarehouseToolsPage");
+        renderPager(toolsPager, toolsPage, filtered.length, (p) => {
+            toolsPage = Math.max(1, p);
+            renderToolsTable();
+        });
     };
     window.changeWarehouseMaterialPage = (p) => { materialPage = Math.max(1, p); renderMaterialsTable(); };
     window.changeWarehouseToolsPage = (p) => { toolsPage = Math.max(1, p); renderToolsTable(); };
