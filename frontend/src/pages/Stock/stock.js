@@ -822,8 +822,14 @@ async function openProductModal(product = null) {
 }
 
 async function renderTools(container) {
-    const currentUser = await apiRequest("/users/me");
-    const { items: allItems } = await apiRequest("/items");
+    const [currentUser, itemsRes, warehousesRes] = await Promise.all([
+        apiRequest("/users/me"),
+        apiRequest("/items"),
+        apiRequest("/warehouses"),
+    ]);
+    const { items: allItems } = itemsRes;
+    const warehouses = warehousesRes.items || [];
+    const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w]));
     // FILTRO: Apenas produtos que sejam ferramentas ou equipamentos
     const items = allItems.filter(i => i.product.category === 'TOOL' || i.product.category === 'EQUIPMENT');
 
@@ -864,7 +870,42 @@ async function renderTools(container) {
     const PAGE_SIZE = 15;
     let currentPage = 1;
     let currentFilter = 'ALL';
+    let currentLocation = 'ALL';
     let currentSearch = '';
+
+    const locationIdOf = (group) => (
+        group.status === 'PENDING_RECEIPT'
+            ? (group.targetWarehouseId || '')
+            : (group.warehouseId || '')
+    );
+
+    displayGroups.forEach((group) => {
+        const locId = locationIdOf(group);
+        if (locId && !warehouseById[locId]) {
+            warehouseById[locId] = {
+                id: locId,
+                name: group.status === 'PENDING_RECEIPT'
+                    ? (group.targetWarehouse?.name || 'Localização')
+                    : (group.warehouse?.name || 'Localização'),
+            };
+        }
+    });
+
+    const usedWarehouses = [...new Set(displayGroups.map(locationIdOf).filter(Boolean))]
+        .map((id) => warehouseById[id])
+        .filter(Boolean)
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt"));
+
+    const projects = [];
+    const seenProjects = new Set();
+    usedWarehouses.forEach((w) => {
+        const pid = w.projectId || w.project?.id;
+        const pname = w.project?.name;
+        if (!pid || !pname || seenProjects.has(pid)) return;
+        seenProjects.add(pid);
+        projects.push({ id: pid, name: pname });
+    });
+    projects.sort((a, b) => a.name.localeCompare(b.name, "pt"));
 
     const matchesFilter = (group) => {
         if (currentFilter === 'ALL') return true;
@@ -872,6 +913,14 @@ async function renderTools(container) {
             return group.status === 'ASSIGNED' || group.status === 'PENDING_RECEIPT' || group.status === 'PENDING_RETURN';
         }
         return group.status === currentFilter;
+    };
+
+    const matchesLocation = (group) => {
+        if (currentLocation === 'ALL') return true;
+        if (!currentLocation.startsWith('proj:')) return true;
+        const pid = currentLocation.slice(5);
+        const warehouse = warehouseById[locationIdOf(group)];
+        return group.projectId === pid || warehouse?.projectId === pid || warehouse?.project?.id === pid;
     };
 
     const matchesSearch = (group) => {
@@ -931,6 +980,10 @@ async function renderTools(container) {
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
+                <select id="filterToolsLocation" class="h-12 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px] max-w-[260px]">
+                    <option value="ALL">Todas as obras</option>
+                    ${projects.map((p) => `<option value="proj:${p.id}">${esc(p.name)}</option>`).join("")}
+                </select>
                 <select id="filterTools" class="h-12 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px]">
                     <option value="ALL">Todos</option>
                     <option value="AVAILABLE">Disponíveis (${available})</option>
@@ -991,7 +1044,7 @@ async function renderTools(container) {
     };
 
     const renderTable = () => {
-        const filtered = displayGroups.filter((g) => matchesFilter(g) && matchesSearch(g));
+        const filtered = displayGroups.filter((g) => matchesFilter(g) && matchesLocation(g) && matchesSearch(g));
         const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE) || 1);
         currentPage = Math.min(Math.max(1, currentPage), totalPages);
         const start = (currentPage - 1) * PAGE_SIZE;
@@ -1061,6 +1114,12 @@ async function renderTools(container) {
 
     document.getElementById("filterTools")?.addEventListener("change", (e) => {
         currentFilter = e.target.value || "ALL";
+        currentPage = 1;
+        renderTable();
+    });
+
+    document.getElementById("filterToolsLocation")?.addEventListener("change", (e) => {
+        currentLocation = e.target.value || "ALL";
         currentPage = 1;
         renderTable();
     });
