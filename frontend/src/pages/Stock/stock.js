@@ -359,24 +359,23 @@ async function renderCatalog(container) {
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
             <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Catálogo Geral de Produtos</h3>
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Gestão de Referências</h2>
+                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Catálogo Geral de Produtos</h2>
             </div>
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
-                <button id="btnToggleSelection" class="h-12 bg-white border border-slate-200 text-slate-700 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm items-center gap-2 flex" onclick="window.toggleSelectionMode()">
+                <button id="btnToggleSelection" class="h-10 bg-white border bg-slate-200  px-6 rounded-2xl text-xs font-bold hover:scale-105 transition-all shadow-sm flex items-center gap-2" onclick="window.toggleSelectionMode()">
                     <span class="material-symbols-outlined text-xl">checklist</span> Selecionar
                 </button>
-                <button id="btnDeleteSelected" class="hidden h-12 bg-red-50 border border-red-100 text-red-600 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm items-center gap-2">
+                <button id="btnDeleteSelected" class="hidden h-10 bg-red-50 border border-red-100 text-red-600 px-6 rounded-2xl text-xs font-bold hover:scale-105 transition-all shadow-sm items-center gap-2">
                     <span class="material-symbols-outlined text-xl">delete</span> Eliminar (<span id="selectedCount">0</span>)
                 </button>
                 <div class="relative flex-grow md:flex-grow-0 min-w-[300px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchCatalog" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="text" id="searchCatalog" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
-                <button id="btnUploadExcel" class="h-12 bg-white border border-slate-200 text-slate-700 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm flex items-center gap-2">
+                <button id="btnUploadExcel" class="h-10 bg-white border bg-slate-200  px-6 rounded-2xl text-xs font-bold hover:scale-105 transition-all shadow-sm flex items-center gap-2">
                     <span class="material-symbols-outlined text-xl">upload_file</span> Importar Excel
                 </button>
-                <button id="btnCreateProduct" class="h-12 bg-slate-900 text-white px-8 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-slate-900/20 flex items-center gap-2">
+                <button id="btnCreateProduct" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
                     <span class="material-symbols-outlined text-xl">add</span> Novo Produto
                 </button>
             </div>
@@ -972,25 +971,24 @@ async function renderTools(container) {
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Logística de Ativos</h3>
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Ferramentas & Equipamento</h2>
             </div>
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
                 <div class="relative flex-grow md:flex-grow-0 min-w-[240px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
-                <select id="filterToolsLocation" class="h-12 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px] max-w-[260px]">
+                <select id="filterToolsLocation" class="h-10 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px] max-w-[260px]">
                     <option value="ALL">Todas as obras</option>
                     ${projects.map((p) => `<option value="proj:${p.id}">${esc(p.name)}</option>`).join("")}
                 </select>
-                <select id="filterTools" class="h-12 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px]">
+                <select id="filterTools" class="h-10 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px]">
                     <option value="ALL">Todos</option>
                     <option value="AVAILABLE">Disponíveis (${available})</option>
                     <option value="ASSIGNED">Em Obra / Trânsito (${assignedCount})</option>
                     <option value="MAINTENANCE">Manutenção (${maintenanceCount})</option>
                 </select>
-                <button id="btnCreateTool" class="h-12 bg-slate-900 text-white px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20">
+                <button id="btnCreateTool" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
                     <span class="material-symbols-outlined text-xl">add</span> Cadastrar
                 </button>
             </div>
@@ -1486,72 +1484,93 @@ async function renderWarehouses(container) {
     const warehouses = allWarehouses.filter(w => w.active);
     const deletedWarehouses = manageWarehouses ? allWarehouses.filter(w => !w.active) : [];
 
-    const { items: allStock } = await apiRequest("/stock/balance");
     const { items: allItems } = await apiRequest("/items");
+    const pendingByWarehouse = {};
+    allItems.forEach((i) => {
+        if (!i.targetWarehouseId) return;
+        if (i.status !== "PENDING_RECEIPT" && i.status !== "PENDING_RETURN") return;
+        pendingByWarehouse[i.targetWarehouseId] = (pendingByWarehouse[i.targetWarehouseId] || 0) + 1;
+    });
 
-    container.innerHTML = `
-        <div class="mb-10 flex justify-between items-end">
-            <div>
-                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Rede Logística</h4>
-                <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Armazéns & Estaleiros</h2>
-            </div>
-            ${manageWarehouses ? `
-            <button id="btnCreateWarehouse" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
-                <span class="material-symbols-outlined text-lg">add</span> Novo Armazém
-            </button>
-            ` : ""}
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
-            ${warehouses.map(w => {
-        const warehouseStock = allStock.filter(s => s.warehouseId === w.id && (s.product.category === 'MATERIAL' || s.product.category === 'CONSUMABLE'));
-        const toolCount = allItems.filter(i => i.warehouseId === w.id && (i.product.category === 'TOOL' || i.product.category === 'EQUIPMENT')).length;
-        const pendingCount = allItems.filter(i => i.targetWarehouseId === w.id && (i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN')).length;
-        const isCentral = w.type === 'CENTRAL';
+    const PAGE_SIZE = 9;
+    let currentPage = 1;
+    let currentSearch = "";
 
+    const matchesSearch = (w) => {
+        if (!currentSearch) return true;
+        const haystack = [
+            w.name,
+            w.type,
+            w.type === "CENTRAL" ? "armazém central" : "estaleiro obra",
+            w.project?.name,
+            w.project ? `obra ${w.project.name}` : "gestão central",
+        ].join(" ").toLowerCase();
+        return haystack.includes(currentSearch);
+    };
+
+    const warehouseCardHtml = (w) => {
+        const pendingCount = pendingByWarehouse[w.id] || 0;
+        const isCentral = w.type === "CENTRAL";
         return `
-                <div onclick="window.enterWarehouse('${w.id}')" class="bg-white rounded-3xl border border-slate-200 p-8 hover:border-[#2afc8d] hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all group relative overflow-hidden flex flex-col h-full">
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-16 -mt-16 group-hover:bg-[#2afc8d]/5 transition-colors"></div>
-                    
-                    <div class="flex justify-between items-start mb-8 relative">
-                        <div class="w-14 h-14 ${isCentral ? 'bg-slate-900 text-[#2afc8d]' : 'bg-emerald-50 text-emerald-600'} rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
-                            <span class="material-symbols-outlined text-3xl">${isCentral ? 'warehouse' : 'construction'}</span>
-                        </div>
-                        <div class="flex gap-1">
-                            ${pendingCount > 0 ? `
-                            <div onclick="event.stopPropagation(); window.viewPendingReceipts('${w.id}')" class="h-8 px-3 bg-amber-100 text-amber-600 rounded-lg flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest animate-pulse hover:bg-amber-200 transition-colors cursor-pointer border border-amber-200">
-                                <span class="material-symbols-outlined text-xs">local_shipping</span>
-                                ${pendingCount} a caminho
-                            </div>
-                            ` : ''}
-                            ${manageWarehouses ? `
-                            <button onclick="event.stopPropagation(); window.editWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
-                                <span class="material-symbols-outlined text-base">edit</span>
-                            </button>
-                            <button onclick="event.stopPropagation(); window.deleteWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
-                                <span class="material-symbols-outlined text-base">delete</span>
-                            </button>
-                            ` : ""}
-                        </div>
+            <div onclick="window.enterWarehouse('${w.id}')" class="bg-white rounded-3xl border border-slate-200 p-8 hover:border-[#2afc8d] hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all group relative overflow-hidden flex flex-col h-full">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-16 -mt-16 group-hover:bg-[#2afc8d]/5 transition-colors"></div>
+                <div class="flex justify-between items-start mb-8 relative">
+                    <div class="w-14 h-14 ${isCentral ? "bg-slate-900 text-[#2afc8d]" : "bg-emerald-50 text-emerald-600"} rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
+                        <span class="material-symbols-outlined text-3xl">${isCentral ? "warehouse" : "construction"}</span>
                     </div>
-
-                    <h3 class="text-xl font-bold text-slate-900 mb-1 group-hover:text-emerald-700 transition-colors">${esc(w.name)}</h3>
-                    <p class="text-xs text-slate-400 font-medium mb-2 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : 'Gestão Central de Inventário'}</p>
-                    ${w.project ? `
-                    <span class="inline-flex w-fit items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black capitalize tracking-widest mb-4 ${w.visibleToClient ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}">
-                        <span class="material-symbols-outlined text-xs">${w.visibleToClient ? "visibility" : "visibility_off"}</span>
-                        ${w.visibleToClient ? "Cliente" : "Gestão"}
-                    </span>
-                    ` : ""}
-
-                    <div class="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
-                        <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Detalhes do Local</span>
-                        <span class="material-symbols-outlined text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-[#2afc8d]">arrow_forward</span>
+                    <div class="flex gap-1">
+                        ${pendingCount > 0 ? `
+                        <div onclick="event.stopPropagation(); window.viewPendingReceipts('${w.id}')" class="h-8 px-3 bg-amber-100 text-amber-600 rounded-lg flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest animate-pulse hover:bg-amber-200 transition-colors cursor-pointer border border-amber-200">
+                            <span class="material-symbols-outlined text-xs">local_shipping</span>
+                            ${pendingCount} a caminho
+                        </div>
+                        ` : ""}
+                        ${manageWarehouses ? `
+                        <button onclick="event.stopPropagation(); window.editWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600 flex items-center justify-center transition-all">
+                            <span class="material-symbols-outlined text-base">edit</span>
+                        </button>
+                        <button onclick="event.stopPropagation(); window.deleteWarehouse('${w.id}')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all">
+                            <span class="material-symbols-outlined text-base">delete</span>
+                        </button>
+                        ` : ""}
                     </div>
                 </div>
-                `;
-    }).join('')}
+                <h3 class="text-xl font-bold text-slate-900 mb-1 group-hover:text-emerald-700 transition-colors">${esc(w.name)}</h3>
+                <p class="text-xs text-slate-400 font-medium mb-2 line-clamp-1">${w.project ? `Obra: ${esc(w.project.name)}` : "Gestão Central de Inventário"}</p>
+                ${w.project ? `
+                <span class="inline-flex w-fit items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black capitalize tracking-widest mb-4 ${w.visibleToClient ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}">
+                    <span class="material-symbols-outlined text-xs">${w.visibleToClient ? "visibility" : "visibility_off"}</span>
+                    ${w.visibleToClient ? "Cliente" : "Gestão"}
+                </span>
+                ` : ""}
+                <div class="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+                    <span class="text-[10px] font-black text-[#2afc8d] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">Detalhes do Local</span>
+                    <span class="material-symbols-outlined text-slate-300 group-hover:translate-x-1 transition-transform group-hover:text-[#2afc8d]">arrow_forward</span>
+                </div>
+            </div>
+        `;
+    };
+
+    container.innerHTML = `
+        <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div>
+                <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Armazéns & Estaleiros</h2>
+            </div>
+            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <div class="relative flex-grow md:flex-grow-0 min-w-[240px]">
+                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+                    <input type="text" id="searchWarehouses" placeholder="Pesquisar armazém, estaleiro ou obra..." class="w-full pl-12 pr-4 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                </div>
+                ${manageWarehouses ? `
+                <button id="btnCreateWarehouse" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
+                    <span class="material-symbols-outlined text-xl">add</span> Novo Armazém
+                </button>
+                ` : ""}
+            </div>
         </div>
+
+        <div id="warehousesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <div id="warehousesPager" class="mt-8 mb-12"></div>
 
         ${deletedWarehouses.length > 0 ? `
         <div class="mt-12 p-10 bg-slate-50 rounded-[2.5rem] border border-slate-100 border-dashed">
@@ -1564,7 +1583,6 @@ async function renderWarehouses(container) {
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Armazéns desativados que podem ser restaurados</p>
                 </div>
             </div>
-            
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 ${deletedWarehouses.map(w => `
                 <div class="bg-white p-5 rounded-2xl border border-slate-200 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
@@ -1581,13 +1599,60 @@ async function renderWarehouses(container) {
                         </button>
                     </div>
                 </div>
-                `).join('')}
+                `).join("")}
             </div>
         </div>
-        ` : ''}
+        ` : ""}
     `;
 
+    const grid = document.getElementById("warehousesGrid");
+    const pager = document.getElementById("warehousesPager");
+
+    const renderPager = (page, totalPages) => {
+        if (!pager) return;
+        if (totalPages <= 1) {
+            pager.innerHTML = warehouses.length ? `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">1 página</p>` : "";
+            return;
+        }
+        pager.innerHTML = `
+            <div class="flex items-center justify-between gap-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
+                <div class="flex gap-2">
+                    <button type="button" data-wh-page="${page - 1}" ${page <= 1 ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
+                    <button type="button" data-wh-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
+                </div>
+            </div>
+        `;
+        pager.querySelectorAll("[data-wh-page]").forEach((btn) => {
+            if (btn.disabled) return;
+            btn.addEventListener("click", () => {
+                currentPage = Math.max(1, Number(btn.getAttribute("data-wh-page")) || 1);
+                renderGrid();
+            });
+        });
+    };
+
+    const renderGrid = () => {
+        const filtered = warehouses.filter(matchesSearch);
+        if (!filtered.length) {
+            grid.innerHTML = `<div class="col-span-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-16 text-center"><span class="material-symbols-outlined text-5xl text-slate-300 mb-4">warehouse</span><p class="text-slate-500 font-bold">${warehouses.length === 0 ? "Nenhum armazém registado." : "Nenhum armazém encontrado."}</p></div>`;
+            renderPager(1, 1);
+            return;
+        }
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        currentPage = Math.min(Math.max(1, currentPage), totalPages);
+        const start = (currentPage - 1) * PAGE_SIZE;
+        grid.innerHTML = filtered.slice(start, start + PAGE_SIZE).map(warehouseCardHtml).join("");
+        renderPager(currentPage, totalPages);
+    };
+
     document.getElementById("btnCreateWarehouse")?.addEventListener("click", () => openWarehouseModal());
+    document.getElementById("searchWarehouses")?.addEventListener("input", (e) => {
+        currentSearch = (e.target.value || "").toLowerCase().trim();
+        currentPage = 1;
+        renderGrid();
+    });
+
     window.enterWarehouse = (id) => {
         currentTab = `warehouse_detail_${id}`;
         loadTabContent(currentTab);
@@ -1608,8 +1673,9 @@ async function renderWarehouses(container) {
             renderWarehouses(container);
         } catch (error) { alert("Erro ao eliminar permanentemente: " + error.message); }
     };
-}
 
+    renderGrid();
+}
 
 async function openWarehouseModal(warehouseId = null) {
     if (!canManageWarehouses()) {
@@ -1727,7 +1793,6 @@ async function renderMovements(container) {
         <!-- Header -->
         <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Rastreabilidade Total</p>
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Histórico de Atividade</h2>
             </div>
             <div class="bg-white border border-slate-100 rounded-2xl shadow-sm p-1.5 flex gap-1 flex-wrap">
@@ -3743,7 +3808,6 @@ async function renderDeliveries(container) {
     container.innerHTML = `
         <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
             <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Previsão logística</h3>
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Calendário de Entregas</h2>
             </div>
             <div class="flex flex-wrap items-center gap-3">

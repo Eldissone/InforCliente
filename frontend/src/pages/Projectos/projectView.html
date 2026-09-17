@@ -406,13 +406,13 @@
                     class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
                 <p id="projectType" class="text-slate-500 font-medium">---</p>
             </div>
-            <div class="flex items-center gap-3 shrink-0">
+            <!-- <div class="flex items-center gap-3 shrink-0">
                 <button id="btnNewExtra" type="button"
                     class="h-9 px-4 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0">
                     <span class="material-symbols-outlined text-base">add</span>
                     Pedido de Compra
                 </button>
-            </div>
+            </div> -->
         </header>
 
         <!-- Tab Navigation -->
@@ -451,12 +451,12 @@
             <!-- Dashboard Action Buttons -->
             <div class="flex justify-end gap-4 mb-8">
                 <button id="exportProjectBtn"
-                    class="h-12 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                    class="h-10 bg-white border border-slate-200 text-slate-600 px-6 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                     <span class="material-symbols-outlined text-xl">file_download</span>
                     Relatório
                 </button>
                 <button id="newTransactionBtn" data-role-visible="admin,operador"
-                    class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
+                    class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all">
                     <span class="material-symbols-outlined text-xl">add</span>
                     Lançamento
                 </button>
@@ -716,7 +716,7 @@
                             <span
                                 class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
                             <input id="transactionsSearch"
-                                class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+                                class="w-full pl-12 pr-6 h-10 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
                                 placeholder="Buscar lançamentos..." type="text" />
                         </div>
                         <button data-toggle-table="transactions"
@@ -761,7 +761,7 @@
                     </div>
                     <div class="flex items-center gap-4">
                         <button id="addPaymentBtn" data-role-visible="admin,operador"
-                            class="h-11 md:h-12 bg-emerald-600 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap text-xs md:text-sm">
+                            class="h-10 md:h-10 bg-emerald-600 text-white px-5 md:px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-emerald-600/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap text-xs md:text-sm">
                             Registar Pagamento
                             <span class="material-symbols-outlined text-lg">add</span>
                         </button>
@@ -943,7 +943,7 @@
                         <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
                             Nº</label>
                         <input id="measurementReportNumber" type="text" value="01" readonly
-                            class="w-12 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
+                            class="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
                             title="Atribuído automaticamente" />
                         <!-- <p id="measurementReportNumberHint" class="text-[9px] text-slate-400 mt-1 font-semibold">Automático</p>     -->
                     </div>
@@ -1087,12 +1087,12 @@
                 </div>
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
                     <button onclick="window.loadDailyPlans()"
-                        class="w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all"
+                        class="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all"
                         title="Atualizar Planos Diários">
                         <span class="material-symbols-outlined text-xl">refresh</span>
                     </button>
                     <button id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
-                        class="h-11 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
+                        class="h-10 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
                         Novo Plano <span class="material-symbols-outlined text-xl">post_add</span>
                     </button>
                 </div>
@@ -1150,12 +1150,12 @@
                 </div>
                 <div class="flex items-center gap-3 shrink-0">
                     <button id="createNewFolderBtn" type="button" data-role-visible="admin,operador,supervisor"
-                        class="h-14 bg-white/10 text-white border border-white/20 px-4 md:px-6 rounded-[24px] font-bold hidden items-center justify-center gap-2 hover:bg-white/20 transition-all">
+                        class="h-10 bg-white/10 text-white border border-white/20 px-4 md:px-6 rounded-[24px] font-bold hidden items-center justify-center gap-2 hover:bg-white/20 transition-all">
                         <span class="hidden md:inline">Nova pasta</span>
                         <span class="material-symbols-outlined text-2xl">create_new_folder</span>
                     </button>
                     <button id="uploadFileBtn" data-role-visible="admin,operador,supervisor"
-                        class="h-14 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                        class="h-10 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
                         <span class="hidden md:inline">Anexar</span> <span
                             class="material-symbols-outlined text-2xl">cloud_upload</span>
                     </button>
@@ -1182,21 +1182,21 @@
                 <div class="flex flex-row items-center justify-end gap-2 shrink-0">
 
                     <button id="btnManageProjectWarehouses" data-role-visible="admin"
-                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all"
+                        class="hidden h-10 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all"
                         title="Gerir armazéns desta obra">
                         <span class="material-symbols-outlined text-xl">warehouse</span>
                     </button>
                     <button id="btnDeleteSelectedStock"
-                        class="hidden h-11 bg-red-50 text-red-600 px-4 rounded-xl font-bold items-center gap-2 hover:bg-red-100 transition-all text-xs">
+                        class="hidden h-10 bg-red-50 text-red-600 px-4 rounded-xl font-bold items-center gap-2 hover:bg-red-100 transition-all text-xs">
                         <span class="material-symbols-outlined text-lg">delete</span>
                         Apagar (<span id="selectedStockCount">0</span>)
                     </button>
                     <button id="manageMaterialsBtn" data-role-visible="admin"
-                        class="hidden h-11 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
+                        class="hidden h-10 bg-slate-100 text-slate-600 px-3 rounded-xl font-bold items-center justify-center hover:bg-slate-200 transition-all">
                         <span class="material-symbols-outlined text-xl">category</span>
                     </button>
                     <button id="newStockMovementBtn" data-role-visible="admin,operador"
-                        class="h-11 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
+                        class="h-10 bg-slate-900 text-[#2afc8d] px-3 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all whitespace-nowrap">
                         <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
                         <span class="hidden md:inline">Nova Operação</span>
                     </button>
@@ -1216,13 +1216,13 @@
                     <span
                         class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
                     <input id="stockFilterSearch" type="text" placeholder="Buscar material, viatura, motorista..."
-                        class="w-full pl-12 pr-6 h-12 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
+                        class="w-full pl-12 pr-6 h-10 bg-slate-50 border-none rounded-2xl text-xs font-semibold focus:ring-2 focus:ring-emerald-500 transition-all">
                 </div>
 
                 <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 w-full lg:w-auto shrink-0">
                     <div id="stockWarehouseFilterWrap" class="hidden w-full sm:flex-1 lg:w-52">
                         <select id="stockFilterWarehouse"
-                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500"
+                            class="w-full h-10 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500"
                             title="Filtrar por armazém">
                             <option value="">Todos os armazéns</option>
                         </select>
@@ -1230,7 +1230,7 @@
                     <!-- Tipo -->
                     <div class="w-full sm:flex-1 lg:w-44">
                         <select id="stockFilterType"
-                            class="w-full h-12 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
+                            class="w-full h-10 bg-slate-50 border-none rounded-2xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500">
                             <option value="">Todas Operações</option>
                             <option value="ENTRADA">Entradas (recepções)</option>
                             <option value="SAIDA">Saídas</option>
@@ -1240,7 +1240,7 @@
                         </select>
                     </div>
                     <!-- Datas -->
-                    <div class="flex items-center w-full sm:flex-1 lg:w-auto h-12 bg-slate-50 rounded-2xl px-2 gap-1"
+                    <div class="flex items-center w-full sm:flex-1 lg:w-auto h-10 bg-slate-50 rounded-2xl px-2 gap-1"
                         title="Filtrar o Diário de Armazém por intervalo de datas">
                         <input type="date" id="stockFilterDateFrom"
                             class="bg-transparent border-none text-xs font-semibold text-slate-600 focus:ring-2 focus:ring-emerald-500 w-full min-w-[8.5rem] lg:w-[8.5rem] h-full rounded-xl"
@@ -1271,12 +1271,12 @@
                             <span id="stock_requests_badge"
                                 class="hidden absolute top-4 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                         </button>
-                        <button data-stock-subtab="adjustments" data-perm="stock:manage"
+                         <!-- <button data-stock-subtab="adjustments" data-perm="stock:manage"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Ajustes</span>
                             <span class="hidden md:inline">Ajustes</span>
                         </button>
-                        <!-- <button data-stock-subtab="gallery"
+                      <button data-stock-subtab="gallery"
                             class="px-6 py-6 text-xs font-black uppercase tracking-widest text-slate-400 border-b-2 border-transparent transition-all">
                             <span class="md:hidden">Galeria</span>
                             <span class="hidden md:inline">Galeria do Armazém</span>
@@ -1424,7 +1424,7 @@
                     <p class="text-sm text-slate-400 font-medium">Fotos de progresso geral visíveis ao cliente.</p>
                 </div>
                 <button id="addPhotoBtn" data-role-visible="admin,operador"
-                    class="h-14 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                    class="h-10 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
                     <span class="hidden md:inline">Novo Registo</span> <span
                         class="material-symbols-outlined text-2xl">add_a_photo</span>
                 </button>
