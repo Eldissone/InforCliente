@@ -371,7 +371,7 @@ async function renderCatalog(container) {
                 </button>
                 <div class="relative flex-grow md:flex-grow-0 min-w-[300px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchCatalog" placeholder="Procurar no catálogo (Nome, SKU...)" class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="text" id="searchCatalog" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 <button id="btnUploadExcel" class="h-12 bg-white border border-slate-200 text-slate-700 px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm flex items-center gap-2">
                     <span class="material-symbols-outlined text-xl">upload_file</span> Importar Excel
@@ -821,27 +821,6 @@ async function openProductModal(product = null) {
     });
 }
 
-const TOOL_SUMMARY_COLLAPSED_KEY = "InfoCliente.toolSummaryCollapsed";
-
-function isToolSummaryCollapsed() {
-    return localStorage.getItem(TOOL_SUMMARY_COLLAPSED_KEY) === "1";
-}
-
-function applyToolSummaryCollapsed(collapsed) {
-    const grid = document.getElementById("toolSummaryGrid");
-    const label = document.getElementById("btnToggleToolSummaryLabel");
-    const icon = document.getElementById("btnToggleToolSummaryIcon");
-    const btn = document.getElementById("btnToggleToolSummary");
-    const headingRow = btn?.parentElement;
-    if (!grid || !btn) return;
-
-    grid.classList.toggle("hidden", collapsed);
-    headingRow?.classList.toggle("mb-6", !collapsed);
-    if (label) label.textContent = collapsed ? "Expandir" : "Ocultar";
-    icon?.classList.toggle("rotate-180", !collapsed);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-}
-
 async function renderTools(container) {
     const currentUser = await apiRequest("/users/me");
     const { items: allItems } = await apiRequest("/items");
@@ -851,30 +830,97 @@ async function renderTools(container) {
     const available = items.filter(i => i.status === 'AVAILABLE').length;
     const assignedCount = items.filter(i => i.status === 'ASSIGNED' || i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN').length;
     const maintenanceCount = items.filter(i => i.status === 'MAINTENANCE').length;
+    const me = currentUser?.id ? currentUser : currentUser?.user;
+    const currentUserId = me?.id;
 
-    // Agrupar ferramentas por produto para o resumo de quantidades
-    const toolGroups = {};
-    items.forEach(i => {
-        if (!toolGroups[i.productId]) {
-            toolGroups[i.productId] = {
-                product: i.product,
-                total: 0,
-                available: 0,
-                assigned: 0,
-                maintenance: 0
+    const statusMap = {
+        AVAILABLE: { label: 'Livre', color: 'text-emerald-700 bg-emerald-50' },
+        PENDING_RECEIPT: { label: 'Pendente Receção', color: 'text-orange-700 bg-orange-50' },
+        ASSIGNED: { label: 'Em Obra', color: 'text-blue-700 bg-blue-50' },
+        PENDING_RETURN: { label: 'Aguardando Validação', color: 'text-indigo-700 bg-indigo-50' },
+        MAINTENANCE: { label: 'Manutenção', color: 'text-amber-700 bg-amber-50' },
+        BROKEN: { label: 'Avariado', color: 'text-red-700 bg-red-50' },
+        LOST: { label: 'Extraviado', color: 'text-red-700 bg-red-50' },
+    };
+
+    const displayGroups = [];
+    const grouped = {};
+    items.forEach((item) => {
+        const key = `${item.productId}-${item.warehouseId}-${item.targetWarehouseId || 'none'}-${item.responsibleId || 'none'}-${item.status}`;
+        if (!grouped[key]) {
+            grouped[key] = {
+                ...item,
+                quantity: 0,
+                itemIds: [],
+                serials: [],
             };
+            displayGroups.push(grouped[key]);
         }
-        toolGroups[i.productId].total++;
-        if (i.status === 'AVAILABLE') {
-            toolGroups[i.productId].available++;
-        } else if (i.status === 'ASSIGNED' || i.status === 'PENDING_RECEIPT' || i.status === 'PENDING_RETURN') {
-            toolGroups[i.productId].assigned++;
-        } else if (i.status === 'MAINTENANCE') {
-            toolGroups[i.productId].maintenance++;
-        }
+        grouped[key].quantity++;
+        grouped[key].itemIds.push(item.id);
+        if (item.serialNumber) grouped[key].serials.push(item.serialNumber);
     });
 
-    let html = `
+    const PAGE_SIZE = 15;
+    let currentPage = 1;
+    let currentFilter = 'ALL';
+    let currentSearch = '';
+
+    const matchesFilter = (group) => {
+        if (currentFilter === 'ALL') return true;
+        if (currentFilter === 'ASSIGNED') {
+            return group.status === 'ASSIGNED' || group.status === 'PENDING_RECEIPT' || group.status === 'PENDING_RETURN';
+        }
+        return group.status === currentFilter;
+    };
+
+    const matchesSearch = (group) => {
+        if (!currentSearch) return true;
+        const haystack = [
+            group.product?.name,
+            group.product?.sku,
+            group.warehouse?.name,
+            group.targetWarehouse?.name,
+            group.responsible?.name,
+            group.status,
+            statusMap[group.status]?.label,
+            ...(group.serials || []),
+        ].join(' ').toLowerCase();
+        return haystack.includes(currentSearch);
+    };
+
+    const groupActionsHtml = (group) => {
+        const isResponsible = group.responsibleId === currentUserId;
+        const ids = group.itemIds.join(',');
+        return `
+            <div class="flex justify-end items-center gap-2 flex-nowrap">
+                ${group.status === 'PENDING_RECEIPT' && isResponsible ? `
+                    <button type="button" onclick="window.confirmReceiptGroup('${ids}')" class="h-9 px-3 rounded-xl bg-[#2afc8d] text-slate-900 text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-all">Receber</button>
+                ` : ''}
+                ${group.status === 'ASSIGNED' && isResponsible ? `
+                    <button type="button" onclick="window.requestReturnGroup('${ids}')" class="h-9 px-3 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-all">Devolver</button>
+                ` : ''}
+                ${group.status === 'PENDING_RETURN' && isResponsible ? `
+                    <button type="button" onclick="window.confirmReturnGroup('${ids}')" class="h-9 px-3 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-all">Validar</button>
+                ` : ''}
+                ${group.status === 'AVAILABLE' ? `
+                    <button type="button" onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="h-9 px-3 rounded-xl bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-all">Entregar</button>
+                ` : ''}
+                ${canEditTools() ? `
+                    <button type="button" onclick="window.editToolGroup('${ids}')" class="h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center justify-center" title="Editar">
+                        <span class="material-symbols-outlined text-base">edit</span>
+                    </button>
+                    ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') ? `
+                    <button type="button" onclick="window.deleteToolGroup('${ids}')" class="h-9 w-9 rounded-xl border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center" title="Eliminar">
+                        <span class="material-symbols-outlined text-base">delete</span>
+                    </button>
+                    ` : ''}
+                ` : ''}
+            </div>
+        `;
+    };
+
+    container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div>
                 <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Logística de Ativos</h3>
@@ -883,197 +929,120 @@ async function renderTools(container) {
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
                 <div class="relative flex-grow md:flex-grow-0 min-w-[240px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchTools" placeholder="Procurar ferramenta ou S/N..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
+                    <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-12 pr-4 h-12 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
+                <select id="filterTools" class="h-12 px-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all cursor-pointer min-w-[200px]">
+                    <option value="ALL">Todos</option>
+                    <option value="AVAILABLE">Disponíveis (${available})</option>
+                    <option value="ASSIGNED">Em Obra / Trânsito (${assignedCount})</option>
+                    <option value="MAINTENANCE">Manutenção (${maintenanceCount})</option>
+                </select>
                 <button id="btnCreateTool" class="h-12 bg-slate-900 text-white px-6 rounded-2xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-2 shadow-xl shadow-slate-900/20">
                     <span class="material-symbols-outlined text-xl">add</span> Cadastrar
                 </button>
             </div>
         </div>
 
-        <!-- Resumo por Modelo (Quantidades) -->
-        <div id="toolSummaryPanel" class="mb-10 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-            <div class="flex items-center justify-between gap-4 ${isToolSummaryCollapsed() ? "" : "mb-6"} px-1 sm:px-2">
-                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo por Modelo / Quantidades</h4>
-                <button type="button" id="btnToggleToolSummary"
-                    class="h-9 px-4 bg-white border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors shrink-0"
-                    aria-expanded="${isToolSummaryCollapsed() ? "false" : "true"}"
-                    aria-controls="toolSummaryGrid"
-                    title="Ocultar ou expandir o resumo">
-                    <span id="btnToggleToolSummaryLabel">${isToolSummaryCollapsed() ? "Expandir" : "Ocultar"}</span>
-                    <span id="btnToggleToolSummaryIcon" class="material-symbols-outlined text-lg transition-transform ${isToolSummaryCollapsed() ? "" : "rotate-180"}">expand_more</span>
-                </button>
+        <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left table-fixed min-w-[980px]">
+                    <thead>
+                        <tr class="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/50 border-b border-slate-100">
+                            <th class="px-6 py-4 w-[28%]">Ferramenta</th>
+                            <th class="px-3 py-4 w-[8%] text-center">Qtd</th>
+                            <th class="px-4 py-4 w-[20%]">Localização</th>
+                            <th class="px-4 py-4 w-[14%]">Estado</th>
+                            <th class="px-4 py-4 w-[14%]">Responsável</th>
+                            <th class="px-5 py-4 w-[16%] text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="toolsTableBody" class="divide-y divide-slate-50"></tbody>
+                </table>
             </div>
-            <div id="toolSummaryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isToolSummaryCollapsed() ? "hidden" : ""}">
-                ${Object.values(toolGroups).map(g => `
-                    <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex justify-between items-center group hover:border-[#2afc8d] transition-all">
-                        <div>
-                            <p class="font-bold text-slate-900 text-sm mb-1 uppercase">${esc(g.product.name)}</p>
-                            <div class="flex gap-3">
-                                <span class="text-[10px] font-black text-emerald-500 uppercase">${g.available} Livres</span>
-                                <span class="text-[10px] font-black text-slate-400 uppercase">${g.assigned} Em Obra</span>
-                            </div>
-                        </div>
-                        <button onclick="window.openDeliveryModal({ productId: '${g.product.id}' })" class="h-10 px-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all ${g.available === 0 ? 'opacity-30 pointer-events-none' : ''}">
-                            Entregar
-                        </button>
-                    </div>
-                `).join('')}
-            </div>
+            <div id="toolsPager" class="px-8 py-4 border-t border-slate-100"></div>
         </div>
-
-        <div class="flex overflow-x-auto no-scrollbar gap-2 mb-10 pb-2">
-            <button data-status="ALL" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-slate-900 text-white transition-all">Todos</button>
-            <button data-status="AVAILABLE" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Disponíveis (${available})</button>
-            <button data-status="ASSIGNED" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Em Obra / Trânsito (${assignedCount})</button>
-            <button data-status="MAINTENANCE" class="tool-filter-btn shrink-0 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">Manutenção (${maintenanceCount})</button>
-        </div>
-
-        <div id="toolsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
     `;
 
-    if (items.length === 0) {
-        container.innerHTML = `<div class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-20 text-center col-span-full"><span class="material-symbols-outlined text-5xl text-slate-300 mb-4">construction</span><p class="text-slate-500 font-bold">Nenhuma ferramenta registada.</p></div>`;
-        return;
-    }
+    const body = document.getElementById("toolsTableBody");
+    const pager = document.getElementById("toolsPager");
 
-    // Agrupar itens para exibição na grelha principal
-    const displayGroups = {};
-    items.forEach(item => {
-        const key = `${item.productId}-${item.warehouseId}-${item.targetWarehouseId || 'none'}-${item.responsibleId || 'none'}-${item.status}`;
-        if (!displayGroups[key]) {
-            displayGroups[key] = {
-                ...item,
-                quantity: 0,
-                itemIds: []
-            };
+    const renderPager = (page, totalPages) => {
+        if (!pager) return;
+        if (totalPages <= 1) {
+            pager.innerHTML = `<p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${displayGroups.length ? "1 página" : ""}</p>`;
+            return;
         }
-        displayGroups[key].quantity++;
-        displayGroups[key].itemIds.push(item.id);
-    });
-
-    Object.values(displayGroups).forEach(group => {
-        const statusMap = {
-            'AVAILABLE': { label: 'Livre', color: 'bg-emerald-500', icon: 'check_circle' },
-            'PENDING_RECEIPT': { label: 'Pendente Receção', color: 'bg-orange-500', icon: 'hourglass_empty' },
-            'ASSIGNED': { label: 'Em Obra', color: 'bg-blue-600', icon: 'construction' },
-            'PENDING_RETURN': { label: 'Aguardando Validação', color: 'bg-indigo-500', icon: 'assignment_return' },
-            'MAINTENANCE': { label: 'Manutenção', color: 'bg-yellow-500', icon: 'build' },
-            'BROKEN': { label: 'Avariado', color: 'bg-red-500', icon: 'broken_image' },
-            'LOST': { label: 'Extraviado', color: 'bg-red-500', icon: 'not_listed_location' }
-        };
-        const status = statusMap[group.status] || { label: group.status, color: 'bg-slate-500', icon: 'help' };
-        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-        const isResponsible = group.responsibleId === currentUser.id;
-
-        const imgUrl = getAssetUrl(group.imageUrl || group.product.image) || 'https://placehold.co/400x300/f8fafc/cbd5e1?text=Ferramenta';
-
-        html += `
-            <div class="tool-card group relative bg-white rounded-[2rem] border border-slate-100/80 overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col h-full" 
-                 data-status="${group.status}" 
-                 data-search="${esc(group.product.name.toLowerCase())}">
-                
-                <!-- Image Header with Premium Background -->
-                <div class="h-40 sm:h-48 relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 p-6 flex items-center justify-center shrink-0">
-                    <!-- Subtle Glow Effect -->
-                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-white rounded-full opacity-60 blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-                    
-                    <img src="${imgUrl}" alt="${esc(group.product.name)}" class="relative z-10 w-full h-full object-contain drop-shadow-md group-hover:scale-110 group-hover:rotate-1 transition-transform duration-500">
-                    
-                    <!-- Glassmorphism Status Badge -->
-                    <div class="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 px-3 py-1.5 ${status.color} bg-opacity-90 backdrop-blur-md text-white rounded-2xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5 border border-white/20">
-                        <span class="material-symbols-outlined text-[10px] sm:text-xs">${status.icon}</span>
-                        ${status.label}
-                    </div>
-                </div>
-
-                <div class="p-5 sm:p-6 flex flex-col flex-grow bg-white relative">
-                    <!-- Title & SKU -->
-                    <div class="mb-5">
-                        <h3 class="font-bold text-slate-900 text-sm sm:text-base leading-tight mb-1.5 group-hover:text-[#2afc8d] transition-colors line-clamp-2 uppercase">${esc(group.product.name)}</h3>
-                        <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                            <span class="material-symbols-outlined text-[12px]">qr_code_2</span>
-                            ${esc(group.product.sku || '---')}
-                        </p>
-                    </div>
-                    
-                    <!-- Info Boxes -->
-                    <div class="space-y-2 mb-6 flex-grow">
-                        <!-- Location Box -->
-                        <div class="flex items-center gap-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-2xl border border-slate-100 transition-colors">
-                            <div class="w-8 h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm text-slate-400">
-                                <span class="material-symbols-outlined text-lg">${group.status === 'PENDING_RECEIPT' ? 'local_shipping' : 'location_on'}</span>
-                            </div>
-                            <div class="min-w-0 flex-grow">
-                                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Localização</p>
-                                <p class="text-[10px] sm:text-[11px] font-bold text-slate-700 truncate w-full">
-                                    ${group.status === 'PENDING_RECEIPT' ? esc(group.targetWarehouse?.name || '---') : esc(group.warehouse?.name || '---')}
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Status/Responsible Box -->
-                        <div class="flex items-center gap-3 p-3 ${group.responsibleId ? 'bg-amber-50/50 hover:bg-amber-50 border-amber-100/50' : 'bg-emerald-50/50 hover:bg-emerald-50 border-emerald-100/50'} rounded-2xl border transition-colors">
-                            <div class="w-8 h-8 shrink-0 bg-white rounded-xl flex items-center justify-center shadow-sm ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'}">
-                                <span class="material-symbols-outlined text-lg">${group.responsibleId ? 'person_check' : 'check_circle'}</span>
-                            </div>
-                            <div class="flex-grow min-w-0">
-                                <p class="text-[8px] sm:text-[9px] font-black ${group.responsibleId ? 'text-amber-500' : 'text-emerald-500'} uppercase tracking-widest mb-0.5">${group.responsibleId ? 'Responsável' : 'Estado'}</p>
-                                <div class="flex justify-between items-center gap-1">
-                                    <p class="text-[10px] sm:text-[11px] font-bold ${group.responsibleId ? 'text-amber-900' : 'text-emerald-900'} truncate">
-                                        ${group.responsibleId ? esc(group.responsible?.name) : 'Livre em Stock'}
-                                    </p>
-                                    <span class="px-2 py-0.5 rounded-lg bg-white ${group.responsibleId ? 'text-amber-600 border-amber-100' : 'text-emerald-600 border-emerald-100'} border text-[9px] sm:text-[10px] font-black shadow-sm shrink-0">x${group.quantity}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex gap-2 mt-auto pt-4 border-t border-slate-50">
-                        ${group.status === 'PENDING_RECEIPT' && isResponsible ? `
-                            <button onclick="window.confirmReceiptGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-[#2afc8d] text-slate-900 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[#2afc8d]/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-base">check</span> <span class="truncate">Receber</span>
-                            </button>
-                        ` : ''}
-
-                        ${group.status === 'ASSIGNED' && isResponsible ? `
-                            <button onclick="window.requestReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-base">assignment_return</span> <span class="truncate">Devolver</span>
-                            </button>
-                        ` : ''}
-
-                        ${group.status === 'PENDING_RETURN' && isResponsible ? `
-                            <button onclick="window.confirmReturnGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl bg-indigo-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-1.5">
-                                <span class="material-symbols-outlined text-base">verified</span> <span class="truncate">Validar</span>
-                            </button>
-                        ` : ''}
-
-                        ${group.status === 'AVAILABLE' ? `
-                            <button onclick="window.openDeliveryModal({ productId: '${group.productId}' })" class="flex-1 h-11 rounded-xl bg-slate-900 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg shadow-slate-900/20 flex items-center justify-center">
-                                <span class="truncate">Entregar</span>
-                            </button>
-                        ` : ''}
-                        
-                        ${canEditTools() ? `
-                            <button type="button" onclick="window.editToolGroup('${group.itemIds.join(',')}')" class="flex-1 h-11 rounded-xl border-2 border-slate-100 bg-white text-slate-600 text-[9px] sm:text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 hover:border-slate-200 hover:text-slate-900 active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5" title="Editar">
-                                <span class="material-symbols-outlined text-base">edit</span>
-                                <span class="truncate hidden sm:inline">Editar</span>
-                            </button>
-                            ${(group.status === 'AVAILABLE' || group.status === 'MAINTENANCE') ? `
-                            <button type="button" onclick="window.deleteToolGroup('${group.itemIds.join(',')}')" class="h-11 w-11 shrink-0 rounded-xl border-2 border-red-50 bg-white text-red-500 hover:bg-red-50 hover:border-red-100 hover:text-red-600 active:scale-95 transition-all flex items-center justify-center" title="Eliminar">
-                                <span class="material-symbols-outlined text-base">delete</span>
-                            </button>
-                            ` : ''}
-                        ` : ''}
-                    </div>
+        pager.innerHTML = `
+            <div class="flex items-center justify-between gap-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Página ${page} de ${totalPages}</p>
+                <div class="flex gap-2">
+                    <button type="button" data-tools-page="${page - 1}" ${page <= 1 ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page <= 1 ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Anterior</button>
+                    <button type="button" data-tools-page="${page + 1}" ${page >= totalPages ? "disabled" : ""} class="h-8 px-3 rounded-lg border border-slate-200 text-[10px] font-black uppercase tracking-widest ${page >= totalPages ? "text-slate-300 cursor-not-allowed" : "text-slate-600 hover:bg-slate-50"}">Próxima</button>
                 </div>
             </div>
         `;
-    });
+        pager.querySelectorAll("[data-tools-page]").forEach((btn) => {
+            if (btn.disabled) return;
+            btn.addEventListener("click", () => {
+                currentPage = Math.max(1, Number(btn.getAttribute("data-tools-page")) || 1);
+                renderTable();
+            });
+        });
+    };
 
-    html += `</div>`;
-    container.innerHTML = html;
+    const renderTable = () => {
+        const filtered = displayGroups.filter((g) => matchesFilter(g) && matchesSearch(g));
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE) || 1);
+        currentPage = Math.min(Math.max(1, currentPage), totalPages);
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pageItems = filtered.slice(start, start + PAGE_SIZE);
+
+        if (!pageItems.length) {
+            body.innerHTML = `<tr><td colspan="6" class="p-16 text-center text-slate-400 font-medium italic">${items.length === 0 ? "Nenhuma ferramenta registada." : "Nenhuma ferramenta encontrada."}</td></tr>`;
+            renderPager(1, 1);
+            return;
+        }
+
+        body.innerHTML = pageItems.map((group) => {
+            const status = statusMap[group.status] || { label: group.status, color: 'text-slate-600 bg-slate-50' };
+            const location = group.status === 'PENDING_RECEIPT'
+                ? (group.targetWarehouse?.name || '---')
+                : (group.warehouse?.name || '---');
+            const serialHint = group.quantity === 1 && group.serials[0]
+                ? `S/N: ${group.serials[0]}`
+                : (group.serials.length ? `${group.serials.length} números de série` : (group.product?.sku || '---'));
+            return `
+                <tr class="group hover:bg-slate-50/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-11 h-11 shrink-0">${renderProductImageThumb(group.product)}</div>
+                            <div class="min-w-0">
+                                <div class="font-bold text-slate-900 text-sm uppercase truncate">${esc(group.product?.name || '---')}</div>
+                                <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">${esc(serialHint)}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-3 py-4 text-center">
+                        <span class="text-base font-black text-slate-900 tabular-nums">x${group.quantity}</span>
+                    </td>
+                    <td class="px-4 py-4">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="material-symbols-outlined text-slate-300 text-base shrink-0">${group.status === 'PENDING_RECEIPT' ? 'local_shipping' : 'location_on'}</span>
+                            <span class="text-sm font-bold text-slate-600 truncate">${esc(location)}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4">
+                        <span class="inline-flex px-2.5 py-1 ${status.color} rounded-lg text-[9px] font-black uppercase tracking-widest whitespace-nowrap">${esc(status.label)}</span>
+                    </td>
+                    <td class="px-4 py-4">
+                        <span class="block text-sm font-bold truncate ${group.responsible?.name ? 'text-slate-700' : 'text-emerald-700'}">${esc(group.responsible?.name || 'Livre em stock')}</span>
+                    </td>
+                    <td class="px-5 py-4 text-right">${groupActionsHtml(group)}</td>
+                </tr>
+            `;
+        }).join('');
+        renderPager(currentPage, totalPages);
+    };
 
     const btnCreate = document.getElementById("btnCreateTool");
     if (btnCreate) {
@@ -1084,51 +1053,19 @@ async function renderTools(container) {
         }
     }
 
-    document.getElementById("btnToggleToolSummary")?.addEventListener("click", () => {
-        const collapsed = !isToolSummaryCollapsed();
-        localStorage.setItem(TOOL_SUMMARY_COLLAPSED_KEY, collapsed ? "1" : "0");
-        applyToolSummaryCollapsed(collapsed);
+    document.getElementById("searchTools")?.addEventListener("input", (e) => {
+        currentSearch = (e.target.value || "").toLowerCase().trim();
+        currentPage = 1;
+        renderTable();
     });
 
-    // Lógica de Pesquisa e Filtros
-    const searchInput = document.getElementById("searchTools");
-    const filterBtns = document.querySelectorAll(".tool-filter-btn");
-    const toolCards = document.querySelectorAll(".tool-card");
-
-    let currentFilter = 'ALL';
-    let currentSearch = '';
-
-    const applyFilters = () => {
-        toolCards.forEach(card => {
-            const matchesStatus = currentFilter === 'ALL'
-                || (currentFilter === 'ASSIGNED' && (card.dataset.status === 'ASSIGNED' || card.dataset.status === 'PENDING_RECEIPT' || card.dataset.status === 'PENDING_RETURN'))
-                || card.dataset.status === currentFilter;
-            const matchesSearch = card.dataset.search.includes(currentSearch);
-            if (matchesStatus && matchesSearch) {
-                card.classList.remove("hidden");
-            } else {
-                card.classList.add("hidden");
-            }
-        });
-    };
-
-    searchInput?.addEventListener("input", (e) => {
-        currentSearch = e.target.value.toLowerCase();
-        applyFilters();
+    document.getElementById("filterTools")?.addEventListener("change", (e) => {
+        currentFilter = e.target.value || "ALL";
+        currentPage = 1;
+        renderTable();
     });
 
-    filterBtns.forEach(btn => {
-        btn.onclick = () => {
-            currentFilter = btn.dataset.status;
-            filterBtns.forEach(b => {
-                b.classList.remove("bg-slate-900", "text-white");
-                b.classList.add("bg-white", "border", "border-slate-200", "text-slate-400");
-            });
-            btn.classList.add("bg-slate-900", "text-white");
-            btn.classList.remove("bg-white", "border", "border-slate-200", "text-slate-400");
-            applyFilters();
-        };
-    });
+    renderTable();
 }
 
 async function openToolModal(tool = null) {
