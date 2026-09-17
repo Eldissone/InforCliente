@@ -58,7 +58,7 @@ function renderObraRow(p) {
           </div>
           <div>
             <div class="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">${escapeHtml(p.name)}</div>
-            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${escapeHtml(p.code)} &bull; ${escapeHtml(clientName)}</div>
+            <div class="text-[11px] font-medium text-slate-400 uppercase tracking-wider">${escapeHtml(String(p.referencia || "").trim() || "—")} &bull; ${escapeHtml(clientName)}</div>
           </div>
         </div>
       </td>
@@ -506,7 +506,7 @@ function wireClientMatrixActions() {
     const btn = e.target?.closest?.("[data-open-obra]");
     const id = btn?.getAttribute?.("data-open-obra");
     if (!id) return;
-    window.location.href = `../Projectos/ProjectGeral.html?id=${encodeURIComponent(id)}`;
+    window.location.href = `../Projectos/projectView.html?id=${encodeURIComponent(id)}`;
   });
 }
 
