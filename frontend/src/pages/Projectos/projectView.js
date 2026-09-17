@@ -3581,8 +3581,6 @@ function renderStockSummary(items, movements = []) {
 
   const uniqueProducts = visible.length;
   const totalStock = visible.reduce((acc, curr) => acc + Number(curr.quantity || 0), 0);
-  const btCount = visible.filter((i) => i.product?.category === "BT").length;
-  const mtCount = visible.filter((i) => i.product?.category === "MT").length;
 
   el("stockSummary").innerHTML = `
     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
@@ -3592,14 +3590,6 @@ function renderStockSummary(items, movements = []) {
     <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
         <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Total no Estaleiro</p>
         <p class="text-2xl font-bold text-emerald-600">${totalStock.toLocaleString("pt-AO")}</p>
-    </div>
-    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-        <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">Material BT</p>
-        <p class="text-2xl font-bold text-blue-500">${btCount}</p>
-    </div>
-    <div class="bg-[#0F172A] p-6 rounded-3xl border border-slate-800 shadow-xl">
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Material MT</p>
-        <p class="text-2xl font-bold text-[#2afc8d]">${mtCount}</p>
     </div>
   `;
 }
@@ -4704,7 +4694,7 @@ async function openMaterialManagerModal() {
       unit: el("mt_unit").value
     };
 
-    if (!body.code || !body.name) return toast("Preencha cÃ³digo e nome", { type: "warning" });
+    if (!body.code || !body.name) return toast("Preencha código e nome", { type: "warning" });
 
     setButtonLoading(btn, true);
     try {
