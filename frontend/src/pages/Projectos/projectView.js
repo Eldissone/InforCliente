@@ -469,7 +469,8 @@ function updateStockWarehouseContextLabel() {
   })();
   ctx.textContent = `Armazém: ${selected.name} · ${vis}${apiHost ? ` · API: ${apiHost}` : ""}`;
 }
-let galleryState = { items: [] }; // Cache para fotos da galeria
+let galleryState = { items: [], page: 1 };
+const GALLERY_PAGE_SIZE = 12;
 
 function updateOperationStatus(summary) {
   const mapping = {
@@ -5194,34 +5195,30 @@ async function loadStockGallery() {
 // GESTÃO DA GALERIA DA OBRA (ADMIN)
 // =============================================================================
 
-async function loadGallery() {
+function renderAdminGallery() {
   const grid = el("adminGalleryGrid");
   const empty = el("noPhotosMsg");
+  const pager = el("adminGalleryPagination");
   if (!grid) return;
 
-  grid.innerHTML = `
-    <div class="col-span-full py-20 flex flex-col items-center justify-center animate-pulse">
-      <div class="w-12 h-12 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin mb-4"></div>
-      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">A carregar galeria...</p>
-    </div>
-  `;
+  const photos = galleryState.items || [];
+  if (photos.length === 0) {
+    grid.innerHTML = "";
+    empty?.classList.remove("hidden");
+    if (pager) pager.innerHTML = "";
+    return;
+  }
 
-  try {
-    const id = getProjectId();
-    const res = await apiRequest(`/projects/${encodeURIComponent(id)}/photos`);
-    const photos = (res.items || []).filter(p => !p.movementId); // Apenas fotos gerais
-    galleryState.items = photos; // Guardar em cache para preview
+  empty?.classList.add("hidden");
+  const totalPages = Math.max(1, Math.ceil(photos.length / GALLERY_PAGE_SIZE));
+  galleryState.page = Math.min(Math.max(1, Number(galleryState.page) || 1), totalPages);
+  const start = (galleryState.page - 1) * GALLERY_PAGE_SIZE;
+  const pageItems = photos.slice(start, start + GALLERY_PAGE_SIZE);
+  const id = getProjectId();
 
-    if (photos.length === 0) {
-      grid.innerHTML = "";
-      empty?.classList.remove("hidden");
-      return;
-    }
-
-    empty?.classList.add("hidden");
-    grid.innerHTML = photos.map(p => {
-      const url = getAssetUrl(p.path);
-      return `
+  grid.innerHTML = pageItems.map((p) => {
+    const url = getAssetUrl(p.path);
+    return `
         <div class="bg-white rounded-[2rem] overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group">
           <div class="aspect-video relative overflow-hidden bg-slate-100">
             <img src="${url}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -5243,25 +5240,61 @@ async function loadGallery() {
           </div>
         </div>
       `;
-    }).join("");
+  }).join("");
 
-    // Wire delete buttons
-    grid.querySelectorAll("[data-delete-photo]").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        if (!confirm("Tem certeza que deseja apagar esta foto da galeria?")) return;
-        const photoId = btn.dataset.deletePhoto;
-        try {
-          await apiRequest(`/projects/${encodeURIComponent(id)}/photos/${encodeURIComponent(photoId)}`, { method: "DELETE" });
-          toast("Foto apagada!", { type: "success" });
-          loadGallery();
-        } catch (err) {
-          toast("Erro ao apagar foto", { type: "error" });
-        }
-      });
+  grid.querySelectorAll("[data-delete-photo]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Tem certeza que deseja apagar esta foto da galeria?")) return;
+      const photoId = btn.dataset.deletePhoto;
+      try {
+        await apiRequest(`/projects/${encodeURIComponent(id)}/photos/${encodeURIComponent(photoId)}`, { method: "DELETE" });
+        toast("Foto apagada!", { type: "success" });
+        loadGallery();
+      } catch (err) {
+        toast("Erro ao apagar foto", { type: "error" });
+      }
     });
+  });
 
+  renderGeralPagination(pager, {
+    page: galleryState.page,
+    pageSize: GALLERY_PAGE_SIZE,
+    total: photos.length,
+    onPage: (next) => {
+      galleryState.page = next;
+      renderAdminGallery();
+      grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+  });
+
+  applyRoleVisibility();
+}
+
+async function loadGallery() {
+  const grid = el("adminGalleryGrid");
+  const empty = el("noPhotosMsg");
+  const pager = el("adminGalleryPagination");
+  if (!grid) return;
+
+  grid.innerHTML = `
+    <div class="col-span-full py-20 flex flex-col items-center justify-center animate-pulse">
+      <div class="w-12 h-12 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin mb-4"></div>
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">A carregar galeria...</p>
+    </div>
+  `;
+  empty?.classList.add("hidden");
+  if (pager) pager.innerHTML = "";
+
+  try {
+    const id = getProjectId();
+    const res = await apiRequest(`/projects/${encodeURIComponent(id)}/photos`);
+    const photos = (res.items || []).filter(p => !p.movementId); // Apenas fotos gerais
+    galleryState.items = photos;
+    galleryState.page = 1;
+    renderAdminGallery();
   } catch (err) {
     grid.innerHTML = `<div class="col-span-full py-20 text-center text-red-500 font-bold">Erro ao carregar fotos</div>`;
+    if (pager) pager.innerHTML = "";
   }
 }
 
