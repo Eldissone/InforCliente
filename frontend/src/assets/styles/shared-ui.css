@@ -936,14 +936,24 @@
 }
 
 @media (min-width: 1024px) {
+  /* Ponte invisível para o rato ir do título ao menu sem fechar. */
+  .nav-dropdown::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 12px;
+  }
+
   .nav-dropdown:hover .nav-dropdown-menu,
-  .nav-dropdown:focus-within .nav-dropdown-menu,
-  .nav-dropdown.nav-dropdown-open .nav-dropdown-menu {
+  .nav-dropdown:focus-within .nav-dropdown-menu {
     display: block;
     animation: fadeIn 0.15s ease-out;
   }
 
-  .nav-dropdown-open .nav-dropdown-trigger .material-symbols-outlined {
+  .nav-dropdown:hover .nav-dropdown-trigger .material-symbols-outlined,
+  .nav-dropdown:focus-within .nav-dropdown-trigger .material-symbols-outlined {
     transform: rotate(180deg);
   }
 

@@ -154,36 +154,31 @@ export function initAppNavDropdowns() {
 
   document.addEventListener("click", (e) => {
     const trigger = e.target.closest(".nav-dropdown-trigger");
-    const group = e.target.closest(".nav-dropdown");
-
-    if (trigger && group) {
+    if (trigger) {
       e.preventDefault();
-      const open = group.classList.contains("nav-dropdown-open");
-      document.querySelectorAll(".nav-dropdown-open").forEach((g) => {
-        g.classList.remove("nav-dropdown-open");
-        g.querySelector(".nav-dropdown-trigger")?.setAttribute("aria-expanded", "false");
-      });
-      if (!open) {
-        group.classList.add("nav-dropdown-open");
-        trigger.setAttribute("aria-expanded", "true");
-      }
+      // Clique do rato não deve fixar o menu aberto — só hover.
+      if (e.detail > 0) trigger.blur();
       return;
-    }
-
-    if (!e.target.closest(".nav-dropdown-menu")) {
-      document.querySelectorAll(".nav-dropdown-open").forEach((g) => {
-        g.classList.remove("nav-dropdown-open");
-        g.querySelector(".nav-dropdown-trigger")?.setAttribute("aria-expanded", "false");
-      });
     }
   });
 
+  document.addEventListener("mouseover", (e) => {
+    const group = e.target.closest(".nav-dropdown");
+    if (!group) return;
+    group.querySelector(".nav-dropdown-trigger")?.setAttribute("aria-expanded", "true");
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const group = e.target.closest(".nav-dropdown");
+    if (!group || group.contains(e.relatedTarget)) return;
+    group.querySelector(".nav-dropdown-trigger")?.setAttribute("aria-expanded", "false");
+  });
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      document.querySelectorAll(".nav-dropdown-open").forEach((g) => {
-        g.classList.remove("nav-dropdown-open");
-        g.querySelector(".nav-dropdown-trigger")?.setAttribute("aria-expanded", "false");
-      });
-    }
+    if (e.key !== "Escape") return;
+    const group = document.activeElement?.closest?.(".nav-dropdown");
+    const trigger = group?.querySelector(".nav-dropdown-trigger");
+    trigger?.setAttribute("aria-expanded", "false");
+    trigger?.blur();
   });
 }
