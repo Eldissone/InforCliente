@@ -54,6 +54,57 @@ function getProjectId() {
   return params.get("id");
 }
 
+const PROJECT_VIEW_ORIGIN_KEY = "InfoCliente.projectView.origin";
+const DEFAULT_BACK_HREF = "./ProjectGeral.html";
+
+function isProjectViewPath(pathname) {
+  return /projectView(\.html)?$/i.test(String(pathname || ""));
+}
+
+function captureBackOrigin() {
+  try {
+    if (!document.referrer) return;
+    const ref = new URL(document.referrer);
+    if (ref.origin !== window.location.origin) return;
+    if (isProjectViewPath(ref.pathname)) return;
+    sessionStorage.setItem(PROJECT_VIEW_ORIGIN_KEY, `${ref.pathname}${ref.search}${ref.hash}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+function resolveBackHref() {
+  try {
+    const stored = sessionStorage.getItem(PROJECT_VIEW_ORIGIN_KEY);
+    if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
+      const path = stored.split("?")[0];
+      if (!isProjectViewPath(path)) return stored;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    if (document.referrer) {
+      const ref = new URL(document.referrer);
+      if (ref.origin === window.location.origin && !isProjectViewPath(ref.pathname)) {
+        return `${ref.pathname}${ref.search}${ref.hash}`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return DEFAULT_BACK_HREF;
+}
+
+function wireBackButton() {
+  captureBackOrigin();
+  const btn = el("btnBackToOrigin");
+  if (!btn) return;
+  btn.href = resolveBackHref();
+}
+
 function applyRoleVisibility() {
   const user = getSessionUser();
   const role = (user?.role || "leitura").toLowerCase();
@@ -3291,6 +3342,7 @@ async function init() {
   initMobileMenu();
   wireLogout();
   wireUsersNav();
+  wireBackButton();
   await guardPageAccess("obras", "view");
   await initPermissionLayer();
   await initExtraRequestModal({
