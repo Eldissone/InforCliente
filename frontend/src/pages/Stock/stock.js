@@ -74,7 +74,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     init();
 });
 
-let currentTab = "inventory";
+let currentTab = "warehouses";
 
 function stockOwnershipLabel(item, clientById = {}) {
     if (item.ownershipLabel) return item.ownershipLabel;
@@ -174,8 +174,7 @@ async function loadTabContent(tab) {
     container.innerHTML = `<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div></div>`;
 
     try {
-        if (tab === "inventory") await renderInventory(container);
-        else if (tab === "catalog") await renderCatalog(container);
+        if (tab === "catalog") await renderCatalog(container);
         else if (tab === "tools") await renderTools(container);
         else if (tab === "warehouses") await renderWarehouses(container);
         else if (tab === "movements") await renderMovements(container);
@@ -190,189 +189,6 @@ async function loadTabContent(tab) {
     } catch (error) {
         container.innerHTML = `<div class="bg-red-50 text-red-600 p-8 rounded-2xl font-bold text-center">Erro ao carregar dados: ${error.message}</div>`;
     }
-}
-
-async function renderInventory(container) {
-    const [{ items: balances }, { items: allItems }, { items: clients }] = await Promise.all([
-        apiRequest("/stock/balance"),
-        apiRequest("/items"),
-        apiRequest("/clients"),
-    ]);
-    const clientById = Object.fromEntries((clients || []).map((c) => [c.id, c]));
-
-    // Agrupar tudo por produto, armazém e proprietário para evitar duplicados no inventário geral
-    const groups = {};
-    const getGroupKey = (item) => `${item.productId || item.product?.id}-${item.warehouseId || item.warehouse?.id}-${item.ownerId || 'proprio'}`;
-
-    // 1. Processar Saldos (Stock Consumível / Geral)
-    balances.forEach(b => {
-        const key = getGroupKey(b);
-        if (!groups[key]) {
-            groups[key] = {
-                product: b.product,
-                warehouse: b.warehouse,
-                ownerId: b.ownerId,
-                owner: b.owner,
-                ownershipLabel: b.ownershipLabel,
-                transferFromWarehouse: b.transferFromWarehouse,
-                quantity: 0,
-                hasStock: true,
-                hasAsset: false
-            };
-        }
-        groups[key].quantity += Number(b.quantity);
-        groups[key].hasStock = true;
-    });
-
-    // 2. Processar Ativos (Items Individuais)
-    // Para Ferramentas/Equipamentos, a contagem de itens é o "mestre" da verdade
-    allItems.forEach(item => {
-        if (!item.warehouseId) return; // Ignorar se não estiver num armazém (ex: em trânsito sem destino ou com técnico mas sem warehouseId)
-        const key = getGroupKey(item);
-        const isTool = item.product?.category === 'TOOL' || item.product?.category === 'EQUIPMENT';
-
-        if (!groups[key]) {
-            groups[key] = {
-                product: item.product,
-                warehouse: item.warehouse,
-                ownerId: item.ownerId,
-                quantity: 0,
-                hasStock: false,
-                hasAsset: true
-            };
-        }
-
-        if (isTool) {
-            // Se for ferramenta, ignoramos o saldo anterior e contamos os itens reais presentes
-            if (!groups[key].hasAsset) {
-                groups[key].quantity = 1; // Inicia a contagem baseada em itens
-                groups[key].hasAsset = true;
-            } else {
-                groups[key].quantity += 1;
-            }
-        } else {
-            // Se for material mas tiver um item individual por erro, só somamos se não houver stock base
-            if (!groups[key].hasStock) {
-                groups[key].quantity += 1;
-            }
-            groups[key].hasAsset = true;
-        }
-    });
-
-    const consolidated = Object.values(groups);
-
-    let html = `
-        <div class="mb-10 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
-            <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Visão Consolidada</h3>
-                <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Inventário Geral</h2>
-            </div>
-            <div class="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                <div class="bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm flex gap-1">
-                    <button data-filter="ALL" class="inventory-filter-btn px-5 py-2 rounded-xl text-[10px] font-black uppercase bg-slate-900 text-white transition-all">Tudo</button>
-                    <button data-filter="MATERIAL" class="inventory-filter-btn px-5 py-2 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all">Materiais</button>
-                    <button data-filter="ASSET" class="inventory-filter-btn px-5 py-2 rounded-xl text-[10px] font-black uppercase text-slate-400 hover:bg-slate-50 transition-all">Ferramentas</button>
-                </div>
-                <div class="relative flex-grow lg:flex-grow-0 lg:w-64">
-                    <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                    <input type="text" id="searchInventory" placeholder="Procurar no inventário..." class="w-full pl-12 pr-4 h-11 bg-white border border-slate-200 rounded-2xl text-xs font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="text-[10px] font-black uppercase text-slate-400 bg-slate-50/30">
-                        <th class="px-10 py-5">Produto</th>
-                        <th class="px-10 py-5">Localização</th>
-                        <th class="px-10 py-5">Tipo / Propriedade</th>
-                        <th class="px-10 py-5 text-right">Quantidade</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-50">
-    `;
-
-    if (consolidated.length === 0) {
-        html += `<tr><td colspan="4" class="p-20 text-center text-slate-400 font-medium italic">Nenhum registo de stock ou ativos.</td></tr>`;
-    } else {
-        consolidated.forEach(item => {
-            const isAsset = item.hasAsset;
-            const isStock = item.hasStock;
-            const isLow = isStock && !isAsset && item.quantity < 5;
-            const isTool = item.product.category === 'TOOL' || item.product.category === 'EQUIPMENT';
-
-            html += `
-                <tr class="inventory-row group hover:bg-slate-50/50 transition-colors" data-type="${isTool ? 'ASSET' : 'MATERIAL'}">
-                    <td class="px-10 py-6">
-                        <div class="font-bold text-slate-900 text-base uppercase">${esc(item.product.name)}</div>
-                        <div class="text-[10px] text-slate-400 font-black uppercase tracking-wider">${esc(item.product.sku || 'N/A')}</div>
-                    </td>
-                    <td class="px-10 py-6">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-sm text-slate-300">location_on</span>
-                            <span class="text-sm font-bold text-slate-600">${esc(item.warehouse?.name || '---')}</span>
-                        </div>
-                    </td>
-                    <td class="px-10 py-6">
-                        <div class="flex flex-col gap-1">
-                            <div class="flex flex-wrap gap-1">
-                                ${isStock ? `<span class="px-2 py-0.5 w-fit rounded-md bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase tracking-widest">Stock</span>` : ''}
-                                ${isAsset ? `<span class="px-2 py-0.5 w-fit rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-widest">Ativo</span>` : ''}
-                            </div>
-                            <span class="text-[9px] font-bold text-slate-600 uppercase tracking-widest truncate max-w-[200px]" title="${esc(stockOwnershipLabel(item, clientById))}">
-                                ${esc(stockOwnershipLabel(item, clientById))}
-                            </span>
-                        </div>
-                    </td>
-                    <td class="px-10 py-6 text-right">
-                        <div class="flex flex-col items-end">
-                            <span class="text-2xl font-black ${isLow ? 'text-amber-500' : 'text-slate-900'}">${item.quantity}</span>
-                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${esc(item.product.unit)}</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        });
-    }
-
-    html += `</tbody></table></div>`;
-    container.innerHTML = html;
-
-    // Lógica de Pesquisa e Filtros no Inventário
-    const searchInput = document.getElementById("searchInventory");
-    const filterBtns = container.querySelectorAll(".inventory-filter-btn");
-    const rows = container.querySelectorAll(".inventory-row");
-
-    let currentSearch = '';
-    let currentFilter = 'ALL';
-
-    const applyInventoryFilters = () => {
-        rows.forEach(row => {
-            const matchesType = currentFilter === 'ALL' || row.dataset.type === currentFilter;
-            const matchesSearch = row.innerText.toLowerCase().includes(currentSearch);
-            if (matchesType && matchesSearch) row.classList.remove("hidden");
-            else row.classList.add("hidden");
-        });
-    };
-
-    searchInput?.addEventListener("input", (e) => {
-        currentSearch = e.target.value.toLowerCase();
-        applyInventoryFilters();
-    });
-
-    filterBtns.forEach(btn => {
-        btn.onclick = () => {
-            currentFilter = btn.dataset.filter;
-            filterBtns.forEach(b => {
-                b.classList.remove("bg-slate-900", "text-white");
-                b.classList.add("text-slate-400");
-            });
-            btn.classList.add("bg-slate-900", "text-white");
-            btn.classList.remove("text-slate-400");
-            applyInventoryFilters();
-        };
-    });
 }
 
 async function renderCatalog(container) {
@@ -992,7 +808,6 @@ async function openProductModal(product = null) {
                 }
                 close();
                 loadTabContent("catalog");
-                if (currentTab === "inventory") loadTabContent("inventory");
             } catch (error) { alert("Erro: " + error.message); }
         }
     });

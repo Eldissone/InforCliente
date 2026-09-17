@@ -38,7 +38,6 @@ const ACTION_LABELS = {
   read: "Visualizar (leitura)",
   manage: "Gerir / operar",
   financeiro: "Módulo financeiro",
-  tab_inventory: "Aba: Inventário geral",
   tab_catalog: "Aba: Catálogo",
   tab_tools: "Aba: Ferramentas",
   tab_warehouses: "Aba: Armazéns",
@@ -74,14 +73,13 @@ const ACTION_LABELS = {
  * Abas configuráveis por página — groupModule = módulo no mapa de permissões onde aparece.
  */
 const PAGE_TABS = [
-  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Inventário Geral", module: "stock", action: "tab_inventory" },
-  { groupModule: "materiais", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Catálogo", module: "materiais", action: "tab_catalog" },
-  { groupModule: "ferramentas", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Ferramentas", module: "ferramentas", action: "tab_tools" },
   { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Armazéns", module: "stock", action: "tab_warehouses" },
   { groupModule: "obras", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Pedidos de Obra", module: "obras", action: "tab_stock_requests" },
   { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Devoluções", module: "stock", action: "tab_returns" },
-  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Histórico", module: "stock", action: "tab_movements" },
+  { groupModule: "materiais", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Catálogo", module: "materiais", action: "tab_catalog" },
+  { groupModule: "ferramentas", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Ferramentas", module: "ferramentas", action: "tab_tools" },
   { groupModule: "logistica", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Entregas", module: "logistica", action: "tab_deliveries" },
+  { groupModule: "stock", pageLabel: "Logística & Stock", route: "/Stock/index.html", label: "Histórico", module: "stock", action: "tab_movements" },
   { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Dashboard financeiro", module: "obras", action: "tab_dashboard", fallbackAction: "financeiro" },
   { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Avanço físico", module: "obras", action: "tab_progress" },
   { groupModule: "obras", pageLabel: "Vista da obra", route: "/Projectos/projectView.html", label: "Autos de medição", module: "obras", action: "tab_measurements", fallbackAction: "tab_progress" },
