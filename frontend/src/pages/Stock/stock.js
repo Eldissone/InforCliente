@@ -1055,9 +1055,9 @@ async function renderTools(container) {
     };
 
     container.innerHTML = `
-        <div class="flex flex-row items-center justify-between gap-4 mb-8 min-w-0 overflow-x-auto">
+        <div class="flex flex-row items-center justify-between gap-4 mb-8 min-w-0 overflow-x-hidden py-1 pr-1">
             <h2 class="text-2xl lg:text-3xl font-black text-slate-900 tracking-tighter leading-tight shrink-0 whitespace-nowrap">Ferramentas & Equipamento</h2>
-            <div class="flex flex-nowrap items-center gap-3 min-w-0 flex-1 justify-end">
+            <div class="flex flex-nowrap items-center gap-3 min-w-0 flex-1 justify-end overflow-visible">
                 <div class="relative min-w-0 w-40 lg:w-52 shrink">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input type="text" id="searchTools" placeholder="Pesquisar..." class="w-full pl-10 pr-3 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
@@ -1072,7 +1072,7 @@ async function renderTools(container) {
                     <option value="ASSIGNED">Em Obra / Trânsito (${assignedCount})</option>
                     <option value="MAINTENANCE">Manutenção (${maintenanceCount})</option>
                 </select>
-                <button id="btnCreateTool" class="h-10 bg-slate-900 text-white px-4 lg:px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all shrink-0 whitespace-nowrap">
+                <button id="btnCreateTool" class="h-10 bg-slate-900 text-white px-3 lg:px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-800 transition-colors shrink-0 whitespace-nowrap">
                     <span class="material-symbols-outlined text-xl">add</span> Cadastrar
                 </button>
             </div>
