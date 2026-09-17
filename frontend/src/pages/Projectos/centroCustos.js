@@ -10,6 +10,66 @@ import { renderAsideProductSection, renderAsideAccountingLine } from "/shared/pa
 import { initMobileMenu } from "/shared/ui.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 
+const CENTRO_CUSTOS_ORIGIN_KEY = "InfoCliente.centroCustos.origin";
+const DEFAULT_BACK_HREF = "./ProjectGeral.html";
+
+function isCentroCustosPath(pathname) {
+  return /centroCustos(\.html)?$/i.test(String(pathname || ""));
+}
+
+function isCentroCustosChildPath(pathname) {
+  const path = String(pathname || "");
+  return /\/Cotacao(\/|$)/i.test(path) || /novoPedido(\.html)?$/i.test(path);
+}
+
+function captureBackOrigin() {
+  try {
+    if (!document.referrer) return;
+    const ref = new URL(document.referrer);
+    if (ref.origin !== window.location.origin) return;
+    if (isCentroCustosPath(ref.pathname) || isCentroCustosChildPath(ref.pathname)) return;
+    sessionStorage.setItem(CENTRO_CUSTOS_ORIGIN_KEY, `${ref.pathname}${ref.search}${ref.hash}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+function resolveBackHref() {
+  try {
+    const stored = sessionStorage.getItem(CENTRO_CUSTOS_ORIGIN_KEY);
+    if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
+      const path = stored.split("?")[0];
+      if (!isCentroCustosPath(path) && !isCentroCustosChildPath(path)) return stored;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    if (document.referrer) {
+      const ref = new URL(document.referrer);
+      if (
+        ref.origin === window.location.origin &&
+        !isCentroCustosPath(ref.pathname) &&
+        !isCentroCustosChildPath(ref.pathname)
+      ) {
+        return `${ref.pathname}${ref.search}${ref.hash}`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return DEFAULT_BACK_HREF;
+}
+
+function wireBackButton() {
+  captureBackOrigin();
+  const btn = document.getElementById("btnBackToOrigin");
+  if (!btn) return;
+  btn.href = resolveBackHref();
+}
+
 // ── State ──────────────────────────────────────────────────────────────────────
 let allProjects = [];
 let selectedProject = null;
@@ -32,6 +92,7 @@ let currentSuppliers = [];
   wireLogout();
   wireUsersNav();
   initMobileMenu();
+  wireBackButton();
   await initExtraRequestModal({ showToast });
   wireExtraRequestButton("btnNewExtra", () => {
     if (!selectedProject) return { errorMessage: "Seleccione uma obra primeiro" };
