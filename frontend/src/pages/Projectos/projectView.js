@@ -5486,8 +5486,96 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
 }
 window.openEditPlannedModal = openEditPlannedModal;
 
+const DAILY_PLANS_PAGE_SIZE = 12;
+
+function renderGeralPagination(container, { page, pageSize, total, onPage }) {
+  if (!container) return;
+  container.innerHTML = "";
+  const totalCount = Number(total) || 0;
+  const size = Math.max(1, Number(pageSize) || 1);
+  const totalPages = Math.max(1, Math.ceil(totalCount / size) || 1);
+  if (totalCount <= 0 || totalPages <= 1) return;
+
+  const current = Math.min(Math.max(1, Number(page) || 1), totalPages);
+  const wrap = document.createElement("div");
+  wrap.className = "flex items-center justify-center gap-2 flex-wrap";
+
+  const goTo = (next) => {
+    if (typeof onPage === "function") onPage(next);
+  };
+
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button";
+  prevBtn.disabled = current === 1;
+  prevBtn.className = current === 1
+    ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+    : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+  prevBtn.innerHTML = `<span class="material-symbols-outlined text-sm">chevron_left</span> Anterior`;
+  if (current > 1) prevBtn.addEventListener("click", () => goTo(current - 1));
+  wrap.appendChild(prevBtn);
+
+  const buildNumBtn = (label, target, disabled, isActive) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.disabled = disabled;
+    if (isActive) {
+      btn.className = "w-10 h-10 rounded-xl bg-slate-900 text-[#2afc8d] font-black text-sm shadow-lg flex items-center justify-center";
+    } else if (disabled) {
+      btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-sm flex items-center justify-center cursor-not-allowed";
+    } else {
+      btn.className = "w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-50 hover:border-slate-200 transition-all flex items-center justify-center shadow-sm";
+    }
+    if (!disabled && !isActive) btn.addEventListener("click", () => goTo(target));
+    return btn;
+  };
+
+  const delta = 2;
+  const range = [];
+  for (let i = Math.max(1, current - delta); i <= Math.min(totalPages, current + delta); i++) range.push(i);
+  if (range[0] > 1) {
+    wrap.appendChild(buildNumBtn("1", 1, false, false));
+    if (range[0] > 2) {
+      const dots = document.createElement("span");
+      dots.textContent = "...";
+      dots.className = "text-slate-400 font-bold text-sm px-1";
+      wrap.appendChild(dots);
+    }
+  }
+  range.forEach((p) => wrap.appendChild(buildNumBtn(String(p), p, false, p === current)));
+  if (range[range.length - 1] < totalPages) {
+    if (range[range.length - 1] < totalPages - 1) {
+      const dots = document.createElement("span");
+      dots.textContent = "...";
+      dots.className = "text-slate-400 font-bold text-sm px-1";
+      wrap.appendChild(dots);
+    }
+    wrap.appendChild(buildNumBtn(String(totalPages), totalPages, false, false));
+  }
+
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button";
+  nextBtn.disabled = current === totalPages;
+  nextBtn.className = current === totalPages
+    ? "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-300 font-bold text-xs flex items-center gap-1 cursor-not-allowed"
+    : "h-10 px-4 rounded-xl bg-white border border-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all flex items-center gap-1 shadow-sm";
+  nextBtn.innerHTML = `Próximo <span class="material-symbols-outlined text-sm">chevron_right</span>`;
+  if (current < totalPages) nextBtn.addEventListener("click", () => goTo(current + 1));
+  wrap.appendChild(nextBtn);
+
+  const from = (current - 1) * size + 1;
+  const to = Math.min(current * size, totalCount);
+  const info = document.createElement("span");
+  info.className = "text-xs font-bold text-slate-400 ml-2 hidden md:inline";
+  info.textContent = `${from}–${to} de ${totalCount}`;
+  wrap.appendChild(info);
+
+  container.appendChild(wrap);
+}
+
 function renderDailyPlansList() {
   const container = el("dailyPlansList");
+  const pager = el("dailyPlansPagination");
   if (!container || !window.dailyPlansState) return;
 
   const searchQuery = (el("dpFilterSearch")?.value || "").toLowerCase().trim();
@@ -5537,10 +5625,16 @@ function renderDailyPlansList() {
         <span class="material-symbols-outlined text-4xl mb-2 text-slate-350">event_busy</span>
         Nenhum plano diário corresponde aos filtros aplicados.
       </div>`;
+    if (pager) pager.innerHTML = "";
     return;
   }
 
-  container.innerHTML = filtered.map(p => {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / DAILY_PLANS_PAGE_SIZE));
+  window.dailyPlansPage = Math.min(Math.max(1, Number(window.dailyPlansPage) || 1), totalPages);
+  const start = (window.dailyPlansPage - 1) * DAILY_PLANS_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + DAILY_PLANS_PAGE_SIZE);
+
+  container.innerHTML = pageItems.map(p => {
     let statusBadge = "";
     if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
     if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
@@ -5602,6 +5696,17 @@ function renderDailyPlansList() {
     `;
   }).join('');
 
+  renderGeralPagination(pager, {
+    page: window.dailyPlansPage,
+    pageSize: DAILY_PLANS_PAGE_SIZE,
+    total: filtered.length,
+    onPage: (next) => {
+      window.dailyPlansPage = next;
+      renderDailyPlansList();
+      container.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+  });
+
   applyRoleVisibility();
 }
 
@@ -5610,17 +5715,24 @@ async function loadDailyPlans() {
   const container = el("dailyPlansList");
   if (!container) return;
 
+  const pager = el("dailyPlansPagination");
   try {
     container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">Carregando planos...</div>`;
+    if (pager) pager.innerHTML = "";
 
     const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
     window.dailyPlansState = plans || [];
+    window.dailyPlansPage = 1;
 
     // Wire up event listeners if they haven't been wired yet
     if (!window.dailyPlansListenersWired) {
-      el("dpFilterSearch")?.addEventListener("input", renderDailyPlansList);
-      el("dpFilterStatus")?.addEventListener("change", renderDailyPlansList);
-      el("dpFilterSort")?.addEventListener("change", renderDailyPlansList);
+      const resetAndRender = () => {
+        window.dailyPlansPage = 1;
+        renderDailyPlansList();
+      };
+      el("dpFilterSearch")?.addEventListener("input", resetAndRender);
+      el("dpFilterStatus")?.addEventListener("change", resetAndRender);
+      el("dpFilterSort")?.addEventListener("change", resetAndRender);
       window.dailyPlansListenersWired = true;
     }
 
@@ -5629,6 +5741,7 @@ async function loadDailyPlans() {
   } catch (err) {
     console.error(err);
     container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl w-full">Erro ao carregar planos.</div>`;
+    if (pager) pager.innerHTML = "";
   }
 }
 window.loadDailyPlans = loadDailyPlans;
