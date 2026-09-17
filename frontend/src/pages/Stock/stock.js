@@ -359,7 +359,7 @@ async function renderCatalog(container) {
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
             <div>
-                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Catálogo Mestre</h3>
+                <h3 class="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Catálogo Geral de Produtos</h3>
                 <h2 class="text-3xl font-black text-slate-900 tracking-tighter">Gestão de Referências</h2>
             </div>
             <div class="flex flex-wrap gap-3 w-full md:w-auto">
