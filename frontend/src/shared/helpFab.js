@@ -19,7 +19,7 @@ let isOpen = false;
 let capturing = false;
 
 const state = {
-  view: "choose", // choose | form | mine | detail
+  view: "choose", // choose | form | mine | detail | opening
   type: null,
   screenshotFile: null,
   screenshotUrl: null,
@@ -29,6 +29,8 @@ const state = {
   detail: null,
   loadingMine: false,
   submitting: false,
+  opening: false,
+  selectingType: null,
 };
 
 const HTML2CANVAS_SRC = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
@@ -72,6 +74,21 @@ function currentPageContext() {
     pageUrl: `${window.location.pathname}${window.location.search || ""}`,
     pageTitle: document.title || "",
   };
+}
+
+function spinnerHtml(color = "currentColor") {
+  return `<span class="spinner" style="color:${color}" aria-hidden="true"></span>`;
+}
+
+function setFabLoading(on) {
+  if (!fabEl) fabEl = el("globalHelpFab");
+  if (!fabEl) return;
+  fabEl.disabled = Boolean(on);
+  fabEl.classList.toggle("pointer-events-none", Boolean(on));
+  fabEl.setAttribute("aria-busy", on ? "true" : "false");
+  fabEl.innerHTML = on
+    ? spinnerHtml("#2afc8d")
+    : `<span class="material-symbols-outlined text-3xl">help</span>`;
 }
 
 function hideCaptureTargets(hidden) {
@@ -249,55 +266,70 @@ function setHeader(title, subtitle, showBack) {
 function renderBody() {
   const body = el("globalHelpBody");
   if (!body) return;
-  if (state.view === "choose") renderChoose(body);
+  if (state.view === "opening") renderOpening(body);
+  else if (state.view === "choose") renderChoose(body);
   else if (state.view === "form") renderForm(body);
   else if (state.view === "mine") renderMine(body);
   else if (state.view === "detail") renderDetail(body);
 }
 
+function renderOpening(body) {
+  setHeader("Ajuda", "A carregar…", false);
+  body.innerHTML = `
+    <div class="flex flex-col items-center justify-center gap-3 p-8">
+      ${spinnerHtml("#0f172a")}
+      <p class="text-sm font-semibold text-slate-500">A abrir ajuda…</p>
+    </div>
+  `;
+}
+
 function renderChoose(body) {
   setHeader("Ajuda", "Sugestões e dúvidas", false);
+  const selecting = state.selectingType;
+  const busy = Boolean(selecting);
+  const option = (type, iconWrap, icon, title, hint) => {
+    const selected = selecting === type;
+    const dim = busy && !selected;
+    const iconInner = selected
+      ? spinnerHtml(type === "DUVIDA" ? "#ffffff" : "#2afc8d")
+      : `<span class="material-symbols-outlined">${icon}</span>`;
+    return `
+      <button type="button" data-help-type="${type}" ${busy ? "disabled" : ""}
+        class="w-full text-left p-3 rounded-2xl border transition-all ${selected ? "border-slate-900 bg-slate-50 shadow-md" : "border-slate-100 bg-slate-50/80"} ${dim ? "opacity-40 pointer-events-none" : "hover:border-slate-900 hover:shadow-md"}">
+        <div class="flex items-center gap-3">
+          <span class="w-10 h-10 rounded-xl ${iconWrap} flex items-center justify-center shrink-0">
+            ${iconInner}
+          </span>
+          <div>
+            <div class="font-black text-slate-900 text-sm">${title}</div>
+            <div class="text-[11px] text-slate-500 font-medium">${selected ? "A capturar o ecrã…" : hint}</div>
+          </div>
+        </div>
+      </button>`;
+  };
   body.innerHTML = `
     <div class="p-4 flex flex-col gap-2.5">
       <p class="text-[13px] text-slate-500 font-medium leading-snug">Ajude a melhorar o sistema. Captura e descreva sua dúvida ou sugestão.</p>
-      <button type="button" data-help-type="MELHORIA" class="w-full text-left p-3 rounded-2xl border border-slate-100 hover:border-slate-900 hover:shadow-md transition-all bg-slate-50/80">
-        <div class="flex items-center gap-3">
-          <span class="w-10 h-10 rounded-xl bg-slate-900 text-[#2afc8d] flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined">lightbulb</span>
-          </span>
-          <div>
-            <div class="font-black text-slate-900 text-sm">Sugerir melhoria</div>
-            <div class="text-[11px] text-slate-500 font-medium">Propor uma alteração neste ecrã</div>
-          </div>
-        </div>
-      </button>
-      <button type="button" data-help-type="DUVIDA" class="w-full text-left p-3 rounded-2xl border border-slate-100 hover:border-slate-900 hover:shadow-md transition-all bg-slate-50/80">
-        <div class="flex items-center gap-3">
-          <span class="w-10 h-10 rounded-xl bg-sky-700 text-white flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined">contact_support</span>
-          </span>
-          <div>
-            <div class="font-black text-slate-900 text-sm">Tirar uma dúvida</div>
-            <div class="text-[11px] text-slate-500 font-medium">Perguntar sobre este ponto do sistema</div>
-          </div>
-        </div>
-      </button>
-      <button type="button" id="globalHelpMineBtn" class="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors">
+      ${option("MELHORIA", "bg-slate-900 text-[#2afc8d]", "lightbulb", "Sugerir melhoria", "Propor uma alteração neste ecrã")}
+      ${option("DUVIDA", "bg-sky-700 text-white", "contact_support", "Tirar uma dúvida", "Perguntar sobre este ponto do sistema")}
+      <button type="button" id="globalHelpMineBtn" ${busy ? "disabled" : ""} class="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-40">
         <span class="material-symbols-outlined text-base">history</span> Os meus pedidos
       </button>
     </div>
   `;
-  body.querySelectorAll("[data-help-type]").forEach((btn) => {
-    btn.addEventListener("click", () => startCaptureFlow(btn.getAttribute("data-help-type")));
-  });
-  el("globalHelpMineBtn")?.addEventListener("click", () => openMine());
+  if (!busy) {
+    body.querySelectorAll("[data-help-type]").forEach((btn) => {
+      btn.addEventListener("click", () => startCaptureFlow(btn.getAttribute("data-help-type")));
+    });
+    el("globalHelpMineBtn")?.addEventListener("click", () => openMine());
+  }
 }
 
 function renderCapturing(body) {
   setHeader("A capturar…", "Aguarde um instante", false);
   body.innerHTML = `
-    <div class="flex flex-col items-center justify-center gap-2 text-slate-500 p-6">
-      <span class="material-symbols-outlined text-4xl animate-pulse">photo_camera</span>
+    <div class="flex flex-col items-center justify-center gap-3 text-slate-500 p-6">
+      ${spinnerHtml("#0f172a")}
       <p class="text-sm font-semibold text-center">A capturar o ecrã actual…</p>
     </div>
   `;
@@ -352,7 +384,11 @@ function renderForm(body) {
 function renderMine(body) {
   setHeader("Os meus pedidos", "Histórico e respostas", true);
   if (state.loadingMine) {
-    body.innerHTML = `<div class="p-8 text-center text-sm text-slate-400 font-semibold">A carregar…</div>`;
+    body.innerHTML = `
+      <div class="flex flex-col items-center justify-center gap-3 p-8">
+        ${spinnerHtml("#0f172a")}
+        <p class="text-sm font-semibold text-slate-500">A carregar pedidos…</p>
+      </div>`;
     return;
   }
   const items = state.myTickets || [];
@@ -425,18 +461,31 @@ function renderDetail(body) {
 }
 
 async function startCaptureFlow(type, { recapture = false } = {}) {
+  if (capturing || state.opening || state.selectingType) return;
   state.type = type;
+  state.selectingType = type;
   Object.assign(state, currentPageContext());
   closeChatPanel?.();
 
-  if (!recapture) {
-    state.view = "form";
-  }
   const body = el("globalHelpBody");
-  if (body) renderCapturing(body);
+  if (!recapture) {
+    state.view = "choose";
+    if (body) renderChoose(body);
+    await new Promise((r) => setTimeout(r, 220));
+    if (!isOpen) {
+      state.selectingType = null;
+      setFabLoading(false);
+      return;
+    }
+  } else if (body) {
+    renderCapturing(body);
+  }
 
+  setFabLoading(true);
   closeHelpPanelVisual();
   const ok = await captureScreenshot();
+  state.selectingType = null;
+  setFabLoading(false);
   openHelpPanelVisual();
   state.view = "form";
   renderBody();
@@ -488,6 +537,7 @@ function resetComposer() {
   state.pageUrl = "";
   state.pageTitle = "";
   state.view = "choose";
+  state.selectingType = null;
 }
 
 async function openMine() {
@@ -544,29 +594,41 @@ function closeHelpPanelVisual() {
   panelEl.classList.remove("scale-100", "opacity-100", "pointer-events-auto");
 }
 
-export function openHelpPanel() {
+export async function openHelpPanel() {
+  if (state.opening || capturing) return;
   if (!panelEl) createPanel();
   if (!panelEl) panelEl = el("globalHelpPanel");
   if (!panelEl) return;
   closeChatPanel?.();
-  if (state.view !== "form") {
+  const showChooser = state.view !== "form" && state.view !== "mine" && state.view !== "detail";
+  openHelpPanelVisual();
+  if (showChooser) {
+    state.opening = true;
+    state.view = "opening";
+    setFabLoading(true);
+    renderBody();
+    await loadHtml2Canvas().catch(() => {});
+    state.opening = false;
+    setFabLoading(false);
+    if (!isOpen) return;
     state.view = "choose";
   }
-  openHelpPanelVisual();
   renderBody();
 }
 
 export function closeHelpPanel() {
   if (!panelEl) return;
   isOpen = false;
+  state.opening = false;
   if (!capturing) {
     closeHelpPanelVisual();
+    setFabLoading(false);
   }
   fabEl?.focus();
 }
 
 export function toggleHelpPanel() {
-  if (capturing) return;
+  if (capturing || state.opening || state.selectingType) return;
   if (isOpen) closeHelpPanel();
   else openHelpPanel();
 }
