@@ -151,6 +151,12 @@ export function wireUsersNav() {
     .then(({ initChatFab }) => initChatFab())
     .catch(() => { });
 
+  if (role !== "cliente") {
+    import("./helpFab.js")
+      .then(({ initHelpFab }) => initHelpFab())
+      .catch(() => { });
+  }
+
   import("./paymentNotificationBar.js")
     .then(({ initPaymentNotifications }) => initPaymentNotifications())
     .catch(() => { });

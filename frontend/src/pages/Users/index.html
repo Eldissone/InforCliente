@@ -125,7 +125,7 @@
         }
 
         .perm-table-wrap {
-            max-height: calc(100vh - 22rem);
+            max-height: calc(100vh - 12rem);
             overflow: auto;
         }
 
@@ -448,6 +448,10 @@
                 <span class="material-symbols-outlined si">security</span>
                 <span>Permissões</span>
             </button>
+            <button data-section="ajuda" class="sidebar-link" id="m-ajuda">
+                <span class="material-symbols-outlined si">help</span>
+                <span>Ajuda</span>
+            </button>
             <button data-section="history" class="sidebar-link" id="m-history">
                 <span class="material-symbols-outlined si">history</span>
                 <span>Histórico</span>
@@ -492,6 +496,11 @@
                 </button>
                 <button data-section="permissions" class="sidebar-link">
                     <span class="material-symbols-outlined si">security</span>Permissões
+                </button>
+                <button data-section="ajuda" class="sidebar-link">
+                    <span class="material-symbols-outlined si">help</span>Ajuda
+                    <span id="sidebar-help-count"
+                        class="ml-auto bg-sky-100 text-sky-700 text-[9px] font-black px-2 py-0.5 rounded-full hidden">0</span>
                 </button>
                 <button data-section="history" class="sidebar-link">
                     <span class="material-symbols-outlined si">history</span>Histórico
@@ -792,7 +801,7 @@
                                 class="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
                                 title="Recolher todos os módulos">
                                 <span class="material-symbols-outlined text-base">unfold_less</span>
-                                Recolher
+                                ocultar
                             </button>
                         </div>
                     </div>
@@ -909,9 +918,52 @@
                             <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Acesso
                                 total</span>
                         </div>
-                        <p class="text-[10px] text-slate-400 font-medium">Herança por perfil aplicada nos valores por
-                            defeito. Clique numa célula para alternar: false → view → own → true. Alterações guardam-se
-                            na API e aplicam-se ao middleware JWT em tempo real.</p>
+                        <p class="text-[10px] text-slate-400 font-medium">Clique numa célula para alternar: falso → ver → próprio → tudo.</p>
+                    </div>
+                </div>
+
+                <!-- ===== HELP INBOX ===== -->
+                <div id="section-ajuda" class="section-panel hidden">
+                    <div class="flex flex-row items-center justify-between gap-4 mb-8">
+                        <div>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Ajuda &amp; sugestões</h1>
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Melhorias e dúvidas enviadas pela equipa, com captura do ecrã.</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white mb-6 rounded-2xl border border-slate-100 shadow-sm p-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
+                                <input id="helpSearchInput" type="text" placeholder="Pesquisar mensagem, página ou autor..."
+                                    class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 placeholder-slate-400 font-medium" />
+                            </div>
+                            <select id="helpTypeFilter"
+                                class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
+                                <option value="">Todos os tipos</option>
+                                <option value="MELHORIA">Melhoria</option>
+                                <option value="DUVIDA">Dúvida</option>
+                            </select>
+                            <select id="helpStatusFilter"
+                                class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
+                                <option value="">Todos os estados</option>
+                                <option value="ABERTO">Aberto</option>
+                                <option value="EM_ANALISE">Em análise</option>
+                                <option value="RESOLVIDO">Resolvido</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
+                        <div class="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div id="helpTicketsList" class="divide-y divide-slate-50 max-h-[70vh] overflow-y-auto"></div>
+                        </div>
+                        <div class="xl:col-span-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 min-h-[24rem]" id="helpTicketDetail">
+                            <div class="h-full flex flex-col items-center justify-center text-slate-400 gap-2 py-16">
+                                <span class="material-symbols-outlined text-5xl">help</span>
+                                <p class="text-sm font-semibold">Seleccione um pedido para ver o detalhe.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

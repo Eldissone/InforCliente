@@ -31,6 +31,8 @@ model User {
   mentionsReceived         Mention[]                 @relation("MentionsReceived")
   notifications            Notification[]
   permissionAuditLogs      PermissionAuditLog[]
+  helpTicketsCreated       HelpTicket[]              @relation("HelpTicketAuthor")
+  helpTicketsResolved      HelpTicket[]              @relation("HelpTicketResolver")
 
   @@index([clientId])
 }
@@ -1743,4 +1745,38 @@ model PurchaseHistoryLog {
 
   @@index([purchaseOrderId])
   @@index([createdAt])
+}
+
+enum HelpTicketType {
+  MELHORIA
+  DUVIDA
+}
+
+enum HelpTicketStatus {
+  ABERTO
+  EM_ANALISE
+  RESOLVIDO
+}
+
+model HelpTicket {
+  id            String           @id @default(cuid())
+  type          HelpTicketType
+  status        HelpTicketStatus @default(ABERTO)
+  message       String
+  pageUrl       String
+  pageTitle     String?
+  screenshotUrl String?
+  adminReply    String?
+  createdById   String
+  resolvedAt    DateTime?
+  resolvedById  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  createdBy  User  @relation("HelpTicketAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("HelpTicketResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([createdById])
+  @@index([type, status])
 }

@@ -26,6 +26,7 @@ const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
 const { costCategoryRoutes } = require("./routes/costCategories");
 const { freightOrderRoutes } = require("./routes/freightOrders");
 const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
+const { helpTicketRoutes } = require("./routes/helpTickets");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
 const { ensureUploadsDir } = require("./utils/storage");
@@ -121,6 +122,7 @@ app.use("/general-cost-centers", generalCostCenterRoutes);
 app.use("/cost-categories", costCategoryRoutes);
 app.use("/freight-orders", freightOrderRoutes);
 app.use("/purchase-orders", purchaseOrderRoutes);
+app.use("/help-tickets", helpTicketRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

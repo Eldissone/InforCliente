@@ -34,6 +34,7 @@ const ACTION_LABELS = {
   full_access: "Acesso total",
   confirm_invoice: "Confirmar fatura (crédito)",
   pay: "Executar pagamento",
+  reply: "Responder",
   // Legado (rotas existentes)
   read: "Visualizar (leitura)",
   manage: "Gerir / operar",
@@ -233,6 +234,16 @@ const PERMISSION_GROUPS = [
     actions: ["view", "export", "full_access"],
   },
   {
+    id: "ajuda",
+    label: "Ajuda & Sugestões",
+    icon: "help",
+    pages: [
+      { id: "ajuda.widget", label: "Botão de ajuda (global)", route: "*" },
+      { id: "ajuda.inbox", label: "Inbox de ajuda", route: "/Users/index.html" },
+    ],
+    actions: ["create", "view", "reply", "full_access"],
+  },
+  {
     id: "sistema",
     label: "Utilizadores",
     icon: "manage_accounts",
@@ -324,6 +335,12 @@ function defaultAllowedFor(role, module, action) {
     if (module === "portal" && action === "view") return "false";
     if (module === "permissoes" || action === "manage_permissions") return "true";
     return "true";
+  }
+
+  if (module === "ajuda") {
+    if (role === "cliente") return "false";
+    if (action === "create") return "true";
+    return "false";
   }
 
   if (role === "supervisor") {

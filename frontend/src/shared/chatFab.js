@@ -113,13 +113,12 @@ function createFab() {
   fabEl.setAttribute("aria-label", "Abrir chat");
   fabEl.setAttribute("data-role-visible", "admin,operador,financeiro,tecnico,supervisor,leitura,cliente");
   fabEl.className =
-    "fixed bottom-8 right-8 w-16 h-16 bg-slate-900 text-[#2afc8d] rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[90] group";
+    "fixed bottom-8 right-8 w-12 h-12 bg-slate-900 text-[#2afc8d] rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[90] group";
   fabEl.innerHTML = `
     <span class="material-symbols-outlined text-3xl">forum</span>
     <span id="globalChatFabBadge"
       class="hidden absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">0</span>
-    <span
-      class="absolute right-20 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Chat</span>
+    
   `;
 
   fabEl.addEventListener("click", () => {
@@ -736,7 +735,7 @@ function wireSocketEvents() {
   });
 
   onSocketEvent("notification:new", (payload) => {
-    if (payload?.type === "PAYMENT") {
+    if (payload?.type === "PAYMENT" || payload?.metadata?.helpTicketId) {
       enqueuePaymentNotification(payload);
     }
   });
@@ -750,6 +749,7 @@ export function openChatPanel() {
     console.error("[Chat] panelEl não encontrado! initChatFab correu?");
     return;
   }
+  window.dispatchEvent(new CustomEvent("inforcliente:chat-open"));
   isOpen = true;
   panelEl.setAttribute("aria-hidden", "false");
   panelEl.classList.remove("scale-95", "opacity-0", "pointer-events-none");

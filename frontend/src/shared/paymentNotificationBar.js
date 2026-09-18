@@ -10,6 +10,9 @@ let currentPayload = null;
 
 function resolveStyle(payload) {
   const title = String(payload?.title || "").toLowerCase();
+  if (payload?.metadata?.helpTicketId || payload?.type === "SYSTEM") {
+    return { bar: "bg-sky-700 text-white", icon: "help", accent: "text-sky-100" };
+  }
   if (payload?.metadata?.extraRequestId || title.includes("pedido extra")) {
     return { bar: "bg-indigo-600 text-white", icon: "request_quote", accent: "text-indigo-100" };
   }
@@ -298,7 +301,7 @@ export async function loadUnreadPaymentNotifications(fetchNotifications) {
   try {
     const data = await fetchNotifications({ unreadOnly: true });
     const items = (data.items || [])
-      .filter((n) => n.type === "PAYMENT" && n.id)
+      .filter((n) => n.id && (n.type === "PAYMENT" || n.metadata?.helpTicketId))
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
     for (const item of items) {

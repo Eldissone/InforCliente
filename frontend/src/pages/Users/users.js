@@ -3,6 +3,7 @@ import { checkAuth, getSessionUser } from "../../services/auth.js";
 import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } from "../../shared/ui.js";
 import { formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { fetchHelpTickets, fetchHelpTicket, updateHelpTicket } from "../../services/helpApi.js";
 
 checkAuth({ allowedRoles: ["admin"] });
 
@@ -53,11 +54,11 @@ function avatarEl(email, profilePic) {
 }
 
 // ─── Section switching ─────────────────────────────────────────
-const SECTION_LABELS = { overview: "Visão Geral", users: "Utilizadores", permissions: "Permissões" };
+const SECTION_LABELS = { overview: "Visão Geral", users: "Utilizadores", permissions: "Permissões", ajuda: "Ajuda", history: "Histórico" };
 
 function switchSection(name) {
   activeSection = name;
-  ["overview", "users", "permissions", "history"].forEach(s => {
+  ["overview", "users", "permissions", "ajuda", "history"].forEach(s => {
     el(`section-${s}`)?.classList.toggle("hidden", s !== name);
   });
   // Update all sidebar links (desktop + mobile)
@@ -71,6 +72,7 @@ function switchSection(name) {
   window.scrollTo({ top: 0, behavior: "instant" });
   if (name === "users") renderTable(filterUsers());
   if (name === "permissions") renderPermissions();
+  if (name === "ajuda") loadHelpInbox();
   if (name === "history") loadLogs();
 }
 
@@ -1205,6 +1207,7 @@ function wireEvents() {
   
   // History tab click from mobile
   el("m-history")?.addEventListener("click", () => { closeMobileSidebar(); switchSection("history"); });
+  el("m-ajuda")?.addEventListener("click", () => { closeMobileSidebar(); switchSection("ajuda"); });
 
   // "Ver todos" link on overview
   document.querySelectorAll("[data-section-goto]").forEach(btn => {
@@ -1517,6 +1520,201 @@ async function exportLogs(type) {
   }
 }
 
+// ─── Ajuda inbox ──────────────────────────────────────────────
+let helpTickets = [];
+let helpSelectedId = null;
+let helpSearchTimer = null;
+
+function helpTypeLabel(type) {
+  return type === "DUVIDA" ? "Dúvida" : "Melhoria";
+}
+
+function helpStatusLabel(status) {
+  if (status === "RESOLVIDO") return "Resolvido";
+  if (status === "EM_ANALISE") return "Em análise";
+  return "Aberto";
+}
+
+function helpStatusClass(status) {
+  if (status === "RESOLVIDO") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  if (status === "EM_ANALISE") return "bg-amber-50 text-amber-700 border-amber-100";
+  return "bg-sky-50 text-sky-700 border-sky-100";
+}
+
+function updateHelpBadge(openCount) {
+  const badge = el("sidebar-help-count");
+  if (!badge) return;
+  const n = Number(openCount) || 0;
+  badge.textContent = String(n);
+  badge.classList.toggle("hidden", n === 0);
+}
+
+function renderHelpList() {
+  const list = el("helpTicketsList");
+  if (!list) return;
+  if (!helpTickets.length) {
+    list.innerHTML = `<div class="p-8 text-center text-sm text-slate-400 font-semibold">Nenhum pedido encontrado.</div>`;
+    return;
+  }
+  list.innerHTML = helpTickets.map((t) => {
+    const active = t.id === helpSelectedId ? "bg-slate-50" : "bg-white hover:bg-slate-50";
+    return `
+      <button type="button" data-help-id="${esc(t.id)}" class="w-full text-left px-5 py-4 ${active} transition-colors">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="text-[10px] font-black uppercase tracking-widest ${t.type === "DUVIDA" ? "text-sky-700" : "text-slate-700"}">${esc(helpTypeLabel(t.type))}</span>
+          <span class="px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-widest ${helpStatusClass(t.status)}">${esc(helpStatusLabel(t.status))}</span>
+        </div>
+        <p class="text-sm font-semibold text-slate-800 line-clamp-2">${esc(t.message)}</p>
+        <p class="text-[11px] text-slate-400 mt-1">${esc(t.createdBy?.name || t.createdBy?.email || "—")} · ${esc(formatDateBR(t.createdAt))}</p>
+      </button>`;
+  }).join("");
+  list.querySelectorAll("[data-help-id]").forEach((btn) => {
+    btn.addEventListener("click", () => selectHelpTicket(btn.getAttribute("data-help-id")));
+  });
+}
+
+function renderHelpDetail(ticket) {
+  const box = el("helpTicketDetail");
+  if (!box) return;
+  if (!ticket) {
+    box.innerHTML = `
+      <div class="h-full flex flex-col items-center justify-center text-slate-400 gap-2 py-16">
+        <span class="material-symbols-outlined text-5xl">help</span>
+        <p class="text-sm font-semibold">Seleccione um pedido para ver o detalhe.</p>
+      </div>`;
+    return;
+  }
+  const shot = ticket.screenshotUrl ? getAssetUrl(ticket.screenshotUrl) : null;
+  box.innerHTML = `
+    <div class="flex flex-col gap-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">${esc(helpTypeLabel(ticket.type))}</div>
+          <h2 class="text-xl font-bold text-slate-900">${esc(ticket.createdBy?.name || ticket.createdBy?.email || "Utilizador")}</h2>
+          <p class="text-sm text-slate-500">${esc(ticket.createdBy?.email || "")} · ${esc(formatDateBR(ticket.createdAt))}</p>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-widest ${helpStatusClass(ticket.status)}">${esc(helpStatusLabel(ticket.status))}</span>
+      </div>
+      ${shot ? `<a href="${esc(shot)}" target="_blank" rel="noopener" class="rounded-2xl overflow-hidden border border-slate-100 block">
+        <img src="${esc(shot)}" alt="Captura de ecrã" class="w-full max-h-80 object-contain bg-slate-50" />
+      </a>` : ""}
+      <p class="text-[11px] text-slate-400 font-medium break-all">
+        <span class="material-symbols-outlined text-sm align-middle">location_on</span>
+        ${esc(ticket.pageTitle || "")} ${ticket.pageTitle && ticket.pageUrl ? "·" : ""} ${esc(ticket.pageUrl || "")}
+      </p>
+      <div>
+        <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Mensagem</div>
+        <p class="text-sm text-slate-800 font-medium whitespace-pre-wrap">${esc(ticket.message)}</p>
+      </div>
+      <div>
+        <label class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 block">Resposta</label>
+        <textarea id="helpAdminReply" rows="4" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-800">${esc(ticket.adminReply || "")}</textarea>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" id="helpSaveReply" class="h-10 px-4 rounded-xl bg-slate-900 text-[#2afc8d] text-[10px] font-black uppercase tracking-widest">Guardar resposta</button>
+        ${ticket.status === "ABERTO" ? `<button type="button" data-help-status="EM_ANALISE" class="h-10 px-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest">Em análise</button>` : ""}
+        ${ticket.status !== "RESOLVIDO" ? `<button type="button" data-help-status="RESOLVIDO" class="h-10 px-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest">Resolver</button>` : `<button type="button" data-help-status="ABERTO" class="h-10 px-4 rounded-xl border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest">Reabrir</button>`}
+      </div>
+    </div>
+  `;
+  el("helpSaveReply")?.addEventListener("click", () => saveHelpReply(ticket.id));
+  box.querySelectorAll("[data-help-status]").forEach((btn) => {
+    btn.addEventListener("click", () => changeHelpStatus(ticket.id, btn.getAttribute("data-help-status")));
+  });
+}
+
+async function loadHelpInbox({ keepSelection = true } = {}) {
+  const type = el("helpTypeFilter")?.value || "";
+  const status = el("helpStatusFilter")?.value || "";
+  const search = el("helpSearchInput")?.value?.trim() || "";
+  const list = el("helpTicketsList");
+  if (list) list.innerHTML = `<div class="p-8 text-center text-sm text-slate-400 font-semibold">A carregar…</div>`;
+  try {
+    const data = await fetchHelpTickets({ type, status, search, take: 80 });
+    helpTickets = data.items || [];
+    updateHelpBadge(data.openCount);
+    if (!keepSelection) {
+      helpSelectedId = helpTickets[0]?.id || null;
+    } else if (!helpSelectedId) {
+      helpSelectedId = helpTickets[0]?.id || null;
+    }
+    renderHelpList();
+    if (helpSelectedId) {
+      await selectHelpTicket(helpSelectedId, { silentList: true });
+    } else {
+      renderHelpDetail(null);
+    }
+  } catch (err) {
+    toast(err.message || "Falha ao carregar pedidos de ajuda.", { type: "error" });
+    helpTickets = [];
+    renderHelpList();
+  }
+}
+
+async function selectHelpTicket(id, { silentList = false } = {}) {
+  helpSelectedId = id;
+  if (!silentList) renderHelpList();
+  try {
+    const ticket = await fetchHelpTicket(id);
+    const idx = helpTickets.findIndex((t) => t.id === id);
+    if (idx >= 0) helpTickets[idx] = ticket;
+    else helpTickets.unshift(ticket);
+    renderHelpList();
+    renderHelpDetail(ticket);
+  } catch (err) {
+    toast(err.message || "Falha ao abrir o pedido.", { type: "error" });
+  }
+}
+
+async function saveHelpReply(id) {
+  const adminReply = String(el("helpAdminReply")?.value || "").trim();
+  try {
+    const ticket = await updateHelpTicket(id, { adminReply });
+    const idx = helpTickets.findIndex((t) => t.id === id);
+    if (idx >= 0) helpTickets[idx] = ticket;
+    renderHelpList();
+    renderHelpDetail(ticket);
+    toast("Resposta guardada.", { type: "success" });
+  } catch (err) {
+    toast(err.message || "Falha ao guardar a resposta.", { type: "error" });
+  }
+}
+
+async function changeHelpStatus(id, status) {
+  try {
+    const body = { status };
+    const reply = String(el("helpAdminReply")?.value || "").trim();
+    if (reply) body.adminReply = reply;
+    const ticket = await updateHelpTicket(id, body);
+    const idx = helpTickets.findIndex((t) => t.id === id);
+    if (idx >= 0) helpTickets[idx] = ticket;
+    await loadHelpInbox({ keepSelection: true });
+    renderHelpDetail(ticket);
+    toast(status === "RESOLVIDO" ? "Pedido resolvido." : "Estado actualizado.", { type: "success" });
+  } catch (err) {
+    toast(err.message || "Falha ao actualizar o estado.", { type: "error" });
+  }
+}
+
+function wireHelpEvents() {
+  el("helpTypeFilter")?.addEventListener("change", () => loadHelpInbox({ keepSelection: false }));
+  el("helpStatusFilter")?.addEventListener("change", () => loadHelpInbox({ keepSelection: false }));
+  el("helpSearchInput")?.addEventListener("input", () => {
+    clearTimeout(helpSearchTimer);
+    helpSearchTimer = setTimeout(() => loadHelpInbox({ keepSelection: false }), 250);
+  });
+}
+
+function applyHelpDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get("section");
+  const id = params.get("id");
+  if (section !== "ajuda") return false;
+  helpSelectedId = id || null;
+  switchSection("ajuda");
+  return true;
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 async function init() {
   initMobileMenu();
@@ -1528,7 +1726,11 @@ async function init() {
   wirePermissionCollapse();
   wireResetPerms();
   wireLogEvents();
+  wireHelpEvents();
   await loadUsers();
+  if (!applyHelpDeepLink()) {
+    fetchHelpTickets({ take: 1 }).then((data) => updateHelpBadge(data.openCount)).catch(() => {});
+  }
 }
 
 init().catch((err) => toast(err.message || "Falha ao carregar. Verifique login/API.", { type: "error" }));
