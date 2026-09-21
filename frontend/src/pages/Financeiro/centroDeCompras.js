@@ -7,6 +7,7 @@ import { formatCurrency, formatDateBR } from "/shared/format.js";
 import {
   initExtraRequestModal,
   openExtraRequestModal,
+  openExtraRequestModalForReview,
   wireExtraRequestButton,
   novoPedidoHref,
 } from "/shared/extraRequestModal.js";
@@ -2724,10 +2725,14 @@ function ccPedidoPageHref(r) {
 function ccOpenDetailsBtn(r, label, extraClass = "") {
   const id = typeof r === "string" ? r : r?.id;
   const isExtra = typeof r === "object" && r?._isExtra;
-  if (isExtra) {
-    return `<a href="${escapeAttr(ccPedidoPageHref(r))}" class="${extraClass}">${label}</a>`;
+  return `<button type="button" onclick="openCCPedidoReview('${escapeAttr(id)}', ${isExtra ? "true" : "false"})" class="${extraClass}">${label}</button>`;
+}
+
+function ccCanApprovePedido(r) {
+  if (r?._isExtra) {
+    return can("pedidosExtras", "approve") && (r.extraStatus || r.status) === "PENDENTE";
   }
-  return `<button type="button" onclick="openCCReqDrawer('${escapeAttr(id)}')" class="${extraClass}">${label}</button>`;
+  return r?.status === "PENDENTE_APROVACAO" && can("pedidosExtras", "approve");
 }
 
 function ccCanEditPedido(r) {
@@ -2756,6 +2761,13 @@ function ccPedidoActionsHtml(r, { requisition = false } = {}) {
     })
   );
 
+  if (ccCanApprovePedido(r)) {
+    actions.push(
+      renderIconBtn("check_circle", "Aprovar / rejeitar", "emerald", {
+        attrs: `data-cc-action="approve" data-id="${escapeAttr(id)}" data-extra="${extra}"`,
+      })
+    );
+  }
 
   if (ccCanEditPedido(r)) {
     actions.push(
@@ -2791,13 +2803,8 @@ async function onCCListActionClick(e) {
   const isExtra = btn.dataset.extra === "1";
   if (!id || !action) return;
 
-  if (action === "view") {
-    const isReq = btn.dataset.req === "1";
-    if (isExtra || !isReq) {
-      window.location.href = isExtra ? novoPedidoHref({ extraId: id }) : novoPedidoHref({ id });
-      return;
-    }
-    openCCReqDrawer(id);
+  if (action === "view" || action === "approve") {
+    openCCPedidoReview(id, isExtra);
     return;
   }
   if (action === "edit") {
@@ -3191,6 +3198,15 @@ function bindCCReqSupplierNifLookup() {
 }
 
 // ======================== DRAWER REQUISIÇÃO E WORKFLOW ========================
+
+function openCCPedidoReview(id, isExtra = false) {
+  if (isExtra) {
+    openExtraRequestModalForReview(id);
+    return;
+  }
+  openCCReqDrawer(id);
+}
+window.openCCPedidoReview = openCCPedidoReview;
 
 async function openCCReqDrawer(id) {
   const drawer = document.getElementById("drawerRequisicao");

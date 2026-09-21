@@ -1438,6 +1438,10 @@ export async function openExtraRequestModalForEdit(id) {
   window.location.href = novoPedidoHref({ extraId: id });
 }
 
+export async function openExtraRequestModalForReview(id) {
+  return openExtraRequestModalForEditLegacy(id);
+}
+
 async function openExtraRequestModalForEditLegacy(id) {
   ensureModalMounted();
   let item = modalOptions.getEditItem?.(id);
