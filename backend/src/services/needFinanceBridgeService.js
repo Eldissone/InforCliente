@@ -30,7 +30,7 @@ async function loadNeedForFinanceSend(needId, ccId) {
           },
         },
       },
-      _count: { select: { payments: true } },
+      _count: { select: { payments: true, quotes: true } },
     },
   });
 
@@ -39,9 +39,12 @@ async function loadNeedForFinanceSend(needId, ccId) {
     throw httpError("COST_CENTER_MISMATCH", "Centro de custos inválido para esta necessidade", 400);
   }
   if (!needReadyForFinance(need)) {
+    const waitingProforma = need.status === "ORDERED";
     throw httpError(
       "NEED_NOT_APPROVED",
-      "O item tem de estar em análise (com preço) antes de enviar ao financeiro",
+      waitingProforma
+        ? "Carregue a proforma e aprove a análise antes de enviar ao financeiro"
+        : "O item tem de estar em análise (com preço) antes de enviar ao financeiro",
       400
     );
   }

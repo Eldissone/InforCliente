@@ -6,9 +6,12 @@ function isMarketWorkflowStarted(need) {
   if (!need) return false;
   if (["IN_QUOTATION", "ORDERED", "EM_ANALISE", "PAID"].includes(need.status)) return true;
   if (need.status === "APPROVED") {
+    const countedQuotes = Number(need._count?.quotes);
+    const loadedQuotes = Array.isArray(need.quotes) ? need.quotes.length : 0;
     return Boolean(need.scheduled)
       || Boolean(need.priceExceptionReason)
-      || Number(need._count?.quotes) > 0;
+      || (Number.isFinite(countedQuotes) && countedQuotes > 0)
+      || loadedQuotes > 0;
   }
   return false;
 }

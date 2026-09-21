@@ -27,6 +27,16 @@ function needWorkflowState(need) {
   };
 }
 
+function syncQuoteModalTitle(need) {
+  const modalTitle = document.querySelector("#modalQuote h2");
+  if (!modalTitle) return;
+  const { isApproved, isInAnalysis, isOrdered } = needWorkflowState(need);
+  if (isOrdered) modalTitle.textContent = "Encomenda — Aguarda Proforma";
+  else if (isInAnalysis) modalTitle.textContent = "Em Análise";
+  else if (isApproved) modalTitle.textContent = "Cotação Aprovada";
+  else modalTitle.textContent = "Precificar Item";
+}
+
 function needCostCenterId(need) {
   return need?.costCenterId || need?.costCenter?.id || null;
 }
@@ -742,29 +752,23 @@ export async function loadPresentedPrices({
 
 
 
-  const { isApproved, isInAnalysis, isOrdered, isLocked } = needWorkflowState(need);
-
   clearOrderedBanner();
 
 
 
   try {
 
-    const [quotesData, suggestions] = await Promise.all([
-
-      apiRequest(`/quotes/need/${needId}`),
-
-      isLocked ? Promise.resolve([]) : fetchCatalogSuggestions(need.description, suppliers, apiRequest),
-
-    ]);
-
-
-
+    const quotesData = await apiRequest(`/quotes/need/${needId}`);
     const quotes = dedupeQuotes(quotesData.items || []);
     const needMeta = { ...(need || {}), ...(quotesData.need || {}) };
+    const { isApproved, isInAnalysis, isOrdered, isLocked } = needWorkflowState(needMeta);
+    const suggestions = isLocked
+      ? []
+      : await fetchCatalogSuggestions(needMeta.description || need.description, suppliers, apiRequest);
     const allocation = quotesData.allocation || null;
     window.__quoteModalNeed = needMeta;
     window.__quoteModalAllocation = allocation;
+    syncQuoteModalTitle(needMeta);
 
     renderAllocationSummary(allocation, needMeta);
     updateQuoteQuantityHint(allocation, needMeta);
@@ -778,28 +782,46 @@ export async function loadPresentedPrices({
 
     if (isInAnalysis && selectedQuote) {
 
-      renderInAnalysisBanner(selectedQuote, need);
+      renderInAnalysisBanner(selectedQuote, needMeta);
 
       document.getElementById("btnApproveAnalysis")?.addEventListener("click", async () => {
 
-        await approveNeedAnalysis({ needId, need, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+        await approveNeedAnalysis({ needId, need: needMeta, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
 
       });
 
       document.getElementById("btnRejectAnalysis")?.addEventListener("click", async () => {
 
-        await rejectNeedAnalysis({ needId, need, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+        await rejectNeedAnalysis({ needId, need: needMeta, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
 
       });
 
-    } else if (isApproved && selectedQuote && !need.scheduled) {
+    } else if (isApproved && selectedQuote && !needMeta.scheduled) {
 
-      renderApprovedBanner(selectedQuote, need);
+      renderApprovedBanner(selectedQuote, needMeta);
 
       document.getElementById("btnSendToFinance")?.addEventListener("click", async () => {
 
-        await sendNeedToFinanceFromModal({ needId, need, ccId: need.costCenterId, apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
+        await sendNeedToFinanceFromModal({ needId, need: needMeta, ccId: needCostCenterId(needMeta), apiRequest, showToast: window.showQuoteToast, onApproved: window.onQuoteApproved, suppliers, openProformaViewer });
 
+      });
+
+    } else if (isOrdered && selectedQuote && selectedQuotes.some((q) => !quoteHasProforma(q))) {
+
+      const pendingProforma = selectedQuotes.find((q) => !quoteHasProforma(q)) || selectedQuote;
+      renderOrderedBanner(pendingProforma);
+      document.getElementById("btnUploadOrderedProforma")?.addEventListener("click", async () => {
+        await uploadOrderedProforma({
+          quoteId: pendingProforma.id,
+          quote: pendingProforma,
+          needId,
+          need: needMeta,
+          suppliers,
+          apiRequest,
+          openProformaViewer,
+          showToast: window.showQuoteToast,
+          onApproved: window.onQuoteApproved,
+        });
       });
 
     } else if (!isLocked && selectedQuote && selectedQuotes.length === 1) {
@@ -886,7 +908,7 @@ export async function loadPresentedPrices({
 
         winnerBadge = `<span class="bg-[#2afc8d]/20 text-green-700 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">verified</span>Aprovado</span>`;
 
-      } else if (q.selected && need?.status === "EM_ANALISE") {
+      } else if (q.selected && isInAnalysis) {
 
         winnerBadge = `<span class="bg-sky-100 text-sky-700 px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest"><span class="material-symbols-outlined text-[10px] align-middle mr-1">fact_check</span>Em Análise</span>`;
 
@@ -1624,19 +1646,7 @@ export async function openQuotePricingModal({
 
 
 
-  const { isApproved, isOrdered } = needWorkflowState(need);
-
-  const modalTitle = document.querySelector("#modalQuote h2");
-
-  if (modalTitle) {
-
-    if (isOrdered) modalTitle.textContent = "Encomenda — Aguarda Proforma";
-
-    else if (isApproved) modalTitle.textContent = "Cotação Aprovada";
-
-    else modalTitle.textContent = "Precificar Item";
-
-  }
+  syncQuoteModalTitle(need);
 
 
 

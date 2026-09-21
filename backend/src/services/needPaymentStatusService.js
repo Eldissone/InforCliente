@@ -27,7 +27,10 @@ function needRealizadoWorkflowStatus(need) {
 function needReadyForFinance(need) {
   if (!need) return false;
   if (need.status === "PAID") return false;
-  return ["EM_ANALISE", "APPROVED"].includes(need.status) && needHasRealizadoPrice(need);
+  if (!["EM_ANALISE", "APPROVED"].includes(need.status)) return false;
+  if (needHasRealizadoPrice(need)) return true;
+  const quotePrice = Number(need.quotes?.[0]?.quotedPrice);
+  return Number.isFinite(quotePrice) && quotePrice > 0;
 }
 
 async function assertCanModifyPaidNeed(req) {
