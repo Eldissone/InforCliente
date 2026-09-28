@@ -218,6 +218,10 @@
     transform: rotate(180deg);
   }
 
+  .app-sidebar-children:empty {
+    display: none;
+  }
+
   .app-sidebar-children {
     position: relative;
     margin: 0.3rem 0 0.15rem 1.13rem;
@@ -240,6 +244,22 @@
     padding: 0.45rem 0.65rem;
     font-size: 0.75rem;
     font-weight: 500;
+    white-space: normal;
+  }
+
+  .app-sidebar-link.is-pending {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .app-sidebar-link.hidden,
+  .app-sidebar-group.hidden {
+    display: none !important;
+  }
+
+  .app-sidebar-footer .app-sidebar-link {
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .app-sidebar-children .app-sidebar-link::before {

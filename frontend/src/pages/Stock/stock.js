@@ -219,9 +219,23 @@ function parseMovementParties(m) {
 
 function init() {
     setupTabs();
-    const firstTab = activateFirstVisibleStockTab();
-    if (firstTab) currentTab = firstTab;
-    else loadTabContent(currentTab);
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    const requestedBtn = requested && /^[a-z]+$/.test(requested)
+        ? document.querySelector(`.tab-btn[data-tab="${requested}"]`)
+        : null;
+    const requestedOk = requestedBtn
+        && requestedBtn.dataset.permDenied !== "true"
+        && !requestedBtn.classList.contains("hidden");
+    if (requestedOk) {
+        document.querySelectorAll(".tab-btn").forEach((tab) => tab.classList.remove("tab-active"));
+        requestedBtn.classList.add("tab-active");
+        currentTab = requested;
+        loadTabContent(currentTab);
+    } else {
+        const firstTab = activateFirstVisibleStockTab();
+        if (firstTab) currentTab = firstTab;
+        else loadTabContent(currentTab);
+    }
     setupGlobalEvents();
     updateRequestsBadge();
 }

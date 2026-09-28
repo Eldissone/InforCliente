@@ -250,6 +250,56 @@ body > nav.app-top-nav #navMenu a[class*="2afc8d"] {
   color: var(--tn-accent);
 }
 
+body > nav.app-top-nav #navMenu .app-nav-mobile-group {
+  margin: 0;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group.hidden {
+  display: none;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  color: var(--tn-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group > summary .material-symbols-outlined {
+  font-size: 1.125rem;
+  transition: transform 0.15s ease;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group[open] > summary {
+  color: #fff;
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group[open] > summary .material-symbols-outlined {
+  transform: rotate(180deg);
+}
+
+body > nav.app-top-nav #navMenu .app-nav-mobile-group a:not(.hidden) {
+  padding-left: 1.75rem;
+}
+
+body > nav.app-top-nav #navMenu a.is-pending {
+  opacity: 0.55;
+  cursor: default;
+}
+
 body > nav.app-top-nav #navMenu [data-logout] {
   margin-top: 0.5rem;
   color: var(--tn-danger);
