@@ -12,7 +12,7 @@ export function wireLogout() {
     const btn = e.target?.closest?.("[data-logout]");
     if (!btn) return;
     clearSession();
-    window.location.href = "/Auth/login.html";
+    window.location.href = "/auth/login";
   });
 }
 

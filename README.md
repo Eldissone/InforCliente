@@ -65,7 +65,7 @@ npm run dev
 ```
 
 - Frontend: `http://localhost:5173`
-- Página inicial: `/` → redireciona para `/Auth/login.html`
+- Página inicial: `/` → redireciona para `/auth/login`
 
 ## Primeiro acesso
 O arranque **não** cria um admin com senha conhecida. Para o primeiro utilizador, defina no `backend/.env`:
@@ -82,7 +82,9 @@ Depois remova essas variáveis. `JWT_SECRET` é obrigatório e não pode ser um 
 
 ## Páginas implementadas
 As páginas abaixo já consomem a API:
-- **Login**: `frontend/src/pages/Auth/login.html`
+- **Login**: `frontend/src/pages/auth/login/index.html` (URL `/auth/login`)
+- **Selecção de obra**: `frontend/src/pages/auth/selecionar-obra/index.html` (URL `/auth/selecionar-obra`)
+- **Selecção de conta**: `frontend/src/pages/auth/selecionar-conta/index.html` (URL `/auth/selecionar-conta`)
 - **Dashboard**: `frontend/src/pages/Dashboard/index.html`
 - **Clientes (lista)**: `frontend/src/pages/Clientes/clienteLista.html`
 - **Cliente detalhe ()**: `frontend/src/pages/ClienteDetalhe/client.html?id=<clientId>`
@@ -137,7 +139,7 @@ As páginas abaixo já consomem a API:
 
 ### Navegador redireciona para login (401)
 - Token inválido/expirado ou API desligada.
-- Faça login novamente em `/Auth/login.html`.
+- Faça login novamente em `/auth/login`.
 
 ### CORS / bloqueio no fetch
 - Confirme `FRONTEND_ORIGIN` no `backend/.env` (por padrão `http://localhost:5173`).

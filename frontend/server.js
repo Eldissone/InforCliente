@@ -74,7 +74,21 @@ app.use("/routes", express.static(path.join(srcRoot, "routes")));
 
 // Rota padrão → login
 app.get("/", (_req, res) => {
-  res.redirect("/Auth/login");
+  res.redirect("/auth/login");
+});
+
+// Compatibilidade: URLs antigas do módulo Auth → nova estrutura auth/<pagina>/index.html
+const legacyAuthRoutes = {
+  login: "/auth/login",
+  projectselection: "/auth/selecionar-obra",
+  accountselection: "/auth/selecionar-conta",
+};
+app.get("/Auth/:page", (req, res, next) => {
+  const target = legacyAuthRoutes[String(req.params.page).toLowerCase()];
+  // Rotas do Express não distinguem maiúsculas: evitar loop se já estivermos no destino
+  if (!target || req.path.toLowerCase() === target) return next();
+  const qs = req.originalUrl.includes("?") ? req.originalUrl.slice(req.originalUrl.indexOf("?")) : "";
+  res.redirect(301, `${target}${qs}`);
 });
 
 // Helper: permitir acessar /Dashboard, /Clientes, /Projectos como diretórios

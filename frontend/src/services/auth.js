@@ -93,7 +93,7 @@ export function checkAuth({ allowedRoles = [] } = {}) {
   if (!user || !token) {
     console.warn("checkAuth: Sessão ausente. Redirecionando para login.", { hasUser: !!user, hasToken: !!token });
     const here = window.location.pathname.split("/").slice(-2).join("/");
-    window.location.href = `/Auth/login.html?next=${encodeURIComponent(here)}`;
+    window.location.href = `/auth/login?next=${encodeURIComponent(here)}`;
     return null;
   }
 

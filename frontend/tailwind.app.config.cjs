@@ -4,7 +4,7 @@ module.exports = {
     "./src/pages/ClienteDetalhe/**/*.{html,js}",
     "./src/pages/Projectos/**/*.{html,js}",
     "./src/pages/Users/**/*.{html,js}",
-    " ./src/pages/Auth/**/*.{html,js}",
+    "./src/pages/auth/**/*.{html,js}",
     "./src/pages/Stock/**/*.{html,js}",
     "./src/pages/Financeiro/**/*.{html,js}",
     "./src/shared/**/*.{html,js}"

@@ -138,7 +138,7 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
     console.error("apiRequest: 401 Unauthorized em", path, { hasToken: !!token });
     logout();
     const here = window.location.pathname.split("/").slice(-2).join("/");
-    const loginUrl = `/Auth/login.html?next=${encodeURIComponent(here)}`;
+    const loginUrl = `/auth/login?next=${encodeURIComponent(here)}`;
     window.location.href = loginUrl;
     throw new Error("UNAUTHORIZED");
   }
@@ -186,7 +186,7 @@ export async function apiUpload(path, dataOrOptions, method = "POST") {
   if (res.status === 401) {
     logout();
     const here = window.location.pathname.split("/").slice(-2).join("/");
-    const loginUrl = `/Auth/login.html?next=${encodeURIComponent(here)}`;
+    const loginUrl = `/auth/login?next=${encodeURIComponent(here)}`;
     window.location.href = loginUrl;
     throw new Error("UNAUTHORIZED");
   }

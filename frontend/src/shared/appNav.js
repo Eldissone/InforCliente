@@ -104,6 +104,8 @@ function createGroup(label, icon, links, { open = false } = {}) {
 export function transformDesktopNavToDropdowns() {
   const source = getDesktopNavLinksContainer();
   const nav = getTopNav();
+  // Pages can opt out explicitly with <body data-app-sidebar="off"> (e.g. client portal).
+  if (document.body.dataset.appSidebar === "off") return;
   // Screens that already have a task-specific desktop sidebar (admin, project
   // selector and purchase centre) keep their dedicated working area intact.
   if (!source || !nav || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar, .cc-sidebar")) return;

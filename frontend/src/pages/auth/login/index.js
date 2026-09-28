@@ -1,7 +1,7 @@
-import { apiRequest } from "../../services/api.js";
-import { setPendingAuthSelection, setSession } from "../../services/auth.js";
-import { resolvePostLoginPath } from "../../shared/postLoginRedirect.js";
-import { toast, setButtonLoading } from "../../shared/ui.js";
+import { apiRequest } from "/services/api.js";
+import { setPendingAuthSelection, setSession } from "/services/auth.js";
+import { resolvePostLoginPath } from "/shared/postLoginRedirect.js";
+import { toast, setButtonLoading } from "/shared/ui.js";
 
 function qs(id) {
   return document.getElementById(id);
@@ -55,7 +55,7 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
         accounts: res.accounts || [],
         selectionToken: res.selectionToken || null,
       });
-      window.location.href = "ProjectSelection.html" + (getNext() ? `?next=${getNext()}` : "");
+      window.location.href = "/auth/selecionar-obra" + (getNext() ? `?next=${encodeURIComponent(getNext())}` : "");
       return;
     }
 

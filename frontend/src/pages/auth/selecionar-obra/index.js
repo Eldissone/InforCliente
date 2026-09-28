@@ -1,12 +1,12 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest } from "/services/api.js";
 import {
   clearPendingAuthSelection,
   getPendingAuthSelectionToken,
   getPendingAuthUser,
   setSession,
-} from "../../services/auth.js";
-import { resolvePostLoginPath } from "../../shared/postLoginRedirect.js";
-import { toast } from "../../shared/ui.js";
+} from "/services/auth.js";
+import { resolvePostLoginPath } from "/shared/postLoginRedirect.js";
+import { toast } from "/shared/ui.js";
 
 function getNext() {
   const params = new URLSearchParams(window.location.search);
@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const selectionToken = getPendingAuthSelectionToken();
 
   if (!user.id || !selectionToken) {
-    window.location.href = "login.html";
+    window.location.href = "/auth/login";
     return;
   }
 
@@ -107,7 +107,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           clearPendingAuthSelection();
 
           setSession(authRes);
-          import("../../shared/permissions.js")
+          import("/shared/permissions.js")
             .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
             .catch(() => {});
 

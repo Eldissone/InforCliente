@@ -1,12 +1,12 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest } from "/services/api.js";
 import {
   clearPendingAuthSelection,
   getPendingAuthAccounts,
   getPendingAuthSelectionToken,
   getPendingAuthUser,
   setSession,
-} from "../../services/auth.js";
-import { toast } from "../../shared/ui.js";
+} from "/services/auth.js";
+import { toast } from "/shared/ui.js";
 
 function getNext() {
   const params = new URLSearchParams(window.location.search);
@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectionToken = getPendingAuthSelectionToken();
 
   if (!user.id || !selectionToken || accounts.length === 0) {
-    window.location.href = "login.html";
+    window.location.href = "/auth/login";
     return;
   }
 
@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
         clearPendingAuthSelection();
 
         setSession(res);
-        import("../../shared/permissions.js")
+        import("/shared/permissions.js")
           .then(({ loadUserPermissions }) => loadUserPermissions({ force: true }))
           .catch(() => {});
         toast(`Acedendo a ${acc.name}...`);
@@ -76,7 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (next) {
             window.location.href = `/${next}`;
           } else {
-            window.location.href = "../Dashboard/clientDashboard.html";
+            window.location.href = "/Dashboard/clientDashboard";
           }
         }, 1000);
 
