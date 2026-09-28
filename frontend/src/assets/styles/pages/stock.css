@@ -101,3 +101,7 @@
             transform: rotate(90deg) scale(1.1);
             border-color: #2afc8d;
         }
+
+        .registry-perm-sentinel {
+            display: none !important;
+        }

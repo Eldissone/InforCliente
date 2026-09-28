@@ -160,7 +160,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     init();
 });
 
-let currentTab = "warehouses";
+const REGISTRY_PAGES = {
+    catalog: "/registos/produtos",
+    tools: "/registos/equipamentos",
+    warehouses: "/registos/armazens",
+};
+
+const pageView = document.body.dataset.stockView || "";
+let currentTab = pageView || "requests";
 
 function stockOwnershipLabel(item, clientById = {}) {
     if (item.ownershipLabel) return item.ownershipLabel;
@@ -217,25 +224,39 @@ function parseMovementParties(m) {
     return { deliveredBy, receivedBy: null };
 }
 
+function tabIsDenied(tab) {
+    const tabBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+    if (!tabBtn) return false;
+    if (tabBtn.dataset.permDenied === "true") return true;
+    if (pageView) return false;
+    return tabBtn.classList.contains("hidden");
+}
+
 function init() {
-    setupTabs();
-    const requested = new URLSearchParams(window.location.search).get("tab");
-    const requestedBtn = requested && /^[a-z]+$/.test(requested)
-        ? document.querySelector(`.tab-btn[data-tab="${requested}"]`)
-        : null;
-    const requestedOk = requestedBtn
-        && requestedBtn.dataset.permDenied !== "true"
-        && !requestedBtn.classList.contains("hidden");
-    if (requestedOk) {
-        document.querySelectorAll(".tab-btn").forEach((tab) => tab.classList.remove("tab-active"));
-        requestedBtn.classList.add("tab-active");
-        currentTab = requested;
-        loadTabContent(currentTab);
-    } else {
-        const firstTab = activateFirstVisibleStockTab();
-        if (firstTab) currentTab = firstTab;
-        else loadTabContent(currentTab);
+    if (!pageView) {
+        const requested = new URLSearchParams(window.location.search).get("tab");
+        if (requested && REGISTRY_PAGES[requested]) {
+            window.location.replace(REGISTRY_PAGES[requested]);
+            return;
+        }
     }
+
+    setupTabs();
+    if (pageView) {
+        currentTab = pageView;
+        const container = document.getElementById("tabContent");
+        if (tabIsDenied(pageView)) {
+            container.innerHTML = `<div class="bg-slate-50 text-slate-500 p-10 rounded-2xl font-bold text-center">Sem permissão para aceder a esta secção.</div>`;
+        } else {
+            loadTabContent(pageView);
+        }
+        setupGlobalEvents();
+        return;
+    }
+
+    const firstTab = activateFirstVisibleStockTab();
+    if (firstTab) currentTab = firstTab;
+    else loadTabContent(currentTab);
     setupGlobalEvents();
     updateRequestsBadge();
 }
@@ -260,8 +281,7 @@ function setupGlobalEvents() {
 
 async function loadTabContent(tab) {
     const container = document.getElementById("tabContent");
-    const tabBtn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
-    if (tabBtn?.dataset.permDenied === "true" || tabBtn?.classList.contains("hidden")) {
+    if (tabIsDenied(tab)) {
         const fallback = activateFirstVisibleStockTab();
         if (fallback) {
             currentTab = fallback;

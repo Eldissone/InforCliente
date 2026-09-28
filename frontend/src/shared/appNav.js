@@ -10,10 +10,10 @@ const APP_MENU = [
     children: [
       { label: "Obras", icon: "apartment", selector: "[data-nav-obras]" },
       { label: "Terceiros", icon: "groups", selector: "[data-nav-clientes]" },
-      { label: "Produtos e Serviços", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock?tab=catalog" },
-      { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", selector: LOGISTICS_SELECTOR, href: "/Stock?tab=tools" },
+      { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos" },
+      { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos" },
       { label: "Pessoal", icon: "badge", pending: true },
-      { label: "Armazéns", icon: "warehouse", selector: LOGISTICS_SELECTOR, href: "/Stock?tab=warehouses" },
+      { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
       { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", pending: true },
       { label: "Categorias de Custo", icon: "account_tree", pending: true },
       { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", pending: true },
