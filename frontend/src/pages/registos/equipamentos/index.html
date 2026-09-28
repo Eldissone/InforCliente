@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html class="light" lang="pt">
-
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
@@ -13,11 +12,9 @@
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <link href="/assets/styles/top-nav.css" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    <link href="/assets/styles/pages/stock.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/registry-form.css" rel="stylesheet" />
 </head>
-
-<body class="bg-surface font-body text-on-surface antialiased pb-20" data-stock-view="tools">
+<body class="bg-surface font-body text-on-surface antialiased" data-registry="equipamentos">
     <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
         <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
             <div class="flex items-center gap-10">
@@ -77,41 +74,11 @@
             </button>
         </div>
     </nav>
-
-    <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-20">
-        <header class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10">
-            <div>
-                <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    <span>Registos</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="text-[#0d3fd1]">Equipamentos</span>
-                </nav>
-                <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-2">Equipamentos, Maquinarias e Viaturas</h1>
-                <p class="text-slate-500 font-medium text-sm">Ativos, ferramentas e o respetivo estado.</p>
-            </div>
-        </header>
-        <button data-tab="tools" data-perm="ferramentas:tab_tools" class="tab-btn registry-perm-sentinel" type="button" tabindex="-1" aria-hidden="true"></button>
-        <div id="tabContent" class="min-h-[400px]">
-            <div class="flex items-center justify-center py-20">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2afc8d]"></div>
-            </div>
-        </div>
+    <main class="registry-page">
+        <p class="registry-kicker">Registos</p>
+        <h1>Equipamentos, Maquinarias e Viaturas</h1>
+        <div id="registryRoot"></div>
     </main>
-
-    <div id="modalContainer"></div>
-    <div id="imageLightbox">
-        <div class="close-btn" id="closeLightbox" role="button" tabindex="0" aria-label="Fechar">
-            <span class="material-symbols-outlined text-3xl">close</span>
-        </div>
-        <div class="lightbox-content">
-            <img id="lightboxImage" src="" alt="Preview" />
-        </div>
-        <div class="lightbox-info">
-            <h3 id="lightboxTitle" class="text-2xl font-black text-[#2afc8d] mb-1"></h3>
-        </div>
-    </div>
-
-    <script src="/Stock/stock.js" type="module"></script>
+    <script type="module" src="/registos/registryForms.js"></script>
 </body>
-
 </html>

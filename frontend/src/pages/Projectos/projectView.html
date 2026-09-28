@@ -18,6 +18,7 @@
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <link href="/assets/styles/top-nav.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/registry-form.css" rel="stylesheet" />
     <link href="/assets/styles/pages/project-view.css" rel="stylesheet" />
 </head>
 
@@ -112,6 +113,10 @@
                 <h1 id="projectTitle"
                     class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
                 <p id="projectType" class="text-slate-500 font-medium">---</p>
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <span id="obraEstadoChip" class="inline-flex items-center h-8 px-3 rounded-full bg-slate-100 text-xs font-bold text-slate-700">—</span>
+                    <button type="button" id="btnAtualizarEstado" class="h-8 px-3 rounded-full bg-[#0F172A] text-white text-xs font-bold hover:bg-slate-800">Atualizar estado</button>
+                </div>
             </div>
             <!-- <div class="flex items-center gap-3 shrink-0">
                 <button id="btnNewExtra" type="button"

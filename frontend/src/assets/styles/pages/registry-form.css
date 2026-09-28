@@ -1,0 +1,211 @@
+.registry-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 7.5rem 1.25rem 4rem;
+}
+
+.registry-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.registry-page h1 {
+  margin: 0 0 1.25rem;
+  font-family: Outfit, Inter, sans-serif;
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.registry-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.registry-lead,
+.registry-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.registry-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+.registry-section h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.registry-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .registry-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .registry-field.span-2 {
+    grid-column: 1 / -1;
+  }
+}
+
+.registry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.registry-field small {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #94a3b8;
+}
+
+.registry-field input,
+.registry-field select,
+.registry-field textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  background: #f8fafc;
+  padding: 0.8rem 0.9rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #0f172a;
+}
+
+.registry-field textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.registry-field input:focus,
+.registry-field select:focus,
+.registry-field textarea:focus {
+  outline: 2px solid #2afc8d;
+  border-color: transparent;
+}
+
+.registry-checks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+}
+
+@media (min-width: 720px) {
+  .registry-checks {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.registry-check {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.7rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  background: #f8fafc;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #0f172a;
+}
+
+.registry-check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #0f172a;
+}
+
+.registry-check img {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.45rem;
+  object-fit: cover;
+}
+
+.registry-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.registry-submit,
+.registry-ghost {
+  height: 2.7rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.registry-submit {
+  background: #2afc8d;
+  color: #0f172a;
+}
+
+.registry-submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.registry-ghost {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.registry-pausas[hidden],
+[data-efetiva][hidden] {
+  display: none !important;
+}
+
+.registry-pausas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  background: #f8fafc;
+}
+
+.registry-inline-actions {
+  display: flex;
+  justify-content: flex-start;
+}

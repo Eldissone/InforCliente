@@ -253,8 +253,42 @@
   }
 
   .app-sidebar-link.hidden,
-  .app-sidebar-group.hidden {
+  .app-sidebar-group.hidden,
+  .app-sidebar-subgroup.hidden {
     display: none !important;
+  }
+
+  .app-sidebar-subgroup {
+    margin: 0.15rem 0 0.25rem;
+  }
+
+  .app-sidebar-subgroup > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 2rem;
+    padding: 0.3rem 0.65rem;
+    list-style: none;
+    cursor: pointer;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+
+  .app-sidebar-subgroup > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .app-sidebar-subgroup-links {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-sidebar-subgroup.has-active-link > summary {
+    color: #0f172a;
   }
 
   .app-sidebar-footer .app-sidebar-link {

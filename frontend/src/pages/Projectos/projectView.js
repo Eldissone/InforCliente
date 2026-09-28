@@ -26,6 +26,7 @@ import {
 } from "../../shared/wbsHelpers.js";
 import { exportMeasurementExcel, exportMeasurementPdf } from "../../shared/measurementReportExport.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { obraEstadoLabel, obraTiposLabel, openObraEstadoDialog } from "../registos/registryForms.js";
 import {
   openGalleryLightbox,
   closeGalleryLightbox,
@@ -283,6 +284,16 @@ function renderFolderCard(f) {
   `;
 }
 
+function wireObraEstadoButton() {
+  const btn = el("btnAtualizarEstado");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", () => {
+    if (!projectState?.id) return;
+    openObraEstadoDialog(projectState, () => loadProject());
+  });
+}
+
 async function loadProject() {
   const id = getProjectId();
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}`);
@@ -290,7 +301,9 @@ async function loadProject() {
   projectState = p;
 
   el("projectTitle").textContent = p.name;
-  if (el("projectType")) el("projectType").textContent = p.projectType || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("projectType")) el("projectType").textContent = obraTiposLabel(p) || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("obraEstadoChip")) el("obraEstadoChip").textContent = obraEstadoLabel(p);
+  wireObraEstadoButton();
   el("projectBreadcrumb").textContent = String(p.referencia || "").trim() || "—";
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   el("projectClientCode").textContent = p.client?.code || "Sem código";

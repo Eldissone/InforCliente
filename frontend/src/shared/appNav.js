@@ -8,17 +8,26 @@ const APP_MENU = [
     label: "Registos",
     icon: "folder_open",
     children: [
-      { label: "Obras", icon: "apartment", selector: "[data-nav-obras]" },
-      { label: "Terceiros", icon: "groups", selector: "[data-nav-clientes]" },
+      { label: "Contactos", icon: "contacts", href: "/registos/contactos" },
+      { label: "Obras", icon: "apartment", href: "/registos/obras" },
+      {
+        label: "Terceiros",
+        icon: "groups",
+        children: [
+          { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores" },
+          { label: "Fornecedores", icon: "local_shipping", href: "/registos/terceiros/fornecedores" },
+          { label: "Clientes", icon: "business", selector: "[data-nav-clientes]", href: "/registos/terceiros/clientes" },
+        ],
+      },
       { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos" },
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos" },
-      { label: "Pessoal", icon: "badge", pending: true },
+      { label: "Pessoal", icon: "badge", href: "/registos/pessoal" },
       { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
-      { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", pending: true },
-      { label: "Categorias de Custo", icon: "account_tree", pending: true },
-      { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", pending: true },
-      { label: "Cartões Bancários", icon: "credit_card", pending: true },
-      { label: "Movimentos Financeiros", icon: "payments", pending: true },
+      { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo" },
+      { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo" },
+      { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo" },
+      { label: "Cartões Bancários", icon: "credit_card", href: "/registos/cartoes" },
+      { label: "Movimentos Financeiros", icon: "payments", href: "/registos/movimentos" },
     ],
   },
   {
@@ -26,6 +35,7 @@ const APP_MENU = [
     label: "Obras",
     icon: "construction",
     children: [
+      { label: "Listagem", icon: "list", selector: "[data-nav-obras]" },
       { label: "Planeamento", icon: "event_note", selector: "[data-nav-planeamento]" },
       { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]" },
     ],
@@ -77,12 +87,20 @@ function createMenuLink(definition, source, variant) {
     link.title = "Módulo em preparação";
     link.addEventListener("click", (event) => event.preventDefault());
   }
-  link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon}</span><span>${definition.label}</span>`;
+  link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span><span>${definition.label}</span>`;
   return link;
 }
 
-function menuLinks(children, source, variant) {
-  return (children || []).map((child) => createMenuLink(child, source, variant));
+function buildMenuNodes(entries, source, variant, nested) {
+  return (entries || []).map((entry) => {
+    if (entry.children) {
+      const nodes = buildMenuNodes(entry.children, source, variant, true);
+      if (variant === "mobile") return createMobileGroup(entry.label, nodes);
+      if (nested) return createSubgroup(entry.label, nodes);
+      return createGroup(entry.label, entry.icon || "folder", nodes);
+    }
+    return createMenuLink(entry, source, variant);
+  });
 }
 
 function currentPathMatches(href) {
@@ -165,7 +183,7 @@ function setActiveState(sidebar = document.getElementById("appPrimarySidebar")) 
   links.forEach((link) => {
     link.classList.toggle("is-active", isSidebarLinkActive(link));
   });
-  document.querySelectorAll(".app-sidebar-group, .app-nav-mobile-group").forEach((group) => {
+  document.querySelectorAll(".app-sidebar-group, .app-sidebar-subgroup, .app-nav-mobile-group").forEach((group) => {
     const active = Boolean(group.querySelector("a.is-active"));
     group.classList.toggle("has-active-link", active);
     if (active) group.open = true;
@@ -175,7 +193,7 @@ function setActiveState(sidebar = document.getElementById("appPrimarySidebar")) 
 function syncGroupVisibility(sidebar = document.getElementById("appPrimarySidebar")) {
   const roots = [sidebar, document.getElementById("navMenu")].filter(Boolean);
   roots.forEach((root) => {
-    root.querySelectorAll(".app-sidebar-group, .app-sidebar-section, .app-nav-mobile-group").forEach((section) => {
+    root.querySelectorAll(".app-sidebar-group, .app-sidebar-subgroup, .app-sidebar-section, .app-nav-mobile-group").forEach((section) => {
       const links = [...section.querySelectorAll("a")];
       if (links.length) section.classList.toggle("hidden", !links.some((link) => !link.classList.contains("hidden")));
     });
@@ -195,6 +213,18 @@ function createGroup(label, icon, links, { open = false } = {}) {
   return group;
 }
 
+function createSubgroup(label, nodes) {
+  const group = document.createElement("details");
+  group.className = "app-sidebar-subgroup";
+  const summary = document.createElement("summary");
+  summary.innerHTML = `<span>${label}</span><span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>`;
+  const children = document.createElement("div");
+  children.className = "app-sidebar-subgroup-links";
+  nodes.filter(Boolean).forEach((node) => children.appendChild(node));
+  group.append(summary, children);
+  return group;
+}
+
 function createMobileGroup(label, links) {
   const group = document.createElement("details");
   group.className = "app-nav-mobile-group";
@@ -207,16 +237,7 @@ function createMobileGroup(label, links) {
 }
 
 function appendMenu(parent, source, variant) {
-  APP_MENU.forEach((entry) => {
-    if (entry.type === "link") {
-      parent.appendChild(createMenuLink(entry, source, variant));
-      return;
-    }
-    const links = menuLinks(entry.children, source, variant);
-    parent.appendChild(variant === "sidebar"
-      ? createGroup(entry.label, entry.icon, links)
-      : createMobileGroup(entry.label, links));
-  });
+  buildMenuNodes(APP_MENU, source, variant, false).forEach((node) => parent.appendChild(node));
 }
 
 function rebuildMobileMenu(nav, source) {
@@ -262,12 +283,9 @@ export function transformDesktopNavToDropdowns() {
   const primary = document.createElement("div");
   primary.className = "app-sidebar-links";
   sidebar.appendChild(primary);
-  APP_MENU.forEach((entry) => {
-    if (entry.type === "link") {
-      primary.appendChild(createMenuLink(entry, source, "sidebar"));
-      return;
-    }
-    sidebar.appendChild(createGroup(entry.label, entry.icon, menuLinks(entry.children, source, "sidebar")));
+  buildMenuNodes(APP_MENU, source, "sidebar", false).forEach((node) => {
+    if (node.classList.contains("app-sidebar-link")) primary.appendChild(node);
+    else sidebar.appendChild(node);
   });
 
   const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]" }, source, "sidebar");
@@ -309,7 +327,7 @@ export function initAppNavDropdowns() {
   sidebarListenersBound = true;
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    document.querySelectorAll(".app-sidebar-group[open], .app-nav-mobile-group[open]").forEach((group) => {
+    document.querySelectorAll(".app-sidebar-group[open], .app-sidebar-subgroup[open], .app-nav-mobile-group[open]").forEach((group) => {
       if (!group.classList.contains("has-active-link")) group.open = false;
     });
   });
