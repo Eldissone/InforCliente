@@ -11,7 +11,7 @@ const NAV_LINKS = {
 };
 
 function getTopNav() {
-  return document.querySelector("body > nav.fixed, body > nav[class*='fixed']");
+  return document.querySelector("body > nav.app-top-nav, body > nav.fixed, body > nav[class*='fixed']");
 }
 
 function getDesktopNavLinksContainer() {
@@ -44,6 +44,34 @@ function currentPathMatches(href) {
   } catch {
     return false;
   }
+}
+
+function isBrandLink(nav, link) {
+  const cluster = nav.querySelector(":scope > div > div");
+  return Boolean(cluster && link.parentElement === cluster);
+}
+
+function isTopNavLinkActive(link) {
+  if (isSidebarLinkActive(link)) return true;
+
+  const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
+  if (link.matches("[data-nav-centros]")) return current.includes("/financeiro/");
+  if (link.matches("[data-nav-clientes]")) return current.includes("/clientes/") || current.includes("/clientedetalhe/");
+  if (link.matches("[data-nav-planeamento]")) return current.includes("centrocustos");
+  if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
+  if (link.matches("[data-nav-logistics], [data-nav-logistica]")) return current.includes("/stock");
+  if (link.matches("[data-nav-users]")) return current.includes("/users/");
+  if (link.matches("[data-nav-dashboard]")) return /\/dashboard(\/index)?\/?$/.test(current);
+  return false;
+}
+
+/** Marca o separador da página atual. O aspecto fica em assets/styles/top-nav.css (.is-active). */
+export function markTopNavActive(nav = getTopNav()) {
+  if (!nav) return;
+  nav.querySelectorAll("a[href]").forEach((link) => {
+    if (isBrandLink(nav, link)) return;
+    link.classList.toggle("is-active", isTopNavLinkActive(link));
+  });
 }
 
 function isSidebarLinkActive(link) {
@@ -169,6 +197,7 @@ export function syncNavDropdownGroups() {
 let sidebarListenersBound = false;
 
 export function initAppNavDropdowns() {
+  markTopNavActive();
   if (sidebarListenersBound) return;
   sidebarListenersBound = true;
   document.addEventListener("keydown", (event) => {

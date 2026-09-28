@@ -3,11 +3,13 @@ import { resolveHomePathByRole } from "./postLoginRedirect.js";
 import { toast } from "./ui.js";
 import {
   initAppNavDropdowns,
+  markTopNavActive,
   syncNavDropdownGroups,
   transformDesktopNavToDropdowns,
 } from "./appNav.js";
 
 export function wireLogout() {
+  markTopNavActive();
   document.addEventListener("click", (e) => {
     const btn = e.target?.closest?.("[data-logout]");
     if (!btn) return;

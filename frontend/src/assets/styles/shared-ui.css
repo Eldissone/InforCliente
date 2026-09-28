@@ -76,32 +76,6 @@
 }
 
 @media (min-width: 1024px) {
-  .app-sidebar-layout > nav.fixed,
-  .app-sidebar-layout > nav[class*='fixed'] {
-    top: 1rem !important;
-    right: 1rem !important;
-    left: 1rem !important;
-    width: auto !important;
-    min-height: 5.6rem;
-    border: 0 !important;
-    border-radius: 1.65rem;
-    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
-  }
-
-  .app-sidebar-layout > nav > div:first-child {
-    max-width: none !important;
-    min-height: 5.6rem;
-  }
-
-  .app-nav-desktop-source {
-    display: none !important;
-  }
-
-  .app-sidebar-layout > nav [data-nav-users],
-  .app-sidebar-layout > nav > div:first-child [data-logout] {
-    display: none !important;
-  }
-
   .app-primary-sidebar {
     position: fixed;
     z-index: 40;
