@@ -259,6 +259,8 @@
   }
 
   .app-sidebar-subgroup {
+    display: block;
+    width: 100%;
     margin: 0.15rem 0 0.25rem;
   }
 
@@ -267,6 +269,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+    width: 100%;
     min-height: 2rem;
     padding: 0.3rem 0.65rem;
     list-style: none;
@@ -283,12 +286,47 @@
   }
 
   .app-sidebar-subgroup-links {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+    position: relative;
+    width: 100%;
+    margin: 0.2rem 0 0.15rem 0.35rem;
+    padding: 0.1rem 0 0.1rem 1.05rem;
+  }
+
+  .app-sidebar-subgroup-links::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    background: #edf0f2;
+    content: '';
+  }
+
+  .app-sidebar-subgroup-links > .app-sidebar-link {
     display: flex;
-    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .app-sidebar-subgroup-links > .app-sidebar-link::before {
+    left: -1.05rem;
+    width: 0.65rem;
   }
 
   .app-sidebar-subgroup.has-active-link > summary {
     color: #0f172a;
+  }
+
+  .app-sidebar-subgroup:not([open]) > summary .app-sidebar-chevron {
+    transform: none;
+  }
+
+  .app-sidebar-subgroup[open] > summary .app-sidebar-chevron {
+    transform: rotate(180deg);
   }
 
   .app-sidebar-footer .app-sidebar-link {
