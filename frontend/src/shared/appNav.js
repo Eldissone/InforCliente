@@ -278,7 +278,7 @@ export function transformDesktopNavToDropdowns() {
   sidebar.id = "appPrimarySidebar";
   sidebar.className = "app-primary-sidebar";
   sidebar.setAttribute("aria-label", "Menu principal");
-  sidebar.innerHTML = `<div class="app-sidebar-top"><span class="app-sidebar-caption">Principal</span><button class="app-sidebar-collapse" type="button" aria-label="Recolher menu" aria-expanded="true"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button></div>`;
+  sidebar.innerHTML = `<div class="app-sidebar-top"><button class="app-sidebar-collapse" type="button" aria-label="Recolher menu" aria-expanded="true"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button></div>`;
 
   const primary = document.createElement("div");
   primary.className = "app-sidebar-links";

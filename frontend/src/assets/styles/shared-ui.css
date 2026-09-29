@@ -79,7 +79,7 @@
   .app-primary-sidebar {
     position: fixed;
     z-index: 40;
-    top: 7.65rem;
+    top: 5rem;
     bottom: 1rem;
     left: 0;
     display: flex;
@@ -97,10 +97,10 @@
   .app-sidebar-top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     min-height: 2.5rem;
     margin: 0 0 0.35rem;
-    padding: 0 0.7rem;
+    padding: 0 0.5rem;
   }
 
   .app-sidebar-caption,
@@ -172,7 +172,7 @@
   .app-sidebar-group .material-symbols-outlined {
     flex: 0 0 auto;
     color: #74787e;
-    font-size: 1.18rem;
+    font-size: 1.1rem;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
   }
 
@@ -180,7 +180,7 @@
   .app-sidebar-group.has-active-link > summary {
     background: #f3f3f3;
     color: #17191d;
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .app-sidebar-link.is-active .material-symbols-outlined,
@@ -466,6 +466,20 @@
   top: 0;
   z-index: 10;
   background-color: #f8fafc;
+}
+
+/* Nas páginas de registo de custos a lista tem de aparecer logo.
+   O cabeçalho fixo, dentro da caixa com altura limitada, cobria as linhas até haver uma pesquisa. */
+body[data-cost-catalog] .overflow-x-auto:has(> table) {
+  max-height: none;
+  overflow: visible;
+}
+
+body[data-cost-catalog] .overflow-x-auto:has(> table) thead,
+body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
+  position: static;
+  top: auto;
+  z-index: auto;
 }
 
 
