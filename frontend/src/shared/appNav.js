@@ -280,6 +280,16 @@ export function transformDesktopNavToDropdowns() {
   sidebar.setAttribute("aria-label", "Menu principal");
   sidebar.innerHTML = `<div class="app-sidebar-top"><button class="app-sidebar-collapse" type="button" aria-label="Recolher menu" aria-expanded="true"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button></div>`;
 
+  if (document.body.dataset.shell === "figma") {
+    sidebar.classList.add("is-figma-shell");
+    const brandLabel = document.getElementById("navBrandText")?.textContent?.trim() || "Gestor";
+    const brand = document.createElement("a");
+    brand.className = "app-sidebar-brand";
+    brand.href = "/Dashboard";
+    brand.innerHTML = `<span class="app-sidebar-mark">Info</span><span class="app-sidebar-brand-text">${brandLabel}</span>`;
+    sidebar.insertBefore(brand, sidebar.firstChild);
+  }
+
   const primary = document.createElement("div");
   primary.className = "app-sidebar-links";
   sidebar.appendChild(primary);
