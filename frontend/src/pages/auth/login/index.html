@@ -1,87 +1,56 @@
 <!DOCTYPE html>
-<html class="light" lang="pt-pt">
+<html lang="pt-pt">
 
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>Login | Info</title>
   <link rel="icon" href="/assets/icon/favicon.ico" type="image/x-icon">
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap"
-    rel="stylesheet">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <link href="/assets/styles/pages/auth-login.css" rel="stylesheet" />
 </head>
 
 <body>
-  <!-- Glow Elements -->
-  <div class="glow" style="top: -100px; right: -100px;"></div>
-  <div class="glow" style="bottom: -100px; left: -100px; background: #6366f1; opacity: 0.03;"></div>
+  <div class="auth-stage">
+    <section class="auth-panel">
+      <div class="auth-card">
+        <p class="auth-kicker">Bem vindo !</p>
+        <h1>Inicie a sua sessão</h1>
 
-  <div class="login-container">
-    <div class="login-header text-center sm:text-left">
-      <div class="logo-badge mb-4 justify-center sm:justify-start">
-        <div class="logo-pill">Info</div>
-        <span>_</span>
+        <form id="loginForm">
+          <div class="auth-fields">
+            <label for="email">Email
+              <input id="email" type="email" name="email" placeholder="email@dominio.com" autocomplete="username" required />
+            </label>
+            <label for="password">Senha
+              <span class="auth-password">
+                <input id="password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+                <button type="button" id="togglePassword" aria-label="Mostrar senha">
+                  <span class="material-symbols-outlined">visibility_off</span>
+                </button>
+              </span>
+            </label>
+            <label class="auth-remember">
+              <input type="checkbox" />
+              Sessão Iniciada
+            </label>
+          </div>
+          <button id="submitBtn" type="submit">Entrar</button>
+          <div id="errorBox" class="hidden auth-error"></div>
+          <p class="auth-help">Para recuperar a senha, envie um email ao suporte técnico.</p>
+        </form>
       </div>
-      <h1 class="login-title">Acesso</h1>
-    </div>
-
-    <form id="loginForm" class="space-y-7">
-      <div class="form-group">
-        <label for="email">Endereço de Email</label>
-        <div class="input-wrapper">
-          <input id="email" type="email" class="input-field" placeholder="nome@empresa.com" required />
-        </div>
-      </div>
-
-      <div class="form-group mt-4">
-        <label for="password">Chave de Segurança</label>
-        <div class="relative">
-          <input id="password" type="password" class="input-field pr-12" placeholder="••••••••" required />
-          <button type="button" id="togglePassword"
-            class="absolute right-0 mr-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
-            <span class="material-symbols-outlined text-xl">visibility</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="flex mt-4 items-center justify-between px-1">
-        <label class="remember-me">
-          <input type="checkbox">
-          Manter sessão
-        </label>
-
-      </div>
-
-      <button id="submitBtn" type="submit" class="btn-signin">
-        Entrar no Sistema
-      </button>
-
-      <div id="errorBox" class="hidden error-box"></div>
-    </form>
-
-    <div class="divider"><a href="#" class="forgot-password">Para recuperar a senha envie um email ao suporte
-        técnico</a></div>
-
-
-    <!-- <div class="text-center mt-4 pt-4 border-t border-white/5">
-      <p class="text-[12px] text-slate-500 font-medium tracking-tight">
-        Não tem uma conta?
-        <a href="#" class="text-[#2afc8d] font-bold hover:underline transition-all">Solicitar Acesso</a>
-      </p>
-    </div> -->
+    </section>
+    <aside class="auth-hero" aria-hidden="true">
+      <img src="/assets/images/login-hero.png" alt="" />
+    </aside>
   </div>
-
   <script type="module" src="./index.js"></script>
 </body>
 
 </html>
-

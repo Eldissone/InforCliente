@@ -386,33 +386,256 @@ function renderContactos() {
   });
 }
 
+const PESSOAL_PAGE_SIZE = 12;
+const PESSOAL_TIPOS = ["Interno", "Subcontratado"];
+
+function pessoalView() {
+  if (!renderPessoal.view) {
+    renderPessoal.view = { q: "", tipo: "", page: 1, mode: "list", editId: null, obras: null };
+  }
+  return renderPessoal.view;
+}
+
+function pessoalBlob(item) {
+  return [item.nome, item.apelido, item.email, item.telefone, item.funcao, item.idFuncionario, item.obraNome, item.categoria]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function renderPessoal() {
-  const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}"></option>`).join("");
-  mount("pessoal", formShell(
-    "Registo de pessoal. Fica disponível neste dispositivo.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("nome", { required: true }), "span-2")}
-      ${field("Função", `${textInput("funcao", { required: true, list: "funcoes-pessoal" })}<datalist id="funcoes-pessoal">${funcoes}</datalist>`)}
-      ${field("Telefone", textInput("telefone"))}
-      ${field("Email", textInput("email", { type: "email" }))}
-      ${field("Foto", textInput("foto", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
-    const nome = String(data.get("nome") || "").trim();
-    const funcao = String(data.get("funcao") || "").trim();
-    if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
+  const root = document.getElementById("registryRoot");
+  if (!root) return;
+  const view = pessoalView();
+
+  const draw = () => {
+    if (view.mode === "form") drawForm();
+    else drawList();
+  };
+
+  const drawList = () => {
     const items = readStore(PESSOAL_KEY);
-    items.push({
-      id: newId(),
-      nome,
-      funcao,
-      telefone: String(data.get("telefone") || "").trim(),
-      email: String(data.get("email") || "").trim(),
-      foto: await readPhoto(data.get("foto")),
+    const q = view.q.trim().toLowerCase();
+    const filtered = items.filter((item) => {
+      if (view.tipo && item.tipo !== view.tipo) return false;
+      if (!q) return true;
+      return pessoalBlob(item).includes(q);
     });
-    writeStore(PESSOAL_KEY, items);
-  });
+    const pages = Math.max(1, Math.ceil(filtered.length / PESSOAL_PAGE_SIZE));
+    if (view.page > pages) view.page = pages;
+    const start = (view.page - 1) * PESSOAL_PAGE_SIZE;
+    const rows = filtered.slice(start, start + PESSOAL_PAGE_SIZE);
+    const body = rows.length
+      ? rows.map((item, index) => `<tr>
+          <td>${String(start + index + 1).padStart(2, "0")}</td>
+          <td>${esc(item.nome || "")}</td>
+          <td>${esc(item.apelido || "")}</td>
+          <td>${esc(item.tipo || "")}</td>
+          <td>${esc(item.idFuncionario || "")}</td>
+          <td>${esc(item.telefone || "")}</td>
+          <td>${esc(item.funcao || "")}</td>
+          <td>${esc(item.obraNome || "")}</td>
+          <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
+        </tr>`).join("")
+      : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
+    const pageButtons = Array.from({ length: pages }, (_, index) => {
+      const page = index + 1;
+      return `<button type="button" data-page="${page}" ${page === view.page ? 'aria-current="page"' : ""}>${page}</button>`;
+    }).join("");
+
+    root.innerHTML = `
+      <header class="pessoal-head">
+        <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+        <div>
+          <h1>Todo o Pessoal</h1>
+          <p>Pesquisar e registar novo funcionário</p>
+        </div>
+      </header>
+      <section class="pessoal-toolbar">
+        <label class="pessoal-field">Pesquisar funcionário
+          <input id="pessoalSearch" type="search" value="${esc(view.q)}" placeholder="Introduzir termo de pesquisa" />
+        </label>
+        <p class="pessoal-count"><strong>${items.length}</strong><span>Total de funcionários</span></p>
+        <label class="pessoal-field">Filtrar pessoal
+          <select id="pessoalTipo">
+            <option value="">Todo o pessoal</option>
+            ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${view.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="button" class="pessoal-register" id="pessoalCreate">Registar Funcionário</button>
+      </section>
+      <section class="pessoal-table-card">
+        <div class="pessoal-table-head">
+          <h2>Todo o Pessoal</h2>
+          <p class="pessoal-page-size">A mostrar <b>${PESSOAL_PAGE_SIZE}</b> por página</p>
+        </div>
+        <div class="pessoal-table-wrap">
+          <table class="pessoal-table">
+            <thead>
+              <tr>
+                <th>N.º</th><th>Nome</th><th>Apelido</th><th>Tipo</th><th>ID Func.</th><th>Telefone</th><th>Função</th><th>Obra Alocada</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+        <nav class="pessoal-pages" aria-label="Páginas">${pageButtons}</nav>
+      </section>`;
+
+    root.querySelector("#pessoalSearch")?.addEventListener("input", (event) => {
+      view.q = event.target.value;
+      view.page = 1;
+      drawList();
+      root.querySelector("#pessoalSearch")?.focus();
+    });
+    root.querySelector("#pessoalTipo")?.addEventListener("change", (event) => {
+      view.tipo = event.target.value;
+      view.page = 1;
+      drawList();
+    });
+    root.querySelector("#pessoalCreate")?.addEventListener("click", () => {
+      view.mode = "form";
+      view.editId = null;
+      draw();
+    });
+    root.querySelectorAll("[data-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        view.mode = "form";
+        view.editId = button.getAttribute("data-open");
+        draw();
+      });
+    });
+    root.querySelectorAll("[data-page]").forEach((button) => {
+      button.addEventListener("click", () => {
+        view.page = Number(button.getAttribute("data-page")) || 1;
+        drawList();
+      });
+    });
+  };
+
+  const drawForm = async () => {
+    if (!view.obras) {
+      try {
+        const data = await apiRequest("/projects?pageSize=200");
+        view.obras = Array.isArray(data?.items) ? data.items : [];
+      } catch {
+        view.obras = [];
+      }
+    }
+    const current = view.editId
+      ? readStore(PESSOAL_KEY).find((item) => item.id === view.editId) || null
+      : null;
+    const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.funcao === funcao ? "selected" : ""}></option>`).join("");
+    const obras = view.obras.map((obra) => `<option value="${esc(obra.id)}" ${current?.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`).join("");
+    const foto = current?.foto
+      ? `<img src="${esc(current.foto)}" alt="">`
+      : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
+    root.innerHTML = `
+      <header class="pessoal-head">
+        <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+        <div>
+          <h1>${current ? "Editar Funcionário" : "Novo Funcionário"}</h1>
+          <p>${current ? "Actualizar ficha do funcionário" : "Registar ficha de novo funcionário"}</p>
+        </div>
+      </header>
+      <button type="button" class="pessoal-back" id="pessoalBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
+      <form class="pessoal-form-card" id="pessoalForm" novalidate>
+        <h2>${current ? "Editar Funcionário" : "Registar Novo Funcionário"}</h2>
+        <label class="pessoal-photo">
+          ${foto}
+          <span>Carregar foto</span>
+          <small>JPG, JPEG e PNG<br>Máximo 2MB</small>
+          <input name="foto" type="file" accept="image/jpeg,image/png" />
+        </label>
+        <div class="pessoal-grid">
+          <label>Nome <input name="nome" required value="${esc(current?.nome || "")}" placeholder="Introduzir nome" /></label>
+          <label>Apelido <input name="apelido" value="${esc(current?.apelido || "")}" placeholder="Introduzir apelido" /></label>
+          <label>Email <input name="email" type="email" value="${esc(current?.email || "")}" placeholder="Introduzir email" /></label>
+          <label>Telefone <input name="telefone" value="${esc(current?.telefone || "")}" placeholder="Introduzir telefone" /></label>
+          <label>Tipo de Funcionário
+            <select name="tipo">
+              <option value="">Seleccionar tipo</option>
+              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${current?.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Função
+            <input name="funcao" required list="funcoes-pessoal" value="${esc(current?.funcao || "")}" placeholder="Seleccionar função" />
+            <datalist id="funcoes-pessoal">${funcoes}</datalist>
+          </label>
+          <label>Obra Alocada
+            <select name="obraId">
+              <option value="">Seleccionar obra</option>
+              ${obras}
+            </select>
+          </label>
+          <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
+          <label>Categoria Profissional <input name="categoria" value="${esc(current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
+        </div>
+        <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
+      </form>`;
+
+    root.querySelector("#pessoalBack")?.addEventListener("click", () => {
+      view.mode = "list";
+      view.editId = null;
+      draw();
+    });
+    const photoInput = root.querySelector('input[name="foto"]');
+    photoInput?.addEventListener("change", () => {
+      const file = photoInput.files?.[0];
+      if (!file) return;
+      const preview = root.querySelector(".pessoal-photo img, .pessoal-photo .material-symbols-outlined");
+      const url = URL.createObjectURL(file);
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      preview?.replaceWith(img);
+    });
+    root.querySelector("#pessoalForm")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector("[type=submit]");
+      if (button) button.disabled = true;
+      try {
+        const data = new FormData(form);
+        const nome = String(data.get("nome") || "").trim();
+        const funcao = String(data.get("funcao") || "").trim();
+        if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
+        const file = data.get("foto");
+        if (file instanceof File && file.size > 2 * 1024 * 1024) invalid("A foto deve ter no máximo 2MB.");
+        const obraId = String(data.get("obraId") || "");
+        const obra = (view.obras || []).find((item) => item.id === obraId);
+        const foto = file instanceof File && file.size ? await readPhoto(file) : (current?.foto || "");
+        const record = {
+          id: current?.id || newId(),
+          nome,
+          apelido: String(data.get("apelido") || "").trim(),
+          email: String(data.get("email") || "").trim(),
+          telefone: String(data.get("telefone") || "").trim(),
+          tipo: String(data.get("tipo") || ""),
+          funcao,
+          obraId,
+          obraNome: obra?.name || obra?.code || current?.obraNome || "",
+          idFuncionario: String(data.get("idFuncionario") || "").trim(),
+          categoria: String(data.get("categoria") || "").trim(),
+          foto,
+        };
+        const items = readStore(PESSOAL_KEY);
+        const index = items.findIndex((item) => item.id === record.id);
+        if (index >= 0) items[index] = record;
+        else items.push(record);
+        writeStore(PESSOAL_KEY, items);
+        toast(current ? "Funcionário actualizado." : "Registo guardado.", { type: "success" });
+        view.mode = "list";
+        view.editId = null;
+        draw();
+      } catch (error) {
+        toast(apiMessage(error), { type: "error" });
+        if (button) button.disabled = false;
+      }
+    });
+  };
+
+  draw();
 }
 
 function renderSetores() {

@@ -29,10 +29,10 @@ qs("togglePassword")?.addEventListener("click", () => {
   const icon = qs("togglePassword").querySelector("span");
   if (passwordInp.type === "password") {
     passwordInp.type = "text";
-    icon.textContent = "visibility_off";
+    icon.textContent = "visibility";
   } else {
     passwordInp.type = "password";
-    icon.textContent = "visibility";
+    icon.textContent = "visibility_off";
   }
 });
 

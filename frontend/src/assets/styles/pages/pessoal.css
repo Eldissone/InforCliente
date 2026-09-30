@@ -1,0 +1,349 @@
+body[data-registry="pessoal"] {
+  background: #f8f9fd;
+}
+
+.pessoal-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 7.5rem 1.25rem 3rem;
+}
+
+.pessoal-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.pessoal-head .material-symbols-outlined {
+  color: #10a142;
+  font-size: 22px;
+}
+
+.pessoal-head h1 {
+  margin: 0;
+  color: #121212;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.pessoal-head p,
+.pessoal-back {
+  margin: 0;
+  color: #515151;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #14add6;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pessoal-toolbar,
+.pessoal-table-card,
+.pessoal-form-card {
+  background: #fff;
+  border-radius: 20px;
+}
+
+.pessoal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 40px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+  padding: 24px 20px;
+}
+
+.pessoal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  color: #121212;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-field input,
+.pessoal-field select,
+.pessoal-grid input,
+.pessoal-grid select {
+  height: 50px;
+  padding: 0 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  box-shadow: none;
+}
+
+.pessoal-field input {
+  width: min(350px, 100%);
+}
+
+.pessoal-field select,
+.pessoal-grid select {
+  background: #f2f7ff;
+  border-color: transparent;
+}
+
+.pessoal-field input::placeholder,
+.pessoal-grid input::placeholder {
+  color: #a3a3a3;
+}
+
+.pessoal-field input:focus,
+.pessoal-field select:focus,
+.pessoal-grid input:focus,
+.pessoal-grid select:focus {
+  outline: 2px solid #248cd8;
+  outline-offset: 2px;
+}
+
+.pessoal-count strong {
+  display: block;
+  color: #272525;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.pessoal-count span {
+  color: #515151;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-register {
+  height: 46px;
+  margin-left: auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #212e3e;
+  color: #fff;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pessoal-register:hover,
+.pessoal-submit:hover {
+  background: #1a2430;
+}
+
+.pessoal-table-card,
+.pessoal-form-card {
+  padding: 24px 20px 28px;
+}
+
+.pessoal-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.pessoal-table-head h2,
+.pessoal-form-card h2 {
+  margin: 0;
+  color: #121212;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.pessoal-page-size {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #121212;
+  font-size: 14px;
+}
+
+.pessoal-page-size b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #14add6;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #14add6, #384295);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 400;
+}
+
+.pessoal-table-wrap {
+  overflow-x: auto;
+}
+
+.pessoal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-table th {
+  padding: 0 12px 16px 0;
+  color: #515151;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pessoal-table td {
+  padding: 8px 12px 8px 0;
+  border-top: 1px solid #f2f2f2;
+  color: #515151;
+  white-space: nowrap;
+}
+
+.pessoal-more {
+  padding: 0;
+  border: 0;
+  background: linear-gradient(135deg, #14add6, #384295);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pessoal-empty {
+  padding: 28px 0;
+  color: #777;
+  white-space: normal;
+}
+
+.pessoal-pages {
+  display: flex;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.pessoal-pages button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #515151;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pessoal-pages button[aria-current="page"] {
+  border-color: #212e3e;
+  background: #212e3e;
+  color: #fff;
+}
+
+.pessoal-form-card {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px 32px;
+  align-items: start;
+}
+
+.pessoal-form-card h2 {
+  grid-column: 1 / -1;
+}
+
+.pessoal-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 280px;
+  padding: 24px 16px;
+  border: 1px dashed #d0d0d0;
+  border-radius: 16px;
+  color: #515151;
+  text-align: center;
+  cursor: pointer;
+}
+
+.pessoal-photo input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.pessoal-photo img,
+.pessoal-photo .material-symbols-outlined {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #f2f2f2;
+  color: #777;
+  font-size: 32px;
+  line-height: 88px;
+}
+
+.pessoal-photo small {
+  color: #777;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pessoal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+
+.pessoal-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #121212;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-submit {
+  grid-column: 1 / -1;
+  justify-self: start;
+  height: 46px;
+  min-width: 180px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #212e3e;
+  color: #fff;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+@media (max-width: 800px) {
+  .pessoal-register {
+    margin-left: 0;
+  }
+
+  .pessoal-form-card,
+  .pessoal-grid {
+    grid-template-columns: 1fr;
+  }
+}

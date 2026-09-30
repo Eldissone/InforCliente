@@ -12,9 +12,11 @@
     <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
     <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
     <link href="/assets/styles/top-nav.css" rel="stylesheet" />
+    <link href="/assets/styles/shell.css" rel="stylesheet" />
     <link href="/assets/styles/pages/registry-form.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/pessoal.css" rel="stylesheet" />
 </head>
-<body class="bg-surface font-body text-on-surface antialiased" data-registry="pessoal">
+<body data-shell="figma" class="bg-surface font-body text-on-surface antialiased" data-registry="pessoal">
     <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
         <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
             <div class="flex items-center gap-10">
@@ -74,9 +76,7 @@
             </button>
         </div>
     </nav>
-    <main class="registry-page">
-        <p class="registry-kicker">Registos</p>
-        <h1>Pessoal</h1>
+    <main class="pessoal-page">
         <div id="registryRoot"></div>
     </main>
     <script type="module" src="/registos/registryForms.js"></script>

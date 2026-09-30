@@ -95,7 +95,6 @@ module.exports = {
         control: "10px",
       },
       fontFamily: {
-        nunito: ["Nunito", "system-ui", "-apple-system", "sans-serif"],
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
         display: ["Outfit", "Inter", "sans-serif"],
         headline: ["Outfit", "sans-serif"],
