@@ -37,7 +37,7 @@ body[data-shell="figma"] > nav.app-top-nav > div:first-child > div:first-child >
   background: #212e3e;
   color: #fff;
   border-radius: 10px;
-  font-style: normal;
+  font-style: italic;
 }
 
 body[data-shell="figma"] .shell-search {
@@ -166,8 +166,8 @@ body[data-shell="figma"] .shell-btn:disabled {
     left: 260px !important;
     box-sizing: border-box;
     width: auto !important;
-    height: 100px;
-    min-height: 100px;
+    height: 60px;
+    min-height: 60px;
     border: 0 !important;
     border-bottom: 1px solid #e8e8e8 !important;
     border-radius: 0;
@@ -241,11 +241,11 @@ body > nav.app-top-nav {
   --tn-accent:#2afc8d;
   --tn-accent-soft:rgba(42,252,141,.1);
   --tn-muted:rgba(255,255,255,.65);
-  top:1rem !important;
+  top:5px !important;
   right:1.25rem !important;
   left:1.25rem !important;
   width:auto !important;
-  min-height:5.6rem;
+  min-height:3.5rem;
   border:0 !important;
   border-radius:1.35rem;
   background:#0f172a !important;
@@ -258,17 +258,17 @@ body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout > nav.app-top-
   right:1.25rem !important;
   left:1.25rem !important;
   width:auto !important;
-  height:5.6rem !important;
+  height:4rem !important;
   border:0 !important;
   border-radius:1.35rem !important;
   background:#0f172a !important;
 }
 body > nav.app-top-nav > div:first-child {
   max-width:none;
-  height:5.6rem;
+  height:3rem;
   padding-inline:2rem;
 }
-body[data-shell="figma"] > nav.app-top-nav > div:first-child { height:5.6rem; }
+body[data-shell="figma"] > nav.app-top-nav > div:first-child { height:4rem; }
 body > nav.app-top-nav > div:first-child > div:first-child > :first-child {
   display:flex !important;
   color:#fff;
@@ -276,12 +276,14 @@ body > nav.app-top-nav > div:first-child > div:first-child > :first-child {
 }
 body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav > div:first-child > div:first-child > :first-child { display:flex !important; color:#fff !important; }
 body > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child {
-  width:5.2rem;
-  height:3.35rem;
-  border-radius:1rem;
+  width:auto;
+  height:auto;
+  border-radius:1.5rem;
   background:#20e981;
   color:#0f172a;
-  font-size:1.6rem;
+  font-size:1.5rem;
+  font-style: italic;
+  padding: 5px 10px;
 }
 body[data-shell="figma"] > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child { background:#20e981 !important; color:#0f172a !important; }
 body > nav.app-top-nav [data-user-profile] { color:#fff !important; }

@@ -7,6 +7,7 @@ import {
   syncNavDropdownGroups,
   transformDesktopNavToDropdowns,
 } from "./appNav.js";
+import { mountAppHeader } from "./appHeader.js";
 
 export function wireLogout() {
   markTopNavActive();
@@ -414,3 +415,5 @@ async function openProfileModal() {
     },
   });
 }
+
+mountAppHeader();

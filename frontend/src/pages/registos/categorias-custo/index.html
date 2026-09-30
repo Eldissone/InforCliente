@@ -16,66 +16,8 @@
     <link href="/assets/styles/centros.css" rel="stylesheet" />
 </head>
 <body data-shell="figma" class="bg-surface font-body text-on-surface antialiased" data-cost-catalog="tipos">
-    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300">
-        <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
-            <div class="flex items-center gap-10">
-                <a href="../../Dashboard/index.html" class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <span class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
-                    <span id="navBrandText">Gestor</span>
-                </a>
-                <div class="hidden lg:flex items-center gap-6">
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" data-nav-dashboard href="../../Dashboard/index.html">Dashboard</a>
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" data-nav-clientes href="../../Clientes/clienteLista.html">Clientes</a>
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" data-nav-obras href="../../Projectos/ProjectGeral.html">Obras</a>
-                    <a data-nav-logistics class="text-sm font-semibold text-slate-400 hover:text-white transition-colors" href="../../Stock/index.html">Logística</a>
-                    <a data-nav-planeamento href="../../Projectos/centroCustos.html" class="text-sm font-semibold text-slate-400 hover:text-white transition-colors">Planeamento</a>
-                    <a data-nav-cotacao href="../../Projectos/Cotacao/index.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-                    <a data-nav-centros href="../../Financeiro/centroDeCompras.html" class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centro de Compras</a>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2" href="../../Users/index.html">
-                    <span class="material-symbols-outlined text-lg">manage_accounts</span>
-                    Gestão
-                </a>
-                <button data-user-profile class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all">
-                    <span class="material-symbols-outlined text-sm">person</span>
-                    <span data-user-role></span>
-                </button>
-                <button data-logout class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">Sair</button>
-                <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                    <span class="material-symbols-outlined">menu</span>
-                </button>
-            </div>
-        </div>
-        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" data-nav-dashboard href="../../Dashboard/index.html">
-                <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
-            </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" data-nav-clientes href="../../Clientes/clienteLista.html">
-                <span class="material-symbols-outlined text-lg">group</span> Clientes
-            </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" data-nav-obras href="../../Projectos/ProjectGeral.html">
-                <span class="material-symbols-outlined text-lg">construction</span> Obras
-            </a>
-            <a data-nav-logistics class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../../Stock/index.html">
-                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
-            </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" data-nav-planeamento href="../../Projectos/centroCustos.html">
-                <span class="material-symbols-outlined text-lg">account_balance</span> Planeamento
-            </a>
-            <a data-nav-cotacao class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../../Projectos/Cotacao/index.html">
-                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
-            </a>
-            <a data-nav-centros class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all" href="../../Financeiro/centroDeCompras.html">
-                <span class="material-symbols-outlined text-lg">account_balance</span> Centro de Compras
-            </a>
-            <button data-logout class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
-                <span class="material-symbols-outlined text-lg">logout</span> Sair
-            </button>
-        </div>
-    </nav>
-        <main id="costCatalogRoot" class="max-w-[1500px] mx-auto px-4 md:px-8 pt-28 pb-16">
+    <div id="appHeader"></div>
+    <main id="costCatalogRoot" class="max-w-[1500px] mx-auto px-4 md:px-8 pt-28 pb-16">
         <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1">Registos</p>
         <h1 class="text-3xl font-bold text-slate-900 mb-1">Categorias de Custo</h1>
         <p class="text-sm text-slate-500 mb-6">Só categorias. As subcategorias ficam na página própria.</p>

@@ -25,39 +25,7 @@
 
 <body data-shell="figma" class="bg-slate-50 text-slate-800 font-sans min-h-screen">
     <!-- Navbar -->
-    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
-        <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
-            <div class="flex items-center gap-10">
-                <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <span
-                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
-                    <span id="navBrandText">Gestor</span>
-                </span>
-                <div class="hidden lg:flex items-center gap-6">
-                    <a class="text-sm font-semibold text-[#2afc8d] transition-colors" href="./tecnicoPlanos.html">Planos
-                        de Obra</a>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <button data-user-profile
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all">
-                    <span class="material-symbols-outlined text-sm">person</span>
-                    <span id="headerUserName">Técnico</span>
-                </button>
-                <button data-logout
-                    class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white hover:bg-red-500/10 hover:text-red-400 transition-all">
-                    Sair
-                </button>
-                <!-- Mobile logout icon button -->
-                <button data-logout
-                    class="md:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-red-400 transition-colors">
-                    <span class="material-symbols-outlined">logout</span>
-                </button>
-            </div>
-        </div>
-    </nav>
-
+    <div id="appHeader"></div>
     <!-- Main Container -->
     <main class="max-w-6xl mx-auto px-4 md:px-8 py-8" style="margin-top: 4rem;">
 
