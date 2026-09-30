@@ -277,6 +277,20 @@ body[data-registry]:not([data-registry="obras"]) .registry-submit,
 body[data-registry]:not([data-registry="obras"]) .registry-ghost { min-height:2.8rem; padding:0 1.25rem; border:1px solid #20e981; border-radius:.7rem; font-size:.82rem; font-weight:500; }
 body[data-registry]:not([data-registry="obras"]) .registry-submit { background:#20e981; color:#10251b; }
 body[data-registry]:not([data-registry="obras"]) .registry-ghost { background:#fff; color:#333; }
+@media (min-width:1024px) {
+  body[data-registry].app-sidebar-layout > nav.app-top-nav,
+  body[data-registry].app-sidebar-collapsed.app-sidebar-layout > nav.app-top-nav { top:1rem !important; right:1.25rem !important; left:1.25rem !important; width:auto !important; height:5.6rem; min-height:5.6rem; border:0 !important; border-radius:1.35rem; background:#0f172a !important; box-shadow:none; }
+  body[data-registry].app-sidebar-layout > nav.app-top-nav > div:first-child { max-width:none; height:100%; padding-inline:2rem; }
+  body[data-registry].app-sidebar-layout > nav.app-top-nav > div:first-child > div:first-child > :first-child { display:flex; color:#fff; font-size:1.35rem; }
+  body[data-registry].app-sidebar-layout > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child { width:5.2rem; height:3.35rem; border-radius:1rem; background:#20e981; color:#0f172a; font-size:1.6rem; }
+  body[data-registry] .app-primary-sidebar.is-figma-shell { top:7.1rem; width:21rem; padding-top:1rem; }
+  body[data-registry] .app-primary-sidebar.is-figma-shell .app-sidebar-brand { display:none; }
+  body[data-registry].app-sidebar-layout > main { width:calc(100% - 21rem) !important; margin-left:21rem !important; padding-top:8.7rem !important; }
+  body[data-registry].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell { width:5.75rem; }
+  body[data-registry].app-sidebar-collapsed.app-sidebar-layout > main { width:calc(100% - 5.75rem) !important; margin-left:5.75rem !important; }
+  body[data-registry].app-sidebar-collapsed.app-sidebar-layout > nav.app-top-nav { left:1.25rem !important; }
+}
+body[data-registry] > nav.app-top-nav [data-user-profile] { color:#fff !important; }
 @media (max-width:600px) {
   body[data-registry]:not([data-registry="obras"]) .registry-page { padding:5.75rem .8rem 2rem; }
   body[data-registry]:not([data-registry="obras"]) .registry-form { padding:1.1rem; }
