@@ -504,41 +504,30 @@ async function renderObras() {
     photo: contact.foto || "",
   }));
 
-  const form = mount("obras", formShell(
-    "Informação geral da obra. Os contactos escolhidos vêm do registo de contactos.",
-    `<div class="registry-section">
-      <h2>Informação geral</h2>
-      ${field("Descrição Obra", `<textarea name="descricao" required placeholder="Electrificação Rural Município da Quibala"></textarea>`)}
-      <div class="registry-grid">
-        ${field("Sigla", textInput("sigla", { required: true, placeholder: "MTR - QUIB" }))}
-        ${field("Cliente", clients.length ? selectInput("clientId", clientOptions, "Seleccionar cliente") : `<select disabled><option value="">Registe um cliente primeiro</option></select>`)}
-        ${field("Local", textInput("local", { required: true, placeholder: "Kwanza Sul" }))}
-        ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT" }))}
-        ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Só se houver sub-empreitada" }), "span-2")}
-        ${field("Valor Venda (S/ IVA)", textInput("valor", { required: true, placeholder: "99.000" }))}
-        ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }), "")}
-        ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
-        ${field("Data Conclusão Obra (Previsional)", textInput("conclusaoPrevisional", { type: "date" }), "span-2")}
-      </div>
-      <p class="registry-note">Início operacional: primeiras compras ou levantamentos, mesmo sem execução. Arranque: início efetivo da execução.</p>
-    </div>
-    <div class="registry-section">
-      <h2>Tipo de Obra</h2>
-      <p class="registry-note">Pode seleccionar vários.</p>
-      ${checkGrid("tipos", TIPOS_OBRA)}
-    </div>
-    <div class="registry-section">
-      <h2>Composição de Serviços</h2>
-      <p class="registry-note">Pode seleccionar vários.</p>
-      ${checkGrid("servicos", SERVICOS)}
-    </div>
-    <div class="registry-section">
-      <h2>Contactos</h2>
-      <p class="registry-note">Pessoas relevantes para o cliente, incluindo a área financeira.</p>
-      ${contacts.length ? checkGrid("contactos", contactOptions) : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
-    </div>
-    ${estadoFields()}`
-  ), async (form) => {
+  const form = mount("obras", `<form class="registry-form obra-form" novalidate>
+    <header class="obra-form-heading"><div><h2>Criar Obra</h2><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
+    <section class="obra-card"><h3>Informação Geral da Obra</h3><div class="registry-grid obra-general">
+      ${field("Descrição da Obra", textInput("descricao", { required: true, placeholder: "Ex: Electrificação Rural Município da Quibala" }))}
+      ${field("Tipo de Obra", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("tipos", TIPOS_OBRA)}</details>`)}
+      ${field("Composição de Serviços", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("servicos", SERVICOS)}</details>`)}
+      ${field("Sigla", textInput("sigla", { required: true, placeholder: "Ex: MTR-QUIB" }))}
+      ${field("Cliente", clients.length ? selectInput("clientId", clientOptions, "Seleccione cliente") : `<select disabled><option value="">Registe um cliente primeiro</option></select>`)}
+      ${field("Local", textInput("local", { required: true, placeholder: "Ex: Kwanza Sul" }))}
+      ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT Energia" }))}
+      ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Opcional" }))}
+      ${field("Valor Venda S/IVA", textInput("valor", { required: true, placeholder: "0.00" }))}
+    </div></section>
+    <section class="obra-card"><h3>Datas</h3><div class="registry-grid">
+      ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }))}
+      ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
+      ${field("Data Conclusão Obra Previsional", textInput("conclusaoPrevisional", { type: "date" }))}
+    </div></section>
+    <section class="obra-card"><h3>Estado da Obra</h3><div class="registry-grid obra-status">${estadoFields()}</div></section>
+    <section class="obra-card obra-contacts"><div class="obra-card-title"><h3>Contactos da Obra</h3><a class="registry-ghost" href="/registos/contactos">Adicionar Contacto</a></div>
+      ${contacts.length ? `<div class="obra-contact-options">${checkGrid("contactos", contactOptions)}</div>` : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
+    </section>
+    <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
+  </form>`, async (form) => {
     const data = new FormData(form);
     const descricao = String(data.get("descricao") || "").trim();
     const sigla = String(data.get("sigla") || "").trim();
@@ -603,7 +592,17 @@ async function renderObras() {
       },
     });
   });
-  if (form) bindEstado(form);
+  if (form) {
+    bindEstado(form);
+    form.querySelectorAll(".obra-multiselect").forEach((select) => {
+      const summary = select.querySelector("summary");
+      const refresh = () => {
+        const count = select.querySelectorAll("input:checked").length;
+        summary.textContent = count ? `${count} seleccionado${count === 1 ? "" : "s"}` : "Seleccione múltiplos";
+      };
+      select.addEventListener("change", refresh);
+    });
+  }
 }
 
 function renderProdutos() {

@@ -794,7 +794,7 @@ async function openCreate() {
     title: "Cadastrar nova obra",
     primaryLabel: "Criar",
     contentHtml: `
-
+      <div class="project-create-form grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referência</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
@@ -843,8 +843,15 @@ async function openCreate() {
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nº Funcionários Ativos</label><input id="p_staff" type="number" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Último Acidente</label><input id="p_last_accident" type="date" class="w-full rounded-lg border-slate-300" /></div>
-      </div >
+      </div>
     `,
+    onRender: ({ overlay, panel }) => {
+      overlay.classList.remove("items-center", "p-4");
+      overlay.classList.add("items-start", "p-3", "md:p-6");
+      panel.classList.remove("max-w-[640px]", "max-h-[90vh]");
+      panel.classList.add("project-create-modal", "max-w-[1140px]", "max-h-[calc(100vh-3rem)]", "rounded-[26px]");
+      panel.querySelector("[data-body]")?.classList.add("project-create-body");
+    },
     onPrimary: async ({ close, panel }) => {
       const v = (id) => panel.querySelector(`#${id} `)?.value?.trim?.();
       const btn = panel.querySelector("[data-primary]");
