@@ -9,7 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
   <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
   <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
   <link href="/assets/styles/pages/auth-login.css" rel="stylesheet" />
@@ -19,17 +21,24 @@
   <div class="auth-stage">
     <section class="auth-panel">
       <div class="auth-card">
-        <p class="auth-kicker">Bem vindo !</p>
-        <h1>Inicie a sua sessão</h1>
-
+        <div class="login-header text-center sm:text-left">
+          <div class="logo-badge mb-4 justify-center sm:justify-start">
+            <div class="logo-pill">Info</div>
+            <span>_</span>
+          </div>
+          <h1 class="login-title">Acesso</h1>
+        </div>
+        
         <form id="loginForm">
           <div class="auth-fields">
             <label for="email">Email
-              <input id="email" type="email" name="email" placeholder="email@dominio.com" autocomplete="username" required />
+              <input id="email" type="email" name="email" placeholder="email@dominio.com" autocomplete="username"
+                required />
             </label>
             <label for="password">Senha
               <span class="auth-password">
-                <input id="password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+                <input id="password" type="password" name="password" placeholder="••••••••"
+                  autocomplete="current-password" required />
                 <button type="button" id="togglePassword" aria-label="Mostrar senha">
                   <span class="material-symbols-outlined">visibility_off</span>
                 </button>
@@ -47,7 +56,7 @@
       </div>
     </section>
     <aside class="auth-hero" aria-hidden="true">
-      <img src="/assets/images/login-hero.png" alt="" />
+      <img src="/assets/images/login-hero.jpg" alt="" />
     </aside>
   </div>
   <script type="module" src="./index.js"></script>

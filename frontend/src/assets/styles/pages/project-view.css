@@ -292,3 +292,104 @@
             scrollbar-width: thin;
             scrollbar-color: #94a3b8 transparent;
         }
+
+/* Vista da obra: mesmos separadores e dados, com os controlos do Figma. */
+body[data-shell="figma"] main {
+  color: #121212;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body[data-shell="figma"] main h1 {
+  color: #272525;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+body[data-shell="figma"] main > header nav {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #777;
+}
+
+body[data-shell="figma"] main > header nav #projectBreadcrumb {
+  color: #248cd8;
+}
+
+body[data-shell="figma"] main [data-tab-trigger] {
+  height: 46px;
+  border-bottom-width: 2px;
+  border-bottom-color: transparent;
+  color: #777;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body[data-shell="figma"] main [data-tab-trigger].border-slate-900 {
+  border-bottom-color: #212e3e;
+  color: #121212;
+}
+
+body[data-shell="figma"] main .rounded-3xl.bg-white,
+body[data-shell="figma"] main .rounded-2xl.bg-white {
+  border-color: #e8e8e8;
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+body[data-shell="figma"] main button.bg-slate-900,
+body[data-shell="figma"] main button[class*="0F172A"],
+body[data-shell="figma"] main a.bg-slate-900 {
+  height: 46px;
+  border-radius: 10px;
+  background: #212e3e;
+  font-size: 14px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+body[data-shell="figma"] main button.bg-slate-900:hover,
+body[data-shell="figma"] main button[class*="0F172A"]:hover {
+  background: #1a2430;
+  transform: none;
+}
+
+body[data-shell="figma"] main button.bg-white.border {
+  height: 46px;
+  border-radius: 10px;
+  border-color: #d0d0d0;
+  color: #121212;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+body[data-shell="figma"] main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body[data-shell="figma"] main select {
+  height: 50px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  box-shadow: none;
+}
+
+body[data-shell="figma"] main textarea {
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+}
+
+body[data-shell="figma"] main input:focus,
+body[data-shell="figma"] main select:focus,
+body[data-shell="figma"] main textarea:focus {
+  outline: 2px solid #248cd8;
+  outline-offset: 2px;
+}
+
+.file-drop-target {
+  outline-color: #248cd8;
+  background: rgba(36, 140, 216, 0.08) !important;
+}
