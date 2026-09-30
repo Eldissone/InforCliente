@@ -53,7 +53,7 @@ function renderObraRow(p) {
     <tr class="hover:bg-slate-50/50 transition-all duration-200 group border-b border-slate-100 last:border-0">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
-          <div class="h-11 w-11 rounded-2xl bg-slate-900 flex items-center justify-center font-extrabold text-[#2afc8d] shadow-lg shadow-black/10 group-hover:scale-105 transition-transform text-sm">
+          <div class="h-11 w-11 rounded-[10px] bg-[#212e3e] flex items-center justify-center font-extrabold text-white text-sm">
             ${initials(p.name)}
           </div>
           <div>

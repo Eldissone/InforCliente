@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-ink: #121212;
+    --color-action: #212e3e;
+    --color-line: #d0d0d0;
+    --color-canvas: #f2f2f2;
+    --color-accent-blue: #248cd8;
+    --color-accent-green: #10a142;
+    --radius-control: 10px;
+    --sidebar-width: 260px;
+    --sidebar-collapsed: 92px;
+    --header-height: 100px;
+    --font-nunito: "Nunito", system-ui, sans-serif;
+  }
+
   html,
   body {
     font-family: 'Inter', sans-serif;
