@@ -18,7 +18,7 @@ import {
 } from "./costCategoryCascade.js";
 
 const EXTRA_BTN_CLASS =
-  "h-9 px-4 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0";
+  "h-9 px-4 rounded-xl bg-[#2afc8d] text-[#212e3e] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0";
 
 const EXTRA_MODAL_HTML = `
 <div class="modal-overlay" id="modalExtra">

@@ -2353,7 +2353,7 @@ async function renderWarehouseDetail(container, warehouseId) {
 
             <!-- Sidebar Informativa -->
             <div class="space-y-8">
-                <div class="bg-[#0F172A] rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-300 relative overflow-hidden">
+                <div class="bg-[#212e3e] rounded-[2.5rem] p-10 text-white shadow-2xl shadow-slate-300 relative overflow-hidden">
                     <div class="absolute bottom-0 right-0 w-32 h-32 bg-white/5 rounded-full -mb-16 -mr-16"></div>
                     <h4 class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-10">Ficha Informativa</h4>
                     <div class="space-y-10 relative">
@@ -3194,7 +3194,7 @@ window.viewPendingReceipts = async (warehouseId) => {
         const icon = isReturn ? 'assignment_return' : 'check';
         const btnStyle = isReturn
             ? 'background:#4f46e5;color:#fff;'
-            : 'background:#0f172a;color:#fff;';
+            : 'background:#212e3e;color:#fff;';
         const badgeStyle = isReturn
             ? 'background:#eef2ff;color:#6366f1;'
             : 'background:#fffbeb;color:#d97706;';

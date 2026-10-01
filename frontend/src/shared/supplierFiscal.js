@@ -184,7 +184,7 @@ export function renderQuotePriceTotalsHtml(supplier, baseAmount, currency = "AOA
         </div>
         <div>
           <div class="text-[9px] font-bold text-emerald-700 uppercase tracking-widest">Líquido</div>
-          <div class="text-sm font-black text-[#0f172a] tabular-nums">${netFmt}</div>
+          <div class="text-sm font-black text-[#212e3e] tabular-nums">${netFmt}</div>
         </div>
       </div>
     `,
@@ -210,7 +210,7 @@ export function renderFiscalBreakdownHtml(breakdown, currency = "AOA", { showNet
   const netRow = showNet
     ? `<div class="flex justify-between items-center text-xs pt-1.5 mt-1.5 border-t border-slate-200">
         <span class="text-slate-700 font-black uppercase tracking-wide text-[10px]">Valor líquido a pagar</span>
-        <span class="font-black tabular-nums text-[#0f172a]">${formatFiscalAmount(breakdown.net, currency)}</span>
+        <span class="font-black tabular-nums text-[#212e3e]">${formatFiscalAmount(breakdown.net, currency)}</span>
       </div>`
     : "";
 

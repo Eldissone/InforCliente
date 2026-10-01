@@ -19,11 +19,11 @@ function renderAppHeader() {
       </label>`
     : "";
 
-  return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800 transition-all duration-300" data-shared-header>
+  return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800 transition-all duration-300" data-shared-header>
     <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
       <div class="flex items-center gap-10">
         <a href="/Dashboard" class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-          <span class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
+          <span class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
           <span id="navBrandText">Gestor</span>
         </a>
         <div class="hidden lg:flex items-center gap-6">
@@ -52,7 +52,7 @@ function renderAppHeader() {
         </button>
       </div>
     </div>
-    <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
+    <div id="navMenu" class="hidden lg:hidden flex-col bg-[#212e3e] border-b border-slate-800 px-4 pb-6 gap-1">
       <a class="${MOBILE}" data-nav-dashboard href="/Dashboard"><span class="material-symbols-outlined text-lg">dashboard</span> Dashboard</a>
       <a class="${MOBILE}" data-nav-clientes href="/Clientes/clienteLista"><span class="material-symbols-outlined text-lg">group</span> Clientes</a>
       <a class="${MOBILE}" data-nav-obras href="/Projectos/ProjectGeral"><span class="material-symbols-outlined text-lg">construction</span> Obras</a>

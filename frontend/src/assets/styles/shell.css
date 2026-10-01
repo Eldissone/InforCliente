@@ -11,7 +11,7 @@ body[data-shell="figma"] h3 {
   font-family: Inter, system-ui, sans-serif;
 }
 
-body[data-shell="figma"] > nav.app-top-nav {
+body[data-shell="figma"]>nav.app-top-nav {
   --tn-bg: #ffffff;
   --tn-border: #e8e8e8;
   --tn-text: #515151;
@@ -29,11 +29,11 @@ body[data-shell="figma"] > nav.app-top-nav {
   box-shadow: none;
 }
 
-body[data-shell="figma"] > nav.app-top-nav > div:first-child > div:first-child > :first-child {
+body[data-shell="figma"]>nav.app-top-nav>div:first-child>div:first-child> :first-child {
   color: #121212;
 }
 
-body[data-shell="figma"] > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child {
+body[data-shell="figma"]>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
   background: #212e3e;
   color: #fff;
   border-radius: 10px;
@@ -74,7 +74,7 @@ body[data-shell="figma"] .shell-search input:focus {
 }
 
 body[data-shell="figma"] .shell-search:focus-within {
-  outline: 2px solid #248cd8;
+  outline: 2px solid #0d3fd1;
   outline-offset: 2px;
 }
 
@@ -101,7 +101,7 @@ body[data-shell="figma"] .shell-btn:hover {
 }
 
 body[data-shell="figma"] .shell-btn:focus-visible {
-  outline: 2px solid #248cd8;
+  outline: 2px solid #0d3fd1;
   outline-offset: 2px;
 }
 
@@ -121,7 +121,7 @@ body[data-shell="figma"] .shell-btn:disabled {
 }
 
 @media (min-width: 1024px) {
-  body[data-shell="figma"] > nav.app-top-nav {
+  body[data-shell="figma"]>nav.app-top-nav {
     --tn-height: 100px;
   }
 
@@ -160,7 +160,7 @@ body[data-shell="figma"] .shell-btn:disabled {
     font-weight: 800;
   }
 
-  body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav {
+  body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav {
     top: 0 !important;
     right: 0 !important;
     left: 260px !important;
@@ -175,7 +175,7 @@ body[data-shell="figma"] .shell-btn:disabled {
     background: #fff;
   }
 
-  body[data-shell="figma"].app-sidebar-layout > main {
+  body[data-shell="figma"].app-sidebar-layout>main {
     width: calc(100% - 260px) !important;
     max-width: none !important;
     margin-top: 0 !important;
@@ -200,17 +200,17 @@ body[data-shell="figma"] .shell-btn:disabled {
     margin-left: 0;
   }
 
-  body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout > nav.app-top-nav {
+  body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
     left: 92px !important;
   }
 
-  body[data-shell="figma"].app-sidebar-collapsed > main {
+  body[data-shell="figma"].app-sidebar-collapsed>main {
     width: calc(100% - 92px) !important;
     margin-left: 92px !important;
     margin-top: 0 !important;
   }
 
-  body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav > div:first-child > div:first-child > :first-child {
+  body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav>div:first-child>div:first-child> :first-child {
     display: none;
   }
 }
@@ -221,78 +221,119 @@ body[data-shell="figma"] .shell-btn:disabled {
     border-bottom: 1px solid #e8e8e8;
   }
 
-  body[data-shell="figma"] > nav.app-top-nav #navMenu a:not(.hidden),
-  body[data-shell="figma"] > nav.app-top-nav #navMenu [data-logout] {
+  body[data-shell="figma"]>nav.app-top-nav #navMenu a:not(.hidden),
+  body[data-shell="figma"]>nav.app-top-nav #navMenu [data-logout] {
     color: #515151;
   }
 
-  body[data-shell="figma"] > nav.app-top-nav #navMenu a.is-active {
+  body[data-shell="figma"]>nav.app-top-nav #navMenu a.is-active {
     color: #212e3e;
     background: #f2f2f2;
   }
 }
 
 /* Shared dark, rounded application header */
-body > nav.app-top-nav {
-  --tn-bg:#0f172a;
-  --tn-border:#0f172a;
-  --tn-text:#cbd5e1;
-  --tn-text-hover:#fff;
-  --tn-accent:#2afc8d;
-  --tn-accent-soft:rgba(42,252,141,.1);
-  --tn-muted:rgba(255,255,255,.65);
-  top:5px !important;
-  right:1.25rem !important;
-  left:1.25rem !important;
-  width:auto !important;
-  min-height:3.5rem;
-  border:0 !important;
-  border-radius:1.35rem;
-  background:#0f172a !important;
-  color:#fff;
-  box-shadow:none;
+body>nav.app-top-nav {
+  --tn-bg: #212e3e;
+  --tn-border: #212e3e;
+  --tn-text: #cbd5e1;
+  --tn-text-hover: #fff;
+  --tn-accent: #2afc8d;
+  --tn-accent-soft: rgba(42, 252, 141, .1);
+  --tn-muted: rgba(255, 255, 255, .65);
+  top: 5px !important;
+  right: 1.25rem !important;
+  left: 1.25rem !important;
+  width: auto !important;
+  min-height: 3.5rem;
+  border: 0 !important;
+  border-radius: 1.35rem;
+  background: #212e3e !important;
+  color: #fff;
+  box-shadow: none;
 }
-body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav,
-body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout > nav.app-top-nav {
-  top:1rem !important;
-  right:1.25rem !important;
-  left:1.25rem !important;
-  width:auto !important;
-  height:4rem !important;
-  border:0 !important;
-  border-radius:1.35rem !important;
-  background:#0f172a !important;
+
+body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav,
+body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
+  top: 1rem !important;
+  right: 1.25rem !important;
+  left: 1.25rem !important;
+  width: auto !important;
+  height: 4rem !important;
+  border: 0 !important;
+  border-radius: 1.35rem !important;
+  background: #212e3e !important;
 }
-body > nav.app-top-nav > div:first-child {
-  max-width:none;
-  height:3rem;
-  padding-inline:2rem;
+
+body>nav.app-top-nav>div:first-child {
+  max-width: none;
+  height: 3rem;
+  padding-inline: 2rem;
 }
-body[data-shell="figma"] > nav.app-top-nav > div:first-child { height:4rem; }
-body > nav.app-top-nav > div:first-child > div:first-child > :first-child {
-  display:flex !important;
-  color:#fff;
-  font-size:1.35rem;
+
+body[data-shell="figma"]>nav.app-top-nav>div:first-child {
+  height: 4rem;
 }
-body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav > div:first-child > div:first-child > :first-child { display:flex !important; color:#fff !important; }
-body > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child {
-  width:auto;
-  height:auto;
-  border-radius:1.5rem;
-  background:#20e981;
-  color:#0f172a;
-  font-size:1.5rem;
+
+body>nav.app-top-nav>div:first-child>div:first-child> :first-child {
+  display: flex !important;
+  color: #fff;
+  font-size: 1.35rem;
+}
+
+body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav>div:first-child>div:first-child> :first-child {
+  display: flex !important;
+  color: #fff !important;
+}
+
+body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
+  width: auto;
+  height: auto;
+  border-radius: 1.5rem;
+  background: #20e981;
+  color: #212e3e;
+  font-size: 1.5rem;
   font-style: italic;
   padding: 5px 10px;
 }
-body[data-shell="figma"] > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child { background:#20e981 !important; color:#0f172a !important; }
-body > nav.app-top-nav [data-user-profile] { color:#fff !important; }
-body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand { display:none; }
-@media (min-width:1024px) {
-  body[data-shell="figma"] .app-primary-sidebar.is-figma-shell { top:7.1rem; padding-top:1rem; }
+
+body[data-shell="figma"]>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
+  background: #20e981 !important;
+  color: #212e3e !important;
 }
+
+body>nav.app-top-nav [data-user-profile] {
+  color: #fff !important;
+}
+
+body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand {
+  display: none;
+}
+
+@media (min-width:1024px) {
+  body[data-shell="figma"] .app-primary-sidebar.is-figma-shell {
+    top: 6.1rem;
+    padding-top: 1rem;
+  }
+}
+
 @media (max-width:1023px) {
-  body > nav.app-top-nav { top:.5rem !important; right:.5rem !important; left:.5rem !important; min-height:4.5rem; border-radius:1rem; }
-  body > nav.app-top-nav > div:first-child { height:4.5rem; padding-inline:1rem; }
-  body > nav.app-top-nav > div:first-child > div:first-child > :first-child > :first-child { width:3.5rem; height:2.2rem; font-size:1.2rem; }
+  body>nav.app-top-nav {
+    top: .5rem !important;
+    right: .5rem !important;
+    left: .5rem !important;
+    min-height: 4.5rem;
+    border-radius: 1rem;
+  }
+
+  body>nav.app-top-nav>div:first-child {
+    height: 4.5rem;
+    padding-inline: 1rem;
+  }
+
+  body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
+    width: 3.5rem;
+    height: 2.2rem;
+    font-size: 1.2rem;
+  }
 }

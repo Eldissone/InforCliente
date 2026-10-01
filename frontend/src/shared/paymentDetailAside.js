@@ -255,7 +255,7 @@ export function renderAsideAccountingLine(data) {
     if (isInstallment) {
       noteEl.classList.remove("hidden");
       noteEl.className =
-        "mt-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#0f172a] border border-[#2afc8d]/30 shadow-sm";
+        "mt-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-[#212e3e] border border-[#2afc8d]/30 shadow-sm";
       noteEl.innerHTML = `
         <span class="text-[10px] font-black uppercase tracking-widest text-[#2afc8d]">Valor desta parcela</span>
         <span class="text-base font-black text-white tabular-nums">${formatCurrency(installmentPayable, currency)}</span>`;
@@ -329,7 +329,7 @@ function renderLiqDocRow({ kind = "comprovativo", required = false, removable = 
         </select>
         ${removeBtn}
       </div>
-      <input type="file" class="liq-doc-file w-full h-11 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" accept="image/*,.pdf" ${required ? "required" : ""} />
+      <input type="file" class="liq-doc-file w-full h-11 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#212e3e] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" accept="image/*,.pdf" ${required ? "required" : ""} />
       <input type="text" class="liq-doc-desc w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 ${descHidden}" placeholder="Descrição (opcional)" />
     </div>`;
 }

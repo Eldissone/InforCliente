@@ -17,11 +17,11 @@ body {
         }
 
         .tab-btn:hover {
-            color: #0f172a;
+            color: #212e3e;
         }
 
         .tab-btn.active {
-            color: #0f172a;
+            color: #212e3e;
         }
 
         .tab-btn.active::after {
@@ -71,10 +71,10 @@ body {
             transition: all 0.2s;
         }
 
-        .sub-tab-btn:hover { color: #0f172a; }
+        .sub-tab-btn:hover { color: #212e3e; }
 
         .sub-tab-btn.active {
-            color: #0f172a;
+            color: #212e3e;
             border-bottom-color: #2afc8d;
         }
 
@@ -129,7 +129,7 @@ body {
             cursor: pointer;
         }
 
-        .supplier-action-link:hover { background: #f1f5f9; color: #0f172a; }
+        .supplier-action-link:hover { background: #f1f5f9; color: #212e3e; }
         .supplier-action-link.is-danger:hover { background: #fef2f2; color: #dc2626; }
         .supplier-action-link .material-symbols-outlined { font-size: 16px; }
 

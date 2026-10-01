@@ -25,7 +25,7 @@
         }
 
         .sidebar-link.active {
-            background: #0F172A;
+            background: #212e3e;
             color: #2afc8d;
         }
 
@@ -216,13 +216,13 @@
 
         #searchInput:focus {
             outline: none;
-            border-color: #0F172A;
+            border-color: #212e3e;
             box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
         }
 
         #roleFilter:focus {
             outline: none;
-            border-color: #0F172A;
+            border-color: #212e3e;
         }
 
         /* Sidebar layout — flex-based, no ml-60 dependency */

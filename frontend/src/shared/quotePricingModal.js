@@ -208,7 +208,7 @@ function buildQuotePdfIcon(quote) {
   if (!quote?.purchaseOrderUrl) return "";
   return `<a href="${getAssetUrl(quote.purchaseOrderUrl)}" target="_blank" rel="noopener"
     class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-    style="background:#0f172a;color:#2afc8d"
+    style="background:#212e3e;color:#2afc8d"
     title="PDF encomenda">
     <span class="material-symbols-outlined text-[22px] leading-none">picture_as_pdf</span>
   </a>`;
@@ -244,7 +244,7 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
     const proformaAction = buildQuoteProformaStatus(quote);
     const orderBtn = canOrder
       ? `<button type="button" data-place-order="${quote.id}" title="Gerar encomenda só para este fornecedor"
-          class="h-8 px-2 rounded-lg bg-[#0f172a] text-white text-[10px] font-bold hover:bg-[#2afc8d] hover:text-[#0f172a] transition-all whitespace-nowrap flex items-center gap-1">
+          class="h-8 px-2 rounded-lg bg-[#212e3e] text-white text-[10px] font-bold hover:bg-[#2afc8d] hover:text-[#212e3e] transition-all whitespace-nowrap flex items-center gap-1">
           <span class="material-symbols-outlined text-sm">local_shipping</span>Encomendar</button>`
       : "";
     const removeBtn = canEditQty
@@ -267,7 +267,7 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
       <input type="number" step="0.01" min="0.01" data-for-quote="${quote.id}" value="${suggested}"
         class="w-20 h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade a alocar">
       <button type="button" data-select-quote="${quote.id}"
-        class="h-8 px-3 bg-[#0f172a] text-white text-[10px] font-bold rounded-lg hover:bg-[#2afc8d] hover:text-[#0f172a] transition-all whitespace-nowrap">Alocar</button>
+        class="h-8 px-3 bg-[#212e3e] text-white text-[10px] font-bold rounded-lg hover:bg-[#2afc8d] hover:text-[#212e3e] transition-all whitespace-nowrap">Alocar</button>
     </div>`;
 }
 
@@ -438,7 +438,7 @@ function renderOrderedBanner(selectedQuote) {
 
         <button type="button" id="btnUploadOrderedProforma"
 
-          class="h-10 w-full rounded-lg bg-[#0f172a] text-white text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
+          class="h-10 w-full rounded-lg bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
 
           <span class="material-symbols-outlined text-base">upload_file</span>
 
@@ -553,7 +553,7 @@ function renderApprovedBanner(selectedQuote, need) {
         </p>
       </div>
       <button type="button" id="btnSendToFinance"
-        class="h-10 px-4 rounded-lg bg-[#0f172a] text-white text-xs font-bold hover:bg-slate-800 transition-all inline-flex items-center gap-2 shrink-0">
+        class="h-10 px-4 rounded-lg bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800 transition-all inline-flex items-center gap-2 shrink-0">
         <span class="material-symbols-outlined text-base">forward_to_inbox</span>
         Enviar ao Financeiro
       </button>

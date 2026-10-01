@@ -455,7 +455,7 @@ function renderStockSummaryCards(summary, movements) {
             <p class="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total Recebido (Entradas)</p>
             <p class="text-4xl leading-none font-black text-emerald-600">${totalEntries.toLocaleString("pt-AO")}</p>
         </div>
-        <div class="w-full bg-[#0F172A] p-6 rounded-2xl border border-slate-800 shadow-lg min-h-[118px] flex flex-col justify-between">
+        <div class="w-full bg-[#212e3e] p-6 rounded-2xl border border-slate-800 shadow-lg min-h-[118px] flex flex-col justify-between">
             <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Saldo em Armazém</p>
             <p class="text-4xl leading-none font-black text-[#2afc8d]">${currentBalance.toLocaleString("pt-AO")}</p>
         </div>
@@ -1624,7 +1624,7 @@ function openPreview(fileId) {
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-slate-200 mb-6">description</span>
         <p class="text-slate-500 font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
-        <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-[#0F172A] text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-all">
+        <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-[#212e3e] text-white px-8 py-3 rounded-xl font-bold hover:scale-105 transition-all">
           <span class="material-symbols-outlined">download</span> Download do Arquivo
         </a>
       </div>

@@ -27,7 +27,7 @@
             bottom: calc(100% + 8px);
             right: 0;
             min-width: 220px;
-            background: #0f172a;
+            background: #212e3e;
             color: #e2e8f0;
             border-radius: 14px;
             padding: 12px 14px;
@@ -53,7 +53,7 @@
             top: 100%;
             right: 14px;
             border: 6px solid transparent;
-            border-top-color: #0f172a;
+            border-top-color: #212e3e;
         }
 
         .tooltip-row {
@@ -235,7 +235,7 @@
 
 /* client-dashboard.css — bloco 2 */
 .bt {
-                    background-color: #0f172a1c;
+                    background-color: #212e3e1c;
                 }
 
 /* client-dashboard.css — bloco 3 */

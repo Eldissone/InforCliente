@@ -277,7 +277,7 @@ function renderOpening(body) {
   setHeader("Ajuda", "A carregar…", false);
   body.innerHTML = `
     <div class="flex flex-col items-center justify-center gap-3 p-8">
-      ${spinnerHtml("#0f172a")}
+      ${spinnerHtml("#212e3e")}
       <p class="text-sm font-semibold text-slate-500">A abrir ajuda…</p>
     </div>
   `;
@@ -329,7 +329,7 @@ function renderCapturing(body) {
   setHeader("A capturar…", "Aguarde um instante", false);
   body.innerHTML = `
     <div class="flex flex-col items-center justify-center gap-3 text-slate-500 p-6">
-      ${spinnerHtml("#0f172a")}
+      ${spinnerHtml("#212e3e")}
       <p class="text-sm font-semibold text-center">A capturar o ecrã actual…</p>
     </div>
   `;
@@ -386,7 +386,7 @@ function renderMine(body) {
   if (state.loadingMine) {
     body.innerHTML = `
       <div class="flex flex-col items-center justify-center gap-3 p-8">
-        ${spinnerHtml("#0f172a")}
+        ${spinnerHtml("#212e3e")}
         <p class="text-sm font-semibold text-slate-500">A carregar pedidos…</p>
       </div>`;
     return;

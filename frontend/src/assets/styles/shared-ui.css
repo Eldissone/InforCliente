@@ -318,7 +318,7 @@
   }
 
   .app-sidebar-subgroup.has-active-link > summary {
-    color: #0f172a;
+    color: #212e3e;
   }
 
   .app-sidebar-subgroup:not([open]) > summary .app-sidebar-chevron {
@@ -570,9 +570,9 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
 }
 
 .type-toggle-btn.active {
-  background: #0f172a;
+  background: #212e3e;
   color: white;
-  border-color: #0f172a;
+  border-color: #212e3e;
 }
 
 .type-toggle-btn:disabled {
@@ -1088,7 +1088,7 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
 .cost-type-pill__title {
   font-size: 0.9375rem;
   font-weight: 800;
-  color: #0f172a;
+  color: #212e3e;
   line-height: 1.25;
   text-transform: none;
   letter-spacing: normal;
@@ -1291,7 +1291,7 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
   border-radius: 0.75rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .cost-cascade-field__select:focus {

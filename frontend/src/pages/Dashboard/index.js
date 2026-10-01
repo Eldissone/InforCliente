@@ -142,7 +142,7 @@ function renderClientsStatusChart(statusData) {
               fontSize: '18px',
               fontFamily: 'Outfit, sans-serif',
               fontWeight: 800,
-              color: '#0f172a',
+              color: '#212e3e',
               offsetY: 6,
               formatter: (val) => val
             },
@@ -152,7 +152,7 @@ function renderClientsStatusChart(statusData) {
               fontSize: '18px',
               fontFamily: 'Outfit, sans-serif',
               fontWeight: 800,
-              color: '#0f172a',
+              color: '#212e3e',
               formatter: function (w) {
                 return w.globals.seriesTotals.reduce((a, b) => a + b, 0);
               }
@@ -290,7 +290,7 @@ function renderObrasProgressChart(avancoMedio) {
             fontSize: "26px",
             fontFamily: "Outfit, sans-serif",
             fontWeight: 800,
-            color: "#0f172a",
+            color: "#212e3e",
             formatter: (val) => `${Math.round(val)}%`,
           },
         },
@@ -368,7 +368,7 @@ function renderProjectsBarChart(obras) {
         fontSize: '11px',
         fontFamily: 'Outfit, sans-serif',
         fontWeight: 700,
-        colors: ["#0f172a"]
+        colors: ["#212e3e"]
       }
     },
     legend: { show: false },

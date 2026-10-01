@@ -25,7 +25,7 @@ module.exports = {
         "grey-80": "#383838",
         "grey-90": "#262626",
         "grey-100": "#121212",
-        "accent-blue": "#248cd8",
+        "accent-blue": "#0d3fd1",
         "accent-blue-light": "#e8f5ff",
         "accent-green": "#10a142",
         "accent-green-light": "#ecfff2",

@@ -18,7 +18,7 @@
   font-family: Outfit, Inter, sans-serif;
   font-size: clamp(1.7rem, 3vw, 2.25rem);
   line-height: 1.1;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-form {
@@ -53,7 +53,7 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-grid {
@@ -103,7 +103,7 @@
   font-weight: 650;
   letter-spacing: 0;
   text-transform: none;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-field textarea {
@@ -143,13 +143,13 @@
   font-weight: 650;
   letter-spacing: 0;
   text-transform: none;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-check input {
   width: 1rem;
   height: 1rem;
-  accent-color: #0f172a;
+  accent-color: #212e3e;
 }
 
 .registry-check img {
@@ -178,7 +178,7 @@
 
 .registry-submit {
   background: #2afc8d;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-submit:disabled {
@@ -188,7 +188,7 @@
 
 .registry-ghost {
   background: #f1f5f9;
-  color: #0f172a;
+  color: #212e3e;
 }
 
 .registry-pausas[hidden],
@@ -206,86 +206,501 @@
 }
 
 /* Obra registration page */
-body[data-registry="obras"] { background: #f8f9fd; font-family: Inter, system-ui, sans-serif; }
-body[data-registry="obras"] .registry-page { max-width: 1148px; margin: 0 auto; padding: 7.5rem 1.25rem 2.5rem; }
-body[data-registry="obras"] .registry-kicker { display: none; }
-body[data-registry="obras"] .registry-page > h1 { display: none; }
-.obra-form { gap: 20px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-family: Inter, system-ui, sans-serif; }
-.obra-form-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; padding:0; }
-.obra-form-heading h2 { margin:0 0 4px; color:#272525; font-family: Inter, system-ui, sans-serif; font-size:28px; font-weight:800; }
-.obra-form-heading p { margin:0; color:#515151; font-size:14px; line-height:24px; }
-.obra-form-heading a { color:#248cd8; font-size:14px; line-height:24px; text-decoration:none; }
-.obra-card { padding:20px; border-radius:20px; background:#fff; }
-.obra-card h3 { margin:0 0 20px; color:#121212; font-size:20px; font-weight:800; }
-.obra-form .registry-grid { grid-template-columns:minmax(0,1fr); gap:20px; }
-.obra-form .registry-field { gap:8px; color:#121212; font-size:14px; font-weight:400; line-height:24px; letter-spacing:0; text-transform:none; }
-.obra-form .registry-field input,.obra-form .registry-field select,.obra-form .registry-field textarea { height:50px; min-height:50px; border:1px solid #d0d0d0; border-radius:10px; background:#fff; padding:0 12px; color:#121212; font:400 14px/24px Inter, system-ui, sans-serif; box-shadow:none; }
-.obra-form .registry-field input::placeholder { color:#a3a3a3; }
-.obra-form .registry-section { padding:0; gap:.7rem; }
-.obra-form .registry-section h2 { margin:0; font-size:.85rem; letter-spacing:0; text-transform:none; }
-.obra-form .obra-status { display:block; }
-.obra-form .obra-status .registry-section { display:block; }
-.obra-form .registry-pausas { margin-top:1rem; }
-.obra-multiselect { position:relative; width:100%; min-height:50px; border:1px solid #d0d0d0; border-radius:10px; background:#fff; color:#515151; font-size:14px; font-weight:400; }
-.obra-multiselect[open] { border-color:#a8a8a8; }
-.obra-multiselect summary { display:flex; min-height:3.1rem; align-items:center; justify-content:space-between; padding:0 .75rem; cursor:pointer; list-style:none; color:#999; }
-.obra-multiselect summary::-webkit-details-marker { display:none; }
-.obra-multiselect summary::after { content:""; width:.6rem; height:.6rem; margin-right:.2rem; border-right:1.5px solid #999; border-bottom:1.5px solid #999; transform:rotate(45deg) translateY(-2px); }
-.obra-multiselect[open] summary::after { transform:rotate(225deg) translate(-2px,-2px); }
-.obra-multiselect .registry-checks { position:absolute; z-index:20; top:calc(100% + 4px); left:-1px; right:-1px; display:grid; grid-template-columns:1fr; gap:0; max-height:15rem; overflow:auto; padding:8px; border:1px solid #d0d0d0; border-radius:10px; background:#fff; box-shadow:0 8px 20px rgb(15 23 42 / 12%); }
-.obra-multiselect .registry-check { min-height:2.3rem; padding:.4rem .5rem; border:0; border-radius:.4rem; background:#fff; font-size:.8rem; font-weight:400; }
-.obra-multiselect .registry-check:hover { background:#f4f6f8; }
-.obra-multiselect .registry-check input { width:1rem; height:1rem; flex:0 0 1rem; accent-color:#212e3e; }
-.obra-form .registry-field select { appearance:none; padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .9rem center; cursor:pointer; }
-.obra-form .registry-field select option { padding:.65rem; color:#333; background:#fff; }
-.obra-card-title { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
-.obra-card-title h3 { margin:0 0 1rem; }
-.obra-form .registry-ghost { display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 16px; border:1px solid #d0d0d0; border-radius:10px; background:#fff; color:#121212; font-size:14px; font-weight:400; text-decoration:none; }
-.obra-contact-options .registry-checks { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
-.obra-form .registry-actions { gap:1rem; padding:0 .5rem; }
-.obra-form .registry-submit,.obra-form .registry-actions .registry-ghost { min-width:180px; height:46px; border-radius:10px; font-size:14px; font-weight:400; }
-.obra-form .registry-submit { background:#212e3e; color:#fff; }
-.obra-form .registry-submit:hover { background:#1a2430; }
-.obra-form .registry-field input:focus,.obra-form .registry-field select:focus,.obra-form .registry-field textarea:focus,.obra-multiselect:focus-within { outline:2px solid #248cd8; outline-offset:2px; }
-.obra-general .registry-field:first-child { grid-column:1 / -1; }
-@media (min-width:720px) { .obra-form .registry-grid { grid-template-columns:repeat(2, minmax(0, 540px)); gap:20px; } }
-@media (min-width:1100px) { body[data-registry="obras"] .registry-page { padding-left:2rem; padding-right:2rem; } }
-@media (max-width:600px) { body[data-registry="obras"] .registry-page { padding:5.75rem .8rem 1.5rem; } .obra-card { padding:1.1rem; } .obra-form-heading { align-items:flex-start; flex-direction:column; } .obra-form .registry-actions { flex-direction:column-reverse; } .obra-form .registry-submit,.obra-form .registry-actions .registry-ghost { width:100%; } }
+body[data-registry="obras"] {
+  background: #f8f9fd;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body[data-registry="obras"] .registry-page {
+  max-width: 1148px;
+  margin: 0 auto;
+  padding: 6.5rem 1.25rem 6rem;
+}
+
+body[data-registry="obras"] .registry-kicker {
+  display: none;
+}
+
+body[data-registry="obras"] .registry-page>h1 {
+  display: none;
+}
+
+.obra-form {
+  gap: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.obra-form-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0;
+}
+
+.obra-form-heading h2 {
+  margin: 0 0 4px;
+  color: #272525;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.obra-form-heading p {
+  margin: 0;
+  color: #515151;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.obra-form-heading a {
+  color: #0d3fd1;
+  font-size: 14px;
+  line-height: 24px;
+  text-decoration: none;
+}
+
+.obra-card {
+  padding: 20px;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.obra-card h3 {
+  margin: 0 0 20px;
+  color: #121212;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.obra-form .registry-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.obra-form .registry-field {
+  gap: 8px;
+  color: #121212;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 24px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.obra-form .registry-field input,
+.obra-form .registry-field select,
+.obra-form .registry-field textarea {
+  height: 50px;
+  min-height: 50px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 12px;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  box-shadow: none;
+}
+
+.obra-form .registry-field input::placeholder {
+  color: #a3a3a3;
+}
+
+.obra-form .registry-section {
+  padding: 0;
+  gap: .7rem;
+}
+
+.obra-form .registry-section h2 {
+  margin: 0;
+  font-size: .85rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.obra-form .obra-status {
+  display: block;
+}
+
+.obra-form .obra-status .registry-section {
+  display: block;
+}
+
+.obra-form .registry-pausas {
+  margin-top: 1rem;
+}
+
+.obra-multiselect {
+  position: relative;
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #515151;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.obra-multiselect[open] {
+  border-color: #a8a8a8;
+}
+
+.obra-multiselect summary {
+  display: flex;
+  min-height: 3.1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 .75rem;
+  cursor: pointer;
+  list-style: none;
+  color: #999;
+}
+
+.obra-multiselect summary::-webkit-details-marker {
+  display: none;
+}
+
+.obra-multiselect summary::after {
+  content: "";
+  width: .6rem;
+  height: .6rem;
+  margin-right: .2rem;
+  border-right: 1.5px solid #999;
+  border-bottom: 1.5px solid #999;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.obra-multiselect[open] summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.obra-multiselect .registry-checks {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: -1px;
+  right: -1px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  max-height: 15rem;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 12%);
+}
+
+.obra-multiselect .registry-check {
+  min-height: 2.3rem;
+  padding: .4rem .5rem;
+  border: 0;
+  border-radius: .4rem;
+  background: #fff;
+  font-size: .8rem;
+  font-weight: 400;
+}
+
+.obra-multiselect .registry-check:hover {
+  background: #f4f6f8;
+}
+
+.obra-multiselect .registry-check input {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  accent-color: #212e3e;
+}
+
+.obra-form .registry-field select {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .9rem center;
+  cursor: pointer;
+}
+
+.obra-form .registry-field select option {
+  padding: .65rem;
+  color: #333;
+  background: #fff;
+}
+
+.obra-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.obra-card-title h3 {
+  margin: 0 0 1rem;
+}
+
+.obra-form .registry-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 16px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+}
+
+.obra-contact-options .registry-checks {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.obra-form .registry-actions {
+  gap: 1rem;
+  padding: 0 .5rem;
+}
+
+.obra-form .registry-submit,
+.obra-form .registry-actions .registry-ghost {
+  min-width: 180px;
+  height: 46px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.obra-form .registry-submit {
+  background: #212e3e;
+  color: #fff;
+}
+
+.obra-form .registry-submit:hover {
+  background: #1a2430;
+}
+
+.obra-form .registry-field input:focus,
+.obra-form .registry-field select:focus,
+.obra-form .registry-field textarea:focus,
+.obra-multiselect:focus-within {
+  outline: 2px solid #0d3fd1;
+  outline-offset: 2px;
+}
+
+.obra-general .registry-field:first-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width:720px) {
+  .obra-form .registry-grid {
+    grid-template-columns: repeat(2, minmax(0, 540px));
+    gap: 20px;
+  }
+}
+
+@media (min-width:1100px) {
+  body[data-registry="obras"] .registry-page {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+@media (max-width:600px) {
+  body[data-registry="obras"] .registry-page {
+    padding: 5.75rem .8rem 1.5rem;
+  }
+
+  .obra-card {
+    padding: 1.1rem;
+  }
+
+  .obra-form-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .obra-form .registry-actions {
+    flex-direction: column-reverse;
+  }
+
+  .obra-form .registry-submit,
+  .obra-form .registry-actions .registry-ghost {
+    width: 100%;
+  }
+}
 
 /* Shared form styling for every other registry page */
-body[data-registry]:not([data-registry="obras"]) { background:#f7f8fc; }
-body[data-registry]:not([data-registry="obras"]) .registry-page { max-width:1180px; padding:7.25rem 1.5rem 3rem; }
-body[data-registry]:not([data-registry="obras"]) .registry-kicker { margin-bottom:.4rem; color:#687386; font-size:.68rem; font-weight:600; letter-spacing:.1em; }
-body[data-registry]:not([data-registry="obras"]) .registry-page > h1 { margin-bottom:1.25rem; color:#111827; font-family:Outfit,Inter,sans-serif; font-size:1.55rem; font-weight:700; }
-body[data-registry]:not([data-registry="obras"]) .registry-form { gap:1.4rem; padding:1.5rem; border:0; border-radius:1.4rem; background:#fff; box-shadow:none; }
-body[data-registry]:not([data-registry="obras"]) .registry-lead { color:#4b5563; font-size:.82rem; }
-body[data-registry]:not([data-registry="obras"]) .registry-section { gap:1rem; padding:1.2rem 0 0; border-top:1px solid #edf0f4; }
-body[data-registry]:not([data-registry="obras"]) .registry-section:first-child { padding-top:0; border-top:0; }
-body[data-registry]:not([data-registry="obras"]) .registry-section h2 { color:#303030; font-size:1rem; font-weight:700; letter-spacing:0; text-transform:none; }
-body[data-registry]:not([data-registry="obras"]) .registry-grid { gap:1.1rem 2rem; }
-body[data-registry]:not([data-registry="obras"]) .registry-field { gap:.55rem; color:#242424; font-size:.82rem; font-weight:400; letter-spacing:0; text-transform:none; }
+body[data-registry]:not([data-registry="obras"]) {
+  background: #f7f8fc;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-page {
+  max-width: 1180px;
+  padding: 7.25rem 1.5rem 3rem;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-kicker {
+  margin-bottom: .4rem;
+  color: #687386;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-page>h1 {
+  margin-bottom: 1.25rem;
+  color: #111827;
+  font-family: Outfit, Inter, sans-serif;
+  font-size: 1.55rem;
+  font-weight: 700;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-form {
+  gap: 1.4rem;
+  padding: 1.5rem;
+  border: 0;
+  border-radius: 1.4rem;
+  background: #fff;
+  box-shadow: none;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-lead {
+  color: #4b5563;
+  font-size: .82rem;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-section {
+  gap: 1rem;
+  padding: 1.2rem 0 0;
+  border-top: 1px solid #edf0f4;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-section h2 {
+  color: #303030;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-grid {
+  gap: 1.1rem 2rem;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-field {
+  gap: .55rem;
+  color: #242424;
+  font-size: .82rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 body[data-registry]:not([data-registry="obras"]) .registry-field input,
 body[data-registry]:not([data-registry="obras"]) .registry-field select,
-body[data-registry]:not([data-registry="obras"]) .registry-field textarea { min-height:3.2rem; border:1px solid #d6d6d6; border-radius:.7rem; background:#fff; padding:.75rem; color:#333; font-size:.85rem; font-weight:400; }
-body[data-registry]:not([data-registry="obras"]) .registry-field textarea { min-height:6rem; }
-body[data-registry]:not([data-registry="obras"]) .registry-field input::placeholder { color:#a3a3a3; }
+body[data-registry]:not([data-registry="obras"]) .registry-field textarea {
+  min-height: 3.2rem;
+  border: 1px solid #d6d6d6;
+  border-radius: .7rem;
+  background: #fff;
+  padding: .75rem;
+  color: #333;
+  font-size: .85rem;
+  font-weight: 400;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-field textarea {
+  min-height: 6rem;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-field input::placeholder {
+  color: #a3a3a3;
+}
+
 body[data-registry]:not([data-registry="obras"]) .registry-field input:focus,
 body[data-registry]:not([data-registry="obras"]) .registry-field select:focus,
-body[data-registry]:not([data-registry="obras"]) .registry-field textarea:focus { border-color:#20e981; outline:2px solid rgb(32 233 129 / 12%); }
-body[data-registry]:not([data-registry="obras"]) .registry-field select { appearance:none; padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .9rem center; cursor:pointer; }
-body[data-registry]:not([data-registry="obras"]) .registry-check { min-height:3rem; border:1px solid #e3e6eb; border-radius:.7rem; background:#fff; font-size:.82rem; font-weight:400; }
-body[data-registry]:not([data-registry="obras"]) .registry-check input { accent-color:#20e981; }
-body[data-registry]:not([data-registry="obras"]) .registry-actions { gap:.75rem; padding-top:.25rem; }
+body[data-registry]:not([data-registry="obras"]) .registry-field textarea:focus {
+  border-color: #20e981;
+  outline: 2px solid rgb(32 233 129 / 12%);
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-field select {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .9rem center;
+  cursor: pointer;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-check {
+  min-height: 3rem;
+  border: 1px solid #e3e6eb;
+  border-radius: .7rem;
+  background: #fff;
+  font-size: .82rem;
+  font-weight: 400;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-check input {
+  accent-color: #20e981;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-actions {
+  gap: .75rem;
+  padding-top: .25rem;
+}
+
 body[data-registry]:not([data-registry="obras"]) .registry-submit,
-body[data-registry]:not([data-registry="obras"]) .registry-ghost { min-height:2.8rem; padding:0 1.25rem; border:1px solid #20e981; border-radius:.7rem; font-size:.82rem; font-weight:500; }
-body[data-registry]:not([data-registry="obras"]) .registry-submit { background:#20e981; color:#10251b; }
-body[data-registry]:not([data-registry="obras"]) .registry-ghost { background:#fff; color:#333; }
+body[data-registry]:not([data-registry="obras"]) .registry-ghost {
+  min-height: 2.8rem;
+  padding: 0 1.25rem;
+  border: 1px solid #20e981;
+  border-radius: .7rem;
+  font-size: .82rem;
+  font-weight: 500;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-submit {
+  background: #20e981;
+  color: #10251b;
+}
+
+body[data-registry]:not([data-registry="obras"]) .registry-ghost {
+  background: #fff;
+  color: #333;
+}
+
 @media (max-width:600px) {
-  body[data-registry]:not([data-registry="obras"]) .registry-page { padding:5.75rem .8rem 2rem; }
-  body[data-registry]:not([data-registry="obras"]) .registry-form { padding:1.1rem; }
-  body[data-registry]:not([data-registry="obras"]) .registry-actions { flex-direction:column; }
+  body[data-registry]:not([data-registry="obras"]) .registry-page {
+    padding: 5.75rem .8rem 2rem;
+  }
+
+  body[data-registry]:not([data-registry="obras"]) .registry-form {
+    padding: 1.1rem;
+  }
+
+  body[data-registry]:not([data-registry="obras"]) .registry-actions {
+    flex-direction: column;
+  }
+
   body[data-registry]:not([data-registry="obras"]) .registry-submit,
-  body[data-registry]:not([data-registry="obras"]) .registry-ghost { width:100%; }
+  body[data-registry]:not([data-registry="obras"]) .registry-ghost {
+    width: 100%;
+  }
 }
 
 .registry-inline-actions {

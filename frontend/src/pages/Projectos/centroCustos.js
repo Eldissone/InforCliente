@@ -1040,7 +1040,7 @@ function renderNeedsTable(items) {
   const afterTotal = needsColsAfterTotal();
 
   let html = `
-    <tr style="background-color: #0f172a !important;">
+    <tr style="background-color: #212e3e !important;">
       <td class="font-bold text-white text-sm" colspan="2">Total Geral (${budgetViewMode === "previsto" ? "Previsto Aprovado" : "Realizado"})</td>
       <td colspan="${beforeTotal}"></td>
       <td class="text-right font-bold text-white text-sm">${formatCurrency(totalObraGeral, currency)}</td>

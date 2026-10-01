@@ -735,7 +735,7 @@ function refreshBatchFiscalTotals() {
   box.innerHTML = `
     <div class="flex justify-between text-slate-600"><span>Base (s/ impostos)</span><span class="font-bold tabular-nums">${money(baseSum)}</span></div>
     ${extras.join("") || `<p class="text-[11px] text-slate-400">Sem IVA, retenção ou desconto neste lote.</p>`}
-    <div class="flex justify-between pt-1.5 border-t border-slate-200"><span class="font-black text-slate-800 uppercase text-[11px] tracking-wide">Líquido a pagar</span><span class="font-black tabular-nums text-[#0f172a]">${money(netSum)}</span></div>
+    <div class="flex justify-between pt-1.5 border-t border-slate-200"><span class="font-black text-slate-800 uppercase text-[11px] tracking-wide">Líquido a pagar</span><span class="font-black tabular-nums text-[#212e3e]">${money(netSum)}</span></div>
   `;
 }
 
@@ -1224,7 +1224,7 @@ function setSupplierProductFormVisible(visible) {
     btn.classList.toggle("bg-slate-200", visible);
     btn.classList.toggle("text-slate-700", visible);
     btn.classList.toggle("hover:bg-slate-300", visible);
-    btn.classList.toggle("bg-[#0f172a]", !visible);
+    btn.classList.toggle("bg-[#212e3e]", !visible);
     btn.classList.toggle("text-white", !visible);
     btn.classList.toggle("hover:bg-slate-800", !visible);
   }
@@ -1624,7 +1624,7 @@ function showToast(msg, type = "info") {
     toast.classList.add("bg-red-500", "shadow-red-500/20");
     toast.innerHTML = `<span class="material-symbols-outlined text-lg">error</span> ${escapeHtml(msg)}`;
   } else {
-    toast.classList.add("bg-[#0f172a]", "shadow-slate-900/20");
+    toast.classList.add("bg-[#212e3e]", "shadow-slate-900/20");
     toast.innerHTML = `<span class="material-symbols-outlined text-lg">info</span> ${escapeHtml(msg)}`;
   }
 

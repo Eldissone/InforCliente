@@ -387,7 +387,7 @@ function renderConversationList() {
             </div>
             <p class="text-xs text-slate-500 truncate mt-0.5 ${unread ? "font-bold text-slate-800" : ""}">${previewHTML}</p>
           </div>
-          ${unread ? `<span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2afc8d] text-[#0F172A] text-[10px] font-black flex items-center justify-center">${c.unreadCount > 9 ? "9+" : c.unreadCount}</span>` : ""}
+          ${unread ? `<span class="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2afc8d] text-[#212e3e] text-[10px] font-black flex items-center justify-center">${c.unreadCount > 9 ? "9+" : c.unreadCount}</span>` : ""}
         </button>`;
     })
     .join("");

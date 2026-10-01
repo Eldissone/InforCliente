@@ -97,9 +97,9 @@ body {
 }
 
 .type-toggle-btn.active {
-    background: #0f172a;
+    background: #212e3e;
     color: white;
-    border-color: #0f172a;
+    border-color: #212e3e;
 }
 
 .fin-actions {
@@ -127,7 +127,7 @@ body {
 
 .fin-icon-btn:hover {
     background: #e2e8f0;
-    color: #0f172a;
+    color: #212e3e;
 }
 
 .fin-icon-btn--emerald:hover {
@@ -259,7 +259,7 @@ body {
 }
 
 .centros-main-tab:hover {
-    color: #0f172a;
+    color: #212e3e;
 }
 
 .centros-main-tab.active {
@@ -340,7 +340,7 @@ body {
 }
 
 .debit-card--generic {
-    background: linear-gradient(135deg, #334155 0%, #0f172a 100%);
+    background: linear-gradient(135deg, #334155 0%, #212e3e 100%);
 }
 
 .debit-card__top {
@@ -604,7 +604,7 @@ body {
 
 .cc-sidebar-toggle:hover {
     background: #e2e8f0;
-    color: #0f172a;
+    color: #212e3e;
 }
 
 .cc-sub-tab {
@@ -627,12 +627,12 @@ body {
 }
 
 .cc-sub-tab:hover {
-    color: #0f172a;
+    color: #212e3e;
     background: #f8fafc;
 }
 
 .cc-sub-tab.active {
-    color: #0f172a;
+    color: #212e3e;
     background: #f1f5f9;
     font-weight: 800;
 }
@@ -744,7 +744,7 @@ body {
 .cc-kpi-value {
     font-size: 1.75rem;
     font-weight: 800;
-    color: #0f172a;
+    color: #212e3e;
     letter-spacing: -0.02em;
     line-height: 1;
 }
@@ -900,11 +900,11 @@ body {
 }
 
 .gantt-view-btn:hover {
-    color: #0f172a;
+    color: #212e3e;
 }
 
 .gantt-view-btn.active {
-    background: #0f172a;
+    background: #212e3e;
     color: white;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
 }
@@ -922,7 +922,7 @@ body {
 }
 
 .gantt-nav-btn:hover {
-    color: #0f172a;
+    color: #212e3e;
     background: rgba(255, 255, 255, 0.6);
 }
 
@@ -938,11 +938,11 @@ body {
 }
 
 .gantt-nav-today:hover {
-    color: #0f172a;
+    color: #212e3e;
 }
 
 .gantt-nav-today.active {
-    background: #0f172a;
+    background: #212e3e;
     color: white;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
 }

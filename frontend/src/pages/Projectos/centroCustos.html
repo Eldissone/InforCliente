@@ -27,13 +27,13 @@
 <body class="bg-surface antialiased text-slate-900 min-h-screen flex flex-col">
 
     <!-- ══════════════════════════════════════════════════════════ TOP NAV -->
-    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#0F172A] border-b border-slate-800">
+    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800">
         <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
             <div class="flex items-center gap-6 min-w-0">
                 <a href="../Projectos/ProjectGeral.html"
                     class="text-xl font-bold text-white tracking-tight flex items-center gap-2 shrink-0">
                     <span
-                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#0F172A] font-black italic">Info</span>
+                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
                     <span>Gestor</span>
                 </a>
                 <div class="hidden lg:flex items-center gap-4">
@@ -74,7 +74,7 @@
                 </button>
             </div>
         </div>
-        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#0F172A] border-b border-slate-800 px-4 pb-6 gap-1">
+        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#212e3e] border-b border-slate-800 px-4 pb-6 gap-1">
             <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
                 data-nav-dashboard href="../Dashboard/index.html">
                 <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
@@ -193,12 +193,12 @@
                             Ver Obra
                         </a>
                         <button id="btnNewExtra" type="button"
-                            class="h-9 px-4 rounded-xl bg-[#2afc8d] text-[#0F172A] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0">
+                            class="h-9 px-4 rounded-xl bg-[#2afc8d] text-[#212e3e] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0">
                             <span class="material-symbols-outlined text-base">add</span>
                             Pedido de Compra
                         </button>
                         <button id="newCCBtn"
-                            class="h-10 px-5 rounded-xl bg-[#0F172A] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
+                            class="h-10 px-5 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10">
                             <span class="material-symbols-outlined text-base">add</span>
                             Custo Obra
                         </button>
@@ -281,7 +281,7 @@
                     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div class="px-6 py-5 border-b border-slate-50  text-white flex justify-between items-center">
                             <div>
-                                <h3 class="font-bold text-[#0F172A]">Execução Orçamental</h3>
+                                <h3 class="font-bold text-[#212e3e]">Execução Orçamental</h3>
                                 <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-0.5">
                                     Previsto × Realizado × Liquidado por centro de custo</p>
                             </div>
@@ -382,13 +382,13 @@
                                 </select>
                                 <button id="btnBudgetPrecificar" onclick="sendAllToQuotation()"
                                     title="Seleccionar centros de custo e enviar itens pendentes para cotação"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md hidden">
+                                    class="h-9 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md hidden">
                                     <span class="material-symbols-outlined text-base">fact_check</span>
                                     Precificar
                                 </button>
                                 <button id="btnBudgetAgendar" onclick="sendAllToCronograma()"
                                     title="Enviar todos os itens aprovados para Cronograma"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20 hidden">
+                                    class="h-9 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20 hidden">
                                     <span class="material-symbols-outlined text-base">schedule</span>
                                     Agendar
                                 </button>
@@ -399,7 +399,7 @@
                                     Excel
                                 </button>
                                 <button id="newNeedBtn"
-                                    class="h-9 px-4 rounded-xl bg-[#0f172a] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
+                                    class="h-9 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md shadow-amber-500/20">
                                     <span class="material-symbols-outlined text-base">add</span>
                                     Criar
                                 </button>
@@ -778,7 +778,7 @@
                                 </div>
                                 <div class="flex flex-col gap-0.5">
                                     <span class="text-[9px] font-black uppercase tracking-widest text-emerald-700 whitespace-nowrap">Líquido a pagar</span>
-                                    <span id="asideAcctNet" class="text-sm font-black text-[#0f172a] tabular-nums whitespace-nowrap">—</span>
+                                    <span id="asideAcctNet" class="text-sm font-black text-[#212e3e] tabular-nums whitespace-nowrap">—</span>
                                 </div>
                             </div>
                         </div>
@@ -901,7 +901,7 @@
                     <button type="button" onclick="document.getElementById('modalCC').classList.remove('open')"
                         class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
                     <button type="submit" id="ccSubmitBtn"
-                        class="h-10 px-6 rounded-xl bg-[#0F172A] text-white text-sm font-bold hover:bg-slate-800 transition-all">Guardar</button>
+                        class="h-10 px-6 rounded-xl bg-[#212e3e] text-white text-sm font-bold hover:bg-slate-800 transition-all">Guardar</button>
                 </div>
             </form>
         </div>
@@ -1236,7 +1236,7 @@
                             <input id="cronogramaNumParcelas" type="number" min="1" value="1"
                                 class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40" />
                             <button type="button" onclick="gerarParcelasAutomaticas()"
-                                class="h-11 px-4 rounded-xl bg-[#0f172a] text-[#2afc8d] text-xs font-bold hover:bg-slate-800 transition-all">
+                                class="h-11 px-4 rounded-xl bg-[#212e3e] text-[#2afc8d] text-xs font-bold hover:bg-slate-800 transition-all">
                                 Gerar
                             </button>
                         </div>
@@ -1348,7 +1348,7 @@
                         <label for="liqComprovativo" id="liqComprovativoLabel"
                             class="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Comprovativo*</label>
                         <input id="liqComprovativo" type="file" accept="image/*,.pdf" required
-                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#0f172a] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" />
+                            class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#212e3e] file:text-white hover:file:bg-slate-800 transition-all cursor-pointer" />
                         <p id="liqComprovativoHint" class="text-[10px] text-slate-400 mt-1.5 font-semibold hidden">Já
                             existe um
                             comprovativo anexado. Só precisas de escolher um ficheiro se quiseres substituí-lo.</p>
@@ -1599,7 +1599,7 @@
                 <button type="button" onclick="document.getElementById('modalBulkQuotation').classList.remove('open')"
                     class="h-10 px-5 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
                 <button type="button" id="bulkQuotationConfirmBtn"
-                    class="h-10 px-6 rounded-xl bg-[#0f172a] text-white font-bold text-xs hover:bg-slate-800 flex items-center gap-2">
+                    class="h-10 px-6 rounded-xl bg-[#212e3e] text-white font-bold text-xs hover:bg-slate-800 flex items-center gap-2">
                     <span class="material-symbols-outlined text-base">fact_check</span>
                     Enviar seleccionados
                 </button>

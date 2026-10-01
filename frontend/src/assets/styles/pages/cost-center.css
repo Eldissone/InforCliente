@@ -2,7 +2,7 @@
 :root {
             --accent: #2afc8d;
             --accent-dim: rgba(42, 252, 141, 0.12);
-            --dark: #0F172A;
+            --dark: #212e3e;
             --card-border: #e2e8f0;
         }
 
@@ -49,8 +49,8 @@
         }
 
         .cc-tab-btn.active {
-            border-bottom-color: #0f172a;
-            color: #0f172a;
+            border-bottom-color: #212e3e;
+            color: #212e3e;
         }
 
         .cc-tab-btn:hover:not(.active) {
@@ -265,7 +265,7 @@
             height: 32px;
             border-radius: 50%;
             border: 3px solid #e2e8f0;
-            border-top-color: #0f172a;
+            border-top-color: #212e3e;
             animation: spin 0.7s linear infinite;
             margin: auto;
         }

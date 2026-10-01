@@ -84,7 +84,7 @@
         .measurement-row-grand td {
             background: #e2e8f0;
             font-weight: 800;
-            color: #0f172a;
+            color: #212e3e;
         }
 
         .measurement-row-section td {
@@ -315,7 +315,7 @@ body[data-shell="figma"] main > header nav {
 }
 
 body[data-shell="figma"] main > header nav #projectBreadcrumb {
-  color: #248cd8;
+  color: #0d3fd1;
 }
 
 body[data-shell="figma"] main [data-tab-trigger] {
@@ -385,11 +385,11 @@ body[data-shell="figma"] main textarea {
 body[data-shell="figma"] main input:focus,
 body[data-shell="figma"] main select:focus,
 body[data-shell="figma"] main textarea:focus {
-  outline: 2px solid #248cd8;
+  outline: 2px solid #0d3fd1;
   outline-offset: 2px;
 }
 
 .file-drop-target {
-  outline-color: #248cd8;
+  outline-color: #0d3fd1;
   background: rgba(36, 140, 216, 0.08) !important;
 }

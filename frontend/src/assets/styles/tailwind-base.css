@@ -1314,7 +1314,7 @@ h3 {
     border-color: hsla(0, 0%, 100%, .05)
 }
 
-.bg-\[\#0F172A\] {
+.bg-\[\#212e3e\] {
     --tw-bg-opacity: 1;
     background-color: rgb(15 23 42/var(--tw-bg-opacity, 1))
 }
@@ -1811,7 +1811,7 @@ h3 {
     letter-spacing: .1em
 }
 
-.text-\[\#0F172A\] {
+.text-\[\#212e3e\] {
     --tw-text-opacity: 1;
     color: rgb(15 23 42/var(--tw-text-opacity, 1))
 }

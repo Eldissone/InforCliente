@@ -570,8 +570,8 @@ function renderPessoal() {
           </label>
           <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
           <label>Categoria Profissional <input name="categoria" value="${esc(current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
+          <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
         </div>
-        <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
       </form>`;
 
     root.querySelector("#pessoalBack")?.addEventListener("click", () => {

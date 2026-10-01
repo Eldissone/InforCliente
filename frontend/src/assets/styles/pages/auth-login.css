@@ -1,8 +1,8 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: #5584ce;
-  color: #272525;
+  background: #212e3e;
+  color: #212e3e;
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -53,7 +53,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #0F172A;
+  color: #212e3e;
   font-family: 'Inter', sans-serif;
   font-weight: 900;
   font-style: italic;
@@ -121,8 +121,8 @@ body {
 }
 
 .auth-fields input:focus {
-  outline: 2px solid #248cd8;
-  outline-offset: 2px;
+  outline: 1px solid #0d3fd1;
+  outline-offset: 1px;
   border-color: #d0d0d0;
 }
 
@@ -165,25 +165,25 @@ body {
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: #0f172a;
+  accent-color: #212e3e;
 }
 
 #submitBtn {
   height: 50px;
   border: 0;
   border-radius: 10px;
-  background: #0f172a;
+  background: #212e3e;
   color: #fff;
   font: 400 14px/24px Inter, system-ui, sans-serif;
   cursor: pointer;
 }
 
 #submitBtn:hover {
-  background: #1a2430;
+  background: #212e3e;
 }
 
 #submitBtn:focus-visible {
-  outline: 2px solid #248cd8;
+  outline: 2px solid #0d3fd1;
   outline-offset: 2px;
 }
 
@@ -211,7 +211,8 @@ body {
   overflow: hidden;
   background: #212e3e;
   z-index: -1;
-  margin-left: -50px;
+  margin-left: -100px;
+  opacity: 0.8;
   
 
 }

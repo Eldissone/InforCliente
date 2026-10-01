@@ -9,8 +9,8 @@
         }
 
         .tab-active {
-            color: #080808;
-            border-bottom: 2px solid #2afc8d;
+            color: #121212;
+            border-bottom: 2px solid #212e3e;
         }
 
         /* Tab labels: hide text on small screens, show icon only */
@@ -105,3 +105,81 @@
         .registry-perm-sentinel {
             display: none !important;
         }
+
+/* Logística: separadores actuais, controlos do Figma. */
+body[data-shell="figma"] main {
+  color: #121212;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body[data-shell="figma"] main > header h1 {
+  color: #272525;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+body[data-shell="figma"] main > header nav {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #777;
+}
+
+body[data-shell="figma"] main > header nav span[class*="0d3fd1"] {
+  color: #0d3fd1;
+}
+
+body[data-shell="figma"] main .tab-btn {
+  height: 46px;
+  padding-top: 0;
+  padding-bottom: 0;
+  color: #777;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body[data-shell="figma"] main #btnNewExtra,
+body[data-shell="figma"] main #btnNewEntry,
+body[data-shell="figma"] main #btnTransfer,
+body[data-shell="figma"] #tabContent button.bg-slate-900:not(.w-10),
+body[data-shell="figma"] #tabContent button[class*="2afc8d"],
+body[data-shell="figma"] #modalContainer button.bg-slate-900:not(.w-10),
+body[data-shell="figma"] #modalContainer button[class*="2afc8d"] {
+  height: 46px;
+  border-radius: 10px;
+  background: #212e3e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
+}
+
+body[data-shell="figma"] main #btnTransfer {
+  background: #fff;
+  color: #121212;
+  border: 1px solid #d0d0d0;
+}
+
+body[data-shell="figma"] #tabContent .bg-white.rounded-3xl,
+body[data-shell="figma"] #tabContent .bg-white.rounded-2xl {
+  border-radius: 20px;
+  border-color: #e8e8e8;
+  box-shadow: none;
+}
+
+body[data-shell="figma"] #tabContent input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body[data-shell="figma"] #tabContent select,
+body[data-shell="figma"] #modalContainer input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+body[data-shell="figma"] #modalContainer select {
+  height: 50px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  box-shadow: none;
+}

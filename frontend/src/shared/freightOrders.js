@@ -94,7 +94,7 @@ function openFreightCreateModal({ onSaved } = {}) {
               <input id="freightLineAmount" type="number" min="0" step="0.01" class="w-full h-10 px-2 bg-white border border-slate-200 rounded-lg text-xs font-bold" />
             </div>
             <div class="sm:col-span-1">
-              <button type="button" id="freightAddLine" class="w-full h-10 rounded-lg bg-[#0f172a] text-[#2afc8d] text-xs font-black">+</button>
+              <button type="button" id="freightAddLine" class="w-full h-10 rounded-lg bg-[#212e3e] text-[#2afc8d] text-xs font-black">+</button>
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ function openFreightCreateModal({ onSaved } = {}) {
         </div>
         <div class="flex justify-between items-center text-xs font-bold">
           <span class="text-slate-500 uppercase tracking-wide">Soma alocações</span>
-          <span id="freightAllocSum" class="text-[#0f172a] tabular-nums">0,00 AOA</span>
+          <span id="freightAllocSum" class="text-[#212e3e] tabular-nums">0,00 AOA</span>
         </div>
       </div>`,
     onPrimary: async ({ close, btn }) => {
