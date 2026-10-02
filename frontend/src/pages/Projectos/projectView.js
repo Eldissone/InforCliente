@@ -5696,8 +5696,8 @@ function renderDailyPlansList() {
               <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
             </button>
           ` : ""}
-          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS") ? `
-            <button data-role-visible="admin,operador" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
+          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") ? `
+            <button data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0" title="Editar plano">
               <span class="material-symbols-outlined text-sm">edit</span>
             </button>
           ` : ""}
@@ -6477,7 +6477,10 @@ window.openEditPlanModal = async (planId) => {
     return;
   }
 
-  const canEditMaterials = plan.status === "DRAFT" || plan.status === "PENDING_MATERIAL" || plan.status === "IN_PROGRESS";
+  const role = (getSessionUser()?.role || "").toLowerCase();
+  const isAdmin = role === "admin";
+  const isCompleted = plan.status === "COMPLETED";
+  const canEditMaterials = plan.status === "DRAFT" || plan.status === "PENDING_MATERIAL" || plan.status === "IN_PROGRESS" || (isAdmin && isCompleted);
 
   let selectedTasks = plan.tasks.map(t => {
     const pt = progressTasks.find(p => p.id === t.progressTaskId);

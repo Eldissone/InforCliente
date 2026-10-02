@@ -393,12 +393,16 @@ dailyPlansRoutes.patch(
     }
     await assertOwnProjectAccess(req, existing.projectId);
 
-    if (existing.status === "PENDING_VALIDATION" || existing.status === "COMPLETED") {
+    const role = (req.user?.role || "").toLowerCase();
+    const isAdmin = role === "admin";
+    const isCompleted = existing.status === "COMPLETED";
+
+    if (existing.status === "PENDING_VALIDATION" || (isCompleted && !isAdmin)) {
       return res.status(400).json({ error: "Não é possível editar um plano já concluído ou pendente de validação." });
     }
 
     // Determine what we can edit based on status
-    const canEditMaterials = existing.status === "DRAFT" || existing.status === "PENDING_MATERIAL" || existing.status === "IN_PROGRESS";
+    const canEditMaterials = existing.status === "DRAFT" || existing.status === "PENDING_MATERIAL" || existing.status === "IN_PROGRESS" || (isAdmin && isCompleted);
     
     await prisma.$transaction(async (tx) => {
       // 1. Update basic info
@@ -410,15 +414,21 @@ dailyPlansRoutes.patch(
 
       // 2. Update Tasks
       if (tasks && Array.isArray(tasks)) {
+        const previousTasks = [...existing.tasks];
         await tx.dailyPlanTask.deleteMany({ where: { dailyPlanId: id } });
         if (tasks.length > 0) {
           updateData.tasks = {
-            create: tasks.map(t => ({
-              progressTaskId: t.progressTaskId,
-              plannedQty: t.plannedQty,
-              notes: t.notes,
-              technicianId: t.technicianId || null
-            }))
+            create: tasks.map(t => {
+              const prevIdx = previousTasks.findIndex((pt) => pt.progressTaskId === t.progressTaskId);
+              const prev = prevIdx >= 0 ? previousTasks.splice(prevIdx, 1)[0] : null;
+              return {
+                progressTaskId: t.progressTaskId,
+                plannedQty: t.plannedQty,
+                executedQty: prev ? prev.executedQty : 0,
+                notes: t.notes !== undefined ? t.notes : (prev?.notes ?? null),
+                technicianId: t.technicianId || null
+              };
+            })
           };
         }
       }
