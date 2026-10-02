@@ -35,6 +35,100 @@ function dailyPlanItemNote(planId) {
   return `dailyPlan:${planId}`;
 }
 
+function utcDayStamp(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+function replaceUtcCalendarDay(original, daySource) {
+  const src = new Date(original);
+  const day = new Date(daySource);
+  return new Date(Date.UTC(
+    day.getUTCFullYear(),
+    day.getUTCMonth(),
+    day.getUTCDate(),
+    src.getUTCHours(),
+    src.getUTCMinutes(),
+    src.getUTCSeconds(),
+    src.getUTCMilliseconds()
+  ));
+}
+
+function qtyClose(a, b) {
+  return Math.abs(Number(a || 0) - Number(b || 0)) < 1e-6;
+}
+
+/**
+ * A data do plano é copiada para o diário de execução e para os movimentos de stock.
+ * Ao corrigi-la, esses registos têm de acompanhar o mesmo dia.
+ */
+async function syncDailyPlanDateDependents(tx, plan, newDate) {
+  const oldStamp = utcDayStamp(plan.date);
+  const newStamp = utcDayStamp(newDate);
+  if (oldStamp == null || newStamp == null || oldStamp === newStamp) return;
+
+  const movements = await tx.stockMovement.findMany({
+    where: { dailyPlanId: plan.id },
+    select: { id: true, createdAt: true },
+  });
+
+  for (const movement of movements) {
+    await tx.stockMovement.update({
+      where: { id: movement.id },
+      data: { createdAt: replaceUtcCalendarDay(movement.createdAt, newDate) },
+    });
+  }
+
+  if (movements.length) {
+    const photos = await tx.projectPhoto.findMany({
+      where: { movementId: { in: movements.map((movement) => movement.id) } },
+      select: { id: true, createdAt: true },
+    });
+    for (const photo of photos) {
+      await tx.projectPhoto.update({
+        where: { id: photo.id },
+        data: { createdAt: replaceUtcCalendarDay(photo.createdAt, newDate) },
+      });
+    }
+  }
+
+  const executedTasks = (plan.tasks || []).filter((task) => Number(task.executedQty) > 0);
+  if (!executedTasks.length) return;
+
+  const histories = await tx.projectProgressHistory.findMany({
+    where: {
+      projectId: plan.projectId,
+      taskId: { in: [...new Set(executedTasks.map((task) => task.progressTaskId))] },
+      date: {
+        gte: new Date(oldStamp),
+        lt: new Date(oldStamp + 24 * 60 * 60 * 1000),
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const used = new Set();
+  for (const task of executedTasks) {
+    const noteCandidates = [task.notes, plan.description]
+      .map((value) => (value == null ? "" : String(value).trim()))
+      .filter(Boolean);
+    const matches = histories.filter((row) => {
+      if (used.has(row.id)) return false;
+      if (row.taskId !== task.progressTaskId) return false;
+      return qtyClose(row.executedQty, task.executedQty);
+    });
+    const withNote = matches.filter((row) => noteCandidates.includes(String(row.notes || "").trim()));
+    const chosen = (withNote.length ? withNote : matches)[0];
+    if (!chosen) continue;
+    used.add(chosen.id);
+    await tx.projectProgressHistory.update({
+      where: { id: chosen.id },
+      data: { date: new Date(newDate) },
+    });
+  }
+}
+
 async function allocatePlanTools(tx, { product, estaleiro, qty, planId }) {
   const availableItems = await tx.item.findMany({
     where: {
@@ -405,6 +499,10 @@ dailyPlansRoutes.patch(
     const canEditMaterials = existing.status === "DRAFT" || existing.status === "PENDING_MATERIAL" || existing.status === "IN_PROGRESS" || (isAdmin && isCompleted);
     
     await prisma.$transaction(async (tx) => {
+      if (date) {
+        await syncDailyPlanDateDependents(tx, existing, new Date(date));
+      }
+
       // 1. Update basic info
       let newStatus = existing.status;
       
