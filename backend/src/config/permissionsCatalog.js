@@ -293,6 +293,17 @@ const PERMISSION_GROUPS = [
     actions: ["view", "create", "edit", "delete", "manage", "full_access"],
   },
   {
+    id: "cadastros",
+    label: "Cadastros (Contactos, Setores, Pessoal)",
+    icon: "contacts",
+    pages: [
+      { id: "cadastros.contactos", label: "Contactos", route: "/registos/contactos" },
+      { id: "cadastros.setores", label: "Setores", route: "/registos/terceiros/setores" },
+      { id: "cadastros.pessoal", label: "Pessoal", route: "/registos/pessoal" },
+    ],
+    actions: ["view", "create", "edit", "delete", "manage", "full_access"],
+  },
+  {
     id: "navlinks",
     label: "Links de Navegação (Header)",
     icon: "link",
@@ -324,6 +335,9 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Financeiro/financeiro.html", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
   { route: "/Financeiro/centroDeCompras.html", module: "pedidosExtras", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "tecnico"] },
   { route: "/Users/index.html", module: "sistema", action: "view", roles: ["admin"] },
+  { route: "/registos/contactos", module: "cadastros", action: "view" },
+  { route: "/registos/terceiros/setores", module: "cadastros", action: "view" },
+  { route: "/registos/pessoal", module: "cadastros", action: "view" },
 ];
 
 /**
@@ -369,6 +383,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "true", reject: "true", cancel: "true", pay: "false", delete: "true", full_access: "false" },
+      cadastros: { view: "true", create: "true", edit: "true", delete: "true", manage: "true", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -400,6 +415,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "true", pay: "true", delete: "false", full_access: "false" },
+      cadastros: { view: "true", create: "true", edit: "true", delete: "false", manage: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -434,6 +450,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "false", edit: "false", approve: "false", reject: "false", cancel: "false", pay: "true", delete: "false", full_access: "false" },
+      cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
@@ -465,6 +482,7 @@ function defaultAllowedFor(role, module, action) {
       portal: { view: "false", export: "false", full_access: "false" },
       fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "false", pay: "false", delete: "false", full_access: "false" },
+      cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
       navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";

@@ -157,7 +157,15 @@ function renderProjectList(projects) {
 
   list.innerHTML = projects.map((p) => {
     const isSelected = selectedProject?.id === p.id;
-    const statusColor = p.status === "ACTIVE" ? "bg-emerald-500" : p.status === "ON_HOLD" ? "bg-amber-400" : "bg-slate-400";
+    const statusColor = p.status === "ACTIVE"
+      ? "bg-emerald-500"
+      : p.status === "ON_HOLD"
+        ? "bg-amber-400"
+        : p.status === "NOT_STARTED"
+          ? "bg-slate-300"
+          : p.status === "COMPLETED"
+            ? "bg-blue-500"
+            : "bg-slate-400";
     return `
     <div class="proj-card ${isSelected ? "selected" : ""}" data-pid="${p.id}">
       <div class="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">

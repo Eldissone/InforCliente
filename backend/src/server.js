@@ -27,6 +27,7 @@ const { costCategoryRoutes } = require("./routes/costCategories");
 const { freightOrderRoutes } = require("./routes/freightOrders");
 const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { helpTicketRoutes } = require("./routes/helpTickets");
+const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
 const { ensureUploadsDir } = require("./utils/storage");
@@ -123,6 +124,10 @@ app.use("/cost-categories", costCategoryRoutes);
 app.use("/freight-orders", freightOrderRoutes);
 app.use("/purchase-orders", purchaseOrderRoutes);
 app.use("/help-tickets", helpTicketRoutes);
+// Cadastros persistentes (Fase 1 — ver docs/agents/CONTRACTS.md)
+app.use("/contacts", contactRoutes);
+app.use("/sectors", sectorRoutes);
+app.use("/personnel", personnelRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

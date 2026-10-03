@@ -82,13 +82,14 @@ dashboardRoutes.get(
           select: { status: true }
         });
 
-        const obras = { total: projects.length, ativas: 0, concluidas: 0, pausadas: 0, avancoMedio: 0 };
+        const obras = { total: projects.length, ativas: 0, concluidas: 0, pausadas: 0, porIniciar: 0, avancoMedio: 0 };
         let portfolioValue = 0;
         let faturacaoEstimada = 0;
         let progressSum = 0;
 
         projects.forEach(p => {
           if (p.status === "ACTIVE") obras.ativas++;
+          if (p.status === "NOT_STARTED") obras.porIniciar++;
           if (p.status === "COMPLETED") obras.concluidas++;
           if (p.status === "ON_HOLD") obras.pausadas++;
           progressSum += Number(p.physicalProgressPct || 0);
@@ -263,12 +264,14 @@ dashboardRoutes.get(
       ativas: 0,
       concluidas: 0,
       pausadas: 0,
+      porIniciar: 0,
       avancoMedio: Math.round(obrasProgressAgg._avg.physicalProgressPct || 0),
     };
     obrasStatusCounts.forEach(item => {
       const cnt = item._count._all || 0;
       obras.total += cnt;
       if (item.status === "ACTIVE") obras.ativas = cnt;
+      if (item.status === "NOT_STARTED") obras.porIniciar = cnt;
       if (item.status === "COMPLETED") obras.concluidas = cnt;
       if (item.status === "ON_HOLD") obras.pausadas = cnt;
     });

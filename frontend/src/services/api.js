@@ -108,6 +108,11 @@ const API_ERROR_MESSAGES = {
   INSTALLMENTS_ALREADY_DEFINED: "Este fornecedor já tem parcelas definidas.",
   INSTALLMENT_TOTAL_MISMATCH: "A soma das parcelas deve corresponder ao total do fornecedor.",
   INSUFFICIENT_STOCK: "Stock insuficiente no armazém desta obra.",
+  PAUSE_REQUIRED: "Indique o período de pausa da obra.",
+  PAUSE_END_BEFORE_START: "A data de fim da pausa não pode ser anterior ao início.",
+  ACTUAL_END_DATE_REQUIRED: "Indique a data de conclusão efetiva.",
+  INVALID_DATE: "Data inválida.",
+  CONTACT_NOT_FOUND: "Um ou mais contactos da obra não existem ou estão inativos.",
 };
 
 function resolveApiErrorMessage(data, status) {

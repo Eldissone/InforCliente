@@ -26,7 +26,7 @@ import {
 } from "../../shared/wbsHelpers.js";
 import { exportMeasurementExcel, exportMeasurementPdf } from "../../shared/measurementReportExport.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
-import { obraEstadoLabel, obraTiposLabel, openObraEstadoDialog } from "../registos/registryForms.js";
+import { obraEstadoLabel, obraStatusVisual, obraTiposLabel, openObraEstadoDialog } from "../registos/registryForms.js";
 import {
   openGalleryLightbox,
   closeGalleryLightbox,
@@ -302,12 +302,17 @@ async function loadProject() {
 
   el("projectTitle").textContent = p.name;
   if (el("projectType")) el("projectType").textContent = obraTiposLabel(p) || "TIPO DE OBRA NÃO DEFINIDO";
-  if (el("obraEstadoChip")) el("obraEstadoChip").textContent = obraEstadoLabel(p);
+  const chip = el("obraEstadoChip");
+  if (chip) {
+    const visual = obraStatusVisual(p.status);
+    chip.textContent = obraEstadoLabel(p);
+    chip.className = `inline-flex items-center h-8 px-3 rounded-full text-xs font-bold ${visual.chip}`;
+  }
   wireObraEstadoButton();
   el("projectBreadcrumb").textContent = String(p.referencia || "").trim() || "—";
   el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   el("projectClientCode").textContent = p.client?.code || "Sem código";
-  el("projectContact").textContent = p.contact || "-";
+  renderProjectContacts(p);
   el("projectLocation").textContent = p.location || p.region || "-";
 
   const total = Number(p.budgetTotal || 0);
@@ -342,6 +347,15 @@ async function loadProject() {
 
   el("projectStartDate").textContent = p.startDate ? formatDateBR(p.startDate) : "---";
   el("projectDueDate").textContent = p.dueDate ? formatDateBR(p.dueDate) : "---";
+  if (el("projectLaunchDate")) {
+    const launch = p.launchDate || p.lifecycle?.launchDate;
+    el("projectLaunchDate").textContent = launch ? formatDateBR(launch) : "---";
+  }
+  if (el("projectActualEndDate")) {
+    const actual = p.actualEndDate || p.lifecycle?.actualEndDate;
+    el("projectActualEndDate").textContent = actual ? formatDateBR(actual) : "---";
+  }
+  renderProjectPauses(p);
   updateDateAnalysis(p);
 
   // New: Update Operation Status (CBS)
@@ -526,11 +540,62 @@ function updateOperationStatus(summary) {
   });
 }
 
+function renderProjectContacts(p) {
+  const box = el("projectContact");
+  if (!box) return;
+  const contacts = Array.isArray(p.contacts) ? p.contacts.filter(Boolean) : [];
+  if (!contacts.length) {
+    box.textContent = p.contact || p.directorObra || "---";
+    return;
+  }
+  box.innerHTML = contacts.map((contact) => {
+    const role = contact.role
+      ? `<span class="block text-[10px] font-bold uppercase tracking-widest text-slate-400">${escapeHtml(contact.role)}</span>`
+      : "";
+    return `<div class="mb-1 last:mb-0"><span class="block">${escapeHtml(contact.name)}</span>${role}</div>`;
+  }).join("");
+}
+
+function renderProjectPauses(p) {
+  const box = el("projectPauses");
+  if (!box) return;
+  const pauses = Array.isArray(p.pauses) ? p.pauses : [];
+  if (!pauses.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  box.innerHTML = pauses.map((pause) => {
+    const inicio = pause.inicio || (pause.startDate ? formatDateBR(pause.startDate) : "---");
+    const fim = pause.fim || (pause.endDate ? formatDateBR(pause.endDate) : "---");
+    return `<p class="text-[10px] font-bold text-slate-500">${escapeHtml(inicio)} → ${escapeHtml(fim)}</p>`;
+  }).join("");
+}
+
 function updateDateAnalysis(p) {
   if (!el("daysRemaining")) return;
   const now = new Date();
   const due = p.dueDate ? new Date(p.dueDate) : null;
-  const start = p.startDate ? new Date(p.startDate) : null;
+
+  if (p.status === "COMPLETED") {
+    el("daysRemaining").textContent = "Obra concluída";
+    el("dateAnalysis")?.classList.remove("bg-error/10", "border-error/20", "text-error");
+    el("dateAnalysis")?.classList.add("bg-primary/5", "border-primary/10", "text-primary");
+    return;
+  }
+  if (p.status === "NOT_STARTED") {
+    el("daysRemaining").textContent = "Por iniciar";
+    el("dateAnalysis")?.classList.remove("bg-error/10", "border-error/20", "text-error");
+    el("dateAnalysis")?.classList.add("bg-primary/5", "border-primary/10", "text-primary");
+    return;
+  }
+  if (p.status === "ON_HOLD") {
+    el("daysRemaining").textContent = "Em pausa";
+    el("dateAnalysis")?.classList.remove("bg-error/10", "border-error/20", "text-error");
+    el("dateAnalysis")?.classList.add("bg-warning/10", "border-warning/20");
+    return;
+  }
 
   if (due) {
     const diffTime = due - now;

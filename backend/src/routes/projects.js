@@ -15,6 +15,13 @@ const {
   restoreProject,
   permanentDeleteProject,
 } = require("../services/projectLifecycleService");
+const {
+  PROJECT_STATUSES,
+  LABEL_FROM_STATUS,
+  lifecycleInclude,
+  serializeLifecycle,
+  applyProjectRegistry,
+} = require("../services/projectRegistryService");
 const { computeProjectBudgetSummary } = require("../services/projectBudgetSummaryService");
 const path = require("path");
 const fs = require("fs");
@@ -95,6 +102,15 @@ async function loadProjectPhotoAsset(photoPath) {
   };
 }
 
+const PROJECT_STATUS_INPUT = [...PROJECT_STATUSES, "Por Iniciar", "Em Execução", "Em Pausa", "Concluído"];
+const pauseInputSchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  inicio: z.string().optional(),
+  fim: z.string().optional(),
+  reason: z.string().optional().nullable(),
+});
+
 const projectRoutes = express.Router();
 projectRoutes.use(authRequired);
 
@@ -137,6 +153,7 @@ async function ensureProjectReadable(req, projectId) {
     where,
     include: {
       client: { select: { id: true, name: true, code: true } },
+      ...lifecycleInclude(),
     },
   });
 
@@ -289,14 +306,26 @@ projectRoutes.get(
       page,
       pageSize,
       total,
-      items: items.map((p) => ({
-        ...p,
-        budgetTotal: String(p.budgetTotal),
-        budgetAllocated: String(p.budgetAllocated),
-        budgetConsumed: String(p.budgetConsumed),
-        budgetCommitted: String(p.budgetCommitted),
-        budgetAvailable: String(p.budgetAvailable),
-      })),
+      items: items.map((p) => {
+        const estado = LABEL_FROM_STATUS[p.status] || p.phaseLabel || null;
+        return {
+          ...p,
+          estado,
+          lifecycle: {
+            status: p.status,
+            estado,
+            operationalStartDate: p.startDate || null,
+            launchDate: p.launchDate || null,
+            plannedEndDate: p.dueDate || null,
+            actualEndDate: p.actualEndDate || null,
+          },
+          budgetTotal: String(p.budgetTotal),
+          budgetAllocated: String(p.budgetAllocated),
+          budgetConsumed: String(p.budgetConsumed),
+          budgetCommitted: String(p.budgetCommitted),
+          budgetAvailable: String(p.budgetAvailable),
+        };
+      }),
     });
   })
 );
@@ -312,9 +341,13 @@ projectRoutes.post(
         contact: z.string().optional().nullable(),
         location: z.string().optional().nullable(),
         region: z.string().optional().nullable(),
-        status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
-        startDate: z.string().datetime().optional().nullable(),
-        dueDate: z.string().datetime().optional().nullable(),
+        status: z.enum(PROJECT_STATUS_INPUT).optional(),
+        startDate: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+        launchDate: z.string().optional().nullable(),
+        actualEndDate: z.string().optional().nullable(),
+        pauses: z.array(pauseInputSchema).optional(),
+        contactIds: z.array(z.string()).optional(),
         budgetTotal: z.union([z.number(), z.string()]),
         budgetAllocated: z.union([z.number(), z.string()]).optional(),
         budgetConsumed: z.union([z.number(), z.string()]).optional(),
@@ -373,9 +406,11 @@ projectRoutes.post(
           contact: body.contact || null,
           location: body.location || null,
           region: body.region || null,
-          status: body.status || "ACTIVE",
+          status: "ACTIVE",
           startDate: body.startDate ? new Date(body.startDate) : null,
           dueDate: body.dueDate ? new Date(body.dueDate) : null,
+          launchDate: body.launchDate ? new Date(body.launchDate) : null,
+          actualEndDate: body.actualEndDate ? new Date(body.actualEndDate) : null,
           budgetTotal,
           budgetAllocated,
           budgetConsumed,
@@ -425,6 +460,18 @@ projectRoutes.post(
           visibleToClient: true,
         },
       });
+
+      await applyProjectRegistry(tx, p.id, {
+        status: body.status,
+        phaseLabel: body.phaseLabel,
+        startDate: body.startDate,
+        dueDate: body.dueDate,
+        launchDate: body.launchDate,
+        actualEndDate: body.actualEndDate,
+        pauses: body.pauses,
+        contactIds: body.contactIds,
+        maoDeObraIndireta: body.maoDeObraIndireta,
+      }, null);
 
       return p;
     });
@@ -514,6 +561,7 @@ projectRoutes.get(
     return res.json({
       project: {
         ...project,
+        ...serializeLifecycle(project),
         budgetTotal: String(project.budgetTotal || 0),
         budgetAllocated: String(project.budgetAllocated || 0),
         budgetConsumed: String(project.budgetConsumed || 0),
@@ -541,9 +589,13 @@ projectRoutes.patch(
         contact: z.string().optional().nullable(),
         location: z.string().optional().nullable(),
         region: z.string().optional().nullable(),
-        status: z.enum(["ACTIVE", "ON_HOLD", "COMPLETED"]).optional(),
-        startDate: z.string().datetime().optional().nullable(),
-        dueDate: z.string().datetime().optional().nullable(),
+        status: z.enum(PROJECT_STATUS_INPUT).optional(),
+        startDate: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+        launchDate: z.string().optional().nullable(),
+        actualEndDate: z.string().optional().nullable(),
+        pauses: z.array(pauseInputSchema).optional(),
+        contactIds: z.array(z.string()).optional(),
         budgetTotal: z.union([z.number(), z.string()]).optional(),
         budgetAllocated: z.union([z.number(), z.string()]).optional(),
         budgetConsumed: z.union([z.number(), z.string()]).optional(),
@@ -640,6 +692,35 @@ projectRoutes.patch(
       },
       select: { id: true },
     });
+
+    const hasRegistry =
+      body.status !== undefined
+      || body.phaseLabel !== undefined
+      || body.startDate !== undefined
+      || body.dueDate !== undefined
+      || body.launchDate !== undefined
+      || body.actualEndDate !== undefined
+      || body.pauses !== undefined
+      || body.contactIds !== undefined
+      || body.maoDeObraIndireta !== undefined;
+
+    if (hasRegistry) {
+      const current = await prisma.project.findUnique({
+        where: { id },
+        include: lifecycleInclude(),
+      });
+      await applyProjectRegistry(prisma, id, {
+        status: body.status,
+        phaseLabel: body.phaseLabel,
+        startDate: body.startDate,
+        dueDate: body.dueDate,
+        launchDate: body.launchDate,
+        actualEndDate: body.actualEndDate,
+        pauses: body.pauses,
+        contactIds: body.contactIds,
+        maoDeObraIndireta: body.maoDeObraIndireta,
+      }, current);
+    }
 
     if (body.projectType) {
       const existingTasks = await prisma.projectProgressTask.count({ where: { projectId: id } });

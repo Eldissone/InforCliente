@@ -6,6 +6,7 @@ import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.j
 checkAuth(); // apenas verifica sessão válida
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { OBRA_STATUS_OPTIONS, obraEstadoLabel, obraStatusVisual } from "../registos/registryForms.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -149,21 +150,77 @@ function renderPagination() {
   anchor.parentNode.insertBefore(container, anchor.nextSibling);
 }
 
-function renderStatusPill(status) {
-  if (status === "ON_HOLD") {
-    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-700 border border-orange-100">
-      <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> PAUSADA
+function renderStatusPill(projectOrStatus) {
+  const status = typeof projectOrStatus === "string" ? projectOrStatus : projectOrStatus?.status;
+  const visual = obraStatusVisual(status);
+  const label = typeof projectOrStatus === "object" && projectOrStatus
+    ? obraEstadoLabel(projectOrStatus)
+    : visual.label;
+  const pulse = status === "ACTIVE" ? "animate-pulse" : "";
+  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${visual.pill}">
+      <span class="w-1.5 h-1.5 rounded-full ${visual.dot} ${pulse}"></span> ${escapeHtml(label)}
     </span>`;
-  }
-  if (status === "COMPLETED") {
-    return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100">
-      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> CONCLUÍDO
-    </span>`;
-  }
-  return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> EM CURSO
-  </span>`;
 }
+
+function statusBarColor(status) {
+  return obraStatusVisual(status).bar;
+}
+
+function dateInputValue(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function firstPauseDates(project) {
+  const pause = Array.isArray(project?.pauses) && project.pauses.length ? project.pauses[0] : null;
+  return {
+    start: dateInputValue(pause?.inicio || pause?.startDate),
+    end: dateInputValue(pause?.fim || pause?.endDate),
+  };
+}
+
+function statusSelectHtml(selected) {
+  return OBRA_STATUS_OPTIONS.map((option) => (
+    `<option value="${option.value}" ${selected === option.value ? "selected" : ""}>${option.label}</option>`
+  )).join("");
+}
+
+function lifecycleFieldsHtml(project = {}, { includeStatus = true } = {}) {
+  const pause = firstPauseDates(project);
+  const status = project.status || "NOT_STARTED";
+  return `
+        ${includeStatus ? `<div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Estado</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusSelectHtml(status)}</select></div>` : ""}
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Arranque</label><input id="p_launch" type="date" class="w-full rounded-lg border-slate-300" value="${dateInputValue(project.launchDate || project.lifecycle?.launchDate)}" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Conclusão efetiva</label><input id="p_actual_end" type="date" class="w-full rounded-lg border-slate-300" value="${dateInputValue(project.actualEndDate || project.lifecycle?.actualEndDate)}" /></div>
+        <div id="p_pause_wrap" class="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 ${status === "ON_HOLD" ? "" : "hidden"}">
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início da pausa</label><input id="p_pause_start" type="date" class="w-full rounded-lg border-slate-300" value="${pause.start}" /></div>
+          <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim da pausa</label><input id="p_pause_end" type="date" class="w-full rounded-lg border-slate-300" value="${pause.end}" /></div>
+        </div>`;
+}
+
+function bindLifecycleFields(panel) {
+  const status = panel.querySelector("#p_status");
+  const wrap = panel.querySelector("#p_pause_wrap");
+  const sync = () => {
+    wrap?.classList.toggle("hidden", status?.value !== "ON_HOLD");
+  };
+  status?.addEventListener("change", sync);
+  sync();
+}
+
+function lifecyclePayload(v) {
+  const status = v("p_status");
+  const payload = {
+    status,
+    launchDate: toIsoDate(v("p_launch")),
+    actualEndDate: toIsoDate(v("p_actual_end")),
+  };
+  if (status === "ON_HOLD") {
+    payload.pauses = [{ inicio: v("p_pause_start"), fim: v("p_pause_end") }];
+  }
+  return payload;
+}
+
 
 function iconFor(name) {
   const n = String(name || "").toLowerCase();
@@ -180,7 +237,7 @@ function displayReferencia(p) {
 
 function renderRow(p, idx = 1) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
-  const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+  const barColor = statusBarColor(p.status);
   const numStr = String(idx).padStart(2, '0');
 
   return `
@@ -219,7 +276,7 @@ function renderRow(p, idx = 1) {
           <span class="text-[10px] font-black text-slate-900">${progress}%</span>
         </div>
       </td>
-      <td class="px-8 py-5 text-center">${renderStatusPill(p.status)}</td>
+      <td class="px-8 py-5 text-center">${renderStatusPill(p)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1">
           <a href="./centroCustos.html?projectId=${p.id}" title="Planeamento" onclick="event.stopPropagation()"
@@ -240,7 +297,7 @@ function renderRow(p, idx = 1) {
 
 function renderGridItem(p, idx = 1) {
   const progress = Math.max(0, Math.min(100, Number(p.physicalProgressPct || 0)));
-  const barColor = p.status === "ON_HOLD" ? "bg-orange-500" : (p.status === "COMPLETED" ? "bg-blue-500" : "bg-emerald-500");
+  const barColor = statusBarColor(p.status);
   const numStr = String(idx).padStart(2, '0');
 
   return `
@@ -253,7 +310,7 @@ function renderGridItem(p, idx = 1) {
           </span>
         </div>
         <div class="flex flex-col items-end gap-2">
-            ${renderStatusPill(p.status)}
+            ${renderStatusPill(p)}
             <span class="text-[10px] font-bold text-slate-400">${escapeHtml(displayReferencia(p))}</span>
         </div>
       </div>
@@ -526,7 +583,7 @@ function wireActions() {
 async function openEdit(id) {
   const [data, clients] = await Promise.all([
     apiRequest(`/projects/${encodeURIComponent(id)}`),
-    loadClients()
+    loadClients(),
   ]);
   const p = data.project;
   let currentTechnicians = Array.isArray(p.technicians) ? p.technicians : [];
@@ -535,12 +592,6 @@ async function openEdit(id) {
     `<option value="">Sem cliente vinculado</option>`,
     ...clients.map(c => `<option value="${c.id}" ${p.clientId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
   ].join("");
-
-  const statusOptions = [
-    { v: "ACTIVE", l: "Em Curso" },
-    { v: "ON_HOLD", l: "Paralisada" },
-    { v: "COMPLETED", l: "Concluído" }
-  ].map(s => `<option value="${s.v}" ${p.status === s.v ? 'selected' : ''}>${s.l}</option>`).join("");
 
   const projectTypesOptions = [
     "MÉDIA TENSÃO",
@@ -607,8 +658,8 @@ async function openEdit(id) {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label><select id="p_currency" class="w-full rounded-lg border-slate-300"><option value="AOA" ${p.currency !== 'USD' ? 'selected' : ''}>Kz (Kwanza)</option><option value="USD" ${p.currency === 'USD' ? 'selected' : ''}>USD (Dólar)</option></select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="${p.budgetTotal}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="${p.physicalProgressPct}" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Status</label><select id="p_status" class="w-full rounded-lg border-slate-300">${statusOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
+        ${lifecycleFieldsHtml(p)}
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início operacional</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" value="${p.startDate ? p.startDate.split('T')[0] : ''}" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Previsão Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" value="${p.dueDate ? p.dueDate.split('T')[0] : ''}" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
@@ -632,7 +683,7 @@ async function openEdit(id) {
             currency: v("p_currency") || "AOA",
             budgetTotal: Number(v("p_total") || 0),
             physicalProgressPct: Number(v("p_prog") || 0),
-            status: v("p_status"),
+            ...lifecyclePayload(v),
             startDate: toIsoDate(v("p_start")),
             dueDate: toIsoDate(v("p_due")),
             projectType: v("p_type") || null,
@@ -658,6 +709,7 @@ async function openEdit(id) {
     },
     // Listen for file changes
     onRender: ({ panel }) => {
+      bindLifecycleFields(panel);
       const fileInput = panel.querySelector("#p_dir_photo_file");
       const btn = panel.querySelector("#p_dir_photo_btn");
       const preview = panel.querySelector("#p_dir_photo_preview");
@@ -837,8 +889,9 @@ async function openCreate() {
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label><select id="p_currency" class="w-full rounded-lg border-slate-300"><option value="AOA">Kz (Kwanza)</option><option value="USD">USD (Dólar)</option></select></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
+        ${lifecycleFieldsHtml({ status: "NOT_STARTED" })}
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início operacional</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
+        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Previsão Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
 
         <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
         <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nº Funcionários Ativos</label><input id="p_staff" type="number" class="w-full rounded-lg border-slate-300" value="0" /></div>
@@ -851,9 +904,10 @@ async function openCreate() {
       panel.classList.remove("max-w-[640px]", "max-h-[90vh]");
       panel.classList.add("project-create-modal", "max-w-[1140px]", "max-h-[calc(100vh-3rem)]", "rounded-[26px]");
       panel.querySelector("[data-body]")?.classList.add("project-create-body");
+      bindLifecycleFields(panel);
     },
     onPrimary: async ({ close, panel }) => {
-      const v = (id) => panel.querySelector(`#${id} `)?.value?.trim?.();
+      const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
       const btn = panel.querySelector("[data-primary]");
       try {
         setButtonLoading(btn, true);
@@ -868,6 +922,7 @@ async function openCreate() {
             currency: v("p_currency") || "AOA",
             budgetTotal: Number(v("p_total") || 0),
             physicalProgressPct: Number(v("p_prog") || 0),
+            ...lifecyclePayload(v),
             startDate: toIsoDate(v("p_start")),
             dueDate: toIsoDate(v("p_due")),
             projectType: v("p_type") || null,
@@ -888,7 +943,7 @@ async function openCreate() {
         if (fileInput?.files?.length) {
           try {
             toast("A carregar foto do director...", { type: "info" });
-            await apiUpload(`/ projects / ${encodeURIComponent(res.id)}/director-photo`, {
+            await apiUpload(`/projects/${encodeURIComponent(res.id)}/director-photo`, {
               file: fileInput.files[0],
               fieldName: "photo"
             });

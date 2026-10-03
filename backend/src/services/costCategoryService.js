@@ -19,7 +19,7 @@ async function ensureCostCategories() {
   try {
     const nodes = loadSeedNodes();
     if (!nodes.length) {
-      console.log("ℹ️ Seed de tipos de custo vazio — catálogo manual");
+      console.log("ℹ️ catálogo manual");
       return;
     }
     const byCode = new Map(nodes.map((n) => [n.code, n]));

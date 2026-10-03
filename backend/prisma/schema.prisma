@@ -33,6 +33,10 @@ model User {
   permissionAuditLogs      PermissionAuditLog[]
   helpTicketsCreated       HelpTicket[]              @relation("HelpTicketAuthor")
   helpTicketsResolved      HelpTicket[]              @relation("HelpTicketResolver")
+  contactsCreated          Contact[]                 @relation("ContactCreatedBy")
+  sectorsCreated           Sector[]                  @relation("SectorCreatedBy")
+  personnelCreated         Personnel[]               @relation("PersonnelCreatedBy")
+  registryImportBatches    RegistryImportBatch[]     @relation("RegistryImportBatchCreatedBy")
 
   @@index([clientId])
 }
@@ -231,6 +235,8 @@ model Project {
   active              Boolean                  @default(true)
   startDate           DateTime?
   dueDate             DateTime?
+  launchDate          DateTime?
+  actualEndDate       DateTime?
   budgetTotal         Decimal                  @db.Decimal(16, 2)
   budgetAllocated     Decimal                  @db.Decimal(16, 2)
   budgetConsumed      Decimal                  @db.Decimal(16, 2)
@@ -283,9 +289,36 @@ model Project {
   freightAllocations  FreightAllocation[]
   purchaseOrders      PurchaseOrder[]
   quoteSupplierOrders QuoteSupplierOrder[]
+  personnel           Personnel[]
+  pauses              ProjectPause[]
+  projectContacts     ProjectContact[]
 
   @@index([name])
   @@index([status])
+}
+
+model ProjectPause {
+  id        String   @id @default(cuid())
+  projectId String
+  startDate DateTime
+  endDate   DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, startDate])
+}
+
+model ProjectContact {
+  id        String   @id @default(cuid())
+  projectId String
+  contactId String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, contactId])
+  @@index([contactId])
 }
 
 model ProjectFolder {
@@ -719,6 +752,7 @@ enum ClientStatus {
 }
 
 enum ProjectStatus {
+  NOT_STARTED
   ACTIVE
   ON_HOLD
   COMPLETED
@@ -1779,4 +1813,115 @@ model HelpTicket {
   @@index([status, createdAt])
   @@index([createdById])
   @@index([type, status])
+}
+
+// ─── Cadastros persistentes (Fase 1 — D-002/D-012) ───────────────────────────
+// Substituem os registos de contactos, setores e pessoal que viviam em
+// localStorage. `legacyId` guarda o id gerado no browser para importação
+// idempotente; `importBatchId` liga ao lote para rollback.
+
+enum PersonnelType {
+  INTERNO
+  SUBCONTRATADO
+}
+
+model Contact {
+  id            String   @id @default(cuid())
+  name          String
+  role          String
+  phone         String?
+  email         String?
+  photoUrl      String?
+  active        Boolean  @default(true)
+  legacyId      String?  @unique
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  createdBy   User?                @relation("ContactCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  importBatch RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  projects    ProjectContact[]
+
+  @@index([name])
+  @@index([active])
+  @@index([importBatchId])
+}
+
+model Sector {
+  id            String   @id @default(cuid())
+  name          String
+  nameKey       String   @unique
+  active        Boolean  @default(true)
+  legacyId      String?  @unique
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  createdBy   User?                @relation("SectorCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  importBatch RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([importBatchId])
+}
+
+model Personnel {
+  id            String         @id @default(cuid())
+  firstName     String
+  lastName      String?
+  email         String?
+  phone         String?
+  type          PersonnelType?
+  role          String
+  projectId     String?
+  employeeCode  String?
+  category      String?
+  photoUrl      String?
+  active        Boolean        @default(true)
+  legacyId      String?        @unique
+  importBatchId String?
+  createdById   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  project     Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy   User?                @relation("PersonnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  importBatch RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  @@index([firstName, lastName])
+  @@index([projectId])
+  @@index([type])
+  @@index([active])
+  @@index([importBatchId])
+}
+
+enum RegistryResource {
+  CONTACTS
+  SECTORS
+  PERSONNEL
+}
+
+model RegistryImportBatch {
+  id           String           @id @default(cuid())
+  resource     RegistryResource
+  source       String           @default("localStorage")
+  sourceKey    String
+  deviceLabel  String?
+  requested    Int
+  created      Int
+  skipped      Int
+  failed       Int
+  details      Json?
+  rolledBackAt DateTime?
+  createdById  String
+  createdAt    DateTime         @default(now())
+
+  createdBy User        @relation("RegistryImportBatchCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  contacts  Contact[]
+  sectors   Sector[]
+  personnel Personnel[]
+
+  @@index([resource, createdAt])
+  @@index([createdById])
 }

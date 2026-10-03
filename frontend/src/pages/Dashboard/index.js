@@ -323,9 +323,10 @@ function renderObrasProgressChart(avancoMedio) {
 }
 
 // Chart 4: Vertical column project count metrics
-const OBRAS_BAR_COLORS = ["#10B981", "#F59E0B", "#94A3B8"]; // Em curso, Pausadas, Concluídas
+const OBRAS_BAR_COLORS = ["#94A3B8", "#10B981", "#F59E0B", "#3B82F6"]; // Por iniciar, Em curso, Pausadas, Concluídas
 
 function renderProjectsBarChart(obras) {
+  const pending = obras.porIniciar || 0;
   const active = obras.ativas || 0;
   const paused = obras.pausadas || 0;
   const completed = obras.concluidas || 0;
@@ -333,7 +334,7 @@ function renderProjectsBarChart(obras) {
   const options = {
     series: [{
       name: "Obras",
-      data: [active, paused, completed]
+      data: [pending, active, paused, completed]
     }],
     chart: {
       type: 'bar',
@@ -343,7 +344,7 @@ function renderProjectsBarChart(obras) {
       animations: { enabled: true, easing: 'easeinout', speed: 800 },
       events: {
         dataPointSelection: (event, chartContext, config) => {
-          const projectStatuses = ["ACTIVE", "ON_HOLD", "COMPLETED"];
+          const projectStatuses = ["NOT_STARTED", "ACTIVE", "ON_HOLD", "COMPLETED"];
           const projectStatus = projectStatuses[config.dataPointIndex];
           if (projectStatus) {
             toggleProjectStatusFilter(projectStatus);
@@ -373,7 +374,7 @@ function renderProjectsBarChart(obras) {
     },
     legend: { show: false },
     xaxis: {
-      categories: ["Em Curso", "Pausadas", "Concluídas"],
+      categories: ["Por Iniciar", "Em Curso", "Pausadas", "Concluídas"],
       labels: { show: false },
       axisBorder: { show: false },
       axisTicks: { show: false }
@@ -388,7 +389,7 @@ function renderProjectsBarChart(obras) {
     projectsChart.updateOptions({ colors: OBRAS_BAR_COLORS });
     projectsChart.updateSeries([{
       name: "Obras",
-      data: [active, paused, completed],
+      data: [pending, active, paused, completed],
     }]);
   } else {
     projectsChart = new ApexCharts(container, options);
@@ -449,8 +450,8 @@ function updateFiltersUI() {
 
   // Filtro: Estado da Obra (clique no gráfico de barras)
   if (currentProjectStatusFilter) {
-    const labels = { ACTIVE: "Obras em Curso", ON_HOLD: "Obras Paradas", COMPLETED: "Obras Concluídas" };
-    const classes = { ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", ON_HOLD: "bg-amber-50 text-amber-700 border-amber-100", COMPLETED: "bg-slate-50 text-slate-600 border-slate-200" };
+    const labels = { NOT_STARTED: "Obras por Iniciar", ACTIVE: "Obras em Curso", ON_HOLD: "Obras Paradas", COMPLETED: "Obras Concluídas" };
+    const classes = { NOT_STARTED: "bg-slate-50 text-slate-600 border-slate-200", ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-100", ON_HOLD: "bg-amber-50 text-amber-700 border-amber-100", COMPLETED: "bg-blue-50 text-blue-700 border-blue-100" };
     createBadge(labels[currentProjectStatusFilter], classes[currentProjectStatusFilter] || "bg-cyan-50 text-cyan-700 border-cyan-100", () => {
       currentProjectStatusFilter = null;
       refreshClientsGrid();

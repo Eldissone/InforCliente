@@ -113,7 +113,7 @@ const SUBCATEGORIAS = [
 const UNIDADES = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
 
 const STATUS_MAP = {
-  "Por Iniciar": "ACTIVE",
+  "Por Iniciar": "NOT_STARTED",
   "Em Execução": "ACTIVE",
   "Em Pausa": "ON_HOLD",
   "Concluído": "COMPLETED",
@@ -192,10 +192,62 @@ function mergeObraRegisto(project, registo) {
   return base;
 }
 
+export const OBRA_STATUS_OPTIONS = [
+  { value: "NOT_STARTED", label: "Por Iniciar" },
+  { value: "ACTIVE", label: "Em Execução" },
+  { value: "ON_HOLD", label: "Em Pausa" },
+  { value: "COMPLETED", label: "Concluído" },
+];
+
+export function obraStatusVisual(status) {
+  const key = String(status || "").toUpperCase();
+  if (key === "NOT_STARTED") {
+    return {
+      label: "Por Iniciar",
+      pill: "bg-slate-50 text-slate-700 border-slate-200",
+      dot: "bg-slate-400",
+      bar: "bg-slate-400",
+      chip: "bg-slate-100 text-slate-700 border border-slate-200",
+      list: "bg-slate-400",
+    };
+  }
+  if (key === "ON_HOLD") {
+    return {
+      label: "Em Pausa",
+      pill: "bg-orange-50 text-orange-700 border-orange-100",
+      dot: "bg-orange-500",
+      bar: "bg-orange-500",
+      chip: "bg-orange-50 text-orange-700 border border-orange-100",
+      list: "bg-amber-400",
+    };
+  }
+  if (key === "COMPLETED") {
+    return {
+      label: "Concluído",
+      pill: "bg-blue-50 text-blue-700 border-blue-100",
+      dot: "bg-blue-500",
+      bar: "bg-blue-500",
+      chip: "bg-blue-50 text-blue-700 border border-blue-100",
+      list: "bg-blue-500",
+    };
+  }
+  return {
+    label: "Em Execução",
+    pill: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    dot: "bg-emerald-500",
+    bar: "bg-emerald-500",
+    chip: "bg-emerald-50 text-emerald-700 border border-emerald-100",
+    list: "bg-emerald-500",
+  };
+}
+
 export function obraEstadoLabel(project) {
+  if (project?.estado) return project.estado;
+  if (project?.lifecycle?.estado) return project.lifecycle.estado;
   const estado = readObraRegisto(project).estado;
   if (estado) return estado;
   if (["Por Iniciar", "Em Execução", "Em Pausa", "Concluído"].includes(project?.phaseLabel)) return project.phaseLabel;
+  if (project?.status === "NOT_STARTED") return "Por Iniciar";
   if (project?.status === "ON_HOLD") return "Em Pausa";
   if (project?.status === "COMPLETED") return "Concluído";
   return "Em Execução";
@@ -335,10 +387,78 @@ function readPhoto(file) {
   });
 }
 
+function checkMigration(kind) {
+  const map = {
+    contactos: { key: CONTACTS_KEY, endpoint: "/contacts/import" },
+    setores: { key: SETORES_KEY, endpoint: "/sectors/import" },
+    pessoal: { key: PESSOAL_KEY, endpoint: "/personnel/import" },
+  };
+  return map[kind];
+}
+
+async function handleMigration(mig, root) {
+  const items = readStore(mig.key);
+  if (!items.length) return false;
+
+  const banner = document.createElement("div");
+  banner.className = "registry-migration-banner";
+  banner.style.cssText = "background: #fff3cd; color: #856404; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #ffeeba;";
+  banner.innerHTML = `
+    <strong>Dados deste dispositivo ainda não importados!</strong>
+    <p>Foram encontrados ${items.length} registos locais de ${mig.key.split('.').pop()} que precisam de ser migrados para a base de dados central.</p>
+    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+      <button type="button" id="btn-migrar" style="padding: 0.5rem 1rem; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer;">Importar para Servidor</button>
+      <button type="button" id="btn-remover" style="padding: 0.5rem 1rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" hidden>Remover Cópia Local</button>
+    </div>
+    <div id="mig-status" style="margin-top: 0.5rem; font-size: 0.9em;"></div>
+  `;
+  root.insertBefore(banner, root.firstChild);
+
+  let currentBatchId = null;
+
+  banner.querySelector("#btn-migrar").addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    const status = banner.querySelector("#mig-status");
+    status.innerText = "A importar...";
+    try {
+      const res = await apiRequest(mig.endpoint, {
+        method: "POST",
+        body: { sourceKey: mig.key, items },
+      });
+      status.innerHTML = `<span style="color: green">Sucesso! ${res.created} criados, ${res.skipped} ignorados.</span>`;
+      if (res.failed === 0 && (res.created + res.skipped === res.requested)) {
+        currentBatchId = res.batchId;
+        banner.querySelector("#btn-remover").hidden = false;
+        e.target.hidden = true;
+      } else {
+        status.innerHTML += ` <span style="color: red">Atenção: ${res.failed} falharam. Não é seguro apagar a cópia local.</span>`;
+      }
+    } catch (err) {
+      status.innerText = "Erro: " + apiMessage(err);
+      e.target.disabled = false;
+    }
+  });
+
+  banner.querySelector("#btn-remover").addEventListener("click", () => {
+    if (confirm("Tem a certeza que deseja remover a cópia local deste dispositivo?")) {
+      localStorage.setItem(mig.key + ".backup", JSON.stringify({ batchId: currentBatchId, items }));
+      localStorage.removeItem(mig.key);
+      banner.remove();
+      toast("Cópia local removida com sucesso.", { type: "success" });
+    }
+  });
+
+  return true;
+}
+
 function mount(kind, html, onSubmit) {
   const root = document.getElementById("registryRoot");
   if (!root) return;
   root.innerHTML = html;
+
+  const mig = checkMigration(kind);
+  if (mig) handleMigration(mig, root);
+
   const form = root.querySelector("form");
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -372,17 +492,23 @@ function renderContactos() {
     const nome = String(data.get("nome") || "").trim();
     const funcao = String(data.get("funcao") || "").trim();
     if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
-    const foto = await readPhoto(data.get("foto"));
-    const items = readStore(CONTACTS_KEY);
-    items.push({
-      id: newId(),
-      nome,
-      funcao,
-      telefone: String(data.get("telefone") || "").trim(),
-      email: String(data.get("email") || "").trim(),
-      foto,
+    
+    const res = await apiRequest("/contacts", {
+      method: "POST",
+      body: {
+        name: nome,
+        role: funcao,
+        phone: String(data.get("telefone") || "").trim() || null,
+        email: String(data.get("email") || "").trim() || null,
+      }
     });
-    writeStore(CONTACTS_KEY, items);
+
+    const file = data.get("foto");
+    if (file instanceof File && file.size) {
+      const fd = new FormData();
+      fd.append("photo", file);
+      await apiUpload(`/contacts/${res.id}/photo`, fd);
+    }
   });
 }
 
@@ -413,8 +539,16 @@ function renderPessoal() {
     else drawList();
   };
 
-  const drawList = () => {
-    const items = readStore(PESSOAL_KEY);
+  const drawList = async () => {
+    let items = [];
+    try {
+      const res = await apiRequest("/personnel?pageSize=200");
+      items = res.items || [];
+    } catch (error) {
+      root.innerHTML = `<p class="registry-note">Não foi possível carregar o pessoal. ${esc(apiMessage(error))}</p>`;
+      return;
+    }
+    view.loadedItems = items;
     const q = view.q.trim().toLowerCase();
     const filtered = items.filter((item) => {
       if (view.tipo && item.tipo !== view.tipo) return false;
@@ -424,19 +558,19 @@ function renderPessoal() {
     const pages = Math.max(1, Math.ceil(filtered.length / PESSOAL_PAGE_SIZE));
     if (view.page > pages) view.page = pages;
     const start = (view.page - 1) * PESSOAL_PAGE_SIZE;
-    const rows = filtered.slice(start, start + PESSOAL_PAGE_SIZE);
-    const body = rows.length
-      ? rows.map((item, index) => `<tr>
-          <td>${String(start + index + 1).padStart(2, "0")}</td>
-          <td>${esc(item.nome || "")}</td>
-          <td>${esc(item.apelido || "")}</td>
-          <td>${esc(item.tipo || "")}</td>
-          <td>${esc(item.idFuncionario || "")}</td>
-          <td>${esc(item.telefone || "")}</td>
-          <td>${esc(item.funcao || "")}</td>
-          <td>${esc(item.obraNome || "")}</td>
-          <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
-        </tr>`).join("")
+      const rows = filtered.slice(start, start + PESSOAL_PAGE_SIZE);
+      const body = rows.length
+        ? rows.map((item, index) => `<tr>
+            <td>${String(start + index + 1).padStart(2, "0")}</td>
+            <td>${esc(item.firstName || item.nome || "")}</td>
+            <td>${esc(item.lastName || item.apelido || "")}</td>
+            <td>${esc(item.type || item.tipo || "")}</td>
+            <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
+            <td>${esc(item.phone || item.telefone || "")}</td>
+            <td>${esc(item.role || item.funcao || "")}</td>
+            <td>${esc(item.project?.name || item.obraNome || "")}</td>
+            <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
+          </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
     const pageButtons = Array.from({ length: pages }, (_, index) => {
       const page = index + 1;
@@ -482,6 +616,9 @@ function renderPessoal() {
         <nav class="pessoal-pages" aria-label="Páginas">${pageButtons}</nav>
       </section>`;
 
+    const mig = checkMigration("pessoal");
+    if (mig) handleMigration(mig, root);
+
     root.querySelector("#pessoalSearch")?.addEventListener("input", (event) => {
       view.q = event.target.value;
       view.page = 1;
@@ -523,12 +660,12 @@ function renderPessoal() {
       }
     }
     const current = view.editId
-      ? readStore(PESSOAL_KEY).find((item) => item.id === view.editId) || null
+      ? view.loadedItems?.find((item) => item.id === view.editId) || null
       : null;
-    const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.funcao === funcao ? "selected" : ""}></option>`).join("");
-    const obras = view.obras.map((obra) => `<option value="${esc(obra.id)}" ${current?.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`).join("");
-    const foto = current?.foto
-      ? `<img src="${esc(current.foto)}" alt="">`
+    const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
+    const obras = view.obras.map((obra) => `<option value="${esc(obra.id)}" ${current?.projectId === obra.id || current?.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`).join("");
+    const foto = current?.photoUrl || current?.foto
+      ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
     root.innerHTML = `
       <header class="pessoal-head">
@@ -548,18 +685,18 @@ function renderPessoal() {
           <input name="foto" type="file" accept="image/jpeg,image/png" />
         </label>
         <div class="pessoal-grid">
-          <label>Nome <input name="nome" required value="${esc(current?.nome || "")}" placeholder="Introduzir nome" /></label>
-          <label>Apelido <input name="apelido" value="${esc(current?.apelido || "")}" placeholder="Introduzir apelido" /></label>
+          <label>Nome <input name="nome" required value="${esc(current?.firstName || current?.nome || "")}" placeholder="Introduzir nome" /></label>
+          <label>Apelido <input name="apelido" value="${esc(current?.lastName || current?.apelido || "")}" placeholder="Introduzir apelido" /></label>
           <label>Email <input name="email" type="email" value="${esc(current?.email || "")}" placeholder="Introduzir email" /></label>
-          <label>Telefone <input name="telefone" value="${esc(current?.telefone || "")}" placeholder="Introduzir telefone" /></label>
+          <label>Telefone <input name="telefone" value="${esc(current?.phone || current?.telefone || "")}" placeholder="Introduzir telefone" /></label>
           <label>Tipo de Funcionário
             <select name="tipo">
               <option value="">Seleccionar tipo</option>
-              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${current?.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${current?.type === tipo || current?.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
             </select>
           </label>
           <label>Função
-            <input name="funcao" required list="funcoes-pessoal" value="${esc(current?.funcao || "")}" placeholder="Seleccionar função" />
+            <input name="funcao" required list="funcoes-pessoal" value="${esc(current?.role || current?.funcao || "")}" placeholder="Seleccionar função" />
             <datalist id="funcoes-pessoal">${funcoes}</datalist>
           </label>
           <label>Obra Alocada
@@ -568,8 +705,8 @@ function renderPessoal() {
               ${obras}
             </select>
           </label>
-          <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
-          <label>Categoria Profissional <input name="categoria" value="${esc(current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
+          <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.employeeCode || current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
+          <label>Categoria Profissional <input name="categoria" value="${esc(current?.category || current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
           <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
         </div>
       </form>`;
@@ -604,26 +741,27 @@ function renderPessoal() {
         if (file instanceof File && file.size > 2 * 1024 * 1024) invalid("A foto deve ter no máximo 2MB.");
         const obraId = String(data.get("obraId") || "");
         const obra = (view.obras || []).find((item) => item.id === obraId);
-        const foto = file instanceof File && file.size ? await readPhoto(file) : (current?.foto || "");
-        const record = {
-          id: current?.id || newId(),
-          nome,
-          apelido: String(data.get("apelido") || "").trim(),
-          email: String(data.get("email") || "").trim(),
-          telefone: String(data.get("telefone") || "").trim(),
-          tipo: String(data.get("tipo") || ""),
-          funcao,
-          obraId,
-          obraNome: obra?.name || obra?.code || current?.obraNome || "",
-          idFuncionario: String(data.get("idFuncionario") || "").trim(),
-          categoria: String(data.get("categoria") || "").trim(),
-          foto,
-        };
-        const items = readStore(PESSOAL_KEY);
-        const index = items.findIndex((item) => item.id === record.id);
-        if (index >= 0) items[index] = record;
-        else items.push(record);
-        writeStore(PESSOAL_KEY, items);
+        const res = await apiRequest(current?.id ? `/personnel/${current.id}` : "/personnel", {
+          method: current?.id ? "PATCH" : "POST",
+          body: {
+            firstName: nome,
+            lastName: String(data.get("apelido") || "").trim() || null,
+            email: String(data.get("email") || "").trim() || null,
+            phone: String(data.get("telefone") || "").trim() || null,
+            type: String(data.get("tipo") || "INTERNO"),
+            role: funcao,
+            projectId: obraId || null,
+            employeeCode: String(data.get("idFuncionario") || "").trim() || null,
+            category: String(data.get("categoria") || "").trim() || null,
+          }
+        });
+        
+        if (file instanceof File && file.size) {
+          const fd = new FormData();
+          fd.append("photo", file);
+          await apiUpload(`/personnel/${res.id}/photo`, fd);
+        }
+
         toast(current ? "Funcionário actualizado." : "Registo guardado.", { type: "success" });
         view.mode = "list";
         view.editId = null;
@@ -640,14 +778,15 @@ function renderPessoal() {
 
 function renderSetores() {
   mount("setores", formShell(
-    "Registo de setores. Fica disponível neste dispositivo.",
+    "Registo de setores gerido pelo servidor.",
     field("Nome do setor", textInput("nome", { required: true, placeholder: "Financeiro" }))
   ), async (form) => {
     const nome = String(new FormData(form).get("nome") || "").trim();
     if (nome.length < 2) invalid("Indique o nome do setor.");
-    const items = readStore(SETORES_KEY);
-    items.push({ id: newId(), nome });
-    writeStore(SETORES_KEY, items);
+    await apiRequest("/sectors", {
+      method: "POST",
+      body: { name: nome }
+    });
   });
 }
 
@@ -682,13 +821,26 @@ function renderFornecedores() {
   });
 }
 
-function renderClientes() {
+async function renderClientes() {
+  let sectors = [];
+  try {
+    const res = await apiRequest("/sectors?pageSize=200");
+    sectors = res.items || [];
+  } catch {
+    sectors = readStore(SETORES_KEY);
+  }
+  
+  const sectorOptions = sectors.map((sector) => ({
+    value: sector.name || sector.nome,
+    label: sector.name || sector.nome
+  }));
+
   mount("clientes", formShell(
     "Registo de clientes no Info Gestor. O email e a palavra-passe criam o acesso do cliente.",
     `<div class="registry-grid">
       ${field("Código", textInput("code", { required: true, placeholder: "CLI-001" }))}
       ${field("Nome", textInput("name", { required: true, placeholder: "Mitrelli Project" }))}
-      ${field("Setor / actividade", textInput("industry"))}
+      ${field("Setor / actividade", sectorOptions.length ? selectInput("industry", sectorOptions, "Seleccione o setor") : textInput("industry", { placeholder: "Registe um setor primeiro..." }))}
       ${field("Região", textInput("region", { placeholder: "Kwanza Sul" }))}
       ${field("Email de acesso", textInput("email", { type: "email", required: true }))}
       ${field("Palavra-passe", textInput("password", { type: "password", required: true }))}
@@ -719,12 +871,19 @@ async function renderObras() {
   } catch {
     clients = [];
   }
-  const contacts = readStore(CONTACTS_KEY);
+  let contacts = [];
+  try {
+    const res = await apiRequest("/contacts?pageSize=200");
+    contacts = res.items || [];
+  } catch (error) {
+    contacts = [];
+    toast(apiMessage(error), { type: "error" });
+  }
   const clientOptions = clients.map((client) => ({ value: client.id, label: client.name }));
   const contactOptions = contacts.map((contact) => ({
     value: contact.id,
-    label: `${esc(contact.nome)} — ${esc(contact.funcao || "Sem função")}`,
-    photo: contact.foto || "",
+    label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
+    photo: contact.photoUrl || contact.foto || "",
   }));
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
@@ -765,11 +924,12 @@ async function renderObras() {
     if (!tipos.length) invalid("Seleccione pelo menos um tipo de obra.");
     if (!servicos.length) invalid("Seleccione pelo menos um serviço.");
     const estado = collectEstado(form);
-    const selected = readStore(CONTACTS_KEY).filter((contact) => checkedValues(form, "contactos").includes(contact.id));
-    const director = selected.find((contact) => /director/i.test(contact.funcao || "")) || selected[0] || null;
+    const selected = contacts.filter((contact) => checkedValues(form, "contactos").includes(contact.id));
+    const director = selected.find((contact) => /director/i.test(contact.role || contact.funcao || "")) || selected[0] || null;
     const inicio = toIsoDate(data.get("inicioOperacional"));
     const previsional = toIsoDate(data.get("conclusaoPrevisional"));
     const efetiva = toIsoDate(estado.conclusaoEfetiva);
+    const arranque = toIsoDate(data.get("arranque"));
 
     await apiRequest("/projects", {
       method: "POST",
@@ -788,14 +948,19 @@ async function renderObras() {
         phaseLabel: estado.estado,
         startDate: inicio,
         dueDate: previsional,
-        contact: selected.map((contact) => contact.nome).join(", ") || null,
-        directorObra: director?.nome || null,
-        directorPhone: director?.telefone || null,
+        launchDate: arranque,
+        actualEndDate: efetiva,
+        pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
+        contactIds: selected.map((contact) => contact.id),
+        contact: selected.map((contact) => contact.name || contact.nome).join(", ") || null,
+        directorObra: director?.name || director?.nome || null,
+        directorPhone: director?.phone || director?.telefone || null,
         directorEmail: director?.email || null,
         technicians: selected.map((contact) => ({
-          name: contact.nome,
-          role: contact.funcao,
-          phone: contact.telefone,
+          id: contact.id,
+          name: contact.name || contact.nome,
+          role: contact.role || contact.funcao,
+          phone: contact.phone || contact.telefone,
           email: contact.email,
         })),
         maoDeObraIndireta: {
@@ -809,7 +974,13 @@ async function renderObras() {
             conclusaoEfetiva: efetiva ? estado.conclusaoEfetiva : "",
             estado: estado.estado,
             pausas: estado.pausas,
-            contactos: selected.map(({ id, nome, funcao, telefone, email }) => ({ id, nome, funcao, telefone, email })),
+            contactos: selected.map((contact) => ({
+              id: contact.id,
+              nome: contact.name || contact.nome,
+              funcao: contact.role || contact.funcao,
+              telefone: contact.phone || contact.telefone,
+              email: contact.email,
+            })),
           },
         },
       },
@@ -1092,11 +1263,15 @@ export function openObraEstadoDialog(project, onSaved) {
     contentHtml: estadoFields(registo.estado || obraEstadoLabel(project)),
     onRender: ({ panel }) => {
       const body = panel.querySelector("[data-body]");
-      if (registo.conclusaoEfetiva) {
+      const efetiva = project?.lifecycle?.actualEndDate || project?.actualEndDate || registo.conclusaoEfetiva;
+      if (efetiva) {
         const input = body.querySelector("[name=conclusaoEfetiva]");
-        if (input) input.value = registo.conclusaoEfetiva;
+        if (input) input.value = String(efetiva).slice(0, 10);
       }
-      bindEstado(body, Array.isArray(registo.pausas) ? registo.pausas : []);
+      const pausas = Array.isArray(project?.pauses) && project.pauses.length
+        ? project.pauses
+        : (Array.isArray(registo.pausas) ? registo.pausas : []);
+      bindEstado(body, pausas);
     },
     onPrimary: async ({ close, panel }) => {
       const body = panel.querySelector("[data-body]");
@@ -1107,6 +1282,8 @@ export function openObraEstadoDialog(project, onSaved) {
           body: {
             status: STATUS_MAP[estado.estado] || "ACTIVE",
             phaseLabel: estado.estado,
+            actualEndDate: toIsoDate(estado.conclusaoEfetiva),
+            pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
             maoDeObraIndireta: mergeObraRegisto(project, {
               estado: estado.estado,
               pausas: estado.pausas,
