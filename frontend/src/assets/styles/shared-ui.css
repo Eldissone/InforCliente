@@ -274,11 +274,11 @@
     padding: 0.3rem 0.65rem;
     list-style: none;
     cursor: pointer;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+    color: #62666c;
   }
 
   .app-sidebar-subgroup > summary::-webkit-details-marker {

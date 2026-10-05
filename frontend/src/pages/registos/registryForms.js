@@ -514,7 +514,24 @@ function renderContactos() {
 }
 
 const PESSOAL_PAGE_SIZE = 12;
-const PESSOAL_TIPOS = ["Interno", "Subcontratado"];
+const PESSOAL_TIPOS = [
+  { value: "INTERNO", label: "Interno" },
+  { value: "SUBCONTRATADO", label: "Subcontratado" },
+];
+
+function pessoalTipoLabel(type) {
+  const raw = String(type || "").trim();
+  const found = PESSOAL_TIPOS.find((tipo) => tipo.value === raw || tipo.label === raw);
+  return found?.label || raw;
+}
+
+function mapPessoalTipo(type) {
+  const raw = String(type || "").trim();
+  const found = PESSOAL_TIPOS.find((tipo) => tipo.value === raw || tipo.label === raw);
+  if (found) return found.value;
+  const upper = raw.toUpperCase();
+  return PESSOAL_TIPOS.some((tipo) => tipo.value === upper) ? upper : "INTERNO";
+}
 
 function pessoalView() {
   if (!renderPessoal.view) {
@@ -523,8 +540,28 @@ function pessoalView() {
   return renderPessoal.view;
 }
 
+function pessoalObrasLabel(item) {
+  const names = (item.projects || [])
+    .map((obra) => obra.name || obra.code)
+    .filter(Boolean);
+  if (names.length) return names.join(", ");
+  return item.project?.name || item.obraNome || "";
+}
+
+function personnelProjectIdsFromItem(item) {
+  if (!item) return [];
+  if (Array.isArray(item.projectIds) && item.projectIds.length) {
+    return [...new Set(item.projectIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  if (Array.isArray(item.projects) && item.projects.length) {
+    return [...new Set(item.projects.map((obra) => String(obra.id || "").trim()).filter(Boolean))];
+  }
+  const one = item.projectId || item.obraId;
+  return one ? [String(one)] : [];
+}
+
 function pessoalBlob(item) {
-  return [item.nome, item.apelido, item.email, item.telefone, item.funcao, item.idFuncionario, item.obraNome, item.categoria]
+  return [item.nome, item.apelido, item.email, item.telefone, item.funcao, item.idFuncionario, item.obraNome, pessoalObrasLabel(item), item.categoria]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -552,7 +589,7 @@ function renderPessoal() {
     view.loadedItems = items;
     const q = view.q.trim().toLowerCase();
     const filtered = items.filter((item) => {
-      if (view.tipo && item.tipo !== view.tipo) return false;
+      if (view.tipo && (item.type || item.tipo) !== view.tipo) return false;
       if (!q) return true;
       return pessoalBlob(item).includes(q);
     });
@@ -565,11 +602,11 @@ function renderPessoal() {
             <td>${String(start + index + 1).padStart(2, "0")}</td>
             <td>${esc(item.firstName || item.nome || "")}</td>
             <td>${esc(item.lastName || item.apelido || "")}</td>
-            <td>${esc(item.type || item.tipo || "")}</td>
+            <td>${esc(pessoalTipoLabel(item.type || item.tipo || ""))}</td>
             <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
             <td>${esc(item.phone || item.telefone || "")}</td>
             <td>${esc(item.role || item.funcao || "")}</td>
-            <td>${esc(item.project?.name || item.obraNome || "")}</td>
+            <td class="pessoal-obras-cell">${esc(pessoalObrasLabel(item))}</td>
             <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
           </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
@@ -594,7 +631,7 @@ function renderPessoal() {
         <label class="pessoal-field">Filtrar pessoal
           <select id="pessoalTipo">
             <option value="">Todo o pessoal</option>
-            ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${view.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+            ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo.value)}" ${view.tipo === tipo.value ? "selected" : ""}>${esc(tipo.label)}</option>`).join("")}
           </select>
         </label>
         <button type="button" class="pessoal-register" id="pessoalCreate">Registar Funcionário</button>
@@ -660,14 +697,97 @@ function renderPessoal() {
         view.obras = [];
       }
     }
-    const current = view.editId
+    let current = view.editId
       ? view.loadedItems?.find((item) => item.id === view.editId) || null
       : null;
+    if (view.editId) {
+      try {
+        current = await apiRequest(`/personnel/${view.editId}`);
+      } catch {
+        /* mantém o item da listagem se o GET falhar */
+      }
+    }
+    view.formProjectIds = personnelProjectIdsFromItem(current);
+    const selectedTipo = mapPessoalTipo(current?.type || current?.tipo || "INTERNO");
     const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
-    const obras = view.obras.map((obra) => `<option value="${esc(obra.id)}" ${current?.projectId === obra.id || current?.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`).join("");
     const foto = current?.photoUrl || current?.foto
       ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
+
+    const obraOptions = (selectedId = "", excludeIds = []) => view.obras
+      .filter((obra) => !excludeIds.includes(obra.id) || obra.id === selectedId)
+      .map((obra) => `<option value="${esc(obra.id)}" ${selectedId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`)
+      .join("");
+
+    const isInternoTipo = (tipo) => mapPessoalTipo(tipo || "INTERNO") !== "SUBCONTRATADO";
+
+    const obrasFieldHtml = () => {
+      const tipo = root.querySelector('[name="tipo"]')?.value || selectedTipo;
+      if (!isInternoTipo(tipo)) {
+        const selected = view.formProjectIds[0] || "";
+        return `<label class="pessoal-obra-single">Obra Alocada
+            <select name="obraId">
+              <option value="">Seleccionar obra</option>
+              ${obraOptions(selected)}
+            </select>
+          </label>`;
+      }
+      const assigned = view.formProjectIds
+        .map((id) => (view.obras || []).find((obra) => obra.id === id))
+        .filter(Boolean);
+      const exclude = view.formProjectIds;
+      const chips = assigned.length
+        ? assigned.map((obra) => `<li>
+              <span>${esc(obra.name || obra.code || "Obra")}</span>
+              <button type="button" class="pessoal-obra-remove" data-remove-obra="${esc(obra.id)}">Remover</button>
+            </li>`).join("")
+        : `<li class="pessoal-obra-empty">Nenhuma obra alocada</li>`;
+      return `<div class="pessoal-obras">
+            <span class="pessoal-obras-label">Obras alocadas</span>
+            <ul class="pessoal-obra-list">${chips}</ul>
+            <div class="pessoal-obra-add">
+              <select id="pessoalObraPick">
+                <option value="">Seleccionar obra</option>
+                ${obraOptions("", exclude)}
+              </select>
+              <button type="button" class="pessoal-obra-add-btn" id="pessoalObraAdd">Adicionar obra</button>
+            </div>
+          </div>`;
+    };
+
+    const bindObrasField = () => {
+      const wrap = root.querySelector("#pessoalObrasField");
+      if (!wrap) return;
+      wrap.querySelector("#pessoalObraAdd")?.addEventListener("click", () => {
+        const pick = wrap.querySelector("#pessoalObraPick");
+        const id = String(pick?.value || "");
+        if (!id) {
+          toast("Seleccione uma obra para adicionar.", { type: "error" });
+          return;
+        }
+        if (!view.formProjectIds.includes(id)) view.formProjectIds.push(id);
+        paintObrasField();
+      });
+      wrap.querySelectorAll("[data-remove-obra]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const id = button.getAttribute("data-remove-obra");
+          view.formProjectIds = view.formProjectIds.filter((item) => item !== id);
+          paintObrasField();
+        });
+      });
+      wrap.querySelector('[name="obraId"]')?.addEventListener("change", (event) => {
+        const id = String(event.target.value || "");
+        view.formProjectIds = id ? [id] : [];
+      });
+    };
+
+    const paintObrasField = () => {
+      const wrap = root.querySelector("#pessoalObrasField");
+      if (!wrap) return;
+      wrap.innerHTML = obrasFieldHtml();
+      bindObrasField();
+    };
+
     root.innerHTML = `
       <header class="pessoal-head">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>
@@ -693,29 +813,32 @@ function renderPessoal() {
           <label>Tipo de Funcionário
             <select name="tipo">
               <option value="">Seleccionar tipo</option>
-              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${current?.type === tipo || current?.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo.value)}" ${selectedTipo === tipo.value ? "selected" : ""}>${esc(tipo.label)}</option>`).join("")}
             </select>
           </label>
           <label>Função
             <input name="funcao" required list="funcoes-pessoal" value="${esc(current?.role || current?.funcao || "")}" placeholder="Seleccionar função" />
             <datalist id="funcoes-pessoal">${funcoes}</datalist>
           </label>
-          <label>Obra Alocada
-            <select name="obraId">
-              <option value="">Seleccionar obra</option>
-              ${obras}
-            </select>
-          </label>
+          <div id="pessoalObrasField"></div>
           <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.employeeCode || current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
           <label>Categoria Profissional <input name="categoria" value="${esc(current?.category || current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
           <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
         </div>
       </form>`;
 
+    paintObrasField();
+
     root.querySelector("#pessoalBack")?.addEventListener("click", () => {
       view.mode = "list";
       view.editId = null;
       draw();
+    });
+    root.querySelector('[name="tipo"]')?.addEventListener("change", (event) => {
+      if (!isInternoTipo(event.target.value) && view.formProjectIds.length > 1) {
+        view.formProjectIds = view.formProjectIds.slice(0, 1);
+      }
+      paintObrasField();
     });
     const photoInput = root.querySelector('input[name="foto"]');
     photoInput?.addEventListener("change", () => {
@@ -740,8 +863,10 @@ function renderPessoal() {
         if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
         const file = data.get("foto");
         if (file instanceof File && file.size > 2 * 1024 * 1024) invalid("A foto deve ter no máximo 2MB.");
-        const obraId = String(data.get("obraId") || "");
-        const obra = (view.obras || []).find((item) => item.id === obraId);
+        const tipo = mapPessoalTipo(data.get("tipo") || "INTERNO");
+        const projectIds = tipo === "SUBCONTRATADO"
+          ? [String(data.get("obraId") || "")].filter(Boolean)
+          : [...(view.formProjectIds || [])];
         const res = await apiRequest(current?.id ? `/personnel/${current.id}` : "/personnel", {
           method: current?.id ? "PATCH" : "POST",
           body: {
@@ -749,14 +874,15 @@ function renderPessoal() {
             lastName: String(data.get("apelido") || "").trim() || null,
             email: String(data.get("email") || "").trim() || null,
             phone: String(data.get("telefone") || "").trim() || null,
-            type: String(data.get("tipo") || "INTERNO"),
+            type: tipo,
             role: funcao,
-            projectId: obraId || null,
+            projectId: projectIds[0] || null,
+            projectIds,
             employeeCode: String(data.get("idFuncionario") || "").trim() || null,
             category: String(data.get("categoria") || "").trim() || null,
           }
         });
-        
+
         if (file instanceof File && file.size) {
           const fd = new FormData();
           fd.append("photo", file);

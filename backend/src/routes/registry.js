@@ -14,6 +14,15 @@ const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { createLog } = require("../services/logService");
 const {
+  PERSONNEL_PROJECT_INCLUDE,
+  normalizePersonnelProjectIds,
+  assignmentCreate,
+  assignmentReplace,
+  assertProjectsExist,
+  serializePersonnelProjects,
+  takePersonnelProjectFields,
+} = require("../services/personnelProjects");
+const {
   MAX_PHOTO_BYTES,
   PHOTO_MIME_EXT,
   normalizeNameKey,
@@ -25,7 +34,6 @@ const {
 
 const MODULE = "cadastros";
 const MAX_IMPORT_ITEMS = 500;
-const PROJECT_SELECT = { id: true, name: true, code: true };
 
 // `undefined` tem de continuar `undefined` para o PATCH não anular campos omitidos.
 const emptyToNull = (v) => (v === undefined ? undefined : v === null ? null : String(v).trim() || null);
@@ -89,6 +97,12 @@ async function projectExists(projectId) {
   const found = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
   return Boolean(found);
 }
+
+const optionalProjectIds = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  const list = value == null ? [] : Array.isArray(value) ? value : [value];
+  return list.map((item) => String(item ?? "").trim()).filter(Boolean);
+}, z.array(z.string().min(1).max(120)).max(80).optional());
 
 // ─── Definições por recurso ──────────────────────────────────────────────────
 
@@ -233,22 +247,33 @@ const sectorDef = {
 const PERSONNEL_TYPES = ["INTERNO", "SUBCONTRATADO"];
 const LEGACY_PERSONNEL_TYPE = { interno: "INTERNO", subcontratado: "SUBCONTRATADO" };
 
+function normalizePersonnelType(value) {
+  if (value === undefined) return undefined;
+  if (value == null || value === "") return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const mapped = LEGACY_PERSONNEL_TYPE[raw.toLowerCase()];
+  if (mapped) return mapped;
+  return raw.toUpperCase();
+}
+
 const personnelDef = {
   resource: "PERSONNEL",
   model: "personnel",
   logPrefix: "PERSONNEL",
   photoDir: "personnel",
   hasPhoto: true,
-  include: { project: { select: PROJECT_SELECT } },
+  include: PERSONNEL_PROJECT_INCLUDE,
   orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
   createSchema: z.object({
     firstName: z.string().trim().min(2).max(120),
     lastName: optionalText(120),
     email: optionalEmail,
     phone: optionalText(60),
-    type: z.preprocess((v) => (v === "" ? null : v), z.enum(PERSONNEL_TYPES).nullable().optional()),
+    type: z.preprocess(normalizePersonnelType, z.enum(PERSONNEL_TYPES).nullable().optional()),
     role: z.string().trim().min(2).max(200),
     projectId: optionalText(120),
+    projectIds: optionalProjectIds,
     employeeCode: optionalText(60),
     category: optionalText(120),
     legacyId: legacyIdSchema,
@@ -258,9 +283,10 @@ const personnelDef = {
     lastName: optionalText(120),
     email: optionalEmail,
     phone: optionalText(60),
-    type: z.preprocess((v) => (v === "" ? null : v), z.enum(PERSONNEL_TYPES).nullable().optional()),
+    type: z.preprocess(normalizePersonnelType, z.enum(PERSONNEL_TYPES).nullable().optional()),
     role: z.string().trim().min(2).max(200).optional(),
     projectId: optionalText(120),
+    projectIds: optionalProjectIds,
     employeeCode: optionalText(60),
     category: optionalText(120),
     active: z.boolean().optional(),
@@ -276,6 +302,7 @@ const personnelDef = {
         { employeeCode: { contains: q, mode: "insensitive" } },
         { category: { contains: q, mode: "insensitive" } },
         { project: { name: { contains: q, mode: "insensitive" } } },
+        { projectAssignments: { some: { project: { name: { contains: q, mode: "insensitive" } } } } },
       ],
     };
   },
@@ -283,28 +310,64 @@ const personnelDef = {
     const where = {};
     const type = String(query.type || "").toUpperCase();
     if (PERSONNEL_TYPES.includes(type)) where.type = type;
-    if (query.projectId) where.projectId = String(query.projectId);
+    if (query.projectId) {
+      const projectId = String(query.projectId);
+      where.AND = [
+        {
+          OR: [
+            { projectId },
+            { projectAssignments: { some: { projectId } } },
+          ],
+        },
+      ];
+    }
     return where;
   },
   async toCreateData(body) {
-    const data = { ...body };
-    if (data.projectId && !(await projectExists(data.projectId))) {
-      const err = new Error("PROJECT_NOT_FOUND");
-      err.status = 400;
-      err.payload = { error: "PROJECT_NOT_FOUND" };
-      throw err;
-    }
-    return { data, warnings: [] };
+    const { rest, projectId, projectIds } = takePersonnelProjectFields(body);
+    const { ids, primaryId } = normalizePersonnelProjectIds({
+      type: rest.type,
+      projectId,
+      projectIds,
+    });
+    await assertProjectsExist(ids);
+    return {
+      data: {
+        ...rest,
+        projectId: primaryId,
+        projectAssignments: assignmentCreate(ids),
+      },
+      warnings: [],
+    };
   },
-  async toPatchData(body) {
-    const data = { ...body };
-    if (data.projectId && !(await projectExists(data.projectId))) {
-      const err = new Error("PROJECT_NOT_FOUND");
-      err.status = 400;
-      err.payload = { error: "PROJECT_NOT_FOUND" };
-      throw err;
+  async toPatchData(body, { id }) {
+    const { rest, projectId, projectIds, hasProjectIds, hasProjectId } = takePersonnelProjectFields(body);
+    const typeChangingToSub = rest.type !== undefined && String(rest.type).toUpperCase() === "SUBCONTRATADO";
+    if (!hasProjectIds && !hasProjectId && !typeChangingToSub) {
+      return { data: rest };
     }
-    return { data };
+
+    const existing = await prisma.personnel.findUnique({
+      where: { id },
+      include: { projectAssignments: { select: { projectId: true }, orderBy: { createdAt: "asc" } } },
+    });
+    const existingIds = (existing?.projectAssignments || []).map((row) => row.projectId);
+    if (!existingIds.length && existing?.projectId) existingIds.push(existing.projectId);
+
+    const { ids, primaryId } = normalizePersonnelProjectIds({
+      type: rest.type !== undefined ? rest.type : existing?.type,
+      projectId: hasProjectId ? projectId : undefined,
+      projectIds: hasProjectIds ? projectIds : undefined,
+      existingIds: !hasProjectIds && !hasProjectId ? existingIds : undefined,
+    });
+    await assertProjectsExist(ids);
+    return {
+      data: {
+        ...rest,
+        projectId: primaryId,
+        projectAssignments: assignmentReplace(ids),
+      },
+    };
   },
   fromLegacy(item) {
     const rawType = String(item.tipo ?? item.type ?? "").trim().toLowerCase();
@@ -334,6 +397,7 @@ const personnelDef = {
     return body;
   },
   serialize(row) {
+    const projects = serializePersonnelProjects(row);
     return {
       id: row.id,
       firstName: row.firstName,
@@ -342,8 +406,6 @@ const personnelDef = {
       phone: row.phone,
       type: row.type,
       role: row.role,
-      projectId: row.projectId,
-      project: row.project ? { id: row.project.id, name: row.project.name, code: row.project.code } : null,
       employeeCode: row.employeeCode,
       category: row.category,
       photoUrl: row.photoUrl,
@@ -351,6 +413,7 @@ const personnelDef = {
       legacyId: row.legacyId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      ...projects,
     };
   },
 };

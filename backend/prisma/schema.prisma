@@ -290,6 +290,7 @@ model Project {
   purchaseOrders      PurchaseOrder[]
   quoteSupplierOrders QuoteSupplierOrder[]
   personnel           Personnel[]
+  personnelAssignments PersonnelProject[]
   pauses              ProjectPause[]
   projectContacts     ProjectContact[]
 
@@ -1874,6 +1875,8 @@ model Personnel {
   phone         String?
   type          PersonnelType?
   role          String
+  /// Obra principal (primeira da lista). Compatibilidade com código legado que lê um só id.
+  /// Fonte da verdade para internos: PersonnelProject.
   projectId     String?
   employeeCode  String?
   category      String?
@@ -1885,15 +1888,31 @@ model Personnel {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  project     Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  createdBy   User?                @relation("PersonnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  importBatch RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectAssignments  PersonnelProject[]
+  createdBy           User?                @relation("PersonnelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  importBatch         RegistryImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([firstName, lastName])
   @@index([projectId])
   @@index([type])
   @@index([active])
   @@index([importBatchId])
+}
+
+/// N:N funcionário ↔ obra. Fonte da verdade das alocações (internos: 0..N obras).
+model PersonnelProject {
+  id          String   @id @default(cuid())
+  personnelId String
+  projectId   String
+  createdAt   DateTime @default(now())
+
+  personnel Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([personnelId, projectId])
+  @@index([projectId])
+  @@index([personnelId])
 }
 
 enum RegistryResource {

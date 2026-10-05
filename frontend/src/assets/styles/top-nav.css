@@ -304,6 +304,13 @@ body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group {
   border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
+body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group > summary {
+  font-size: inherit;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group a:not(.hidden) {
   width: 100%;
 }
