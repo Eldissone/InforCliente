@@ -319,7 +319,7 @@ body[data-shell="figma"] main > header nav #projectBreadcrumb {
 }
 
 body[data-shell="figma"] main [data-tab-trigger] {
-  height: 46px;
+  height: 38px;
   border-bottom-width: 2px;
   border-bottom-color: transparent;
   color: #777;
@@ -342,7 +342,7 @@ body[data-shell="figma"] main .rounded-2xl.bg-white {
 body[data-shell="figma"] main button.bg-slate-900,
 body[data-shell="figma"] main button[class*="0F172A"],
 body[data-shell="figma"] main a.bg-slate-900 {
-  height: 46px;
+  height: 38px;
   border-radius: 10px;
   background: #212e3e;
   font-size: 14px;
@@ -357,7 +357,7 @@ body[data-shell="figma"] main button[class*="0F172A"]:hover {
 }
 
 body[data-shell="figma"] main button.bg-white.border {
-  height: 46px;
+  height: 38px;
   border-radius: 10px;
   border-color: #d0d0d0;
   color: #121212;

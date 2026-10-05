@@ -47,7 +47,7 @@ body[data-shell="figma"] .shell-search {
   min-width: 0;
   flex: 1 1 180px;
   max-width: 360px;
-  height: 46px;
+  height: 38px;
   padding: 0 12px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
@@ -83,7 +83,7 @@ body[data-shell="figma"] .shell-btn {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 46px;
+  height: 38px;
   padding: 10px 16px;
   border: 0;
   border-radius: 10px;

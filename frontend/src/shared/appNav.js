@@ -268,8 +268,8 @@ export function transformDesktopNavToDropdowns() {
   rebuildMobileMenu(nav, source);
 
   // Screens that already have a task-specific desktop sidebar (admin, project
-  // selector and purchase centre) keep their dedicated working area intact.
-  if (!source || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar, .cc-sidebar")) {
+  // selector) keep their dedicated working area intact.
+  if (!source || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar")) {
     setActiveState();
     syncGroupVisibility();
     return;

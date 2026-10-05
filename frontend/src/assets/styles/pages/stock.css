@@ -132,7 +132,7 @@ body[data-shell="figma"] main > header nav span[class*="0d3fd1"] {
 }
 
 body[data-shell="figma"] main .tab-btn {
-  height: 46px;
+  height: 38px;
   padding-top: 0;
   padding-bottom: 0;
   color: #777;
@@ -147,7 +147,7 @@ body[data-shell="figma"] #tabContent button.bg-slate-900:not(.w-10),
 body[data-shell="figma"] #tabContent button[class*="2afc8d"],
 body[data-shell="figma"] #modalContainer button.bg-slate-900:not(.w-10),
 body[data-shell="figma"] #modalContainer button[class*="2afc8d"] {
-  height: 46px;
+  height: 38px;
   border-radius: 10px;
   background: #212e3e;
   color: #fff;

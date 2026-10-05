@@ -296,8 +296,8 @@ body[data-registry="obras"] .registry-page>h1 {
 .obra-form .registry-field input,
 .obra-form .registry-field select,
 .obra-form .registry-field textarea {
-  height: 50px;
-  min-height: 50px;
+  height: 40px;
+  min-height: 40px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
   background: #fff;
@@ -338,7 +338,7 @@ body[data-registry="obras"] .registry-page>h1 {
 .obra-multiselect {
   position: relative;
   width: 100%;
-  min-height: 50px;
+  min-height: 40px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
   background: #fff;
@@ -449,7 +449,7 @@ body[data-registry="obras"] .registry-page>h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
+  min-height: 38px;
   padding: 0 16px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
@@ -472,7 +472,7 @@ body[data-registry="obras"] .registry-page>h1 {
 .obra-form .registry-submit,
 .obra-form .registry-actions .registry-ghost {
   min-width: 180px;
-  height: 46px;
+  height: 38px;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 400;
