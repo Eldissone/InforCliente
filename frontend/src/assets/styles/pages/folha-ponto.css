@@ -1,0 +1,153 @@
+/* Folha de Ponto — reutiliza pessoal.css; só o que a ficha de horas precisa. */
+
+body[data-registry="folha-ponto"] {
+  background: #f8f9fd;
+}
+
+.ponto-form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 20px 28px;
+  background: #fff;
+  border-radius: 20px;
+}
+
+.ponto-form-card h2 {
+  margin: 0;
+  color: #121212;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.ponto-employee {
+  max-width: 546px;
+}
+
+.ponto-employee label,
+.ponto-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #121212;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.ponto-employee select,
+.ponto-meta input,
+.ponto-lines input,
+.ponto-lines select {
+  height: 50px;
+  padding: 0 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+}
+
+.ponto-employee select:focus,
+.ponto-meta input:focus,
+.ponto-lines input:focus,
+.ponto-lines select:focus {
+  outline: 2px solid #0d3fd1;
+  outline-offset: 2px;
+}
+
+.ponto-lines-wrap {
+  overflow-x: auto;
+}
+
+.ponto-lines {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.ponto-lines th {
+  padding: 0 8px 12px 0;
+  color: #515151;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ponto-lines td {
+  padding: 6px 8px 6px 0;
+  border-top: 1px solid #f2f2f2;
+  color: #515151;
+}
+
+.ponto-lines input,
+.ponto-lines select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+}
+
+.ponto-lines .ponto-num {
+  width: 36px;
+  color: #515151;
+}
+
+.ponto-add-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  margin-top: 8px;
+  padding: 0 16px;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  background: #fff;
+  color: #121212;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.ponto-add-line:hover {
+  background: #f2f2f2;
+}
+
+.ponto-extenso {
+  color: #515151;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.ponto-extenso span {
+  display: inline-block;
+  min-width: 12rem;
+  margin-left: 8px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.ponto-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.ponto-meta h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #121212;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.ponto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 800px) {
+  .ponto-meta {
+    grid-template-columns: 1fr;
+  }
+}

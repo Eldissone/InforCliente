@@ -22,6 +22,7 @@ const APP_MENU = [
       { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos" },
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal" },
+      { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto" },
       { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
       { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo" },
       { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo" },

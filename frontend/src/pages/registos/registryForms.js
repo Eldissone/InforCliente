@@ -6,6 +6,7 @@ import { initMobileMenu, openModal, toast } from "/shared/ui.js";
 const CONTACTS_KEY = "InfoCliente.registo.contactos";
 const SETORES_KEY = "InfoCliente.registo.setores";
 const PESSOAL_KEY = "InfoCliente.registo.pessoal";
+const PONTO_KEY = "InfoCliente.registo.folhaPonto";
 
 const TIPOS_OBRA = [
   "Eletrificação Rural",
@@ -776,6 +777,388 @@ function renderPessoal() {
   draw();
 }
 
+const PONTO_PAGE_SIZE = 16;
+const PONTO_TIPOS_HORA = ["Horas Normais", "Horas Extra"];
+
+function pontoView() {
+  if (!renderFolhaPonto.view) {
+    renderFolhaPonto.view = { q: "", obraId: "", page: 1, mode: "list", editId: null, pessoas: null, obras: null, lines: null };
+  }
+  return renderFolhaPonto.view;
+}
+
+function formatMoney(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
+  return Number(value).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatPtDate(value) {
+  if (!value) return "—";
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("pt-PT");
+}
+
+function employeeLabel(item) {
+  return [item.firstName || item.nome, item.lastName || item.apelido].filter(Boolean).join(" ").trim() || "Funcionário";
+}
+
+function emptyPontoLine(projectId = "") {
+  return {
+    tipoHora: "Horas Normais",
+    descricao: "Normal",
+    qtd: "1",
+    valorHora: "",
+    periodo: "",
+    dataInicio: "",
+    dataFim: "",
+    projectId,
+  };
+}
+
+function lineTotal(line) {
+  const qtd = parseMoney(line.qtd);
+  const rate = parseMoney(line.valorHora);
+  if (qtd == null || rate == null) return null;
+  return qtd * rate;
+}
+
+function renderFolhaPonto() {
+  const root = document.getElementById("registryRoot");
+  if (!root) return;
+  const view = pontoView();
+
+  const draw = () => {
+    if (view.mode === "form") drawForm();
+    else drawList();
+  };
+
+  const drawList = async () => {
+    if (!view.pessoas) {
+      try {
+        const res = await apiRequest("/personnel?pageSize=200");
+        view.pessoas = res.items || [];
+      } catch {
+        view.pessoas = [];
+      }
+    }
+    if (!view.obras) {
+      try {
+        const data = await apiRequest("/projects?pageSize=200");
+        view.obras = Array.isArray(data?.items) ? data.items : [];
+      } catch {
+        view.obras = [];
+      }
+    }
+    const items = readStore(PONTO_KEY);
+    const q = view.q.trim().toLowerCase();
+    const filtered = items.filter((item) => {
+      if (view.obraId && item.projectId !== view.obraId) return false;
+      if (!q) return true;
+      return [item.employeeName, item.projectName, item.tipoCusto, item.date]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    });
+    const pages = Math.max(1, Math.ceil(filtered.length / PONTO_PAGE_SIZE));
+    if (view.page > pages) view.page = pages;
+    const start = (view.page - 1) * PONTO_PAGE_SIZE;
+    const rows = filtered.slice(start, start + PONTO_PAGE_SIZE);
+    const body = rows.length
+      ? rows.map((item, index) => `<tr>
+          <td>${String(start + index + 1).padStart(2, "0")}</td>
+          <td>${esc(item.employeeName || "")}${item.tipoCusto ? ` — ${esc(item.tipoCusto)}` : ""}</td>
+          <td>${esc(formatPtDate(item.date))}</td>
+          <td>${esc(item.projectName || "")}</td>
+          <td>${esc(item.tipoCusto || "")}</td>
+          <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
+        </tr>`).join("")
+      : `<tr><td class="pessoal-empty" colspan="6">Ainda não há registos de ponto.</td></tr>`;
+    const pageButtons = Array.from({ length: pages }, (_, index) => {
+      const page = index + 1;
+      return `<button type="button" data-page="${page}" ${page === view.page ? 'aria-current="page"' : ""}>${page}</button>`;
+    }).join("");
+    const obras = (view.obras || []).map((obra) =>
+      `<option value="${esc(obra.id)}" ${view.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`
+    ).join("");
+
+    root.innerHTML = `
+      <header class="pessoal-head">
+        <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+        <div>
+          <h1>Todos os Registos de Ponto</h1>
+          <p>Consultar e registar horas de pessoal</p>
+        </div>
+      </header>
+      <section class="pessoal-toolbar">
+        <p class="pessoal-count"><strong>${items.length}</strong><span>Total de registos</span></p>
+        <label class="pessoal-field">Filtrar por obra
+          <select id="pontoObra">
+            <option value="">Todas as obras</option>
+            ${obras}
+          </select>
+        </label>
+        <label class="pessoal-field">Pesquisar
+          <input id="pontoSearch" type="search" value="${esc(view.q)}" placeholder="Funcionário ou tipo" />
+        </label>
+        <button type="button" class="pessoal-register" id="pontoCreate">Registar Horas</button>
+      </section>
+      <section class="pessoal-table-card">
+        <div class="pessoal-table-head">
+          <h2>Todos os Registos de Ponto</h2>
+          <p class="pessoal-page-size">A mostrar <b>${PONTO_PAGE_SIZE}</b> por página</p>
+        </div>
+        <div class="pessoal-table-wrap">
+          <table class="pessoal-table">
+            <thead>
+              <tr>
+                <th>N.º</th><th>Funcionário</th><th>Data</th><th>Obra</th><th>Tipo Custo</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+        <nav class="pessoal-pages" aria-label="Páginas">${pageButtons}</nav>
+      </section>`;
+
+    root.querySelector("#pontoSearch")?.addEventListener("input", (event) => {
+      view.q = event.target.value;
+      view.page = 1;
+      drawList();
+      root.querySelector("#pontoSearch")?.focus();
+    });
+    root.querySelector("#pontoObra")?.addEventListener("change", (event) => {
+      view.obraId = event.target.value;
+      view.page = 1;
+      drawList();
+    });
+    root.querySelector("#pontoCreate")?.addEventListener("click", () => {
+      view.mode = "form";
+      view.editId = null;
+      view.personnelId = "";
+      view.lines = [emptyPontoLine()];
+      draw();
+    });
+    root.querySelectorAll("[data-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        view.mode = "form";
+        view.editId = button.getAttribute("data-open");
+        view.personnelId = "";
+        view.lines = null;
+        draw();
+      });
+    });
+    root.querySelectorAll("[data-page]").forEach((button) => {
+      button.addEventListener("click", () => {
+        view.page = Number(button.getAttribute("data-page")) || 1;
+        drawList();
+      });
+    });
+  };
+
+  const collectLines = (form) => [...form.querySelectorAll("[data-ponto-line]")].map((row) => ({
+    tipoHora: String(row.querySelector('[name="tipoHora"]')?.value || ""),
+    descricao: String(row.querySelector('[name="descricao"]')?.value || "").trim(),
+    qtd: String(row.querySelector('[name="qtd"]')?.value || "").trim(),
+    valorHora: String(row.querySelector('[name="valorHora"]')?.value || "").trim(),
+    periodo: String(row.querySelector('[name="periodo"]')?.value || "").trim(),
+    dataInicio: String(row.querySelector('[name="dataInicio"]')?.value || ""),
+    dataFim: String(row.querySelector('[name="dataFim"]')?.value || ""),
+    projectId: String(row.querySelector('[name="lineObra"]')?.value || ""),
+  }));
+
+  const drawForm = async () => {
+    if (!view.pessoas) {
+      try {
+        const res = await apiRequest("/personnel?pageSize=200");
+        view.pessoas = res.items || [];
+      } catch {
+        view.pessoas = [];
+      }
+    }
+    if (!view.obras) {
+      try {
+        const data = await apiRequest("/projects?pageSize=200");
+        view.obras = Array.isArray(data?.items) ? data.items : [];
+      } catch {
+        view.obras = [];
+      }
+    }
+    const current = view.editId
+      ? readStore(PONTO_KEY).find((item) => item.id === view.editId) || null
+      : null;
+    if (!view.lines) {
+      view.lines = current?.lines?.length
+        ? current.lines.map((line) => ({ ...emptyPontoLine(), ...line }))
+        : [emptyPontoLine(current?.projectId || "")];
+    }
+    const selectedPersonnelId = view.personnelId || current?.personnelId || "";
+    const pessoas = (view.pessoas || []).map((pessoa) => {
+      const selected = selectedPersonnelId === pessoa.id;
+      return `<option value="${esc(pessoa.id)}" ${selected ? "selected" : ""}>${esc(employeeLabel(pessoa))}</option>`;
+    }).join("");
+    const obraOptions = (selectedId) => (view.obras || []).map((obra) =>
+      `<option value="${esc(obra.id)}" ${selectedId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`
+    ).join("");
+    const selectedPerson = (view.pessoas || []).find((pessoa) => pessoa.id === selectedPersonnelId) || null;
+    const lineRows = view.lines.map((line, index) => {
+      const total = lineTotal(line);
+      return `<tr data-ponto-line>
+        <td class="ponto-num">${String(index + 1).padStart(2, "0")}</td>
+        <td><select name="tipoHora">${PONTO_TIPOS_HORA.map((tipo) =>
+          `<option value="${esc(tipo)}" ${line.tipoHora === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}</select></td>
+        <td><input name="descricao" value="${esc(line.descricao || "")}" placeholder="Normal" /></td>
+        <td><input name="qtd" inputmode="decimal" value="${esc(line.qtd || "")}" /></td>
+        <td><input name="valorHora" inputmode="decimal" value="${esc(line.valorHora || "")}" placeholder="0,00" /></td>
+        <td>${esc(formatMoney(total))}</td>
+        <td><input name="periodo" value="${esc(line.periodo || "")}" placeholder="—" /></td>
+        <td><input name="dataInicio" type="date" value="${esc(line.dataInicio || "")}" /></td>
+        <td><input name="dataFim" type="date" value="${esc(line.dataFim || "")}" /></td>
+        <td><select name="lineObra"><option value="">Obra</option>${obraOptions(line.projectId)}</select></td>
+        <td>${esc(formatMoney(total))}</td>
+        <td>${esc(formatMoney(total))}</td>
+      </tr>`;
+    }).join("");
+    const grand = view.lines.reduce((sum, line) => sum + (lineTotal(line) || 0), 0);
+
+    root.innerHTML = `
+      <header class="pessoal-head">
+        <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+        <div>
+          <h1>Folha de Ponto</h1>
+          <p>${current ? "Actualizar registo de horas" : "Registar horas do funcionário"}</p>
+        </div>
+      </header>
+      <button type="button" class="pessoal-back" id="pontoBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
+      <form class="ponto-form-card" id="pontoForm" novalidate>
+        <h2>Folha de Ponto</h2>
+        <div class="ponto-employee">
+          <label>Funcionário
+            <select name="personnelId" required>
+              <option value="">Seleccionar funcionário</option>
+              ${pessoas}
+            </select>
+          </label>
+        </div>
+        <div class="ponto-lines-wrap">
+          <table class="ponto-lines">
+            <thead>
+              <tr>
+                <th>N.º</th><th>Tipo Hora</th><th>Descrição</th><th>QTD</th><th>Valor/Hora (USD)</th>
+                <th>Total (USD)</th><th>Período</th><th>Data Início</th><th>Data Fim</th>
+                <th>Obra</th><th>Custo Total</th><th>Valor Líquido</th>
+              </tr>
+            </thead>
+            <tbody>${lineRows}</tbody>
+          </table>
+        </div>
+        <button type="button" class="ponto-add-line" id="pontoAddLine">
+          <span class="material-symbols-outlined" aria-hidden="true">add</span>
+          Adicionar linha
+        </button>
+        <p class="ponto-extenso">Valor total por extenso:<span>${esc(formatMoney(grand))}</span></p>
+        <div class="ponto-meta">
+          <h3>Dados do Funcionário</h3>
+          <label>Função <input readonly value="${esc(selectedPerson?.role || selectedPerson?.funcao || current?.role || "")}" /></label>
+          <label>Tipo <input readonly value="${esc(selectedPerson?.type || selectedPerson?.tipo || current?.type || "")}" /></label>
+          <label>Categoria <input readonly value="${esc(selectedPerson?.category || selectedPerson?.categoria || current?.category || "")}" /></label>
+        </div>
+        <div class="ponto-actions">
+          <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Horas"}</button>
+        </div>
+      </form>`;
+
+    const syncLines = () => {
+      const form = root.querySelector("#pontoForm");
+      if (form) view.lines = collectLines(form);
+    };
+
+    root.querySelector("#pontoBack")?.addEventListener("click", () => {
+      view.mode = "list";
+      view.editId = null;
+      view.personnelId = "";
+      view.lines = null;
+      draw();
+    });
+    root.querySelector("#pontoAddLine")?.addEventListener("click", () => {
+      syncLines();
+      const person = (view.pessoas || []).find((item) => item.id === root.querySelector('[name="personnelId"]')?.value);
+      view.lines.push(emptyPontoLine(person?.projectId || view.lines[0]?.projectId || ""));
+      drawForm();
+    });
+    root.querySelector('[name="personnelId"]')?.addEventListener("change", (event) => {
+      view.personnelId = event.target.value;
+      const person = (view.pessoas || []).find((item) => item.id === view.personnelId);
+      if (person?.projectId) {
+        syncLines();
+        view.lines = view.lines.map((line) => ({ ...line, projectId: line.projectId || person.projectId }));
+      }
+      drawForm();
+    });
+    root.querySelector("#pontoForm")?.addEventListener("input", (event) => {
+      const row = event.target.closest("[data-ponto-line]");
+      if (!row || !["qtd", "valorHora"].includes(event.target.name)) return;
+      const total = formatMoney(lineTotal({
+        qtd: row.querySelector('[name="qtd"]')?.value,
+        valorHora: row.querySelector('[name="valorHora"]')?.value,
+      }));
+      const cells = row.querySelectorAll("td");
+      if (cells[5]) cells[5].textContent = total;
+      if (cells[10]) cells[10].textContent = total;
+      if (cells[11]) cells[11].textContent = total;
+    });
+    root.querySelector("#pontoForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector("[type=submit]");
+      if (button) button.disabled = true;
+      try {
+        const personnelId = String(new FormData(form).get("personnelId") || "");
+        const person = (view.pessoas || []).find((item) => item.id === personnelId);
+        if (!person) invalid("Seleccione o funcionário.");
+        const lines = collectLines(form).map((line) => ({
+          ...line,
+          projectName: (view.obras || []).find((obra) => obra.id === line.projectId)?.name
+            || (view.obras || []).find((obra) => obra.id === line.projectId)?.code
+            || "",
+        }));
+        if (!lines.length || lines.every((line) => !parseMoney(line.qtd))) invalid("Adicione pelo menos uma linha de horas.");
+        const first = lines[0];
+        const obra = (view.obras || []).find((item) => item.id === first.projectId);
+        const items = readStore(PONTO_KEY);
+        const record = {
+          id: current?.id || newId(),
+          personnelId,
+          employeeName: employeeLabel(person),
+          date: first.dataInicio || first.dataFim || new Date().toISOString().slice(0, 10),
+          projectId: first.projectId || person.projectId || "",
+          projectName: obra?.name || obra?.code || person.project?.name || "",
+          tipoCusto: first.tipoHora,
+          role: person.role || person.funcao || "",
+          type: person.type || person.tipo || "",
+          category: person.category || person.categoria || "",
+          lines,
+        };
+        const next = current
+          ? items.map((item) => item.id === current.id ? record : item)
+          : [record, ...items];
+        writeStore(PONTO_KEY, next);
+        toast(current ? "Registo de ponto actualizado." : "Horas registadas.", { type: "success" });
+        view.mode = "list";
+        view.editId = null;
+        view.lines = null;
+        draw();
+      } catch (error) {
+        toast(apiMessage(error), { type: "error" });
+        if (button) button.disabled = false;
+      }
+    });
+  };
+
+  draw();
+}
+
 function renderSetores() {
   mount("setores", formShell(
     "Registo de setores gerido pelo servidor.",
@@ -999,40 +1382,9 @@ async function renderObras() {
   }
 }
 
-function renderProdutos() {
-  mount("produtos", formShell(
-    "Registo de um produto ou de um serviço no catálogo.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("name", { required: true }), "span-2")}
-      ${field("Classificação", selectInput("kind", ["Produto", "Serviço"]))}
-      ${field("SKU / Ref", textInput("sku"))}
-      ${field("Unidade", selectInput("unit", UNIDADES))}
-      ${field("Descrição", `<textarea name="description"></textarea>`, "span-2")}
-      ${field("Foto", textInput("photo", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
-    const name = String(data.get("name") || "").trim();
-    const kind = String(data.get("kind") || "");
-    if (name.length < 2) invalid("Indique o nome.");
-    if (!kind) invalid("Seleccione a classificação.");
-    const description = String(data.get("description") || "").trim();
-    const created = await apiRequest("/products", {
-      method: "POST",
-      body: {
-        name,
-        sku: String(data.get("sku") || "").trim() || null,
-        description: description || (kind === "Serviço" ? "Serviço" : null),
-        category: kind === "Serviço" ? "CONSUMABLE" : "MATERIAL",
-        unit: String(data.get("unit") || "UN"),
-        minStock: 0,
-      },
-    });
-    const photo = data.get("photo");
-    if (photo && photo.size && created?.id) {
-      await apiUpload(`/products/${created.id}/photo`, { file: photo, fieldName: "photo" });
-    }
-  });
+async function renderProdutos() {
+  const { renderProdutosForm } = await import("/registos/produtos/index.js");
+  await renderProdutosForm();
 }
 
 function renderEquipamentos() {
@@ -1243,6 +1595,7 @@ const RENDERERS = {
   produtos: renderProdutos,
   equipamentos: renderEquipamentos,
   pessoal: renderPessoal,
+  "folha-ponto": renderFolhaPonto,
   "tipo-custo": renderTipoCusto,
   categorias: renderCategorias,
   subcategorias: renderSubcategorias,
