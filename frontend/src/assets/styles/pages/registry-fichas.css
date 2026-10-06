@@ -1,0 +1,283 @@
+/* Fichas de Registos (Contactos, Setores, Equipamentos, Cartões, Movimentos, Novo Armazém). */
+
+body[data-registry="contactos"],
+body[data-registry="setores"],
+body[data-registry="equipamentos"],
+body[data-registry="cartoes"],
+body[data-registry="movimentos"],
+body[data-stock-view="warehouses"] {
+  background: #f7f8fc;
+}
+
+.rf-page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 7.25rem 1.5rem 4rem;
+}
+
+.rf-crumb {
+  margin: 0 0 1.15rem;
+  color: #9aa3b2;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rf-title {
+  margin: 0 0 0.45rem;
+  color: #17191d;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: clamp(1.85rem, 3vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.rf-lead {
+  margin: 0 0 1.75rem;
+  color: #8d95a3;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.rf-catalog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.rf-catalog-head .rf-lead {
+  margin-bottom: 0;
+}
+
+.rf-catalog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.rf-ficha-slot {
+  margin-bottom: 1.5rem;
+}
+
+.rf-ficha-slot:empty {
+  display: none;
+}
+
+.rf-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.rf-card {
+  padding: 1.65rem 1.75rem 1.8rem;
+  border-radius: 1.5rem;
+  background: #fff;
+}
+
+.rf-card h2 {
+  margin: 0 0 1.35rem;
+  color: #17191d;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.rf-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.15rem 1.35rem;
+}
+
+.rf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  color: #2a2e36;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.rf-field.span-2,
+.rf-check.span-2 {
+  grid-column: 1 / -1;
+}
+
+.rf-field input:not([type="checkbox"]):not([type="radio"]),
+.rf-field select,
+.rf-field textarea {
+  width: 100%;
+  height: 3rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.95rem;
+  background: #f3f5f8;
+  color: #2a2e36;
+  font: 400 0.9rem/1.4 Inter, system-ui, sans-serif;
+  box-shadow: none;
+}
+
+.rf-field textarea {
+  height: auto;
+  min-height: 6.5rem;
+  padding: 0.85rem 1rem;
+  resize: vertical;
+}
+
+.rf-field input[type="file"] {
+  height: auto;
+  min-height: 3rem;
+  padding: 0.7rem 1rem;
+  font-size: 0.82rem;
+}
+
+.rf-field select {
+  appearance: none;
+  padding-right: 2.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.9rem center;
+  cursor: pointer;
+}
+
+.rf-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.rf-field input::placeholder,
+.rf-field textarea::placeholder {
+  color: #b0b6c3;
+}
+
+.rf-field input:focus,
+.rf-field select:focus,
+.rf-field textarea:focus {
+  outline: 2px solid #212e3e;
+  outline-offset: 2px;
+}
+
+.rf-hint {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.rf-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.95rem;
+  background: #f3f5f8;
+  cursor: pointer;
+}
+
+.rf-check input {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.15rem;
+  accent-color: #212e3e;
+}
+
+.rf-check span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: #2a2e36;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.rf-check small {
+  color: #8d95a3;
+  font-size: 0.75rem;
+}
+
+.rf-check.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.rf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.15rem 0 0.5rem;
+}
+
+.rf-submit,
+.rf-ghost {
+  min-width: 11.5rem;
+  height: 3rem;
+  padding: 0 1.6rem;
+  border: 0;
+  border-radius: 999px;
+  font: 600 0.92rem/1 Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.rf-submit {
+  background: #212e3e;
+  color: #fff;
+}
+
+.rf-submit:hover {
+  background: #1a2430;
+}
+
+.rf-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.rf-ghost {
+  background: #eef0f4;
+  color: #212e3e;
+}
+
+.rf-ghost:hover {
+  background: #e4e7ed;
+}
+
+.rf-denied {
+  margin: 0;
+  color: #8d95a3;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 720px) {
+  .rf-page {
+    padding: 5.75rem 0.85rem 2.5rem;
+  }
+
+  .rf-card {
+    padding: 1.2rem 1.1rem 1.35rem;
+  }
+
+  .rf-grid,
+  .rf-submit,
+  .rf-ghost {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .rf-catalog-actions,
+  .rf-actions {
+    width: 100%;
+  }
+
+  .rf-catalog-actions > * {
+    flex: 1 1 auto;
+  }
+}

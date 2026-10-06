@@ -162,10 +162,10 @@ function addCostCategoryBatchLine(value = "") {
   const wrap = document.getElementById("costCategoryBatchLines");
   if (!wrap) return;
   const row = document.createElement("div");
-  row.className = "flex gap-2 items-center cost-catalog-batch-line";
-  row.innerHTML = `<input type="text" class="cost-category-batch-name flex-1 h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none" placeholder="Nome da subcategoria" maxlength="120" value="${escapeHtml(value)}">
-    <button type="button" class="cost-catalog-batch-remove shrink-0 w-10 h-10 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-red-600 flex items-center justify-center" aria-label="Remover linha">
-      <span class="material-symbols-outlined text-lg">close</span>
+  row.className = "cc-batch-line cost-catalog-batch-line";
+  row.innerHTML = `<input type="text" class="cost-category-batch-name" placeholder="Nome da subcategoria" maxlength="120" value="${escapeHtml(value)}">
+    <button type="button" class="cost-catalog-batch-remove cc-batch-remove" aria-label="Remover linha">
+      <span class="material-symbols-outlined">close</span>
     </button>`;
   wrap.appendChild(row);
 }

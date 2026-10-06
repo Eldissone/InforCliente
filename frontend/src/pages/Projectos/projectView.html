@@ -584,63 +584,65 @@
         <!-- Autos de Medição Tab -->
         <div id="tab_medicoes" class="tab-content hidden">
             <div
-                class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
-                <div>
+                class="flex flex-row flex-nowrap items-center gap-4 mb-8 bg-white p-5 md:p-6 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+                <div class="shrink-0">
                     <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
                     <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto
                         (WBS).</p>
                 </div>
-                <div class="flex flex-wrap items-end gap-3 w-full lg:w-auto">
-                    <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
-                            Nº</label>
-                        <input id="measurementReportNumber" type="text" value="01" readonly
-                            class="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
-                            title="Atribuído automaticamente" />
-                        <!-- <p id="measurementReportNumberHint" class="text-[9px] text-slate-400 mt-1 font-semibold">Automático</p>     -->
+                <div class="flex flex-nowrap items-end gap-2 ml-auto shrink-0">
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Auto
+                                Nº</label>
+                            <input id="measurementReportNumber" type="text" value="01" readonly
+                                class="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
+                                title="Atribuído automaticamente" />
+                            <!-- <p id="measurementReportNumberHint" class="text-[9px] text-slate-400 mt-1 font-semibold">Automático</p>     -->
+                        </div>
+                        <button id="newMeasurementReportBtn" type="button"
+                            class="h-10 w-10 shrink-0 bg-slate-50 text-slate-700 rounded-xl font-bold flex items-center justify-center hover:bg-slate-100 transition-all"
+                            title="Preparar um novo auto com o próximo número disponível">
+                            <span class="material-symbols-outlined text-lg">add</span>
+                        </button>
                     </div>
-                    <button id="newMeasurementReportBtn" type="button"
-                        class="h-10 bg-slate-50 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-100 transition-all"
-                        title="Preparar um novo auto com o próximo número disponível">
-                        <span class="material-symbols-outlined text-lg">add</span>
-                    </button>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Data
                             do Auto</label>
                         <input id="measurementCurrentDate" type="date"
-                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
+                            class="h-10 w-40 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Auto
                             Anterior (até)</label>
                         <input id="measurementPrevDate" type="date"
-                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                            class="h-10 w-40 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                             title="Data limite do auto anterior — define o acumulado anterior" />
                     </div>
                     <button id="refreshMeasurementsBtn"
-                        class="h-10 bg-slate-100 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-slate-100 text-slate-700 px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-slate-200 transition-all">
                         <span class="material-symbols-outlined text-lg">refresh</span>
                         Atualizar
                     </button>
                     <button id="saveMeasurementReportBtn" data-role-visible="admin,operador"
-                        class="h-10 bg-blue-600 text-white px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-blue-600 text-white px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-blue-700 transition-all">
                         <span class="material-symbols-outlined text-lg">save</span>
                         Salvar
                     </button>
                     <button id="approveMeasurementReportBtn" data-role-visible="admin,operador"
-                        class="h-10 bg-emerald-600 text-white px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-emerald-600 text-white px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-700 transition-all">
                         <span class="material-symbols-outlined text-lg">verified</span>
                         Aprovar
                     </button>
                     <button id="exportMeasurementExcelBtn"
-                        class="h-10 bg-white border border-slate-200 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        class="h-10 w-10 shrink-0 bg-white border border-slate-200 text-emerald-600 rounded-xl font-bold flex items-center justify-center hover:bg-slate-50 transition-all"
+                        title="Exportar Excel">
                         <span class="material-symbols-outlined text-lg">table</span>
-
                     </button>
                     <button id="exportMeasurementPdfBtn"
-                        class="h-10 bg-white border border-slate-200 text-red-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        class="h-10 w-10 shrink-0 bg-white border border-slate-200 text-red-600 rounded-xl font-bold flex items-center justify-center hover:bg-slate-50 transition-all"
+                        title="Exportar PDF">
                         <span class="material-symbols-outlined text-lg">picture_as_pdf</span>
-
                     </button>
                 </div>
             </div>

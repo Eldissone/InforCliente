@@ -303,6 +303,29 @@ function formShell(lead, body, submitLabel = "Registar") {
   </form>`;
 }
 
+function rfField(label, control, extra = "") {
+  return `<label class="rf-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar." }) {
+  return `
+    <h1 class="rf-title">${title}</h1>
+    <p class="rf-lead">${lead}</p>
+    <form class="rf-form" novalidate>
+      ${cards}
+      <div class="rf-actions">
+        ${canSave
+          ? `<button class="rf-submit" type="submit">${submitLabel}</button>`
+          : `<p class="rf-denied">${denied}</p>`}
+      </div>
+    </form>
+  `;
+}
+
+function rfCard(title, inner) {
+  return `<section class="rf-card"><h2>${title}</h2>${inner}</section>`;
+}
+
 function estadoFields(selected = "") {
   const options = ["Por Iniciar", "Em Execução", "Em Pausa", "Concluído"].map((estado) => (
     `<option value="${estado}" ${estado === selected ? "selected" : ""}>${estado}</option>`
@@ -628,23 +651,32 @@ function mount(kind, html, onSubmit) {
   return form;
 }
 
-function renderContactos() {
+async function renderContactos() {
+  await initPermissionLayer();
+  const canSave = can("cadastros", "create") || can("cadastros", "manage");
   const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}"></option>`).join("");
-  mount("contactos", formShell(
-    "Registe as pessoas que podem ser associadas a uma obra, incluindo a área financeira.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("nome", { required: true, placeholder: "Euclides Cabenda" }), "span-2")}
-      ${field("Função", `${textInput("funcao", { required: true, placeholder: "Director de Obra", list: "funcoes-list" })}<datalist id="funcoes-list">${funcoes}</datalist>`)}
-      ${field("Telefone", textInput("telefone", { required: true, placeholder: "+244" }))}
-      ${field("Email", textInput("email", { type: "email", placeholder: "nome@empresa.com" }))}
-      ${field("Foto", textInput("foto", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
+  mount("contactos", rfFicha({
+    title: "Criar Contacto",
+    lead: "Registe as pessoas que podem ser associadas a uma obra, incluindo a área financeira.",
+    submitLabel: "Guardar contacto",
+    canSave,
+    denied: "Sem permissão para guardar contactos.",
+    cards: rfCard("Identificação", `<div class="rf-grid">
+      ${rfField("Nome *", textInput("nome", { required: true, placeholder: "Euclides Cabenda" }), "span-2")}
+      ${rfField("Função *", `${textInput("funcao", { required: true, placeholder: "Director de Obra", list: "funcoes-list" })}<datalist id="funcoes-list">${funcoes}</datalist>`)}
+      ${rfField("Telefone *", textInput("telefone", { required: true, placeholder: "+244" }))}
+      ${rfField("Email", textInput("email", { type: "email", placeholder: "nome@empresa.com" }))}
+      ${rfField("Foto", `${textInput("foto", { type: "file", accept: "image/*" })}<span class="rf-hint">Opcional. Imagem do contacto.</span>`)}
+    </div>`),
+  }), async (form) => {
+    if (!can("cadastros", "create") && !can("cadastros", "manage")) {
+      invalid("Sem permissão para guardar contactos.");
+    }
     const data = new FormData(form);
     const nome = String(data.get("nome") || "").trim();
     const funcao = String(data.get("funcao") || "").trim();
     if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
-    
+
     const res = await apiRequest("/contacts", {
       method: "POST",
       body: {
@@ -1436,11 +1468,22 @@ function renderFolhaPonto() {
   draw();
 }
 
-function renderSetores() {
-  mount("setores", formShell(
-    "Registo de setores gerido pelo servidor.",
-    field("Nome do setor", textInput("nome", { required: true, placeholder: "Financeiro" }))
-  ), async (form) => {
+async function renderSetores() {
+  await initPermissionLayer();
+  const canSave = can("cadastros", "create") || can("cadastros", "manage");
+  mount("setores", rfFicha({
+    title: "Criar Setor",
+    lead: "Registo de setores gerido pelo servidor.",
+    submitLabel: "Guardar setor",
+    canSave,
+    denied: "Sem permissão para guardar setores.",
+    cards: rfCard("Setor", `<div class="rf-grid">
+      ${rfField("Nome do setor *", textInput("nome", { required: true, placeholder: "Financeiro" }), "span-2")}
+    </div>`),
+  }), async (form) => {
+    if (!can("cadastros", "create") && !can("cadastros", "manage")) {
+      invalid("Sem permissão para guardar setores.");
+    }
     const nome = String(new FormData(form).get("nome") || "").trim();
     if (nome.length < 2) invalid("Indique o nome do setor.");
     await apiRequest("/sectors", {
@@ -1544,7 +1587,6 @@ async function renderFornecedores() {
   await initPermissionLayer();
   const canManage = can("fornecedores", "manage") || can("fornecedores", "create");
   const form = mount("fornecedores", `
-    <p class="forn-crumb">INFO GESTOR · Registos</p>
     <h1 class="forn-title">Criar Fornecedor</h1>
     <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
     <form class="forn-form" novalidate>
@@ -1692,7 +1734,6 @@ async function renderClientes() {
        <span class="cli-hint">Ainda não há setores. Pode escrever o nome ou criar um setor em Registos.</span>`;
 
   mount("clientes", `
-    <p class="cli-crumb">INFO GESTOR · Registos</p>
     <h1 class="cli-title">Criar Cliente</h1>
     <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
     <form class="cli-form" novalidate>
@@ -1764,7 +1805,7 @@ async function renderObras() {
   }
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
-    <header class="obra-form-heading"><div><h2>Criar Obra</h2><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
+    <header class="obra-form-heading"><div><h1>Criar Obra</h1><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
     ${obraFormSectionsHtml({ clients, contacts })}
     <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
   </form>`, async (form) => {
@@ -1781,18 +1822,21 @@ async function renderProdutos() {
   await renderProdutosForm();
 }
 
-function renderEquipamentos() {
-  mount("equipamentos", formShell(
-    "Registo de equipamento, maquinaria, viatura ou ferramenta.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("name", { required: true }), "span-2")}
-      ${field("Tipo", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
-      ${field("Matrícula / série", textInput("sku"))}
-      ${field("Unidade", selectInput("unit", UNIDADES))}
-      ${field("Descrição", `<textarea name="description"></textarea>`, "span-2")}
-      ${field("Foto", textInput("photo", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
+async function renderEquipamentos() {
+  await initPermissionLayer();
+  mount("equipamentos", rfFicha({
+    title: "Criar Equipamento, Maquinaria ou Viatura",
+    lead: "Registo de equipamento, maquinaria, viatura ou ferramenta.",
+    submitLabel: "Guardar equipamento",
+    cards: rfCard("Identificação", `<div class="rf-grid">
+      ${rfField("Nome *", textInput("name", { required: true, placeholder: "Nome do equipamento" }), "span-2")}
+      ${rfField("Tipo *", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
+      ${rfField("Matrícula / série", textInput("sku", { placeholder: "Opcional" }))}
+      ${rfField("Unidade", selectInput("unit", UNIDADES))}
+      ${rfField("Descrição", `<textarea name="description" placeholder="Notas ou características"></textarea>`, "span-2")}
+      ${rfField("Foto", `${textInput("photo", { type: "file", accept: "image/*" })}<span class="rf-hint">Opcional.</span>`)}
+    </div>`),
+  }), async (form) => {
     const data = new FormData(form);
     const name = String(data.get("name") || "").trim();
     const kind = String(data.get("kind") || "");
@@ -1894,25 +1938,30 @@ async function renderSubcategorias() {
   });
 }
 
-function renderCartoes() {
-  mount("cartoes", formShell(
-    "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
-    `<div class="registry-grid">
-      ${field("Designação", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
-      ${field("Banco", textInput("bank"))}
-      ${field("Titular", textInput("holderName"))}
-      ${field("Últimos 4 dígitos", textInput("lastDigits", { placeholder: "1234" }))}
-      ${field("Tipo", selectInput("type", [
+async function renderCartoes() {
+  await initPermissionLayer();
+  mount("cartoes", rfFicha({
+    title: "Criar Cartão Bancário",
+    lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
+    submitLabel: "Guardar cartão",
+    cards: `${rfCard("Cartão", `<div class="rf-grid">
+      ${rfField("Designação *", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
+      ${rfField("Banco", textInput("bank", { placeholder: "Nome do banco" }))}
+      ${rfField("Titular", textInput("holderName", { placeholder: "Nome no cartão" }))}
+      ${rfField("Últimos 4 dígitos", textInput("lastDigits", { placeholder: "1234" }))}
+      ${rfField("Tipo", selectInput("type", [
         { value: "PREPAGO", label: "Pré-pago" },
         { value: "DEBITO", label: "Débito" },
         { value: "CREDITO", label: "Crédito" },
       ]))}
-      ${field("Moeda", selectInput("currency", ["AOA", "USD", "EUR"]))}
-      ${field("Responsável", textInput("responsibleName"))}
-      ${field("Saldo inicial", textInput("initialBalance", { placeholder: "0" }))}
-      ${field("Notas", `<textarea name="notes"></textarea>`, "span-2")}
-    </div>`
-  ), async (form) => {
+      ${rfField("Moeda", selectInput("currency", ["AOA", "USD", "EUR"]))}
+      ${rfField("Responsável", textInput("responsibleName", { placeholder: "Quem usa o cartão" }))}
+    </div>`)}
+    ${rfCard("Saldo e notas", `<div class="rf-grid">
+      ${rfField("Saldo inicial", textInput("initialBalance", { placeholder: "0" }))}
+      ${rfField("Notas", `<textarea name="notes" placeholder="Observações opcionais"></textarea>`, "span-2")}
+    </div>`)}`,
+  }), async (form) => {
     const data = new FormData(form);
     const label = String(data.get("label") || "").trim();
     if (!label) invalid("Indique a designação do cartão.");
@@ -1938,6 +1987,7 @@ function renderCartoes() {
 }
 
 async function renderMovimentos() {
+  await initPermissionLayer();
   let cards = [];
   try {
     const data = await apiRequest("/petty-cash/cards");
@@ -1945,23 +1995,25 @@ async function renderMovimentos() {
   } catch {
     cards = [];
   }
-  mount("movimentos", formShell(
-    "Registe um crédito ou um ajuste num cartão bancário.",
-    `<div class="registry-grid">
-      ${field("Cartão", cards.length
+  mount("movimentos", rfFicha({
+    title: "Registar Movimento Financeiro",
+    lead: "Registe um crédito ou um ajuste num cartão bancário.",
+    submitLabel: "Guardar movimento",
+    cards: rfCard("Movimento", `<div class="rf-grid">
+      ${rfField("Cartão *", cards.length
         ? selectInput("cardId", cards.map((card) => ({
           value: card.id,
           label: [card.label, card.bank, card.lastDigits ? `•••• ${card.lastDigits}` : ""].filter(Boolean).join(" · "),
         })))
         : `<select disabled><option>Registe primeiro um cartão</option></select>`, "span-2")}
-      ${field("Movimento", selectInput("type", [
+      ${rfField("Movimento", selectInput("type", [
         { value: "CREDITO", label: "Crédito" },
         { value: "AJUSTE", label: "Ajuste" },
       ]))}
-      ${field("Valor", textInput("amount", { required: true, placeholder: "0" }))}
-      ${field("Descrição", `<textarea name="description" required></textarea>`, "span-2")}
-    </div>`
-  ), async (form) => {
+      ${rfField("Valor *", textInput("amount", { required: true, placeholder: "0" }))}
+      ${rfField("Descrição *", `<textarea name="description" required placeholder="Motivo do movimento"></textarea>`, "span-2")}
+    </div>`),
+  }), async (form) => {
     const data = new FormData(form);
     const cardId = String(data.get("cardId") || "");
     const description = String(data.get("description") || "").trim();

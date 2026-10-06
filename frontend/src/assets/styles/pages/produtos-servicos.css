@@ -134,19 +134,8 @@ body[data-registry="produtos"] {
   outline-offset: 2px;
 }
 
-.ps-notes p {
-  margin: 0 0 0.7rem;
-  color: #6b7280;
-  font-size: 0.9rem;
-  line-height: 1.55;
-}
-
-.ps-notes p:last-child {
-  margin-bottom: 0;
-}
-
 .ps-photo {
-  margin-top: 1rem;
+  margin-top: 0;
 }
 
 .ps-actions {

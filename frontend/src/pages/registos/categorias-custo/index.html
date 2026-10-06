@@ -19,7 +19,6 @@
 <body data-shell="figma" class="bg-surface font-body text-on-surface antialiased" data-cost-catalog="tipos">
     <div id="appHeader"></div>
     <main id="costCatalogRoot" class="cc-catalog">
-        <p class="cc-crumb">INFO GESTOR · Registos</p>
         <h1 class="cc-title">Categorias de Custo</h1>
         <p class="cc-lead">Registe uma categoria. As subcategorias ficam na página própria.</p>
                     <div data-cost-tabs class="hidden flex flex-wrap items-center justify-between gap-4 mb-4 border-b border-slate-100 pb-4">
@@ -121,118 +120,92 @@
     <!-- Modal: Novo Centro Geral — removido (catálogo fixo CENTRO COMPRAS) -->
 
     <div class="modal-overlay" id="modalCostCategory">
-        <div class="modal-box cost-catalog-modal" style="max-width:680px">
-            <div class="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-slate-100">
-                <div>
-                    <h2 id="modalCostCategoryTitle" class="text-lg font-bold text-slate-900">Adicionar tipo de custo
-                    </h2>
-                    <p id="modalCostCategorySubtitle" class="text-xs text-slate-500 mt-0.5">Classificação na folha de
-                        centro de compras</p>
-                </div>
-                <button type="button" id="btnCloseCostCategoryModal" aria-label="Fechar"
-                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all shrink-0">
-                    <span class="material-symbols-outlined text-base">close</span>
-                </button>
-            </div>
-            <form id="formCostCategory" class="flex flex-col gap-4">
+        <div class="modal-box cc-modal">
+            <form id="formCostCategory" class="cc-form">
                 <input type="hidden" id="costCategoryEditId" value="">
-                <div id="rowCostCategoryLineContext"
-                    class="hidden rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
-                    <span class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Linha
-                        seleccionada</span>
-                    <p id="costCategoryLineBreadcrumb"
-                        class="text-xs font-semibold text-emerald-700 leading-relaxed min-h-[1rem]"></p>
+                <div class="cc-modal-head">
                     <div>
-                        <label for="costCategoryLineTarget"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Campo a
-                            editar</label>
-                        <select id="costCategoryLineTarget"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
-                        </select>
+                        <h2 id="modalCostCategoryTitle">Adicionar tipo de custo</h2>
+                        <p id="modalCostCategorySubtitle" class="cc-hint">Classificação na folha de centro de compras</p>
                     </div>
+                    <button type="button" id="btnCloseCostCategoryModal" class="cc-modal-close" aria-label="Fechar">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
                 </div>
-                <div class="rounded-xl border border-slate-200 p-4 space-y-3 bg-slate-50/50">
-                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Classificação *</p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div class="sm:col-span-2">
-                            <label for="costCategorySheetLevel"
-                                class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nível</label>
-                            <select id="costCategorySheetLevel" required
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
-                                <option value="TIPO1">Centro custo</option>
-                                <option value="GRUPO">Grupo</option>
-                                <option value="TIPO2">Categoria</option>
-                                <option value="SUBCUSTO" selected>Subcategoria</option>
-                            </select>
-                        </div>
-                        <input type="hidden" id="costCategoryDomain" value="GERAL">
-                        <div id="rowCostCategoryTipo1" class="hidden sm:col-span-1">
-                            <label for="costCategoryTipo1Id"
-                                class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Centro custo</label>
-                            <select id="costCategoryTipo1Id"
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                <div id="rowCostCategoryLineContext" class="hidden cc-context">
+                    <span class="cc-context-label">Linha seleccionada</span>
+                    <p id="costCategoryLineBreadcrumb" class="cc-context-path"></p>
+                    <label for="costCategoryLineTarget" class="cc-field">
+                        <span>Campo a editar</span>
+                        <select id="costCategoryLineTarget"></select>
+                    </label>
+                </div>
+                <div class="cc-grid">
+                    <label class="cc-field span-2" for="costCategorySheetLevel">
+                        <span>Nível</span>
+                        <select id="costCategorySheetLevel" required>
+                            <option value="TIPO1">Centro custo</option>
+                            <option value="GRUPO">Grupo</option>
+                            <option value="TIPO2">Categoria</option>
+                            <option value="SUBCUSTO" selected>Subcategoria</option>
+                        </select>
+                    </label>
+                    <input type="hidden" id="costCategoryDomain" value="GERAL">
+                    <div id="rowCostCategoryTipo1" class="hidden">
+                        <label class="cc-field" for="costCategoryTipo1Id">
+                            <span>Centro de custo</span>
+                            <select id="costCategoryTipo1Id">
                                 <option value="">— Seleccione —</option>
                             </select>
-                        </div>
-                        <div id="rowCostCategoryGrupo" class="hidden sm:col-span-1">
-                            <label for="costCategoryGrupoId"
-                                class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Grupo</label>
-                            <select id="costCategoryGrupoId"
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                        </label>
+                    </div>
+                    <div id="rowCostCategoryGrupo" class="hidden">
+                        <label class="cc-field" for="costCategoryGrupoId">
+                            <span>Grupo</span>
+                            <select id="costCategoryGrupoId">
                                 <option value="">— Directamente sob o centro de custo —</option>
                             </select>
-                        </div>
-                        <div id="rowCostCategoryParent" class="sm:col-span-2">
-                            <label for="costCategoryParentId"
-                                class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria (pai)</label>
-                            <select id="costCategoryParentId"
-                                class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
+                        </label>
+                    </div>
+                    <div id="rowCostCategoryParent" class="hidden span-2">
+                        <label class="cc-field" for="costCategoryParentId">
+                            <span>Categoria (pai)</span>
+                            <select id="costCategoryParentId">
                                 <option value="">— Seleccione a categoria —</option>
                             </select>
-                        </div>
+                        </label>
                     </div>
-                </div>
-                <div class="rounded-xl border border-slate-200 p-4 space-y-3">
-                    <p class="text-[10px] font-black uppercase text-slate-500 tracking-widest">Detalhes</p>
-                    <div>
-                        <label for="costCategoryName"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome *</label>
+                    <label class="cc-field span-2" for="costCategoryName">
+                        <span>Nome *</span>
                         <input id="costCategoryName" type="text" required minlength="2" maxlength="120"
-                            placeholder="Ex.: Combustível"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none">
-                    </div>
-                    <div id="rowCostCategoryBatch" class="hidden border-t border-slate-100 pt-3 space-y-2">
-                        <p class="text-xs font-semibold text-slate-600">Outras subcategorias na mesma gravação</p>
-                        <div id="costCategoryBatchLines" class="space-y-2"></div>
-                        <button type="button" id="btnAddCostCategoryBatchLine"
-                            class="text-sm font-bold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1">
-                            <span class="material-symbols-outlined text-base">add</span>
+                            placeholder="Ex.: Combustível">
+                    </label>
+                    <div id="rowCostCategoryBatch" class="hidden cc-batch span-2">
+                        <p class="cc-hint">Outras subcategorias na mesma gravação</p>
+                        <div id="costCategoryBatchLines" class="cc-batch-lines"></div>
+                        <button type="button" id="btnAddCostCategoryBatchLine" class="cc-batch-add">
+                            <span class="material-symbols-outlined">add</span>
                             Adicionar subcategoria
                         </button>
                     </div>
-                    <div id="rowCostCategoryFlags" class="grid grid-cols-1 gap-2 pt-1">
-                        <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-                            <input id="costCategoryRequiresDetail" type="checkbox" class="rounded border-slate-300">
-                            Descrição custo obrigatória no pedido extra
+                    <div id="rowCostCategoryFlags" class="cc-checks span-2">
+                        <label class="cc-check">
+                            <input id="costCategoryRequiresDetail" type="checkbox">
+                            <span>Descrição custo obrigatória no pedido extra</span>
                         </label>
-                        <label id="rowCostCategorySelectable"
-                            class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-                            <input id="costCategorySelectable" type="checkbox" checked class="rounded border-slate-300">
-                            Seleccionável em pedidos
+                        <label id="rowCostCategorySelectable" class="cc-check">
+                            <input id="costCategorySelectable" type="checkbox" checked>
+                            <span>Seleccionável em pedidos</span>
                         </label>
                     </div>
-                    <div>
-                        <label for="costCategorySortOrder"
-                            class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Ordem</label>
-                        <input id="costCategorySortOrder" type="number" min="0" step="1" placeholder="Automática"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none max-w-[140px]">
-                    </div>
+                    <label class="cc-field" for="costCategorySortOrder">
+                        <span>Ordem</span>
+                        <input id="costCategorySortOrder" type="number" min="0" step="1" placeholder="Automática">
+                    </label>
                 </div>
-                <div class="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                    <button type="button" id="btnCancelCostCategory"
-                        class="h-10 px-5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-bold hover:bg-slate-50 transition-all">Cancelar</button>
-                    <button type="submit" id="btnSubmitCostCategory"
-                        class="h-10 px-8 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-sm">Salvar</button>
+                <div class="cc-actions">
+                    <button type="button" id="btnCancelCostCategory" class="cc-ghost">Cancelar</button>
+                    <button type="submit" id="btnSubmitCostCategory" class="cc-submit">Guardar</button>
                 </div>
             </form>
         </div>
