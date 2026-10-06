@@ -102,33 +102,61 @@ async function scrapeAgtNif(nif) {
       timeout: 60000,
     });
 
-    const inputSelector = 'input[type="text"]';
+    const inputSelector = 'input[id$="txtNIFNumber"], input[name$="txtNIFNumber"], input[type="text"]';
     await page.waitForSelector(inputSelector, { visible: true, timeout: 15000 });
-    await page.click(inputSelector);
-    await page.type(inputSelector, nif, { delay: 50 });
-    await page.keyboard.press("Enter");
-    await page.waitForNetworkIdle({ idleTime: 1500, timeout: 15000 }).catch(() => {});
+    await page.click(inputSelector, { clickCount: 3 });
+    await page.type(inputSelector, nif, { delay: 40 });
+
+    const clicked = await page.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll("button")).find((el) =>
+        /pesquisar/i.test(el.innerText || "")
+      );
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    if (!clicked) await page.keyboard.press("Enter");
+
+    await page
+      .waitForFunction(
+        () => {
+          const panel = document.getElementById("showpanelNIF_content");
+          const growl = document.querySelector(".ui-growl-item-content, .ui-messages-error");
+          return Boolean((panel && panel.innerText.trim()) || growl);
+        },
+        { timeout: 25000 }
+      )
+      .catch(() => {});
 
     const dados = await page.evaluate(() => {
-      const extrairPorTexto = (rotulo) => {
-        const elementos = Array.from(document.querySelectorAll("*"));
-        for (const el of elementos) {
-          if (el.children.length === 0 && el.innerText && el.innerText.trim() === rotulo) {
-            if (el.nextElementSibling) return el.nextElementSibling.innerText.trim();
-            if (el.parentElement && el.parentElement.nextElementSibling) {
-              return el.parentElement.nextElementSibling.innerText.trim();
-            }
-          }
+      const normalize = (value) =>
+        String(value || "")
+          .replace(/:$/, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+
+      const byLabel = (rotulo) => {
+        const wanted = normalize(rotulo);
+        const labels = Array.from(
+          document.querySelectorAll("#showpanelNIF label, #panelNIF label")
+        );
+        for (const el of labels) {
+          if (normalize(el.innerText) !== wanted) continue;
+          const group = el.closest(".form-group");
+          const valueEl = group?.querySelector(".col-sm-6:last-child");
+          const value = (valueEl?.innerText || el.nextElementSibling?.innerText || "").trim();
+          if (value && normalize(value) !== wanted) return value;
         }
         return null;
       };
 
       return {
-        nome: extrairPorTexto("Nome:") || "Não encontrado",
-        tipo: extrairPorTexto("Tipo:") || "Não encontrado",
-        estado: extrairPorTexto("Estado:") || "Não encontrado",
-        inadimplente: extrairPorTexto("Inadimplente:") || "Não encontrado",
-        regimeIva: extrairPorTexto("Regime de IVA:") || "Não encontrado",
+        nome: byLabel("Nome") || "Não encontrado",
+        tipo: byLabel("Tipo") || "Não encontrado",
+        estado: byLabel("Estado") || "Não encontrado",
+        inadimplente: byLabel("Inadimplente") || "Não encontrado",
+        regimeIva: byLabel("Regime de IVA") || "Não encontrado",
       };
     });
 

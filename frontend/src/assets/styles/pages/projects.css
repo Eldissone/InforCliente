@@ -4,9 +4,44 @@
     }
 
 /* Create project form */
+.project-create-modal {
+  width: min(1148px, calc(100vw - 1.5rem));
+  max-width: none;
+  max-height: calc(100vh - 2rem);
+}
+.project-create-modal > [data-body] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 .project-create-body {
-  padding: 1.25rem 1.5rem 1.75rem;
-  background: #f7f8fc;
+  padding: 0 1.5rem 1.25rem;
+  background: #f8f9fd;
+}
+.project-create-body .obra-form {
+  width: 100%;
+  max-width: none;
+  gap: 16px;
+}
+.project-create-body .obra-form .registry-grid {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 720px) {
+  .project-create-body .obra-form .registry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.project-create-body .obra-card,
+.project-create-body .obra-form .registry-field {
+  overflow: visible;
+}
+.project-create-body .obra-multiselect {
+  z-index: 2;
+}
+.project-create-body .obra-multiselect[open] {
+  z-index: 30;
 }
 .project-create-form > div:not([class*="col-span"]) {
   min-width: 0;

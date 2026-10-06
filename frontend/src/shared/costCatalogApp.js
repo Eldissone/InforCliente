@@ -1343,7 +1343,6 @@ async function reloadCostCatalog() {
   selectedCatalogDeleteIds = new Set(
     [...selectedCatalogDeleteIds].filter((id) => valid.has(id))
   );
-  populateCostCategoryFilter();
   renderCostCatalogViews();
   refreshTipo3DrillIfOpen();
   updateCatalogBulkDeleteButton();
@@ -1725,7 +1724,12 @@ async function bootCostCatalog() {
   bindCatalogCrudEvents();
   mountRegistryAddForm();
   const locked = lockCostCatalogTab();
-  await reloadCostCatalog();
+  try {
+    await reloadCostCatalog();
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Não foi possível carregar o catálogo.", "error");
+    renderCostCatalogViews();
+  }
   setCostCatalogTab(locked);
   fillRegistryAddSelects();
 }

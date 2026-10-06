@@ -6,7 +6,7 @@ import { guardPageAccess, initPermissionLayer } from "../../shared/permissions.j
 checkAuth(); // apenas verifica sessão válida
 import { formatCurrency, formatPercent } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
-import { OBRA_STATUS_OPTIONS, obraEstadoLabel, obraStatusVisual } from "../registos/registryForms.js";
+import { OBRA_STATUS_OPTIONS, obraEstadoLabel, obraStatusVisual, obraFormSectionsHtml, bindObraForm, obraFormCreatePayload, TIPOS_OBRA } from "../registos/registryForms.js";
 
 function el(id) {
   return document.getElementById(id);
@@ -29,6 +29,15 @@ function toIsoDate(value) {
 async function loadClients() {
   const data = await apiRequest("/clients?page=1&pageSize=100&sort=updatedAt_desc");
   return data.items || [];
+}
+
+async function loadContacts() {
+  try {
+    const data = await apiRequest("/contacts?pageSize=200");
+    return data.items || [];
+  } catch {
+    return [];
+  }
 }
 
 let state = {
@@ -593,16 +602,13 @@ async function openEdit(id) {
     ...clients.map(c => `<option value="${c.id}" ${p.clientId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
   ].join("");
 
-  const projectTypesOptions = [
-    "MÉDIA TENSÃO",
-    "POSTO DE TRANSFORMAÇÃO 160KVA",
-    "POSTO DE TRANSFORMAÇÃO 250KVA",
-    "BAIXA TENSÃO",
-    "ABERTURA E FECHAMENTO DE VALA",
-    "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
-    "BAIXA TENSÃO E TERRAS",
-    "OBRA COMPLEXA"
-  ].map(t => `<option value="${t}" ${p.projectType === t ? 'selected' : ''}>${t}</option>`).join("");
+  const typeOptions = [
+    ...TIPOS_OBRA,
+    ...(p.projectType && !TIPOS_OBRA.includes(p.projectType) ? [p.projectType] : []),
+  ];
+  const projectTypesOptions = typeOptions
+    .map((t) => `<option value="${escapeHtml(t)}" ${p.projectType === t ? "selected" : ""}>${escapeHtml(t)}</option>`)
+    .join("");
 
   openModal({
     title: `Editar Obra: ${p.referencia || p.name}`,
@@ -820,161 +826,38 @@ async function openEdit(id) {
 }
 
 async function openCreate() {
-  const clients = await loadClients();
-  const clientOptions = [
-    `<option value="">Sem cliente vinculado</option>`,
-    ...clients.map(
-      (client) =>
-        `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)} (${escapeHtml(client.code)})</option>`
-    ),
-  ].join("");
-
-  const projectTypesOptions = [
-    "MÉDIA TENSÃO",
-    "POSTO DE TRANSFORMAÇÃO 160KVA",
-    "POSTO DE TRANSFORMAÇÃO 250KVA",
-    "BAIXA TENSÃO",
-    "ABERTURA E FECHAMENTO DE VALA",
-    "RAMAL SUBTERRÂNEO DE MÉDIA TENSÃO",
-    "BAIXA TENSÃO E TERRAS",
-    "OBRA COMPLEXA"
-  ].map(t => `<option value="${t}">${t}</option>`).join("");
-
-  let currentTechnicians = [];
+  const [clients, contacts] = await Promise.all([loadClients(), loadContacts()]);
 
   openModal({
     title: "Cadastrar nova obra",
-    primaryLabel: "Criar",
-    contentHtml: `
-      <div class="project-create-form grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nome da obra</label><input id="p_name" class="w-full rounded-lg border-slate-300" placeholder="Condomínio Alpha" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Referência</label><input id="p_referencia" class="w-full rounded-lg border-slate-300" placeholder="Ex: NM/ADM/PROREDES/003/2025" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Tipo de Obra</label><select id="p_type" class="w-full rounded-lg border-slate-300"><option value="">Selecione...</option>${projectTypesOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Cliente</label><select id="p_client" class="w-full rounded-lg border-slate-300">${clientOptions}</select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contacto</label><input id="p_contact" class="w-full rounded-lg border-slate-300" placeholder="Telefone" /></div>
-        
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Contratos e Direcção</h3></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Empreiteiro</label><input id="p_empreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: ProRedes Utilities Ltd" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Sub-Empreiteiro</label><input id="p_subempreiteiro" class="w-full rounded-lg border-slate-300" placeholder="Ex: MBT ENERGIA" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Director de Obra</label><input id="p_director" class="w-full rounded-lg border-slate-300" placeholder="Ex: LUCAS ZANGUEU" /></div>
-        
-        <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Foto do Director</label>
-          <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-             <div class="w-12 h-12 rounded-full overflow-hidden bg-slate-200 border-2 border-white shadow-sm flex-shrink-0">
-                <img id="p_dir_photo_preview_create" src="/assets/images/placeholder-user.png" class="w-full h-full object-cover"/>
-             </div>
-             <div class="flex-1">
-                <input type="file" id="p_dir_photo_file_create" class="hidden" accept="image/*" />
-                <button type="button" id="p_dir_photo_btn_create" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors">Selecionar Foto</button>
-                <div id="p_dir_photo_status_create" class="text-[9px] font-bold text-slate-400 mt-1">PNG ou JPG (Max 5MB)</div>
-             </div>
-          </div>
-        </div>
-
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Telefone do Dir.</label><input id="p_dir_phone" class="w-full rounded-lg border-slate-300" placeholder="9xxxxxxxx" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Email do Dir.</label><input id="p_dir_email" class="w-full rounded-lg border-slate-300" placeholder="email@exemplo.com" /></div>
-
-        <div class="col-span-1 md:col-span-2 mt-2">
-          <div class="flex justify-between items-center border-b border-outline-variant/20 pb-2 mb-2">
-            <h3 class="text-xs font-bold text-primary uppercase tracking-widest">Equipa Técnica Adicional</h3>
-            <button type="button" id="add_technician_btn_create" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 transition-colors rounded text-[10px] font-bold text-slate-600">+ Adicionar Técnico</button>
-          </div>
-          <div id="technicians_list_create" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-        </div>
-
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Localização e Orçamento</h3></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Local da obra / Região</label><input id="p_region" class="w-full rounded-lg border-slate-300" placeholder="Ex: Luanda" /></div>
-        <div class="md:col-span-1"><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Morada</label><input id="p_location" class="w-full rounded-lg border-slate-300" placeholder="Ex: Rua, Bairro" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Moeda</label><select id="p_currency" class="w-full rounded-lg border-slate-300"><option value="AOA">Kz (Kwanza)</option><option value="USD">USD (Dólar)</option></select></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Orçamento Total</label><input id="p_total" type="number" step="0.01" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Progresso inicial (%)</label><input id="p_prog" type="number" min="0" max="100" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        ${lifecycleFieldsHtml({ status: "NOT_STARTED" })}
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Início operacional</label><input id="p_start" type="date" class="w-full rounded-lg border-slate-300" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Previsão Fim</label><input id="p_due" type="date" class="w-full rounded-lg border-slate-300" /></div>
-
-        <div class="col-span-1 md:col-span-2 mt-2"><h3 class="text-xs font-bold text-primary uppercase tracking-widest border-b border-outline-variant/20 pb-2 mb-2">Segurança e Pessoal (HSE)</h3></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Nº Funcionários Ativos</label><input id="p_staff" type="number" class="w-full rounded-lg border-slate-300" value="0" /></div>
-        <div><label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Último Acidente</label><input id="p_last_accident" type="date" class="w-full rounded-lg border-slate-300" /></div>
-      </div>
-    `,
+    primaryLabel: "Guardar Obra",
+    contentHtml: `<form class="registry-form obra-form" id="obraCreateForm" novalidate>
+      ${obraFormSectionsHtml({ clients, contacts })}
+    </form>`,
     onRender: ({ overlay, panel }) => {
       overlay.classList.remove("items-center", "p-4");
       overlay.classList.add("items-start", "p-3", "md:p-6");
       panel.classList.remove("max-w-[640px]", "max-h-[90vh]");
-      panel.classList.add("project-create-modal", "max-w-[1140px]", "max-h-[calc(100vh-3rem)]", "rounded-[26px]");
-      panel.querySelector("[data-body]")?.classList.add("project-create-body");
-      bindLifecycleFields(panel);
+      panel.classList.add("project-create-modal");
+      const body = panel.querySelector("[data-body]");
+      body?.classList.add("project-create-body");
+      body?.classList.remove("px-8", "pb-8");
+      const form = panel.querySelector("#obraCreateForm");
+      bindObraForm(form);
+      form?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        panel.querySelector("[data-primary]")?.click();
+      });
     },
     onPrimary: async ({ close, panel }) => {
-      const v = (id) => panel.querySelector(`#${id}`)?.value?.trim?.();
+      const form = panel.querySelector("#obraCreateForm");
       const btn = panel.querySelector("[data-primary]");
       try {
         setButtonLoading(btn, true);
-        const res = await apiRequest("/projects", {
+        await apiRequest("/projects", {
           method: "POST",
-          body: {
-            name: v("p_name"),
-            clientId: v("p_client") || null,
-            contact: v("p_contact") || null,
-            region: v("p_region") || null,
-            location: v("p_location") || null,
-            currency: v("p_currency") || "AOA",
-            budgetTotal: Number(v("p_total") || 0),
-            physicalProgressPct: Number(v("p_prog") || 0),
-            ...lifecyclePayload(v),
-            startDate: toIsoDate(v("p_start")),
-            dueDate: toIsoDate(v("p_due")),
-            projectType: v("p_type") || null,
-            empreiteiro: v("p_empreiteiro") || null,
-            subempreiteiro: v("p_subempreiteiro") || null,
-            directorObra: v("p_director") || null,
-            directorPhone: v("p_dir_phone") || null,
-            directorEmail: v("p_dir_email") || null,
-            referencia: v("p_referencia") || null,
-            technicians: currentTechnicians.map(t => ({ name: t.name, role: t.role, phone: t.phone, email: t.email, photo: "" })),
-            activeStaffCount: Number(v("p_staff") || 0),
-            lastAccidentDate: toIsoDate(v("p_last_accident")),
-          },
+          body: obraFormCreatePayload(form, contacts),
         });
-
-        // 2. Upload photo if selected
-        const fileInput = panel.querySelector("#p_dir_photo_file_create");
-        if (fileInput?.files?.length) {
-          try {
-            toast("A carregar foto do director...", { type: "info" });
-            await apiUpload(`/projects/${encodeURIComponent(res.id)}/director-photo`, {
-              file: fileInput.files[0],
-              fieldName: "photo"
-            });
-          } catch (err) {
-            console.error("Erro no upload inicial da foto:", err);
-            toast("Obra criada, mas houve erro no upload da foto.", { type: "warning" });
-          }
-        }
-
-        // 3. Upload technician photos if any
-        let techUpdated = false;
-        for (let i = 0; i < currentTechnicians.length; i++) {
-          if (currentTechnicians[i].fileObj) {
-            try {
-              const r = await apiUpload(`/projects/${encodeURIComponent(res.id)}/technician-photo`, {
-                file: currentTechnicians[i].fileObj,
-                fieldName: "photo"
-              });
-              currentTechnicians[i].photo = r.photo;
-              techUpdated = true;
-            } catch (e) {
-              console.error("Erro no upload da foto do tecnico", e);
-            }
-          }
-        }
-
-        if (techUpdated) {
-          const cleanTechs = currentTechnicians.map(t => ({ name: t.name, role: t.role, phone: t.phone, email: t.email, photo: t.photo }));
-          await apiRequest(`/projects/${encodeURIComponent(res.id)}`, { method: "PATCH", body: { technicians: cleanTechs } });
-        }
-
         toast("Obra criada com sucesso", { type: "success" });
         close();
         state.page = 1;
@@ -984,96 +867,6 @@ async function openCreate() {
         toast(err.message || "Erro ao criar obra", { type: "error" });
       }
     },
-    onRender: ({ panel }) => {
-      const fileInput = panel.querySelector("#p_dir_photo_file_create");
-      const btn = panel.querySelector("#p_dir_photo_btn_create");
-      const preview = panel.querySelector("#p_dir_photo_preview_create");
-      const status = panel.querySelector("#p_dir_photo_status_create");
-
-      btn?.addEventListener("click", () => fileInput?.click());
-
-      fileInput?.addEventListener("change", () => {
-        if (!fileInput.files.length) return;
-        const file = fileInput.files[0];
-
-        // Local preview only
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          preview.src = e.target.result;
-          status.textContent = "Foto selecionada";
-          status.className = "text-[9px] font-black text-blue-600 mt-1";
-        };
-        reader.readAsDataURL(file);
-      });
-
-      // Render Technicians
-      const list = panel.querySelector("#technicians_list_create");
-      const renderTechnicians = () => {
-        list.innerHTML = currentTechnicians.map((t, i) => `
-          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl relative group">
-            <button type="button" data-remove-tech="${i}" class="absolute top-2 right-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity material-symbols-outlined text-sm">delete</button>
-            <div class="flex items-start gap-3">
-              <div class="flex-shrink-0 flex flex-col items-center gap-2">
-                <div class="w-10 h-10 rounded-full bg-slate-200 border border-white shadow-sm overflow-hidden flex-shrink-0">
-                  <img src="${t.previewUrl ? t.previewUrl : '/assets/images/placeholder-user.png'}" class="w-full h-full object-cover">
-                </div>
-                <input type="file" class="hidden" data-tech-photo-file="${i}" accept="image/*">
-                <button type="button" data-tech-photo-btn="${i}" class="text-[9px] bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500 hover:bg-slate-100">Foto</button>
-              </div>
-              <div class="flex-1 space-y-2">
-                <div><input type="text" data-tech-field="name" data-tech-idx="${i}" value="${escapeHtml(t.name)}" placeholder="Nome" class="w-full text-xs font-bold rounded border-slate-200 p-1.5 focus:ring-1 focus:ring-blue-500"/></div>
-                <div><input type="text" data-tech-field="role" data-tech-idx="${i}" value="${escapeHtml(t.role)}" placeholder="Função (ex: Eng. Eletrotécnico)" class="w-full text-[10px] rounded border-slate-200 p-1.5"/></div>
-                <div class="grid grid-cols-2 gap-2">
-                  <input type="text" data-tech-field="phone" data-tech-idx="${i}" value="${escapeHtml(t.phone)}" placeholder="Telefone" class="w-full text-[10px] rounded border-slate-200 p-1.5"/>
-                  <input type="text" data-tech-field="email" data-tech-idx="${i}" value="${escapeHtml(t.email)}" placeholder="Email" class="w-full text-[10px] rounded border-slate-200 p-1.5"/>
-                </div>
-              </div>
-            </div>
-          </div>
-        `).join("");
-      };
-
-      panel.querySelector("#add_technician_btn_create").addEventListener("click", () => {
-        currentTechnicians.push({ name: "", role: "", phone: "", email: "", photo: "", fileObj: null, previewUrl: null });
-        renderTechnicians();
-      });
-
-      list.addEventListener("input", (e) => {
-        if (e.target.matches("[data-tech-field]")) {
-          const idx = e.target.getAttribute("data-tech-idx");
-          const field = e.target.getAttribute("data-tech-field");
-          currentTechnicians[idx][field] = e.target.value;
-        }
-      });
-
-      list.addEventListener("click", (e) => {
-        if (e.target.matches("[data-remove-tech]")) {
-          const idx = e.target.getAttribute("data-remove-tech");
-          if (currentTechnicians[idx].previewUrl) URL.revokeObjectURL(currentTechnicians[idx].previewUrl);
-          currentTechnicians.splice(idx, 1);
-          renderTechnicians();
-        }
-        if (e.target.matches("[data-tech-photo-btn]")) {
-          const idx = e.target.getAttribute("data-tech-photo-btn");
-          list.querySelector(`[data-tech-photo-file="${idx}"]`).click();
-        }
-      });
-
-      list.addEventListener("change", (e) => {
-        if (e.target.matches("[data-tech-photo-file]")) {
-          const idx = e.target.getAttribute("data-tech-photo-file");
-          if (!e.target.files.length) return;
-          const file = e.target.files[0];
-          currentTechnicians[idx].fileObj = file;
-
-          if (currentTechnicians[idx].previewUrl) URL.revokeObjectURL(currentTechnicians[idx].previewUrl);
-          currentTechnicians[idx].previewUrl = URL.createObjectURL(file);
-          renderTechnicians();
-        }
-      });
-
-      renderTechnicians();
-    }
   });
 }
 

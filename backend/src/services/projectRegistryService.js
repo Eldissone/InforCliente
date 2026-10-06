@@ -174,14 +174,31 @@ function serializeLifecycle(project) {
   };
 }
 
-async function applyProjectRegistry(tx, projectId, input, existing) {
+function contactSnapshot(contacts) {
+  const director = contacts.find((c) => /director/i.test(c.role || "")) || contacts[0] || null;
+  return {
+    contact: contacts.map((c) => c.name).join(", ") || null,
+    directorObra: director?.name || null,
+    directorPhone: director?.phone || null,
+    directorEmail: director?.email || null,
+    technicians: contacts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      role: c.role,
+      phone: c.phone,
+      email: c.email,
+    })),
+  };
+}
+
+function buildProjectRegistryState(input, existing) {
   const status = normalizeStatus(input.status, input.phaseLabel) || existing?.status || "ACTIVE";
   const startDate = input.startDate !== undefined ? parseDate(input.startDate) : existing?.startDate;
   const dueDate = input.dueDate !== undefined ? parseDate(input.dueDate) : existing?.dueDate;
   const launchDate = input.launchDate !== undefined ? parseDate(input.launchDate) : existing?.launchDate;
   const actualEndDate = input.actualEndDate !== undefined
     ? parseDate(input.actualEndDate)
-    : (status === "COMPLETED" ? existing?.actualEndDate : existing?.actualEndDate);
+    : existing?.actualEndDate;
   const pauses = input.pauses !== undefined ? pausePayload(input.pauses) : undefined;
   const effectivePauses = pauses !== undefined ? pauses : existing?.pauses;
   const resolvedActual = actualEndDate !== undefined ? actualEndDate : existing?.actualEndDate;
@@ -208,57 +225,74 @@ async function applyProjectRegistry(tx, projectId, input, existing) {
     ? mergeLegacyRegisto(input.maoDeObraIndireta, legacyPatch)
     : mergeLegacyRegisto(existing?.maoDeObraIndireta, legacyPatch);
 
-  const data = {
+  return {
+    projectData: {
+      status,
+      phaseLabel,
+      startDate: startDate ?? null,
+      dueDate: dueDate ?? null,
+      launchDate: launchDate ?? null,
+      actualEndDate: resolvedActual ?? null,
+      maoDeObraIndireta,
+    },
+    pauses,
     status,
     phaseLabel,
-    startDate: startDate ?? null,
-    dueDate: dueDate ?? null,
-    launchDate: launchDate ?? null,
-    actualEndDate: resolvedActual ?? null,
+    startDate,
+    dueDate,
+    launchDate,
+    actualEndDate: resolvedActual,
     maoDeObraIndireta,
   };
+}
+
+async function applyProjectRegistry(tx, projectId, input, existing) {
+  const state = buildProjectRegistryState(input, existing);
+  const data = { ...state.projectData };
+  const isCreate = !existing;
+  let contacts = [];
+
+  if (projectId && input.contactIds !== undefined) {
+    contacts = await assertContactsExist(tx, input.contactIds);
+    Object.assign(data, contactSnapshot(contacts));
+  }
 
   if (projectId) {
     await tx.project.update({ where: { id: projectId }, data });
   }
 
-  if (projectId && pauses !== undefined) {
-    await tx.projectPause.deleteMany({ where: { projectId } });
-    if (pauses.length) {
+  if (projectId && state.pauses !== undefined) {
+    if (!isCreate) {
+      await tx.projectPause.deleteMany({ where: { projectId } });
+    }
+    if (state.pauses.length) {
       await tx.projectPause.createMany({
-        data: pauses.map((pause) => ({ ...pause, projectId })),
+        data: state.pauses.map((pause) => ({ ...pause, projectId })),
       });
     }
   }
 
   if (projectId && input.contactIds !== undefined) {
-    const contacts = await assertContactsExist(tx, input.contactIds);
-    await tx.projectContact.deleteMany({ where: { projectId } });
+    if (!isCreate) {
+      await tx.projectContact.deleteMany({ where: { projectId } });
+    }
     if (contacts.length) {
       await tx.projectContact.createMany({
         data: contacts.map((contact) => ({ projectId, contactId: contact.id })),
       });
     }
-    const director = contacts.find((c) => /director/i.test(c.role || "")) || contacts[0] || null;
-    await tx.project.update({
-      where: { id: projectId },
-      data: {
-        contact: contacts.map((c) => c.name).join(", ") || null,
-        directorObra: director?.name || null,
-        directorPhone: director?.phone || null,
-        directorEmail: director?.email || null,
-        technicians: contacts.map((c) => ({
-          id: c.id,
-          name: c.name,
-          role: c.role,
-          phone: c.phone,
-          email: c.email,
-        })),
-      },
-    });
   }
 
-  return { status, phaseLabel, startDate, dueDate, launchDate, actualEndDate: resolvedActual, maoDeObraIndireta, pauses };
+  return {
+    status: state.status,
+    phaseLabel: state.phaseLabel,
+    startDate: state.startDate,
+    dueDate: state.dueDate,
+    launchDate: state.launchDate,
+    actualEndDate: state.actualEndDate,
+    maoDeObraIndireta: state.maoDeObraIndireta,
+    pauses: state.pauses,
+  };
 }
 
 module.exports = {
@@ -270,5 +304,8 @@ module.exports = {
   lifecycleInclude,
   serializeLifecycle,
   applyProjectRegistry,
+  buildProjectRegistryState,
+  assertContactsExist,
+  contactSnapshot,
   pausePayload,
 };

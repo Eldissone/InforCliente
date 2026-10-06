@@ -21,6 +21,9 @@ const {
   lifecycleInclude,
   serializeLifecycle,
   applyProjectRegistry,
+  buildProjectRegistryState,
+  assertContactsExist,
+  contactSnapshot,
 } = require("../services/projectRegistryService");
 const { computeProjectBudgetSummary } = require("../services/projectBudgetSummaryService");
 const path = require("path");
@@ -398,19 +401,30 @@ projectRoutes.post(
       code = await generateProjectCode();
     }
 
+    const registry = buildProjectRegistryState({
+      status: body.status,
+      phaseLabel: body.phaseLabel,
+      startDate: body.startDate,
+      dueDate: body.dueDate,
+      launchDate: body.launchDate,
+      actualEndDate: body.actualEndDate,
+      pauses: body.pauses,
+      contactIds: body.contactIds,
+      maoDeObraIndireta: body.maoDeObraIndireta,
+    }, null);
+    const contacts = await assertContactsExist(prisma, body.contactIds);
+    const fromContacts = body.contactIds !== undefined ? contactSnapshot(contacts) : null;
+    const progressTemplates = body.projectType ? getTemplateForProjectType(body.projectType) : [];
+
     const created = await prisma.$transaction(async (tx) => {
       const p = await tx.project.create({
         data: {
           code,
           name: body.name,
-          contact: body.contact || null,
+          contact: fromContacts ? fromContacts.contact : (body.contact || null),
           location: body.location || null,
           region: body.region || null,
-          status: "ACTIVE",
-          startDate: body.startDate ? new Date(body.startDate) : null,
-          dueDate: body.dueDate ? new Date(body.dueDate) : null,
-          launchDate: body.launchDate ? new Date(body.launchDate) : null,
-          actualEndDate: body.actualEndDate ? new Date(body.actualEndDate) : null,
+          ...registry.projectData,
           budgetTotal,
           budgetAllocated,
           budgetConsumed,
@@ -418,63 +432,52 @@ projectRoutes.post(
           budgetAvailable,
           physicalProgressPct: body.physicalProgressPct ?? 0,
           currency: body.currency || "AOA",
-          phaseLabel: body.phaseLabel || null,
           clientId: body.clientId || null,
           projectType: body.projectType || null,
           empreiteiro: body.empreiteiro || null,
           subempreiteiro: body.subempreiteiro || null,
-          directorObra: body.directorObra || null,
+          directorObra: fromContacts ? fromContacts.directorObra : (body.directorObra || null),
           directorPhoto: body.directorPhoto || null,
-          directorPhone: body.directorPhone || null,
-          directorEmail: body.directorEmail || null,
+          directorPhone: fromContacts ? fromContacts.directorPhone : (body.directorPhone || null),
+          directorEmail: fromContacts ? fromContacts.directorEmail : (body.directorEmail || null),
           referencia: body.referencia || null,
           lastAccidentDate: body.lastAccidentDate ? new Date(body.lastAccidentDate) : null,
           activeStaffCount: body.activeStaffCount ?? 0,
-          technicians: body.technicians || [],
+          technicians: fromContacts ? fromContacts.technicians : (body.technicians || []),
           safetyHistory: body.safetyHistory || null,
-          maoDeObraIndireta: body.maoDeObraIndireta || null,
           maoDeObraDireta: body.maoDeObraDireta || null,
           equipamentos: body.equipamentos || null,
-          progressTasks: body.projectType
+          warehouses: {
+            create: {
+              name: `Estaleiro: ${body.name}`,
+              type: "SITE",
+              visibleToClient: true,
+            },
+          },
+          pauses: registry.pauses?.length
+            ? { create: registry.pauses }
+            : undefined,
+          projectContacts: contacts.length
+            ? { create: contacts.map((contact) => ({ contactId: contact.id })) }
+            : undefined,
+          progressTasks: progressTemplates.length
             ? {
-              create: getTemplateForProjectType(body.projectType).map((t) => ({
+              create: progressTemplates.map((t) => ({
                 itemGroup: body.projectType,
                 order: t.order,
                 description: t.description,
                 expectedQty: t.expectedQty,
                 unit: t.unit,
-                executedQty: 0
-              }))
+                executedQty: 0,
+              })),
             }
             : undefined,
         },
         select: { id: true, name: true },
       });
 
-      // Automação Logística: Criar Armazém de Obra (Estaleiro) — visível ao cliente por defeito
-      await tx.warehouse.create({
-        data: {
-          name: `Estaleiro: ${p.name}`,
-          type: "SITE",
-          projectId: p.id,
-          visibleToClient: true,
-        },
-      });
-
-      await applyProjectRegistry(tx, p.id, {
-        status: body.status,
-        phaseLabel: body.phaseLabel,
-        startDate: body.startDate,
-        dueDate: body.dueDate,
-        launchDate: body.launchDate,
-        actualEndDate: body.actualEndDate,
-        pauses: body.pauses,
-        contactIds: body.contactIds,
-        maoDeObraIndireta: body.maoDeObraIndireta,
-      }, null);
-
       return p;
-    });
+    }, { maxWait: 10_000, timeout: 20_000 });
 
     return res.status(201).json({ id: created.id });
   })
@@ -709,17 +712,19 @@ projectRoutes.patch(
         where: { id },
         include: lifecycleInclude(),
       });
-      await applyProjectRegistry(prisma, id, {
-        status: body.status,
-        phaseLabel: body.phaseLabel,
-        startDate: body.startDate,
-        dueDate: body.dueDate,
-        launchDate: body.launchDate,
-        actualEndDate: body.actualEndDate,
-        pauses: body.pauses,
-        contactIds: body.contactIds,
-        maoDeObraIndireta: body.maoDeObraIndireta,
-      }, current);
+      await prisma.$transaction(async (tx) => {
+        await applyProjectRegistry(tx, id, {
+          status: body.status,
+          phaseLabel: body.phaseLabel,
+          startDate: body.startDate,
+          dueDate: body.dueDate,
+          launchDate: body.launchDate,
+          actualEndDate: body.actualEndDate,
+          pauses: body.pauses,
+          contactIds: body.contactIds,
+          maoDeObraIndireta: body.maoDeObraIndireta,
+        }, current);
+      }, { maxWait: 10_000, timeout: 20_000 });
     }
 
     if (body.projectType) {

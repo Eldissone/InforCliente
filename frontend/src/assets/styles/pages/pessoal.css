@@ -45,7 +45,7 @@ body[data-registry="pessoal"] {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #14add6;
+  color: #0d3fd1;
   font: 400 14px/24px Inter, system-ui, sans-serif;
   cursor: pointer;
 }
@@ -80,7 +80,7 @@ body[data-registry="pessoal"] {
 .pessoal-field select,
 .pessoal-grid input,
 .pessoal-grid select {
-  height: 50px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
@@ -91,7 +91,7 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-field input {
-  width: min(350px, 100%);
+  width: min(450px, 100%);
 }
 
 .pessoal-field select,
@@ -128,7 +128,7 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-register {
-  height: 46px;
+  height: 45px;
   margin-left: auto;
   padding: 10px 16px;
   border: 0;
@@ -180,9 +180,9 @@ body[data-registry="pessoal"] {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #14add6;
+  border: 1px solid #0d3fd1;
   border-radius: 5px;
-  background: linear-gradient(135deg, #14add6, #384295);
+  background: linear-gradient(135deg, #0d3fd1, #384295);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -219,7 +219,7 @@ body[data-registry="pessoal"] {
 .pessoal-more {
   padding: 0;
   border: 0;
-  background: linear-gradient(135deg, #14add6, #384295);
+  background: linear-gradient(135deg, #0d3fd1, #384295);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

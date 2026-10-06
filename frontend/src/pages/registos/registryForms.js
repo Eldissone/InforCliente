@@ -1,6 +1,8 @@
 import { apiRequest, apiUpload } from "/services/api.js";
 import { checkAuth } from "/services/auth.js";
+import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
+import { bindNifLookup, normalizeNif, setNifLookupStatus } from "/shared/supplierNifLookup.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
 
 const CONTACTS_KEY = "InfoCliente.registo.contactos";
@@ -8,7 +10,7 @@ const SETORES_KEY = "InfoCliente.registo.setores";
 const PESSOAL_KEY = "InfoCliente.registo.pessoal";
 const PONTO_KEY = "InfoCliente.registo.folhaPonto";
 
-const TIPOS_OBRA = [
+export const TIPOS_OBRA = [
   "Eletrificação Rural",
   "Eletrificação Urbana",
   "Expansão da Rede",
@@ -22,7 +24,7 @@ const TIPOS_OBRA = [
   "Outro",
 ];
 
-const SERVICOS = [
+export const SERVICOS = [
   "Rede de Média Tensão (MT)",
   "Postos de Transformação (PT)",
   "Rede de Baixa Tensão (BT)",
@@ -185,7 +187,7 @@ export function readObraRegisto(project) {
   return {};
 }
 
-function mergeObraRegisto(project, registo) {
+export function mergeObraRegisto(project, registo) {
   const raw = project?.maoDeObraIndireta;
   const base = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (raw != null && (Array.isArray(raw) || typeof raw !== "object")) base.legado = raw;
@@ -266,7 +268,7 @@ function field(label, control, extra = "") {
 
 function textInput(name, options = {}) {
   const type = options.type || "text";
-  return `<input name="${name}" type="${type}" ${options.required ? "required" : ""} ${options.placeholder ? `placeholder="${esc(options.placeholder)}"` : ""} ${options.list ? `list="${options.list}"` : ""} ${options.accept ? `accept="${options.accept}"` : ""} ${options.step ? `step="${options.step}"` : ""}>`;
+  return `<input name="${name}" type="${type}" ${options.required ? "required" : ""} ${options.placeholder ? `placeholder="${esc(options.placeholder)}"` : ""} ${options.list ? `list="${options.list}"` : ""} ${options.accept ? `accept="${options.accept}"` : ""} ${options.step ? `step="${options.step}"` : ""} ${options.min != null ? `min="${esc(options.min)}"` : ""} ${options.max != null ? `max="${esc(options.max)}"` : ""} ${options.value != null ? `value="${esc(options.value)}"` : ""}>`;
 }
 
 function selectInput(name, options, placeholder) {
@@ -278,12 +280,14 @@ function selectInput(name, options, placeholder) {
   return `<select name="${name}" required><option value="">${esc(placeholder || "Seleccionar")}</option>${items}</select>`;
 }
 
-function checkGrid(name, options) {
+function checkGrid(name, options, selected = []) {
+  const selectedSet = new Set(selected);
   return `<div class="registry-checks">${options.map((option) => {
     const value = typeof option === "string" ? option : option.value;
     const label = typeof option === "string" ? option : option.label;
     const photo = typeof option === "string" ? "" : option.photo;
-    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}">${photo ? `<img src="${esc(photo)}" alt="">` : ""}<span>${label}</span></label>`;
+    const checked = selectedSet.has(value) ? " checked" : "";
+    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}"${checked}>${photo ? `<img src="${esc(photo)}" alt="">` : ""}<span>${label}</span></label>`;
   }).join("")}</div>`;
 }
 
@@ -364,6 +368,153 @@ function collectEstado(scope) {
     estado,
     pausas: estado === "Em Pausa" ? pausas : [],
     conclusaoEfetiva: estado === "Concluído" ? conclusaoEfetiva : "",
+  };
+}
+
+export function obraFormSectionsHtml({ clients = [], contacts = [], values = {} } = {}) {
+  const clientOptions = clients.map((client) => ({ value: client.id, label: client.name }));
+  const contactOptions = contacts.map((contact) => ({
+    value: contact.id,
+    label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
+    photo: contact.photoUrl || contact.foto || "",
+  }));
+  const tipos = Array.isArray(values.tipos) ? values.tipos : [];
+  const servicos = Array.isArray(values.servicos) ? values.servicos : [];
+  const contactIds = Array.isArray(values.contactos) ? values.contactos : [];
+  const clientSelect = clients.length
+    ? selectInput("clientId", clientOptions, "Seleccione cliente")
+    : `<select name="clientId" disabled><option value="">Registe um cliente primeiro</option></select>`;
+  return `
+    <section class="obra-card"><h3>Informação Geral da Obra</h3><div class="registry-grid obra-general">
+      ${field("Descrição da Obra", textInput("descricao", { required: true, placeholder: "Ex: Electrificação Rural Município da Quibala" }))}
+      ${field("Tipo de Obra", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("tipos", TIPOS_OBRA, tipos)}</details>`)}
+      ${field("Composição de Serviços", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("servicos", SERVICOS, servicos)}</details>`)}
+      ${field("Sigla", textInput("sigla", { required: true, placeholder: "Ex: MTR-QUIB" }))}
+      ${field("Cliente", clientSelect)}
+      ${field("Local", textInput("local", { required: true, placeholder: "Ex: Kwanza Sul" }))}
+      ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT Energia" }))}
+      ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Opcional" }))}
+      ${field("Valor Venda S/IVA", textInput("valor", { required: true, placeholder: "0.00" }))}
+      ${field("Progresso (%)", textInput("progresso", { type: "number", min: "0", max: "100", step: "0.01", value: "0" }))}
+    </div></section>
+    <section class="obra-card"><h3>Datas</h3><div class="registry-grid">
+      ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }))}
+      ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
+      ${field("Data Conclusão Obra Previsional", textInput("conclusaoPrevisional", { type: "date" }))}
+    </div></section>
+    <section class="obra-card"><h3>Estado da Obra</h3><div class="registry-grid obra-status">${estadoFields(values.estado || "")}</div></section>
+    <section class="obra-card"><h3>Segurança e Pessoal (HSE)</h3><div class="registry-grid">
+      ${field("N.º Funcionários Ativos", textInput("staffCount", { type: "number", min: "0", step: "1", value: "0" }))}
+      ${field("Último Acidente", textInput("lastAccident", { type: "date" }))}
+    </div></section>
+    <section class="obra-card obra-contacts"><div class="obra-card-title"><h3>Contactos da Obra</h3><a class="registry-ghost" href="/registos/contactos">Adicionar Contacto</a></div>
+      ${contacts.length ? `<div class="obra-contact-options">${checkGrid("contactos", contactOptions, contactIds)}</div>` : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
+    </section>
+  `;
+}
+
+export function bindObraForm(form) {
+  if (!form) return;
+  bindEstado(form);
+  form.querySelectorAll(".obra-multiselect").forEach((select) => {
+    const summary = select.querySelector("summary");
+    const refresh = () => {
+      const count = select.querySelectorAll("input:checked").length;
+      summary.textContent = count ? `${count} seleccionado${count === 1 ? "" : "s"}` : "Seleccione múltiplos";
+    };
+    select.addEventListener("toggle", () => {
+      if (!select.open) return;
+      form.querySelectorAll(".obra-multiselect[open]").forEach((other) => {
+        if (other !== select) other.open = false;
+      });
+    });
+    select.addEventListener("change", refresh);
+    refresh();
+  });
+}
+
+export function obraFormCreatePayload(form, contacts = []) {
+  const data = new FormData(form);
+  const descricao = String(data.get("descricao") || "").trim();
+  const sigla = String(data.get("sigla") || "").trim();
+  const local = String(data.get("local") || "").trim();
+  const valor = parseMoney(data.get("valor"));
+  const tipos = checkedValues(form, "tipos");
+  const servicos = checkedValues(form, "servicos");
+  if (descricao.length < 2) invalid("Indique a descrição da obra.");
+  if (sigla.length < 3) invalid("A sigla deve ter pelo menos 3 caracteres.");
+  if (!local) invalid("Indique o local.");
+  if (valor == null || valor < 0) invalid("Indique o valor de venda.");
+  if (!tipos.length) invalid("Seleccione pelo menos um tipo de obra.");
+  if (!servicos.length) invalid("Seleccione pelo menos um serviço.");
+  const progressoRaw = data.get("progresso");
+  const progresso = progressoRaw === "" || progressoRaw == null ? 0 : Number(progressoRaw);
+  if (!Number.isFinite(progresso) || progresso < 0 || progresso > 100) invalid("O progresso deve estar entre 0 e 100.");
+  const staffRaw = data.get("staffCount");
+  const staffCount = staffRaw === "" || staffRaw == null ? 0 : Number(staffRaw);
+  if (!Number.isFinite(staffCount) || staffCount < 0) invalid("Indique o n.º de funcionários ativos.");
+  const estado = collectEstado(form);
+  const selected = contacts.filter((contact) => checkedValues(form, "contactos").includes(contact.id));
+  const director = selected.find((contact) => /director/i.test(contact.role || contact.funcao || "")) || selected[0] || null;
+  const inicio = toIsoDate(data.get("inicioOperacional"));
+  const previsional = toIsoDate(data.get("conclusaoPrevisional"));
+  const efetiva = toIsoDate(estado.conclusaoEfetiva);
+  const arranque = toIsoDate(data.get("arranque"));
+
+  return {
+    code: sigla,
+    referencia: sigla,
+    name: descricao,
+    clientId: String(data.get("clientId") || "") || null,
+    location: local,
+    region: local,
+    empreiteiro: String(data.get("empreiteiro") || "").trim() || null,
+    subempreiteiro: String(data.get("subempreiteiro") || "").trim() || null,
+    budgetTotal: valor,
+    currency: "AOA",
+    physicalProgressPct: progresso,
+    activeStaffCount: Math.round(staffCount),
+    lastAccidentDate: toIsoDate(data.get("lastAccident")),
+    status: STATUS_MAP[estado.estado] || "ACTIVE",
+    phaseLabel: estado.estado,
+    startDate: inicio,
+    dueDate: previsional,
+    launchDate: arranque,
+    actualEndDate: efetiva,
+    pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
+    contactIds: selected.map((contact) => contact.id),
+    contact: selected.map((contact) => contact.name || contact.nome).join(", ") || null,
+    directorObra: director?.name || director?.nome || null,
+    directorPhone: director?.phone || director?.telefone || null,
+    directorEmail: director?.email || null,
+    projectType: tipos[0] || null,
+    technicians: selected.map((contact) => ({
+      id: contact.id,
+      name: contact.name || contact.nome,
+      role: contact.role || contact.funcao,
+      phone: contact.phone || contact.telefone,
+      email: contact.email,
+    })),
+    maoDeObraIndireta: {
+      registo: {
+        tipos,
+        servicos,
+        sigla,
+        inicioOperacional: data.get("inicioOperacional") || "",
+        arranque: data.get("arranque") || "",
+        conclusaoPrevisional: data.get("conclusaoPrevisional") || "",
+        conclusaoEfetiva: efetiva ? estado.conclusaoEfetiva : "",
+        estado: estado.estado,
+        pausas: estado.pausas,
+        contactos: selected.map((contact) => ({
+          id: contact.id,
+          nome: contact.name || contact.nome,
+          funcao: contact.role || contact.funcao,
+          telefone: contact.phone || contact.telefone,
+          email: contact.email,
+        })),
+      },
+    },
   };
 }
 
@@ -1171,8 +1322,8 @@ function renderFolhaPonto() {
           <table class="ponto-lines">
             <thead>
               <tr>
-                <th>N.º</th><th>Tipo Hora</th><th>Descrição</th><th>QTD</th><th>Valor/Hora (USD)</th>
-                <th>Total (USD)</th><th>Período</th><th>Data Início</th><th>Data Fim</th>
+                <th>N.º</th><th>Tipo Hora</th><th>Descrição</th><th>QTD</th><th>Valor/Hora</th>
+                <th>Total </th><th>Período</th><th>Data Início</th><th>Data Fim</th>
                 <th>Obra</th><th>Custo Total</th><th>Valor Líquido</th>
               </tr>
             </thead>
@@ -1299,38 +1450,224 @@ function renderSetores() {
   });
 }
 
-function renderFornecedores() {
-  mount("fornecedores", formShell(
-    "Registo de fornecedores no Info Gestor.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("name", { required: true }), "span-2")}
-      ${field("NIF", textInput("nif"))}
-      ${field("Categoria", textInput("category", { placeholder: "Materiais, transporte..." }))}
-      ${field("Contacto", textInput("contact"))}
-      ${field("Telefone", textInput("phone"))}
-      ${field("Email", textInput("email", { type: "email" }))}
-      ${field("Morada", textInput("address"), "span-2")}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
+function fornField(label, control, extra = "") {
+  return `<label class="forn-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function cliField(label, control, extra = "") {
+  return `<label class="cli-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function supplierBankRowHtml(account = {}) {
+  return `<div class="forn-bank-row" data-bank-row>
+    <input type="text" data-bank-name placeholder="Banco (ex: BAI)" value="${esc(account.bankName || "")}">
+    <input type="text" data-bank-iban placeholder="AO06..." value="${esc(account.iban || "")}">
+    <button type="button" class="forn-remove-bank" data-remove-bank title="Remover conta" aria-label="Remover conta">×</button>
+  </div>`;
+}
+
+function collectSupplierBanks(form) {
+  return [...form.querySelectorAll("[data-bank-row]")].map((row) => ({
+    bankName: row.querySelector("[data-bank-name]")?.value.trim() || "",
+    iban: row.querySelector("[data-bank-iban]")?.value.trim() || "",
+  }))
+    .filter((item) => item.bankName || item.iban)
+    .map((item) => ({ bankName: item.bankName || "Banco", iban: item.iban }))
+    .filter((item) => item.iban);
+}
+
+function applyAgtToSupplierForm(form, agt, existing) {
+  const nifEl = form.querySelector("[name=nif]");
+  const nameEl = form.querySelector("[name=name]");
+  const agtEl = form.querySelector("[name=agtStatusDisplay]");
+  if (nameEl) nameEl.value = existing?.name || agt?.nome || nameEl.value;
+  if (nifEl) {
+    nifEl.dataset.validatedNif = normalizeNif(nifEl.value);
+    nifEl.dataset.vatRegime = agt?.regimeIva || existing?.vatRegime || "";
+    nifEl.dataset.agtStatus = agt?.estado || existing?.agtStatus || "";
+    nifEl.dataset.agtType = agt?.tipo || existing?.agtType || "";
+    nifEl.dataset.vatPercent = agt?.vatPercent != null ? String(agt.vatPercent) : "";
+  }
+  if (agtEl) agtEl.value = [agt?.estado || existing?.agtStatus, agt?.regimeIva || existing?.vatRegime]
+    .filter(Boolean)
+    .join(" · ");
+
+  if (!existing) {
+    delete form.dataset.existingId;
+    return;
+  }
+
+  form.dataset.existingId = existing.id || "";
+  if (nameEl) nameEl.value = existing.name || agt?.nome || "";
+  const set = (name, value) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el && value) el.value = value;
+  };
+  set("phone", existing.phone);
+  set("email", existing.email);
+  set("contact", existing.contact);
+  set("address", existing.address);
+  set("category", existing.category);
+  set("type", existing.type);
+  set("paymentTerm", existing.paymentTerm);
+  const list = form.querySelector("[data-bank-list]");
+  if (list) {
+    const accounts = existing.bankAccounts?.length
+      ? existing.bankAccounts
+      : existing.iban
+        ? [{ bankName: "Principal", iban: existing.iban }]
+        : [];
+    list.innerHTML = (accounts.length ? accounts : [{}]).map(supplierBankRowHtml).join("");
+  }
+}
+
+function bindSupplierBankList(form) {
+  const list = form.querySelector("[data-bank-list]");
+  form.querySelector("[data-add-bank]")?.addEventListener("click", () => {
+    list?.insertAdjacentHTML("beforeend", supplierBankRowHtml());
+  });
+  list?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-remove-bank]");
+    if (!btn) return;
+    const rows = list.querySelectorAll("[data-bank-row]");
+    const row = btn.closest("[data-bank-row]");
+    if (rows.length <= 1) {
+      row.querySelector("[data-bank-name]").value = "";
+      row.querySelector("[data-bank-iban]").value = "";
+      return;
+    }
+    row.remove();
+  });
+}
+
+async function renderFornecedores() {
+  await initPermissionLayer();
+  const canManage = can("fornecedores", "manage") || can("fornecedores", "create");
+  const form = mount("fornecedores", `
+    <p class="forn-crumb">INFO GESTOR · Registos</p>
+    <h1 class="forn-title">Criar Fornecedor</h1>
+    <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+    <form class="forn-form" novalidate>
+      <section class="forn-card">
+        <h2>Identificação fiscal</h2>
+        <div class="forn-grid">
+          <div class="forn-field span-2">
+            <span>NIF *</span>
+            <div class="forn-nif-row">
+              <input name="nif" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Introduza o NIF e consulte a AGT">
+              <button type="button" class="forn-nif-btn" data-lookup-nif>Consultar NIF</button>
+            </div>
+            <p class="forn-nif-status hidden" data-nif-status></p>
+          </div>
+          ${fornField("Nome *", `<input name="name" type="text" required placeholder="Preenchido após consulta do NIF">`, "span-2")}
+          ${fornField("Estado AGT", `<input name="agtStatusDisplay" type="text" readonly placeholder="Disponível após consulta">`)}
+          ${fornField("Tipo", `<select name="type">
+            <option value="MATERIAL">Material</option>
+            <option value="SERVICO">Serviço</option>
+            <option value="TRANSPORTADOR">Transportador</option>
+          </select>`)}
+          ${fornField("Categoria", `<input name="category" type="text" placeholder="Materiais, transporte...">`)}
+          ${fornField("Modalidade de pagamento", `<select name="paymentTerm">
+            <option value="">Seleccionar...</option>
+            <option value="PRONTO_PAGAMENTO">PP — Pronto pagamento</option>
+            <option value="CREDITO">C — Crédito</option>
+          </select>`)}
+        </div>
+      </section>
+      <section class="forn-card">
+        <h2>Contacto</h2>
+        <div class="forn-grid">
+          ${fornField("Pessoa de contacto", `<input name="contact" type="text" placeholder="Nome do contacto">`)}
+          ${fornField("Telefone", `<input name="phone" type="text" placeholder="9XX XXX XXX">`)}
+          ${fornField("Email", `<input name="email" type="email" placeholder="email@fornecedor.ao">`)}
+          ${fornField("Morada", `<input name="address" type="text" placeholder="Morada completa">`)}
+        </div>
+      </section>
+      <section class="forn-card">
+        <div class="forn-bank-head">
+          <h2>Contas bancárias (IBAN)</h2>
+          <button type="button" class="forn-add-bank" data-add-bank>+ Adicionar</button>
+        </div>
+        <div class="forn-bank-list" data-bank-list>${supplierBankRowHtml()}</div>
+        <p class="forn-hint">Opcional. Registe um ou mais IBANs identificados pelo banco.</p>
+      </section>
+      <div class="forn-actions">
+        ${canManage
+          ? `<button class="forn-submit" type="submit">Guardar fornecedor</button>`
+          : `<p class="forn-denied">Sem permissão para guardar fornecedores.</p>`}
+      </div>
+    </form>
+  `, async (formEl) => {
+    if (!can("fornecedores", "manage") && !can("fornecedores", "create")) {
+      invalid("Sem permissão para guardar fornecedores.");
+    }
+    const data = new FormData(formEl);
+    const nifEl = formEl.querySelector("[name=nif]");
+    const nif = normalizeNif(data.get("nif"));
+    const validated = nifEl?.dataset?.validatedNif || "";
     const name = String(data.get("name") || "").trim();
-    if (!name) invalid("Indique o nome do fornecedor.");
+    if (!nif || nif.length < 9) invalid("Indique um NIF válido e consulte o Portal da AGT.");
+    if (validated !== nif) invalid("Consulte o NIF no Portal da AGT antes de guardar.");
+    if (formEl.dataset.existingId) invalid("Já existe um fornecedor cadastrado com este NIF.");
+    if (!name) invalid("O nome do fornecedor é obrigatório. Consulte o NIF para o preencher.");
+    const vatRaw = nifEl?.dataset?.vatPercent;
+    const vatPercent = vatRaw === "" || vatRaw == null ? null : Number(vatRaw);
     await apiRequest("/suppliers", {
       method: "POST",
       body: {
         name,
-        nif: String(data.get("nif") || "").trim() || null,
+        nif,
+        type: String(data.get("type") || "MATERIAL"),
         category: String(data.get("category") || "").trim() || null,
         contact: String(data.get("contact") || "").trim() || null,
         phone: String(data.get("phone") || "").trim() || null,
         email: String(data.get("email") || "").trim() || null,
         address: String(data.get("address") || "").trim() || null,
+        paymentTerm: String(data.get("paymentTerm") || "").trim() || null,
+        vatRegime: nifEl?.dataset?.vatRegime || null,
+        agtStatus: nifEl?.dataset?.agtStatus || null,
+        agtType: nifEl?.dataset?.agtType || null,
+        vatPercent: Number.isFinite(vatPercent) ? vatPercent : null,
+        bankAccounts: collectSupplierBanks(formEl),
       },
     });
+  });
+
+  if (!form) return;
+  bindSupplierBankList(form);
+  bindNifLookup({
+    nifInput: form.querySelector("[name=nif]"),
+    button: form.querySelector("[data-lookup-nif]"),
+    statusEl: form.querySelector("[data-nif-status]"),
+    register: false,
+    onResult: ({ ok, agt, result }) => {
+      if (!ok) {
+        delete form.dataset.existingId;
+        return;
+      }
+      const existing = result?.existingSupplier || null;
+      applyAgtToSupplierForm(form, agt, existing);
+      if (existing) {
+        toast("Este NIF já está cadastrado. Não será criado um fornecedor duplicado.", { type: "error" });
+      }
+    },
+  });
+  form.querySelector("[name=nif]")?.addEventListener("input", (event) => {
+    const el = event.currentTarget;
+    if (el.dataset.validatedNif && el.dataset.validatedNif !== normalizeNif(el.value)) {
+      delete el.dataset.validatedNif;
+      delete form.dataset.existingId;
+      const agtEl = form.querySelector("[name=agtStatusDisplay]");
+      if (agtEl) agtEl.value = "";
+      setNifLookupStatus(form.querySelector("[data-nif-status]"), "");
+    }
   });
 }
 
 async function renderClientes() {
+  await initPermissionLayer();
+  const canCreate = can("clientes", "create");
+
   let sectors = [];
   try {
     const res = await apiRequest("/sectors?pageSize=200");
@@ -1338,34 +1675,71 @@ async function renderClientes() {
   } catch {
     sectors = readStore(SETORES_KEY);
   }
-  
-  const sectorOptions = sectors.map((sector) => ({
-    value: sector.name || sector.nome,
-    label: sector.name || sector.nome
-  }));
 
-  mount("clientes", formShell(
-    "Registo de clientes no Info Gestor. O email e a palavra-passe criam o acesso do cliente.",
-    `<div class="registry-grid">
-      ${field("Código", textInput("code", { required: true, placeholder: "CLI-001" }))}
-      ${field("Nome", textInput("name", { required: true, placeholder: "Mitrelli Project" }))}
-      ${field("Setor / actividade", sectorOptions.length ? selectInput("industry", sectorOptions, "Seleccione o setor") : textInput("industry", { placeholder: "Registe um setor primeiro..." }))}
-      ${field("Região", textInput("region", { placeholder: "Kwanza Sul" }))}
-      ${field("Email de acesso", textInput("email", { type: "email", required: true }))}
-      ${field("Palavra-passe", textInput("password", { type: "password", required: true }))}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
+  const sectorOptions = sectors
+    .map((sector) => ({
+      value: sector.name || sector.nome,
+      label: sector.name || sector.nome,
+    }))
+    .filter((sector) => sector.value);
+
+  const industryControl = sectorOptions.length
+    ? `<select name="industry">
+        <option value="">Seleccione o setor</option>
+        ${sectorOptions.map((sector) => `<option value="${esc(sector.value)}">${esc(sector.label)}</option>`).join("")}
+      </select>`
+    : `<input name="industry" type="text" placeholder="Registe um setor primeiro...">
+       <span class="cli-hint">Ainda não há setores. Pode escrever o nome ou criar um setor em Registos.</span>`;
+
+  mount("clientes", `
+    <p class="cli-crumb">INFO GESTOR · Registos</p>
+    <h1 class="cli-title">Criar Cliente</h1>
+    <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+    <form class="cli-form" novalidate>
+      <section class="cli-card">
+        <h2>Identificação</h2>
+        <div class="cli-grid">
+          ${cliField("Código *", `<input name="code" type="text" required placeholder="CLI-001">`)}
+          ${cliField("Nome *", `<input name="name" type="text" required placeholder="Nome da empresa">`)}
+          ${cliField("Setor / actividade", industryControl)}
+          ${cliField("Região", `<input name="region" type="text" placeholder="Kwanza Sul">`)}
+        </div>
+      </section>
+      <section class="cli-card">
+        <h2>Acesso</h2>
+        <div class="cli-grid">
+          ${cliField("Email de acesso *", `<input name="email" type="email" required autocomplete="off" placeholder="cliente@empresa.ao">`)}
+          ${cliField("Palavra-passe *", `<input name="password" type="password" required autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+            <span class="cli-hint">Cria o login do cliente. A palavra-passe deve ter pelo menos 6 caracteres.</span>`)}
+        </div>
+      </section>
+      <div class="cli-actions">
+        ${canCreate
+          ? `<button class="cli-submit" type="submit">Guardar cliente</button>`
+          : `<p class="cli-denied">Sem permissão para guardar clientes.</p>`}
+      </div>
+    </form>
+  `, async (formEl) => {
+    if (!can("clientes", "create")) {
+      invalid("Sem permissão para guardar clientes.");
+    }
+    const data = new FormData(formEl);
+    const code = String(data.get("code") || "").trim();
+    const name = String(data.get("name") || "").trim();
+    const email = String(data.get("email") || "").trim();
     const password = String(data.get("password") || "");
+    if (code.length < 2) invalid("Indique um código com pelo menos 2 caracteres.");
+    if (name.length < 2) invalid("Indique o nome do cliente.");
+    if (!email) invalid("Indique o email de acesso.");
     if (password.length < 6) invalid("A palavra-passe deve ter pelo menos 6 caracteres.");
     await apiRequest("/clients", {
       method: "POST",
       body: {
-        code: String(data.get("code") || "").trim(),
-        name: String(data.get("name") || "").trim(),
+        code,
+        name,
         industry: String(data.get("industry") || "").trim() || null,
         region: String(data.get("region") || "").trim() || null,
-        email: String(data.get("email") || "").trim(),
+        email,
         password,
       },
     });
@@ -1388,124 +1762,18 @@ async function renderObras() {
     contacts = [];
     toast(apiMessage(error), { type: "error" });
   }
-  const clientOptions = clients.map((client) => ({ value: client.id, label: client.name }));
-  const contactOptions = contacts.map((contact) => ({
-    value: contact.id,
-    label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
-    photo: contact.photoUrl || contact.foto || "",
-  }));
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
     <header class="obra-form-heading"><div><h2>Criar Obra</h2><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
-    <section class="obra-card"><h3>Informação Geral da Obra</h3><div class="registry-grid obra-general">
-      ${field("Descrição da Obra", textInput("descricao", { required: true, placeholder: "Ex: Electrificação Rural Município da Quibala" }))}
-      ${field("Tipo de Obra", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("tipos", TIPOS_OBRA)}</details>`)}
-      ${field("Composição de Serviços", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("servicos", SERVICOS)}</details>`)}
-      ${field("Sigla", textInput("sigla", { required: true, placeholder: "Ex: MTR-QUIB" }))}
-      ${field("Cliente", clients.length ? selectInput("clientId", clientOptions, "Seleccione cliente") : `<select disabled><option value="">Registe um cliente primeiro</option></select>`)}
-      ${field("Local", textInput("local", { required: true, placeholder: "Ex: Kwanza Sul" }))}
-      ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT Energia" }))}
-      ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Opcional" }))}
-      ${field("Valor Venda S/IVA", textInput("valor", { required: true, placeholder: "0.00" }))}
-    </div></section>
-    <section class="obra-card"><h3>Datas</h3><div class="registry-grid">
-      ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }))}
-      ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
-      ${field("Data Conclusão Obra Previsional", textInput("conclusaoPrevisional", { type: "date" }))}
-    </div></section>
-    <section class="obra-card"><h3>Estado da Obra</h3><div class="registry-grid obra-status">${estadoFields()}</div></section>
-    <section class="obra-card obra-contacts"><div class="obra-card-title"><h3>Contactos da Obra</h3><a class="registry-ghost" href="/registos/contactos">Adicionar Contacto</a></div>
-      ${contacts.length ? `<div class="obra-contact-options">${checkGrid("contactos", contactOptions)}</div>` : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
-    </section>
+    ${obraFormSectionsHtml({ clients, contacts })}
     <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
   </form>`, async (form) => {
-    const data = new FormData(form);
-    const descricao = String(data.get("descricao") || "").trim();
-    const sigla = String(data.get("sigla") || "").trim();
-    const local = String(data.get("local") || "").trim();
-    const valor = parseMoney(data.get("valor"));
-    const tipos = checkedValues(form, "tipos");
-    const servicos = checkedValues(form, "servicos");
-    if (descricao.length < 2) invalid("Indique a descrição da obra.");
-    if (sigla.length < 3) invalid("A sigla deve ter pelo menos 3 caracteres.");
-    if (!local) invalid("Indique o local.");
-    if (valor == null || valor < 0) invalid("Indique o valor de venda.");
-    if (!tipos.length) invalid("Seleccione pelo menos um tipo de obra.");
-    if (!servicos.length) invalid("Seleccione pelo menos um serviço.");
-    const estado = collectEstado(form);
-    const selected = contacts.filter((contact) => checkedValues(form, "contactos").includes(contact.id));
-    const director = selected.find((contact) => /director/i.test(contact.role || contact.funcao || "")) || selected[0] || null;
-    const inicio = toIsoDate(data.get("inicioOperacional"));
-    const previsional = toIsoDate(data.get("conclusaoPrevisional"));
-    const efetiva = toIsoDate(estado.conclusaoEfetiva);
-    const arranque = toIsoDate(data.get("arranque"));
-
     await apiRequest("/projects", {
       method: "POST",
-      body: {
-        code: sigla,
-        referencia: sigla,
-        name: descricao,
-        clientId: String(data.get("clientId") || "") || null,
-        location: local,
-        region: local,
-        empreiteiro: String(data.get("empreiteiro") || "").trim() || null,
-        subempreiteiro: String(data.get("subempreiteiro") || "").trim() || null,
-        budgetTotal: valor,
-        currency: "AOA",
-        status: STATUS_MAP[estado.estado] || "ACTIVE",
-        phaseLabel: estado.estado,
-        startDate: inicio,
-        dueDate: previsional,
-        launchDate: arranque,
-        actualEndDate: efetiva,
-        pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
-        contactIds: selected.map((contact) => contact.id),
-        contact: selected.map((contact) => contact.name || contact.nome).join(", ") || null,
-        directorObra: director?.name || director?.nome || null,
-        directorPhone: director?.phone || director?.telefone || null,
-        directorEmail: director?.email || null,
-        technicians: selected.map((contact) => ({
-          id: contact.id,
-          name: contact.name || contact.nome,
-          role: contact.role || contact.funcao,
-          phone: contact.phone || contact.telefone,
-          email: contact.email,
-        })),
-        maoDeObraIndireta: {
-          registo: {
-            tipos,
-            servicos,
-            sigla,
-            inicioOperacional: data.get("inicioOperacional") || "",
-            arranque: data.get("arranque") || "",
-            conclusaoPrevisional: data.get("conclusaoPrevisional") || "",
-            conclusaoEfetiva: efetiva ? estado.conclusaoEfetiva : "",
-            estado: estado.estado,
-            pausas: estado.pausas,
-            contactos: selected.map((contact) => ({
-              id: contact.id,
-              nome: contact.name || contact.nome,
-              funcao: contact.role || contact.funcao,
-              telefone: contact.phone || contact.telefone,
-              email: contact.email,
-            })),
-          },
-        },
-      },
+      body: obraFormCreatePayload(form, contacts),
     });
   });
-  if (form) {
-    bindEstado(form);
-    form.querySelectorAll(".obra-multiselect").forEach((select) => {
-      const summary = select.querySelector("summary");
-      const refresh = () => {
-        const count = select.querySelectorAll("input:checked").length;
-        summary.textContent = count ? `${count} seleccionado${count === 1 ? "" : "s"}` : "Seleccione múltiplos";
-      };
-      select.addEventListener("change", refresh);
-    });
-  }
+  bindObraForm(form);
 }
 
 async function renderProdutos() {
@@ -1783,6 +2051,7 @@ export function openObraEstadoDialog(project, onSaved) {
 const kind = document.body?.dataset.registry;
 if (kind && RENDERERS[kind]) {
   checkAuth();
+  initPermissionLayer();
   wireUsersNav();
   wireLogout();
   initMobileMenu();
