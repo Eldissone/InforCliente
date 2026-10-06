@@ -91,7 +91,7 @@
   color: #94a3b8;
 }
 
-.registry-field input,
+.registry-field input:not([type="checkbox"]):not([type="radio"]),
 .registry-field select,
 .registry-field textarea {
   width: 100%;
@@ -111,7 +111,7 @@
   resize: vertical;
 }
 
-.registry-field input:focus,
+.registry-field input:not([type="checkbox"]):not([type="radio"]):focus,
 .registry-field select:focus,
 .registry-field textarea:focus {
   outline: 2px solid #2afc8d;
@@ -296,7 +296,7 @@ body[data-registry="obras"] .registry-page>h1 {
   text-transform: none;
 }
 
-.obra-form .registry-field input,
+.obra-form .registry-field input:not([type="checkbox"]):not([type="radio"]),
 .obra-form .registry-field select,
 .obra-form .registry-field textarea {
   width: 100%;
@@ -418,11 +418,32 @@ body[data-registry="obras"] .registry-page>h1 {
   background: #f4f6f8;
 }
 
+.obra-multiselect .registry-check:has(:checked) {
+  background: #eef2f6;
+}
+
 .obra-multiselect .registry-check input {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 1rem;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid #9aa3ad;
+  border-radius: 4px;
+  background-color: #fff;
+  background-image: none;
   accent-color: #212e3e;
+}
+
+.obra-multiselect .registry-check input:checked {
+  border-color: #212e3e;
+  background-color: #212e3e;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23fff' viewBox='0 0 16 16'%3E%3Cpath d='M12.207 4.793a1 1 0 0 1 0 1.414l-5 5a1 1 0 0 1-1.414 0l-2-2a1 1 0 0 1 1.414-1.414L6.5 9.086l4.293-4.293a1 1 0 0 1 1.414 0'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-position: 50%;
+  background-repeat: no-repeat;
 }
 
 .obra-form .registry-field select {
@@ -493,7 +514,7 @@ body[data-registry="obras"] .registry-page>h1 {
   background: #1a2430;
 }
 
-.obra-form .registry-field input:focus,
+.obra-form .registry-field input:not([type="checkbox"]):not([type="radio"]):focus,
 .obra-form .registry-field select:focus,
 .obra-form .registry-field textarea:focus,
 .obra-multiselect:focus-within {

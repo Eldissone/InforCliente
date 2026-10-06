@@ -595,8 +595,9 @@ function applyCatalogManageVisibility() {
   document.getElementById("costCatalogNovaWrap")?.classList.toggle("hidden", true);
   const onTipos = activeCostCatalogTab === "tipos";
   const onEstrutura = activeCostCatalogTab === "estrutura";
-  document.getElementById("btnCostCatalogNova")?.classList.toggle("hidden", !(show && onTipos));
-  document.getElementById("costCatalogEstruturaNova")?.classList.toggle("hidden", !(show && onEstrutura));
+  const hasInlineAdd = Boolean(document.getElementById("registryCostAdd"));
+  document.getElementById("btnCostCatalogNova")?.classList.toggle("hidden", hasInlineAdd || !(show && onTipos));
+  document.getElementById("costCatalogEstruturaNova")?.classList.toggle("hidden", hasInlineAdd || !(show && onEstrutura));
   document.getElementById("costCatalogSearch")?.closest(".relative")?.classList.toggle("hidden", onEstrutura);
   updateCatalogBulkDeleteButton();
 }
@@ -1079,7 +1080,7 @@ function renderEstruturaCatalog() {
           </tr>`;
       })
       .join("")
-    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem centros de custo. Use «Centro custo» acima; o grupo é opcional e fica dentro de cada centro.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-xs text-slate-400">Sem tipos de custo. Use o formulário acima; o grupo é opcional e fica dentro de cada tipo.</td></tr>`;
 
   container.innerHTML = `
     <div class="overflow-x-auto border border-slate-200 rounded-lg">
@@ -1554,49 +1555,57 @@ function mountRegistryAddForm() {
   const mode = catalogMode();
   const form = document.createElement("form");
   form.id = "registryCostAdd";
-  form.className = "mb-6 rounded-2xl border border-slate-200 bg-white p-4 flex flex-col gap-3";
-  const field = "mt-1 w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-800";
+  form.className = "cc-form";
+  form.noValidate = true;
   if (mode === "estrutura") {
     form.innerHTML = `
-      <p class="text-[11px] font-black uppercase tracking-widest text-slate-500">Adicionar tipo de custo</p>
-      <div class="flex flex-wrap items-end gap-3">
-        <label class="flex-1 min-w-[220px] text-xs font-bold text-slate-500 uppercase tracking-widest">Nome
-          <input name="nome" required minlength="2" maxlength="120" class="${field}" placeholder="Nome do tipo">
-        </label>
-        <button type="submit" class="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold">Adicionar tipo</button>
-      </div>`;
+      <section class="cc-card">
+        <h2>Adicionar tipo de custo</h2>
+        <div class="cc-grid">
+          <label class="cc-field span-2"><span>Nome *</span>
+            <input name="nome" required minlength="2" maxlength="120" placeholder="Nome do tipo">
+          </label>
+        </div>
+        <div class="cc-actions">
+          <button type="submit" class="cc-submit">Guardar tipo de custo</button>
+        </div>
+      </section>`;
   } else if (mode === "subcustos") {
     form.innerHTML = `
-      <p class="text-[11px] font-black uppercase tracking-widest text-slate-500">Adicionar subcategoria</p>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">Categoria
-          <select name="parent" required class="${field}"></select>
-        </label>
-        <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">Nome
-          <input name="nome" required minlength="2" maxlength="120" class="${field}" placeholder="Nome da subcategoria">
-        </label>
-      </div>
-      <div class="flex justify-end">
-        <button type="submit" class="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold">Adicionar subcategoria</button>
-      </div>`;
+      <section class="cc-card">
+        <h2>Adicionar subcategoria</h2>
+        <div class="cc-grid">
+          <label class="cc-field"><span>Categoria *</span>
+            <select name="parent" required></select>
+          </label>
+          <label class="cc-field"><span>Nome *</span>
+            <input name="nome" required minlength="2" maxlength="120" placeholder="Nome da subcategoria">
+          </label>
+        </div>
+        <div class="cc-actions">
+          <button type="submit" class="cc-submit">Guardar subcategoria</button>
+        </div>
+      </section>`;
   } else {
     form.innerHTML = `
-      <p class="text-[11px] font-black uppercase tracking-widest text-slate-500">Adicionar categoria</p>
-      <div class="grid gap-3 sm:grid-cols-3">
-        <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">Centro de custo
-          <select name="tipo1" class="${field}"></select>
-        </label>
-        <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">Grupo
-          <select name="grupo" class="${field}"></select>
-        </label>
-        <label class="text-xs font-bold text-slate-500 uppercase tracking-widest">Nome
-          <input name="nome" required minlength="2" maxlength="120" class="${field}" placeholder="Nome da categoria">
-        </label>
-      </div>
-      <p class="text-[11px] text-slate-400">Sem centro de custo, a categoria fica em custos de obra.</p>
-      <div class="flex justify-end">
-        <button type="submit" class="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold">Adicionar categoria</button>
-      </div>`;
+      <section class="cc-card">
+        <h2>Adicionar categoria</h2>
+        <div class="cc-grid">
+          <label class="cc-field"><span>Centro de custo</span>
+            <select name="tipo1"></select>
+          </label>
+          <label class="cc-field"><span>Grupo</span>
+            <select name="grupo"></select>
+          </label>
+          <label class="cc-field span-2"><span>Nome *</span>
+            <input name="nome" required minlength="2" maxlength="120" placeholder="Nome da categoria">
+          </label>
+        </div>
+        <p class="cc-hint">Sem centro de custo, a categoria fica em custos de obra.</p>
+        <div class="cc-actions">
+          <button type="submit" class="cc-submit">Guardar categoria</button>
+        </div>
+      </section>`;
   }
   document.getElementById("costCatalogToolbar")?.before(form);
   form.addEventListener("submit", submitRegistryAdd);
