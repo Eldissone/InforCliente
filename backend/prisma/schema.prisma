@@ -211,6 +211,7 @@ model Client {
   projects     Project[]
   primaryUsers User[]             @relation("PrimaryClient")
   users        UserClient[]
+  invoices     Invoice[]
 
   @@index([name])
   @@index([status])
@@ -292,6 +293,15 @@ model Project {
   personnel           Personnel[]
   pauses              ProjectPause[]
   projectContacts     ProjectContact[]
+  invoices            Invoice[]
+  bankMovements       BankMovement[]
+
+  // ─── Configuração de faturação da obra (Área Financeira) ───
+  billingVatCativo          Boolean @default(false) // IVA cativo: recebimento não considera IVA
+  billingVatPercent         Decimal? @db.Decimal(5, 2) // % IVA aplicada
+  billingWithholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na Fonte
+  billingCarPercent         Decimal? @db.Decimal(5, 2) // % Seguro CAR
+  billingGuaranteePercent   Decimal? @db.Decimal(5, 2) // % Garantia
 
   @@index([name])
   @@index([status])
@@ -484,6 +494,7 @@ model MeasurementReport {
   createdAt      DateTime  @default(now())
   createdBy      String?
   project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invoices       Invoice[]
 
   @@unique([projectId, reportNumber])
   @@index([projectId, reportDate])
@@ -1010,6 +1021,9 @@ model CostPayment {
   certifiedBy        String?
   certifiedAt        DateTime?
   certificationNotes String?
+  confirmationStatus CostConfirmationStatus @default(POR_CONFIRMAR)
+  responsible        String?
+  sourceType         String? // MERCADORIA_STOCK | PAGAMENTO_DIRETO | ATM | MANUAL
   createdAt          DateTime            @default(now())
   project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   costCenter         CostCenter          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
@@ -1111,6 +1125,8 @@ model PettyCashCard {
   movements             PettyCashMovement[]
   extraRequests         ExtraRequest[]
   reinforcementRequests PettyCashReinforcementRequest[]
+  bankStatements        BankStatement[]
+  bankMovements         BankMovement[]
 
   @@index([fundId])
 }
@@ -1358,6 +1374,7 @@ model Supplier {
   purchaseOrders      PurchaseOrder[]
   purchaseRequisitions PurchaseRequisition[]
   quoteSupplierOrders QuoteSupplierOrder[]
+  bankMovements       BankMovement[]
 }
 
 enum SupplierType {
@@ -1924,4 +1941,148 @@ model RegistryImportBatch {
 
   @@index([resource, createdAt])
   @@index([createdById])
+}
+
+// =============================================
+// MÓDULO: ÁREA FINANCEIRA
+// Faturação (faturas de cliente), Tesouraria (extratos/movimentos bancários)
+// e regras de confirmação de custos.
+// =============================================
+
+enum InvoiceStatus {
+  EM_ABERTO
+  PAGO_PARCIAL
+  PAGO_TOTAL
+  ATRASADO
+}
+
+enum BankDocType {
+  FATURA
+  AF
+}
+
+enum BankMovementType {
+  TRANSFERENCIA_INTERNA
+  PF
+  REEMBOLSO
+  OPERACAO_ANULADA
+  RECEBIMENTO_CLIENTE
+  LEVANTAMENTO_ATM
+  OUTRO
+}
+
+enum BankMovementDirection {
+  ENTRADA
+  SAIDA
+}
+
+enum CostConfirmationStatus {
+  POR_CONFIRMAR
+  CONFIRMADO
+}
+
+// Fatura emitida ao cliente (receita) — folha "RECEBIMENTOS – REGISTO".
+model Invoice {
+  id                 String        @id @default(cuid())
+  projectId          String
+  clientId           String?
+  measurementId      String? // Auto de Medição (AM) associado
+  docNumber          String?
+  docDate            DateTime
+  dueDate            DateTime?
+  grossAmount        Decimal       @db.Decimal(16, 2) // V. Ilíquido Doc
+  withholdingAmount  Decimal?      @db.Decimal(16, 2) // V. Retenção na Fonte
+  vatAmount          Decimal?      @db.Decimal(16, 2) // V. IVA
+  carInsuranceAmount Decimal?      @db.Decimal(16, 2) // Seguro CAR
+  guaranteeAmount    Decimal?      @db.Decimal(16, 2) // Garantia
+  netAmount          Decimal?      @db.Decimal(16, 2) // V. Líq. Doc
+  workPercent        Decimal?      @db.Decimal(5, 2) // % Obra
+  flagRetention      Boolean       @default(false)
+  flagVatCativo      Boolean       @default(false)
+  flagCar            Boolean       @default(false)
+  flagGuarantee      Boolean       @default(false)
+  status             InvoiceStatus @default(EM_ABERTO)
+  receivedAmount     Decimal       @default(0) @db.Decimal(16, 2)
+  receivedDate       DateTime?
+  notes              String?
+  createdBy          String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client      Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  measurement MeasurementReport? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
+  receipts    InvoiceReceipt[]
+
+  @@index([projectId, docDate])
+  @@index([clientId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// Recebimento (parcial ou total) de uma fatura.
+model InvoiceReceipt {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  amount       Decimal  @db.Decimal(16, 2)
+  receivedDate DateTime
+  method       String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, receivedDate])
+}
+
+// Extrato bancário importado para a área financeira.
+model BankStatement {
+  id          String    @id @default(cuid())
+  cardId      String?
+  name        String
+  periodStart DateTime?
+  periodEnd   DateTime?
+  fileName    String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+
+  card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  movements BankMovement[]
+
+  @@index([cardId])
+}
+
+// Movimento de um extrato bancário, classificado pela área financeira.
+model BankMovement {
+  id             String                @id @default(cuid())
+  statementId    String
+  cardId         String?
+  projectId      String?
+  docNumber      String?
+  docType        BankDocType?
+  supplierId     String?
+  movementType   BankMovementType      @default(OUTRO)
+  costCategoryId String? // Tipo/Categoria de custo
+  subcategoryId  String? // Subcategoria de custo
+  direction      BankMovementDirection
+  amount         Decimal               @db.Decimal(16, 2)
+  movementDate   DateTime
+  description    String?
+  isMerchandise  Boolean               @default(false) // compra de mercadorias (custo via stock)
+  costAssigned   Boolean               @default(false) // já tem custo associado
+  notes          String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  statement BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  supplier  Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([statementId])
+  @@index([projectId, movementDate])
+  @@index([movementType])
+  @@index([costAssigned])
 }
