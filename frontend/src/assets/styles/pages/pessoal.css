@@ -324,8 +324,9 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-submit {
+  grid-column: 1 / -1;
   align-self: end;
-  justify-self: stretch;
+  justify-self: end;
   height: 46px;
   min-width: 180px;
   padding: 10px 16px;
@@ -425,5 +426,10 @@ body[data-registry="pessoal"] {
   .pessoal-grid,
   .pessoal-obra-add {
     grid-template-columns: 1fr;
+  }
+
+  .pessoal-submit {
+    justify-self: stretch;
+    width: 100%;
   }
 }
