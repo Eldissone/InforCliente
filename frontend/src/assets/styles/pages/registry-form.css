@@ -167,10 +167,11 @@
 
 .registry-submit,
 .registry-ghost {
-  height: 2.7rem;
+  min-width: 11.5rem;
+  height: 3rem;
   padding: 0 1rem;
   border: 0;
-  border-radius: 0.9rem;
+  border-radius: 10px;
   font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
@@ -500,8 +501,9 @@ body[data-registry="obras"] .registry-page>h1 {
 
 .obra-form .registry-submit,
 .obra-form .registry-actions .registry-ghost {
-  min-width: 180px;
-  height: 38px;
+  min-width: 11.5rem;
+  height: 3rem;
+  padding: 0 1rem;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 400;

@@ -151,7 +151,7 @@ body[data-registry="produtos"] {
   height: 3rem;
   padding: 0 1.6rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #212e3e;
   color: #fff;
   font: 600 0.92rem/1 Inter, system-ui, sans-serif;

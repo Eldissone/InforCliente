@@ -222,7 +222,7 @@ body[data-stock-view="warehouses"] {
   height: 3rem;
   padding: 0 1.6rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 10px;
   font: 600 0.92rem/1 Inter, system-ui, sans-serif;
   cursor: pointer;
 }
