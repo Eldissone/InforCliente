@@ -50,7 +50,46 @@ const APP_MENU = [
       { label: "Centro de Compras", icon: "shopping_cart", selector: "[data-nav-centros]" },
     ],
   },
-  { type: "group", label: "Financeiro", icon: "account_balance", children: [] },
+  {
+    type: "group",
+    label: "Financeiro",
+    icon: "account_balance",
+    children: [
+      { label: "Overview Financeiro", icon: "insights", href: "/Financeiro/overview", perm: "financeiro:view" },
+      {
+        label: "Faturação",
+        icon: "request_quote",
+        children: [
+          { label: "Registar Faturas", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
+          { label: "Faturação Prevista", icon: "event_upcoming", href: "/Financeiro/faturacao/prevista", perm: "financeiro:view" },
+          { label: "Resumo Faturas vs Previsão", icon: "compare_arrows", href: "/Financeiro/faturacao/resumo", perm: "financeiro:view" },
+        ],
+      },
+      {
+        label: "Custos",
+        icon: "payments",
+        children: [
+          { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
+          { label: "Custos Realizados", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
+          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
+        ],
+      },
+      { label: "Contas a Pagar / Receber", icon: "swap_horiz", href: "/Financeiro/contas", perm: "financeiro:view" },
+      {
+        label: "Tesouraria",
+        icon: "account_balance_wallet",
+        children: [
+          { label: "Extratos Bancários", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos", perm: "financeiro:view" },
+          { label: "Recebimentos do Cliente", icon: "south_west", href: "/Financeiro/tesouraria/recebimentos", perm: "financeiro:view" },
+          { label: "Transferências Internas", icon: "swap_horiz", href: "/Financeiro/tesouraria/transferencias", perm: "financeiro:view" },
+          { label: "Levantamentos ATM", icon: "local_atm", href: "/Financeiro/tesouraria/atm", perm: "financeiro:view" },
+          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
+        ],
+      },
+      { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
+      { label: "Controlo Financeiro", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
+    ],
+  },
 ];
 
 function getTopNav() {
@@ -80,7 +119,10 @@ function createMenuLink(definition, source, variant) {
     const attr = definition.selector.match(/data-nav-[\w-]+/)?.[0];
     if (attr) link.setAttribute(attr, "");
   }
-  link.className = variant === "sidebar" ? "app-sidebar-link" : "";
+  if (variant === "sidebar") link.className = "app-sidebar-link";
+  else if (!origin) link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
+  else link.className = "";
+  if (definition.perm) link.setAttribute("data-nav-perm", definition.perm);
   if (wasHidden) link.classList.add("hidden");
   if (definition.pending) {
     link.classList.add("is-pending");
@@ -168,7 +210,9 @@ function isSidebarLinkActive(link) {
       && !current.includes("/projectos/tecnicoplanos");
   }
   if (link.matches("[data-nav-clientes]")) return current.includes("/clientes/") || current.includes("/clientedetalhe/");
-  if (link.matches("[data-nav-centros]")) return current.includes("/financeiro/");
+  if (link.matches("[data-nav-centros]")) {
+    return current.includes("/financeiro/centrodecompras") || current.includes("/financeiro/financeiro");
+  }
   if (link.matches("[data-nav-planeamento]")) return current.includes("centrocustos");
   if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
   if (link.matches("[data-nav-users]")) return current.includes("/users/");
