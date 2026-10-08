@@ -16,7 +16,7 @@ import {
   pickPrimaryEntryMovement,
   STOCK_TYPE_LABELS,
 } from "../../shared/stockDetail.js";
-import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
+import { formatCurrency, formatDateBR, formatPercent, getExchangeRate, toDateKey } from "../../shared/format.js";
 import {
   buildMeasurementSnapshot,
   flattenTasksForParentSelect,
@@ -5296,8 +5296,6 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
 }
 window.openEditPlannedModal = openEditPlannedModal;
 
-const DAILY_PLANS_PAGE_SIZE = 12;
-
 function renderGeralPagination(container, { page, pageSize, total, onPage }) {
   if (!container) return;
   container.innerHTML = "";
@@ -5383,141 +5381,380 @@ function renderGeralPagination(container, { page, pageSize, total, onPage }) {
   container.appendChild(wrap);
 }
 
+const DP_BOARD_COLORS = ["#f43f5e", "#f97316", "#0d9488", "#7c3aed", "#ec4899", "#d946ef", "#3b82f6", "#a855f7"];
+
+const DP_STATUS_COLUMNS = [
+  { id: "open", title: "Aberto", color: "#f43f5e", icon: "assignment", statuses: ["DRAFT", "PENDING_MATERIAL"] },
+  { id: "progress", title: "Em Curso", color: "#d97706", icon: "play_circle", statuses: ["IN_PROGRESS", "PENDING_VALIDATION"] },
+  { id: "done", title: "Concluído", color: "#059669", icon: "task_alt", statuses: ["COMPLETED", "PENDING_RETURN"] },
+];
+
+const DP_MONTHS_SHORT = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+
+function dpBoardStorageKey(projectId) {
+  return `InfoCliente.dailyPlanBoard.${projectId}`;
+}
+
+function loadDailyPlanBoardConfig(projectId) {
+  try {
+    const raw = localStorage.getItem(dpBoardStorageKey(projectId));
+    if (!raw) return { customColumns: [], placements: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
+      placements: parsed.placements && typeof parsed.placements === "object" ? parsed.placements : {},
+    };
+  } catch {
+    return { customColumns: [], placements: {} };
+  }
+}
+
+function saveDailyPlanBoardConfig(projectId, config) {
+  localStorage.setItem(dpBoardStorageKey(projectId), JSON.stringify(config));
+}
+
+function getDailyPlanBoardConfig() {
+  const projectId = getProjectId();
+  if (!window.dailyPlanBoardConfig || window.dailyPlanBoardProjectId !== projectId) {
+    window.dailyPlanBoardConfig = loadDailyPlanBoardConfig(projectId);
+    window.dailyPlanBoardProjectId = projectId;
+  }
+  return window.dailyPlanBoardConfig;
+}
+
+function persistDailyPlanBoardConfig() {
+  saveDailyPlanBoardConfig(getProjectId(), getDailyPlanBoardConfig());
+}
+
+function hexToRgba(hex, alpha) {
+  const raw = String(hex || "").replace("#", "");
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+  const n = Number.parseInt(full, 16);
+  if (!Number.isFinite(n)) return `rgba(148, 163, 184, ${alpha})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function formatDailyPlanBoardDate(value) {
+  const key = toDateKey(value);
+  if (!key) return "—";
+  const [y, m, d] = key.split("-").map(Number);
+  return `${d} de ${DP_MONTHS_SHORT[m - 1]} de ${y}`;
+}
+
+function dailyPlanBoardTitle(p) {
+  const desc = (p.description || "").trim();
+  const firstTask = (p.tasks || [])[0]?.progressTask;
+  const taskDesc = (firstTask?.description || "").trim();
+  const group = (firstTask?.itemGroup || "").trim();
+  const main = desc || taskDesc || "Sem descrição";
+  if (group) return `${main} (${group})`;
+  if (desc && taskDesc && taskDesc !== desc) return `${main} (${taskDesc})`;
+  return main;
+}
+
+function dailyPlanPriority(p) {
+  if (["PENDING_MATERIAL", "PENDING_VALIDATION", "PENDING_RETURN"].includes(p.status)) return "alta";
+  const key = toDateKey(p.date);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (key && key <= today && p.status !== "COMPLETED") return "alta";
+  return "normal";
+}
+
+function dailyPlanTitleColor(column) {
+  if (column?.id === "done") return "#0d3fd1";
+  return column?.color || "#212e3e";
+}
+
+function nativeColumnIdForStatus(status) {
+  return DP_STATUS_COLUMNS.find((col) => col.statuses.includes(status))?.id || "open";
+}
+
+function columnForPlan(plan, config) {
+  const customId = config.placements?.[plan.id];
+  if (customId && config.customColumns.some((col) => col.id === customId)) return customId;
+  return nativeColumnIdForStatus(plan.status);
+}
+
+function renderDailyPlanCard(p, column) {
+  const title = dailyPlanBoardTitle(p);
+  const prio = dailyPlanPriority(p);
+  const titleColor = dailyPlanTitleColor(column);
+  const uniqueTechs = [...new Set((p.tasks || []).map((t) => t.technician?.name || t.technician?.email).filter(Boolean))];
+  const techDisplay = uniqueTechs[0] || "";
+  const iconBg = hexToRgba(column.color, 0.14);
+
+  const actions = [];
+  if (p.status === "PENDING_MATERIAL") {
+    actions.push(`<button type="button" data-role-visible="admin,supervisor,operador" class="dp-act-amber" onclick="event.stopPropagation(); window.providePlanMaterials('${p.id}')"><span class="material-symbols-outlined">inventory_2</span> Material</button>`);
+  }
+  if (p.status === "PENDING_VALIDATION") {
+    actions.push(`<button type="button" data-role-visible="admin,supervisor,operador" class="dp-act-orange" onclick="event.stopPropagation(); window.validatePlan('${p.id}')"><span class="material-symbols-outlined">fact_check</span> Validar</button>`);
+  }
+  if (p.status === "IN_PROGRESS" || p.status === "DRAFT") {
+    actions.push(`<button type="button" data-role-visible="admin,tecnico,supervisor,operador" class="dp-act-green" onclick="event.stopPropagation(); window.completePlan('${p.id}')"><span class="material-symbols-outlined">check_circle</span> Concluir</button>`);
+  }
+  if (p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" class="dp-act-icon" title="Editar plano" onclick="event.stopPropagation(); window.openEditPlanModal('${p.id}')"><span class="material-symbols-outlined">edit</span></button>`);
+  }
+  if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="admin,operador" class="dp-act-icon dp-act-danger" title="Apagar plano" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
+  }
+  actions.push(`<button type="button" class="dp-act-icon" title="Ver detalhes" onclick="event.stopPropagation(); window.viewPlanDetails('${p.id}')"><span class="material-symbols-outlined">visibility</span></button>`);
+
+  return `
+    <article class="dp-card" draggable="true" data-plan-id="${escapeHtml(p.id)}" data-plan-status="${escapeHtml(p.status)}">
+      <div class="dp-card-top">
+        <div class="dp-card-icon" style="background:${iconBg};color:${column.color}">
+          <span class="material-symbols-outlined">${column.icon || "assignment"}</span>
+        </div>
+        <p class="dp-card-title" style="color:${titleColor}" title="${escapeHtml(title)}">${escapeHtml(title)}</p>
+        <span class="dp-card-prio ${prio === "alta" ? "is-alta" : "is-normal"}">${prio === "alta" ? "Alta" : "Normal"}</span>
+      </div>
+      <div class="dp-card-meta">
+        <span><span class="material-symbols-outlined">calendar_today</span>${escapeHtml(formatDailyPlanBoardDate(p.date))}</span>
+        ${techDisplay ? `<span class="dp-card-tech" title="${escapeHtml(uniqueTechs.join(", "))}"><span class="material-symbols-outlined">person</span>${escapeHtml(techDisplay)}</span>` : ""}
+      </div>
+      ${actions.length ? `<div class="dp-card-actions">${actions.join("")}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderDailyPlanColumn(column, plans) {
+  const headBg = hexToRgba(column.color, 0.16);
+  const deleteBtn = column.custom
+    ? `<button type="button" class="dp-col-delete" data-dp-delete-col="${escapeHtml(column.id)}" title="Remover coluna"><span class="material-symbols-outlined">close</span></button>`
+    : "";
+  return `
+    <section class="dp-col" data-dp-col="${escapeHtml(column.id)}" data-dp-custom="${column.custom ? "1" : "0"}">
+      <div class="dp-col-head" style="background:${headBg};color:${column.color}">
+        <span class="dp-col-head-title">${escapeHtml(column.title)}</span>
+        <span class="dp-col-count">${plans.length}</span>
+        ${deleteBtn}
+      </div>
+      <div class="dp-cards">${plans.map((p) => renderDailyPlanCard(p, column)).join("")}</div>
+    </section>
+  `;
+}
+
+function renderDailyPlanAddColumn(selectedColor) {
+  const color = selectedColor || DP_BOARD_COLORS[2];
+  const dots = DP_BOARD_COLORS.map((c) => `
+    <button type="button" class="dp-color-dot${c === color ? " is-selected" : ""}" data-dp-color="${c}" style="background:${c}" aria-label="Cor ${c}"></button>
+  `).join("");
+  return `
+    <button type="button" class="dp-add-col" data-dp-open-add>
+      <span class="material-symbols-outlined">add</span> Adicionar coluna
+    </button>
+    <form class="dp-add-form" data-dp-add-form>
+      <input id="dpNewColumnName" type="text" placeholder="Nome da coluna..." autocomplete="off">
+      <div class="dp-color-row">${dots}</div>
+      <div class="dp-add-actions">
+        <button type="submit" class="dp-add-confirm">Adicionar</button>
+        <button type="button" class="dp-add-cancel" data-dp-cancel-add>Cancelar</button>
+      </div>
+    </form>
+  `;
+}
+
 function renderDailyPlansList() {
   const container = el("dailyPlansList");
-  const pager = el("dailyPlansPagination");
   if (!container || !window.dailyPlansState) return;
 
   const searchQuery = (el("dpFilterSearch")?.value || "").toLowerCase().trim();
-  const filterStatus = el("dpFilterStatus")?.value || "all";
   const sortBy = el("dpFilterSort")?.value || "date_desc";
+  const config = getDailyPlanBoardConfig();
+  const adding = !!window.dailyPlanAddingColumn;
+  const selectedColor = window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2];
 
   let filtered = [...window.dailyPlansState];
 
-  // 1. Apply search filter (by description or technician name)
   if (searchQuery) {
-    filtered = filtered.filter(p => {
+    filtered = filtered.filter((p) => {
       const descMatch = (p.description || "").toLowerCase().includes(searchQuery);
-
-      // Check if any technician matches
-      const techMatch = p.tasks.some(t => {
+      const techMatch = (p.tasks || []).some((t) => {
         const name = (t.technician?.name || "").toLowerCase();
         const email = (t.technician?.email || "").toLowerCase();
         return name.includes(searchQuery) || email.includes(searchQuery);
       });
-
       return descMatch || techMatch;
     });
   }
 
-  // 2. Apply status filter
-  if (filterStatus !== "all") {
-    filtered = filtered.filter(p => p.status === filterStatus);
-  }
-
-  // 3. Apply sort
   filtered.sort((a, b) => {
-    if (sortBy === "date_desc") {
-      return new Date(b.date) - new Date(a.date);
-    } else if (sortBy === "date_asc") {
-      return new Date(a.date) - new Date(b.date);
-    } else if (sortBy === "created_desc") {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    } else if (sortBy === "created_asc") {
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    }
+    if (sortBy === "date_desc") return new Date(b.date) - new Date(a.date);
+    if (sortBy === "date_asc") return new Date(a.date) - new Date(b.date);
+    if (sortBy === "created_desc") return new Date(b.createdAt) - new Date(a.createdAt);
+    if (sortBy === "created_asc") return new Date(a.createdAt) - new Date(b.createdAt);
     return 0;
   });
 
-  if (filtered.length === 0) {
-    container.innerHTML = `
-      <div class="p-10 flex flex-col items-center text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">
-        <span class="material-symbols-outlined text-4xl mb-2 text-slate-350">event_busy</span>
-        Nenhum plano diário corresponde aos filtros aplicados.
-      </div>`;
-    if (pager) pager.innerHTML = "";
-    return;
+  const columns = [
+    ...DP_STATUS_COLUMNS,
+    ...config.customColumns.map((col) => ({ ...col, custom: true, icon: "view_column" })),
+  ];
+
+  container.innerHTML = columns.map((column) => {
+    const plans = filtered.filter((p) => columnForPlan(p, config) === column.id);
+    return renderDailyPlanColumn(column, plans);
+  }).join("") + renderDailyPlanAddColumn(selectedColor);
+
+  const addColBtn = container.querySelector("[data-dp-open-add]");
+  const addForm = container.querySelector("[data-dp-add-form]");
+  if (adding) {
+    addColBtn?.style.setProperty("display", "none");
+    addForm?.classList.add("is-open");
+    requestAnimationFrame(() => el("dpNewColumnName")?.focus());
+  } else if (addColBtn) {
+    addColBtn.style.display = "";
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / DAILY_PLANS_PAGE_SIZE));
-  window.dailyPlansPage = Math.min(Math.max(1, Number(window.dailyPlansPage) || 1), totalPages);
-  const start = (window.dailyPlansPage - 1) * DAILY_PLANS_PAGE_SIZE;
-  const pageItems = filtered.slice(start, start + DAILY_PLANS_PAGE_SIZE);
+  applyRoleVisibility();
+}
 
-  container.innerHTML = pageItems.map(p => {
-    let statusBadge = "";
-    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
-    if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
-    if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
-    if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
-    if (p.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
+function wireDailyPlanBoard() {
+  const container = el("dailyPlansList");
+  if (!container || window.dailyPlansListenersWired) return;
 
-    // Fetch technicians assigned
-    const uniqueTechs = [...new Set(p.tasks.map(t => t.technician?.name || t.technician?.email || "Sem Técnico").filter(Boolean))];
-    const techDisplay = uniqueTechs.length > 0 ? uniqueTechs.join(', ') : "Sem Técnico";
+  const resetAndRender = () => renderDailyPlansList();
+  el("dpFilterSearch")?.addEventListener("input", resetAndRender);
+  el("dpFilterSort")?.addEventListener("change", resetAndRender);
 
-    return `
-      <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group w-full">
-        <div>
-          <div class="flex items-center gap-3 mb-2">
-            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
-            ${statusBadge}
-          </div>
-          <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
-          <div class="mt-2 text-xs font-semibold text-slate-500 flex flex-wrap gap-4 items-center">
-            <span>${p.tasks.length} Tarefa(s)</span>
-            <span>${p.materials.length} Material(ais)</span>
-            <span class="flex items-center gap-1 text-slate-400 font-medium">
-              <span class="material-symbols-outlined text-xs">person</span> ${escapeHtml(techDisplay)}
-            </span>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
-          ${p.status === "PENDING_MATERIAL" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
-            </button>
-          ` : ""}
-          ${p.status === "PENDING_VALIDATION" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.validatePlan('${p.id}')" class="h-10 bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">fact_check</span> Validar Relatório
-            </button>
-          ` : ""}
-          ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
-            <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
-            </button>
-          ` : ""}
-          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") ? `
-            <button data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0" title="Editar plano">
-              <span class="material-symbols-outlined text-sm">edit</span>
-            </button>
-          ` : ""}
-          <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
-            <span class="material-symbols-outlined text-sm">visibility</span>
-          </button>
-          ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
-            <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
-              <span class="material-symbols-outlined text-sm">delete</span>
-            </button>
-          ` : ""}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  renderGeralPagination(pager, {
-    page: window.dailyPlansPage,
-    pageSize: DAILY_PLANS_PAGE_SIZE,
-    total: filtered.length,
-    onPage: (next) => {
-      window.dailyPlansPage = next;
-      renderDailyPlansList();
-      container.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
+  container.addEventListener("mousedown", (event) => {
+    const card = event.target.closest(".dp-card");
+    if (card) card.draggable = !event.target.closest("button");
   });
 
-  applyRoleVisibility();
+  container.addEventListener("click", (event) => {
+    if (window.dpBoardJustDragged) return;
+
+    const openAdd = event.target.closest("[data-dp-open-add]");
+    if (openAdd) {
+      window.dailyPlanAddingColumn = true;
+      window.dailyPlanNewColumnColor = window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2];
+      renderDailyPlansList();
+      return;
+    }
+
+    const cancelAdd = event.target.closest("[data-dp-cancel-add]");
+    if (cancelAdd) {
+      window.dailyPlanAddingColumn = false;
+      renderDailyPlansList();
+      return;
+    }
+
+    const colorBtn = event.target.closest("[data-dp-color]");
+    if (colorBtn) {
+      window.dailyPlanNewColumnColor = colorBtn.getAttribute("data-dp-color");
+      container.querySelectorAll("[data-dp-color]").forEach((btn) => {
+        btn.classList.toggle("is-selected", btn.getAttribute("data-dp-color") === window.dailyPlanNewColumnColor);
+      });
+      return;
+    }
+
+    const deleteCol = event.target.closest("[data-dp-delete-col]");
+    if (deleteCol) {
+      event.preventDefault();
+      const colId = deleteCol.getAttribute("data-dp-delete-col");
+      const config = getDailyPlanBoardConfig();
+      config.customColumns = config.customColumns.filter((col) => col.id !== colId);
+      Object.keys(config.placements).forEach((planId) => {
+        if (config.placements[planId] === colId) delete config.placements[planId];
+      });
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+      return;
+    }
+
+    const card = event.target.closest(".dp-card");
+    if (card && !event.target.closest("button")) {
+      const planId = card.getAttribute("data-plan-id");
+      if (planId) window.viewPlanDetails(planId);
+    }
+  });
+
+  container.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-dp-add-form]");
+    if (!form) return;
+    event.preventDefault();
+    const name = (el("dpNewColumnName")?.value || "").trim();
+    if (!name) {
+      toast("Indique o nome da coluna.", { type: "error" });
+      el("dpNewColumnName")?.focus();
+      return;
+    }
+    const config = getDailyPlanBoardConfig();
+    config.customColumns.push({
+      id: `custom-${Date.now()}`,
+      title: name,
+      color: window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2],
+    });
+    persistDailyPlanBoardConfig();
+    window.dailyPlanAddingColumn = false;
+    window.dailyPlanNewColumnColor = DP_BOARD_COLORS[2];
+    renderDailyPlansList();
+  });
+
+  container.addEventListener("dragstart", (event) => {
+    const card = event.target.closest(".dp-card");
+    if (!card) return;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.getAttribute("data-plan-id") || "");
+  });
+
+  container.addEventListener("dragend", (event) => {
+    event.target.closest(".dp-card")?.classList.remove("is-dragging");
+    container.querySelectorAll(".dp-col.is-drop-target").forEach((col) => col.classList.remove("is-drop-target"));
+    window.dpBoardJustDragged = true;
+    setTimeout(() => { window.dpBoardJustDragged = false; }, 80);
+  });
+
+  container.addEventListener("dragover", (event) => {
+    const col = event.target.closest(".dp-col");
+    if (!col) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    container.querySelectorAll(".dp-col.is-drop-target").forEach((node) => {
+      if (node !== col) node.classList.remove("is-drop-target");
+    });
+    col.classList.add("is-drop-target");
+  });
+
+  container.addEventListener("drop", (event) => {
+    const col = event.target.closest(".dp-col");
+    if (!col) return;
+    event.preventDefault();
+    col.classList.remove("is-drop-target");
+    const planId = event.dataTransfer.getData("text/plain");
+    if (!planId) return;
+    const plan = (window.dailyPlansState || []).find((p) => p.id === planId);
+    if (!plan) return;
+
+    const targetId = col.getAttribute("data-dp-col");
+    const isCustom = col.getAttribute("data-dp-custom") === "1";
+    const config = getDailyPlanBoardConfig();
+
+    if (isCustom) {
+      config.placements[planId] = targetId;
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+      return;
+    }
+
+    const nativeId = nativeColumnIdForStatus(plan.status);
+    if (targetId !== nativeId) {
+      toast("O estado do plano segue o fluxo de execução. Use as acções do cartão.", { type: "info" });
+      return;
+    }
+    if (config.placements[planId]) {
+      delete config.placements[planId];
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+    }
+  });
+
+  window.dailyPlansListenersWired = true;
 }
 
 async function loadDailyPlans() {
@@ -5525,33 +5762,17 @@ async function loadDailyPlans() {
   const container = el("dailyPlansList");
   if (!container) return;
 
-  const pager = el("dailyPlansPagination");
   try {
-    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">Carregando planos...</div>`;
-    if (pager) pager.innerHTML = "";
-
+    container.innerHTML = `<div class="dp-board-empty">Carregando planos...</div>`;
     const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
     window.dailyPlansState = plans || [];
-    window.dailyPlansPage = 1;
-
-    // Wire up event listeners if they haven't been wired yet
-    if (!window.dailyPlansListenersWired) {
-      const resetAndRender = () => {
-        window.dailyPlansPage = 1;
-        renderDailyPlansList();
-      };
-      el("dpFilterSearch")?.addEventListener("input", resetAndRender);
-      el("dpFilterStatus")?.addEventListener("change", resetAndRender);
-      el("dpFilterSort")?.addEventListener("change", resetAndRender);
-      window.dailyPlansListenersWired = true;
-    }
-
+    window.dailyPlanBoardConfig = loadDailyPlanBoardConfig(id);
+    window.dailyPlanBoardProjectId = id;
+    wireDailyPlanBoard();
     renderDailyPlansList();
-
   } catch (err) {
     console.error(err);
-    container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl w-full">Erro ao carregar planos.</div>`;
-    if (pager) pager.innerHTML = "";
+    container.innerHTML = `<div class="dp-board-empty" style="color:#ef4444">Erro ao carregar planos.</div>`;
   }
 }
 window.loadDailyPlans = loadDailyPlans;

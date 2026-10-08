@@ -691,47 +691,24 @@
                 </div>
             </div>
 
-            <!-- Filtros de Planos Diários -->
-            <div
-                class="bg-white p-4 sm:p-6 mb-8 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
-                <div class="w-full md:flex-1 relative">
-                    <span
-                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                    <input id="dpFilterSearch" type="text" placeholder="Buscar por descrição ou técnico..."
-                        class="w-full pl-11 pr-4 h-11 bg-slate-50 border-none rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 transition-all">
+            <div class="dp-toolbar">
+                <div class="dp-toolbar-search">
+                    <span class="material-symbols-outlined dp-toolbar-search-icon">search</span>
+                    <input id="dpFilterSearch" type="text" placeholder="Buscar por descrição ou técnico...">
                 </div>
-                <div class="flex flex-wrap sm:flex-nowrap gap-4 w-full md:w-auto shrink-0">
-                    <div class="w-full sm:w-44">
-                        <select id="dpFilterStatus"
-                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
-                            <option value="all">Todos os Estados</option>
-                            <option value="DRAFT">Disponível</option>
-                            <option value="PENDING_MATERIAL">Aguardando Material</option>
-                            <option value="IN_PROGRESS">Em Execução</option>
-                            <option value="PENDING_VALIDATION">Pendente Validação</option>
-                            <option value="COMPLETED">Concluído</option>
-                        </select>
-                    </div>
-                    <div class="w-full sm:w-56">
-                        <select id="dpFilterSort"
-                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
-                            <option value="date_desc">Data do Plano (Mais Recente)</option>
-                            <option value="date_asc">Data do Plano (Mais Antigo)</option>
-                            <option value="created_desc">Criação (Mais Recente)</option>
-                            <option value="created_asc">Criação (Mais Antigo)</option>
-                        </select>
-                    </div>
+                <div class="dp-toolbar-sort">
+                    <select id="dpFilterSort">
+                        <option value="date_desc">Data do Plano (Mais Recente)</option>
+                        <option value="date_asc">Data do Plano (Mais Antigo)</option>
+                        <option value="created_desc">Criação (Mais Recente)</option>
+                        <option value="created_asc">Criação (Mais Antigo)</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Lista de Planos -->
-            <div class="grid grid-cols-1 gap-6" id="dailyPlansList">
-                <!-- Populado via JS -->
-                <div
-                    class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">
-                    Carregando planos...</div>
+            <div class="dp-board custom-scroll" id="dailyPlansList">
+                <div class="dp-board-empty">Carregando planos...</div>
             </div>
-            <div id="dailyPlansPagination" class="flex items-center justify-center gap-2 mt-8 mb-12"></div>
         </div>
 
         <!-- Files Tab -->

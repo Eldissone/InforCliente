@@ -525,3 +525,463 @@ body[data-shell="figma"] main textarea:focus {
   min-height: 0;
   max-height: none;
 }
+
+/* Planos Diários — pesquisa e filtro */
+.dp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.dp-toolbar-search,
+.dp-toolbar-sort {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  flex: 0 0 300px;
+}
+
+.dp-toolbar-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 1.15rem;
+  pointer-events: none;
+}
+
+body[data-shell="figma"] .dp-toolbar-search input,
+body[data-shell="figma"] .dp-toolbar-sort select {
+  width: 100%;
+  max-width: 300px;
+  height: 2.75rem !important;
+  border: 1px solid #e8e8e8 !important;
+  border-radius: 12px !important;
+  background: #fff;
+  color: #121212;
+  font-size: 13px !important;
+  font-weight: 600;
+}
+
+body[data-shell="figma"] .dp-toolbar-search input {
+  padding: 0 0.9rem 0 2.6rem;
+}
+
+body[data-shell="figma"] .dp-toolbar-sort select {
+  padding: 0 0.9rem;
+}
+
+@media (max-width: 700px) {
+  .dp-toolbar-search,
+  .dp-toolbar-sort {
+    flex-basis: 100%;
+    max-width: 300px;
+    margin-left: auto;
+  }
+}
+
+/* Planos Diários — quadro Kanban */
+.dp-board {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.15rem;
+  overflow-x: auto;
+  padding: 1.15rem 1rem 1.5rem;
+  min-height: 90vh;
+  border-radius: 20px;
+  background-color: #f4f6fa;
+  /* background-image: radial-gradient(#d5dae3 1.15px, transparent 1.15px); */
+  background-size: 18px 18px;
+}
+
+.dp-board-empty {
+  width: 100%;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dp-col {
+  flex: 0 0 280px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-height: 12rem;
+}
+
+.dp-col.is-drop-target {
+  background: rgba(13, 63, 209, 0.05);
+  border-radius: 16px;
+  outline: 1.5px dashed #0d3fd1;
+  outline-offset: 4px;
+}
+
+.dp-col-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0.4rem 0.7rem;
+  border-radius: 10px;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.dp-col-head-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-col-count {
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dp-col-delete {
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-left: 0.1rem;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.dp-col-delete .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.dp-col:hover .dp-col-delete {
+  display: inline-flex;
+}
+
+.dp-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 4rem;
+}
+
+.dp-card {
+  background: #fff;
+  border: 1px solid #eceff3;
+  border-radius: 14px;
+  padding: 0.85rem 0.9rem 0.75rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  user-select: none;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.dp-card:hover {
+  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.28);
+}
+
+.dp-card.is-dragging {
+  opacity: 0.45;
+}
+
+.dp-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.dp-card-icon {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.dp-card-icon .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.dp-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dp-card-prio {
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.dp-card-prio.is-normal {
+  background: #e8f0fe;
+  color: #0d3fd1;
+}
+
+.dp-card-prio.is-alta {
+  background: #fff4e5;
+  color: #d97706;
+}
+
+.dp-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.65rem;
+  padding-left: 0.15rem;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dp-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.dp-card-meta .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.dp-card-tech {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 8.5rem;
+}
+
+.dp-card-actions {
+  display: none;
+  gap: 0.3rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.dp-card:hover .dp-card-actions,
+.dp-card:focus-within .dp-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dp-card-actions button {
+  height: 1.85rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 0.5rem;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.dp-card-actions button .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.dp-card-actions .dp-act-icon {
+  width: 1.85rem;
+  padding: 0;
+  justify-content: center;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.dp-card-actions .dp-act-icon:hover {
+  background: #eef2f6;
+  color: #0d3fd1;
+}
+
+.dp-card-actions .dp-act-danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.dp-card-actions .dp-act-amber {
+  background: #fff7ed;
+  color: #d97706;
+}
+
+.dp-card-actions .dp-act-orange {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.dp-card-actions .dp-act-green {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.dp-add-col,
+.dp-add-form {
+  flex: 0 0 268px;
+  width: 268px;
+}
+
+.dp-add-col {
+  min-height: 2.15rem;
+  border: 1.5px dashed #cfd6e0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.45);
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dp-add-col:hover {
+  background: #fff;
+  color: #475569;
+  border-color: #94a3b8;
+}
+
+.dp-add-col .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.dp-add-form {
+  display: none;
+  background: #fff;
+  border: 1.5px dashed #c5cdd8;
+  border-radius: 16px;
+  padding: 0.9rem;
+  box-shadow: 0 10px 28px -18px rgba(15, 23, 42, 0.35);
+}
+
+.dp-add-form.is-open {
+  display: block;
+}
+
+body[data-shell="figma"] .dp-add-form input {
+  height: 2.4rem !important;
+  width: 100%;
+  border: 1px solid #d0d5dd !important;
+  border-radius: 10px !important;
+  padding: 0 0.75rem;
+  font-size: 13px !important;
+  font-weight: 500;
+  outline: none !important;
+  background: #fff;
+}
+
+body[data-shell="figma"] .dp-add-form input:focus {
+  outline: 2px solid #0d3fd1 !important;
+  outline-offset: 1px;
+}
+
+.dp-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0.9rem;
+}
+
+.dp-color-dot {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+.dp-color-dot.is-selected {
+  border-color: #212e3e;
+}
+
+.dp-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dp-add-confirm {
+  height: 2.15rem;
+  padding: 0 0.95rem;
+  border: 0;
+  border-radius: 10px;
+  background: #212e3e;
+  color: #2afc8d;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dp-add-cancel {
+  height: 2.15rem;
+  padding: 0 0.6rem;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dp-add-cancel:hover {
+  color: #0f172a;
+}
+
+@media (max-width: 767px) {
+  .dp-col,
+  .dp-add-col,
+  .dp-add-form {
+    flex-basis: 250px;
+    width: 250px;
+  }
+
+  .dp-card-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+}
