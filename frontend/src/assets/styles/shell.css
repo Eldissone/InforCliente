@@ -131,6 +131,7 @@ body[data-shell="figma"] .shell-btn:disabled {
     width: 260px;
     padding: 20px 16px 16px;
     border-right: 1px solid #e8e8e8;
+    border-radius: 20px;
     background: #fff;
     font-family: Inter, system-ui, sans-serif;
   }
@@ -198,6 +199,22 @@ body[data-shell="figma"] .shell-btn:disabled {
     justify-content: center;
     margin-right: 0;
     margin-left: 0;
+  }
+
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) {
+    width: 260px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) .app-sidebar-brand-text {
+    display: inline;
+  }
+
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) .app-sidebar-brand {
+    justify-content: flex-start;
+    margin-right: 8px;
+    margin-left: 8px;
   }
 
   body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
@@ -322,7 +339,7 @@ body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand 
 
 @media (min-width:1024px) {
   body[data-shell="figma"] .app-primary-sidebar.is-figma-shell {
-    top: 6.1rem;
+    top: 5.5rem;
     padding-top: 1rem;
   }
 }

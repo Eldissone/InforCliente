@@ -79,7 +79,7 @@
   .app-primary-sidebar {
     position: fixed;
     z-index: 40;
-    top: 5rem;
+    top: 4rem;
     bottom: 1rem;
     left: 0;
     display: flex;
@@ -94,15 +94,6 @@
     transition: width 180ms ease, padding 180ms ease;
   }
 
-  .app-sidebar-top {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    min-height: 2.5rem;
-    margin: 0 0 0.35rem;
-    padding: 0 0.5rem;
-  }
-
   .app-sidebar-caption,
   .app-sidebar-section-title {
     margin: 0;
@@ -113,20 +104,6 @@
     text-transform: uppercase;
   }
 
-  .app-sidebar-collapse {
-    display: inline-flex;
-    width: 1.8rem;
-    height: 1.8rem;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #edf0f2;
-    border-radius: 0.55rem;
-    background: #fff;
-    color: #1d2638;
-    cursor: pointer;
-  }
-
-  .app-sidebar-collapse:hover,
   .app-sidebar-link:hover,
   .app-sidebar-group > summary:hover {
     background: #f4f5f6;
@@ -402,7 +379,6 @@
     display: none;
   }
 
-  .app-sidebar-collapsed .app-sidebar-top,
   .app-sidebar-collapsed .app-sidebar-link,
   .app-sidebar-collapsed .app-sidebar-group > summary,
   .app-sidebar-collapsed .app-sidebar-logout {
@@ -422,6 +398,55 @@
   .app-sidebar-collapsed > main {
     width: calc(100% - 4.65rem) !important;
     margin-left: 4.65rem !important;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) {
+    width: 16.75rem;
+    padding-right: 1rem;
+    padding-left: 1rem;
+    z-index: 45;
+    background: #fff;
+    box-shadow: 12px 0 32px rgba(18, 18, 18, 0.1);
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-caption,
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-section-title {
+    display: block;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-link span:not(.material-symbols-outlined),
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-group-label span:last-child,
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-chevron,
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-footer span:last-child {
+    display: inline;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-link {
+    justify-content: flex-start;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-group > summary {
+    justify-content: space-between;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-logout {
+    justify-content: flex-start;
+    padding: 0.65rem 0;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-footer .app-sidebar-link {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-group {
+    margin-top: 0.45rem;
+  }
+
+  .app-sidebar-collapsed .app-primary-sidebar:is(:hover, :focus-within) .app-sidebar-group[open] > .app-sidebar-children {
+    display: grid;
   }
 }
 
