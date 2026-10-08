@@ -481,3 +481,47 @@ body[data-shell="figma"] main textarea:focus {
   outline-color: #0d3fd1;
   background: rgba(36, 140, 216, 0.08) !important;
 }
+
+/* Dashboard KPI row: cards in the same row share height via stretch. */
+.pv-stats-row {
+  align-items: stretch;
+}
+
+.pv-stats-row > .pv-stat-card {
+  align-self: stretch;
+  height: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  .pv-stats-row > .pv-stat-card {
+    flex: 1 1 0;
+  }
+}
+
+.pv-stat-card__fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pv-stat-card--prazos #dateAnalysis {
+  margin-top: auto;
+}
+
+.pv-stat-card--progress .pv-stat-card__fill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pv-stat-card--operation #cbsList {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-height: 0;
+  max-height: none;
+}

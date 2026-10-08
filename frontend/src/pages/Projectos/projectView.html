@@ -136,14 +136,14 @@
             </section>
 
             <!-- Bento Grid: Main Stats -->
-            <div class="flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
+            <div class="pv-stats-row flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
                 <!-- Budget Card -->
                 <div
-                    class="flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 h-full w-full min-w-0 flex flex-col justify-between">
+                    class="pv-stat-card flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 w-full min-w-0 flex flex-col justify-between">
                     <div
                         class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all">
                     </div>
-                    <div class="relative z-10 h-full flex flex-col justify-between">
+                    <div class="relative z-10 flex-1 flex flex-col justify-between min-h-0">
                         <div>
                             <div class="flex justify-between items-center mb-6 md:mb-8">
                                 <span
@@ -175,7 +175,7 @@
 
                 <!-- Prazos Card -->
                 <div
-                    class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0">
+                    class="pv-stat-card pv-stat-card--prazos flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between w-full min-w-0">
                     <div>
                         <div class="flex justify-between items-center mb-6 md:mb-10">
                             <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Prazos</h3>
@@ -197,7 +197,7 @@
                             <div id="projectPauses" class="hidden space-y-1 pt-1 border-t border-slate-100"></div>
                         </div>
                     </div>
-                    <div id="dateAnalysis" class="mt-10 p-4 rounded-[24px] bg-[#F8FAFC] border border-slate-100 text-center">
+                    <div id="dateAnalysis" class="mt-auto p-4 rounded-[24px] bg-[#F8FAFC] border border-slate-100 text-center">
                         <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---
                         </p>
                         <span id="projectDueDate" class="text-slate-900">--/--/----</span>
@@ -207,10 +207,10 @@
 
                 <!-- Progress Card -->
                 <div
-                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-center h-full w-full min-w-0">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
+                    class="pv-stat-card pv-stat-card--progress flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col w-full min-w-0">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Progresso Físico
                     </h3>
-                    <div class="flex justify-center relative">
+                    <div class="pv-stat-card__fill flex flex-1 items-center justify-center relative min-h-0">
                         <div class="relative w-40 h-40">
                             <div id="physicalProgressPie"
                                 class="w-full h-full rounded-full transition-all duration-1000"
@@ -226,9 +226,9 @@
 
                 <!-- CBS Status -->
                 <div
-                    class="flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 h-full w-full min-w-0 flex flex-col justify-between">
+                    class="pv-stat-card pv-stat-card--operation flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 w-full min-w-0 flex flex-col">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-500 mb-8">Operação</h3>
-                    <div id="cbsList" class="space-y-5 overflow-y-auto max-h-[350px] custom-scroll pr-2">
+                    <div id="cbsList" class="pv-stat-card__fill overflow-y-auto custom-scroll pr-2">
                         <!-- Stat items with standard IDs for JS updateOperationStatus -->
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
