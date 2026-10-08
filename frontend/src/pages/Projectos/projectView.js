@@ -302,6 +302,7 @@ async function loadProject() {
 
   el("projectTitle").textContent = p.name;
   if (el("projectType")) el("projectType").textContent = obraTiposLabel(p) || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("projectClientName")) el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   const chip = el("obraEstadoChip");
   if (chip) {
     const visual = obraStatusVisual(p.status);
@@ -310,10 +311,6 @@ async function loadProject() {
   }
   wireObraEstadoButton();
   el("projectBreadcrumb").textContent = String(p.referencia || "").trim() || "—";
-  el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
-  el("projectClientCode").textContent = p.client?.code || "Sem código";
-  renderProjectContacts(p);
-  el("projectLocation").textContent = p.location || p.region || "-";
 
   const total = Number(p.budgetTotal || 0);
   const consumed = Number(p.budgetConsumed || 0);

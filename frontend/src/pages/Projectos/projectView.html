@@ -43,7 +43,11 @@
                 </nav>
                 <h1 id="projectTitle"
                     class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
-                <p id="projectType" class="text-slate-500 font-medium">---</p>
+                <p class="text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span id="projectType">---</span>
+                    <span class="text-slate-300" aria-hidden="true">·-·</span>
+                    <span id="projectClientName">---</span>
+                </p>
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <span id="obraEstadoChip" class="inline-flex items-center h-8 px-3 rounded-full bg-slate-100 text-xs font-bold text-slate-700">—</span>
                     <button type="button" id="btnAtualizarEstado" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800">Atualizar estado</button>
@@ -115,26 +119,6 @@
                     Lançamento
                 </button>
             </div>
-            <!-- Project Identification Cards -->
-            <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Entidade / Parceiro
-                    </p>
-                    <div id="projectClientName" class="text-lg font-bold text-slate-900">---</div>
-                    <div id="projectClientCode"
-                        class="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">---</div>
-                </div>
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Gestor / Contacto
-                    </p>
-                    <div id="projectContact" class="text-lg font-bold text-slate-900">---</div>
-                </div>
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Localização</p>
-                    <div id="projectLocation" class="text-lg font-bold text-slate-900">---</div>
-                </div>
-            </section>
-
             <!-- Bento Grid: Main Stats -->
             <div class="pv-stats-row flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
                 <!-- Budget Card -->
