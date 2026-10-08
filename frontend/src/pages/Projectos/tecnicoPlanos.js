@@ -1,7 +1,7 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
-import { openModal, setText, toast, setButtonLoading } from "../../shared/ui.js";
-import { wireLogout } from "../../shared/session.js";
+import { openModal, setText, toast, setButtonLoading, initMobileMenu } from "../../shared/ui.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 // Check authentication and authorize role
 const currentUser = checkAuth({ allowedRoles: ["tecnico", "admin", "supervisor", "operador"] });
@@ -684,7 +684,9 @@ window.completePlan = async function (planId) {
 };
 
 function wireEvents() {
+  initMobileMenu();
   wireLogout();
+  wireUsersNav();
 
   // Tabs toggle
   const tabActive = el("tabActiveBtn");

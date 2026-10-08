@@ -338,6 +338,14 @@ body > nav.app-top-nav [data-user-profile] .material-symbols-outlined {
   font-size: 0.875rem;
 }
 
+/* Páginas sem menu (ex.: painel do técnico): só marca, perfil e sair. */
+body[data-app-nav="off"] > nav.app-top-nav > div:first-child > div:first-child > div,
+body[data-app-nav="off"] > nav.app-top-nav #mobileMenuBtn,
+body[data-app-nav="off"] > nav.app-top-nav #navMenu,
+body[data-app-nav="off"] > nav.app-top-nav [data-nav-users] {
+  display: none !important;
+}
+
 /* Com a barra lateral, a navegação superior flutua e os links passam para a sidebar. */
 @media (min-width: 1024px) {
   .app-sidebar-layout > nav.app-top-nav {

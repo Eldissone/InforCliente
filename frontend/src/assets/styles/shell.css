@@ -253,6 +253,7 @@ body>nav.app-top-nav {
   box-shadow: none;
 }
 
+body[data-shell="figma"]>nav.app-top-nav,
 body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav,
 body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
   top: 1rem !important;
@@ -260,6 +261,7 @@ body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-na
   left: 1.25rem !important;
   width: auto !important;
   height: 4rem !important;
+  min-height: 4rem;
   border: 0 !important;
   border-radius: 1.35rem !important;
   background: #212e3e !important;
@@ -275,31 +277,39 @@ body[data-shell="figma"]>nav.app-top-nav>div:first-child {
   height: 4rem;
 }
 
+body>nav.app-top-nav .app-nav-brand,
 body>nav.app-top-nav>div:first-child>div:first-child> :first-child {
   display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
   color: #fff;
   font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-decoration: none;
 }
 
+body[data-shell="figma"]>nav.app-top-nav .app-nav-brand,
 body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav>div:first-child>div:first-child> :first-child {
   display: flex !important;
   color: #fff !important;
 }
 
+body>nav.app-top-nav .app-nav-mark,
 body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
-  width: auto;
-  height: auto;
-  border-radius: 1.5rem;
-  background: #20e981;
-  color: #212e3e;
-  font-size: 1.5rem;
-  font-style: italic;
-  padding: 5px 10px;
-}
-
-body[data-shell="figma"]>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 1.5rem !important;
   background: #20e981 !important;
   color: #212e3e !important;
+  font-size: 1.5rem !important;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  padding: 5px 10px !important;
 }
 
 body>nav.app-top-nav [data-user-profile] {
@@ -331,9 +341,11 @@ body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand 
     padding-inline: 1rem;
   }
 
+  body>nav.app-top-nav .app-nav-mark,
   body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
-    width: 3.5rem;
-    height: 2.2rem;
-    font-size: 1.2rem;
+    width: 3.5rem !important;
+    height: 2.2rem !important;
+    font-size: 1.2rem !important;
+    padding: 0 !important;
   }
 }

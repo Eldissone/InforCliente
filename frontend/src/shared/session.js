@@ -173,6 +173,16 @@ export function wireUsersNav() {
 async function wireNavLinks(role) {
   const allNavSelectors = "[data-nav-dashboard], [data-nav-clientes], [data-nav-obras], [data-nav-logistica], [data-nav-logistics], [data-nav-planeamento], [data-nav-cotacao], [data-nav-financeiro], [data-nav-centros], [data-nav-users]";
 
+  if (document.body.dataset.appNav === "off") {
+    document.querySelectorAll(allNavSelectors).forEach((el) => {
+      el.classList.add("hidden");
+    });
+    document.getElementById("mobileMenuBtn")?.classList.add("hidden");
+    document.getElementById("navMenu")?.classList.add("hidden");
+    syncNavDropdownGroups();
+    return;
+  }
+
   // Admin sempre vê tudo
   if (role === "admin") {
     document.querySelectorAll(allNavSelectors).forEach(el => {

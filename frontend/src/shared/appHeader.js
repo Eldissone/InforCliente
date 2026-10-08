@@ -22,8 +22,8 @@ function renderAppHeader() {
   return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800 transition-all duration-300" data-shared-header>
     <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
       <div class="flex items-center gap-10">
-        <a href="/Dashboard" class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-          <span class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
+        <a href="/Dashboard" class="app-nav-brand text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <span class="app-nav-mark w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
           <span id="navBrandText">Gestor</span>
         </a>
         <div class="hidden lg:flex items-center gap-6">

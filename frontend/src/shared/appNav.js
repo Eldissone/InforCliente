@@ -263,7 +263,7 @@ function rebuildMobileMenu(nav, source) {
 export function transformDesktopNavToDropdowns() {
   const source = getDesktopNavLinksContainer();
   const nav = getTopNav();
-  if (document.body.dataset.appSidebar === "off" || !nav) return;
+  if (document.body.dataset.appSidebar === "off" || document.body.dataset.appNav === "off" || !nav) return;
 
   rebuildMobileMenu(nav, source);
 
