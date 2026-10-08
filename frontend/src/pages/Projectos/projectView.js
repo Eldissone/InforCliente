@@ -332,7 +332,7 @@ async function loadProject() {
   const progress = Number(p.physicalProgressPct || 0).toFixed(2);
   el("physicalProgress").textContent = `${progress}%`;
   if (el("physicalProgressPie")) {
-    el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #f1f5f9 ${progress}%, #f1f5f9 100%)`;
+    el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #e2e8f0 ${progress}%, #e2e8f0 100%)`;
   }
 
   el("projectStartDate").textContent = p.startDate ? formatDateBR(p.startDate) : "---";
@@ -559,7 +559,7 @@ function renderProjectPauses(p) {
   box.innerHTML = pauses.map((pause) => {
     const inicio = pause.inicio || (pause.startDate ? formatDateBR(pause.startDate) : "---");
     const fim = pause.fim || (pause.endDate ? formatDateBR(pause.endDate) : "---");
-    return `<p class="text-[10px] font-bold text-slate-500">${escapeHtml(inicio)} → ${escapeHtml(fim)}</p>`;
+    return `<p class="text-[10px] font-bold text-[#212e3e]">${escapeHtml(inicio)} → ${escapeHtml(fim)}</p>`;
   }).join("");
 }
 
@@ -1749,7 +1749,7 @@ async function loadProgressTasks() {
       }
       const pieEl = el("physicalProgressPie");
       if (pieEl) {
-        pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #f1f5f9 ${globalPct}%, #f1f5f9 100%)`;
+        pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #e2e8f0 ${globalPct}%, #e2e8f0 100%)`;
       }
 
       let groupIndex = 0;
@@ -1820,7 +1820,7 @@ async function loadProgressTasks() {
         // Update UI: Pie Chart
         if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
         if (el("physicalProgressPie")) {
-          el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${avgPct}%, #f1f5f9 ${avgPct}%, #f1f5f9 100%)`;
+          el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${avgPct}%, #e2e8f0 ${avgPct}%, #e2e8f0 100%)`;
         }
 
         // Date Calculations
