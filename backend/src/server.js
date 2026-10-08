@@ -28,6 +28,7 @@ const { freightOrderRoutes } = require("./routes/freightOrders");
 const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { helpTicketRoutes } = require("./routes/helpTickets");
 const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
+const { financeRoutes } = require("./routes/finance");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
 const { ensureUploadsDir } = require("./utils/storage");
@@ -128,6 +129,8 @@ app.use("/help-tickets", helpTicketRoutes);
 app.use("/contacts", contactRoutes);
 app.use("/sectors", sectorRoutes);
 app.use("/personnel", personnelRoutes);
+// Área Financeira (faturação, custos, tesouraria, overview)
+app.use("/finance", financeRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
