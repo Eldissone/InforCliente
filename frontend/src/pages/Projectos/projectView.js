@@ -317,9 +317,6 @@ async function loadProject() {
 
   const total = Number(p.budgetTotal || 0);
   const consumed = Number(p.budgetConsumed || 0);
-  const committed = Number(p.budgetCommitted || 0);
-  // Always re-derive available so it's consistent even if DB lags
-  const available = total - consumed - committed;
 
   const primaryCurrency = projectState?.currency || "AOA";
   const exchangeRate = await getExchangeRate();
@@ -330,10 +327,6 @@ async function loadProject() {
   if (el("budgetTotalSecondary")) {
     el("budgetTotalSecondary").textContent = formatCurrency(convertedTotal, secondaryCurrency);
   }
-
-  el("budgetConsumed").textContent = formatCurrency(consumed, primaryCurrency);
-  el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), primaryCurrency);
-  // el("budgetAvailable") is now dynamically updated by loadBudgetExecution with matrix costs
 
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
@@ -639,273 +632,12 @@ async function loadTransactions() {
   tbody.innerHTML = data.items.map(renderTxRow).join("");
 }
 
-/**
- * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
- * @param {Array}  allTxs      - todos os lançamentos do projeto
- * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
- * @param {Array}  budgetLines - linhas de orçamento
- */
-
 async function loadBudgetExecution() {
   const id = getProjectId();
-  const container = el("budgetExecutionMatrixContainer");
-  if (!container) return;
-  container.innerHTML = `<div class="p-8 text-center text-sm text-on-surface-variant">Construindo matriz...</div>`;
-
-  // Get project, budget lines, and all transactions
-  const [projRes, linesRes, txRes] = await Promise.all([
-    apiRequest(`/projects/${encodeURIComponent(id)}`),
-    apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`),
-    apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/payments?page=1&pageSize=10000`)
-  ]);
-
-  const p = projRes.project;
+  if (!id) return;
+  const linesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
   const lines = linesRes.items || [];
-  const txs = txRes.items || [];
-
-  // --- Build dynamic month range from project start â†’ due date ---
-  const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-  const startDate = p.startDate ? new Date(p.startDate) : new Date();
-  const endDate = p.dueDate ? new Date(p.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
-
-  // Normalise to first of month
-  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-
-  // Build ordered list of {year, month, label}
-  const projectMonths = [];
-  const cur = new Date(rangeStart);
-  while (cur <= rangeEnd) {
-    projectMonths.push({
-      year: cur.getFullYear(),
-      month: cur.getMonth(),
-      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`
-    });
-    cur.setMonth(cur.getMonth() + 1);
-  }
-
-  // Ensure at least 1 month
-  if (projectMonths.length === 0) {
-    projectMonths.push({ year: rangeStart.getFullYear(), month: rangeStart.getMonth(), label: `${monthNames[rangeStart.getMonth()]}/${String(rangeStart.getFullYear()).slice(2)}` });
-  }
-
-  const numMonths = projectMonths.length;
-
-  // Helper: get column index for a given Date (clamp to range)
-  const getColIdx = (date) => {
-    const d = new Date(date.getFullYear(), date.getMonth(), 1);
-    if (d < rangeStart) return 0;
-    if (d > rangeEnd) return numMonths - 1;
-    const diffYears = d.getFullYear() - rangeStart.getFullYear();
-    const diffMonths = d.getMonth() - rangeStart.getMonth();
-    return diffYears * 12 + diffMonths;
-  };
-
-  // --- Categorize ---
-  const cats = {};
-
-  const getCatKey = (ccName) => {
-    const key = ccName ? String(ccName).toUpperCase().trim() : "ORCAMENTO_GERAL";
-    if (!cats[key]) {
-      cats[key] = {
-        name: ccName || "Orçamento Base / Geral",
-        total: 0,
-        consumed: 0,
-        byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })),
-        items: []
-      };
-    }
-    return key;
-  };
-
-  // Pre-process items mapping
-  const itemsMap = new Map();
-
-  lines.forEach(l => {
-    const cKey = getCatKey(null); // Budget lines don't have cost centers
-    const totalP = Number(l.total || 0);
-    const monthlyP = totalP / numMonths; // distribute linearly across all project months
-
-    const obj = {
-      id: l.id,
-      desc: l.description,
-      totalP,
-      totalC: 0,
-      byMonth: Array(numMonths).fill(0).map(() => ({ p: monthlyP, c: 0 }))
-    };
-    cats[cKey].items.push(obj);
-    itemsMap.set(l.id, obj);
-
-    cats[cKey].total += totalP;
-    cats[cKey].byMonth.forEach((m) => m.p += monthlyP);
-  });
-
-  // Calculate forecast (Previsto) and consumed (Realizado) from transactions
-  txs.forEach(t => {
-    const d = new Date(t.paymentDate || t.createdAt);
-    const mIdx = getColIdx(d); // map to column in project range (clamped)
-    const forecastAmount = Number(t.budgetedAmount || 0);
-    const realizedAmount = t.paidAmount != null ? Number(t.paidAmount) : forecastAmount;
-
-    const cKey = getCatKey(t.costCenter?.name);
-    const txCurr = t.costCenter?.currency || projectState?.currency || "AOA";
-
-    // "PENDENTE" is considered forecast. "CONFIRMADO" is realized.
-    if (t.status === "PENDENTE" || t.status === "LATE") {
-      cats[cKey].total += forecastAmount;
-      cats[cKey].byMonth[mIdx].p += forecastAmount;
-
-      const cleanDesc = (t.description || "Lançamento Avulso").trim();
-      const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
-      let row = cats[cKey].items.find(i => i._key === descKey);
-      if (!row) {
-        row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: 0, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
-        cats[cKey].items.push(row);
-      }
-      row.totalP += forecastAmount;
-      row.byMonth[mIdx].p += forecastAmount;
-
-    } else if (t.status === "CONFIRMADO") {
-      cats[cKey].consumed += realizedAmount;
-      cats[cKey].byMonth[mIdx].c += realizedAmount;
-
-      if (t.budgetLineId && itemsMap.has(t.budgetLineId)) {
-        const bItem = itemsMap.get(t.budgetLineId);
-        bItem.totalC += realizedAmount;
-        bItem.byMonth[mIdx].c += realizedAmount;
-      } else {
-        const cleanDesc = (t.description || "Lançamento Avulso").trim();
-        const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
-        let row = cats[cKey].items.find(i => i._key === descKey);
-        if (!row) {
-          row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: forecastAmount, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
-          cats[cKey].items.push(row);
-          cats[cKey].total += forecastAmount;
-          cats[cKey].byMonth[mIdx].p += forecastAmount;
-          row.byMonth[mIdx].p += forecastAmount;
-        }
-        row.totalC += realizedAmount;
-        row.byMonth[mIdx].c += realizedAmount;
-      }
-    }
-  });
-
-  // Render Table
-  let gTotalP = 0;
-  let gTotalC = 0;
-  let gByMonth = Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 }));
-
-  Object.keys(cats).forEach(key => {
-    const cat = cats[key];
-    gTotalP += cat.total;
-    gTotalC += cat.consumed;
-    cat.byMonth.forEach((m, i) => {
-      gByMonth[i].p += m.p;
-      gByMonth[i].c += m.c;
-    });
-  });
-
-  const formatTableCurrency = (val) => val === 0 ? "-" : new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-  const formatPct = (c, p) => p > 0 ? Math.round((c / p) * 100) + '%' : (c > 0 ? '100%' : '0%');
-
-  const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null, rowCurrency = null) => {
-    let rowCls = customRowCls || (isHeader ? "bg-slate-100 font-black text-slate-900" : "bg-white text-slate-800 hover:bg-slate-50 transition-colors");
-    let titleCls = customRowCls ? `px-2 md:px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls} text-[10px] md:text-xs` : (isHeader ? "px-2 md:px-4 py-2 sticky left-0 bg-slate-100 z-10 whitespace-nowrap text-[10px] md:text-xs" : "px-2 md:px-4 py-1.5 sticky left-0 bg-white group-hover:bg-slate-50 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] md:max-w-[250px] pl-4 md:pl-8 text-[9px] md:text-xs font-semibold");
-
-    // Format value with currency suffix for this row (e.g. "3.000 AOA")
-    const projCurr = projectState?.currency || "AOA";
-    const effectiveCurr = rowCurrency || projCurr;
-    const currLabel = effectiveCurr === "AOA" ? "Kz" : effectiveCurr;
-    const showCurrSuffix = !isHeader; // only on leaf rows, not category headers
-    const fmtVal = (val) => {
-      if (val === 0) return "-";
-      const num = new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-      return showCurrSuffix ? `${num} <span class="text-[8px] text-slate-400 font-normal">${currLabel}</span>` : num;
-    };
-
-    // Remove description badge (currency now shown in value cells)
-    let html = `<tr class="border-b border-slate-100 group ${rowCls}">`;
-    html += `<td class="${titleCls}" title="${escapeHtml(title)}">${escapeHtml(title)}</td>`;
-
-    // Total column
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right font-black border-l border-slate-100 bg-slate-50 text-[10px] md:text-xs text-slate-900">${fmtVal(totalP)}</td>`;
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[10px] md:text-xs ${totalC > totalP ? 'text-red-600' : 'text-slate-900'}">${fmtVal(totalC)}</td>`;
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400 font-bold">${formatPct(totalC, totalP)}</td>`;
-
-    monthsData.forEach((m) => {
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right border-l border-slate-100 text-[9px] md:text-[11px] text-slate-500">${fmtVal(m.p)}</td>`;
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[9px] md:text-[11px] font-bold ${m.c > m.p ? 'text-red-600' : 'text-slate-900'}">${fmtVal(m.c)}</td>`;
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400">${formatPct(m.c, m.p)}</td>`;
-    });
-
-    html += `</tr>`;
-    return html;
-  };
-
-  let theadHtml = `
-    <thead>
-      <tr class="bg-slate-900 text-white">
-        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">Descrição</th>
-        <th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10 bg-white/5">TOTAL OBRA</th>
-        ${projectMonths.map(m => `<th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10">${m.label}</th>`).join('')}
-      </tr>
-      <tr class="bg-slate-800 text-slate-300 text-[8px] md:text-[9px] uppercase tracking-wider">
-        <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10">Prev.</th>
-        <th class="px-1 md:px-2 py-1 text-right font-bold">Real.</th>
-        <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">(%)</th>
-        ${projectMonths.map(() => `
-          <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10 text-slate-500">P.</th>
-          <th class="px-1 md:px-2 py-1 text-right font-bold text-emerald-400">R.</th>
-          <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">%</th>
-        `).join('')}
-      </tr>
-    </thead>
-  `;
-
-  let tbodyHtml = `<tbody class="divide-y divide-outline-variant/30">`;
-
-  // Grand Total First Row (like DRE)
-  tbodyHtml += drawRow(`= CUSTO LÍQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
-
-  Object.keys(cats).forEach(key => {
-    const cat = cats[key];
-    if (cat.items.length === 0 && cat.total === 0 && cat.consumed === 0) return;
-
-    // Category Header
-    let catTitle = `+ ${cat.name}`;
-
-    tbodyHtml += drawRow(catTitle, cat.total, cat.consumed, cat.byMonth, true, null);
-
-    // Category Items
-    cat.items.forEach(item => {
-      tbodyHtml += drawRow(item.desc, item.totalP, item.totalC, item.byMonth, false, null, item.currency || null);
-    });
-  });
-
-  tbodyHtml += `</tbody>`;
-
-  container.innerHTML = `<table class="w-full text-left whitespace-nowrap border-collapse">${theadHtml}${tbodyHtml}</table>`;
-
-  if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
-  if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
-
-  // Dashboard Cards
-  if (el("budgetConsumed")) el("budgetConsumed").textContent = formatCurrency(gTotalC, projectState?.currency);
-  if (el("budgetConsumedText")) el("budgetConsumedText").textContent = formatCurrency(gTotalC, projectState?.currency);
-
-  const committed = gTotalP - gTotalC;
-  if (el("budgetCommitted")) el("budgetCommitted").textContent = formatCurrency(committed, projectState?.currency);
-  if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(committed, projectState?.currency);
-
-  if (el("totalExecutionPct")) {
-    const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
-    el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
-    if (el("budgetDelta")) el("budgetDelta").textContent = `Execução: ${totalPct}%`;
-    if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, totalPct))}%`;
-  }
-
-
-  renderOperationStatus(lines);
+  await renderOperationStatus(lines);
 }
 
 async function renderOperationStatus(lines) {
@@ -957,88 +689,6 @@ async function renderOperationStatus(lines) {
       subEl.textContent = `${formatCurrency(c.consumed, projectState?.currency)} lançados`;
     }
   });
-
-  // Update Fluxo Financeiro card with per-currency breakdown
-  updateFluxoFinanceiro(txData.items || []);
-}
-
-/**
- * Aggregates transaction totals by currency (liquidated vs committed)
- * and updates the Fluxo Financeiro card with multi-currency breakdown lines.
- */
-function updateFluxoFinanceiro(txItems) {
-  // Exclude purely informational categories from budget impact
-  const excluded = new Set(["INVESTIMENTOS", "DEPRECIACAO"]);
-
-  // Aggregate: { [currency]: { paid: number, pending: number } }
-  const byCurrency = {};
-  txItems.forEach(t => {
-    if (excluded.has(t.category)) return;
-    const curr = t.costCenter?.currency || projectState?.currency || "AOA";
-    if (!byCurrency[curr]) byCurrency[curr] = { paid: 0, pending: 0 };
-    const amount = Number(t.budgetedAmount || 0);
-    if (t.status === "CONFIRMADO") {
-      byCurrency[curr].paid += amount;
-    } else if (t.status !== "CANCELADO") {
-      byCurrency[curr].pending += amount;
-    }
-  });
-
-  const currencies = Object.keys(byCurrency).sort();
-  const hasMix = currencies.length > 1;
-
-  // Helper: render currency label badge for secondary currencies
-  const currBadge = (curr) => hasMix
-    ? `<span class="inline-block ml-2 text-[6px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">${curr}</span>`
-    : "";
-
-  // ── Liquidado ──────────────────────────────────────────────────────────
-  const consumedContainer = el("budgetConsumedBreakdown");
-  if (consumedContainer) {
-    if (currencies.length === 0) {
-      consumedContainer.innerHTML = `<p id="budgetConsumed" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
-    } else {
-      consumedContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].paid;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetConsumed"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
-
-  // ── Comprometido ──────────────────────────────────────────────────────
-  const committedContainer = el("budgetCommittedBreakdown");
-  if (committedContainer) {
-    if (currencies.length === 0) {
-      committedContainer.innerHTML = `<p id="budgetCommitted" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
-    } else {
-      committedContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].pending;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetCommitted"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
-
-  // ── Custos da Obra (total = paid + pending) ───────────────────────────
-  const availableContainer = el("budgetAvailableBreakdown");
-  if (availableContainer) {
-    if (currencies.length === 0) {
-      availableContainer.innerHTML = `<p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">---</p>`;
-    } else {
-      availableContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].paid + byCurrency[curr].pending;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetAvailable"' : ''} class="font-bold text-blue-600 tracking-tight ${isFirst ? "text-[10px]" : "text-base"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
 }
 
 
@@ -3437,7 +3087,6 @@ let uiState = {
     if (saved) return JSON.parse(saved);
     // Default: all tables collapsed
     return {
-      matrix: true,
       transactions: true,
       payments: true,
       progress: true,

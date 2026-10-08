@@ -173,104 +173,53 @@
                     </div>
                 </div>
 
-                <!-- Detailed Costs Card -->
+                <!-- Prazos Card -->
                 <div
                     class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0">
                     <div>
                         <div class="flex justify-between items-center mb-6 md:mb-10">
-                            <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
-                            </h3>
-
+                            <h3 class="text-sm font-black uppercase tracking-widest text-slate-400">Prazos</h3>
+                            <span class="material-symbols-outlined text-slate-300">calendar_month</span>
                         </div>
-                        <div class="space-y-6">
-                            <div class="flex items-start gap-4">
-                                <div
-                                    class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                                    <span class="material-symbols-outlined">payments</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                        Liquidado</p>
-                                    <div id="budgetConsumedBreakdown" class="space-y-0.5">
-                                        <p id="budgetConsumed"
-                                            class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>
-                                    </div>
-                                </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-slate-400 tracking-wide">Início operacional</span>
+                                <span id="projectStartDate" class="text-slate-900">--/--/----</span>
                             </div>
-                            <div class="flex items-start gap-6">
-                                <div
-                                    class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
-                                    <span class="material-symbols-outlined">schedule</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                        Comprometido</p>
-                                    <div id="budgetCommittedBreakdown" class="space-y-0.5">
-                                        <p id="budgetCommitted"
-                                            class="text-[10px] font-bold text-slate-900 tracking-tight">
-                                            ---</p>
-                                    </div>
-                                </div>
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-slate-400 tracking-wide">Arranque</span>
+                                <span id="projectLaunchDate" class="text-slate-900">--/--/----</span>
                             </div>
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-slate-400 tracking-wide">Conclusão efetiva</span>
+                                <span id="projectActualEndDate" class="text-slate-900">--/--/----</span>
+                            </div>
+                            <div id="projectPauses" class="hidden space-y-1 pt-1 border-t border-slate-100"></div>
                         </div>
                     </div>
-                    <div class="mt-10 pt-10 border-t border-slate-50">
-                        <div class="flex justify-between items-end">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                    Custos da Obra</p>
-                                <div id="budgetAvailableBreakdown" class="space-y-0.5">
-                                    <p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">
-                                        ---
-                                    </p>
-                                </div>
-                            </div>
-                            <div
-                                class="h-10 px-4 rounded-xl bg-blue-50 text-blue-600 flex items-center text-[10px] font-black uppercase tracking-widest">
-                                Saldo</div>
-                        </div>
+                    <div id="dateAnalysis" class="mt-10 p-4 rounded-[24px] bg-[#F8FAFC] border border-slate-100 text-center">
+                        <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---
+                        </p>
+                        <span id="projectDueDate" class="text-slate-900">--/--/----</span>
                     </div>
                 </div>
 
 
-                <!-- Progress & Timeline Card -->
+                <!-- Progress Card -->
                 <div
-                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-between h-full w-full min-w-0">
-                    <div>
-                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
-                        </h3>
-                        <div class="flex justify-center mb-10 relative">
-                            <div class="relative w-40 h-40">
-                                <div id="physicalProgressPie"
-                                    class="w-full h-full rounded-full transition-all duration-1000"
-                                    style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)">
-                                </div>
-                                <div class="absolute inset-4 bg-white rounded-full flex items-center justify-center">
-                                    <span id="physicalProgress"
-                                        class="text-4xl font-bold text-slate-900 tracking-tight">0%</span>
-                                </div>
+                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-center h-full w-full min-w-0">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
+                    </h3>
+                    <div class="flex justify-center relative">
+                        <div class="relative w-40 h-40">
+                            <div id="physicalProgressPie"
+                                class="w-full h-full rounded-full transition-all duration-1000"
+                                style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)">
                             </div>
-                        </div>
-                    </div>
-                    <div class="space-y-4">
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Início operacional</span>
-                            <span id="projectStartDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Arranque</span>
-                            <span id="projectLaunchDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Conclusão efetiva</span>
-                            <span id="projectActualEndDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div id="projectPauses" class="hidden space-y-1 pt-1 border-t border-slate-100"></div>
-
-                        <div id="dateAnalysis" class="p-4 rounded-[24px] bg-white border border-slate-100 text-center">
-                            <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---
-                            </p>
-                            <span id="projectDueDate" class="text-slate-900">--/--/----</span>
+                            <div class="absolute inset-4 bg-white rounded-full flex items-center justify-center">
+                                <span id="physicalProgress"
+                                    class="text-4xl font-bold text-slate-900 tracking-tight">0%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -344,27 +293,6 @@
                                 id="stat_impostos_sub"></span><span id="stat_deducoes_pct"></span><span
                                 id="stat_deducoes_sub"></span><span id="stat_outras_pct"></span><span
                                 id="stat_outras_sub"></span></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Budget Execution Matrix -->
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
-                <div
-                    class="px-10 py-8 border-b border-slate-50 bg-[#212e3e] flex justify-between items-center text-white">
-                    <div>
-                        <h3 class="text-2xl font-bold">Matriz de Execução</h3>
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo
-                            granular mensal</p>
-                    </div>
-                    <button data-toggle-table="matrix"
-                        class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all text-white/50 hover:text-white">
-                        <span class="material-symbols-outlined transition-transform">expand_more</span>
-                    </button>
-                </div>
-                <div data-table-body="matrix" class="overflow-x-auto w-full custom-scroll">
-                    <div id="budgetExecutionMatrixContainer" class="p-4">
-                        <!-- Matrix table via JS -->
                     </div>
                 </div>
             </div>
