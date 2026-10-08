@@ -142,6 +142,43 @@ financeRoutes.get(
   })
 );
 
+financeRoutes.get(
+  "/options/suppliers",
+  view,
+  asyncHandler(async (_req, res) => {
+    const suppliers = await prisma.supplier.findMany({
+      select: { id: true, name: true, nif: true, type: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({ items: suppliers });
+  })
+);
+
+financeRoutes.get(
+  "/options/cost-categories",
+  view,
+  asyncHandler(async (_req, res) => {
+    const categories = await prisma.costCategory.findMany({
+      where: { active: true },
+      select: { id: true, code: true, name: true, parentId: true, level: true, isSelectable: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+    return res.json({ items: categories });
+  })
+);
+
+financeRoutes.get(
+  "/options/cards",
+  view,
+  asyncHandler(async (_req, res) => {
+    const cards = await prisma.pettyCashCard.findMany({
+      select: { id: true, label: true, lastDigits: true, bank: true, type: true, active: true },
+      orderBy: { label: "asc" },
+    });
+    return res.json({ items: cards });
+  })
+);
+
 // ─── Configuração de faturação da obra ───────────────────────────────────────
 
 financeRoutes.get(
