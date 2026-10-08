@@ -24,14 +24,14 @@ const PAGES = {
     kicker: "Financeiro · Faturação",
     title: "Faturação Prevista",
     subtitle: "Faturação emitida vs previsão, total, por obra e por cliente.",
-    module: null,
+    module: "faturacaoPrevista.js",
     placeholder: ["Faturação prevista vs realizada", "Valores por faturar", "Listagem por auto de medição"],
   },
   "faturacao-resumo": {
     kicker: "Financeiro · Faturação",
     title: "Resumo Faturas vs Previsão",
     subtitle: "Comparação entre o faturado e a previsão da obra.",
-    module: null,
+    module: "faturacaoResumo.js",
     placeholder: ["% da obra com AM feitos", "% da obra sem AM feitos", "% executada e por executar"],
   },
   "custos-registar": {

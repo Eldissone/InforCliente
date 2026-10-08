@@ -377,3 +377,131 @@
   padding-top: 0.5rem;
   border-top: 1px solid #f1f5f9;
 }
+
+/* ─── Controlo segmentado ───────────────────────────────────────────────── */
+
+.finance-seg {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 0.75rem;
+  padding: 0.25rem;
+  gap: 0.125rem;
+}
+
+.finance-seg button {
+  border: none;
+  background: transparent;
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.finance-seg button .material-symbols-outlined { font-size: 16px; }
+
+.finance-seg button.active {
+  background: #0f172a;
+  color: #fff;
+}
+
+/* ─── Barras de progresso ───────────────────────────────────────────────── */
+
+.finance-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 150px;
+}
+
+.finance-bar {
+  height: 8px;
+  flex: 1 1 auto;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.finance-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: #10b981;
+}
+
+.finance-bar-fill--amber { background: #f59e0b; }
+.finance-bar-fill--blue { background: #3b82f6; }
+.finance-bar-fill--slate { background: #94a3b8; }
+
+.finance-bar-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ─── Linhas expansíveis ────────────────────────────────────────────────── */
+
+.fin-row--clickable { cursor: pointer; }
+
+.fin-subrow > td {
+  background: #f8fafc;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.fin-subrow .finance-subtable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.finance-subtable th {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-align: left;
+  padding: 4px 10px;
+}
+
+.finance-subtable td {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.finance-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.4rem;
+  border: none;
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.finance-row-toggle .material-symbols-outlined {
+  font-size: 16px;
+  transition: transform 0.15s;
+}
+
+.finance-row-toggle.open .material-symbols-outlined { transform: rotate(90deg); }
+
+.finance-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
