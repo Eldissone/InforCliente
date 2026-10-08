@@ -97,6 +97,51 @@ function computeInvoiceAmounts(raw, config = {}) {
   };
 }
 
+// ─── Opções (listas de apoio aos ecrãs) ──────────────────────────────────────
+
+financeRoutes.get(
+  "/options/projects",
+  view,
+  asyncHandler(async (_req, res) => {
+    const projects = await prisma.project.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        budgetTotal: true,
+        clientId: true,
+        client: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: { name: "asc" },
+    });
+    return res.json({
+      items: projects.map((p) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        currency: p.currency,
+        budgetTotal: toNumber(p.budgetTotal),
+        clientId: p.clientId,
+        clientName: p.client?.name || null,
+      })),
+    });
+  })
+);
+
+financeRoutes.get(
+  "/options/clients",
+  view,
+  asyncHandler(async (_req, res) => {
+    const clients = await prisma.client.findMany({
+      select: { id: true, code: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({ items: clients });
+  })
+);
+
 // ─── Configuração de faturação da obra ───────────────────────────────────────
 
 financeRoutes.get(
@@ -365,13 +410,19 @@ financeRoutes.patch(
       },
     });
 
+    // Percentagem implícita da fatura guardada — preserva as deduções quando
+    // apenas o V. Ilíquido é alterado (o cliente só envia as % que mudam).
+    const existingBase = toNumber(existing.grossAmount);
+    const derivedPct = (amount) =>
+      existingBase > 0 ? round2((toNumber(amount) / existingBase) * 100) : null;
+
     const amounts = computeInvoiceAmounts(
       {
-        grossAmount: body.grossAmount ?? toNumber(existing.grossAmount),
-        vatPercent: body.vatPercent,
-        withholdingPercent: body.withholdingPercent,
-        carPercent: body.carPercent,
-        guaranteePercent: body.guaranteePercent,
+        grossAmount: body.grossAmount ?? existingBase,
+        vatPercent: body.vatPercent ?? derivedPct(existing.vatAmount),
+        withholdingPercent: body.withholdingPercent ?? derivedPct(existing.withholdingAmount),
+        carPercent: body.carPercent ?? derivedPct(existing.carInsuranceAmount),
+        guaranteePercent: body.guaranteePercent ?? derivedPct(existing.guaranteeAmount),
         flagVatCativo: body.flagVatCativo ?? existing.flagVatCativo,
       },
       project || {}

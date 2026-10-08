@@ -17,7 +17,7 @@ const PAGES = {
     kicker: "Financeiro · Faturação",
     title: "Registar Faturas",
     subtitle: "Registo e acompanhamento das faturas emitidas ao cliente.",
-    module: null,
+    module: "registarFaturas.js",
     placeholder: ["Filtros por mês, estado, cliente e obra", "Cálculo automático de retenção, IVA, seguro CAR e garantia", "Valor recebido e valor em falta", "Destaque de faturas atrasadas"],
   },
   "faturacao-prevista": {
