@@ -678,15 +678,16 @@
                     <p class="text-sm text-slate-500 font-medium">Gestão da execução diária e requisição de materiais.
                     </p>
                 </div>
-                <div class="flex flex-row items-center justify-end gap-2 shrink-0">
-                    <button onclick="window.loadDailyPlans()"
-                        class="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all"
+                <div class="dp-actions flex flex-row items-center justify-end gap-3 shrink-0">
+                    <button type="button" onclick="window.loadDailyPlans()"
+                        class="shell-btn shell-btn-secondary dp-btn-icon"
                         title="Atualizar Planos Diários">
-                        <span class="material-symbols-outlined text-xl">refresh</span>
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">refresh</span>
                     </button>
-                    <button id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
-                        class="h-10 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
-                        Novo Plano <span class="material-symbols-outlined text-xl">post_add</span>
+                    <button type="button" id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
+                        class="shell-btn">
+                        Novo Plano
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">post_add</span>
                     </button>
                 </div>
             </div>

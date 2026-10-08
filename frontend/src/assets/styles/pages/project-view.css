@@ -526,6 +526,12 @@ body[data-shell="figma"] main textarea:focus {
   max-height: none;
 }
 
+.dp-btn-icon {
+  width: 38px;
+  min-width: 38px;
+  padding: 0;
+}
+
 /* Planos Diários — pesquisa e filtro */
 .dp-toolbar {
   display: flex;
