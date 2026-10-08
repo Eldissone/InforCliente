@@ -59,7 +59,7 @@ const PAGES = {
     kicker: "Financeiro",
     title: "Contas a Pagar / Receber",
     subtitle: "Contas a pagar, contas a receber e o seu confronto.",
-    module: null,
+    module: "contas.js",
     placeholder: ["Contas a pagar", "Contas a receber", "Pagamentos vs recebimentos"],
   },
   "tesouraria-extratos": {
@@ -101,7 +101,7 @@ const PAGES = {
     kicker: "Financeiro",
     title: "Centro de Pagamentos",
     subtitle: "Pedidos de pagamento pendentes e aprovados.",
-    module: null,
+    module: "centroPagamentos.js",
     placeholder: ["Pedidos pendentes", "Pedidos aprovados", "Liquidação"],
   },
   controlo: {
