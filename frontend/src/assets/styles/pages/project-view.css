@@ -42,6 +42,94 @@
             display: none;
         }
 
+        .pv-tabs {
+            overflow: visible;
+        }
+
+        .pv-tab-dropdown {
+            flex-shrink: 0;
+        }
+
+        .pv-tab-dropdown.hidden,
+        .pv-tab-item.hidden {
+            display: none !important;
+        }
+
+        /* Ponte para o rato ir do título ao menu sem o fechar. */
+        .pv-tab-dropdown::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            height: 12px;
+        }
+
+        .pv-tab-dropdown-trigger .material-symbols-outlined {
+            font-size: 18px;
+            transition: transform 0.2s ease;
+        }
+
+        .pv-tab-dropdown.is-open .pv-tab-dropdown-trigger .material-symbols-outlined,
+        .pv-tab-dropdown:hover .pv-tab-dropdown-trigger .material-symbols-outlined {
+            transform: rotate(180deg);
+        }
+
+        .pv-tab-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 2px);
+            left: 0;
+            z-index: 30;
+            min-width: 220px;
+            padding: 0.4rem;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.9rem;
+            box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.35);
+        }
+
+        .pv-tab-dropdown.is-open .pv-tab-menu,
+        .pv-tab-dropdown:hover .pv-tab-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .pv-tab-dropdown.is-locked .pv-tab-menu {
+            display: none !important;
+        }
+
+        .pv-tab-dropdown.is-locked .pv-tab-dropdown-trigger .material-symbols-outlined {
+            transform: none;
+        }
+
+        .pv-tab-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.65rem 0.85rem;
+            border: 0;
+            border-radius: 0.65rem;
+            background: transparent;
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .pv-tab-item:hover {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .pv-tab-item.is-active {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
         .measurement-table thead th {
             border: 1px solid #e2e8f0;
         }
@@ -318,7 +406,7 @@ body[data-shell="figma"] main > header nav #projectBreadcrumb {
   color: #0d3fd1;
 }
 
-body[data-shell="figma"] main [data-tab-trigger] {
+body[data-shell="figma"] main .pv-tab {
   height: 38px;
   border-bottom-width: 2px;
   border-bottom-color: transparent;
@@ -327,7 +415,7 @@ body[data-shell="figma"] main [data-tab-trigger] {
   font-weight: 700;
 }
 
-body[data-shell="figma"] main [data-tab-trigger].border-slate-900 {
+body[data-shell="figma"] main .pv-tab.border-slate-900 {
   border-bottom-color: #212e3e;
   color: #121212;
 }

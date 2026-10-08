@@ -203,6 +203,14 @@ export function applyTabPermissions(map) {
       trigger.dataset.permDenied === "true" || trigger.classList.contains("hidden");
     if (denied) panel.classList.add("hidden");
   });
+
+  document.querySelectorAll("[data-tab-group]").forEach((group) => {
+    const items = [...group.querySelectorAll("[data-tab-trigger], [data-tab], [data-stock-subtab]")];
+    const anyVisible = items.some(
+      (el) => el.dataset.permDenied !== "true" && !el.classList.contains("hidden")
+    );
+    group.classList.toggle("hidden", items.length > 0 && !anyVisible);
+  });
 }
 
 export function activateFirstVisibleStockSubtab() {
@@ -232,7 +240,9 @@ export function getVisibleStockTabs(selector = ".tab-btn[data-tab]") {
 export function activateFirstVisibleProjectTab() {
   const triggers = getVisibleTabTriggers("[data-tab-trigger]");
   if (!triggers.length) return null;
-  const current = triggers.find((t) => t.classList.contains("border-slate-900"));
+  const current = triggers.find(
+    (t) => t.classList.contains("border-slate-900") || t.classList.contains("is-active")
+  );
   const target = current || triggers[0];
   target.click();
   return target.getAttribute("data-tab-trigger");

@@ -1242,22 +1242,89 @@ function wireTransactionsActions() {
   });
 }
 
+function setActiveProjectTab(trigger) {
+  document.querySelectorAll(".pv-tab").forEach((tab) => {
+    tab.classList.remove("border-slate-900", "text-slate-900");
+    tab.classList.add("text-slate-400", "border-transparent");
+  });
+  document.querySelectorAll(".pv-tab-item").forEach((item) => item.classList.remove("is-active"));
+
+  const dropdown = trigger.closest(".pv-tab-dropdown");
+  if (dropdown) {
+    const parentBtn = dropdown.querySelector(".pv-tab-dropdown-trigger");
+    parentBtn?.classList.add("border-slate-900", "text-slate-900");
+    parentBtn?.classList.remove("text-slate-400", "border-transparent");
+    trigger.classList.add("is-active");
+  } else {
+    trigger.classList.add("border-slate-900", "text-slate-900");
+    trigger.classList.remove("text-slate-400", "border-transparent");
+  }
+}
+
+function closeProjectTabDropdowns(except) {
+  document.querySelectorAll(".pv-tab-dropdown").forEach((group) => {
+    if (group === except) return;
+    group.classList.remove("is-open", "is-locked");
+    const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  });
+}
+
+function lockProjectTabDropdown(group) {
+  if (!group) return;
+  group.classList.remove("is-open");
+  group.classList.add("is-locked");
+  const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+function wireTabDropdowns() {
+  const groups = document.querySelectorAll(".pv-tab-dropdown");
+  groups.forEach((group) => {
+    const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+    if (!trigger) return;
+
+    group.addEventListener("mouseenter", () => {
+      group.classList.remove("is-locked");
+      closeProjectTabDropdowns(group);
+      group.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+    });
+    group.addEventListener("mouseleave", () => {
+      group.classList.remove("is-open", "is-locked");
+      trigger.setAttribute("aria-expanded", "false");
+    });
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const willOpen = !group.classList.contains("is-open");
+      closeProjectTabDropdowns(willOpen ? group : null);
+      group.classList.toggle("is-open", willOpen);
+      group.classList.remove("is-locked");
+      trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".pv-tab-dropdown")) closeProjectTabDropdowns();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeProjectTabDropdowns();
+  });
+}
+
 function wireTabs() {
+  wireTabDropdowns();
   const triggers = document.querySelectorAll("[data-tab-trigger]");
   triggers.forEach(t => {
     t.addEventListener("click", () => {
       if (t.dataset.permDenied === "true" || t.classList.contains("hidden")) return;
       const tabId = t.getAttribute("data-tab-trigger");
 
-      // Update Triggers
-      triggers.forEach(tr => {
-        tr.classList.remove("border-slate-900", "text-slate-900");
-        tr.classList.add("text-slate-400", "border-transparent");
-      });
-      t.classList.add("border-slate-900", "text-slate-900");
-      t.classList.remove("text-slate-400", "border-transparent");
+      setActiveProjectTab(t);
+      const dropdown = t.closest(".pv-tab-dropdown");
+      closeProjectTabDropdowns();
+      lockProjectTabDropdown(dropdown);
 
-      // Update Contents
       document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
       el(`tab_${tabId}`)?.classList.remove("hidden");
 
@@ -1269,8 +1336,6 @@ function wireTabs() {
       if (tabId === "planos_diarios") loadDailyPlans();
     });
   });
-
-  // Sub-tabs de Stock are handled in wireStockEvents
 }
 
 function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupProgress = 0) {

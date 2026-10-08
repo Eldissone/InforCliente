@@ -59,34 +59,45 @@
         </header>
 
         <!-- Tab Navigation -->
-        <div class="flex flex-row flex-nowrap border-b border-slate-100 mb-8 overflow-x-auto no-scrollbar">
+        <div class="pv-tabs flex flex-row flex-nowrap items-stretch border-b border-slate-100 mb-8">
             <button data-tab-trigger="dashboard" data-perm="obras:tab_dashboard"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-tab-trigger="relatorio" data-perm="obras:tab_progress"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Avanço Físico</span>
-                <span class="hidden md:inline">Avanço Físico</span>
-            </button>
-            <button data-tab-trigger="medicoes" data-perm="obras:tab_measurements"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Medições</span>
-                <span class="hidden md:inline">Autos de Medição</span>
-            </button>
-            <button data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                Planos Diários
-            </button>
-            <button data-tab-trigger="files" data-perm="obras:tab_files"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Arquivos</span>
-                <span class="hidden md:inline">Gestão de Arquivos</span>
-            </button>
+                class="pv-tab px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="operacao">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Operação
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
+                        class="pv-tab-item" role="menuitem">Planos Diários</button>
+                    <button type="button" data-tab-trigger="relatorio" data-perm="obras:tab_progress"
+                        class="pv-tab-item" role="menuitem">Avanço Físico</button>
+                    <button type="button" data-tab-trigger="medicoes" data-perm="obras:tab_measurements"
+                        class="pv-tab-item" role="menuitem">Autos de Medição</button>
+                </div>
+            </div>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="documentos">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Documentos
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="files" data-perm="obras:tab_files"
+                        class="pv-tab-item" role="menuitem">Gestão de Arquivos</button>
+                    <button type="button" id="tabTriggerGaleria" data-tab-trigger="galeria_obra"
+                        data-perm="obras:tab_gallery" class="pv-tab-item" role="menuitem">Galeria de Obra</button>
+                </div>
+            </div>
+
             <button data-tab-trigger="stock" data-perm="stock:tab_project_stock"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
+                class="pv-tab px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Armazém</button>
-            <button id="tabTriggerGaleria" data-tab-trigger="galeria_obra" data-perm="obras:tab_gallery"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
-                da Obra</button>
         </div>
 
         <!-- Dashboard Tab -->
