@@ -655,7 +655,7 @@ financeRoutes.get(
     const rows = await prisma.costPayment.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, name: true, currency: true, clientId: true, client: { select: { id: true, name: true, code: true } } } },
         costCenter: { select: { id: true, code: true, name: true } },
         supplierRef: { select: { id: true, name: true, nif: true } },
       },

@@ -505,3 +505,28 @@
   font-weight: 600;
   margin: 0 0 1rem;
 }
+
+/* ─── Tons de texto ─────────────────────────────────────────────────────── */
+
+.finance-neg { color: #dc2626; }
+.finance-pos { color: #059669; }
+.finance-muted { color: #94a3b8; }
+
+.finance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 0.4rem;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.finance-chip--emerald { background: #d1fae5; color: #047857; }
+.finance-chip--blue { background: #dbeafe; color: #1d4ed8; }
+.finance-chip--amber { background: #fef3c7; color: #b45309; }
+.finance-chip--violet { background: #ede9fe; color: #6d28d9; }
