@@ -10,7 +10,7 @@ const PAGES = {
     kicker: "Financeiro",
     title: "Overview Financeiro",
     subtitle: "Visão consolidada de receita, custos, resultado e margem de todas as obras.",
-    module: null,
+    module: "overview.js",
     placeholder: ["Cards de receita, custos, resultado e margem", "Previsão vs realizado", "Contas a receber / a pagar e cash flow", "Centro de Pagamentos"],
   },
   "faturacao-registar": {
@@ -108,7 +108,7 @@ const PAGES = {
     kicker: "Financeiro",
     title: "Controlo Financeiro",
     subtitle: "Previsto vs realizado, resultado, margem, desvios e cash flow.",
-    module: null,
+    module: "controlo.js",
     placeholder: ["Previsto vs realizado", "Resultado & margem", "Desvios e cash flow"],
   },
 };
