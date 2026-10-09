@@ -1,11 +1,3 @@
 {
-  "ignore": [
-    "scratch/*",
-    "uploads/*",
-    "prisma/*",
-    "*.test.js"
-  ],
-  "watch": [
-    "src/"
-  ]
+  "ignore": ["var/**", "uploads/**", "node_modules/**"]
 }

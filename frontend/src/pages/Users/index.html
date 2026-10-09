@@ -456,6 +456,10 @@
                 <span class="material-symbols-outlined si">history</span>
                 <span>Histórico</span>
             </button>
+            <button data-section="backups" class="sidebar-link" id="m-backups">
+                <span class="material-symbols-outlined si">cloud_upload</span>
+                <span>Cópias</span>
+            </button>
             <div
                 style="font-size:.6rem;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:0 .75rem;margin:.75rem 0 .5rem">
                 Acções</div>
@@ -504,6 +508,9 @@
                 </button>
                 <button data-section="history" class="sidebar-link">
                     <span class="material-symbols-outlined si">history</span>Histórico
+                </button>
+                <button data-section="backups" class="sidebar-link">
+                    <span class="material-symbols-outlined si">cloud_upload</span>Cópias
                 </button>
 
                 <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 px-3 mb-2 mt-6">Acções</div>
@@ -965,6 +972,172 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- ===== BACKUPS ===== -->
+                <div id="section-backups" class="section-panel hidden">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+                        <div>
+                            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Cópias de segurança</h1>
+                            <p class="text-slate-500 font-medium mt-1">Base de dados e ficheiros do sistema. A cópia segue para o destino externo. A descarga neste computador é opcional.</p>
+                        </div>
+                        <div class="flex flex-col items-stretch sm:items-end gap-3 shrink-0">
+                            <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                                <input id="backupDownloadLocal" type="checkbox" class="rounded border-slate-300" />
+                                Descarregar neste computador
+                            </label>
+                            <button id="backupRunBtn" type="button"
+                                class="h-12 bg-slate-900 text-white px-6 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all text-sm">
+                                <span class="material-symbols-outlined text-xl">cloud_upload</span>
+                                Gerar cópia agora
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="backupProgress" class="hidden mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-800"></div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        <div class="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+                            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Última cópia</div>
+                            <div id="backupLastRun" class="text-sm font-bold text-slate-900">Ainda não há cópias</div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+                            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Agendamento</div>
+                            <div id="backupScheduleLabel" class="text-sm font-bold text-slate-900">Desligado</div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+                            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Base de dados</div>
+                            <div id="backupPgDump" class="text-sm font-bold text-slate-900">—</div>
+                        </div>
+                    </div>
+
+                    <form id="backupForm" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8 space-y-8">
+                        <div>
+                            <h2 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Cifra</h2>
+                            <p class="text-sm text-slate-500 mb-4">A frase-passe abre o ficheiro descarregado e a cópia externa. Guarde-a fora do servidor. O ficheiro fica cifrado nos dois destinos.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input id="backupPassphrase" type="password" autocomplete="new-password" placeholder="Nova frase-passe (mín. 12 caracteres)"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupPassphraseConfirm" type="password" autocomplete="new-password" placeholder="Confirmar frase-passe"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                            </div>
+                            <p id="backupPassphraseState" class="text-xs font-semibold text-slate-400 mt-2"></p>
+                        </div>
+
+                        <div>
+                            <h2 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Agendamento</h2>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <select id="backupSchedule" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
+                                    <option value="off">Desligado</option>
+                                    <option value="daily">Diário</option>
+                                    <option value="weekly">Semanal</option>
+                                </select>
+                                <input id="backupTime" type="time" value="02:15"
+                                    class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50" />
+                                <select id="backupWeekday" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50">
+                                    <option value="1">Segunda-feira</option>
+                                    <option value="2">Terça-feira</option>
+                                    <option value="3">Quarta-feira</option>
+                                    <option value="4">Quinta-feira</option>
+                                    <option value="5">Sexta-feira</option>
+                                    <option value="6">Sábado</option>
+                                    <option value="0">Domingo</option>
+                                </select>
+                                <label class="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                                    <span class="shrink-0">Reter</span>
+                                    <input id="backupRetention" type="number" min="1" max="3650" value="30"
+                                        class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                    <span class="shrink-0">dias</span>
+                                </label>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-2">A retenção apaga cópias antigas só no destino externo. O ficheiro descarregado fica no seu computador.</p>
+                        </div>
+
+                        <div>
+                            <h2 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-4">Destino externo</h2>
+                            <select id="backupDestType" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50 mb-4">
+                                <option value="s3">S3 compatível (AWS, MinIO, R2, B2)</option>
+                                <option value="sftp">SFTP / servidor remoto</option>
+                            </select>
+
+                            <div id="backupS3Fields" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input id="backupS3Endpoint" type="text" placeholder="Endpoint (vazio = AWS)"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupS3Region" type="text" placeholder="Região" value="eu-central-1"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupS3Bucket" type="text" placeholder="Bucket"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupS3Prefix" type="text" placeholder="Prefixo" value="inforcliente/"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupS3AccessKey" type="text" autocomplete="off" placeholder="Access key"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupS3Secret" type="password" autocomplete="new-password" placeholder="Secret key"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                            </div>
+
+                            <div id="backupSftpFields" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input id="backupSftpHost" type="text" placeholder="Servidor"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupSftpPort" type="number" min="1" max="65535" value="22" placeholder="Porta"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupSftpUser" type="text" placeholder="Utilizador"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupSftpDir" type="text" placeholder="Pasta remota" value="/backups/inforcliente"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupSftpPassword" type="password" autocomplete="new-password" placeholder="Palavra-passe"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <input id="backupSftpFingerprint" type="text" placeholder="Impressão SHA256 do servidor (opcional)"
+                                    class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                                <textarea id="backupSftpKey" rows="4" placeholder="Chave privada (opcional, em alternativa à palavra-passe)"
+                                    class="md:col-span-2 w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-3">
+                            <button id="backupSaveBtn" type="submit"
+                                class="h-11 px-5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest">Guardar</button>
+                            <button id="backupTestBtn" type="button"
+                                class="h-11 px-5 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-widest text-slate-600">Testar destino</button>
+                        </div>
+                    </form>
+
+                    <form id="backupRestoreForm" class="bg-white rounded-2xl border border-amber-100 shadow-sm p-6 mb-8 space-y-4">
+                        <div>
+                            <h2 class="text-sm font-black uppercase tracking-widest text-amber-700 mb-2">Repor dados</h2>
+                            <p class="text-sm text-slate-500">Carregue o mesmo ficheiro .icbk. A base de dados e os ficheiros actuais são substituídos pelos da cópia. O código da aplicação não é alterado.</p>
+                        </div>
+                        <input id="backupRestoreFile" type="file" accept=".icbk,application/octet-stream"
+                            class="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-xs file:font-black file:uppercase file:tracking-widest file:text-[#2afc8d]" />
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input id="backupRestorePassphrase" type="password" autocomplete="new-password" placeholder="Frase-passe desta cópia"
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                            <input id="backupRestoreConfirm" type="text" autocomplete="off" placeholder="Escreva REPOR para confirmar"
+                                class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 font-medium" />
+                        </div>
+                        <button id="backupRestoreBtn" type="submit"
+                            class="h-11 px-5 rounded-xl bg-amber-600 text-white text-xs font-black uppercase tracking-widest">Carregar e repor</button>
+                    </form>
+
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-6 py-5 border-b border-slate-100">
+                            <h2 class="text-sm font-black uppercase tracking-widest text-slate-400">Cópias no destino externo</h2>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/70 border-b border-slate-100">
+                                        <th class="px-6 py-4">Ficheiro</th>
+                                        <th class="px-6 py-4">Tamanho</th>
+                                        <th class="px-6 py-4">Data</th>
+                                        <th class="px-6 py-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backupRemoteBody" class="divide-y divide-slate-50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-slate-400 mt-4">O ficheiro descarregado é o mesmo que se carrega em Repor dados.</p>
                 </div>
 
                 <!-- ===== HISTORY ===== -->
