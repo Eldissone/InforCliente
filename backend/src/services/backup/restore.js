@@ -12,18 +12,18 @@ const {
 const { fail } = require("./settings");
 
 function classifyEntry(name) {
-  const normalized = String(name || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  let normalized = String(name || "").replace(/\\/g, "/").replace(/^\/+/, "");
   if (!normalized || normalized.includes("\0")) return { action: "reject" };
+  const directory = normalized.endsWith("/");
+  if (directory) normalized = normalized.replace(/\/+$/, "");
   const parts = normalized.split("/");
-  if (parts.some((part) => part === ".." || part === "")) return { action: "reject" };
-  if (normalized === "database.dump" || normalized === "manifest.json" || normalized === "LEIA-ME.txt") {
-    return { action: "keep", normalized };
-  }
-  if (normalized === "uploads" || normalized.startsWith("uploads/")) return { action: "keep", normalized };
-  if (normalized === "source" || normalized.startsWith("source/") || normalized === "backend.env") {
-    return { action: "skip", normalized };
-  }
-  return { action: "reject" };
+  if (!normalized || parts.some((part) => part === ".." || part === "")) return { action: "reject" };
+
+  let action = "reject";
+  if (normalized === "database.dump" || normalized === "manifest.json" || normalized === "LEIA-ME.txt") action = "keep";
+  else if (normalized === "uploads" || normalized.startsWith("uploads/")) action = "keep";
+  else if (normalized === "source" || normalized.startsWith("source/") || normalized === "backend.env") action = "skip";
+  return { action, normalized, directory };
 }
 
 function safeDestination(root, normalized) {
@@ -55,13 +55,13 @@ function extractDataZip(zipPath, destDir) {
         if (failed) return;
         const decision = classifyEntry(entry.fileName);
         if (decision.action === "reject") {
-          failOnce(fail(400, "O ficheiro não é uma cópia de dados do InforCliente."));
+          failOnce(fail(400, `O ficheiro não é uma cópia de dados do InforCliente (${entry.fileName}).`));
           return;
         }
-        const isDir = /\/$/.test(entry.fileName);
+        const isDir = decision.directory || /[/\\]$/.test(entry.fileName);
         if (decision.action === "skip" || isDir) {
           if (decision.action === "keep" && isDir) {
-            const dest = safeDestination(destDir, decision.normalized.replace(/\/$/, ""));
+            const dest = safeDestination(destDir, decision.normalized);
             if (!dest) return failOnce(fail(400, "Caminho inválido dentro da cópia."));
             fs.mkdirSync(dest, { recursive: true });
           }
