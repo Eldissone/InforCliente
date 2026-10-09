@@ -1071,7 +1071,44 @@ body[data-shell="figma"] .dp-add-form input:focus {
             margin-bottom: 0.75rem;
         }
 
+        .ex-gantt-scale {
+            display: inline-flex;
+            align-items: center;
+            background: #e8eef4;
+            border-radius: 999px;
+            padding: 3px;
+            gap: 0;
+        }
+
+        .ex-gantt-scale button {
+            appearance: none;
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            line-height: 1;
+            padding: 7px 14px;
+            border-radius: 999px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .ex-gantt-scale button:hover:not(.is-active) {
+            color: #64748b;
+        }
+
+        .ex-gantt-scale button.is-active {
+            background: #cfd8e3;
+            color: #1e293b;
+            font-weight: 700;
+            box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+        }
+
         .ex-gantt-wrap {
+            --gantt-row-h: 56px;
+            --gantt-bar-h: 26px;
             background: #fff;
             border: 1px solid #e2e8f0;
             border-radius: 1rem;
@@ -1084,7 +1121,16 @@ body[data-shell="figma"] .dp-add-form input:focus {
             max-height: min(72vh, 820px);
         }
 
+        .ex-gantt-inner {
+            position: relative;
+            --gantt-sticky: 508px;
+            min-width: 100%;
+            background: #fff;
+        }
+
         .ex-gantt-table {
+            position: relative;
+            z-index: 2;
             border-collapse: separate;
             border-spacing: 0;
             min-width: 100%;
@@ -1117,15 +1163,16 @@ body[data-shell="figma"] .dp-add-form input:focus {
             letter-spacing: 0.08em;
         }
 
+        .ex-gantt-table thead .ex-gantt-unit,
         .ex-gantt-table thead .ex-gantt-week {
             text-align: center;
-            width: 52px;
-            min-width: 52px;
             padding: 2px 0 8px;
             color: #94a3b8;
             font-weight: 700;
             top: 26px;
             z-index: 4;
+            text-transform: none;
+            letter-spacing: 0.02em;
         }
 
         .ex-gantt-sticky {
@@ -1145,8 +1192,14 @@ body[data-shell="figma"] .dp-add-form input:focus {
         .ex-gantt-col-end { left: 328px; min-width: 128px; width: 128px; }
         .ex-gantt-col-pct { left: 456px; min-width: 52px; width: 52px; text-align: center; box-shadow: 6px 0 12px -8px rgba(15, 23, 42, 0.28); }
 
+        .ex-gantt-table tbody tr {
+            height: var(--gantt-row-h);
+        }
+
         .ex-gantt-table tbody td {
-            height: 42px;
+            height: var(--gantt-row-h);
+            min-height: var(--gantt-row-h);
+            overflow: visible;
             border-bottom: 1px solid #f1f5f9;
             border-right: 1px solid #f8fafc;
             font-size: 12px;
@@ -1155,9 +1208,20 @@ body[data-shell="figma"] .dp-add-form input:focus {
             vertical-align: middle;
         }
 
+        .ex-gantt-table tbody td:not(.ex-gantt-sticky) {
+            background: transparent;
+        }
+
         .ex-gantt-table tbody td.ex-gantt-sticky {
             padding: 0 10px;
             font-weight: 600;
+        }
+
+        .ex-gantt-act-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
         }
 
         .ex-gantt-act {
@@ -1168,6 +1232,31 @@ body[data-shell="figma"] .dp-add-form input:focus {
             white-space: nowrap;
             font-weight: 700;
             color: #1e293b;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .ex-gantt-dep-btn {
+            flex: 0 0 auto;
+            width: 26px;
+            height: 26px;
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .ex-gantt-dep-btn:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .ex-gantt-dep-btn .material-symbols-outlined {
+            font-size: 16px;
         }
 
         .ex-gantt-date {
@@ -1189,54 +1278,262 @@ body[data-shell="figma"] .dp-add-form input:focus {
 
         .ex-gantt-track {
             position: relative;
-            height: 42px;
+            height: var(--gantt-row-h);
+            min-height: var(--gantt-row-h);
             min-width: 100%;
-            background-image: linear-gradient(to right, #f1f5f9 1px, transparent 1px);
+            overflow: visible;
+            background-image: linear-gradient(to right, #e8eef5 1px, transparent 1px);
             background-size: 52px 100%;
         }
 
         .ex-gantt-bar {
             position: absolute;
-            top: 10px;
-            height: 22px;
-            border-radius: 4px;
+            top: calc((var(--gantt-row-h) - var(--gantt-bar-h)) / 2);
+            height: var(--gantt-bar-h);
+            min-width: 96px;
+            border-radius: 999px;
             display: flex;
             align-items: center;
-            padding: 0 8px;
+            padding: 0 10px;
             overflow: hidden;
-            color: #fff;
-            font-size: 11px;
+            color: var(--gantt-bar-text, #fff);
+            font-size: 12px;
             font-weight: 700;
+            line-height: 1;
             white-space: nowrap;
+            z-index: 4;
+            background: var(--gantt-bar-color, #059669);
+            border: 2px solid var(--gantt-bar-color, #059669);
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+
+        .ex-gantt-bar:hover {
+            filter: brightness(1.06);
+        }
+
+        .ex-gantt-bar-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            background: var(--gantt-bar-color, #059669);
+            pointer-events: none;
+        }
+
+        .ex-gantt-bar.is-split {
+            background: color-mix(in srgb, var(--gantt-bar-color, #059669) 28%, #fff);
+            color: var(--gantt-bar-text, #fff);
+        }
+
+        .ex-gantt-bar.is-split:not(.is-dark-text) span {
+            text-shadow: 0 0 4px rgba(15, 23, 42, 0.55);
+        }
+
+        .ex-gantt-bar.is-outline {
+            background: color-mix(in srgb, var(--gantt-bar-color, #059669) 22%, #fff);
+            color: var(--gantt-bar-outline-text, var(--gantt-bar-color, #059669));
         }
 
         .ex-gantt-bar span {
+            position: relative;
+            z-index: 1;
+            display: block;
+            min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .ex-gantt-dep {
+        .ex-gantt-links {
             position: absolute;
-            top: 18px;
-            width: 10px;
-            height: 2px;
-            background: #94a3b8;
+            left: 0;
+            top: 0;
+            pointer-events: none;
+            z-index: 1;
+            overflow: visible;
         }
 
-        .ex-gantt-dep::after {
-            content: "";
+        .ex-gantt-links path,
+        .ex-gantt-links polyline {
+            fill: none;
+            stroke: #64748b;
+            stroke-width: 1.5;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+
+        .ex-dep-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .ex-dep-dates {
+            margin: 4px 0 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .ex-dep-section {
+            margin-top: 22px;
+        }
+
+        .ex-dep-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+            margin: 0 0 10px;
+        }
+
+        .ex-dep-section-title .material-symbols-outlined {
+            font-size: 18px;
+            color: #64748b;
+        }
+
+        .ex-dep-empty {
+            font-size: 13px;
+            color: #64748b;
+            font-weight: 500;
+            margin: 0 0 14px;
+            line-height: 1.45;
+        }
+
+        .ex-dep-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .ex-dep-add-box,
+        .ex-dep-saved {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 14px;
+            background: #fff;
+        }
+
+        .ex-dep-saved,
+        .ex-dep-add-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.8fr) minmax(90px, 0.55fr) auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .ex-dep-add-grid {
+            grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.8fr) minmax(90px, 0.55fr);
+        }
+
+        .ex-dep-saved label,
+        .ex-dep-add-grid label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        .ex-dep-input {
+            display: block;
+            width: 100%;
+            margin-top: 6px;
+            height: 40px;
+            padding: 0 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .ex-dep-remove {
+            width: 36px;
+            height: 40px;
+            border: 0;
+            background: transparent;
+            color: #94a3b8;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .ex-dep-remove:hover {
+            background: #f8fafc;
+            color: #be123c;
+        }
+
+        .ex-dep-add-btn {
+            margin-top: 12px;
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .ex-dep-add-btn:hover:not(:disabled) {
+            color: #1d4ed8;
+        }
+
+        .ex-dep-add-btn:disabled {
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 700px) {
+            .ex-dep-saved,
+            .ex-dep-add-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .ex-gantt-hoje {
             position: absolute;
-            right: -3px;
-            top: -3px;
-            border: 4px solid transparent;
-            border-left-color: #94a3b8;
+            top: 0;
+            bottom: 0;
+            left: calc(var(--gantt-sticky) + var(--hoje-left, 0px));
+            z-index: 3;
+            width: 0;
+            border-left: 1px dashed #f43f5e;
+            pointer-events: none;
+        }
+
+        .ex-gantt-hoje-flag {
+            position: absolute;
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f43f5e;
+            color: #fff;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            line-height: 1;
+            padding: 3px 6px;
+            border-radius: 4px;
+            text-transform: none;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(244, 63, 94, 0.35);
         }
 
         @media (max-width: 900px) {
+            .ex-gantt-inner { --gantt-sticky: 412px; }
             .ex-gantt-col-act { min-width: 140px; width: 140px; max-width: 160px; }
             .ex-gantt-col-start { left: 140px; min-width: 110px; width: 110px; }
             .ex-gantt-col-end { left: 250px; min-width: 110px; width: 110px; }
             .ex-gantt-col-pct { left: 360px; }
             .ex-gantt-act { max-width: 130px; }
+            .ex-gantt-scale button { padding: 6px 10px; font-size: 11px; }
         }

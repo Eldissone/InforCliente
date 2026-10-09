@@ -851,10 +851,18 @@ enum DailyPlanStatus {
   COMPLETED
 }
 
+enum DailyPlanDepType {
+  FS
+  SS
+  FF
+  SF
+}
+
 model DailyPlan {
   id                 String          @id @default(cuid())
   projectId          String
   date               DateTime
+  plannedEndDate     DateTime?
   status             DailyPlanStatus @default(DRAFT)
   description        String?
   receivedBy         String?
@@ -864,10 +872,28 @@ model DailyPlan {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks          DailyPlanTask[]
   materials      DailyPlanMaterial[]
   stockMovements StockMovement[]
+  predecessors   DailyPlanDependency[] @relation("DailyPlanPredecessors")
+  successors     DailyPlanDependency[] @relation("DailyPlanSuccessors")
+}
+
+model DailyPlanDependency {
+  id            String           @id @default(cuid())
+  successorId   String
+  predecessorId String
+  type          DailyPlanDepType @default(FS)
+  lagDays       Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @default(now()) @updatedAt
+
+  successor   DailyPlan @relation("DailyPlanPredecessors", fields: [successorId], references: [id], onDelete: Cascade)
+  predecessor DailyPlan @relation("DailyPlanSuccessors", fields: [predecessorId], references: [id], onDelete: Cascade)
+
+  @@unique([successorId, predecessorId])
+  @@index([predecessorId])
 }
 
 model DailyPlanTask {

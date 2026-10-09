@@ -5469,6 +5469,20 @@ function formatDailyPlanBoardDate(value) {
   return `${d} de ${DP_MONTHS_SHORT[m - 1]} de ${y}`;
 }
 
+function localDateInputValue(value) {
+  if (arguments.length === 0) {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return toDateKey(value) || "";
+}
+
+function dailyPlanDateRangeLabel(plan) {
+  const start = formatDailyPlanBoardDate(plan?.date);
+  const end = plan?.plannedEndDate ? formatDailyPlanBoardDate(plan.plannedEndDate) : "";
+  return end ? `${start} – ${end}` : start;
+}
+
 function dailyPlanBoardTitle(p) {
   const desc = (p.description || "").trim();
   const firstTask = (p.tasks || [])[0]?.progressTask;
@@ -5540,7 +5554,7 @@ function renderDailyPlanCard(p, column) {
         <span class="dp-card-prio ${prio === "alta" ? "is-alta" : "is-normal"}">${prio === "alta" ? "Alta" : "Normal"}</span>
       </div>
       <div class="dp-card-meta">
-        <span><span class="material-symbols-outlined">calendar_today</span>${escapeHtml(formatDailyPlanBoardDate(p.date))}</span>
+        <span><span class="material-symbols-outlined">calendar_today</span>${escapeHtml(dailyPlanDateRangeLabel(p))}</span>
         ${techDisplay ? `<span class="dp-card-tech" title="${escapeHtml(uniqueTechs.join(", "))}"><span class="material-symbols-outlined">person</span>${escapeHtml(techDisplay)}</span>` : ""}
       </div>
       ${actions.length ? `<div class="dp-card-actions">${actions.join("")}</div>` : ""}
@@ -5951,10 +5965,14 @@ async function wireDailyPlans() {
       primaryLabel: "Gravar Plano",
       contentHtml: `
         <div class="space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
-              <input type="date" id="dp_date" value="${new Date().toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de início</label>
+              <input type="date" id="dp_date" value="${localDateInputValue()}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de fim</label>
+              <input type="date" id="dp_end_date" value="${localDateInputValue()}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
@@ -6112,8 +6130,19 @@ async function wireDailyPlans() {
       },
       onPrimary: async ({ close, btn, panel }) => {
         const date = panel.querySelector("#dp_date").value;
+        const plannedEndDate = panel.querySelector("#dp_end_date").value;
         const description = panel.querySelector("#dp_desc").value;
         const planTechId = panel.querySelector("#dp_plan_tech").value;
+
+        if (!date) {
+          return toast("Indique a data prevista de início.", { type: "error" });
+        }
+        if (!plannedEndDate) {
+          return toast("Indique a data prevista de fim.", { type: "error" });
+        }
+        if (plannedEndDate < date) {
+          return toast("A data prevista de fim não pode ser anterior ao início.", { type: "error" });
+        }
 
         if (!planTechId) {
           return toast("Por favor, selecione o Técnico Responsável.", { type: "error" });
@@ -6136,6 +6165,7 @@ async function wireDailyPlans() {
             body: {
               projectId: id,
               date,
+              plannedEndDate,
               description,
               tasks: finalTasks,
               materials: [...selectedMaterials, ...selectedTools]
@@ -6383,7 +6413,7 @@ window.viewPlanDetails = async function (planId) {
       <div class="space-y-6">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(plan.date)}</span>
+            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${escapeHtml(plan.plannedEndDate ? `${formatDateBR(plan.date)} – ${formatDateBR(plan.plannedEndDate)}` : formatDateBR(plan.date))}</span>
             ${statusBadge}
           </div>
         </div>
@@ -6636,10 +6666,14 @@ window.openEditPlanModal = async (planId) => {
 
   const contentHtml = `
     <div class="space-y-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
-          <input type="date" id="edit_dp_date" value="${new Date(plan.date).toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de início</label>
+          <input type="date" id="edit_dp_date" value="${localDateInputValue(plan.date)}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de fim</label>
+          <input type="date" id="edit_dp_end_date" value="${localDateInputValue(plan.plannedEndDate)}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
         </div>
         <div>
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
@@ -6816,11 +6850,20 @@ window.openEditPlanModal = async (planId) => {
     },
     onPrimary: async ({ panel, close }) => {
       const date = panel.querySelector("#edit_dp_date").value;
+      const plannedEndDate = panel.querySelector("#edit_dp_end_date").value;
       const desc = panel.querySelector("#edit_dp_desc").value;
       const techId = panel.querySelector("#edit_dp_plan_tech").value;
 
       if (!date || selectedTasks.length === 0) {
-        toast("Data e pelo menos uma tarefa são obrigatórios.", { type: "warning" });
+        toast("Data de início e pelo menos uma tarefa são obrigatórios.", { type: "warning" });
+        return;
+      }
+      if (!plannedEndDate) {
+        toast("Indique a data prevista de fim.", { type: "warning" });
+        return;
+      }
+      if (plannedEndDate < date) {
+        toast("A data prevista de fim não pode ser anterior ao início.", { type: "warning" });
         return;
       }
 
@@ -6832,6 +6875,7 @@ window.openEditPlanModal = async (planId) => {
 
       const payload = {
         date,
+        plannedEndDate,
         description: desc,
         tasks: payloadTasks
       };

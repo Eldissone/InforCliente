@@ -381,7 +381,7 @@ function renderPlanCard(p) {
         </div>
         <div class="flex items-center gap-3 self-start sm:self-center">
           <span class="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-            <span class="material-symbols-outlined text-sm">calendar_month</span> ${formatDateBR(p.date)}
+            <span class="material-symbols-outlined text-sm">calendar_month</span> ${formatDateBR(p.date)}${p.plannedEndDate ? ` – ${formatDateBR(p.plannedEndDate)}` : ""}
           </span>
           ${renderStatusBadge(p.status)}
         </div>

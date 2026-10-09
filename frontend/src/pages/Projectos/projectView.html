@@ -821,12 +821,19 @@
 
         <!-- Planeamento: Plano de Execução (Gantt) -->
         <div id="tab_plano_gantt" class="tab-content hidden">
-            <div class="flex flex-row justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="flex flex-row flex-wrap justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Plano de Execução</h2>
                     <p class="text-sm text-slate-500 font-medium">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    <div id="plGanttScale" class="ex-gantt-scale" role="tablist" aria-label="Escala do Gantt">
+                        <button type="button" data-gantt-scale="day" role="tab" aria-pressed="false">Dia</button>
+                        <button type="button" data-gantt-scale="week" role="tab" aria-pressed="true" class="is-active">Semana</button>
+                        <button type="button" data-gantt-scale="month" role="tab" aria-pressed="false">Mês</button>
+                        <button type="button" data-gantt-scale="quarter" role="tab" aria-pressed="false">Trimestre</button>
+                        <button type="button" data-gantt-scale="year" role="tab" aria-pressed="false">Ano</button>
+                    </div>
                     <button type="button" id="plGanttRefresh" class="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200" title="Atualizar">
                         <span class="material-symbols-outlined text-lg">refresh</span>
                     </button>
