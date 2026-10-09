@@ -165,34 +165,57 @@ function applicationDatabaseUrl() {
   return url.toString();
 }
 
-function findPgRestore() {
+function findClientTool(name) {
   const dumpBin = findPgDump();
   if (!dumpBin) return null;
-  const name = process.platform === "win32" ? "pg_restore.exe" : "pg_restore";
-  const candidate = path.join(path.dirname(dumpBin), name);
+  const file = process.platform === "win32" ? `${name}.exe` : name;
+  const candidate = path.join(path.dirname(dumpBin), file);
   return fs.existsSync(candidate) ? candidate : null;
 }
 
-function restoreDatabase(dumpFile) {
-  const bin = findPgRestore();
-  if (!bin) {
-    throw fail(503, "pg_restore não foi encontrado. Instale as ferramentas de cliente do PostgreSQL ou defina PG_DUMP_PATH.");
-  }
+function runTool(bin, args) {
   return new Promise((resolve, reject) => {
     execFile(
       bin,
-      ["--clean", "--if-exists", "--no-owner", "--no-acl", "--exit-on-error", "--dbname", applicationDatabaseUrl(), dumpFile],
-      { windowsHide: true, timeout: 60 * 60 * 1000 },
-      (error, _stdout, stderr) => {
+      args,
+      { windowsHide: true, timeout: 60 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 },
+      (error, stdout, stderr) => {
         if (error) {
-          const detail = redact(stderr || error.message).trim();
-          reject(fail(503, detail ? `Falha ao repor a base de dados: ${detail}` : "Falha ao repor a base de dados."));
+          reject(fail(503, redact(stderr || stdout || error.message).trim() || "Falha ao repor a base de dados."));
           return;
         }
-        resolve();
+        resolve(String(stdout || ""));
       }
     );
   });
+}
+
+function tocCreatesPublicSchema(toc) {
+  return /^\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+public\b/m.test(toc);
+}
+
+async function restoreDatabase(dumpFile) {
+  const restoreBin = findClientTool("pg_restore");
+  const psql = findClientTool("psql");
+  if (!restoreBin || !psql) {
+    throw fail(503, "pg_restore ou psql não foi encontrado. Instale as ferramentas de cliente do PostgreSQL ou defina PG_DUMP_PATH.");
+  }
+
+  const dbUrl = applicationDatabaseUrl();
+  const psqlArgs = ["--dbname", dbUrl, "--set", "ON_ERROR_STOP=1", "-c"];
+  await runTool(psql, [...psqlArgs, "DROP SCHEMA IF EXISTS public CASCADE;"]);
+
+  const toc = await runTool(restoreBin, ["--list", dumpFile]);
+  if (!tocCreatesPublicSchema(toc)) {
+    await runTool(psql, [...psqlArgs, "CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;"]);
+  }
+
+  try {
+    await runTool(restoreBin, ["--no-owner", "--no-acl", "--exit-on-error", "--dbname", dbUrl, dumpFile]);
+  } catch (error) {
+    const detail = error.message || "Falha ao repor a base de dados.";
+    throw fail(503, detail.startsWith("Falha ao repor") ? detail : `Falha ao repor a base de dados: ${detail}`);
+  }
 }
 
 module.exports = {
