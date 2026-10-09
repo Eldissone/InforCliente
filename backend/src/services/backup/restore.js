@@ -92,23 +92,64 @@ function extractDataZip(zipPath, destDir) {
   });
 }
 
+function copyContents(from, to) {
+  fs.mkdirSync(to, { recursive: true });
+  if (!fs.existsSync(from)) return;
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    if (entry.isDirectory()) copyContents(src, dest);
+    else if (entry.isFile()) fs.copyFileSync(src, dest);
+  }
+}
+
+function clearContents(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir)) {
+    try {
+      fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+    } catch {
+      /* um ficheiro aberto é substituído pela cópia */
+    }
+  }
+}
+
 function stageUploads(incomingDir) {
   const previous = `${UPLOADS_ROOT}.previous`;
   fs.rmSync(previous, { recursive: true, force: true });
   const hadPrevious = fs.existsSync(UPLOADS_ROOT);
+  let mode = "fresh";
+
   if (hadPrevious) {
     try {
       fs.renameSync(UPLOADS_ROOT, previous);
+      mode = "renamed";
     } catch {
-      throw fail(503, "Não foi possível substituir os ficheiros actuais. Feche o que estiver a usar a pasta de uploads e tente de novo.");
+      fs.cpSync(UPLOADS_ROOT, previous, { recursive: true, force: true });
+      clearContents(UPLOADS_ROOT);
+      mode = "inplace";
     }
   }
+
+  const restorePrevious = () => {
+    if (!hadPrevious || !fs.existsSync(previous)) return;
+    if (mode === "renamed") {
+      fs.rmSync(UPLOADS_ROOT, { recursive: true, force: true });
+      fs.renameSync(previous, UPLOADS_ROOT);
+      return;
+    }
+    clearContents(UPLOADS_ROOT);
+    copyContents(previous, UPLOADS_ROOT);
+  };
+
   try {
     fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
-    if (fs.existsSync(incomingDir)) fs.cpSync(incomingDir, UPLOADS_ROOT, { recursive: true });
+    if (fs.existsSync(incomingDir)) {
+      if (mode === "inplace") copyContents(incomingDir, UPLOADS_ROOT);
+      else fs.cpSync(incomingDir, UPLOADS_ROOT, { recursive: true, force: true });
+    }
   } catch {
-    fs.rmSync(UPLOADS_ROOT, { recursive: true, force: true });
-    if (hadPrevious && fs.existsSync(previous)) fs.renameSync(previous, UPLOADS_ROOT);
+    try { restorePrevious(); } catch { /* a pasta anterior fica em uploads.previous */ }
     throw fail(503, "Não foi possível copiar os ficheiros da cópia.");
   }
 
@@ -120,8 +161,7 @@ function stageUploads(incomingDir) {
     },
     rollback() {
       if (committed) return;
-      fs.rmSync(UPLOADS_ROOT, { recursive: true, force: true });
-      if (hadPrevious && fs.existsSync(previous)) fs.renameSync(previous, UPLOADS_ROOT);
+      restorePrevious();
     },
   };
 }
