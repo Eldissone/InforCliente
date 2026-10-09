@@ -34,6 +34,7 @@ import {
   galleryPhotoTitle,
 } from "../../shared/galleryLightbox.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
+import { initProjectPlaneamento, loadPlaneamentoTab } from "./projectPlaneamento.js";
 
 checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "financeiro", "tecnico", "cliente"] });
 
@@ -925,6 +926,20 @@ function lockProjectTabDropdown(group) {
   if (trigger) trigger.setAttribute("aria-expanded", "false");
 }
 
+function firstVisibleDropdownTab(group) {
+  const items = [...group.querySelectorAll("[data-tab-trigger]")].filter(
+    (el) => el.dataset.permDenied !== "true" && !el.classList.contains("hidden")
+  );
+  const preferred = group.getAttribute("data-default-tab");
+  return items.find((el) => el.getAttribute("data-tab-trigger") === preferred) || items[0] || null;
+}
+
+function activateDefaultDropdownTab(group) {
+  if (!group?.hasAttribute("data-default-tab")) return;
+  if (group.querySelector(".pv-tab-item.is-active")) return;
+  firstVisibleDropdownTab(group)?.click();
+}
+
 function wireTabDropdowns() {
   const groups = document.querySelectorAll(".pv-tab-dropdown");
   groups.forEach((group) => {
@@ -943,6 +958,7 @@ function wireTabDropdowns() {
     });
     trigger.addEventListener("click", (event) => {
       event.stopPropagation();
+      activateDefaultDropdownTab(group);
       const willOpen = !group.classList.contains("is-open");
       closeProjectTabDropdowns(willOpen ? group : null);
       group.classList.toggle("is-open", willOpen);
@@ -981,6 +997,17 @@ function wireTabs() {
       if (tabId === "stock") loadStock();
       if (tabId === "galeria_obra") loadGallery();
       if (tabId === "planos_diarios") loadDailyPlans();
+      if (
+        tabId === "orcamento_custo" ||
+        tabId === "orcamento_vendas" ||
+        tabId === "plano_gantt" ||
+        tabId === "plano_financeiro" ||
+        tabId === "recursos_equipamentos" ||
+        tabId === "recursos_materiais" ||
+        tabId === "recursos_pessoal"
+      ) {
+        loadPlaneamentoTab(tabId);
+      }
     });
   });
 }
@@ -3158,6 +3185,10 @@ async function init() {
   wireLiquidation();
   wireTransactionsActions();
   wireTabs();
+  initProjectPlaneamento({
+    getProjectId,
+    getProject: () => projectState,
+  });
   applyRoleVisibility();
   const user = getSessionUser();
   const role = (user?.role || "").toLowerCase();
