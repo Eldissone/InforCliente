@@ -168,6 +168,8 @@ function stageUploads(incomingDir) {
 
 async function releaseDatabase() {
   const { prisma } = require("../../db");
+  const { resetLogConnection } = require("../logService");
+  try { await resetLogConnection(); } catch { /* o registo volta a ligar no fim */ }
   try {
     await prisma.$queryRawUnsafe(
       "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()"
@@ -179,12 +181,14 @@ async function releaseDatabase() {
 }
 
 async function reconnectDatabase() {
+  const { resetLogConnection } = require("../logService");
   try {
     const { prisma } = require("../../db");
     await prisma.$connect();
   } catch (error) {
     console.error("Ligação à base após reposição:", redact(error.message));
   }
+  try { await resetLogConnection(); } catch { /* o próximo pedido volta a ligar */ }
 }
 
 async function performRestore({ filePath, passphrase, onPhase }) {
