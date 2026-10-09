@@ -1,14 +1,43 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+async function resetLogConnection() {
+  await prisma.$disconnect();
+  await prisma.$connect();
+}
+
+async function writeLog(logData) {
+  return prisma.systemLog.create({ data: logData });
+}
+
 const createLog = async (logData) => {
   try {
-    return await prisma.systemLog.create({
-      data: logData,
-    });
+    return await writeLog(logData);
   } catch (error) {
-    console.error("Error creating system log:", error);
-    // Non-blocking error
+    if (error?.code === "P1017") {
+      try {
+        await resetLogConnection();
+        return await writeLog(logData);
+      } catch (retryError) {
+        if (retryError?.code !== "P2003") {
+          console.error("Registo de auditoria indisponível:", retryError.code || retryError.message);
+          return;
+        }
+        error = retryError;
+      }
+    }
+
+    if (error?.code === "P2003" && logData?.userId) {
+      try {
+        const { userId, ...rest } = logData;
+        return await writeLog(rest);
+      } catch (retryError) {
+        console.error("Registo de auditoria sem utilizador falhou:", retryError.code || retryError.message);
+        return;
+      }
+    }
+
+    console.error("Registo de auditoria falhou:", error.code || error.message);
   }
 };
 
@@ -66,5 +95,6 @@ const clearAllLogs = async () => {
 module.exports = {
   createLog,
   getLogs,
-  clearAllLogs
+  clearAllLogs,
+  resetLogConnection,
 };
