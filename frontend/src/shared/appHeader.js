@@ -6,19 +6,7 @@
 const LINK = "text-sm font-semibold text-slate-400 hover:text-white transition-colors";
 const MOBILE = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
 
-function isDashboardPage() {
-  const path = window.location.pathname.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-  return /\/dashboard(\/index)?$/.test(path);
-}
-
 function renderAppHeader() {
-  const search = isDashboardPage()
-    ? `<label class="shell-search">
-        <span class="material-symbols-outlined" aria-hidden="true">search</span>
-        <input id="clientMatrixFilter" type="search" placeholder="Buscar obra" aria-label="Buscar obra por nome ou código" />
-      </label>`
-    : "";
-
   return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800 transition-all duration-300" data-shared-header>
     <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
       <div class="flex items-center gap-10">
@@ -37,7 +25,6 @@ function renderAppHeader() {
         </div>
       </div>
       <div class="flex flex-1 items-center justify-end gap-3 min-w-0">
-        ${search}
         <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2" href="/Users">
           <span class="material-symbols-outlined text-lg">manage_accounts</span>
           Gestão
