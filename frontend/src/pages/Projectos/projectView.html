@@ -43,7 +43,11 @@
                 </nav>
                 <h1 id="projectTitle"
                     class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">---</h1>
-                <p id="projectType" class="text-slate-500 font-medium">---</p>
+                <p class="text-slate-500 font-medium flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span id="projectType">---</span>
+                    <span class="text-slate-300" aria-hidden="true">·-·</span>
+                    <span id="projectClientName">---</span>
+                </p>
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <span id="obraEstadoChip" class="inline-flex items-center h-8 px-3 rounded-full bg-slate-100 text-xs font-bold text-slate-700">—</span>
                     <button type="button" id="btnAtualizarEstado" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800">Atualizar estado</button>
@@ -59,34 +63,92 @@
         </header>
 
         <!-- Tab Navigation -->
-        <div class="flex flex-row flex-nowrap border-b border-slate-100 mb-8 overflow-x-auto no-scrollbar">
+        <div class="pv-tabs flex flex-row flex-nowrap items-stretch border-b border-slate-100 mb-8">
             <button data-tab-trigger="dashboard" data-perm="obras:tab_dashboard"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
-            <button data-tab-trigger="relatorio" data-perm="obras:tab_progress"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Avanço Físico</span>
-                <span class="hidden md:inline">Avanço Físico</span>
-            </button>
-            <button data-tab-trigger="medicoes" data-perm="obras:tab_measurements"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Medições</span>
-                <span class="hidden md:inline">Autos de Medição</span>
-            </button>
-            <button data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                Planos Diários
-            </button>
-            <button data-tab-trigger="files" data-perm="obras:tab_files"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">
-                <span class="md:hidden">Arquivos</span>
-                <span class="hidden md:inline">Gestão de Arquivos</span>
-            </button>
+                class="pv-tab px-6 py-3 text-sm font-bold border-b-2 border-slate-900 text-slate-900 whitespace-nowrap transition-all">Dashboard</button>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="operacao">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Operação
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="planos_diarios" data-perm="obras:tab_daily_plans"
+                        class="pv-tab-item" role="menuitem">Planos Diários</button>
+                    <button type="button" data-tab-trigger="relatorio" data-perm="obras:tab_progress"
+                        class="pv-tab-item" role="menuitem">Avanço Físico</button>
+                    <button type="button" data-tab-trigger="medicoes" data-perm="obras:tab_measurements"
+                        class="pv-tab-item" role="menuitem">Autos de Medição</button>
+                </div>
+            </div>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="orcamento" data-default-tab="orcamento_custo">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Orçamento
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="orcamento_custo" data-perm="obras:tab_planning_budget_cost"
+                        class="pv-tab-item" role="menuitem">Orçamento Previsional de Custo</button>
+                    <button type="button" data-tab-trigger="orcamento_vendas" data-perm="obras:tab_planning_budget_sales"
+                        class="pv-tab-item" role="menuitem">Orçamento Previsional de Vendas</button>
+                </div>
+            </div>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="planeamento" data-default-tab="plano_gantt">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Planeamento
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="plano_gantt" data-perm="obras:tab_planning_gantt"
+                        class="pv-tab-item" role="menuitem">Plano de Execução (Gantt)</button>
+                    <button type="button" data-tab-trigger="plano_financeiro" data-perm="obras:tab_planning_finance"
+                        class="pv-tab-item" role="menuitem">Plano Financeiro</button>
+                </div>
+            </div>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="recursos" data-default-tab="recursos_equipamentos">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Recursos
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="recursos_equipamentos" data-perm="obras:tab_planning_equipment"
+                        class="pv-tab-item" role="menuitem">Equipamentos e Viaturas</button>
+                    <button type="button" data-tab-trigger="recursos_materiais" data-perm="obras:tab_planning_materials"
+                        class="pv-tab-item" role="menuitem">Materiais</button>
+                    <button type="button" data-tab-trigger="recursos_pessoal" data-perm="obras:tab_planning_personnel"
+                        class="pv-tab-item" role="menuitem">Pessoal</button>
+                </div>
+            </div>
+
+            <div class="pv-tab-dropdown relative" data-tab-group="documentos">
+                <button type="button"
+                    class="pv-tab pv-tab-dropdown-trigger px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all inline-flex items-center gap-1"
+                    aria-haspopup="menu" aria-expanded="false">
+                    Documentos
+                    <span class="material-symbols-outlined text-base">expand_more</span>
+                </button>
+                <div class="pv-tab-menu" role="menu">
+                    <button type="button" data-tab-trigger="files" data-perm="obras:tab_files"
+                        class="pv-tab-item" role="menuitem">Gestão de Arquivos</button>
+                    <button type="button" id="tabTriggerGaleria" data-tab-trigger="galeria_obra"
+                        data-perm="obras:tab_gallery" class="pv-tab-item" role="menuitem">Galeria de Obra</button>
+                </div>
+            </div>
+
             <button data-tab-trigger="stock" data-perm="stock:tab_project_stock"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
+                class="pv-tab px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Gestão
                 de Armazém</button>
-            <button id="tabTriggerGaleria" data-tab-trigger="galeria_obra" data-perm="obras:tab_gallery"
-                class="px-6 py-3 text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap transition-all">Galeria
-                da Obra</button>
         </div>
 
         <!-- Dashboard Tab -->
@@ -104,35 +166,15 @@
                     Lançamento
                 </button>
             </div>
-            <!-- Project Identification Cards -->
-            <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Entidade / Parceiro
-                    </p>
-                    <div id="projectClientName" class="text-lg font-bold text-slate-900">---</div>
-                    <div id="projectClientCode"
-                        class="mt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">---</div>
-                </div>
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Gestor / Contacto
-                    </p>
-                    <div id="projectContact" class="text-lg font-bold text-slate-900">---</div>
-                </div>
-                <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Localização</p>
-                    <div id="projectLocation" class="text-lg font-bold text-slate-900">---</div>
-                </div>
-            </section>
-
             <!-- Bento Grid: Main Stats -->
-            <div class="flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
+            <div class="pv-stats-row flex flex-col md:grid md:grid-cols-2 lg:flex lg:flex-row gap-6 mb-10 w-full items-stretch">
                 <!-- Budget Card -->
                 <div
-                    class="flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 h-full w-full min-w-0 flex flex-col justify-between">
+                    class="pv-stat-card flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white relative overflow-hidden group shadow-2xl shadow-slate-900/20 w-full min-w-0 flex flex-col justify-between">
                     <div
                         class="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 blur-[100px] group-hover:bg-blue-600/30 transition-all">
                     </div>
-                    <div class="relative z-10 h-full flex flex-col justify-between">
+                    <div class="relative z-10 flex-1 flex flex-col justify-between min-h-0">
                         <div>
                             <div class="flex justify-between items-center mb-6 md:mb-8">
                                 <span
@@ -162,113 +204,62 @@
                     </div>
                 </div>
 
-                <!-- Detailed Costs Card -->
+                <!-- Prazos Card -->
                 <div
-                    class="flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between h-full w-full min-w-0">
+                    class="pv-stat-card pv-stat-card--prazos flex-1 bg-white rounded-2xl p-6 md:p-8 border border-slate-100 shadow-sm flex flex-col justify-between w-full min-w-0">
                     <div>
                         <div class="flex justify-between items-center mb-6 md:mb-10">
-                            <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Fluxo Financeiro
-                            </h3>
-
+                            <h3 class="text-sm font-black uppercase tracking-widest text-[#212e3e]">Prazos</h3>
+                            <span class="material-symbols-outlined text-[#212e3e]">calendar_month</span>
                         </div>
-                        <div class="space-y-6">
-                            <div class="flex items-start gap-4">
-                                <div
-                                    class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                                    <span class="material-symbols-outlined">payments</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                        Liquidado</p>
-                                    <div id="budgetConsumedBreakdown" class="space-y-0.5">
-                                        <p id="budgetConsumed"
-                                            class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>
-                                    </div>
-                                </div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-[#212e3e]/70 tracking-wide">Início operacional</span>
+                                <span id="projectStartDate" class="text-[#212e3e]">--/--/----</span>
                             </div>
-                            <div class="flex items-start gap-6">
-                                <div
-                                    class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
-                                    <span class="material-symbols-outlined">schedule</span>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                        Comprometido</p>
-                                    <div id="budgetCommittedBreakdown" class="space-y-0.5">
-                                        <p id="budgetCommitted"
-                                            class="text-[10px] font-bold text-slate-900 tracking-tight">
-                                            ---</p>
-                                    </div>
-                                </div>
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-[#212e3e]/70 tracking-wide">Arranque</span>
+                                <span id="projectLaunchDate" class="text-[#212e3e]">--/--/----</span>
                             </div>
+                            <div class="flex justify-between text-[11px] font-bold">
+                                <span class="text-[#212e3e]/70 tracking-wide">Conclusão efetiva</span>
+                                <span id="projectActualEndDate" class="text-[#212e3e]">--/--/----</span>
+                            </div>
+                            <div id="projectPauses" class="hidden space-y-1 pt-1 border-t border-slate-100"></div>
                         </div>
                     </div>
-                    <div class="mt-10 pt-10 border-t border-slate-50">
-                        <div class="flex justify-between items-end">
-                            <div>
-                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                                    Custos da Obra</p>
-                                <div id="budgetAvailableBreakdown" class="space-y-0.5">
-                                    <p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">
-                                        ---
-                                    </p>
-                                </div>
-                            </div>
-                            <div
-                                class="h-10 px-4 rounded-xl bg-blue-50 text-blue-600 flex items-center text-[10px] font-black uppercase tracking-widest">
-                                Saldo</div>
-                        </div>
+                    <div id="dateAnalysis" class="mt-auto p-4 rounded-[24px] bg-[#F8FAFC] border border-slate-100 text-center">
+                        <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-[#212e3e]">---
+                        </p>
+                        <span id="projectDueDate" class="text-[#212e3e]">--/--/----</span>
                     </div>
                 </div>
 
 
-                <!-- Progress & Timeline Card -->
+                <!-- Progress Card -->
                 <div
-                    class="flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col justify-between h-full w-full min-w-0">
-                    <div>
-                        <h3 class="text-sm font-black uppercase tracking-widest text-slate-400 mb-10">Progresso Físico
-                        </h3>
-                        <div class="flex justify-center mb-10 relative">
-                            <div class="relative w-40 h-40">
-                                <div id="physicalProgressPie"
-                                    class="w-full h-full rounded-full transition-all duration-1000"
-                                    style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)">
-                                </div>
-                                <div class="absolute inset-4 bg-white rounded-full flex items-center justify-center">
-                                    <span id="physicalProgress"
-                                        class="text-4xl font-bold text-slate-900 tracking-tight">0%</span>
-                                </div>
+                    class="pv-stat-card pv-stat-card--progress flex-1 bg-[#F8FAFC] rounded-2xl p-6 md:p-8 border border-slate-100 flex flex-col w-full min-w-0">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-[#212e3e]">Progresso Físico
+                    </h3>
+                    <div class="pv-stat-card__fill flex flex-1 items-center justify-center relative min-h-0">
+                        <div class="relative w-40 h-40">
+                            <div id="physicalProgressPie"
+                                class="w-full h-full rounded-full transition-all duration-1000"
+                                style="background: conic-gradient(#2afc8d 0%, #2afc8d 0%, #e2e8f0 0%, #e2e8f0 100%)">
                             </div>
-                        </div>
-                    </div>
-                    <div class="space-y-4">
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Início operacional</span>
-                            <span id="projectStartDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Arranque</span>
-                            <span id="projectLaunchDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div class="flex justify-between text-[11px] font-bold">
-                            <span class="text-slate-400 tracking-wide">Conclusão efetiva</span>
-                            <span id="projectActualEndDate" class="text-slate-900">--/--/----</span>
-                        </div>
-                        <div id="projectPauses" class="hidden space-y-1 pt-1 border-t border-slate-100"></div>
-
-                        <div id="dateAnalysis" class="p-4 rounded-[24px] bg-white border border-slate-100 text-center">
-                            <p id="daysRemaining" class="text-xs font-black uppercase tracking-wider text-slate-900">---
-                            </p>
-                            <span id="projectDueDate" class="text-slate-900">--/--/----</span>
+                            <div class="absolute inset-4 bg-white rounded-full flex items-center justify-center">
+                                <span id="physicalProgress"
+                                    class="text-4xl font-bold text-[#212e3e] tracking-tight">0%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- CBS Status -->
                 <div
-                    class="flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 h-full w-full min-w-0 flex flex-col justify-between">
+                    class="pv-stat-card pv-stat-card--operation flex-1 bg-[#212e3e] rounded-2xl p-6 md:p-8 text-white shadow-2xl shadow-slate-900/10 w-full min-w-0 flex flex-col">
                     <h3 class="text-sm font-black uppercase tracking-widest text-slate-500 mb-8">Operação</h3>
-                    <div id="cbsList" class="space-y-5 overflow-y-auto max-h-[350px] custom-scroll pr-2">
+                    <div id="cbsList" class="pv-stat-card__fill overflow-y-auto custom-scroll pr-2">
                         <!-- Stat items with standard IDs for JS updateOperationStatus -->
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-3">
@@ -333,27 +324,6 @@
                                 id="stat_impostos_sub"></span><span id="stat_deducoes_pct"></span><span
                                 id="stat_deducoes_sub"></span><span id="stat_outras_pct"></span><span
                                 id="stat_outras_sub"></span></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Budget Execution Matrix -->
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8 w-full">
-                <div
-                    class="px-10 py-8 border-b border-slate-50 bg-[#212e3e] flex justify-between items-center text-white">
-                    <div>
-                        <h3 class="text-2xl font-bold">Matriz de Execução</h3>
-                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-1">Comparativo
-                            granular mensal</p>
-                    </div>
-                    <button data-toggle-table="matrix"
-                        class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all text-white/50 hover:text-white">
-                        <span class="material-symbols-outlined transition-transform">expand_more</span>
-                    </button>
-                </div>
-                <div data-table-body="matrix" class="overflow-x-auto w-full custom-scroll">
-                    <div id="budgetExecutionMatrixContainer" class="p-4">
-                        <!-- Matrix table via JS -->
                     </div>
                 </div>
             </div>
@@ -584,63 +554,65 @@
         <!-- Autos de Medição Tab -->
         <div id="tab_medicoes" class="tab-content hidden">
             <div
-                class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
-                <div>
+                class="flex flex-row flex-nowrap items-center gap-4 mb-8 bg-white p-5 md:p-6 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
+                <div class="shrink-0">
                     <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
                     <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto
                         (WBS).</p>
                 </div>
-                <div class="flex flex-wrap items-end gap-3 w-full lg:w-auto">
-                    <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
-                            Nº</label>
-                        <input id="measurementReportNumber" type="text" value="01" readonly
-                            class="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
-                            title="Atribuído automaticamente" />
-                        <!-- <p id="measurementReportNumberHint" class="text-[9px] text-slate-400 mt-1 font-semibold">Automático</p>     -->
+                <div class="flex flex-nowrap items-end gap-2 ml-auto shrink-0">
+                    <div class="flex items-end gap-1">
+                        <div>
+                            <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Auto
+                                Nº</label>
+                            <input id="measurementReportNumber" type="text" value="01" readonly
+                                class="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl px-3 text-xs font-bold text-slate-700 cursor-default"
+                                title="Atribuído automaticamente" />
+                            <!-- <p id="measurementReportNumberHint" class="text-[9px] text-slate-400 mt-1 font-semibold">Automático</p>     -->
+                        </div>
+                        <button id="newMeasurementReportBtn" type="button"
+                            class="h-10 w-10 shrink-0 bg-slate-50 text-slate-700 rounded-xl font-bold flex items-center justify-center hover:bg-slate-100 transition-all"
+                            title="Preparar um novo auto com o próximo número disponível">
+                            <span class="material-symbols-outlined text-lg">add</span>
+                        </button>
                     </div>
-                    <button id="newMeasurementReportBtn" type="button"
-                        class="h-10 bg-slate-50 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-100 transition-all"
-                        title="Preparar um novo auto com o próximo número disponível">
-                        <span class="material-symbols-outlined text-lg">add</span>
-                    </button>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Data
                             do Auto</label>
                         <input id="measurementCurrentDate" type="date"
-                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
+                            class="h-10 w-40 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div>
-                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Auto
+                        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1 whitespace-nowrap">Auto
                             Anterior (até)</label>
                         <input id="measurementPrevDate" type="date"
-                            class="h-10 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
+                            class="h-10 w-40 bg-slate-50 border-none rounded-xl px-3 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
                             title="Data limite do auto anterior — define o acumulado anterior" />
                     </div>
                     <button id="refreshMeasurementsBtn"
-                        class="h-10 bg-slate-100 text-slate-700 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-slate-100 text-slate-700 px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-slate-200 transition-all">
                         <span class="material-symbols-outlined text-lg">refresh</span>
                         Atualizar
                     </button>
                     <button id="saveMeasurementReportBtn" data-role-visible="admin,operador"
-                        class="h-10 bg-blue-600 text-white px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-blue-600 text-white px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-blue-700 transition-all">
                         <span class="material-symbols-outlined text-lg">save</span>
                         Salvar
                     </button>
                     <button id="approveMeasurementReportBtn" data-role-visible="admin,operador"
-                        class="h-10 bg-emerald-600 text-white px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all">
+                        class="h-10 shrink-0 whitespace-nowrap bg-emerald-600 text-white px-3 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-700 transition-all">
                         <span class="material-symbols-outlined text-lg">verified</span>
                         Aprovar
                     </button>
                     <button id="exportMeasurementExcelBtn"
-                        class="h-10 bg-white border border-slate-200 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        class="h-10 w-10 shrink-0 bg-white border border-slate-200 text-emerald-600 rounded-xl font-bold flex items-center justify-center hover:bg-slate-50 transition-all"
+                        title="Exportar Excel">
                         <span class="material-symbols-outlined text-lg">table</span>
-
                     </button>
                     <button id="exportMeasurementPdfBtn"
-                        class="h-10 bg-white border border-slate-200 text-red-600 px-4 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        class="h-10 w-10 shrink-0 bg-white border border-slate-200 text-red-600 rounded-xl font-bold flex items-center justify-center hover:bg-slate-50 transition-all"
+                        title="Exportar PDF">
                         <span class="material-symbols-outlined text-lg">picture_as_pdf</span>
-
                     </button>
                 </div>
             </div>
@@ -737,60 +709,367 @@
                     <p class="text-sm text-slate-500 font-medium">Gestão da execução diária e requisição de materiais.
                     </p>
                 </div>
-                <div class="flex flex-row items-center justify-end gap-2 shrink-0">
-                    <button onclick="window.loadDailyPlans()"
-                        class="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center transition-all"
+                <div class="dp-actions flex flex-row items-center justify-end gap-3 shrink-0">
+                    <button type="button" onclick="window.loadDailyPlans()"
+                        class="shell-btn shell-btn-secondary dp-btn-icon"
                         title="Atualizar Planos Diários">
-                        <span class="material-symbols-outlined text-xl">refresh</span>
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">refresh</span>
                     </button>
-                    <button id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
-                        class="h-10 bg-slate-900 text-[#2afc8d] px-4 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 transition-all">
-                        Novo Plano <span class="material-symbols-outlined text-xl">post_add</span>
+                    <button type="button" id="addDailyPlanBtn" data-role-visible="admin,operador,tecnico,supervisor"
+                        class="shell-btn">
+                        Novo Plano
+                        <span class="material-symbols-outlined text-lg" aria-hidden="true">post_add</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Filtros de Planos Diários -->
-            <div
-                class="bg-white p-4 sm:p-6 mb-8 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 items-center">
-                <div class="w-full md:flex-1 relative">
-                    <span
-                        class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                    <input id="dpFilterSearch" type="text" placeholder="Buscar por descrição ou técnico..."
-                        class="w-full pl-11 pr-4 h-11 bg-slate-50 border-none rounded-xl text-xs font-semibold focus:ring-2 focus:ring-blue-500 transition-all">
+            <div class="dp-toolbar">
+                <div class="dp-toolbar-search">
+                    <span class="material-symbols-outlined dp-toolbar-search-icon">search</span>
+                    <input id="dpFilterSearch" type="text" placeholder="Buscar por descrição ou técnico...">
                 </div>
-                <div class="flex flex-wrap sm:flex-nowrap gap-4 w-full md:w-auto shrink-0">
-                    <div class="w-full sm:w-44">
-                        <select id="dpFilterStatus"
-                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
-                            <option value="all">Todos os Estados</option>
-                            <option value="DRAFT">Disponível</option>
-                            <option value="PENDING_MATERIAL">Aguardando Material</option>
-                            <option value="IN_PROGRESS">Em Execução</option>
-                            <option value="PENDING_VALIDATION">Pendente Validação</option>
-                            <option value="COMPLETED">Concluído</option>
-                        </select>
-                    </div>
-                    <div class="w-full sm:w-56">
-                        <select id="dpFilterSort"
-                            class="w-full h-11 bg-slate-50 border-none rounded-xl px-4 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-blue-500">
-                            <option value="date_desc">Data do Plano (Mais Recente)</option>
-                            <option value="date_asc">Data do Plano (Mais Antigo)</option>
-                            <option value="created_desc">Criação (Mais Recente)</option>
-                            <option value="created_asc">Criação (Mais Antigo)</option>
-                        </select>
-                    </div>
+                <div class="dp-toolbar-sort">
+                    <select id="dpFilterSort">
+                        <option value="date_desc">Data do Plano (Mais Recente)</option>
+                        <option value="date_asc">Data do Plano (Mais Antigo)</option>
+                        <option value="created_desc">Criação (Mais Recente)</option>
+                        <option value="created_asc">Criação (Mais Antigo)</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- Lista de Planos -->
-            <div class="grid grid-cols-1 gap-6" id="dailyPlansList">
-                <!-- Populado via JS -->
-                <div
-                    class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl">
-                    Carregando planos...</div>
+            <div class="dp-board custom-scroll" id="dailyPlansList">
+                <div class="dp-board-empty">Carregando planos...</div>
             </div>
-            <div id="dailyPlansPagination" class="flex items-center justify-center gap-2 mt-8 mb-12"></div>
+        </div>
+
+        <!-- Orçamento: Previsional de Custo -->
+        <div id="tab_orcamento_custo" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Custo</h2>
+                    <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — baseline dos centros de custo.</p>
+                </div>
+                <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    Abrir Orçamento Geral
+                </a>
+            </div>
+            <div id="plOrcamentoCustoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-900">Custos previstos por centro</h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Valores do orçamento aprovado (previsto) e execução</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Centro de Custo</th>
+                                <th class="text-right">Previsto</th>
+                                <th class="text-right">Em análise</th>
+                                <th class="text-right">Liquidado</th>
+                                <th class="text-left" style="min-width:140px">% Liquidado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoCustoBody">
+                            <tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orçamento: Previsional de Vendas -->
+        <div id="tab_orcamento_vendas" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Vendas</h2>
+                    <p class="text-sm text-slate-500 font-medium">Quanto prevemos faturar nesta obra, com base na tabela de quantidades.</p>
+                </div>
+                <button type="button" data-pl-open-tab="relatorio" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">straighten</span>
+                    Ver Avanço Físico
+                </button>
+            </div>
+            <div id="plOrcamentoVendasKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Faturação prevista por grupo</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Quantidade prevista × preço unitário da WBS</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Grupo / Atividade</th>
+                                <th class="text-right">Previsto</th>
+                                <th class="text-right">Já medido</th>
+                                <th class="text-right">Em aberto</th>
+                                <th class="text-left" style="min-width:140px">% Faturável</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoVendasBody">
+                            <tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Planeamento: Plano de Execução (Gantt) -->
+        <div id="tab_plano_gantt" class="tab-content hidden">
+            <div class="flex flex-row flex-wrap justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Plano de Execução</h2>
+                    <p class="text-sm text-slate-500 font-medium">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    <div id="plGanttScale" class="ex-gantt-scale" role="tablist" aria-label="Escala do Gantt">
+                        <button type="button" data-gantt-scale="day" role="tab" aria-pressed="false">Dia</button>
+                        <button type="button" data-gantt-scale="week" role="tab" aria-pressed="true" class="is-active">Semana</button>
+                        <button type="button" data-gantt-scale="month" role="tab" aria-pressed="false">Mês</button>
+                        <button type="button" data-gantt-scale="quarter" role="tab" aria-pressed="false">Trimestre</button>
+                        <button type="button" data-gantt-scale="year" role="tab" aria-pressed="false">Ano</button>
+                    </div>
+                    <button type="button" id="plGanttRefresh" class="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200" title="Atualizar">
+                        <span class="material-symbols-outlined text-lg">refresh</span>
+                    </button>
+                    <button type="button" data-pl-open-tab="planos_diarios" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
+                        <span class="material-symbols-outlined text-base">event_note</span>
+                        Planos Diários
+                    </button>
+                </div>
+            </div>
+            <div id="plGanttMeta" class="hidden mb-4 flex flex-wrap gap-4 text-[11px] font-bold text-slate-500"></div>
+            <div id="plGanttRoot" class="ex-gantt-wrap">
+                <div class="py-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400">A carregar Gantt...</div>
+            </div>
+        </div>
+
+        <!-- Planeamento: Plano Financeiro -->
+        <div id="tab_plano_financeiro" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Plano Financeiro</h2>
+                    <p class="text-sm text-slate-500 font-medium">Custos, faturação, recebimentos e cash flow previstos por período.</p>
+                </div>
+                <a href="./centroCustos.html" id="plFinanceiroCronogramaLink" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">calendar_month</span>
+                    Cronograma de pagamentos
+                </a>
+            </div>
+            <div id="plFinanceiroKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Previsão mensal</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Custos do cronograma · faturação da WBS · recebimentos do cliente</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Período</th>
+                                <th class="text-right">Custos previstos</th>
+                                <th class="text-right">Faturação prevista</th>
+                                <th class="text-right">Recebimentos previstos</th>
+                                <th class="text-right">Cash flow previsto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plFinanceiroBody">
+                            <tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                        <tfoot id="plFinanceiroFoot"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recursos: Equipamentos e Viaturas -->
+        <div id="tab_recursos_equipamentos" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Equipamentos e Viaturas</h2>
+                    <p class="text-sm text-slate-500 font-medium">Custo de utilização em obra (registo BAREM) e resumo por tipo.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="/registos/equipamentos" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
+                        <span class="material-symbols-outlined text-base">agriculture</span>
+                        Ficha de equipamento
+                    </a>
+                    <button type="button" id="plBaremCreateBtn" data-role-visible="admin,operador,supervisor"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
+                        <span class="material-symbols-outlined text-base">add</span>
+                        Registo BAREM
+                    </button>
+                </div>
+            </div>
+            <div id="plEquipKpis" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Resumo de custos por tipo</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Agregado dos registos BAREM desta obra</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Tipo de equipamento</th>
+                                <th class="text-center">Registos</th>
+                                <th class="text-right">Horas / dias</th>
+                                <th class="text-right">Custo total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plEquipResumoBody">
+                            <tr><td colspan="4" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Registos BAREM</h3>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Data</th>
+                                <th class="text-left">Equipamento</th>
+                                <th class="text-left">Tipo</th>
+                                <th class="text-right">Qtd</th>
+                                <th class="text-right">Taxa</th>
+                                <th class="text-right">Custo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plBaremBody">
+                            <tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recursos: Materiais -->
+        <div id="tab_recursos_materiais" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Materiais</h2>
+                    <p class="text-sm text-slate-500 font-medium">Valorização de produtos já consumidos e ainda por consumir, por família.</p>
+                </div>
+                <button type="button" data-pl-open-tab="stock" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
+                    <span class="material-symbols-outlined text-base">warehouse</span>
+                    Ver armazém
+                </button>
+            </div>
+            <div id="plMateriaisKpis" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6"></div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Resumo de valorização</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Famílias e subfamílias a partir do stock da obra e do orçamento</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Família</th>
+                                <th class="text-left">Subfamília</th>
+                                <th class="text-right">Consumido</th>
+                                <th class="text-right">Por consumir</th>
+                                <th class="text-right">Valor consumido</th>
+                                <th class="text-right">Valor em aberto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plMateriaisBody">
+                            <tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recursos: Pessoal -->
+        <div id="tab_recursos_pessoal" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Pessoal</h2>
+                    <p class="text-sm text-slate-500 font-medium">Funcionários alocados, folha de ponto e custos de mão de obra.</p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <a href="/registos/folha-ponto" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
+                        <span class="material-symbols-outlined text-base">schedule</span>
+                        Folha de Ponto
+                    </a>
+                    <button type="button" id="plPontoCreateBtn" data-role-visible="admin,operador,supervisor"
+                        class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
+                        <span class="material-symbols-outlined text-base">more_time</span>
+                        Registar horas
+                    </button>
+                    <button type="button" id="plPessoalCreateBtn" data-role-visible="admin,operador,supervisor"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
+                        <span class="material-symbols-outlined text-base">person_add</span>
+                        Novo funcionário
+                    </button>
+                </div>
+            </div>
+            <div id="plPessoalKpis" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
+            <div class="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-end gap-3 flex-wrap">
+                    <label class="flex-1 min-w-[160px] text-[10px] font-black uppercase tracking-widest text-slate-400">Funcionário
+                        <input id="plPessoalNome" type="search" placeholder="Nome..."
+                            class="mt-1 w-full h-10 px-3 bg-slate-50 border-none rounded-xl text-xs font-semibold text-slate-700">
+                    </label>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">De
+                        <input id="plPessoalDe" type="date"
+                            class="mt-1 h-10 px-3 bg-slate-50 border-none rounded-xl text-xs font-semibold text-slate-700">
+                    </label>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Até
+                        <input id="plPessoalAte" type="date"
+                            class="mt-1 h-10 px-3 bg-slate-50 border-none rounded-xl text-xs font-semibold text-slate-700">
+                    </label>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo
+                        <select id="plPessoalTipo"
+                            class="mt-1 h-10 px-3 bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-600">
+                            <option value="">Todos</option>
+                            <option value="INTERNO">Interno</option>
+                            <option value="SUBCONTRATADO">Subcontratado</option>
+                        </select>
+                    </label>
+                    <label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo de custo
+                        <select id="plPessoalCusto"
+                            class="mt-1 h-10 px-3 bg-slate-50 border-none rounded-xl text-xs font-bold text-slate-600">
+                            <option value="">Todos</option>
+                            <option value="Horas Normais">Horas Normais</option>
+                            <option value="Horas Extra">Horas Extras</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Resumo de custos com pessoal</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Horas da folha de ponto desta obra — um dia ou intervalo</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Funcionário</th>
+                                <th class="text-left">Tipo</th>
+                                <th class="text-left">Tipo de custo</th>
+                                <th class="text-left">Período</th>
+                                <th class="text-right">Horas</th>
+                                <th class="text-right">Custo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plPessoalBody">
+                            <tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- Files Tab -->

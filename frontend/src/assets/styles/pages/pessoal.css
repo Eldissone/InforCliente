@@ -45,7 +45,7 @@ body[data-registry="pessoal"] {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #14add6;
+  color: #0d3fd1;
   font: 400 14px/24px Inter, system-ui, sans-serif;
   cursor: pointer;
 }
@@ -80,7 +80,7 @@ body[data-registry="pessoal"] {
 .pessoal-field select,
 .pessoal-grid input,
 .pessoal-grid select {
-  height: 50px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
@@ -91,7 +91,7 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-field input {
-  width: min(350px, 100%);
+  width: min(450px, 100%);
 }
 
 .pessoal-field select,
@@ -128,7 +128,7 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-register {
-  height: 46px;
+  height: 45px;
   margin-left: auto;
   padding: 10px 16px;
   border: 0;
@@ -180,9 +180,9 @@ body[data-registry="pessoal"] {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #14add6;
+  border: 1px solid #0d3fd1;
   border-radius: 5px;
-  background: linear-gradient(135deg, #14add6, #384295);
+  background: linear-gradient(135deg, #0d3fd1, #384295);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -219,7 +219,7 @@ body[data-registry="pessoal"] {
 .pessoal-more {
   padding: 0;
   border: 0;
-  background: linear-gradient(135deg, #14add6, #384295);
+  background: linear-gradient(135deg, #0d3fd1, #384295);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -324,8 +324,9 @@ body[data-registry="pessoal"] {
 }
 
 .pessoal-submit {
+  grid-column: 1 / -1;
   align-self: end;
-  justify-self: stretch;
+  justify-self: end;
   height: 46px;
   min-width: 180px;
   padding: 10px 16px;
@@ -337,13 +338,98 @@ body[data-registry="pessoal"] {
   cursor: pointer;
 }
 
+.pessoal-table td.pessoal-obras-cell {
+  white-space: normal;
+  max-width: 280px;
+}
+
+#pessoalObrasField {
+  grid-column: 1 / -1;
+}
+
+.pessoal-obras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #121212;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.pessoal-obras-label {
+  font-weight: 400;
+}
+
+.pessoal-obra-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pessoal-obra-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #f2f7ff;
+}
+
+.pessoal-obra-empty {
+  color: #777;
+  background: transparent;
+  padding-left: 0;
+}
+
+.pessoal-obra-remove {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #c0392b;
+  font: 400 13px/20px Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pessoal-obra-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pessoal-obra-add-btn {
+  height: 50px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #212e3e;
+  color: #fff;
+  font: 400 14px/24px Inter, system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pessoal-obra-add-btn:hover {
+  background: #1a2430;
+}
+
 @media (max-width: 800px) {
   .pessoal-register {
     margin-left: 0;
   }
 
   .pessoal-form-card,
-  .pessoal-grid {
+  .pessoal-grid,
+  .pessoal-obra-add {
     grid-template-columns: 1fr;
+  }
+
+  .pessoal-submit {
+    justify-self: stretch;
+    width: 100%;
   }
 }

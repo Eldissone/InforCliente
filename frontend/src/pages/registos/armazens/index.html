@@ -16,32 +16,27 @@
     <link href="/assets/styles/shell.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <link href="/assets/styles/pages/stock.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/registry-fichas.css" rel="stylesheet" />
 </head>
 
 <body data-shell="figma" class="bg-surface font-body text-on-surface antialiased pb-20" data-stock-view="warehouses">
     <div id="appHeader"></div>
-    <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-20">
-        <header class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10">
+    <main class="rf-page">
+        <header class="rf-catalog-head">
             <div>
-                <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    <span>Registos</span>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="text-[#0d3fd1]">Armazéns</span>
-                </nav>
-                <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-2">Armazéns</h1>
-                <p class="text-slate-500 font-medium text-sm">Localizações, stock e movimentos de cada armazém.</p>
+                <h1 class="rf-title">Armazéns</h1>
+                <p class="rf-lead">Localizações, stock e movimentos de cada armazém.</p>
             </div>
-            <div class="flex items-center justify-end w-full sm:w-auto gap-3 shrink-0">
-                <button id="btnTransfer" class="h-10 bg-white border border-slate-200 text-slate-700 px-4 sm:px-6 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:shadow-md hover:border-slate-300 active:scale-95 transition-all text-sm whitespace-nowrap">
-                    <span class="material-symbols-outlined text-xl">swap_horiz</span>
-                    <span class="hidden sm:inline">Transferir</span>
+            <div class="rf-catalog-actions">
+                <button id="btnTransfer" class="rf-ghost" type="button">
+                    Transferir
                 </button>
-                <button id="btnNewEntry" class="h-10 bg-slate-900 text-[#2afc8d] px-4 sm:px-6 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:scale-105 active:scale-95 transition-all text-sm whitespace-nowrap">
-                    <span class="material-symbols-outlined text-xl">add_shopping_cart</span>
-                    <span class="hidden sm:inline">Nova Entrada</span>
+                <button id="btnNewEntry" class="rf-submit" type="button">
+                    Nova Entrada
                 </button>
             </div>
         </header>
+        <div id="warehouseFicha" class="rf-ficha-slot"></div>
         <button data-tab="warehouses" data-perm="stock:tab_warehouses" class="tab-btn registry-perm-sentinel" type="button" tabindex="-1" aria-hidden="true"></button>
         <div id="tabContent" class="min-h-[400px]">
             <div class="flex items-center justify-center py-20">

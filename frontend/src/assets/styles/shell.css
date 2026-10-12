@@ -47,7 +47,7 @@ body[data-shell="figma"] .shell-search {
   min-width: 0;
   flex: 1 1 180px;
   max-width: 360px;
-  height: 46px;
+  height: 38px;
   padding: 0 12px;
   border: 1px solid #d0d0d0;
   border-radius: 10px;
@@ -83,7 +83,7 @@ body[data-shell="figma"] .shell-btn {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 46px;
+  height: 38px;
   padding: 10px 16px;
   border: 0;
   border-radius: 10px;
@@ -131,6 +131,7 @@ body[data-shell="figma"] .shell-btn:disabled {
     width: 260px;
     padding: 20px 16px 16px;
     border-right: 1px solid #e8e8e8;
+    border-radius: 20px;
     background: #fff;
     font-family: Inter, system-ui, sans-serif;
   }
@@ -185,7 +186,7 @@ body[data-shell="figma"] .shell-btn:disabled {
   }
 
   body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell {
-    width: 92px;
+    width: 70px;
     padding-right: 12px;
     padding-left: 12px;
   }
@@ -200,13 +201,29 @@ body[data-shell="figma"] .shell-btn:disabled {
     margin-left: 0;
   }
 
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) {
+    width: 260px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) .app-sidebar-brand-text {
+    display: inline;
+  }
+
+  body[data-shell="figma"].app-sidebar-collapsed .app-primary-sidebar.is-figma-shell:is(:hover, :focus-within) .app-sidebar-brand {
+    justify-content: flex-start;
+    margin-right: 8px;
+    margin-left: 8px;
+  }
+
   body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
-    left: 92px !important;
+    left: 70px !important;
   }
 
   body[data-shell="figma"].app-sidebar-collapsed>main {
-    width: calc(100% - 92px) !important;
-    margin-left: 92px !important;
+    width: calc(100% - 70px) !important;
+    margin-left: 70px !important;
     margin-top: 0 !important;
   }
 
@@ -253,6 +270,7 @@ body>nav.app-top-nav {
   box-shadow: none;
 }
 
+body[data-shell="figma"]>nav.app-top-nav,
 body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav,
 body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-nav {
   top: 1rem !important;
@@ -260,6 +278,7 @@ body[data-shell="figma"].app-sidebar-collapsed.app-sidebar-layout>nav.app-top-na
   left: 1.25rem !important;
   width: auto !important;
   height: 4rem !important;
+  min-height: 4rem;
   border: 0 !important;
   border-radius: 1.35rem !important;
   background: #212e3e !important;
@@ -275,31 +294,39 @@ body[data-shell="figma"]>nav.app-top-nav>div:first-child {
   height: 4rem;
 }
 
+body>nav.app-top-nav .app-nav-brand,
 body>nav.app-top-nav>div:first-child>div:first-child> :first-child {
   display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
   color: #fff;
   font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-decoration: none;
 }
 
+body[data-shell="figma"]>nav.app-top-nav .app-nav-brand,
 body[data-shell="figma"].app-sidebar-layout>nav.app-top-nav>div:first-child>div:first-child> :first-child {
   display: flex !important;
   color: #fff !important;
 }
 
+body>nav.app-top-nav .app-nav-mark,
 body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
-  width: auto;
-  height: auto;
-  border-radius: 1.5rem;
-  background: #20e981;
-  color: #212e3e;
-  font-size: 1.5rem;
-  font-style: italic;
-  padding: 5px 10px;
-}
-
-body[data-shell="figma"]>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  height: auto !important;
+  border-radius: 1.5rem !important;
   background: #20e981 !important;
   color: #212e3e !important;
+  font-size: 1.5rem !important;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  padding: 5px 10px !important;
 }
 
 body>nav.app-top-nav [data-user-profile] {
@@ -312,7 +339,7 @@ body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand 
 
 @media (min-width:1024px) {
   body[data-shell="figma"] .app-primary-sidebar.is-figma-shell {
-    top: 6.1rem;
+    top: 5.5rem;
     padding-top: 1rem;
   }
 }
@@ -331,9 +358,11 @@ body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand 
     padding-inline: 1rem;
   }
 
+  body>nav.app-top-nav .app-nav-mark,
   body>nav.app-top-nav>div:first-child>div:first-child> :first-child> :first-child {
-    width: 3.5rem;
-    height: 2.2rem;
-    font-size: 1.2rem;
+    width: 3.5rem !important;
+    height: 2.2rem !important;
+    font-size: 1.2rem !important;
+    padding: 0 !important;
   }
 }

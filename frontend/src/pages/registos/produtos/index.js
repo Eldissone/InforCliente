@@ -48,8 +48,8 @@ const PRODUCT_DEFAULTS = {
   tipoCusto: "Produto",
   categoria: "Materiais de Obra",
   subcategoria: "Material Eléctrico",
-  origem: "XSOFT - Plano A",
-  sincronizacao: "Prevista via Power Automate",
+  origem: "XSOFT",
+  sincronizacao: "Power Automate",
   alternativa: "Manual em ambos - Plano B",
 };
 
@@ -58,8 +58,8 @@ const SERVICE_DEFAULTS = {
   tipoCusto: "Serviço",
   categoria: "Serviços de Maquinaria",
   subcategoria: "Aluguer de Máquinas",
-  origem: "Manual - Plano B",
-  registoXsoft: "A efetuar no XSOFT",
+  origem: "Manual",
+  registoXsoft: "XSOFT",
   estado: "Rascunho",
 };
 
@@ -249,7 +249,6 @@ export async function renderProdutosForm() {
   if (title) title.textContent = isService ? "Info Gestor — Criar Serviço" : "Info Gestor — Criar Produto";
 
   root.innerHTML = `
-    <p class="ps-crumb">INFO GESTOR MBT / XSOFT · Registos</p>
     <nav class="ps-switch" aria-label="Tipo de registo">
       <a href="${kindHref("produto")}" class="${isService ? "" : "is-active"}">Produto</a>
       <a href="${kindHref("servico")}" class="${isService ? "is-active" : ""}">Serviço</a>
@@ -275,8 +274,8 @@ export async function renderProdutosForm() {
           ${field("Subcategoria de custo", `<select name="costSubcategory">${optionList(subcategoryOptions, selectedSub, "Seleccionar subcategoria", { includeEmpty: false })}</select>`)}
           ${field(isService ? "Prestador" : "Fornecedor", `<select name="supplierId">${optionList(lookups.supplierOptions, "", "Seleccionar fornecedor")}</select>`)}
           ${field("Origem", `<select name="origem">${optionList([
-            "XSOFT - Plano A",
-            "Manual - Plano B",
+            "XSOFT",
+            "Manual",
             "Manual em ambos - Plano B",
           ], defaults.origem, "Seleccionar origem", { includeEmpty: false })}</select>`)}
           ${isService
@@ -286,14 +285,10 @@ export async function renderProdutosForm() {
                ${field("Alternativa", `<select name="alternativa">${optionList(["Manual em ambos - Plano B", "Apenas XSOFT", "Apenas INFO GESTOR"], defaults.alternativa, "Seleccionar", { includeEmpty: false })}</select>`)}`}
         </div>
       </section>
-      <section class="ps-card ps-notes">
-        <h2>Notas do processo</h2>
-        ${isService
-          ? `<p>Serviços não geram quantidades em armazém. No Plano B, o registo é realizado manualmente no XSOFT e no INFO GESTOR.</p>`
-          : `<p>Criar o produto no catálogo não regista entrada de stock. Quantidade e valorização são registadas nos diários de armazém.</p>
-             <p>Fotografia do produto — anexar JPG, JPEG ou PNG (máximo 2 MB).</p>
-             <label class="ps-field ps-photo"><span>Fotografia</span><input name="photo" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></label>`}
-      </section>
+      ${isService ? "" : `<section class="ps-card">
+        <h2>Fotografia</h2>
+        <label class="ps-field ps-photo"><span>Anexar JPG, JPEG ou PNG (máximo 2 MB)</span><input name="photo" type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png"></label>
+      </section>`}
       <div class="ps-actions">
         ${canManage
           ? `<button class="ps-submit" type="submit" data-perm="materiais:manage">${isService ? "Guardar serviço" : "Guardar produto"}</button>`

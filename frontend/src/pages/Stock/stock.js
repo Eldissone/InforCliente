@@ -21,6 +21,15 @@ function canManageWarehouses() {
     return can("stock", "manage");
 }
 
+function isRegistryWarehousesPage() {
+    return document.body?.dataset?.stockView === "warehouses";
+}
+
+function clearWarehouseFicha() {
+    const slot = document.getElementById("warehouseFicha");
+    if (slot) slot.innerHTML = "";
+}
+
 /** Paginação no estilo da lista geral de obras. */
 function renderGeralPagination(container, { page, pageSize, total, onPage }) {
     if (!container) return;
@@ -281,6 +290,7 @@ function setupGlobalEvents() {
 
 async function loadTabContent(tab) {
     const container = document.getElementById("tabContent");
+    if (tab !== "warehouses") clearWarehouseFicha();
     if (tabIsDenied(tab)) {
         const fallback = activateFirstVisibleStockTab();
         if (fallback) {
@@ -1657,19 +1667,22 @@ async function renderWarehouses(container) {
         `;
     };
 
+    const registryPage = isRegistryWarehousesPage();
     container.innerHTML = `
         <div class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            ${registryPage ? "" : `
             <div>
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight">Armazéns & Estaleiros</h2>
             </div>
-            <div class="flex flex-wrap gap-3 w-full md:w-auto">
+            `}
+            <div class="flex flex-wrap gap-3 w-full ${registryPage ? "" : "md:w-auto"}">
                 <div class="relative flex-grow md:flex-grow-0 min-w-[240px]">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
                     <input type="text" id="searchWarehouses" placeholder="Pesquisar armazém, estaleiro ou obra..." class="w-full pl-12 pr-4 h-10 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 ${manageWarehouses ? `
-                <button id="btnCreateWarehouse" class="h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all">
-                    <span class="material-symbols-outlined text-xl">add</span> Novo Armazém
+                <button id="btnCreateWarehouse" type="button" class="${registryPage ? "rf-submit" : "h-10 bg-slate-900 text-white px-6 rounded-xl font-bold text-xs flex items-center gap-2 hover:scale-105 transition-all"}">
+                    ${registryPage ? "Novo Armazém" : `<span class="material-symbols-outlined text-xl">add</span> Novo Armazém`}
                 </button>
                 ` : ""}
             </div>
@@ -1771,6 +1784,94 @@ async function renderWarehouses(container) {
     renderGrid();
 }
 
+function bindWarehouseVisibility(scope = document) {
+    const projectSelect = scope.querySelector("#warehouseProjectSelect") || document.getElementById("warehouseProjectSelect");
+    const visibilityRow = scope.querySelector("#warehouseVisibilityRow") || document.getElementById("warehouseVisibilityRow");
+    const visibilityCheckbox = visibilityRow?.querySelector('[name="visibleToClient"]');
+    const syncVisibility = () => {
+        const hasProject = Boolean(projectSelect?.value);
+        if (visibilityRow) {
+            visibilityRow.classList.toggle("opacity-50", !hasProject);
+            visibilityRow.classList.toggle("is-disabled", !hasProject);
+        }
+        if (visibilityCheckbox) {
+            visibilityCheckbox.disabled = !hasProject;
+            if (!hasProject) visibilityCheckbox.checked = false;
+        }
+    };
+    projectSelect?.addEventListener("change", syncVisibility);
+    syncVisibility();
+}
+
+async function saveWarehouseFromForm(form, warehouseId) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (!data.projectId) data.projectId = null;
+    data.visibleToClient = form.querySelector('[name="visibleToClient"]')?.checked === true;
+    await apiRequest(warehouseId ? `/warehouses/${warehouseId}` : "/warehouses", {
+        method: warehouseId ? "PATCH" : "POST",
+        body: data
+    });
+}
+
+async function openRegistryWarehouseFicha(warehouse, warehouseId, projects) {
+    const slot = document.getElementById("warehouseFicha");
+    if (!slot) return;
+    const editing = Boolean(warehouse);
+    const visibleChecked = warehouse?.visibleToClient ? "checked" : "";
+    slot.innerHTML = `
+        <form id="formWarehouse" class="rf-form" novalidate>
+            <section class="rf-card">
+                <h2>${editing ? "Editar Armazém" : "Novo Armazém"}</h2>
+                <div class="rf-grid">
+                    <label class="rf-field span-2"><span>Nome *</span>
+                        <input type="text" name="name" value="${esc(warehouse?.name || "")}" required placeholder="Ex: Consumo Cozinha">
+                    </label>
+                    <label class="rf-field"><span>Tipo *</span>
+                        <select name="type" required>
+                            <option value="SITE" ${warehouse?.type === "SITE" ? "selected" : ""}>Obra / Estaleiro</option>
+                            <option value="CENTRAL" ${warehouse?.type === "CENTRAL" ? "selected" : ""}>Armazém Central</option>
+                        </select>
+                    </label>
+                    <label class="rf-field"><span>Obra associada</span>
+                        <select name="projectId" id="warehouseProjectSelect">
+                            <option value="">Sem obra (Geral)</option>
+                            ${(projects || []).map((p) => `<option value="${p.id}" ${warehouse?.projectId === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+                        </select>
+                    </label>
+                    <label id="warehouseVisibilityRow" class="rf-check span-2 ${warehouse?.projectId || !warehouse ? "" : "is-disabled"}">
+                        <input type="checkbox" name="visibleToClient" value="true" ${visibleChecked}>
+                        <span>Visível para o cliente
+                            <small>Se activo, utilizadores com perfil Cliente podem ver este armazém e o respectivo stock na obra.</small>
+                        </span>
+                    </label>
+                </div>
+            </section>
+            <div class="rf-actions">
+                <button type="button" class="rf-ghost" data-cancel-warehouse>Cancelar</button>
+                <button type="submit" class="rf-submit">${editing ? "Guardar alterações" : "Guardar armazém"}</button>
+            </div>
+        </form>
+    `;
+    const form = slot.querySelector("#formWarehouse");
+    bindWarehouseVisibility(slot);
+    slot.querySelector("[data-cancel-warehouse]")?.addEventListener("click", () => clearWarehouseFicha());
+    form?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector("[type=submit]");
+        if (button) button.disabled = true;
+        try {
+            await saveWarehouseFromForm(form, warehouseId);
+            toast("Registo guardado.", { type: "success" });
+            clearWarehouseFicha();
+            loadTabContent("warehouses");
+        } catch (error) {
+            toast(error?.message || "Não foi possível guardar.", { type: "error" });
+            if (button) button.disabled = false;
+        }
+    });
+    slot.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function openWarehouseModal(warehouseId = null) {
     if (!canManageWarehouses()) {
         alert("Sem permissão para gerir armazéns.");
@@ -1784,6 +1885,12 @@ async function openWarehouseModal(warehouseId = null) {
     }
 
     const projectsRes = await apiRequest("/projects");
+
+    if (isRegistryWarehousesPage()) {
+        await openRegistryWarehouseFicha(warehouse, warehouseId, projectsRes.items || []);
+        return;
+    }
+
     const visibleChecked = warehouse?.visibleToClient ? "checked" : "";
 
     const contentHtml = `
@@ -1824,33 +1931,15 @@ async function openWarehouseModal(warehouseId = null) {
         primaryLabel: warehouse ? "Atualizar" : "Criar Armazém",
         onPrimary: async ({ body }) => {
             const form = body.querySelector("#formWarehouse");
-            const data = Object.fromEntries(new FormData(form).entries());
-            if (!data.projectId) data.projectId = null;
-            data.visibleToClient = form.querySelector('[name="visibleToClient"]')?.checked === true;
             try {
-                await apiRequest(warehouseId ? `/warehouses/${warehouseId}` : "/warehouses", {
-                    method: warehouseId ? "PATCH" : "POST",
-                    body: data
-                });
+                await saveWarehouseFromForm(form, warehouseId);
                 close();
                 loadTabContent("warehouses");
             } catch (error) { alert("Erro: " + error.message); }
         }
     });
 
-    const projectSelect = document.getElementById("warehouseProjectSelect");
-    const visibilityRow = document.getElementById("warehouseVisibilityRow");
-    const visibilityCheckbox = visibilityRow?.querySelector('[name="visibleToClient"]');
-    const syncVisibility = () => {
-        const hasProject = Boolean(projectSelect?.value);
-        if (visibilityRow) visibilityRow.classList.toggle("opacity-50", !hasProject);
-        if (visibilityCheckbox) {
-            visibilityCheckbox.disabled = !hasProject;
-            if (!hasProject) visibilityCheckbox.checked = false;
-        }
-    };
-    projectSelect?.addEventListener("change", syncVisibility);
-    syncVisibility();
+    bindWarehouseVisibility(document);
 }
 
 window.editWarehouse = (id) => openWarehouseModal(id);

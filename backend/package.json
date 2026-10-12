@@ -16,6 +16,7 @@
   "dependencies": {
     "@prisma/client": "^6.0.0",
     "@supabase/supabase-js": "^2.105.0",
+    "archiver": "^8.0.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -26,7 +27,9 @@
     "prisma": "^6.0.0",
     "puppeteer": "^24.15.0",
     "socket.io": "^4.8.1",
+    "ssh2": "^1.17.0",
     "xlsx": "^0.18.5",
+    "yauzl": "^3.4.0",
     "zod": "^4.1.5"
   },
   "devDependencies": {

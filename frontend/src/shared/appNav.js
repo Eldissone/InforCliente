@@ -307,13 +307,13 @@ function rebuildMobileMenu(nav, source) {
 export function transformDesktopNavToDropdowns() {
   const source = getDesktopNavLinksContainer();
   const nav = getTopNav();
-  if (document.body.dataset.appSidebar === "off" || !nav) return;
+  if (document.body.dataset.appSidebar === "off" || document.body.dataset.appNav === "off" || !nav) return;
 
   rebuildMobileMenu(nav, source);
 
   // Screens that already have a task-specific desktop sidebar (admin, project
-  // selector and purchase centre) keep their dedicated working area intact.
-  if (!source || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar, .cc-sidebar")) {
+  // selector) keep their dedicated working area intact.
+  if (!source || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar")) {
     setActiveState();
     syncGroupVisibility();
     return;
@@ -323,7 +323,6 @@ export function transformDesktopNavToDropdowns() {
   sidebar.id = "appPrimarySidebar";
   sidebar.className = "app-primary-sidebar";
   sidebar.setAttribute("aria-label", "Menu principal");
-  sidebar.innerHTML = `<div class="app-sidebar-top"><button class="app-sidebar-collapse" type="button" aria-label="Recolher menu" aria-expanded="true"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button></div>`;
 
   if (document.body.dataset.shell === "figma") {
     sidebar.classList.add("is-figma-shell");
@@ -332,7 +331,7 @@ export function transformDesktopNavToDropdowns() {
     brand.className = "app-sidebar-brand";
     brand.href = "/Dashboard";
     brand.innerHTML = `<span class="app-sidebar-mark">Info</span><span class="app-sidebar-brand-text">${brandLabel}</span>`;
-    sidebar.insertBefore(brand, sidebar.firstChild);
+    sidebar.appendChild(brand);
   }
 
   const primary = document.createElement("div");
@@ -351,15 +350,8 @@ export function transformDesktopNavToDropdowns() {
   sidebar.appendChild(footer);
 
   document.body.appendChild(sidebar);
-  document.body.classList.add("app-sidebar-layout");
+  document.body.classList.add("app-sidebar-layout", "app-sidebar-collapsed");
   source.classList.add("app-nav-desktop-source");
-
-  sidebar.querySelector(".app-sidebar-collapse")?.addEventListener("click", () => {
-    const collapsed = document.body.classList.toggle("app-sidebar-collapsed");
-    const button = sidebar.querySelector(".app-sidebar-collapse");
-    button?.setAttribute("aria-expanded", String(!collapsed));
-    button?.setAttribute("aria-label", collapsed ? "Expandir menu" : "Recolher menu");
-  });
   setActiveState(sidebar);
   syncGroupVisibility(sidebar);
 }

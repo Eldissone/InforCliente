@@ -304,6 +304,13 @@ body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group {
   border-left: 1px solid rgba(255, 255, 255, 0.14);
 }
 
+body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group > summary {
+  font-size: inherit;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 body > nav.app-top-nav #navMenu .app-nav-mobile-group .app-nav-mobile-group a:not(.hidden) {
   width: 100%;
 }
@@ -329,6 +336,14 @@ body > nav.app-top-nav .material-symbols-outlined {
 
 body > nav.app-top-nav [data-user-profile] .material-symbols-outlined {
   font-size: 0.875rem;
+}
+
+/* Páginas sem menu (ex.: painel do técnico): só marca, perfil e sair. */
+body[data-app-nav="off"] > nav.app-top-nav > div:first-child > div:first-child > div,
+body[data-app-nav="off"] > nav.app-top-nav #mobileMenuBtn,
+body[data-app-nav="off"] > nav.app-top-nav #navMenu,
+body[data-app-nav="off"] > nav.app-top-nav [data-nav-users] {
+  display: none !important;
 }
 
 /* Com a barra lateral, a navegação superior flutua e os links passam para a sidebar. */

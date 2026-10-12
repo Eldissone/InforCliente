@@ -1,6 +1,8 @@
 import { apiRequest, apiUpload } from "/services/api.js";
 import { checkAuth } from "/services/auth.js";
+import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
+import { bindNifLookup, normalizeNif, setNifLookupStatus } from "/shared/supplierNifLookup.js";
 import { initMobileMenu, openModal, toast } from "/shared/ui.js";
 
 const CONTACTS_KEY = "InfoCliente.registo.contactos";
@@ -8,7 +10,7 @@ const SETORES_KEY = "InfoCliente.registo.setores";
 const PESSOAL_KEY = "InfoCliente.registo.pessoal";
 const PONTO_KEY = "InfoCliente.registo.folhaPonto";
 
-const TIPOS_OBRA = [
+export const TIPOS_OBRA = [
   "Eletrificação Rural",
   "Eletrificação Urbana",
   "Expansão da Rede",
@@ -22,7 +24,7 @@ const TIPOS_OBRA = [
   "Outro",
 ];
 
-const SERVICOS = [
+export const SERVICOS = [
   "Rede de Média Tensão (MT)",
   "Postos de Transformação (PT)",
   "Rede de Baixa Tensão (BT)",
@@ -185,7 +187,7 @@ export function readObraRegisto(project) {
   return {};
 }
 
-function mergeObraRegisto(project, registo) {
+export function mergeObraRegisto(project, registo) {
   const raw = project?.maoDeObraIndireta;
   const base = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (raw != null && (Array.isArray(raw) || typeof raw !== "object")) base.legado = raw;
@@ -266,7 +268,7 @@ function field(label, control, extra = "") {
 
 function textInput(name, options = {}) {
   const type = options.type || "text";
-  return `<input name="${name}" type="${type}" ${options.required ? "required" : ""} ${options.placeholder ? `placeholder="${esc(options.placeholder)}"` : ""} ${options.list ? `list="${options.list}"` : ""} ${options.accept ? `accept="${options.accept}"` : ""} ${options.step ? `step="${options.step}"` : ""}>`;
+  return `<input name="${name}" type="${type}" ${options.required ? "required" : ""} ${options.placeholder ? `placeholder="${esc(options.placeholder)}"` : ""} ${options.list ? `list="${options.list}"` : ""} ${options.accept ? `accept="${options.accept}"` : ""} ${options.step ? `step="${options.step}"` : ""} ${options.min != null ? `min="${esc(options.min)}"` : ""} ${options.max != null ? `max="${esc(options.max)}"` : ""} ${options.value != null ? `value="${esc(options.value)}"` : ""}>`;
 }
 
 function selectInput(name, options, placeholder) {
@@ -278,12 +280,14 @@ function selectInput(name, options, placeholder) {
   return `<select name="${name}" required><option value="">${esc(placeholder || "Seleccionar")}</option>${items}</select>`;
 }
 
-function checkGrid(name, options) {
+function checkGrid(name, options, selected = []) {
+  const selectedSet = new Set(selected);
   return `<div class="registry-checks">${options.map((option) => {
     const value = typeof option === "string" ? option : option.value;
     const label = typeof option === "string" ? option : option.label;
     const photo = typeof option === "string" ? "" : option.photo;
-    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}">${photo ? `<img src="${esc(photo)}" alt="">` : ""}<span>${label}</span></label>`;
+    const checked = selectedSet.has(value) ? " checked" : "";
+    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}"${checked}>${photo ? `<img src="${esc(photo)}" alt="">` : ""}<span>${label}</span></label>`;
   }).join("")}</div>`;
 }
 
@@ -297,6 +301,29 @@ function formShell(lead, body, submitLabel = "Registar") {
     ${body}
     <div class="registry-actions"><button class="registry-submit" type="submit">${submitLabel}</button></div>
   </form>`;
+}
+
+function rfField(label, control, extra = "") {
+  return `<label class="rf-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar." }) {
+  return `
+    <h1 class="rf-title">${title}</h1>
+    <p class="rf-lead">${lead}</p>
+    <form class="rf-form" novalidate>
+      ${cards}
+      <div class="rf-actions">
+        ${canSave
+          ? `<button class="rf-submit" type="submit">${submitLabel}</button>`
+          : `<p class="rf-denied">${denied}</p>`}
+      </div>
+    </form>
+  `;
+}
+
+function rfCard(title, inner) {
+  return `<section class="rf-card"><h2>${title}</h2>${inner}</section>`;
 }
 
 function estadoFields(selected = "") {
@@ -364,6 +391,153 @@ function collectEstado(scope) {
     estado,
     pausas: estado === "Em Pausa" ? pausas : [],
     conclusaoEfetiva: estado === "Concluído" ? conclusaoEfetiva : "",
+  };
+}
+
+export function obraFormSectionsHtml({ clients = [], contacts = [], values = {} } = {}) {
+  const clientOptions = clients.map((client) => ({ value: client.id, label: client.name }));
+  const contactOptions = contacts.map((contact) => ({
+    value: contact.id,
+    label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
+    photo: contact.photoUrl || contact.foto || "",
+  }));
+  const tipos = Array.isArray(values.tipos) ? values.tipos : [];
+  const servicos = Array.isArray(values.servicos) ? values.servicos : [];
+  const contactIds = Array.isArray(values.contactos) ? values.contactos : [];
+  const clientSelect = clients.length
+    ? selectInput("clientId", clientOptions, "Seleccione cliente")
+    : `<select name="clientId" disabled><option value="">Registe um cliente primeiro</option></select>`;
+  return `
+    <section class="obra-card"><h3>Informação Geral da Obra</h3><div class="registry-grid obra-general">
+      ${field("Descrição da Obra", textInput("descricao", { required: true, placeholder: "Ex: Electrificação Rural Município da Quibala" }))}
+      ${field("Tipo de Obra", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("tipos", TIPOS_OBRA, tipos)}</details>`)}
+      ${field("Composição de Serviços", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("servicos", SERVICOS, servicos)}</details>`)}
+      ${field("Sigla", textInput("sigla", { required: true, placeholder: "Ex: MTR-QUIB" }))}
+      ${field("Cliente", clientSelect)}
+      ${field("Local", textInput("local", { required: true, placeholder: "Ex: Kwanza Sul" }))}
+      ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT Energia" }))}
+      ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Opcional" }))}
+      ${field("Valor Venda S/IVA", textInput("valor", { required: true, placeholder: "0.00" }))}
+      ${field("Progresso (%)", textInput("progresso", { type: "number", min: "0", max: "100", step: "0.01", value: "0" }))}
+    </div></section>
+    <section class="obra-card"><h3>Datas</h3><div class="registry-grid">
+      ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }))}
+      ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
+      ${field("Data Conclusão Obra Previsional", textInput("conclusaoPrevisional", { type: "date" }))}
+    </div></section>
+    <section class="obra-card"><h3>Estado da Obra</h3><div class="registry-grid obra-status">${estadoFields(values.estado || "")}</div></section>
+    <section class="obra-card"><h3>Segurança e Pessoal (HSE)</h3><div class="registry-grid">
+      ${field("N.º Funcionários Ativos", textInput("staffCount", { type: "number", min: "0", step: "1", value: "0" }))}
+      ${field("Último Acidente", textInput("lastAccident", { type: "date" }))}
+    </div></section>
+    <section class="obra-card obra-contacts"><div class="obra-card-title"><h3>Contactos da Obra</h3><a class="registry-ghost" href="/registos/contactos">Adicionar Contacto</a></div>
+      ${contacts.length ? `<div class="obra-contact-options">${checkGrid("contactos", contactOptions, contactIds)}</div>` : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
+    </section>
+  `;
+}
+
+export function bindObraForm(form) {
+  if (!form) return;
+  bindEstado(form);
+  form.querySelectorAll(".obra-multiselect").forEach((select) => {
+    const summary = select.querySelector("summary");
+    const refresh = () => {
+      const count = select.querySelectorAll("input:checked").length;
+      summary.textContent = count ? `${count} seleccionado${count === 1 ? "" : "s"}` : "Seleccione múltiplos";
+    };
+    select.addEventListener("toggle", () => {
+      if (!select.open) return;
+      form.querySelectorAll(".obra-multiselect[open]").forEach((other) => {
+        if (other !== select) other.open = false;
+      });
+    });
+    select.addEventListener("change", refresh);
+    refresh();
+  });
+}
+
+export function obraFormCreatePayload(form, contacts = []) {
+  const data = new FormData(form);
+  const descricao = String(data.get("descricao") || "").trim();
+  const sigla = String(data.get("sigla") || "").trim();
+  const local = String(data.get("local") || "").trim();
+  const valor = parseMoney(data.get("valor"));
+  const tipos = checkedValues(form, "tipos");
+  const servicos = checkedValues(form, "servicos");
+  if (descricao.length < 2) invalid("Indique a descrição da obra.");
+  if (sigla.length < 3) invalid("A sigla deve ter pelo menos 3 caracteres.");
+  if (!local) invalid("Indique o local.");
+  if (valor == null || valor < 0) invalid("Indique o valor de venda.");
+  if (!tipos.length) invalid("Seleccione pelo menos um tipo de obra.");
+  if (!servicos.length) invalid("Seleccione pelo menos um serviço.");
+  const progressoRaw = data.get("progresso");
+  const progresso = progressoRaw === "" || progressoRaw == null ? 0 : Number(progressoRaw);
+  if (!Number.isFinite(progresso) || progresso < 0 || progresso > 100) invalid("O progresso deve estar entre 0 e 100.");
+  const staffRaw = data.get("staffCount");
+  const staffCount = staffRaw === "" || staffRaw == null ? 0 : Number(staffRaw);
+  if (!Number.isFinite(staffCount) || staffCount < 0) invalid("Indique o n.º de funcionários ativos.");
+  const estado = collectEstado(form);
+  const selected = contacts.filter((contact) => checkedValues(form, "contactos").includes(contact.id));
+  const director = selected.find((contact) => /director/i.test(contact.role || contact.funcao || "")) || selected[0] || null;
+  const inicio = toIsoDate(data.get("inicioOperacional"));
+  const previsional = toIsoDate(data.get("conclusaoPrevisional"));
+  const efetiva = toIsoDate(estado.conclusaoEfetiva);
+  const arranque = toIsoDate(data.get("arranque"));
+
+  return {
+    code: sigla,
+    referencia: sigla,
+    name: descricao,
+    clientId: String(data.get("clientId") || "") || null,
+    location: local,
+    region: local,
+    empreiteiro: String(data.get("empreiteiro") || "").trim() || null,
+    subempreiteiro: String(data.get("subempreiteiro") || "").trim() || null,
+    budgetTotal: valor,
+    currency: "AOA",
+    physicalProgressPct: progresso,
+    activeStaffCount: Math.round(staffCount),
+    lastAccidentDate: toIsoDate(data.get("lastAccident")),
+    status: STATUS_MAP[estado.estado] || "ACTIVE",
+    phaseLabel: estado.estado,
+    startDate: inicio,
+    dueDate: previsional,
+    launchDate: arranque,
+    actualEndDate: efetiva,
+    pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
+    contactIds: selected.map((contact) => contact.id),
+    contact: selected.map((contact) => contact.name || contact.nome).join(", ") || null,
+    directorObra: director?.name || director?.nome || null,
+    directorPhone: director?.phone || director?.telefone || null,
+    directorEmail: director?.email || null,
+    projectType: tipos[0] || null,
+    technicians: selected.map((contact) => ({
+      id: contact.id,
+      name: contact.name || contact.nome,
+      role: contact.role || contact.funcao,
+      phone: contact.phone || contact.telefone,
+      email: contact.email,
+    })),
+    maoDeObraIndireta: {
+      registo: {
+        tipos,
+        servicos,
+        sigla,
+        inicioOperacional: data.get("inicioOperacional") || "",
+        arranque: data.get("arranque") || "",
+        conclusaoPrevisional: data.get("conclusaoPrevisional") || "",
+        conclusaoEfetiva: efetiva ? estado.conclusaoEfetiva : "",
+        estado: estado.estado,
+        pausas: estado.pausas,
+        contactos: selected.map((contact) => ({
+          id: contact.id,
+          nome: contact.name || contact.nome,
+          funcao: contact.role || contact.funcao,
+          telefone: contact.phone || contact.telefone,
+          email: contact.email,
+        })),
+      },
+    },
   };
 }
 
@@ -477,23 +651,32 @@ function mount(kind, html, onSubmit) {
   return form;
 }
 
-function renderContactos() {
+async function renderContactos() {
+  await initPermissionLayer();
+  const canSave = can("cadastros", "create") || can("cadastros", "manage");
   const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}"></option>`).join("");
-  mount("contactos", formShell(
-    "Registe as pessoas que podem ser associadas a uma obra, incluindo a área financeira.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("nome", { required: true, placeholder: "Euclides Cabenda" }), "span-2")}
-      ${field("Função", `${textInput("funcao", { required: true, placeholder: "Director de Obra", list: "funcoes-list" })}<datalist id="funcoes-list">${funcoes}</datalist>`)}
-      ${field("Telefone", textInput("telefone", { required: true, placeholder: "+244" }))}
-      ${field("Email", textInput("email", { type: "email", placeholder: "nome@empresa.com" }))}
-      ${field("Foto", textInput("foto", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
+  mount("contactos", rfFicha({
+    title: "Criar Contacto",
+    lead: "Registe as pessoas que podem ser associadas a uma obra, incluindo a área financeira.",
+    submitLabel: "Guardar contacto",
+    canSave,
+    denied: "Sem permissão para guardar contactos.",
+    cards: rfCard("Identificação", `<div class="rf-grid">
+      ${rfField("Nome *", textInput("nome", { required: true, placeholder: "Euclides Cabenda" }), "span-2")}
+      ${rfField("Função *", `${textInput("funcao", { required: true, placeholder: "Director de Obra", list: "funcoes-list" })}<datalist id="funcoes-list">${funcoes}</datalist>`)}
+      ${rfField("Telefone *", textInput("telefone", { required: true, placeholder: "+244" }))}
+      ${rfField("Email", textInput("email", { type: "email", placeholder: "nome@empresa.com" }))}
+      ${rfField("Foto", `${textInput("foto", { type: "file", accept: "image/*" })}<span class="rf-hint">Opcional. Imagem do contacto.</span>`)}
+    </div>`),
+  }), async (form) => {
+    if (!can("cadastros", "create") && !can("cadastros", "manage")) {
+      invalid("Sem permissão para guardar contactos.");
+    }
     const data = new FormData(form);
     const nome = String(data.get("nome") || "").trim();
     const funcao = String(data.get("funcao") || "").trim();
     if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
-    
+
     const res = await apiRequest("/contacts", {
       method: "POST",
       body: {
@@ -514,7 +697,24 @@ function renderContactos() {
 }
 
 const PESSOAL_PAGE_SIZE = 12;
-const PESSOAL_TIPOS = ["Interno", "Subcontratado"];
+const PESSOAL_TIPOS = [
+  { value: "INTERNO", label: "Interno" },
+  { value: "SUBCONTRATADO", label: "Subcontratado" },
+];
+
+function pessoalTipoLabel(type) {
+  const raw = String(type || "").trim();
+  const found = PESSOAL_TIPOS.find((tipo) => tipo.value === raw || tipo.label === raw);
+  return found?.label || raw;
+}
+
+function mapPessoalTipo(type) {
+  const raw = String(type || "").trim();
+  const found = PESSOAL_TIPOS.find((tipo) => tipo.value === raw || tipo.label === raw);
+  if (found) return found.value;
+  const upper = raw.toUpperCase();
+  return PESSOAL_TIPOS.some((tipo) => tipo.value === upper) ? upper : "INTERNO";
+}
 
 function pessoalView() {
   if (!renderPessoal.view) {
@@ -523,8 +723,28 @@ function pessoalView() {
   return renderPessoal.view;
 }
 
+function pessoalObrasLabel(item) {
+  const names = (item.projects || [])
+    .map((obra) => obra.name || obra.code)
+    .filter(Boolean);
+  if (names.length) return names.join(", ");
+  return item.project?.name || item.obraNome || "";
+}
+
+function personnelProjectIdsFromItem(item) {
+  if (!item) return [];
+  if (Array.isArray(item.projectIds) && item.projectIds.length) {
+    return [...new Set(item.projectIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  }
+  if (Array.isArray(item.projects) && item.projects.length) {
+    return [...new Set(item.projects.map((obra) => String(obra.id || "").trim()).filter(Boolean))];
+  }
+  const one = item.projectId || item.obraId;
+  return one ? [String(one)] : [];
+}
+
 function pessoalBlob(item) {
-  return [item.nome, item.apelido, item.email, item.telefone, item.funcao, item.idFuncionario, item.obraNome, item.categoria]
+  return [item.nome, item.apelido, item.email, item.telefone, item.funcao, item.idFuncionario, item.obraNome, pessoalObrasLabel(item), item.categoria]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -552,7 +772,7 @@ function renderPessoal() {
     view.loadedItems = items;
     const q = view.q.trim().toLowerCase();
     const filtered = items.filter((item) => {
-      if (view.tipo && item.tipo !== view.tipo) return false;
+      if (view.tipo && (item.type || item.tipo) !== view.tipo) return false;
       if (!q) return true;
       return pessoalBlob(item).includes(q);
     });
@@ -565,11 +785,11 @@ function renderPessoal() {
             <td>${String(start + index + 1).padStart(2, "0")}</td>
             <td>${esc(item.firstName || item.nome || "")}</td>
             <td>${esc(item.lastName || item.apelido || "")}</td>
-            <td>${esc(item.type || item.tipo || "")}</td>
+            <td>${esc(pessoalTipoLabel(item.type || item.tipo || ""))}</td>
             <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
             <td>${esc(item.phone || item.telefone || "")}</td>
             <td>${esc(item.role || item.funcao || "")}</td>
-            <td>${esc(item.project?.name || item.obraNome || "")}</td>
+            <td class="pessoal-obras-cell">${esc(pessoalObrasLabel(item))}</td>
             <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
           </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
@@ -594,7 +814,7 @@ function renderPessoal() {
         <label class="pessoal-field">Filtrar pessoal
           <select id="pessoalTipo">
             <option value="">Todo o pessoal</option>
-            ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${view.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+            ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo.value)}" ${view.tipo === tipo.value ? "selected" : ""}>${esc(tipo.label)}</option>`).join("")}
           </select>
         </label>
         <button type="button" class="pessoal-register" id="pessoalCreate">Registar Funcionário</button>
@@ -660,14 +880,97 @@ function renderPessoal() {
         view.obras = [];
       }
     }
-    const current = view.editId
+    let current = view.editId
       ? view.loadedItems?.find((item) => item.id === view.editId) || null
       : null;
+    if (view.editId) {
+      try {
+        current = await apiRequest(`/personnel/${view.editId}`);
+      } catch {
+        /* mantém o item da listagem se o GET falhar */
+      }
+    }
+    view.formProjectIds = personnelProjectIdsFromItem(current);
+    const selectedTipo = mapPessoalTipo(current?.type || current?.tipo || "INTERNO");
     const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
-    const obras = view.obras.map((obra) => `<option value="${esc(obra.id)}" ${current?.projectId === obra.id || current?.obraId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`).join("");
     const foto = current?.photoUrl || current?.foto
       ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
+
+    const obraOptions = (selectedId = "", excludeIds = []) => view.obras
+      .filter((obra) => !excludeIds.includes(obra.id) || obra.id === selectedId)
+      .map((obra) => `<option value="${esc(obra.id)}" ${selectedId === obra.id ? "selected" : ""}>${esc(obra.name || obra.code || "Obra")}</option>`)
+      .join("");
+
+    const isInternoTipo = (tipo) => mapPessoalTipo(tipo || "INTERNO") !== "SUBCONTRATADO";
+
+    const obrasFieldHtml = () => {
+      const tipo = root.querySelector('[name="tipo"]')?.value || selectedTipo;
+      if (!isInternoTipo(tipo)) {
+        const selected = view.formProjectIds[0] || "";
+        return `<label class="pessoal-obra-single">Obra Alocada
+            <select name="obraId">
+              <option value="">Seleccionar obra</option>
+              ${obraOptions(selected)}
+            </select>
+          </label>`;
+      }
+      const assigned = view.formProjectIds
+        .map((id) => (view.obras || []).find((obra) => obra.id === id))
+        .filter(Boolean);
+      const exclude = view.formProjectIds;
+      const chips = assigned.length
+        ? assigned.map((obra) => `<li>
+              <span>${esc(obra.name || obra.code || "Obra")}</span>
+              <button type="button" class="pessoal-obra-remove" data-remove-obra="${esc(obra.id)}">Remover</button>
+            </li>`).join("")
+        : `<li class="pessoal-obra-empty">Nenhuma obra alocada</li>`;
+      return `<div class="pessoal-obras">
+            <span class="pessoal-obras-label">Obras alocadas</span>
+            <ul class="pessoal-obra-list">${chips}</ul>
+            <div class="pessoal-obra-add">
+              <select id="pessoalObraPick">
+                <option value="">Seleccionar obra</option>
+                ${obraOptions("", exclude)}
+              </select>
+              <button type="button" class="pessoal-obra-add-btn" id="pessoalObraAdd">Adicionar obra</button>
+            </div>
+          </div>`;
+    };
+
+    const bindObrasField = () => {
+      const wrap = root.querySelector("#pessoalObrasField");
+      if (!wrap) return;
+      wrap.querySelector("#pessoalObraAdd")?.addEventListener("click", () => {
+        const pick = wrap.querySelector("#pessoalObraPick");
+        const id = String(pick?.value || "");
+        if (!id) {
+          toast("Seleccione uma obra para adicionar.", { type: "error" });
+          return;
+        }
+        if (!view.formProjectIds.includes(id)) view.formProjectIds.push(id);
+        paintObrasField();
+      });
+      wrap.querySelectorAll("[data-remove-obra]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const id = button.getAttribute("data-remove-obra");
+          view.formProjectIds = view.formProjectIds.filter((item) => item !== id);
+          paintObrasField();
+        });
+      });
+      wrap.querySelector('[name="obraId"]')?.addEventListener("change", (event) => {
+        const id = String(event.target.value || "");
+        view.formProjectIds = id ? [id] : [];
+      });
+    };
+
+    const paintObrasField = () => {
+      const wrap = root.querySelector("#pessoalObrasField");
+      if (!wrap) return;
+      wrap.innerHTML = obrasFieldHtml();
+      bindObrasField();
+    };
+
     root.innerHTML = `
       <header class="pessoal-head">
         <span class="material-symbols-outlined" aria-hidden="true">groups</span>
@@ -693,29 +996,32 @@ function renderPessoal() {
           <label>Tipo de Funcionário
             <select name="tipo">
               <option value="">Seleccionar tipo</option>
-              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo)}" ${current?.type === tipo || current?.tipo === tipo ? "selected" : ""}>${esc(tipo)}</option>`).join("")}
+              ${PESSOAL_TIPOS.map((tipo) => `<option value="${esc(tipo.value)}" ${selectedTipo === tipo.value ? "selected" : ""}>${esc(tipo.label)}</option>`).join("")}
             </select>
           </label>
           <label>Função
             <input name="funcao" required list="funcoes-pessoal" value="${esc(current?.role || current?.funcao || "")}" placeholder="Seleccionar função" />
             <datalist id="funcoes-pessoal">${funcoes}</datalist>
           </label>
-          <label>Obra Alocada
-            <select name="obraId">
-              <option value="">Seleccionar obra</option>
-              ${obras}
-            </select>
-          </label>
+          <div id="pessoalObrasField"></div>
           <label>ID Funcionário <input name="idFuncionario" value="${esc(current?.employeeCode || current?.idFuncionario || "")}" placeholder="ID Funcionário" /></label>
           <label>Categoria Profissional <input name="categoria" value="${esc(current?.category || current?.categoria || "")}" placeholder="Introduzir categoria" /></label>
           <button class="pessoal-submit" type="submit">${current ? "Guardar" : "Registar Funcionário"}</button>
         </div>
       </form>`;
 
+    paintObrasField();
+
     root.querySelector("#pessoalBack")?.addEventListener("click", () => {
       view.mode = "list";
       view.editId = null;
       draw();
+    });
+    root.querySelector('[name="tipo"]')?.addEventListener("change", (event) => {
+      if (!isInternoTipo(event.target.value) && view.formProjectIds.length > 1) {
+        view.formProjectIds = view.formProjectIds.slice(0, 1);
+      }
+      paintObrasField();
     });
     const photoInput = root.querySelector('input[name="foto"]');
     photoInput?.addEventListener("change", () => {
@@ -740,8 +1046,10 @@ function renderPessoal() {
         if (nome.length < 2 || funcao.length < 2) invalid("Indique o nome e a função.");
         const file = data.get("foto");
         if (file instanceof File && file.size > 2 * 1024 * 1024) invalid("A foto deve ter no máximo 2MB.");
-        const obraId = String(data.get("obraId") || "");
-        const obra = (view.obras || []).find((item) => item.id === obraId);
+        const tipo = mapPessoalTipo(data.get("tipo") || "INTERNO");
+        const projectIds = tipo === "SUBCONTRATADO"
+          ? [String(data.get("obraId") || "")].filter(Boolean)
+          : [...(view.formProjectIds || [])];
         const res = await apiRequest(current?.id ? `/personnel/${current.id}` : "/personnel", {
           method: current?.id ? "PATCH" : "POST",
           body: {
@@ -749,14 +1057,15 @@ function renderPessoal() {
             lastName: String(data.get("apelido") || "").trim() || null,
             email: String(data.get("email") || "").trim() || null,
             phone: String(data.get("telefone") || "").trim() || null,
-            type: String(data.get("tipo") || "INTERNO"),
+            type: tipo,
             role: funcao,
-            projectId: obraId || null,
+            projectId: projectIds[0] || null,
+            projectIds,
             employeeCode: String(data.get("idFuncionario") || "").trim() || null,
             category: String(data.get("categoria") || "").trim() || null,
           }
         });
-        
+
         if (file instanceof File && file.size) {
           const fd = new FormData();
           fd.append("photo", file);
@@ -1045,8 +1354,8 @@ function renderFolhaPonto() {
           <table class="ponto-lines">
             <thead>
               <tr>
-                <th>N.º</th><th>Tipo Hora</th><th>Descrição</th><th>QTD</th><th>Valor/Hora (USD)</th>
-                <th>Total (USD)</th><th>Período</th><th>Data Início</th><th>Data Fim</th>
+                <th>N.º</th><th>Tipo Hora</th><th>Descrição</th><th>QTD</th><th>Valor/Hora</th>
+                <th>Total </th><th>Período</th><th>Data Início</th><th>Data Fim</th>
                 <th>Obra</th><th>Custo Total</th><th>Valor Líquido</th>
               </tr>
             </thead>
@@ -1159,11 +1468,22 @@ function renderFolhaPonto() {
   draw();
 }
 
-function renderSetores() {
-  mount("setores", formShell(
-    "Registo de setores gerido pelo servidor.",
-    field("Nome do setor", textInput("nome", { required: true, placeholder: "Financeiro" }))
-  ), async (form) => {
+async function renderSetores() {
+  await initPermissionLayer();
+  const canSave = can("cadastros", "create") || can("cadastros", "manage");
+  mount("setores", rfFicha({
+    title: "Criar Setor",
+    lead: "Registo de setores gerido pelo servidor.",
+    submitLabel: "Guardar setor",
+    canSave,
+    denied: "Sem permissão para guardar setores.",
+    cards: rfCard("Setor", `<div class="rf-grid">
+      ${rfField("Nome do setor *", textInput("nome", { required: true, placeholder: "Financeiro" }), "span-2")}
+    </div>`),
+  }), async (form) => {
+    if (!can("cadastros", "create") && !can("cadastros", "manage")) {
+      invalid("Sem permissão para guardar setores.");
+    }
     const nome = String(new FormData(form).get("nome") || "").trim();
     if (nome.length < 2) invalid("Indique o nome do setor.");
     await apiRequest("/sectors", {
@@ -1173,38 +1493,223 @@ function renderSetores() {
   });
 }
 
-function renderFornecedores() {
-  mount("fornecedores", formShell(
-    "Registo de fornecedores no Info Gestor.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("name", { required: true }), "span-2")}
-      ${field("NIF", textInput("nif"))}
-      ${field("Categoria", textInput("category", { placeholder: "Materiais, transporte..." }))}
-      ${field("Contacto", textInput("contact"))}
-      ${field("Telefone", textInput("phone"))}
-      ${field("Email", textInput("email", { type: "email" }))}
-      ${field("Morada", textInput("address"), "span-2")}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
+function fornField(label, control, extra = "") {
+  return `<label class="forn-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function cliField(label, control, extra = "") {
+  return `<label class="cli-field ${extra}"><span>${label}</span>${control}</label>`;
+}
+
+function supplierBankRowHtml(account = {}) {
+  return `<div class="forn-bank-row" data-bank-row>
+    <input type="text" data-bank-name placeholder="Banco (ex: BAI)" value="${esc(account.bankName || "")}">
+    <input type="text" data-bank-iban placeholder="AO06..." value="${esc(account.iban || "")}">
+    <button type="button" class="forn-remove-bank" data-remove-bank title="Remover conta" aria-label="Remover conta">×</button>
+  </div>`;
+}
+
+function collectSupplierBanks(form) {
+  return [...form.querySelectorAll("[data-bank-row]")].map((row) => ({
+    bankName: row.querySelector("[data-bank-name]")?.value.trim() || "",
+    iban: row.querySelector("[data-bank-iban]")?.value.trim() || "",
+  }))
+    .filter((item) => item.bankName || item.iban)
+    .map((item) => ({ bankName: item.bankName || "Banco", iban: item.iban }))
+    .filter((item) => item.iban);
+}
+
+function applyAgtToSupplierForm(form, agt, existing) {
+  const nifEl = form.querySelector("[name=nif]");
+  const nameEl = form.querySelector("[name=name]");
+  const agtEl = form.querySelector("[name=agtStatusDisplay]");
+  if (nameEl) nameEl.value = existing?.name || agt?.nome || nameEl.value;
+  if (nifEl) {
+    nifEl.dataset.validatedNif = normalizeNif(nifEl.value);
+    nifEl.dataset.vatRegime = agt?.regimeIva || existing?.vatRegime || "";
+    nifEl.dataset.agtStatus = agt?.estado || existing?.agtStatus || "";
+    nifEl.dataset.agtType = agt?.tipo || existing?.agtType || "";
+    nifEl.dataset.vatPercent = agt?.vatPercent != null ? String(agt.vatPercent) : "";
+  }
+  if (agtEl) agtEl.value = [agt?.estado || existing?.agtStatus, agt?.regimeIva || existing?.vatRegime]
+    .filter(Boolean)
+    .join(" · ");
+
+  if (!existing) {
+    delete form.dataset.existingId;
+    return;
+  }
+
+  form.dataset.existingId = existing.id || "";
+  if (nameEl) nameEl.value = existing.name || agt?.nome || "";
+  const set = (name, value) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el && value) el.value = value;
+  };
+  set("phone", existing.phone);
+  set("email", existing.email);
+  set("contact", existing.contact);
+  set("address", existing.address);
+  set("category", existing.category);
+  set("type", existing.type);
+  set("paymentTerm", existing.paymentTerm);
+  const list = form.querySelector("[data-bank-list]");
+  if (list) {
+    const accounts = existing.bankAccounts?.length
+      ? existing.bankAccounts
+      : existing.iban
+        ? [{ bankName: "Principal", iban: existing.iban }]
+        : [];
+    list.innerHTML = (accounts.length ? accounts : [{}]).map(supplierBankRowHtml).join("");
+  }
+}
+
+function bindSupplierBankList(form) {
+  const list = form.querySelector("[data-bank-list]");
+  form.querySelector("[data-add-bank]")?.addEventListener("click", () => {
+    list?.insertAdjacentHTML("beforeend", supplierBankRowHtml());
+  });
+  list?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-remove-bank]");
+    if (!btn) return;
+    const rows = list.querySelectorAll("[data-bank-row]");
+    const row = btn.closest("[data-bank-row]");
+    if (rows.length <= 1) {
+      row.querySelector("[data-bank-name]").value = "";
+      row.querySelector("[data-bank-iban]").value = "";
+      return;
+    }
+    row.remove();
+  });
+}
+
+async function renderFornecedores() {
+  await initPermissionLayer();
+  const canManage = can("fornecedores", "manage") || can("fornecedores", "create");
+  const form = mount("fornecedores", `
+    <h1 class="forn-title">Criar Fornecedor</h1>
+    <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+    <form class="forn-form" novalidate>
+      <section class="forn-card">
+        <h2>Identificação fiscal</h2>
+        <div class="forn-grid">
+          <div class="forn-field span-2">
+            <span>NIF *</span>
+            <div class="forn-nif-row">
+              <input name="nif" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="Introduza o NIF e consulte a AGT">
+              <button type="button" class="forn-nif-btn" data-lookup-nif>Consultar NIF</button>
+            </div>
+            <p class="forn-nif-status hidden" data-nif-status></p>
+          </div>
+          ${fornField("Nome *", `<input name="name" type="text" required placeholder="Preenchido após consulta do NIF">`, "span-2")}
+          ${fornField("Estado AGT", `<input name="agtStatusDisplay" type="text" readonly placeholder="Disponível após consulta">`)}
+          ${fornField("Tipo", `<select name="type">
+            <option value="MATERIAL">Material</option>
+            <option value="SERVICO">Serviço</option>
+            <option value="TRANSPORTADOR">Transportador</option>
+          </select>`)}
+          ${fornField("Categoria", `<input name="category" type="text" placeholder="Materiais, transporte...">`)}
+          ${fornField("Modalidade de pagamento", `<select name="paymentTerm">
+            <option value="">Seleccionar...</option>
+            <option value="PRONTO_PAGAMENTO">PP — Pronto pagamento</option>
+            <option value="CREDITO">C — Crédito</option>
+          </select>`)}
+        </div>
+      </section>
+      <section class="forn-card">
+        <h2>Contacto</h2>
+        <div class="forn-grid">
+          ${fornField("Pessoa de contacto", `<input name="contact" type="text" placeholder="Nome do contacto">`)}
+          ${fornField("Telefone", `<input name="phone" type="text" placeholder="9XX XXX XXX">`)}
+          ${fornField("Email", `<input name="email" type="email" placeholder="email@fornecedor.ao">`)}
+          ${fornField("Morada", `<input name="address" type="text" placeholder="Morada completa">`)}
+        </div>
+      </section>
+      <section class="forn-card">
+        <div class="forn-bank-head">
+          <h2>Contas bancárias (IBAN)</h2>
+          <button type="button" class="forn-add-bank" data-add-bank>+ Adicionar</button>
+        </div>
+        <div class="forn-bank-list" data-bank-list>${supplierBankRowHtml()}</div>
+        <p class="forn-hint">Opcional. Registe um ou mais IBANs identificados pelo banco.</p>
+      </section>
+      <div class="forn-actions">
+        ${canManage
+          ? `<button class="forn-submit" type="submit">Guardar fornecedor</button>`
+          : `<p class="forn-denied">Sem permissão para guardar fornecedores.</p>`}
+      </div>
+    </form>
+  `, async (formEl) => {
+    if (!can("fornecedores", "manage") && !can("fornecedores", "create")) {
+      invalid("Sem permissão para guardar fornecedores.");
+    }
+    const data = new FormData(formEl);
+    const nifEl = formEl.querySelector("[name=nif]");
+    const nif = normalizeNif(data.get("nif"));
+    const validated = nifEl?.dataset?.validatedNif || "";
     const name = String(data.get("name") || "").trim();
-    if (!name) invalid("Indique o nome do fornecedor.");
+    if (!nif || nif.length < 9) invalid("Indique um NIF válido e consulte o Portal da AGT.");
+    if (validated !== nif) invalid("Consulte o NIF no Portal da AGT antes de guardar.");
+    if (formEl.dataset.existingId) invalid("Já existe um fornecedor cadastrado com este NIF.");
+    if (!name) invalid("O nome do fornecedor é obrigatório. Consulte o NIF para o preencher.");
+    const vatRaw = nifEl?.dataset?.vatPercent;
+    const vatPercent = vatRaw === "" || vatRaw == null ? null : Number(vatRaw);
     await apiRequest("/suppliers", {
       method: "POST",
       body: {
         name,
-        nif: String(data.get("nif") || "").trim() || null,
+        nif,
+        type: String(data.get("type") || "MATERIAL"),
         category: String(data.get("category") || "").trim() || null,
         contact: String(data.get("contact") || "").trim() || null,
         phone: String(data.get("phone") || "").trim() || null,
         email: String(data.get("email") || "").trim() || null,
         address: String(data.get("address") || "").trim() || null,
+        paymentTerm: String(data.get("paymentTerm") || "").trim() || null,
+        vatRegime: nifEl?.dataset?.vatRegime || null,
+        agtStatus: nifEl?.dataset?.agtStatus || null,
+        agtType: nifEl?.dataset?.agtType || null,
+        vatPercent: Number.isFinite(vatPercent) ? vatPercent : null,
+        bankAccounts: collectSupplierBanks(formEl),
       },
     });
+  });
+
+  if (!form) return;
+  bindSupplierBankList(form);
+  bindNifLookup({
+    nifInput: form.querySelector("[name=nif]"),
+    button: form.querySelector("[data-lookup-nif]"),
+    statusEl: form.querySelector("[data-nif-status]"),
+    register: false,
+    onResult: ({ ok, agt, result }) => {
+      if (!ok) {
+        delete form.dataset.existingId;
+        return;
+      }
+      const existing = result?.existingSupplier || null;
+      applyAgtToSupplierForm(form, agt, existing);
+      if (existing) {
+        toast("Este NIF já está cadastrado. Não será criado um fornecedor duplicado.", { type: "error" });
+      }
+    },
+  });
+  form.querySelector("[name=nif]")?.addEventListener("input", (event) => {
+    const el = event.currentTarget;
+    if (el.dataset.validatedNif && el.dataset.validatedNif !== normalizeNif(el.value)) {
+      delete el.dataset.validatedNif;
+      delete form.dataset.existingId;
+      const agtEl = form.querySelector("[name=agtStatusDisplay]");
+      if (agtEl) agtEl.value = "";
+      setNifLookupStatus(form.querySelector("[data-nif-status]"), "");
+    }
   });
 }
 
 async function renderClientes() {
+  await initPermissionLayer();
+  const canCreate = can("clientes", "create");
+
   let sectors = [];
   try {
     const res = await apiRequest("/sectors?pageSize=200");
@@ -1212,34 +1717,70 @@ async function renderClientes() {
   } catch {
     sectors = readStore(SETORES_KEY);
   }
-  
-  const sectorOptions = sectors.map((sector) => ({
-    value: sector.name || sector.nome,
-    label: sector.name || sector.nome
-  }));
 
-  mount("clientes", formShell(
-    "Registo de clientes no Info Gestor. O email e a palavra-passe criam o acesso do cliente.",
-    `<div class="registry-grid">
-      ${field("Código", textInput("code", { required: true, placeholder: "CLI-001" }))}
-      ${field("Nome", textInput("name", { required: true, placeholder: "Mitrelli Project" }))}
-      ${field("Setor / actividade", sectorOptions.length ? selectInput("industry", sectorOptions, "Seleccione o setor") : textInput("industry", { placeholder: "Registe um setor primeiro..." }))}
-      ${field("Região", textInput("region", { placeholder: "Kwanza Sul" }))}
-      ${field("Email de acesso", textInput("email", { type: "email", required: true }))}
-      ${field("Palavra-passe", textInput("password", { type: "password", required: true }))}
-    </div>`
-  ), async (form) => {
-    const data = new FormData(form);
+  const sectorOptions = sectors
+    .map((sector) => ({
+      value: sector.name || sector.nome,
+      label: sector.name || sector.nome,
+    }))
+    .filter((sector) => sector.value);
+
+  const industryControl = sectorOptions.length
+    ? `<select name="industry">
+        <option value="">Seleccione o setor</option>
+        ${sectorOptions.map((sector) => `<option value="${esc(sector.value)}">${esc(sector.label)}</option>`).join("")}
+      </select>`
+    : `<input name="industry" type="text" placeholder="Registe um setor primeiro...">
+       <span class="cli-hint">Ainda não há setores. Pode escrever o nome ou criar um setor em Registos.</span>`;
+
+  mount("clientes", `
+    <h1 class="cli-title">Criar Cliente</h1>
+    <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+    <form class="cli-form" novalidate>
+      <section class="cli-card">
+        <h2>Identificação</h2>
+        <div class="cli-grid">
+          ${cliField("Código *", `<input name="code" type="text" required placeholder="CLI-001">`)}
+          ${cliField("Nome *", `<input name="name" type="text" required placeholder="Nome da empresa">`)}
+          ${cliField("Setor / actividade", industryControl)}
+          ${cliField("Região", `<input name="region" type="text" placeholder="Kwanza Sul">`)}
+        </div>
+      </section>
+      <section class="cli-card">
+        <h2>Acesso</h2>
+        <div class="cli-grid">
+          ${cliField("Email de acesso *", `<input name="email" type="email" required autocomplete="off" placeholder="cliente@empresa.ao">`)}
+          ${cliField("Palavra-passe *", `<input name="password" type="password" required autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+            <span class="cli-hint">Cria o login do cliente. A palavra-passe deve ter pelo menos 6 caracteres.</span>`)}
+        </div>
+      </section>
+      <div class="cli-actions">
+        ${canCreate
+          ? `<button class="cli-submit" type="submit">Guardar cliente</button>`
+          : `<p class="cli-denied">Sem permissão para guardar clientes.</p>`}
+      </div>
+    </form>
+  `, async (formEl) => {
+    if (!can("clientes", "create")) {
+      invalid("Sem permissão para guardar clientes.");
+    }
+    const data = new FormData(formEl);
+    const code = String(data.get("code") || "").trim();
+    const name = String(data.get("name") || "").trim();
+    const email = String(data.get("email") || "").trim();
     const password = String(data.get("password") || "");
+    if (code.length < 2) invalid("Indique um código com pelo menos 2 caracteres.");
+    if (name.length < 2) invalid("Indique o nome do cliente.");
+    if (!email) invalid("Indique o email de acesso.");
     if (password.length < 6) invalid("A palavra-passe deve ter pelo menos 6 caracteres.");
     await apiRequest("/clients", {
       method: "POST",
       body: {
-        code: String(data.get("code") || "").trim(),
-        name: String(data.get("name") || "").trim(),
+        code,
+        name,
         industry: String(data.get("industry") || "").trim() || null,
         region: String(data.get("region") || "").trim() || null,
-        email: String(data.get("email") || "").trim(),
+        email,
         password,
       },
     });
@@ -1262,124 +1803,18 @@ async function renderObras() {
     contacts = [];
     toast(apiMessage(error), { type: "error" });
   }
-  const clientOptions = clients.map((client) => ({ value: client.id, label: client.name }));
-  const contactOptions = contacts.map((contact) => ({
-    value: contact.id,
-    label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
-    photo: contact.photoUrl || contact.foto || "",
-  }));
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
-    <header class="obra-form-heading"><div><h2>Criar Obra</h2><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
-    <section class="obra-card"><h3>Informação Geral da Obra</h3><div class="registry-grid obra-general">
-      ${field("Descrição da Obra", textInput("descricao", { required: true, placeholder: "Ex: Electrificação Rural Município da Quibala" }))}
-      ${field("Tipo de Obra", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("tipos", TIPOS_OBRA)}</details>`)}
-      ${field("Composição de Serviços", `<details class="obra-multiselect"><summary>Seleccione múltiplos</summary>${checkGrid("servicos", SERVICOS)}</details>`)}
-      ${field("Sigla", textInput("sigla", { required: true, placeholder: "Ex: MTR-QUIB" }))}
-      ${field("Cliente", clients.length ? selectInput("clientId", clientOptions, "Seleccione cliente") : `<select disabled><option value="">Registe um cliente primeiro</option></select>`)}
-      ${field("Local", textInput("local", { required: true, placeholder: "Ex: Kwanza Sul" }))}
-      ${field("Empreiteiro", textInput("empreiteiro", { placeholder: "MBT Energia" }))}
-      ${field("Sub-Empreiteiro", textInput("subempreiteiro", { placeholder: "Opcional" }))}
-      ${field("Valor Venda S/IVA", textInput("valor", { required: true, placeholder: "0.00" }))}
-    </div></section>
-    <section class="obra-card"><h3>Datas</h3><div class="registry-grid">
-      ${field("Data Início Operacional", textInput("inicioOperacional", { type: "date" }))}
-      ${field("Data Arranque Obra", textInput("arranque", { type: "date" }))}
-      ${field("Data Conclusão Obra Previsional", textInput("conclusaoPrevisional", { type: "date" }))}
-    </div></section>
-    <section class="obra-card"><h3>Estado da Obra</h3><div class="registry-grid obra-status">${estadoFields()}</div></section>
-    <section class="obra-card obra-contacts"><div class="obra-card-title"><h3>Contactos da Obra</h3><a class="registry-ghost" href="/registos/contactos">Adicionar Contacto</a></div>
-      ${contacts.length ? `<div class="obra-contact-options">${checkGrid("contactos", contactOptions)}</div>` : `<p class="registry-note"><a href="/registos/contactos">Registe contactos</a> antes de os associar à obra.</p>`}
-    </section>
+    <header class="obra-form-heading"><div><h1>Criar Obra</h1><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
+    ${obraFormSectionsHtml({ clients, contacts })}
     <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
   </form>`, async (form) => {
-    const data = new FormData(form);
-    const descricao = String(data.get("descricao") || "").trim();
-    const sigla = String(data.get("sigla") || "").trim();
-    const local = String(data.get("local") || "").trim();
-    const valor = parseMoney(data.get("valor"));
-    const tipos = checkedValues(form, "tipos");
-    const servicos = checkedValues(form, "servicos");
-    if (descricao.length < 2) invalid("Indique a descrição da obra.");
-    if (sigla.length < 3) invalid("A sigla deve ter pelo menos 3 caracteres.");
-    if (!local) invalid("Indique o local.");
-    if (valor == null || valor < 0) invalid("Indique o valor de venda.");
-    if (!tipos.length) invalid("Seleccione pelo menos um tipo de obra.");
-    if (!servicos.length) invalid("Seleccione pelo menos um serviço.");
-    const estado = collectEstado(form);
-    const selected = contacts.filter((contact) => checkedValues(form, "contactos").includes(contact.id));
-    const director = selected.find((contact) => /director/i.test(contact.role || contact.funcao || "")) || selected[0] || null;
-    const inicio = toIsoDate(data.get("inicioOperacional"));
-    const previsional = toIsoDate(data.get("conclusaoPrevisional"));
-    const efetiva = toIsoDate(estado.conclusaoEfetiva);
-    const arranque = toIsoDate(data.get("arranque"));
-
     await apiRequest("/projects", {
       method: "POST",
-      body: {
-        code: sigla,
-        referencia: sigla,
-        name: descricao,
-        clientId: String(data.get("clientId") || "") || null,
-        location: local,
-        region: local,
-        empreiteiro: String(data.get("empreiteiro") || "").trim() || null,
-        subempreiteiro: String(data.get("subempreiteiro") || "").trim() || null,
-        budgetTotal: valor,
-        currency: "AOA",
-        status: STATUS_MAP[estado.estado] || "ACTIVE",
-        phaseLabel: estado.estado,
-        startDate: inicio,
-        dueDate: previsional,
-        launchDate: arranque,
-        actualEndDate: efetiva,
-        pauses: estado.pausas.map((pausa) => ({ inicio: pausa.inicio, fim: pausa.fim })),
-        contactIds: selected.map((contact) => contact.id),
-        contact: selected.map((contact) => contact.name || contact.nome).join(", ") || null,
-        directorObra: director?.name || director?.nome || null,
-        directorPhone: director?.phone || director?.telefone || null,
-        directorEmail: director?.email || null,
-        technicians: selected.map((contact) => ({
-          id: contact.id,
-          name: contact.name || contact.nome,
-          role: contact.role || contact.funcao,
-          phone: contact.phone || contact.telefone,
-          email: contact.email,
-        })),
-        maoDeObraIndireta: {
-          registo: {
-            tipos,
-            servicos,
-            sigla,
-            inicioOperacional: data.get("inicioOperacional") || "",
-            arranque: data.get("arranque") || "",
-            conclusaoPrevisional: data.get("conclusaoPrevisional") || "",
-            conclusaoEfetiva: efetiva ? estado.conclusaoEfetiva : "",
-            estado: estado.estado,
-            pausas: estado.pausas,
-            contactos: selected.map((contact) => ({
-              id: contact.id,
-              nome: contact.name || contact.nome,
-              funcao: contact.role || contact.funcao,
-              telefone: contact.phone || contact.telefone,
-              email: contact.email,
-            })),
-          },
-        },
-      },
+      body: obraFormCreatePayload(form, contacts),
     });
   });
-  if (form) {
-    bindEstado(form);
-    form.querySelectorAll(".obra-multiselect").forEach((select) => {
-      const summary = select.querySelector("summary");
-      const refresh = () => {
-        const count = select.querySelectorAll("input:checked").length;
-        summary.textContent = count ? `${count} seleccionado${count === 1 ? "" : "s"}` : "Seleccione múltiplos";
-      };
-      select.addEventListener("change", refresh);
-    });
-  }
+  bindObraForm(form);
 }
 
 async function renderProdutos() {
@@ -1387,18 +1822,21 @@ async function renderProdutos() {
   await renderProdutosForm();
 }
 
-function renderEquipamentos() {
-  mount("equipamentos", formShell(
-    "Registo de equipamento, maquinaria, viatura ou ferramenta.",
-    `<div class="registry-grid">
-      ${field("Nome", textInput("name", { required: true }), "span-2")}
-      ${field("Tipo", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
-      ${field("Matrícula / série", textInput("sku"))}
-      ${field("Unidade", selectInput("unit", UNIDADES))}
-      ${field("Descrição", `<textarea name="description"></textarea>`, "span-2")}
-      ${field("Foto", textInput("photo", { type: "file", accept: "image/*" }))}
-    </div>`
-  ), async (form) => {
+async function renderEquipamentos() {
+  await initPermissionLayer();
+  mount("equipamentos", rfFicha({
+    title: "Criar Equipamento, Maquinaria ou Viatura",
+    lead: "Registo de equipamento, maquinaria, viatura ou ferramenta.",
+    submitLabel: "Guardar equipamento",
+    cards: rfCard("Identificação", `<div class="rf-grid">
+      ${rfField("Nome *", textInput("name", { required: true, placeholder: "Nome do equipamento" }), "span-2")}
+      ${rfField("Tipo *", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
+      ${rfField("Matrícula / série", textInput("sku", { placeholder: "Opcional" }))}
+      ${rfField("Unidade", selectInput("unit", UNIDADES))}
+      ${rfField("Descrição", `<textarea name="description" placeholder="Notas ou características"></textarea>`, "span-2")}
+      ${rfField("Foto", `${textInput("photo", { type: "file", accept: "image/*" })}<span class="rf-hint">Opcional.</span>`)}
+    </div>`),
+  }), async (form) => {
     const data = new FormData(form);
     const name = String(data.get("name") || "").trim();
     const kind = String(data.get("kind") || "");
@@ -1500,25 +1938,30 @@ async function renderSubcategorias() {
   });
 }
 
-function renderCartoes() {
-  mount("cartoes", formShell(
-    "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
-    `<div class="registry-grid">
-      ${field("Designação", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
-      ${field("Banco", textInput("bank"))}
-      ${field("Titular", textInput("holderName"))}
-      ${field("Últimos 4 dígitos", textInput("lastDigits", { placeholder: "1234" }))}
-      ${field("Tipo", selectInput("type", [
+async function renderCartoes() {
+  await initPermissionLayer();
+  mount("cartoes", rfFicha({
+    title: "Criar Cartão Bancário",
+    lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
+    submitLabel: "Guardar cartão",
+    cards: `${rfCard("Cartão", `<div class="rf-grid">
+      ${rfField("Designação *", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
+      ${rfField("Banco", textInput("bank", { placeholder: "Nome do banco" }))}
+      ${rfField("Titular", textInput("holderName", { placeholder: "Nome no cartão" }))}
+      ${rfField("Últimos 4 dígitos", textInput("lastDigits", { placeholder: "1234" }))}
+      ${rfField("Tipo", selectInput("type", [
         { value: "PREPAGO", label: "Pré-pago" },
         { value: "DEBITO", label: "Débito" },
         { value: "CREDITO", label: "Crédito" },
       ]))}
-      ${field("Moeda", selectInput("currency", ["AOA", "USD", "EUR"]))}
-      ${field("Responsável", textInput("responsibleName"))}
-      ${field("Saldo inicial", textInput("initialBalance", { placeholder: "0" }))}
-      ${field("Notas", `<textarea name="notes"></textarea>`, "span-2")}
-    </div>`
-  ), async (form) => {
+      ${rfField("Moeda", selectInput("currency", ["AOA", "USD", "EUR"]))}
+      ${rfField("Responsável", textInput("responsibleName", { placeholder: "Quem usa o cartão" }))}
+    </div>`)}
+    ${rfCard("Saldo e notas", `<div class="rf-grid">
+      ${rfField("Saldo inicial", textInput("initialBalance", { placeholder: "0" }))}
+      ${rfField("Notas", `<textarea name="notes" placeholder="Observações opcionais"></textarea>`, "span-2")}
+    </div>`)}`,
+  }), async (form) => {
     const data = new FormData(form);
     const label = String(data.get("label") || "").trim();
     if (!label) invalid("Indique a designação do cartão.");
@@ -1544,6 +1987,7 @@ function renderCartoes() {
 }
 
 async function renderMovimentos() {
+  await initPermissionLayer();
   let cards = [];
   try {
     const data = await apiRequest("/petty-cash/cards");
@@ -1551,23 +1995,25 @@ async function renderMovimentos() {
   } catch {
     cards = [];
   }
-  mount("movimentos", formShell(
-    "Registe um crédito ou um ajuste num cartão bancário.",
-    `<div class="registry-grid">
-      ${field("Cartão", cards.length
+  mount("movimentos", rfFicha({
+    title: "Registar Movimento Financeiro",
+    lead: "Registe um crédito ou um ajuste num cartão bancário.",
+    submitLabel: "Guardar movimento",
+    cards: rfCard("Movimento", `<div class="rf-grid">
+      ${rfField("Cartão *", cards.length
         ? selectInput("cardId", cards.map((card) => ({
           value: card.id,
           label: [card.label, card.bank, card.lastDigits ? `•••• ${card.lastDigits}` : ""].filter(Boolean).join(" · "),
         })))
         : `<select disabled><option>Registe primeiro um cartão</option></select>`, "span-2")}
-      ${field("Movimento", selectInput("type", [
+      ${rfField("Movimento", selectInput("type", [
         { value: "CREDITO", label: "Crédito" },
         { value: "AJUSTE", label: "Ajuste" },
       ]))}
-      ${field("Valor", textInput("amount", { required: true, placeholder: "0" }))}
-      ${field("Descrição", `<textarea name="description" required></textarea>`, "span-2")}
-    </div>`
-  ), async (form) => {
+      ${rfField("Valor *", textInput("amount", { required: true, placeholder: "0" }))}
+      ${rfField("Descrição *", `<textarea name="description" required placeholder="Motivo do movimento"></textarea>`, "span-2")}
+    </div>`),
+  }), async (form) => {
     const data = new FormData(form);
     const cardId = String(data.get("cardId") || "");
     const description = String(data.get("description") || "").trim();
@@ -1657,6 +2103,7 @@ export function openObraEstadoDialog(project, onSaved) {
 const kind = document.body?.dataset.registry;
 if (kind && RENDERERS[kind]) {
   checkAuth();
+  initPermissionLayer();
   wireUsersNav();
   wireLogout();
   initMobileMenu();

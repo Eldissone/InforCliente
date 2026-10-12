@@ -8,7 +8,7 @@ const auditMiddleware = (moduleName) => {
     const isGet = req.method === "GET";
     
     // Ignorar endpoints internos ou de alta frequência para evitar spam
-    const excludedGets = ["/health", "/logs", "/uploads", "/permissions/me"];
+    const excludedGets = ["/health", "/logs", "/uploads", "/permissions/me", "/backups/jobs"];
     const isExcludedGet = isGet && excludedGets.some(route => req.path.startsWith(route));
     
     if (!isModifying && !isLogin && (!isGet || isExcludedGet)) {
@@ -38,12 +38,28 @@ const auditMiddleware = (moduleName) => {
             }
           }
 
+          const sensitiveKeys = new Set([
+            "password",
+            "newpassword",
+            "passphrase",
+            "passphraseconfirm",
+            "secretaccesskey",
+            "privatekey",
+            "sftppassword",
+          ]);
+          const redactBody = (value, depth = 0) => {
+            if (!value || typeof value !== "object" || depth > 6) return value;
+            if (Array.isArray(value)) return value.map((item) => redactBody(item, depth + 1));
+            const copy = {};
+            for (const [key, item] of Object.entries(value)) {
+              copy[key] = sensitiveKeys.has(String(key).toLowerCase()) ? "[redacted]" : redactBody(item, depth + 1);
+            }
+            return copy;
+          };
+
           let safeBody = undefined;
-          if (action !== "LOGIN" && req.body) {
-              // Create a copy of the body and remove sensitive fields
-              safeBody = { ...req.body };
-              if (safeBody.password) delete safeBody.password;
-              if (safeBody.newPassword) delete safeBody.newPassword;
+          if (action !== "LOGIN" && req.body && typeof req.body === "object") {
+              safeBody = redactBody(req.body);
           }
 
           const extractedModule = req.baseUrl ? req.baseUrl.split('/')[1]?.toUpperCase() : null;

@@ -29,12 +29,14 @@ const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { helpTicketRoutes } = require("./routes/helpTickets");
 const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
 const { financeRoutes } = require("./routes/finance");
+const { backupRoutes } = require("./routes/backups");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
 const { ensureUploadsDir } = require("./utils/storage");
 const { auditMiddleware } = require("./middlewares/auditMiddleware");
 const { createSocketServer } = require("./socket");
 const { scanDueAndOverduePayments } = require("./services/paymentNotificationService");
+const { startBackupScheduler } = require("./services/backup/service");
 
 const app = express();
 app.set("trust proxy", 1); // Confiar no IP original através de Nginx/Load Balancers
@@ -125,12 +127,15 @@ app.use("/cost-categories", costCategoryRoutes);
 app.use("/freight-orders", freightOrderRoutes);
 app.use("/purchase-orders", purchaseOrderRoutes);
 app.use("/help-tickets", helpTicketRoutes);
-// Cadastros persistentes (Fase 1 — ver docs/agents/CONTRACTS.md)
+// Cadastros persistentes
 app.use("/contacts", contactRoutes);
 app.use("/sectors", sectorRoutes);
 app.use("/personnel", personnelRoutes);
 // Área Financeira (faturação, custos, tesouraria, overview)
 app.use("/finance", financeRoutes);
+
+// Backups
+app.use("/backups", backupRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
@@ -178,6 +183,7 @@ server.listen(config.port, async () => {
   };
   scanPayments();
   setInterval(scanPayments, 6 * 60 * 60 * 1000);
+  startBackupScheduler();
 });
 
 

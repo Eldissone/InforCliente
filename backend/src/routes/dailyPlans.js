@@ -6,6 +6,7 @@ const { assertOwnProjectAccess, enforceOwnProjectScope, getAccessibleProjectWher
 const {
   convertConsumedPlanAllocationsToExit,
 } = require("../services/planAllocationConsumption");
+const { normalizeDateOnly } = require("../utils/dateOnly");
 const dailyPlansRoutes = express.Router();
 
 dailyPlansRoutes.use(authRequired);
@@ -57,6 +58,204 @@ function replaceUtcCalendarDay(original, daySource) {
 
 function qtyClose(a, b) {
   return Math.abs(Number(a || 0) - Number(b || 0)) < 1e-6;
+}
+
+function parsePlanDate(value) {
+  return normalizeDateOnly(value);
+}
+
+function withPlanEnd(plan) {
+  if (!plan) return plan;
+  if (plan.plannedEndDate) return plan;
+  return { ...plan, plannedEndDate: plan.date || null };
+}
+
+const DEP_TYPES = new Set(["FS", "SS", "FF", "SF"]);
+
+const predecessorsInclude = {
+  predecessors: {
+    select: { id: true, predecessorId: true, type: true, lagDays: true },
+    orderBy: { createdAt: "asc" },
+  },
+};
+
+function hasDepModel() {
+  return typeof prisma.dailyPlanDependency?.findMany === "function";
+}
+
+function planPredecessorsInclude() {
+  return hasDepModel() ? predecessorsInclude : {};
+}
+
+function sqlText(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function newDepId() {
+  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function normalizeDepType(value) {
+  const type = String(value || "FS").toUpperCase();
+  return DEP_TYPES.has(type) ? type : null;
+}
+
+function parseLagDays(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-3650, Math.min(3650, Math.trunc(n)));
+}
+
+function mapDepRow(row) {
+  return {
+    id: row.id,
+    predecessorId: row.predecessorId,
+    type: normalizeDepType(row.type) || "FS",
+    lagDays: parseLagDays(row.lagDays),
+  };
+}
+
+async function listProjectDependencyEdges(projectId) {
+  if (hasDepModel()) {
+    return prisma.dailyPlanDependency.findMany({
+      where: { successor: { projectId } },
+      select: { successorId: true, predecessorId: true },
+    });
+  }
+  return prisma.$queryRawUnsafe(`
+    SELECT d."successorId", d."predecessorId"
+    FROM "DailyPlanDependency" d
+    INNER JOIN "DailyPlan" p ON p.id = d."successorId"
+    WHERE p."projectId" = ${sqlText(projectId)}
+  `);
+}
+
+async function loadPredecessorsForPlans(plans) {
+  const ids = (plans || []).map((plan) => plan.id).filter(Boolean);
+  const bySuccessor = new Map(ids.map((id) => [id, []]));
+  if (!ids.length) return bySuccessor;
+  let rows = [];
+  if (hasDepModel()) {
+    rows = await prisma.dailyPlanDependency.findMany({
+      where: { successorId: { in: ids } },
+      select: { id: true, successorId: true, predecessorId: true, type: true, lagDays: true },
+      orderBy: { createdAt: "asc" },
+    });
+  } else {
+    rows = await prisma.$queryRawUnsafe(`
+      SELECT id, "successorId", "predecessorId", type::text AS type, "lagDays"
+      FROM "DailyPlanDependency"
+      WHERE "successorId" IN (${ids.map(sqlText).join(", ")})
+      ORDER BY "createdAt" ASC
+    `);
+  }
+  (rows || []).forEach((row) => {
+    const list = bySuccessor.get(row.successorId) || [];
+    list.push(mapDepRow(row));
+    bySuccessor.set(row.successorId, list);
+  });
+  return bySuccessor;
+}
+
+async function withPlanDeps(plan) {
+  const base = withPlanEnd(plan);
+  if (Array.isArray(base?.predecessors)) return base;
+  const map = await loadPredecessorsForPlans([base]);
+  return { ...base, predecessors: map.get(base.id) || [] };
+}
+
+async function withPlansDeps(plans) {
+  const list = (plans || []).map(withPlanEnd);
+  if (list.every((plan) => Array.isArray(plan.predecessors))) return list;
+  const map = await loadPredecessorsForPlans(list);
+  return list.map((plan) => ({ ...plan, predecessors: plan.predecessors || map.get(plan.id) || [] }));
+}
+
+async function replacePlanDependencies(successorId, items) {
+  if (hasDepModel()) {
+    await prisma.$transaction(async (tx) => {
+      await tx.dailyPlanDependency.deleteMany({ where: { successorId } });
+      for (const item of items) {
+        await tx.dailyPlanDependency.create({
+          data: {
+            successorId,
+            predecessorId: item.predecessorId,
+            type: item.type,
+            lagDays: item.lagDays,
+          },
+        });
+      }
+    });
+    return prisma.dailyPlanDependency.findMany({
+      where: { successorId },
+      select: { id: true, predecessorId: true, type: true, lagDays: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "DailyPlanDependency" WHERE "successorId" = ${sqlText(successorId)}`
+  );
+  for (const item of items) {
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DailyPlanDependency"
+        (id, "successorId", "predecessorId", type, "lagDays", "createdAt", "updatedAt")
+      VALUES (
+        ${sqlText(newDepId())},
+        ${sqlText(successorId)},
+        ${sqlText(item.predecessorId)},
+        ${sqlText(item.type)}::"DailyPlanDepType",
+        ${parseLagDays(item.lagDays)},
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `);
+  }
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT id, "predecessorId", type::text AS type, "lagDays"
+    FROM "DailyPlanDependency"
+    WHERE "successorId" = ${sqlText(successorId)}
+    ORDER BY "createdAt" ASC
+  `);
+  return (rows || []).map(mapDepRow);
+}
+
+async function assertNoDependencyCycles(projectId, successorId, predecessorIds) {
+  if (predecessorIds.includes(successorId)) {
+    const err = new Error("Uma atividade não pode depender de si própria.");
+    err.status = 400;
+    throw err;
+  }
+  if (!predecessorIds.length) return;
+
+  const all = await listProjectDependencyEdges(projectId);
+  const incoming = new Map();
+  (all || []).forEach((dep) => {
+    if (dep.successorId === successorId) return;
+    if (!incoming.has(dep.successorId)) incoming.set(dep.successorId, []);
+    incoming.get(dep.successorId).push(dep.predecessorId);
+  });
+  incoming.set(successorId, predecessorIds);
+
+  const visiting = new Set();
+  const visited = new Set();
+  function dfs(node) {
+    if (visiting.has(node)) return true;
+    if (visited.has(node)) return false;
+    visiting.add(node);
+    const next = incoming.get(node) || [];
+    for (const pred of next) {
+      if (dfs(pred)) return true;
+    }
+    visiting.delete(node);
+    visited.add(node);
+    return false;
+  }
+  if (dfs(successorId)) {
+    const err = new Error("Esta dependência criaria um ciclo entre atividades.");
+    err.status = 400;
+    throw err;
+  }
 }
 
 /**
@@ -286,7 +485,7 @@ dailyPlansRoutes.get(
       orderBy: { date: "desc" }
     });
 
-    res.json(plans);
+    res.json(plans.map(withPlanEnd));
   })
 );
 
@@ -329,7 +528,7 @@ dailyPlansRoutes.get(
       orderBy: { date: "asc" }
     });
 
-    res.json(plans);
+    res.json(plans.map(withPlanEnd));
   })
 );
 
@@ -382,12 +581,67 @@ dailyPlansRoutes.get(
           include: {
             product: true
           }
-        }
+        },
+        ...planPredecessorsInclude(),
       },
       orderBy: { date: "desc" }
     });
 
-    res.json(plans);
+    res.json(await withPlansDeps(plans));
+  })
+);
+
+// PUT /daily-plans/:id/dependencies
+dailyPlansRoutes.put(
+  "/:id/dependencies",
+  requirePermission("obras", "manage"),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const plan = await prisma.dailyPlan.findUnique({ where: { id } });
+    if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
+    await assertOwnProjectAccess(req, plan.projectId);
+
+    const raw = Array.isArray(req.body?.predecessors) ? req.body.predecessors : [];
+    const seen = new Set();
+    const items = [];
+    for (const row of raw) {
+      const predecessorId = String(row?.predecessorId || "").trim();
+      if (!predecessorId || seen.has(predecessorId)) continue;
+      seen.add(predecessorId);
+      const type = normalizeDepType(row?.type);
+      if (!type) {
+        return res.status(400).json({ error: "Tipo de dependência inválido. Use FS, SS, FF ou SF." });
+      }
+      items.push({
+        predecessorId,
+        type,
+        lagDays: parseLagDays(row?.lagDays),
+      });
+    }
+
+    if (items.some((item) => item.predecessorId === id)) {
+      return res.status(400).json({ error: "Uma atividade não pode depender de si própria." });
+    }
+
+    const predIds = items.map((item) => item.predecessorId);
+    if (predIds.length) {
+      const found = await prisma.dailyPlan.findMany({
+        where: { id: { in: predIds }, projectId: plan.projectId },
+        select: { id: true },
+      });
+      if (found.length !== predIds.length) {
+        return res.status(400).json({ error: "A predecessora tem de ser outro plano diário desta obra." });
+      }
+    }
+
+    try {
+      await assertNoDependencyCycles(plan.projectId, id, predIds);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
+    }
+
+    const predecessors = await replacePlanDependencies(id, items);
+    res.json({ id, predecessors });
   })
 );
 
@@ -411,13 +665,14 @@ dailyPlansRoutes.get(
           include: {
             product: true
           }
-        }
+        },
+        ...planPredecessorsInclude(),
       }
     });
 
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
     await assertOwnProjectAccess(req, plan.projectId);
-    res.json(plan);
+    res.json(await withPlanDeps(plan));
   })
 );
 
@@ -426,17 +681,27 @@ dailyPlansRoutes.post(
   "/",
   requirePermission("obras", "manage"),
   asyncHandler(async (req, res) => {
-    const { projectId, date, description, tasks, materials } = req.body;
+    const { projectId, date, plannedEndDate, description, tasks, materials } = req.body;
     
     if (!projectId || !date || !tasks || tasks.length === 0) {
       return res.status(400).json({ error: "projectId, date e tasks são obrigatórios." });
     }
     await assertOwnProjectAccess(req, projectId);
 
+    const startDate = parsePlanDate(date);
+    const endDate = parsePlanDate(plannedEndDate);
+    if (!startDate) {
+      return res.status(400).json({ error: "Data prevista de início inválida." });
+    }
+    if (endDate && endDate < startDate) {
+      return res.status(400).json({ error: "A data prevista de fim não pode ser anterior à data prevista de início." });
+    }
+
     const plan = await prisma.dailyPlan.create({
       data: {
         projectId,
-        date: new Date(date),
+        date: startDate,
+        plannedEndDate: endDate,
         description,
         status: "DRAFT", // ou PENDING_MATERIAL se tiver materiais
         tasks: {
@@ -475,7 +740,7 @@ dailyPlansRoutes.patch(
   requirePermission("obras", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { date, description, tasks, materials } = req.body;
+    const { date, plannedEndDate, description, tasks, materials } = req.body;
     
     const existing = await prisma.dailyPlan.findUnique({
       where: { id },
@@ -497,17 +762,34 @@ dailyPlansRoutes.patch(
 
     // Determine what we can edit based on status
     const canEditMaterials = existing.status === "DRAFT" || existing.status === "PENDING_MATERIAL" || existing.status === "IN_PROGRESS" || (isAdmin && isCompleted);
+
+    const nextStart = date ? parsePlanDate(date) : existing.date;
+    if (date && !nextStart) {
+      return res.status(400).json({ error: "Data prevista de início inválida." });
+    }
+    let nextEnd = existing.plannedEndDate;
+    if (plannedEndDate !== undefined) {
+      if (!plannedEndDate) nextEnd = null;
+      else {
+        nextEnd = parsePlanDate(plannedEndDate);
+        if (!nextEnd) return res.status(400).json({ error: "Data prevista de fim inválida." });
+      }
+    }
+    if (nextStart && nextEnd && nextEnd < nextStart) {
+      return res.status(400).json({ error: "A data prevista de fim não pode ser anterior à data prevista de início." });
+    }
     
     await prisma.$transaction(async (tx) => {
       if (date) {
-        await syncDailyPlanDateDependents(tx, existing, new Date(date));
+        await syncDailyPlanDateDependents(tx, existing, nextStart);
       }
 
       // 1. Update basic info
       let newStatus = existing.status;
       
       const updateData = {};
-      if (date) updateData.date = new Date(date);
+      if (date) updateData.date = nextStart;
+      if (plannedEndDate !== undefined) updateData.plannedEndDate = nextEnd;
       if (description !== undefined) updateData.description = description;
 
       // 2. Update Tasks

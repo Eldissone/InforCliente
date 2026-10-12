@@ -16,7 +16,7 @@ import {
   pickPrimaryEntryMovement,
   STOCK_TYPE_LABELS,
 } from "../../shared/stockDetail.js";
-import { formatCurrency, formatDateBR, formatPercent, getExchangeRate } from "../../shared/format.js";
+import { formatCurrency, formatDateBR, formatPercent, getExchangeRate, toDateKey } from "../../shared/format.js";
 import {
   buildMeasurementSnapshot,
   flattenTasksForParentSelect,
@@ -34,6 +34,7 @@ import {
   galleryPhotoTitle,
 } from "../../shared/galleryLightbox.js";
 import { getSessionUser, getToken } from "../../services/auth.js";
+import { initProjectPlaneamento, loadPlaneamentoTab } from "./projectPlaneamento.js";
 
 checkAuth({ allowedRoles: ["admin", "operador", "supervisor", "leitura", "financeiro", "tecnico", "cliente"] });
 
@@ -302,6 +303,7 @@ async function loadProject() {
 
   el("projectTitle").textContent = p.name;
   if (el("projectType")) el("projectType").textContent = obraTiposLabel(p) || "TIPO DE OBRA NÃO DEFINIDO";
+  if (el("projectClientName")) el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
   const chip = el("obraEstadoChip");
   if (chip) {
     const visual = obraStatusVisual(p.status);
@@ -310,16 +312,9 @@ async function loadProject() {
   }
   wireObraEstadoButton();
   el("projectBreadcrumb").textContent = String(p.referencia || "").trim() || "—";
-  el("projectClientName").textContent = p.client?.name || "Sem cliente vinculado";
-  el("projectClientCode").textContent = p.client?.code || "Sem código";
-  renderProjectContacts(p);
-  el("projectLocation").textContent = p.location || p.region || "-";
 
   const total = Number(p.budgetTotal || 0);
   const consumed = Number(p.budgetConsumed || 0);
-  const committed = Number(p.budgetCommitted || 0);
-  // Always re-derive available so it's consistent even if DB lags
-  const available = total - consumed - committed;
 
   const primaryCurrency = projectState?.currency || "AOA";
   const exchangeRate = await getExchangeRate();
@@ -331,10 +326,6 @@ async function loadProject() {
     el("budgetTotalSecondary").textContent = formatCurrency(convertedTotal, secondaryCurrency);
   }
 
-  el("budgetConsumed").textContent = formatCurrency(consumed, primaryCurrency);
-  el("budgetCommitted").textContent = "-" + formatCurrency(Math.max(0, committed), primaryCurrency);
-  // el("budgetAvailable") is now dynamically updated by loadBudgetExecution with matrix costs
-
   const pct = total > 0 ? Math.round((consumed / total) * 100) : 0;
   el("budgetDelta").textContent = `Consumido: ${formatPercent(pct, { digits: 0 })}`;
   if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, pct))}%`;
@@ -342,7 +333,7 @@ async function loadProject() {
   const progress = Number(p.physicalProgressPct || 0).toFixed(2);
   el("physicalProgress").textContent = `${progress}%`;
   if (el("physicalProgressPie")) {
-    el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #f1f5f9 ${progress}%, #f1f5f9 100%)`;
+    el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${progress}%, #e2e8f0 ${progress}%, #e2e8f0 100%)`;
   }
 
   el("projectStartDate").textContent = p.startDate ? formatDateBR(p.startDate) : "---";
@@ -569,7 +560,7 @@ function renderProjectPauses(p) {
   box.innerHTML = pauses.map((pause) => {
     const inicio = pause.inicio || (pause.startDate ? formatDateBR(pause.startDate) : "---");
     const fim = pause.fim || (pause.endDate ? formatDateBR(pause.endDate) : "---");
-    return `<p class="text-[10px] font-bold text-slate-500">${escapeHtml(inicio)} → ${escapeHtml(fim)}</p>`;
+    return `<p class="text-[10px] font-bold text-[#212e3e]">${escapeHtml(inicio)} → ${escapeHtml(fim)}</p>`;
   }).join("");
 }
 
@@ -639,273 +630,12 @@ async function loadTransactions() {
   tbody.innerHTML = data.items.map(renderTxRow).join("");
 }
 
-/**
- * Renderiza a Curva S com barras simples HTML/CSS usando dados reais.
- * @param {Array}  allTxs      - todos os lançamentos do projeto
- * @param {Object} project     - dados do projeto (startDate, dueDate, budgetTotal)
- * @param {Array}  budgetLines - linhas de orçamento
- */
-
 async function loadBudgetExecution() {
   const id = getProjectId();
-  const container = el("budgetExecutionMatrixContainer");
-  if (!container) return;
-  container.innerHTML = `<div class="p-8 text-center text-sm text-on-surface-variant">Construindo matriz...</div>`;
-
-  // Get project, budget lines, and all transactions
-  const [projRes, linesRes, txRes] = await Promise.all([
-    apiRequest(`/projects/${encodeURIComponent(id)}`),
-    apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`),
-    apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/payments?page=1&pageSize=10000`)
-  ]);
-
-  const p = projRes.project;
+  if (!id) return;
+  const linesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
   const lines = linesRes.items || [];
-  const txs = txRes.items || [];
-
-  // --- Build dynamic month range from project start â†’ due date ---
-  const monthNames = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-  const startDate = p.startDate ? new Date(p.startDate) : new Date();
-  const endDate = p.dueDate ? new Date(p.dueDate) : new Date(startDate.getFullYear(), startDate.getMonth() + 11, 1);
-
-  // Normalise to first of month
-  const rangeStart = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-
-  // Build ordered list of {year, month, label}
-  const projectMonths = [];
-  const cur = new Date(rangeStart);
-  while (cur <= rangeEnd) {
-    projectMonths.push({
-      year: cur.getFullYear(),
-      month: cur.getMonth(),
-      label: `${monthNames[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`
-    });
-    cur.setMonth(cur.getMonth() + 1);
-  }
-
-  // Ensure at least 1 month
-  if (projectMonths.length === 0) {
-    projectMonths.push({ year: rangeStart.getFullYear(), month: rangeStart.getMonth(), label: `${monthNames[rangeStart.getMonth()]}/${String(rangeStart.getFullYear()).slice(2)}` });
-  }
-
-  const numMonths = projectMonths.length;
-
-  // Helper: get column index for a given Date (clamp to range)
-  const getColIdx = (date) => {
-    const d = new Date(date.getFullYear(), date.getMonth(), 1);
-    if (d < rangeStart) return 0;
-    if (d > rangeEnd) return numMonths - 1;
-    const diffYears = d.getFullYear() - rangeStart.getFullYear();
-    const diffMonths = d.getMonth() - rangeStart.getMonth();
-    return diffYears * 12 + diffMonths;
-  };
-
-  // --- Categorize ---
-  const cats = {};
-
-  const getCatKey = (ccName) => {
-    const key = ccName ? String(ccName).toUpperCase().trim() : "ORCAMENTO_GERAL";
-    if (!cats[key]) {
-      cats[key] = {
-        name: ccName || "Orçamento Base / Geral",
-        total: 0,
-        consumed: 0,
-        byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })),
-        items: []
-      };
-    }
-    return key;
-  };
-
-  // Pre-process items mapping
-  const itemsMap = new Map();
-
-  lines.forEach(l => {
-    const cKey = getCatKey(null); // Budget lines don't have cost centers
-    const totalP = Number(l.total || 0);
-    const monthlyP = totalP / numMonths; // distribute linearly across all project months
-
-    const obj = {
-      id: l.id,
-      desc: l.description,
-      totalP,
-      totalC: 0,
-      byMonth: Array(numMonths).fill(0).map(() => ({ p: monthlyP, c: 0 }))
-    };
-    cats[cKey].items.push(obj);
-    itemsMap.set(l.id, obj);
-
-    cats[cKey].total += totalP;
-    cats[cKey].byMonth.forEach((m) => m.p += monthlyP);
-  });
-
-  // Calculate forecast (Previsto) and consumed (Realizado) from transactions
-  txs.forEach(t => {
-    const d = new Date(t.paymentDate || t.createdAt);
-    const mIdx = getColIdx(d); // map to column in project range (clamped)
-    const forecastAmount = Number(t.budgetedAmount || 0);
-    const realizedAmount = t.paidAmount != null ? Number(t.paidAmount) : forecastAmount;
-
-    const cKey = getCatKey(t.costCenter?.name);
-    const txCurr = t.costCenter?.currency || projectState?.currency || "AOA";
-
-    // "PENDENTE" is considered forecast. "CONFIRMADO" is realized.
-    if (t.status === "PENDENTE" || t.status === "LATE") {
-      cats[cKey].total += forecastAmount;
-      cats[cKey].byMonth[mIdx].p += forecastAmount;
-
-      const cleanDesc = (t.description || "Lançamento Avulso").trim();
-      const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
-      let row = cats[cKey].items.find(i => i._key === descKey);
-      if (!row) {
-        row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: 0, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
-        cats[cKey].items.push(row);
-      }
-      row.totalP += forecastAmount;
-      row.byMonth[mIdx].p += forecastAmount;
-
-    } else if (t.status === "CONFIRMADO") {
-      cats[cKey].consumed += realizedAmount;
-      cats[cKey].byMonth[mIdx].c += realizedAmount;
-
-      if (t.budgetLineId && itemsMap.has(t.budgetLineId)) {
-        const bItem = itemsMap.get(t.budgetLineId);
-        bItem.totalC += realizedAmount;
-        bItem.byMonth[mIdx].c += realizedAmount;
-      } else {
-        const cleanDesc = (t.description || "Lançamento Avulso").trim();
-        const descKey = `tx_${cKey}_${cleanDesc.toLowerCase()}`;
-        let row = cats[cKey].items.find(i => i._key === descKey);
-        if (!row) {
-          row = { id: t.id, _key: descKey, desc: cleanDesc, currency: txCurr, totalP: forecastAmount, totalC: 0, byMonth: Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 })) };
-          cats[cKey].items.push(row);
-          cats[cKey].total += forecastAmount;
-          cats[cKey].byMonth[mIdx].p += forecastAmount;
-          row.byMonth[mIdx].p += forecastAmount;
-        }
-        row.totalC += realizedAmount;
-        row.byMonth[mIdx].c += realizedAmount;
-      }
-    }
-  });
-
-  // Render Table
-  let gTotalP = 0;
-  let gTotalC = 0;
-  let gByMonth = Array(numMonths).fill(0).map(() => ({ p: 0, c: 0 }));
-
-  Object.keys(cats).forEach(key => {
-    const cat = cats[key];
-    gTotalP += cat.total;
-    gTotalC += cat.consumed;
-    cat.byMonth.forEach((m, i) => {
-      gByMonth[i].p += m.p;
-      gByMonth[i].c += m.c;
-    });
-  });
-
-  const formatTableCurrency = (val) => val === 0 ? "-" : new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-  const formatPct = (c, p) => p > 0 ? Math.round((c / p) * 100) + '%' : (c > 0 ? '100%' : '0%');
-
-  const drawRow = (title, totalP, totalC, monthsData, isHeader = false, customRowCls = null, rowCurrency = null) => {
-    let rowCls = customRowCls || (isHeader ? "bg-slate-100 font-black text-slate-900" : "bg-white text-slate-800 hover:bg-slate-50 transition-colors");
-    let titleCls = customRowCls ? `px-2 md:px-4 py-2 sticky left-0 z-10 whitespace-nowrap ${customRowCls} text-[10px] md:text-xs` : (isHeader ? "px-2 md:px-4 py-2 sticky left-0 bg-slate-100 z-10 whitespace-nowrap text-[10px] md:text-xs" : "px-2 md:px-4 py-1.5 sticky left-0 bg-white group-hover:bg-slate-50 transition-colors whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] md:max-w-[250px] pl-4 md:pl-8 text-[9px] md:text-xs font-semibold");
-
-    // Format value with currency suffix for this row (e.g. "3.000 AOA")
-    const projCurr = projectState?.currency || "AOA";
-    const effectiveCurr = rowCurrency || projCurr;
-    const currLabel = effectiveCurr === "AOA" ? "Kz" : effectiveCurr;
-    const showCurrSuffix = !isHeader; // only on leaf rows, not category headers
-    const fmtVal = (val) => {
-      if (val === 0) return "-";
-      const num = new Intl.NumberFormat('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
-      return showCurrSuffix ? `${num} <span class="text-[8px] text-slate-400 font-normal">${currLabel}</span>` : num;
-    };
-
-    // Remove description badge (currency now shown in value cells)
-    let html = `<tr class="border-b border-slate-100 group ${rowCls}">`;
-    html += `<td class="${titleCls}" title="${escapeHtml(title)}">${escapeHtml(title)}</td>`;
-
-    // Total column
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right font-black border-l border-slate-100 bg-slate-50 text-[10px] md:text-xs text-slate-900">${fmtVal(totalP)}</td>`;
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[10px] md:text-xs ${totalC > totalP ? 'text-red-600' : 'text-slate-900'}">${fmtVal(totalC)}</td>`;
-    html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400 font-bold">${formatPct(totalC, totalP)}</td>`;
-
-    monthsData.forEach((m) => {
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right border-l border-slate-100 text-[9px] md:text-[11px] text-slate-500">${fmtVal(m.p)}</td>`;
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[9px] md:text-[11px] font-bold ${m.c > m.p ? 'text-red-600' : 'text-slate-900'}">${fmtVal(m.c)}</td>`;
-      html += `<td class="px-1.5 md:px-2 py-1.5 text-right text-[8px] md:text-[9px] text-slate-400">${formatPct(m.c, m.p)}</td>`;
-    });
-
-    html += `</tr>`;
-    return html;
-  };
-
-  let theadHtml = `
-    <thead>
-      <tr class="bg-slate-900 text-white">
-        <th rowspan="2" class="px-2 md:px-4 py-2 sticky left-0 bg-slate-900 z-20 whitespace-nowrap min-w-[150px] md:min-w-[250px] text-left text-[10px] md:text-xs font-black uppercase tracking-widest">Descrição</th>
-        <th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10 bg-white/5">TOTAL OBRA</th>
-        ${projectMonths.map(m => `<th colspan="3" class="px-1 md:px-2 py-2 text-center text-[10px] md:text-xs font-black uppercase tracking-widest border-l border-white/10">${m.label}</th>`).join('')}
-      </tr>
-      <tr class="bg-slate-800 text-slate-300 text-[8px] md:text-[9px] uppercase tracking-wider">
-        <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10">Prev.</th>
-        <th class="px-1 md:px-2 py-1 text-right font-bold">Real.</th>
-        <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">(%)</th>
-        ${projectMonths.map(() => `
-          <th class="px-1 md:px-2 py-1 text-right font-bold border-l border-white/10 text-slate-500">P.</th>
-          <th class="px-1 md:px-2 py-1 text-right font-bold text-emerald-400">R.</th>
-          <th class="px-1 md:px-2 py-1 text-right font-bold text-slate-500">%</th>
-        `).join('')}
-      </tr>
-    </thead>
-  `;
-
-  let tbodyHtml = `<tbody class="divide-y divide-outline-variant/30">`;
-
-  // Grand Total First Row (like DRE)
-  tbodyHtml += drawRow(`= CUSTO LÍQUIDO TOTAL DA OBRA`, gTotalP, gTotalC, gByMonth, true);
-
-  Object.keys(cats).forEach(key => {
-    const cat = cats[key];
-    if (cat.items.length === 0 && cat.total === 0 && cat.consumed === 0) return;
-
-    // Category Header
-    let catTitle = `+ ${cat.name}`;
-
-    tbodyHtml += drawRow(catTitle, cat.total, cat.consumed, cat.byMonth, true, null);
-
-    // Category Items
-    cat.items.forEach(item => {
-      tbodyHtml += drawRow(item.desc, item.totalP, item.totalC, item.byMonth, false, null, item.currency || null);
-    });
-  });
-
-  tbodyHtml += `</tbody>`;
-
-  container.innerHTML = `<table class="w-full text-left whitespace-nowrap border-collapse">${theadHtml}${tbodyHtml}</table>`;
-
-  if (el("totalPlannedVal")) el("totalPlannedVal").textContent = formatCurrency(gTotalP, projectState?.currency);
-  if (el("totalExecutedVal")) el("totalExecutedVal").textContent = formatCurrency(gTotalC, projectState?.currency);
-
-  // Dashboard Cards
-  if (el("budgetConsumed")) el("budgetConsumed").textContent = formatCurrency(gTotalC, projectState?.currency);
-  if (el("budgetConsumedText")) el("budgetConsumedText").textContent = formatCurrency(gTotalC, projectState?.currency);
-
-  const committed = gTotalP - gTotalC;
-  if (el("budgetCommitted")) el("budgetCommitted").textContent = formatCurrency(committed, projectState?.currency);
-  if (el("budgetAvailable")) el("budgetAvailable").textContent = formatCurrency(committed, projectState?.currency);
-
-  if (el("totalExecutionPct")) {
-    const totalPct = gTotalP > 0 ? Math.round((gTotalC / gTotalP) * 100) : 0;
-    el("totalExecutionPct").textContent = `${totalPct}% GERAL`;
-    if (el("budgetDelta")) el("budgetDelta").textContent = `Execução: ${totalPct}%`;
-    if (el("budgetBar")) el("budgetBar").style.width = `${Math.max(0, Math.min(100, totalPct))}%`;
-  }
-
-
-  renderOperationStatus(lines);
+  await renderOperationStatus(lines);
 }
 
 async function renderOperationStatus(lines) {
@@ -957,88 +687,6 @@ async function renderOperationStatus(lines) {
       subEl.textContent = `${formatCurrency(c.consumed, projectState?.currency)} lançados`;
     }
   });
-
-  // Update Fluxo Financeiro card with per-currency breakdown
-  updateFluxoFinanceiro(txData.items || []);
-}
-
-/**
- * Aggregates transaction totals by currency (liquidated vs committed)
- * and updates the Fluxo Financeiro card with multi-currency breakdown lines.
- */
-function updateFluxoFinanceiro(txItems) {
-  // Exclude purely informational categories from budget impact
-  const excluded = new Set(["INVESTIMENTOS", "DEPRECIACAO"]);
-
-  // Aggregate: { [currency]: { paid: number, pending: number } }
-  const byCurrency = {};
-  txItems.forEach(t => {
-    if (excluded.has(t.category)) return;
-    const curr = t.costCenter?.currency || projectState?.currency || "AOA";
-    if (!byCurrency[curr]) byCurrency[curr] = { paid: 0, pending: 0 };
-    const amount = Number(t.budgetedAmount || 0);
-    if (t.status === "CONFIRMADO") {
-      byCurrency[curr].paid += amount;
-    } else if (t.status !== "CANCELADO") {
-      byCurrency[curr].pending += amount;
-    }
-  });
-
-  const currencies = Object.keys(byCurrency).sort();
-  const hasMix = currencies.length > 1;
-
-  // Helper: render currency label badge for secondary currencies
-  const currBadge = (curr) => hasMix
-    ? `<span class="inline-block ml-2 text-[6px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">${curr}</span>`
-    : "";
-
-  // ── Liquidado ──────────────────────────────────────────────────────────
-  const consumedContainer = el("budgetConsumedBreakdown");
-  if (consumedContainer) {
-    if (currencies.length === 0) {
-      consumedContainer.innerHTML = `<p id="budgetConsumed" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
-    } else {
-      consumedContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].paid;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetConsumed"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
-
-  // ── Comprometido ──────────────────────────────────────────────────────
-  const committedContainer = el("budgetCommittedBreakdown");
-  if (committedContainer) {
-    if (currencies.length === 0) {
-      committedContainer.innerHTML = `<p id="budgetCommitted" class="text-[10px] font-bold text-slate-900 tracking-tight">---</p>`;
-    } else {
-      committedContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].pending;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetCommitted"' : ''} class="font-bold text-slate-900 tracking-tight ${isFirst ? "text-[10px]" : "text-sm text-slate-500"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
-
-  // ── Custos da Obra (total = paid + pending) ───────────────────────────
-  const availableContainer = el("budgetAvailableBreakdown");
-  if (availableContainer) {
-    if (currencies.length === 0) {
-      availableContainer.innerHTML = `<p id="budgetAvailable" class="text-[10px] font-bold text-blue-600 tracking-tight">---</p>`;
-    } else {
-      availableContainer.innerHTML = currencies.map((curr, i) => {
-        const val = byCurrency[curr].paid + byCurrency[curr].pending;
-        const isFirst = i === 0;
-        return `<p ${isFirst ? 'id="budgetAvailable"' : ''} class="font-bold text-blue-600 tracking-tight ${isFirst ? "text-[10px]" : "text-base"}">
-          ${formatCurrency(val, curr)}${currBadge(curr)}
-        </p>`;
-      }).join("");
-    }
-  }
 }
 
 
@@ -1242,22 +890,104 @@ function wireTransactionsActions() {
   });
 }
 
+function setActiveProjectTab(trigger) {
+  document.querySelectorAll(".pv-tab").forEach((tab) => {
+    tab.classList.remove("border-slate-900", "text-slate-900");
+    tab.classList.add("text-slate-400", "border-transparent");
+  });
+  document.querySelectorAll(".pv-tab-item").forEach((item) => item.classList.remove("is-active"));
+
+  const dropdown = trigger.closest(".pv-tab-dropdown");
+  if (dropdown) {
+    const parentBtn = dropdown.querySelector(".pv-tab-dropdown-trigger");
+    parentBtn?.classList.add("border-slate-900", "text-slate-900");
+    parentBtn?.classList.remove("text-slate-400", "border-transparent");
+    trigger.classList.add("is-active");
+  } else {
+    trigger.classList.add("border-slate-900", "text-slate-900");
+    trigger.classList.remove("text-slate-400", "border-transparent");
+  }
+}
+
+function closeProjectTabDropdowns(except) {
+  document.querySelectorAll(".pv-tab-dropdown").forEach((group) => {
+    if (group === except) return;
+    group.classList.remove("is-open", "is-locked");
+    const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
+  });
+}
+
+function lockProjectTabDropdown(group) {
+  if (!group) return;
+  group.classList.remove("is-open");
+  group.classList.add("is-locked");
+  const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+}
+
+function firstVisibleDropdownTab(group) {
+  const items = [...group.querySelectorAll("[data-tab-trigger]")].filter(
+    (el) => el.dataset.permDenied !== "true" && !el.classList.contains("hidden")
+  );
+  const preferred = group.getAttribute("data-default-tab");
+  return items.find((el) => el.getAttribute("data-tab-trigger") === preferred) || items[0] || null;
+}
+
+function activateDefaultDropdownTab(group) {
+  if (!group?.hasAttribute("data-default-tab")) return;
+  if (group.querySelector(".pv-tab-item.is-active")) return;
+  firstVisibleDropdownTab(group)?.click();
+}
+
+function wireTabDropdowns() {
+  const groups = document.querySelectorAll(".pv-tab-dropdown");
+  groups.forEach((group) => {
+    const trigger = group.querySelector(".pv-tab-dropdown-trigger");
+    if (!trigger) return;
+
+    group.addEventListener("mouseenter", () => {
+      group.classList.remove("is-locked");
+      closeProjectTabDropdowns(group);
+      group.classList.add("is-open");
+      trigger.setAttribute("aria-expanded", "true");
+    });
+    group.addEventListener("mouseleave", () => {
+      group.classList.remove("is-open", "is-locked");
+      trigger.setAttribute("aria-expanded", "false");
+    });
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      activateDefaultDropdownTab(group);
+      const willOpen = !group.classList.contains("is-open");
+      closeProjectTabDropdowns(willOpen ? group : null);
+      group.classList.toggle("is-open", willOpen);
+      group.classList.remove("is-locked");
+      trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".pv-tab-dropdown")) closeProjectTabDropdowns();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeProjectTabDropdowns();
+  });
+}
+
 function wireTabs() {
+  wireTabDropdowns();
   const triggers = document.querySelectorAll("[data-tab-trigger]");
   triggers.forEach(t => {
     t.addEventListener("click", () => {
       if (t.dataset.permDenied === "true" || t.classList.contains("hidden")) return;
       const tabId = t.getAttribute("data-tab-trigger");
 
-      // Update Triggers
-      triggers.forEach(tr => {
-        tr.classList.remove("border-slate-900", "text-slate-900");
-        tr.classList.add("text-slate-400", "border-transparent");
-      });
-      t.classList.add("border-slate-900", "text-slate-900");
-      t.classList.remove("text-slate-400", "border-transparent");
+      setActiveProjectTab(t);
+      const dropdown = t.closest(".pv-tab-dropdown");
+      closeProjectTabDropdowns();
+      lockProjectTabDropdown(dropdown);
 
-      // Update Contents
       document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
       el(`tab_${tabId}`)?.classList.remove("hidden");
 
@@ -1267,10 +997,19 @@ function wireTabs() {
       if (tabId === "stock") loadStock();
       if (tabId === "galeria_obra") loadGallery();
       if (tabId === "planos_diarios") loadDailyPlans();
+      if (
+        tabId === "orcamento_custo" ||
+        tabId === "orcamento_vendas" ||
+        tabId === "plano_gantt" ||
+        tabId === "plano_financeiro" ||
+        tabId === "recursos_equipamentos" ||
+        tabId === "recursos_materiais" ||
+        tabId === "recursos_pessoal"
+      ) {
+        loadPlaneamentoTab(tabId);
+      }
     });
   });
-
-  // Sub-tabs de Stock are handled in wireStockEvents
 }
 
 function renderGroupHeader(group, totalGroupValue = 0, currency = "Kz", groupProgress = 0) {
@@ -2037,7 +1776,7 @@ async function loadProgressTasks() {
       }
       const pieEl = el("physicalProgressPie");
       if (pieEl) {
-        pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #f1f5f9 ${globalPct}%, #f1f5f9 100%)`;
+        pieEl.style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${globalPct}%, #e2e8f0 ${globalPct}%, #e2e8f0 100%)`;
       }
 
       let groupIndex = 0;
@@ -2108,7 +1847,7 @@ async function loadProgressTasks() {
         // Update UI: Pie Chart
         if (el("physicalProgress")) el("physicalProgress").textContent = `${avgPct}%`;
         if (el("physicalProgressPie")) {
-          el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${avgPct}%, #f1f5f9 ${avgPct}%, #f1f5f9 100%)`;
+          el("physicalProgressPie").style.background = `conic-gradient(#2afc8d 0%, #2afc8d ${avgPct}%, #e2e8f0 ${avgPct}%, #e2e8f0 100%)`;
         }
 
         // Date Calculations
@@ -3372,7 +3111,6 @@ let uiState = {
     if (saved) return JSON.parse(saved);
     // Default: all tables collapsed
     return {
-      matrix: true,
       transactions: true,
       payments: true,
       progress: true,
@@ -3447,6 +3185,10 @@ async function init() {
   wireLiquidation();
   wireTransactionsActions();
   wireTabs();
+  initProjectPlaneamento({
+    getProjectId,
+    getProject: () => projectState,
+  });
   applyRoleVisibility();
   const user = getSessionUser();
   const role = (user?.role || "").toLowerCase();
@@ -5582,8 +5324,6 @@ async function openEditPlannedModal(materialId, materialName, currentPlanned) {
 }
 window.openEditPlannedModal = openEditPlannedModal;
 
-const DAILY_PLANS_PAGE_SIZE = 12;
-
 function renderGeralPagination(container, { page, pageSize, total, onPage }) {
   if (!container) return;
   container.innerHTML = "";
@@ -5669,141 +5409,394 @@ function renderGeralPagination(container, { page, pageSize, total, onPage }) {
   container.appendChild(wrap);
 }
 
+const DP_BOARD_COLORS = ["#f43f5e", "#f97316", "#0d9488", "#7c3aed", "#ec4899", "#d946ef", "#3b82f6", "#a855f7"];
+
+const DP_STATUS_COLUMNS = [
+  { id: "open", title: "Aberto", color: "#f43f5e", icon: "assignment", statuses: ["DRAFT", "PENDING_MATERIAL"] },
+  { id: "progress", title: "Em Curso", color: "#d97706", icon: "play_circle", statuses: ["IN_PROGRESS", "PENDING_VALIDATION"] },
+  { id: "done", title: "Concluído", color: "#059669", icon: "task_alt", statuses: ["COMPLETED", "PENDING_RETURN"] },
+];
+
+const DP_MONTHS_SHORT = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+
+function dpBoardStorageKey(projectId) {
+  return `InfoCliente.dailyPlanBoard.${projectId}`;
+}
+
+function loadDailyPlanBoardConfig(projectId) {
+  try {
+    const raw = localStorage.getItem(dpBoardStorageKey(projectId));
+    if (!raw) return { customColumns: [], placements: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
+      placements: parsed.placements && typeof parsed.placements === "object" ? parsed.placements : {},
+    };
+  } catch {
+    return { customColumns: [], placements: {} };
+  }
+}
+
+function saveDailyPlanBoardConfig(projectId, config) {
+  localStorage.setItem(dpBoardStorageKey(projectId), JSON.stringify(config));
+}
+
+function getDailyPlanBoardConfig() {
+  const projectId = getProjectId();
+  if (!window.dailyPlanBoardConfig || window.dailyPlanBoardProjectId !== projectId) {
+    window.dailyPlanBoardConfig = loadDailyPlanBoardConfig(projectId);
+    window.dailyPlanBoardProjectId = projectId;
+  }
+  return window.dailyPlanBoardConfig;
+}
+
+function persistDailyPlanBoardConfig() {
+  saveDailyPlanBoardConfig(getProjectId(), getDailyPlanBoardConfig());
+}
+
+function hexToRgba(hex, alpha) {
+  const raw = String(hex || "").replace("#", "");
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+  const n = Number.parseInt(full, 16);
+  if (!Number.isFinite(n)) return `rgba(148, 163, 184, ${alpha})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function formatDailyPlanBoardDate(value) {
+  const key = toDateKey(value);
+  if (!key) return "—";
+  const [y, m, d] = key.split("-").map(Number);
+  return `${d} de ${DP_MONTHS_SHORT[m - 1]} de ${y}`;
+}
+
+function localDateInputValue(value) {
+  if (arguments.length === 0) {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return toDateKey(value) || "";
+}
+
+function dailyPlanDateRangeLabel(plan) {
+  const start = formatDailyPlanBoardDate(plan?.date);
+  const end = plan?.plannedEndDate ? formatDailyPlanBoardDate(plan.plannedEndDate) : "";
+  return end ? `${start} – ${end}` : start;
+}
+
+function dailyPlanBoardTitle(p) {
+  const desc = (p.description || "").trim();
+  const firstTask = (p.tasks || [])[0]?.progressTask;
+  const taskDesc = (firstTask?.description || "").trim();
+  const group = (firstTask?.itemGroup || "").trim();
+  const main = desc || taskDesc || "Sem descrição";
+  if (group) return `${main} (${group})`;
+  if (desc && taskDesc && taskDesc !== desc) return `${main} (${taskDesc})`;
+  return main;
+}
+
+function dailyPlanPriority(p) {
+  if (["PENDING_MATERIAL", "PENDING_VALIDATION", "PENDING_RETURN"].includes(p.status)) return "alta";
+  const key = toDateKey(p.date);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  if (key && key <= today && p.status !== "COMPLETED") return "alta";
+  return "normal";
+}
+
+function dailyPlanTitleColor(column) {
+  if (column?.id === "done") return "#0d3fd1";
+  return column?.color || "#212e3e";
+}
+
+function nativeColumnIdForStatus(status) {
+  return DP_STATUS_COLUMNS.find((col) => col.statuses.includes(status))?.id || "open";
+}
+
+function columnForPlan(plan, config) {
+  const customId = config.placements?.[plan.id];
+  if (customId && config.customColumns.some((col) => col.id === customId)) return customId;
+  return nativeColumnIdForStatus(plan.status);
+}
+
+function renderDailyPlanCard(p, column) {
+  const title = dailyPlanBoardTitle(p);
+  const prio = dailyPlanPriority(p);
+  const titleColor = dailyPlanTitleColor(column);
+  const uniqueTechs = [...new Set((p.tasks || []).map((t) => t.technician?.name || t.technician?.email).filter(Boolean))];
+  const techDisplay = uniqueTechs[0] || "";
+  const iconBg = hexToRgba(column.color, 0.14);
+
+  const actions = [];
+  if (p.status === "PENDING_MATERIAL") {
+    actions.push(`<button type="button" data-role-visible="admin,supervisor,operador" class="dp-act-amber" onclick="event.stopPropagation(); window.providePlanMaterials('${p.id}')"><span class="material-symbols-outlined">inventory_2</span> Material</button>`);
+  }
+  if (p.status === "PENDING_VALIDATION") {
+    actions.push(`<button type="button" data-role-visible="admin,supervisor,operador" class="dp-act-orange" onclick="event.stopPropagation(); window.validatePlan('${p.id}')"><span class="material-symbols-outlined">fact_check</span> Validar</button>`);
+  }
+  if (p.status === "IN_PROGRESS" || p.status === "DRAFT") {
+    actions.push(`<button type="button" data-role-visible="admin,tecnico,supervisor,operador" class="dp-act-green" onclick="event.stopPropagation(); window.completePlan('${p.id}')"><span class="material-symbols-outlined">check_circle</span> Concluir</button>`);
+  }
+  if (p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" class="dp-act-icon" title="Editar plano" onclick="event.stopPropagation(); window.openEditPlanModal('${p.id}')"><span class="material-symbols-outlined">edit</span></button>`);
+  }
+  if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="admin,operador" class="dp-act-icon dp-act-danger" title="Apagar plano" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
+  }
+  actions.push(`<button type="button" class="dp-act-icon" title="Ver detalhes" onclick="event.stopPropagation(); window.viewPlanDetails('${p.id}')"><span class="material-symbols-outlined">visibility</span></button>`);
+
+  return `
+    <article class="dp-card" draggable="true" data-plan-id="${escapeHtml(p.id)}" data-plan-status="${escapeHtml(p.status)}">
+      <div class="dp-card-top">
+        <div class="dp-card-icon" style="background:${iconBg};color:${column.color}">
+          <span class="material-symbols-outlined">${column.icon || "assignment"}</span>
+        </div>
+        <p class="dp-card-title" style="color:${titleColor}" title="${escapeHtml(title)}">${escapeHtml(title)}</p>
+        <span class="dp-card-prio ${prio === "alta" ? "is-alta" : "is-normal"}">${prio === "alta" ? "Alta" : "Normal"}</span>
+      </div>
+      <div class="dp-card-meta">
+        <span><span class="material-symbols-outlined">calendar_today</span>${escapeHtml(dailyPlanDateRangeLabel(p))}</span>
+        ${techDisplay ? `<span class="dp-card-tech" title="${escapeHtml(uniqueTechs.join(", "))}"><span class="material-symbols-outlined">person</span>${escapeHtml(techDisplay)}</span>` : ""}
+      </div>
+      ${actions.length ? `<div class="dp-card-actions">${actions.join("")}</div>` : ""}
+    </article>
+  `;
+}
+
+function renderDailyPlanColumn(column, plans) {
+  const headBg = hexToRgba(column.color, 0.16);
+  const deleteBtn = column.custom
+    ? `<button type="button" class="dp-col-delete" data-dp-delete-col="${escapeHtml(column.id)}" title="Remover coluna"><span class="material-symbols-outlined">close</span></button>`
+    : "";
+  return `
+    <section class="dp-col" data-dp-col="${escapeHtml(column.id)}" data-dp-custom="${column.custom ? "1" : "0"}">
+      <div class="dp-col-head" style="background:${headBg};color:${column.color}">
+        <span class="dp-col-head-title">${escapeHtml(column.title)}</span>
+        <span class="dp-col-count">${plans.length}</span>
+        ${deleteBtn}
+      </div>
+      <div class="dp-cards">${plans.map((p) => renderDailyPlanCard(p, column)).join("")}</div>
+    </section>
+  `;
+}
+
+function renderDailyPlanAddColumn(selectedColor) {
+  const color = selectedColor || DP_BOARD_COLORS[2];
+  const dots = DP_BOARD_COLORS.map((c) => `
+    <button type="button" class="dp-color-dot${c === color ? " is-selected" : ""}" data-dp-color="${c}" style="background:${c}" aria-label="Cor ${c}"></button>
+  `).join("");
+  return `
+    <button type="button" class="dp-add-col" data-dp-open-add>
+      <span class="material-symbols-outlined">add</span> Adicionar coluna
+    </button>
+    <form class="dp-add-form" data-dp-add-form>
+      <input id="dpNewColumnName" type="text" placeholder="Nome da coluna..." autocomplete="off">
+      <div class="dp-color-row">${dots}</div>
+      <div class="dp-add-actions">
+        <button type="submit" class="dp-add-confirm">Adicionar</button>
+        <button type="button" class="dp-add-cancel" data-dp-cancel-add>Cancelar</button>
+      </div>
+    </form>
+  `;
+}
+
 function renderDailyPlansList() {
   const container = el("dailyPlansList");
-  const pager = el("dailyPlansPagination");
   if (!container || !window.dailyPlansState) return;
 
   const searchQuery = (el("dpFilterSearch")?.value || "").toLowerCase().trim();
-  const filterStatus = el("dpFilterStatus")?.value || "all";
   const sortBy = el("dpFilterSort")?.value || "date_desc";
+  const config = getDailyPlanBoardConfig();
+  const adding = !!window.dailyPlanAddingColumn;
+  const selectedColor = window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2];
 
   let filtered = [...window.dailyPlansState];
 
-  // 1. Apply search filter (by description or technician name)
   if (searchQuery) {
-    filtered = filtered.filter(p => {
+    filtered = filtered.filter((p) => {
       const descMatch = (p.description || "").toLowerCase().includes(searchQuery);
-
-      // Check if any technician matches
-      const techMatch = p.tasks.some(t => {
+      const techMatch = (p.tasks || []).some((t) => {
         const name = (t.technician?.name || "").toLowerCase();
         const email = (t.technician?.email || "").toLowerCase();
         return name.includes(searchQuery) || email.includes(searchQuery);
       });
-
       return descMatch || techMatch;
     });
   }
 
-  // 2. Apply status filter
-  if (filterStatus !== "all") {
-    filtered = filtered.filter(p => p.status === filterStatus);
-  }
-
-  // 3. Apply sort
   filtered.sort((a, b) => {
-    if (sortBy === "date_desc") {
-      return new Date(b.date) - new Date(a.date);
-    } else if (sortBy === "date_asc") {
-      return new Date(a.date) - new Date(b.date);
-    } else if (sortBy === "created_desc") {
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    } else if (sortBy === "created_asc") {
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    }
+    if (sortBy === "date_desc") return new Date(b.date) - new Date(a.date);
+    if (sortBy === "date_asc") return new Date(a.date) - new Date(b.date);
+    if (sortBy === "created_desc") return new Date(b.createdAt) - new Date(a.createdAt);
+    if (sortBy === "created_asc") return new Date(a.createdAt) - new Date(b.createdAt);
     return 0;
   });
 
-  if (filtered.length === 0) {
-    container.innerHTML = `
-      <div class="p-10 flex flex-col items-center text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">
-        <span class="material-symbols-outlined text-4xl mb-2 text-slate-350">event_busy</span>
-        Nenhum plano diário corresponde aos filtros aplicados.
-      </div>`;
-    if (pager) pager.innerHTML = "";
-    return;
+  const columns = [
+    ...DP_STATUS_COLUMNS,
+    ...config.customColumns.map((col) => ({ ...col, custom: true, icon: "view_column" })),
+  ];
+
+  container.innerHTML = columns.map((column) => {
+    const plans = filtered.filter((p) => columnForPlan(p, config) === column.id);
+    return renderDailyPlanColumn(column, plans);
+  }).join("") + renderDailyPlanAddColumn(selectedColor);
+
+  const addColBtn = container.querySelector("[data-dp-open-add]");
+  const addForm = container.querySelector("[data-dp-add-form]");
+  if (adding) {
+    addColBtn?.style.setProperty("display", "none");
+    addForm?.classList.add("is-open");
+    requestAnimationFrame(() => el("dpNewColumnName")?.focus());
+  } else if (addColBtn) {
+    addColBtn.style.display = "";
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / DAILY_PLANS_PAGE_SIZE));
-  window.dailyPlansPage = Math.min(Math.max(1, Number(window.dailyPlansPage) || 1), totalPages);
-  const start = (window.dailyPlansPage - 1) * DAILY_PLANS_PAGE_SIZE;
-  const pageItems = filtered.slice(start, start + DAILY_PLANS_PAGE_SIZE);
+  applyRoleVisibility();
+}
 
-  container.innerHTML = pageItems.map(p => {
-    let statusBadge = "";
-    if (p.status === "DRAFT") statusBadge = `<span class="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Disponível</span>`;
-    if (p.status === "PENDING_MATERIAL") statusBadge = `<span class="px-2 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Aguardando Material</span>`;
-    if (p.status === "IN_PROGRESS") statusBadge = `<span class="px-2 py-1 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Em Execução</span>`;
-    if (p.status === "PENDING_VALIDATION") statusBadge = `<span class="px-2 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black tracking-widest uppercase animate-pulse">Pendente Validação</span>`;
-    if (p.status === "COMPLETED") statusBadge = `<span class="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black tracking-widest uppercase">Concluído</span>`;
+function wireDailyPlanBoard() {
+  const container = el("dailyPlansList");
+  if (!container || window.dailyPlansListenersWired) return;
 
-    // Fetch technicians assigned
-    const uniqueTechs = [...new Set(p.tasks.map(t => t.technician?.name || t.technician?.email || "Sem Técnico").filter(Boolean))];
-    const techDisplay = uniqueTechs.length > 0 ? uniqueTechs.join(', ') : "Sem Técnico";
+  const resetAndRender = () => renderDailyPlansList();
+  el("dpFilterSearch")?.addEventListener("input", resetAndRender);
+  el("dpFilterSort")?.addEventListener("change", resetAndRender);
 
-    return `
-      <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group w-full">
-        <div>
-          <div class="flex items-center gap-3 mb-2">
-            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
-            ${statusBadge}
-          </div>
-          <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
-          <div class="mt-2 text-xs font-semibold text-slate-500 flex flex-wrap gap-4 items-center">
-            <span>${p.tasks.length} Tarefa(s)</span>
-            <span>${p.materials.length} Material(ais)</span>
-            <span class="flex items-center gap-1 text-slate-400 font-medium">
-              <span class="material-symbols-outlined text-xs">person</span> ${escapeHtml(techDisplay)}
-            </span>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
-          ${p.status === "PENDING_MATERIAL" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
-            </button>
-          ` : ""}
-          ${p.status === "PENDING_VALIDATION" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.validatePlan('${p.id}')" class="h-10 bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">fact_check</span> Validar Relatório
-            </button>
-          ` : ""}
-          ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
-            <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
-            </button>
-          ` : ""}
-          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") ? `
-            <button data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0" title="Editar plano">
-              <span class="material-symbols-outlined text-sm">edit</span>
-            </button>
-          ` : ""}
-          <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
-            <span class="material-symbols-outlined text-sm">visibility</span>
-          </button>
-          ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
-            <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
-              <span class="material-symbols-outlined text-sm">delete</span>
-            </button>
-          ` : ""}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  renderGeralPagination(pager, {
-    page: window.dailyPlansPage,
-    pageSize: DAILY_PLANS_PAGE_SIZE,
-    total: filtered.length,
-    onPage: (next) => {
-      window.dailyPlansPage = next;
-      renderDailyPlansList();
-      container.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
+  container.addEventListener("mousedown", (event) => {
+    const card = event.target.closest(".dp-card");
+    if (card) card.draggable = !event.target.closest("button");
   });
 
-  applyRoleVisibility();
+  container.addEventListener("click", (event) => {
+    if (window.dpBoardJustDragged) return;
+
+    const openAdd = event.target.closest("[data-dp-open-add]");
+    if (openAdd) {
+      window.dailyPlanAddingColumn = true;
+      window.dailyPlanNewColumnColor = window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2];
+      renderDailyPlansList();
+      return;
+    }
+
+    const cancelAdd = event.target.closest("[data-dp-cancel-add]");
+    if (cancelAdd) {
+      window.dailyPlanAddingColumn = false;
+      renderDailyPlansList();
+      return;
+    }
+
+    const colorBtn = event.target.closest("[data-dp-color]");
+    if (colorBtn) {
+      window.dailyPlanNewColumnColor = colorBtn.getAttribute("data-dp-color");
+      container.querySelectorAll("[data-dp-color]").forEach((btn) => {
+        btn.classList.toggle("is-selected", btn.getAttribute("data-dp-color") === window.dailyPlanNewColumnColor);
+      });
+      return;
+    }
+
+    const deleteCol = event.target.closest("[data-dp-delete-col]");
+    if (deleteCol) {
+      event.preventDefault();
+      const colId = deleteCol.getAttribute("data-dp-delete-col");
+      const config = getDailyPlanBoardConfig();
+      config.customColumns = config.customColumns.filter((col) => col.id !== colId);
+      Object.keys(config.placements).forEach((planId) => {
+        if (config.placements[planId] === colId) delete config.placements[planId];
+      });
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+      return;
+    }
+
+    const card = event.target.closest(".dp-card");
+    if (card && !event.target.closest("button")) {
+      const planId = card.getAttribute("data-plan-id");
+      if (planId) window.viewPlanDetails(planId);
+    }
+  });
+
+  container.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-dp-add-form]");
+    if (!form) return;
+    event.preventDefault();
+    const name = (el("dpNewColumnName")?.value || "").trim();
+    if (!name) {
+      toast("Indique o nome da coluna.", { type: "error" });
+      el("dpNewColumnName")?.focus();
+      return;
+    }
+    const config = getDailyPlanBoardConfig();
+    config.customColumns.push({
+      id: `custom-${Date.now()}`,
+      title: name,
+      color: window.dailyPlanNewColumnColor || DP_BOARD_COLORS[2],
+    });
+    persistDailyPlanBoardConfig();
+    window.dailyPlanAddingColumn = false;
+    window.dailyPlanNewColumnColor = DP_BOARD_COLORS[2];
+    renderDailyPlansList();
+  });
+
+  container.addEventListener("dragstart", (event) => {
+    const card = event.target.closest(".dp-card");
+    if (!card) return;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.getAttribute("data-plan-id") || "");
+  });
+
+  container.addEventListener("dragend", (event) => {
+    event.target.closest(".dp-card")?.classList.remove("is-dragging");
+    container.querySelectorAll(".dp-col.is-drop-target").forEach((col) => col.classList.remove("is-drop-target"));
+    window.dpBoardJustDragged = true;
+    setTimeout(() => { window.dpBoardJustDragged = false; }, 80);
+  });
+
+  container.addEventListener("dragover", (event) => {
+    const col = event.target.closest(".dp-col");
+    if (!col) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    container.querySelectorAll(".dp-col.is-drop-target").forEach((node) => {
+      if (node !== col) node.classList.remove("is-drop-target");
+    });
+    col.classList.add("is-drop-target");
+  });
+
+  container.addEventListener("drop", (event) => {
+    const col = event.target.closest(".dp-col");
+    if (!col) return;
+    event.preventDefault();
+    col.classList.remove("is-drop-target");
+    const planId = event.dataTransfer.getData("text/plain");
+    if (!planId) return;
+    const plan = (window.dailyPlansState || []).find((p) => p.id === planId);
+    if (!plan) return;
+
+    const targetId = col.getAttribute("data-dp-col");
+    const isCustom = col.getAttribute("data-dp-custom") === "1";
+    const config = getDailyPlanBoardConfig();
+
+    if (isCustom) {
+      config.placements[planId] = targetId;
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+      return;
+    }
+
+    const nativeId = nativeColumnIdForStatus(plan.status);
+    if (targetId !== nativeId) {
+      toast("O estado do plano segue o fluxo de execução. Use as acções do cartão.", { type: "info" });
+      return;
+    }
+    if (config.placements[planId]) {
+      delete config.placements[planId];
+      persistDailyPlanBoardConfig();
+      renderDailyPlansList();
+    }
+  });
+
+  window.dailyPlansListenersWired = true;
 }
 
 async function loadDailyPlans() {
@@ -5811,33 +5804,17 @@ async function loadDailyPlans() {
   const container = el("dailyPlansList");
   if (!container) return;
 
-  const pager = el("dailyPlansPagination");
   try {
-    container.innerHTML = `<div class="p-10 text-center text-slate-400 font-bold border-2 border-dashed border-slate-100 rounded-3xl w-full">Carregando planos...</div>`;
-    if (pager) pager.innerHTML = "";
-
+    container.innerHTML = `<div class="dp-board-empty">Carregando planos...</div>`;
     const plans = await apiRequest(`/daily-plans?projectId=${encodeURIComponent(id)}`);
     window.dailyPlansState = plans || [];
-    window.dailyPlansPage = 1;
-
-    // Wire up event listeners if they haven't been wired yet
-    if (!window.dailyPlansListenersWired) {
-      const resetAndRender = () => {
-        window.dailyPlansPage = 1;
-        renderDailyPlansList();
-      };
-      el("dpFilterSearch")?.addEventListener("input", resetAndRender);
-      el("dpFilterStatus")?.addEventListener("change", resetAndRender);
-      el("dpFilterSort")?.addEventListener("change", resetAndRender);
-      window.dailyPlansListenersWired = true;
-    }
-
+    window.dailyPlanBoardConfig = loadDailyPlanBoardConfig(id);
+    window.dailyPlanBoardProjectId = id;
+    wireDailyPlanBoard();
     renderDailyPlansList();
-
   } catch (err) {
     console.error(err);
-    container.innerHTML = `<div class="p-10 text-center text-red-500 font-bold border-2 border-dashed border-red-100 rounded-3xl w-full">Erro ao carregar planos.</div>`;
-    if (pager) pager.innerHTML = "";
+    container.innerHTML = `<div class="dp-board-empty" style="color:#ef4444">Erro ao carregar planos.</div>`;
   }
 }
 window.loadDailyPlans = loadDailyPlans;
@@ -5988,10 +5965,14 @@ async function wireDailyPlans() {
       primaryLabel: "Gravar Plano",
       contentHtml: `
         <div class="space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
-              <input type="date" id="dp_date" value="${new Date().toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de início</label>
+              <input type="date" id="dp_date" value="${localDateInputValue()}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+            <div>
+              <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de fim</label>
+              <input type="date" id="dp_end_date" value="${localDateInputValue()}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
             </div>
             <div>
               <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
@@ -6149,8 +6130,19 @@ async function wireDailyPlans() {
       },
       onPrimary: async ({ close, btn, panel }) => {
         const date = panel.querySelector("#dp_date").value;
+        const plannedEndDate = panel.querySelector("#dp_end_date").value;
         const description = panel.querySelector("#dp_desc").value;
         const planTechId = panel.querySelector("#dp_plan_tech").value;
+
+        if (!date) {
+          return toast("Indique a data prevista de início.", { type: "error" });
+        }
+        if (!plannedEndDate) {
+          return toast("Indique a data prevista de fim.", { type: "error" });
+        }
+        if (plannedEndDate < date) {
+          return toast("A data prevista de fim não pode ser anterior ao início.", { type: "error" });
+        }
 
         if (!planTechId) {
           return toast("Por favor, selecione o Técnico Responsável.", { type: "error" });
@@ -6173,6 +6165,7 @@ async function wireDailyPlans() {
             body: {
               projectId: id,
               date,
+              plannedEndDate,
               description,
               tasks: finalTasks,
               materials: [...selectedMaterials, ...selectedTools]
@@ -6420,7 +6413,7 @@ window.viewPlanDetails = async function (planId) {
       <div class="space-y-6">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(plan.date)}</span>
+            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${escapeHtml(plan.plannedEndDate ? `${formatDateBR(plan.date)} – ${formatDateBR(plan.plannedEndDate)}` : formatDateBR(plan.date))}</span>
             ${statusBadge}
           </div>
         </div>
@@ -6673,10 +6666,14 @@ window.openEditPlanModal = async (planId) => {
 
   const contentHtml = `
     <div class="space-y-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data do Plano</label>
-          <input type="date" id="edit_dp_date" value="${new Date(plan.date).toISOString().split('T')[0]}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de início</label>
+          <input type="date" id="edit_dp_date" value="${localDateInputValue(plan.date)}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
+        </div>
+        <div>
+          <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Data prevista de fim</label>
+          <input type="date" id="edit_dp_end_date" value="${localDateInputValue(plan.plannedEndDate)}" class="w-full h-12 bg-slate-50 border-none rounded-xl px-4 text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all">
         </div>
         <div>
           <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Descrição / Resumo</label>
@@ -6853,11 +6850,20 @@ window.openEditPlanModal = async (planId) => {
     },
     onPrimary: async ({ panel, close }) => {
       const date = panel.querySelector("#edit_dp_date").value;
+      const plannedEndDate = panel.querySelector("#edit_dp_end_date").value;
       const desc = panel.querySelector("#edit_dp_desc").value;
       const techId = panel.querySelector("#edit_dp_plan_tech").value;
 
       if (!date || selectedTasks.length === 0) {
-        toast("Data e pelo menos uma tarefa são obrigatórios.", { type: "warning" });
+        toast("Data de início e pelo menos uma tarefa são obrigatórios.", { type: "warning" });
+        return;
+      }
+      if (!plannedEndDate) {
+        toast("Indique a data prevista de fim.", { type: "warning" });
+        return;
+      }
+      if (plannedEndDate < date) {
+        toast("A data prevista de fim não pode ser anterior ao início.", { type: "warning" });
         return;
       }
 
@@ -6869,6 +6875,7 @@ window.openEditPlanModal = async (planId) => {
 
       const payload = {
         date,
+        plannedEndDate,
         description: desc,
         tasks: payloadTasks
       };

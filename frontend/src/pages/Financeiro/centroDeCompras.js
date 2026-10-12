@@ -14,13 +14,6 @@ import {
 
 import { formatExtraCostLabel } from "/shared/costCategoryCascade.js";
 import {
-  renderBankCardHtml,
-  normalizeBankKey,
-  monthInputToExpiresAt,
-  expiresAtToMonthInput,
-  parseCardNumberInput,
-} from "/shared/bankCardVisual.js";
-import {
   bindNifLookup,
   normalizeNif,
   setNifLookupStatus,
@@ -28,7 +21,6 @@ import {
 import { parseItemTax } from "/shared/purchaseOrderForm.js";
 
 let allProjects = [];
-let allCards = [];
 let centrosMainTab = "compras";
 
 function switchCentrosMainTab(tab) {
@@ -63,17 +55,6 @@ function bindCentrosMainTabs() {
     btn.addEventListener("click", () => switchCentrosMainTab(btn.dataset.centrosTab));
   });
 
-  document.getElementById("btnOpenModalCartoes")?.addEventListener("click", () => {
-    const m = document.getElementById("modalCartoes");
-    if (m) m.classList.add("open");
-    // load cards if not loaded yet
-    if (managedCards.length === 0) loadCards();
-  });
-
-  document.getElementById("btnCloseModalCartoes")?.addEventListener("click", () => {
-    document.getElementById("modalCartoes")?.classList.remove("open");
-  });
-
   // Sidebar CC toggle (ocultar/expandir)
   document.getElementById("btnToggleCCSidebar")?.addEventListener("click", () => {
     const sidebar = document.getElementById("ccSidebar");
@@ -101,13 +82,9 @@ function bindCentrosMainTabs() {
 }
 
 function applyCentrosMainTabVisibility() {
-  const hasCards = can("fundoManeio", "view");
   // Assumindo permissão geral de compras ou admin (usando view genérico para testes/demonstração)
   const hasCompras = true; // Todo: usar uma permissão dedicada "centroCompras" quando existir
 
-  const tabsEl = document.getElementById("centrosMainTabs");
-
-  document.getElementById("btnOpenModalCartoes")?.classList.toggle("hidden", !hasCards);
   document.getElementById("centrosTabBtnCompras")?.classList.toggle("hidden", !hasCompras);
 
   const validTabs = [];
@@ -118,48 +95,6 @@ function applyCentrosMainTabVisibility() {
   switchCentrosMainTab(initial);
 }
 
-function cardPreviewPayloadFromForm() {
-  const bankSelect = document.getElementById("cardBank")?.value || "";
-  const bankKey = normalizeBankKey(bankSelect) || bankSelect;
-  const month = document.getElementById("cardExpiresAt")?.value || "";
-  const expiresAt = month ? monthInputToExpiresAt(month) : null;
-  const { cardNumberMasked, lastDigits } = parseCardNumberInput(
-    document.getElementById("cardNumberMasked")?.value
-  );
-  return {
-    id: "preview",
-    label: document.getElementById("cardLabel")?.value.trim() || "NOME APELIDO",
-    bank: bankKey || null,
-    holderName: document.getElementById("cardHolderName")?.value.trim() || "",
-    type: document.getElementById("cardType")?.value || "DEBITO",
-    lastDigits,
-    cardNumberMasked: cardNumberMasked || "",
-    expiresAt,
-  };
-}
-
-function updateCardFormPreview() {
-  const host = document.getElementById("cardFormPreview");
-  if (!host) return;
-  host.innerHTML = renderBankCardHtml(cardPreviewPayloadFromForm(), { compact: true, asButton: false });
-}
-
-function renderCardScopeBadgeHtml(card) {
-  const scope = cardScopeLabel(card);
-  if (card.projectId) {
-    return `<span class="debit-card__scope-pill">${escapeHtml(scope)}</span>`;
-  }
-  return `<span class="debit-card__scope-pill">Global</span>`;
-}
-
-function renderCardBalanceBadgeHtml(card) {
-  const balance = Number(card.currentBalance || 0);
-  return `<span class="debit-card__balance-pill">${escapeHtml(formatCurrency(balance, card.currency))}</span>`;
-}
-
-let managedCards = [];
-let selectedCardId = null;
-let selectedCardCache = null;
 let selectedCostCategoryFilter = "";
 let extrasCache = [];
 function escapeHtml(str) {
@@ -168,9 +103,6 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;");
 }
-
-
-const CARD_TYPE_LABELS = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
 
 const EXTRA_STATUS_LABELS = {
   PENDENTE: "Pendente",
@@ -195,26 +127,6 @@ const EXTRA_SOURCE_LABELS = {
   SOLICITACAO_TRANSFERENCIA: "Solicitação de Transferência",
   TRANSFERENCIA_INTERNA_CARTAO: "Transferência interna (carregar cartão)",
 };
-
-function cardScopeLabel(card) {
-  if (!card?.projectId) return "Global";
-  const p = card.project || allProjects.find((pr) => pr.id === card.projectId);
-  if (p) return `${p.name}${p.code ? ` (${p.code})` : ""}`;
-  return "Obra";
-}
-
-function apiErrorMessage(err) {
-  return err?.data?.message || err?.message || "Erro desconhecido";
-}
-
-function movementReferenceLabel(m) {
-  const ex = m.extraRequest;
-  if (!ex) return "—";
-  if (ex.costCategory?.name) return formatExtraCostLabel(ex);
-  if (ex.generalCostCenter?.name) return ex.generalCostCenter.name;
-  if (ex.project) return `${ex.project.name}${ex.project.code ? ` (${ex.project.code})` : ""}`;
-  return "Pedido extra";
-}
 
 function showToast(msg, type = "info") {
   let container = document.getElementById("toast");
@@ -255,12 +167,6 @@ function populateProjectSelects() {
 
   const filterProjectEl = document.getElementById("filterProject");
   if (filterProjectEl) filterProjectEl.innerHTML = `<option value="">Todas as obras</option>${opts}`;
-
-  const filterCardProjectEl = document.getElementById("filterCardProject");
-  if (filterCardProjectEl) filterCardProjectEl.innerHTML = `<option value="">Todas as obras</option>${opts}`;
-
-  const cardProjectEl = document.getElementById("cardProjectId");
-  if (cardProjectEl) cardProjectEl.innerHTML = `<option value="">Selecionar obra...</option>${opts}`;
 }
 
 function escapeAttr(value) {
@@ -471,39 +377,6 @@ function bindEvents() {
       loadExtras();
     });
   });
-
-  bindCardEvents();
-}
-
-// ── Gestão de Cartões ────────────────────────────────────────────────────────
-
-function updateCardsSectionMeta() {
-  const meta = document.getElementById("cardsSectionMeta");
-  if (!meta) return;
-  const cards = getFilteredManagedCards();
-  if (!cards.length) {
-    meta.textContent = "Nenhum cartão encontrado";
-    return;
-  }
-  const totalBalance = cards.reduce((sum, c) => sum + Number(c.currentBalance || 0), 0);
-  const currency = cards[0]?.currency || "AOA";
-  meta.textContent = `${cards.length} cartão(ões) · ${formatCurrency(totalBalance, currency)} total visível`;
-}
-
-function isCardDetailOpen() {
-  return document.getElementById("modalCardDetail")?.classList.contains("open");
-}
-
-function openCardDetailModal() {
-  document.getElementById("modalCardDetail")?.classList.add("open");
-}
-
-function closeCardDetailModal() {
-  document.getElementById("modalCardDetail")?.classList.remove("open");
-  document.getElementById("cardDetailPreview").innerHTML = "";
-  selectedCardId = null;
-  selectedCardCache = null;
-  renderCardsGrid();
 }
 
 function toggleSectionPanel(panelId) {
@@ -528,375 +401,10 @@ function setSectionCollapsed(panelId, collapsed) {
   if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
 
-function setCardScope(scope) {
-  const isGlobal = scope === "global";
-  document.getElementById("cardScope").value = scope;
-  document.getElementById("btnCardScopeGlobal").classList.toggle("active", isGlobal);
-  document.getElementById("btnCardScopeObra").classList.toggle("active", !isGlobal);
-  document.getElementById("rowCardProject").classList.toggle("hidden", isGlobal);
-  document.getElementById("cardProjectId").required = !isGlobal;
-}
-
-function getFilteredManagedCards() {
-  const scope = document.getElementById("filterCardScope")?.value || "";
-  const projectId = document.getElementById("filterCardProject")?.value || "";
-  return managedCards.filter((c) => {
-    if (scope === "global" && c.projectId) return false;
-    if (scope === "obra" && !c.projectId) return false;
-    if (projectId && c.projectId !== projectId) return false;
-    return true;
-  });
-}
-
-async function loadCards() {
-  const grid = document.getElementById("cardsGrid");
-  if (!grid) return;
-  grid.innerHTML = `<div class="col-span-full flex justify-center py-8"><div class="spinner"></div></div>`;
-
-  const projectId = document.getElementById("filterCardProject")?.value || "";
-  const params = new URLSearchParams();
-  if (projectId) params.set("projectId", projectId);
-
-  try {
-    const data = await apiRequest(`/petty-cash/cards${params.toString() ? `?${params}` : ""}`);
-    managedCards = data.items || [];
-    allCards = managedCards;
-    renderCardsGrid();
-    updateCardsSectionMeta();
-    if (selectedCardId && isCardDetailOpen()) {
-      await selectCard(selectedCardId);
-    }
-  } catch (err) {
-    grid.innerHTML = `<p class="text-center py-8 text-red-500 text-xs font-bold col-span-full">${err.message}</p>`;
-  }
-}
-
-function renderCardsGrid() {
-  const grid = document.getElementById("cardsGrid");
-  if (!grid) return;
-  const cards = getFilteredManagedCards();
-  if (!cards.length) {
-    grid.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
-      <span class="material-symbols-outlined text-4xl mb-2">credit_card</span>
-      <p class="text-sm font-semibold">Nenhum cartão encontrado</p>
-      <p class="text-[11px] mt-1 max-w-sm text-center">Crie um cartão BAI, BFA ou Caixa Angola para ver o layout do banco.</p>
-    </div>`;
-    return;
-  }
-  grid.innerHTML = cards
-    .map((c) =>
-      renderBankCardHtml(c, {
-        active: c.id === selectedCardId,
-        balanceHtml: renderCardBalanceBadgeHtml(c),
-        scopeBadgeHtml: renderCardScopeBadgeHtml(c),
-      })
-    )
-    .join("");
-
-  grid.querySelectorAll("[data-card-id]").forEach((btn) => {
-    btn.addEventListener("click", () => selectCard(btn.dataset.cardId));
-  });
-}
-
-async function selectCard(cardId) {
-  selectedCardId = cardId;
-  renderCardsGrid();
-  openCardDetailModal();
-  document.getElementById("cardMovementsBody").innerHTML =
-    `<tr><td colspan="6" class="text-center py-8"><div class="spinner mx-auto"></div></td></tr>`;
-
-  try {
-    const data = await apiRequest(`/petty-cash/cards/${cardId}?pageSize=30`);
-    const card = data.card;
-    selectedCardCache = card;
-    const balance = Number(card.currentBalance || 0);
-    document.getElementById("cardDetailName").textContent =
-      `${card.label}${card.lastDigits ? ` •••• ${card.lastDigits}` : ""} · ${formatCurrency(balance, card.currency)}`;
-    document.getElementById("cardDetailScope").textContent =
-      `${cardScopeLabel(card)} · Histórico de carregamentos e gastos`;
-
-    const previewHost = document.getElementById("cardDetailPreview");
-    if (previewHost) {
-      previewHost.innerHTML = renderBankCardHtml(card, {
-        compact: true,
-        asButton: false,
-        balanceHtml: renderCardBalanceBadgeHtml(card),
-        scopeBadgeHtml: renderCardScopeBadgeHtml(card),
-      });
-    }
-
-    const movements = data.movements.items || [];
-    document.getElementById("cardMovementsBody").innerHTML =
-      movements
-        .map((m) => {
-          const typeColor =
-            m.type === "DEBITO" ? "text-red-600" : m.type === "CREDITO" ? "text-emerald-600" : "text-amber-600";
-          const sign = m.type === "DEBITO" ? "-" : "+";
-          return `<tr class="border-t border-slate-50">
-            <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(m.createdAt)}</td>
-            <td class="px-4 py-3 text-xs font-bold ${typeColor}">${escapeHtml(m.type)}</td>
-            <td class="px-4 py-3 text-xs text-slate-700">${escapeHtml(m.description)}</td>
-            <td class="px-4 py-3 text-xs text-slate-500">${escapeHtml(movementReferenceLabel(m))}</td>
-            <td class="px-4 py-3 text-xs font-bold ${typeColor} text-right">${sign}${formatCurrency(m.amount, card.currency)}</td>
-            <td class="px-4 py-3 text-xs text-slate-500 text-right">${formatCurrency(m.balanceAfter, card.currency)}</td>
-          </tr>`;
-        })
-        .join("") ||
-      `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">Sem movimentações registadas</td></tr>`;
-
-    updateCardActionButtons();
-  } catch (err) {
-    showToast("Erro ao carregar cartão: " + err.message, "error");
-  }
-}
-
-function updateCardActionButtons() {
-  const canCreate = can("fundoManeio", "create");
-  const canManage = can("fundoManeio", "manage");
-  const canEdit = can("fundoManeio", "edit") || canManage;
-  document.getElementById("cardLoadBtn")?.classList.toggle("hidden", !canManage);
-  document.getElementById("cardAdjustBtn")?.classList.toggle("hidden", !canManage);
-  document.getElementById("cardEditBtn")?.classList.toggle("hidden", !canEdit);
-  document.getElementById("cardDeleteBtn")?.classList.toggle("hidden", !canManage);
-}
-
-function resolveBankSelectValue(bank) {
-  const key = normalizeBankKey(bank);
-  if (key === "BAI" || key === "BFA" || key === "CAIXA") return key;
-  return "";
-}
-
-function openCardFormModal(cardId = "") {
-  document.getElementById("formCard").reset();
-  document.getElementById("cardEditId").value = "";
-  document.getElementById("cardCurrency").value = "AOA";
-  document.getElementById("cardBank").value = "BAI";
-  document.getElementById("cardType").value = "DEBITO";
-  document.getElementById("modalCardFormTitle").textContent = "Novo Cartão";
-  document.getElementById("cardFormSubmitBtn").textContent = "Criar Cartão";
-  document.getElementById("cardInitialBalanceRow").classList.remove("hidden");
-  document.getElementById("cardInitialBalance").disabled = false;
-  setCardScope("global");
-
-  const prefillProject = document.getElementById("filterCardProject")?.value || "";
-  if (prefillProject) {
-    setCardScope("obra");
-    document.getElementById("cardProjectId").value = prefillProject;
-  }
-
-  if (cardId) {
-    const card = selectedCardCache || managedCards.find((c) => c.id === cardId);
-    if (!card) return;
-    document.getElementById("cardEditId").value = card.id;
-    document.getElementById("modalCardFormTitle").textContent = "Editar Cartão";
-    document.getElementById("cardFormSubmitBtn").textContent = "Guardar";
-    document.getElementById("cardInitialBalanceRow").classList.add("hidden");
-    document.getElementById("cardLabel").value = card.label || "";
-    document.getElementById("cardType").value = card.type || "DEBITO";
-    document.getElementById("cardBank").value = resolveBankSelectValue(card.bank);
-    if (card.cardNumberMasked) {
-      document.getElementById("cardNumberMasked").value = card.cardNumberMasked;
-    } else if (card.lastDigits) {
-      document.getElementById("cardNumberMasked").value = `•••• •••• •••• ${card.lastDigits}`;
-    } else {
-      document.getElementById("cardNumberMasked").value = "";
-    }
-    document.getElementById("cardExpiresAt").value = expiresAtToMonthInput(card.expiresAt);
-    document.getElementById("cardHolderName").value = card.holderName || "";
-    document.getElementById("cardCurrency").value = card.currency || "AOA";
-    if (card.projectId) {
-      setCardScope("obra");
-      document.getElementById("cardProjectId").value = card.projectId;
-    } else {
-      setCardScope("global");
-    }
-  }
-
-  updateCardFormPreview();
-  document.getElementById("modalCardForm").classList.add("open");
-}
-
-function closeCardFormModal() {
-  document.getElementById("modalCardForm").classList.remove("open");
-}
-
-async function submitCardForm(e) {
-  e.preventDefault();
-  const cardId = document.getElementById("cardEditId").value;
-  const scope = document.getElementById("cardScope").value;
-  const projectId = scope === "obra" ? document.getElementById("cardProjectId").value || null : null;
-  if (scope === "obra" && !projectId) {
-    showToast("Seleccione a obra", "error");
-    return;
-  }
-  const bankSelect = document.getElementById("cardBank").value;
-  const monthVal = document.getElementById("cardExpiresAt").value;
-  const { cardNumberMasked, lastDigits } = parseCardNumberInput(
-    document.getElementById("cardNumberMasked").value
-  );
-  const body = {
-    label: document.getElementById("cardLabel").value.trim(),
-    type: document.getElementById("cardType").value,
-    bank: bankSelect || null,
-    lastDigits,
-    cardNumberMasked,
-    holderName: document.getElementById("cardHolderName").value.trim() || null,
-    currency: document.getElementById("cardCurrency").value.trim() || "AOA",
-    expiresAt: monthVal ? monthInputToExpiresAt(monthVal) : null,
-    projectId,
-  };
-  if (!cardId) {
-    body.initialBalance = parseFloat(document.getElementById("cardInitialBalance").value) || 0;
-  }
-  try {
-    if (cardId) {
-      await apiRequest(`/petty-cash/cards/${cardId}`, { method: "PATCH", body });
-      showToast("Cartão actualizado", "success");
-    } else {
-      await apiRequest("/petty-cash/cards", { method: "POST", body });
-      showToast("Cartão criado", "success");
-    }
-    closeCardFormModal();
-    await loadCards();
-  } catch (err) {
-    showToast(apiErrorMessage(err), "error");
-  }
-}
-
-function openCardMovementModal(type = "CREDITO") {
-  if (!selectedCardId) {
-    showToast("Selecciona um cartão primeiro", "error");
-    return;
-  }
-  document.getElementById("formCardMovement").reset();
-  document.getElementById("cardMovementCardId").value = selectedCardId;
-  document.getElementById("cardMovementType").value = type;
-  document.getElementById("modalCardMovementTitle").textContent =
-    type === "AJUSTE" ? "Ajuste de Saldo" : "Carregar Cartão";
-  document.getElementById("modalCardMovement").classList.add("open");
-}
-
-function closeCardMovementModal() {
-  document.getElementById("modalCardMovement").classList.remove("open");
-}
-
-async function submitCardMovement(e) {
-  e.preventDefault();
-  const cardId = document.getElementById("cardMovementCardId").value;
-  const body = {
-    type: document.getElementById("cardMovementType").value || "CREDITO",
-    amount: parseFloat(document.getElementById("cardMovementAmount").value) || 0,
-    description: document.getElementById("cardMovementDesc").value.trim(),
-  };
-  try {
-    await apiRequest(`/petty-cash/cards/${cardId}/movements`, { method: "POST", body });
-    showToast(body.type === "AJUSTE" ? "Ajuste registado" : "Cartão carregado", "success");
-    closeCardMovementModal();
-    await loadCards();
-    if (selectedCardId) await selectCard(selectedCardId);
-  } catch (err) {
-    showToast(apiErrorMessage(err), "error");
-  }
-}
-
-async function deleteCardHandler() {
-  if (!selectedCardId) return;
-  const card = selectedCardCache || managedCards.find((c) => c.id === selectedCardId);
-  const label = card?.label || "este cartão";
-  if (
-    !confirm(
-      `Eliminar o cartão "${label}"?\n\nSó é possível se o saldo for zero e não houver movimentações.`
-    )
-  ) {
-    return;
-  }
-  try {
-    await apiRequest(`/petty-cash/cards/${selectedCardId}`, { method: "DELETE" });
-    showToast("Cartão eliminado", "success");
-    closeCardDetailModal();
-    await loadCards();
-  } catch (err) {
-    showToast(apiErrorMessage(err), "error");
-  }
-}
-
-function bindCardEvents() {
-  document.getElementById("btnNewCard")?.addEventListener("click", () => {
-    if (!can("fundoManeio", "create")) {
-      showToast("Sem permissão para criar cartões", "error");
-      return;
-    }
-    switchCentrosMainTab("cartoes");
-    openCardFormModal();
-  });
-  document.getElementById("btnCardScopeGlobal")?.addEventListener("click", () => setCardScope("global"));
-  document.getElementById("btnCardScopeObra")?.addEventListener("click", () => setCardScope("obra"));
-  document.getElementById("formCard")?.addEventListener("submit", submitCardForm);
-  document.getElementById("btnCloseCardFormModal")?.addEventListener("click", closeCardFormModal);
-  document.getElementById("btnCancelCardForm")?.addEventListener("click", closeCardFormModal);
-  document.getElementById("cardLoadBtn")?.addEventListener("click", () => openCardMovementModal("CREDITO"));
-  document.getElementById("cardAdjustBtn")?.addEventListener("click", () => openCardMovementModal("AJUSTE"));
-  document.getElementById("cardEditBtn")?.addEventListener("click", () => openCardFormModal(selectedCardId));
-  document.getElementById("cardDeleteBtn")?.addEventListener("click", deleteCardHandler);
-  document.getElementById("formCardMovement")?.addEventListener("submit", submitCardMovement);
-  document.getElementById("btnCloseCardMovementModal")?.addEventListener("click", closeCardMovementModal);
-  document.getElementById("btnCancelCardMovement")?.addEventListener("click", closeCardMovementModal);
-  document.getElementById("btnCloseCardDetailModal")?.addEventListener("click", closeCardDetailModal);
-
-  [
-    "cardLabel",
-    "cardBank",
-    "cardType",
-    "cardHolderName",
-    "cardNumberMasked",
-    "cardExpiresAt",
-  ].forEach((id) => {
-    document.getElementById(id)?.addEventListener("input", updateCardFormPreview);
-    document.getElementById(id)?.addEventListener("change", updateCardFormPreview);
-  });
-
-  ["filterCardScope", "filterCardProject"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("change", () => {
-      if (id === "filterCardProject") {
-        const pid = document.getElementById("filterCardProject").value;
-        if (pid) document.getElementById("filterCardScope").value = "obra";
-        loadCards();
-      } else {
-        renderCardsGrid();
-        updateCardsSectionMeta();
-        if (selectedCardId && isCardDetailOpen()) {
-          const stillVisible = getFilteredManagedCards().some((c) => c.id === selectedCardId);
-          if (!stillVisible) closeCardDetailModal();
-        }
-      }
-    });
-  });
-
-  ["modalCardForm", "modalCardMovement", "modalCardDetail"].forEach((id) => {
-    document.getElementById(id)?.addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) {
-        if (id === "modalCardDetail") closeCardDetailModal();
-        else e.currentTarget.classList.remove("open");
-      }
-    });
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (isCardDetailOpen()) closeCardDetailModal();
-  });
-}
-
 function applySectionVisibility() {
-  const hasCards = can("fundoManeio", "view");
   const hasExtras = can("pedidosExtras", "view");
-  document.getElementById("sectionCards")?.classList.toggle("hidden", !hasCards);
   document.getElementById("sectionGcc")?.classList.toggle("hidden", !hasExtras);
   document.getElementById("sectionExtras")?.classList.toggle("hidden", !hasExtras);
-  if (!can("fundoManeio", "create")) {
-    document.getElementById("btnNewCard")?.classList.add("hidden");
-  }
-  updateCardActionButtons();
 }
 
 async function guardCentrosGeraisAccess() {
@@ -916,17 +424,10 @@ async function loadInitialData() {
   const urlParams = new URLSearchParams(window.location.search);
   const urlProjectId = urlParams.get("projectId");
   if (urlProjectId) {
-    const cardProjectEl = document.getElementById("filterCardProject");
-    if (cardProjectEl) cardProjectEl.value = urlProjectId;
-    const cardScopeEl = document.getElementById("filterCardScope");
-    if (cardScopeEl) cardScopeEl.value = "obra";
     const projectFilterEl = document.getElementById("filterProject");
     if (projectFilterEl) projectFilterEl.value = urlProjectId;
   }
 
-  if (can("fundoManeio", "view")) {
-    await loadCards();
-  }
   if (can("pedidosExtras", "view")) {
     await loadExtras();
   }
@@ -956,10 +457,6 @@ async function loadInitialData() {
   applyCentrosMainTabVisibility();
   initCentroCompras();
 
-  // Catálogo: painéis expandidos na aba correspondente; cartões sempre expandidos na aba Cartões
-  if (can("fundoManeio", "view")) {
-    setSectionCollapsed("panelCards", false);
-  }
   if (can("pedidosExtras", "view")) {
     setSectionCollapsed("panelGcc", false);
     setSectionCollapsed("panelExtras", false);

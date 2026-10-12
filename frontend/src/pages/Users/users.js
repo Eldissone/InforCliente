@@ -4,6 +4,7 @@ import { openModal, toast, setButtonLoading, renderLoadingRow, initMobileMenu } 
 import { formatDateBR } from "../../shared/format.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
 import { fetchHelpTickets, fetchHelpTicket, updateHelpTicket } from "../../services/helpApi.js";
+import { initBackupPanel, loadBackupPanel } from "./backups.js";
 
 checkAuth({ allowedRoles: ["admin"] });
 
@@ -54,11 +55,11 @@ function avatarEl(email, profilePic) {
 }
 
 // ─── Section switching ─────────────────────────────────────────
-const SECTION_LABELS = { overview: "Visão Geral", users: "Utilizadores", permissions: "Permissões", ajuda: "Ajuda", history: "Histórico" };
+const SECTION_LABELS = { overview: "Visão Geral", users: "Utilizadores", permissions: "Permissões", ajuda: "Ajuda", history: "Histórico", backups: "Cópias de segurança" };
 
 function switchSection(name) {
   activeSection = name;
-  ["overview", "users", "permissions", "ajuda", "history"].forEach(s => {
+  ["overview", "users", "permissions", "ajuda", "history", "backups"].forEach(s => {
     el(`section-${s}`)?.classList.toggle("hidden", s !== name);
   });
   // Update all sidebar links (desktop + mobile)
@@ -74,6 +75,7 @@ function switchSection(name) {
   if (name === "permissions") renderPermissions();
   if (name === "ajuda") loadHelpInbox();
   if (name === "history") loadLogs();
+  if (name === "backups") loadBackupPanel();
 }
 
 // ─── Stats ────────────────────────────────────────────────────
@@ -1727,9 +1729,12 @@ async function init() {
   wireResetPerms();
   wireLogEvents();
   wireHelpEvents();
+  initBackupPanel();
   await loadUsers();
   if (!applyHelpDeepLink()) {
-    fetchHelpTickets({ take: 1 }).then((data) => updateHelpBadge(data.openCount)).catch(() => {});
+    const section = new URLSearchParams(window.location.search).get("section");
+    if (section === "backups") switchSection("backups");
+    else fetchHelpTickets({ take: 1 }).then((data) => updateHelpBadge(data.openCount)).catch(() => {});
   }
 }
 

@@ -3509,7 +3509,7 @@ function renderCCMappingStep() {
             ${autoMatch ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Auto-mapeado</span>` : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Novo CC</span>`}
             <select data-group-idx="${idx}" id="ccMapSelect_${idx}"
               class="h-9 px-3 bg-white border ${autoMatch ? "border-emerald-300" : "border-slate-200"} rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 min-w-[200px]">
-              <option value="CREATE_NEW">✨ Criar automaticamente</option>
+              <option value="CREATE_NEW">Criar automaticamente</option>
               <option value="">— Ignorar grupo —</option>
               <optgroup label="Centros Existentes">
                 ${ccOptions}
