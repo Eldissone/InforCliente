@@ -6,12 +6,8 @@ import {
   getPendingAuthUser,
   setSession,
 } from "/services/auth.js";
+import { getSafeNextPath } from "/shared/postLoginRedirect.js";
 import { toast } from "/shared/ui.js";
-
-function getNext() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("next");
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   const user = getPendingAuthUser() || {};
@@ -71,10 +67,10 @@ document.addEventListener("DOMContentLoaded", () => {
           .catch(() => {});
         toast(`Acedendo a ${acc.name}...`);
 
-        const next = getNext();
+        const next = getSafeNextPath();
         setTimeout(() => {
           if (next) {
-            window.location.href = `/${next}`;
+            window.location.href = next;
           } else {
             window.location.href = "/Dashboard/clientDashboard";
           }

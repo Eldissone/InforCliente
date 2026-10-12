@@ -1,6 +1,6 @@
 import { apiRequest } from "/services/api.js";
 import { setPendingAuthSelection, setSession } from "/services/auth.js";
-import { resolvePostLoginPath } from "/shared/postLoginRedirect.js";
+import { getSafeNextPath, resolvePostLoginPath } from "/shared/postLoginRedirect.js";
 import { toast, setButtonLoading } from "/shared/ui.js";
 
 function qs(id) {
@@ -17,11 +17,6 @@ function setError(msg) {
   }
   box.classList.remove("hidden");
   box.textContent = msg;
-}
-
-function getNext() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("next");
 }
 
 qs("togglePassword")?.addEventListener("click", () => {
@@ -55,7 +50,8 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
         accounts: res.accounts || [],
         selectionToken: res.selectionToken || null,
       });
-      window.location.href = "/auth/selecionar-obra" + (getNext() ? `?next=${encodeURIComponent(getNext())}` : "");
+      const next = getSafeNextPath();
+      window.location.href = "/auth/selecionar-obra" + (next ? `?next=${encodeURIComponent(next)}` : "");
       return;
     }
 
@@ -67,10 +63,10 @@ document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
 
     toast(`Bem-vindo, ${res.user.name || res.user.email || "Utilizador"}!`);
 
-    const next = getNext();
+    const next = getSafeNextPath();
     setTimeout(async () => {
       if (next) {
-        window.location.href = `/${next}`;
+        window.location.href = next;
         return;
       }
       const path = await resolvePostLoginPath(res.user);

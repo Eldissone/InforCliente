@@ -6,6 +6,20 @@ export function resolveHomePathByRole(role) {
   return "/Dashboard";
 }
 
+export function getSafeNextPath() {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (!next) return null;
+
+  const normalizedNext = next.startsWith("/") ? next : `/${next}`;
+  const target = new URL(normalizedNext, window.location.origin);
+  if (target.origin !== window.location.origin) return null;
+
+  const targetPath = target.pathname.replace(/\/+$/, "").toLowerCase();
+  if (targetPath === "/login" || targetPath.startsWith("/auth/")) return null;
+
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
 /**
  * Destino após login (assíncrono — inclui permissões efectivas).
  * Role financeiro → Perfil Financeiro; utilizadores só-financeiros (override) também.

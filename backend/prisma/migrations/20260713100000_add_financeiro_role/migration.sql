@@ -1,2 +1,2 @@
 -- AlterEnum
-ALTER TYPE "Role" ADD VALUE 'financeiro';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'financeiro';

@@ -139,7 +139,9 @@ export async function apiRequest(path, { method = "GET", body, headers } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
+  const requestPath = path.split(/[?#]/, 1)[0].replace(/\/+$/, "");
+  const isLoginRequest = requestPath === "/auth/login";
+  if (res.status === 401 && !isLoginRequest) {
     console.error("apiRequest: 401 Unauthorized em", path, { hasToken: !!token });
     logout();
     const here = window.location.pathname.split("/").slice(-2).join("/");

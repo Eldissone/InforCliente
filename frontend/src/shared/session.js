@@ -71,15 +71,15 @@ export function wireUsersNav() {
   import("../services/api.js").then(({ getAssetUrl, apiRequest }) => {
     apiRequest("/users/me").then(freshUser => {
       if (!freshUser) return;
-      
+
       document.querySelectorAll("[data-user-profile]").forEach((btn) => {
         // Replace the material icon (or existing image if called twice) with the real avatar
         const icon = btn.querySelector(".material-symbols-outlined") || btn.querySelector("img") || btn.querySelector("span:not([data-user-role])");
         if (!icon) return;
-        
+
         const avatarSrc = freshUser.profilePic ? getAssetUrl(freshUser.profilePic) : null;
         const nameInitial = (freshUser.name || freshUser.email || "?")[0].toUpperCase();
-        
+
         if (avatarSrc) {
           const img = document.createElement("img");
           img.src = avatarSrc;
@@ -100,7 +100,7 @@ export function wireUsersNav() {
           icon.replaceWith(span);
         }
       });
-      
+
       // Update name text instantly if it changed
       document.querySelectorAll("[data-user-role]").forEach((el) => {
         el.textContent = freshUser.name || (role ? String(role).toUpperCase() : "");
@@ -115,7 +115,7 @@ export function wireUsersNav() {
       storedUser.profilePic = freshUser.profilePic;
       storedUser.name = freshUser.name;
       localStorage.setItem(USER_KEY, JSON.stringify(storedUser));
-    }).catch(() => {});
+    }).catch(() => { });
   });
 
   // Also support data-user-name explicitly if needed

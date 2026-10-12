@@ -5,13 +5,8 @@ import {
   getPendingAuthUser,
   setSession,
 } from "/services/auth.js";
-import { resolvePostLoginPath } from "/shared/postLoginRedirect.js";
+import { getSafeNextPath, resolvePostLoginPath } from "/shared/postLoginRedirect.js";
 import { toast } from "/shared/ui.js";
-
-function getNext() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("next");
-}
 
 document.addEventListener("DOMContentLoaded", async () => {
   const user = getPendingAuthUser() || {};
@@ -49,8 +44,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           });
           clearPendingAuthSelection();
           setSession(authRes);
-          const next = getNext();
-          const path = next ? `/${next}` : await resolvePostLoginPath(authRes.user);
+          const next = getSafeNextPath();
+          const path = next || await resolvePostLoginPath(authRes.user);
           window.location.href = path;
           return;
         } catch (err) {
@@ -114,10 +109,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           // Store selected project ID to help the dashboard jump to it
           localStorage.setItem("selected_project_id", p.id);
 
-          const next = getNext();
+          const next = getSafeNextPath();
           setTimeout(async () => {
             if (next) {
-              window.location.href = `/${next}`;
+              window.location.href = next;
               return;
             }
             const path = await resolvePostLoginPath(authRes.user);

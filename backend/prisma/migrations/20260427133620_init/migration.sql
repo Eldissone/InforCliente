@@ -131,6 +131,9 @@ CREATE TABLE "Project" (
     CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
 );
 
+-- Colunas do modelo que não existiam em nenhuma migração
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "active" BOOLEAN NOT NULL DEFAULT true;
+
 -- CreateTable
 CREATE TABLE "ProjectFolder" (
     "id" TEXT NOT NULL,
@@ -189,6 +192,12 @@ CREATE TABLE "ProjectTransaction" (
 
     CONSTRAINT "ProjectTransaction_pkey" PRIMARY KEY ("id")
 );
+
+-- Colunas do modelo que não existiam em nenhuma migração
+ALTER TABLE "ProjectTransaction" ADD COLUMN IF NOT EXISTS "currency" TEXT;
+ALTER TABLE "ProjectTransaction" ADD COLUMN IF NOT EXISTS "costCenterId" TEXT;
+ALTER TABLE "ProjectTransaction" ADD COLUMN IF NOT EXISTS "supplier" TEXT;
+ALTER TABLE "ProjectTransaction" ADD COLUMN IF NOT EXISTS "paymentType" TEXT DEFAULT 'PRONTO_PAGAMENTO';
 
 -- CreateTable
 CREATE TABLE "InteractionEvent" (
@@ -321,6 +330,14 @@ CREATE TABLE "StockMovement" (
     CONSTRAINT "StockMovement_pkey" PRIMARY KEY ("id")
 );
 
+-- Colunas do modelo que não existiam em nenhuma migração
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "evidenceUrl" TEXT;
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "ownerId" TEXT;
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "productId" TEXT NOT NULL;
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "reference" TEXT;
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "userId" TEXT NOT NULL;
+ALTER TABLE "StockMovement" ADD COLUMN IF NOT EXISTS "warehouseId" TEXT NOT NULL;
+
 -- CreateTable
 CREATE TABLE "StockAuditLog" (
     "id" TEXT NOT NULL,
@@ -350,6 +367,9 @@ CREATE TABLE "ProjectPhoto" (
 
     CONSTRAINT "ProjectPhoto_pkey" PRIMARY KEY ("id")
 );
+
+-- Colunas do modelo que não existiam em nenhuma migração
+ALTER TABLE "ProjectPhoto" ADD COLUMN IF NOT EXISTS "itemId" TEXT;
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");

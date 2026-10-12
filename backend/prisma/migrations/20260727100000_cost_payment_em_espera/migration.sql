@@ -1,2 +1,2 @@
 -- AlterEnum
-ALTER TYPE "CostPayStatus" ADD VALUE 'EM_ESPERA';
+ALTER TYPE "CostPayStatus" ADD VALUE IF NOT EXISTS 'EM_ESPERA';
