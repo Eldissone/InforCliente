@@ -337,6 +337,10 @@ body[data-shell="figma"] .app-primary-sidebar.is-figma-shell .app-sidebar-brand 
   display: none;
 }
 
+body[data-shell="figma"] table tbody tr {
+  cursor: pointer;
+}
+
 @media (min-width:1024px) {
   body[data-shell="figma"] .app-primary-sidebar.is-figma-shell {
     top: 5.5rem;

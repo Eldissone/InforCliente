@@ -155,18 +155,22 @@ function renderTable() {
     .map((c) => {
       const cur = c.project?.currency || "AOA";
       const supplier = c.supplierRef?.name || c.supplier || "—";
+      const obraName = c.project?.name || "—";
+      const obraRef = String(c.project?.referencia || "").trim() || "—";
+      const description = c.description || "—";
+      const docNumber = String(c.docNumber || "").trim();
       return `
       <tr data-id="${esc(c.id)}">
         <td>${esc(dateOnly(c.paymentDate))}</td>
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(c.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.referencia || "—")}</div>
+        <td class="fin-obra-cell">
+          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
+          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
         </td>
         <td>${esc(c.costCenter?.name || "—")}</td>
         <td>${esc(supplier)}</td>
-        <td style="max-width:260px">
-          <div style="font-weight:600;color:#0f172a">${esc(c.description || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.docNumber || "")}</div>
+        <td class="fin-desc-cell">
+          <div class="fin-desc-name" title="${esc(description)}">${esc(description)}</div>
+          ${docNumber ? `<div class="fin-obra-ref" title="${esc(docNumber)}">${esc(docNumber)}</div>` : ""}
         </td>
         <td>${esc(CATEGORY[c.category] || c.category || "—")}</td>
         <td class="fin-num">${esc(money(c.paidAmount, cur))}</td>
@@ -200,7 +204,7 @@ function renderTable() {
     <table class="fin-table" style="min-width:1250px">
       <thead>
         <tr>
-          <th>Data</th><th>Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
+          <th>Data</th><th class="fin-obra-cell">Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th class="fin-desc-cell">Descrição</th>
           <th>Categoria</th><th style="text-align:right">V. Pago</th><th>Confirmação</th>
           <th>Responsável</th><th>Origem</th><th style="text-align:center">Ações</th>
         </tr>

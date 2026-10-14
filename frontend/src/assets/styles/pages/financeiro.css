@@ -244,13 +244,18 @@
   min-width: 1150px;
 }
 
-#invoiceTable .fin-obra-cell {
+#invoiceTable .fin-obra-cell,
+#costTable .fin-obra-cell,
+#costTable .fin-desc-cell {
   width: 220px;
   max-width: 220px;
 }
 
 #invoiceTable .fin-obra-name,
-#invoiceTable .fin-obra-ref {
+#invoiceTable .fin-obra-ref,
+#costTable .fin-obra-name,
+#costTable .fin-obra-ref,
+#costTable .fin-desc-name {
   display: block;
   max-width: 220px;
   overflow: hidden;
@@ -258,12 +263,15 @@
   white-space: nowrap;
 }
 
-#invoiceTable .fin-obra-name {
+#invoiceTable .fin-obra-name,
+#costTable .fin-obra-name,
+#costTable .fin-desc-name {
   font-weight: 700;
   color: #0f172a;
 }
 
-#invoiceTable .fin-obra-ref {
+#invoiceTable .fin-obra-ref,
+#costTable .fin-obra-ref {
   font-size: 11px;
   color: #94a3b8;
   font-weight: 600;
