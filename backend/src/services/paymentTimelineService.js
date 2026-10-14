@@ -55,6 +55,7 @@ function matchesSearch(payment, search) {
     payment.supplier,
     payment.docNumber,
     payment.project?.name,
+    payment.project?.referencia,
     payment.project?.code,
     payment.costCenter?.name,
     payment.costCenter?.code,

@@ -99,7 +99,7 @@ function renderShell() {
   const projectSel = document.getElementById("costProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -160,7 +160,7 @@ function renderTable() {
         <td>${esc(dateOnly(c.paymentDate))}</td>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(c.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.referencia || "—")}</div>
         </td>
         <td>${esc(c.costCenter?.name || "—")}</td>
         <td>${esc(supplier)}</td>

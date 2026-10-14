@@ -299,7 +299,7 @@ function computeAmountFromItems(items, fallback) {
 }
 
 const EXTRA_INCLUDE = {
-  project: { select: { id: true, name: true, code: true } },
+  project: { select: { id: true, name: true, code: true, referencia: true } },
   costCenter: { select: { id: true, code: true, name: true } },
   generalCostCenter: { select: { id: true, code: true, name: true, description: true } },
   costCategory: { select: { id: true, code: true, name: true, domain: true, requiresDetailText: true } },

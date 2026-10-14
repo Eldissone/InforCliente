@@ -431,7 +431,7 @@ costCenterRoutes.get(
       where,
       orderBy: { paymentDate: "asc" },
       include: {
-        project: { select: { id: true, name: true, code: true } },
+        project: { select: { id: true, name: true, code: true, referencia: true } },
         costCenter: { select: { code: true, name: true, currency: true } },
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
         ...PAYMENT_RELATIONS_INCLUDE,
@@ -502,7 +502,7 @@ costCenterRoutes.get(
             projectId: true,
             siteReceptionPlannedAt: true,
             siteReceptionLocation: true,
-            project: { select: { id: true, name: true, code: true } },
+            project: { select: { id: true, name: true, code: true, referencia: true } },
             costCenter: { select: { code: true, name: true } },
           },
         },
@@ -592,7 +592,7 @@ costCenterRoutes.get(
       where,
       orderBy: { paymentDate: "asc" },
       include: {
-        project: { select: { id: true, name: true, code: true } },
+        project: { select: { id: true, name: true, code: true, referencia: true } },
         costCenter: { select: { code: true, name: true, currency: true } },
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
         ...PAYMENT_RELATIONS_INCLUDE,
@@ -761,7 +761,7 @@ costCenterRoutes.get(
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          project: { select: { id: true, name: true, code: true } },
+          project: { select: { id: true, name: true, code: true, referencia: true } },
           costCenter: { select: { code: true, name: true, currency: true } },
           supplierRef: PAYMENT_SUPPLIER_INCLUDE,
           ...PAYMENT_RELATIONS_INCLUDE,
@@ -815,7 +815,7 @@ costCenterRoutes.get(
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          project: { select: { id: true, name: true, code: true } },
+          project: { select: { id: true, name: true, code: true, referencia: true } },
           costCenter: { select: { code: true, name: true, currency: true } },
           supplierRef: PAYMENT_SUPPLIER_INCLUDE,
           ...PAYMENT_RELATIONS_INCLUDE,
@@ -881,7 +881,7 @@ costCenterRoutes.get(
 );
 
 const PAYMENT_DETAIL_INCLUDE = {
-  project: { select: { id: true, name: true, code: true } },
+  project: { select: { id: true, name: true, code: true, referencia: true } },
   costCenter: { select: { code: true, name: true, currency: true } },
   supplierRef: PAYMENT_SUPPLIER_INCLUDE,
   ...PAYMENT_RELATIONS_INCLUDE,
@@ -2394,7 +2394,7 @@ costCenterRoutes.get(
     const payment = await prisma.costPayment.findUnique({
       where: { id: payId },
       include: {
-        project: { select: { id: true, name: true, code: true } },
+        project: { select: { id: true, name: true, code: true, referencia: true } },
         costCenter: { select: { code: true, name: true, currency: true } },
         supplierRef: PAYMENT_SUPPLIER_INCLUDE,
       },

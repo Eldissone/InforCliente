@@ -59,7 +59,7 @@ function groupByProject(days) {
       if (!map.has(key)) {
         map.set(key, {
           name: p.project?.name || "Sem obra",
-          code: p.project?.code || "",
+          code: String(p.project?.referencia || "").trim(),
           payments: [],
         });
       }

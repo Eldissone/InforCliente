@@ -84,7 +84,7 @@ function renderShell() {
   const projectSel = document.getElementById("forecastProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
 
   clientSel.addEventListener("change", () => {
     state.filters.clientId = clientSel.value;
@@ -214,7 +214,7 @@ function renderTable() {
             </button>
             <div>
               <div style="font-weight:700;color:#0f172a">${esc(entry.project.name)}</div>
-              <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(entry.project.code || "")}</div>
+              <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(entry.project.referencia || "—")}</div>
             </div>
           </div>
         </td>

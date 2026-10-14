@@ -50,7 +50,7 @@ function renderShell() {
   const projectSel = document.getElementById("realProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -72,7 +72,7 @@ function renderShell() {
 function groupKey(item, group) {
   if (group === "costCenter") return { key: item.costCenter?.id || "__none__", label: item.costCenter?.name || "Sem centro de custo", sub: item.costCenter?.code || "" };
   if (group === "client") return { key: item.project?.client?.id || "__none__", label: item.project?.client?.name || "Sem cliente", sub: "" };
-  return { key: item.project?.id || "__none__", label: item.project?.name || "Sem obra", sub: item.project?.code || "" };
+  return { key: item.project?.id || "__none__", label: item.project?.name || "Sem obra", sub: item.project?.referencia || "" };
 }
 
 function aggregate() {

@@ -41,6 +41,7 @@ function matchesSearch(quote, search) {
     quote.supplierProduct?.name,
     quote.need?.description,
     quote.need?.project?.name,
+    quote.need?.project?.referencia,
     quote.need?.project?.code,
     quote.need?.costCenter?.code,
   ]

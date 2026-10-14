@@ -93,7 +93,7 @@ function renderTable(payables) {
         <td>${esc(dateOnly(p.paymentDate))}</td>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(p.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.referencia || "—")}</div>
         </td>
         <td>${esc(p.supplierRef?.name || p.supplier || "—")}</td>
         <td style="max-width:280px">${esc(p.description || "—")}</td>

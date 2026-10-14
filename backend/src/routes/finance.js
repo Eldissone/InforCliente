@@ -108,6 +108,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -120,6 +121,7 @@ financeRoutes.get(
       items: projects.map((p) => ({
         id: p.id,
         code: p.code,
+        referencia: p.referencia || null,
         name: p.name,
         currency: p.currency,
         budgetTotal: toNumber(p.budgetTotal),
@@ -190,6 +192,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -269,7 +272,7 @@ financeRoutes.get(
     const rows = await prisma.invoice.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -372,7 +375,7 @@ financeRoutes.post(
         createdBy: req.user?.name || req.user?.email || null,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -400,7 +403,7 @@ financeRoutes.get(
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         receipts: { orderBy: { receivedDate: "desc" } },
@@ -490,7 +493,7 @@ financeRoutes.patch(
         flagGuarantee: amounts.flagGuarantee,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -547,7 +550,7 @@ financeRoutes.post(
           status: net > 0 && receivedAmount >= net - 0.005 ? "PAGO_TOTAL" : "PAGO_PARCIAL",
         },
         include: {
-          project: { select: { id: true, code: true, name: true, currency: true } },
+          project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
           client: { select: { id: true, name: true, code: true } },
           measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         },
@@ -574,6 +577,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -639,7 +643,7 @@ financeRoutes.get(
     const where = projectId ? { id: String(projectId) } : {};
     const projects = await prisma.project.findMany({
       where,
-      select: { id: true, code: true, name: true, currency: true, budgetTotal: true },
+      select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
       orderBy: { name: "asc" },
     });
 
@@ -692,7 +696,7 @@ financeRoutes.get(
     const rows = await prisma.costPayment.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, clientId: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, clientId: true, client: { select: { id: true, name: true, code: true } } } },
         costCenter: { select: { id: true, code: true, name: true } },
         supplierRef: { select: { id: true, name: true, nif: true } },
       },
@@ -768,6 +772,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -816,7 +821,7 @@ financeRoutes.get(
     const rows = await prisma.costPayment.findMany({
       where: { status: { in: ["PENDENTE", "EM_ESPERA"] } },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         costCenter: { select: { id: true, code: true, name: true } },
         supplierRef: { select: { id: true, name: true, nif: true } },
       },
@@ -835,7 +840,7 @@ financeRoutes.get(
     const rows = await prisma.invoice.findMany({
       where: { status: { in: ["EM_ABERTO", "PAGO_PARCIAL", "ATRASADO"] } },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
         client: { select: { id: true, name: true, code: true } },
       },
       orderBy: [{ dueDate: "asc" }],
@@ -952,7 +957,7 @@ financeRoutes.get(
         card: { select: { id: true, label: true, lastDigits: true, bank: true } },
         movements: {
           include: {
-            project: { select: { id: true, code: true, name: true } },
+            project: { select: { id: true, code: true, referencia: true, name: true } },
             supplier: { select: { id: true, name: true, nif: true } },
           },
           orderBy: { movementDate: "asc" },
@@ -978,7 +983,7 @@ financeRoutes.get(
     const items = await prisma.bankMovement.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true } },
         supplier: { select: { id: true, name: true, nif: true } },
         card: { select: { id: true, label: true, lastDigits: true } },
       },
@@ -1063,7 +1068,7 @@ financeRoutes.get(
   asyncHandler(async (req, res) => {
     const [projects, invoiceRows, costRows] = await Promise.all([
       prisma.project.findMany({
-        select: { id: true, code: true, name: true, currency: true, budgetTotal: true },
+        select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
       }),
       prisma.invoice.findMany({ select: { projectId: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true } }),
       prisma.costPayment.findMany({ select: { projectId: true, paidAmount: true, confirmationStatus: true } }),
@@ -1134,7 +1139,7 @@ financeRoutes.get(
   asyncHandler(async (req, res) => {
     const [projects, costRows, invoiceRows] = await Promise.all([
       prisma.project.findMany({
-        select: { id: true, code: true, name: true, currency: true, budgetTotal: true },
+        select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
       }),
       prisma.costPayment.findMany({ select: { projectId: true, paidAmount: true } }),
       prisma.invoice.findMany({ select: { projectId: true, grossAmount: true, receivedAmount: true, dueDate: true, netAmount: true } }),

@@ -61,7 +61,7 @@ function renderTable(items, totals) {
       <tr>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(row.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(row.project.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(row.project.referencia || "—")}</div>
         </td>
         <td class="fin-num">${esc(String(row.withAmCount))}</td>
         <td class="fin-num">${esc(money(row.withAmValue))}</td>

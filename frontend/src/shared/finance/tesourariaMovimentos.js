@@ -78,7 +78,7 @@ function renderShell() {
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
     state.options.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+      .map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
       .join("");
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;

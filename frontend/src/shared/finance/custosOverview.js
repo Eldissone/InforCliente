@@ -79,7 +79,7 @@ function renderTable(items) {
       <tr>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(r.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(r.project.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(r.project.referencia || "—")}</div>
         </td>
         <td class="fin-num">${esc(money(r.forecast))}</td>
         <td class="fin-num">${esc(money(r.committed))}</td>

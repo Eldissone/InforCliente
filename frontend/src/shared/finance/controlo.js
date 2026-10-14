@@ -76,7 +76,7 @@ function renderProjects(data) {
       <tr>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.referencia || "—")}</div>
         </td>
         <td class="fin-num">${esc(money(p.forecastCost))}</td>
         <td class="fin-num">${esc(money(p.realizedCost))}</td>

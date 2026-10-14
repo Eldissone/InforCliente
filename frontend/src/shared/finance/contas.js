@@ -117,7 +117,7 @@ function renderPayables(wrap) {
         <td>${esc(dateOnly(p.paymentDate))}</td>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(p.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.referencia || "—")}</div>
         </td>
         <td>${esc(p.costCenter?.name || "—")}</td>
         <td>${esc(p.supplierRef?.name || p.supplier || "—")}</td>
@@ -157,7 +157,7 @@ function renderReceivables(wrap) {
       <tr class="${r.status === "ATRASADO" ? "fin-row--overdue" : ""}">
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(r.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(r.project?.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(r.project?.referencia || "—")}</div>
         </td>
         <td>${esc(r.client?.name || "—")}</td>
         <td>${esc(r.docNumber || "—")}</td>

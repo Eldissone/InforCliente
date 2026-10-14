@@ -84,7 +84,7 @@ function renderShell() {
   const projectSel = document.getElementById("invFilterProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
 
   clientSel.value = state.filters.clientId;
   projectSel.value = state.filters.projectId;
@@ -191,7 +191,7 @@ function renderTable() {
       <tr data-id="${esc(inv.id)}" class="${overdue ? "fin-row--overdue" : ""}">
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(inv.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(inv.project?.code || "")}</div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(inv.project?.referencia || "—")}</div>
         </td>
         <td>${esc(inv.client?.name || "—")}</td>
         <td>${esc(inv.docNumber || "—")}</td>
@@ -337,7 +337,7 @@ async function openInvoiceModal(invoice) {
         <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
           <option value="">Selecionar obra…</option>
           ${state.projects
-            .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+            .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
             .join("")}
         </select>
       </div>
