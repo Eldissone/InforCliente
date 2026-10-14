@@ -259,14 +259,14 @@ function renderRow(p, idx = 1) {
               ${numStr}
             </span>
           </div>
-          <div>
-            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${escapeHtml(p.name)}</h4>
-            <span class="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">${escapeHtml(displayReferencia(p))}</span>
+          <div class="min-w-0 max-w-[220px]">
+            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</h4>
+            <span class="mt-1 inline-block max-w-full truncate text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded" title="${escapeHtml(displayReferencia(p))}">${escapeHtml(displayReferencia(p))}</span>
           </div>
         </div>
       </td>
       <td class="px-8 py-5">
-        <span class="text-xs font-bold text-slate-700">${escapeHtml(p.client?.name || "-")}</span>
+        <span class="block max-w-[160px] truncate text-xs font-bold text-slate-700" title="${escapeHtml(p.client?.name || "-")}">${escapeHtml(p.client?.name || "-")}</span>
       </td>
       <td class="px-8 py-5">
         <span class="text-[11px] text-slate-400 font-medium">${escapeHtml(p.contact || "-")}</span>
@@ -325,7 +325,7 @@ function renderGridItem(p, idx = 1) {
       </div>
       
       <div class="mb-8">
-        <h3 class="text-lg font-bold text-slate-900 tracking-tight leading-tight group-hover:text-[#0d3fd1] transition-colors line-clamp-2">${p.name}</h3>
+        <h3 class="text-lg font-bold text-slate-900 tracking-tight leading-tight group-hover:text-[#0d3fd1] transition-colors truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</h3>
       </div>
 
       <div class="space-y-5 mb-auto">
@@ -335,7 +335,7 @@ function renderGridItem(p, idx = 1) {
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cliente Responsável</p>
-            <p class="text-sm font-bold text-slate-700 truncate">${p.client?.name || "-"}</p>
+            <p class="text-sm font-bold text-slate-700 truncate" title="${escapeHtml(p.client?.name || "-")}">${escapeHtml(p.client?.name || "-")}</p>
           </div>
         </div>
         <div class="flex items-center gap-4">

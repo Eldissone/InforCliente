@@ -187,13 +187,18 @@ function renderTable() {
     .map((inv) => {
       const cur = inv.project?.currency || "AOA";
       const overdue = inv.status === "ATRASADO";
+      const obraName = inv.project?.name || "—";
+      const obraRef = String(inv.project?.referencia || "").trim() || "—";
+      const clientName = inv.client?.name || "—";
       return `
       <tr data-id="${esc(inv.id)}" class="${overdue ? "fin-row--overdue" : ""}">
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(inv.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(inv.project?.referencia || "—")}</div>
+        <td class="fin-obra-cell">
+          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
+          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
         </td>
-        <td>${esc(inv.client?.name || "—")}</td>
+        <td class="fin-client-cell">
+          <div class="fin-client-name" title="${esc(clientName)}">${esc(clientName)}</div>
+        </td>
         <td>${esc(inv.docNumber || "—")}</td>
         <td>${esc(formatDateOnly(inv.docDate))}</td>
         <td>${esc(formatDateOnly(inv.dueDate))}</td>
@@ -234,7 +239,7 @@ function renderTable() {
     <table class="fin-table">
       <thead>
         <tr>
-          <th>Obra</th><th>Cliente</th><th>Nº Doc</th><th>Data Doc</th><th>Venc.</th><th>AM</th>
+          <th class="fin-obra-cell">Obra</th><th class="fin-client-cell">Cliente</th><th>Nº Doc</th><th>Data Doc</th><th>Venc.</th><th>AM</th>
           <th style="text-align:right">V. Ilíquido</th>
           <th style="text-align:right">Retenção</th>
           <th style="text-align:right">IVA</th>

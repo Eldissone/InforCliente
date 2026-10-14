@@ -244,6 +244,47 @@
   min-width: 1150px;
 }
 
+#invoiceTable .fin-obra-cell {
+  width: 220px;
+  max-width: 220px;
+}
+
+#invoiceTable .fin-obra-name,
+#invoiceTable .fin-obra-ref {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#invoiceTable .fin-obra-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+#invoiceTable .fin-obra-ref {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+#invoiceTable .fin-client-cell {
+  width: 160px;
+  max-width: 160px;
+}
+
+#invoiceTable .fin-client-name {
+  display: block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
 .fin-table .fin-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .fin-row--overdue { background: #fef2f2; }
