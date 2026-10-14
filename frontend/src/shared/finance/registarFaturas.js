@@ -373,6 +373,28 @@ async function scanInvoiceFile(file) {
   return { fields: data.fields || {}, warnings: data.warnings || [] };
 }
 
+async function lookupScannedInvoiceNif(fields, noteEl, scanSummary) {
+  const nif = String(fields.clientNif || fields.supplierNif || "").replace(/\D/g, "");
+  if (nif.length < 9) return;
+  const party = fields.clientNif ? "destinatário" : "emitente";
+  noteEl.textContent = `${scanSummary} A confirmar o NIF do ${party} no Portal da AGT…`;
+  try {
+    const result = await apiRequest("/finance/invoices/lookup-nif", {
+      method: "POST",
+      body: { nif },
+    });
+    const agt = result?.data || {};
+    const companyDetails = [agt.nome, agt.tipo, agt.estado, agt.regimeIva]
+      .filter(Boolean)
+      .join(" · ");
+    noteEl.textContent = result?.found && companyDetails
+      ? `${scanSummary} Dados AGT (${nif}): ${companyDetails}.`
+      : `${scanSummary} A AGT não encontrou dados para o NIF ${nif}.`;
+  } catch (error) {
+    noteEl.textContent = `${scanSummary} Não foi possível confirmar o NIF na AGT: ${error.message || "serviço indisponível"}`;
+  }
+}
+
 async function openInvoiceModal(invoice) {
   const isEdit = Boolean(invoice);
   const hasDoc = invoiceHasDocument(invoice);
@@ -679,8 +701,12 @@ async function openInvoiceModal(invoice) {
           }
 
           refreshPreview();
-          docNote.textContent = buildScanSummary(fields, warnings);
+          const scanSummary = buildScanSummary(fields, warnings);
+          docNote.textContent = scanSummary;
           toast("Fatura lida. Confirme os valores antes de guardar.", { type: "success" });
+          // The AGT portal can be slow, so its lookup runs after the form fields
+          // have been populated and does not keep the scan button spinning.
+          void lookupScannedInvoiceNif(fields, docNote, scanSummary);
         } catch (err) {
           docNote.textContent = err.message || "Falha ao ler a fatura.";
           toast(err.message || "Falha ao ler a fatura.", { type: "error" });
@@ -731,6 +757,26 @@ async function openInvoiceModal(invoice) {
         notes: $("inv_notes").value.trim() || null,
       };
       if (!raw.grossAmount || raw.grossAmount <= 0) return toast("Indique o V. Ilíquido.", { type: "error" });
+
+      const percentageFields = [
+        ["vatPercent", "inv_vat", "IVA"],
+        ["withholdingPercent", "inv_withholding", "retenção na fonte"],
+        ["carPercent", "inv_car", "Seguro CAR"],
+        ["guaranteePercent", "inv_guarantee", "garantia"],
+      ];
+      const invalidPercent = percentageFields.find(([key]) =>
+        raw[key] !== null && (raw[key] < 0 || raw[key] > 100)
+      );
+      if (invalidPercent) {
+        const [key, inputId, label] = invalidPercent;
+        const input = $(inputId);
+        input?.focus();
+        toast(
+          `${label}: indique uma percentagem entre 0% e 100% (valor atual: ${raw[key]}%). Se pretendia indicar um valor em dinheiro, converta-o para percentagem do V. Ilíquido.`,
+          { type: "error" }
+        );
+        return;
+      }
 
       setButtonLoading(btn, true);
       try {

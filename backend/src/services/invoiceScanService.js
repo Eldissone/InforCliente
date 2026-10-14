@@ -22,6 +22,8 @@ const SUPPORTED_MIME_TYPES = new Map([
 ]);
 
 const MAX_INLINE_BYTES = 12 * 1024 * 1024; // 12MB — limite do payload inline do Gemini
+const GEMINI_TIMEOUT_MS = 60_000;
+const GEMINI_FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash"];
 
 const RESPONSE_SCHEMA = {
   type: "object",
@@ -33,14 +35,14 @@ const RESPONSE_SCHEMA = {
     docNumber: { type: "string" },
     docDate: { type: "string" },
     dueDate: { type: "string" },
-    grossAmount: { type: "number" },
-    vatAmount: { type: "number" },
-    vatPercent: { type: "number" },
-    withholdingAmount: { type: "number" },
-    withholdingPercent: { type: "number" },
-    carInsuranceAmount: { type: "number" },
-    guaranteeAmount: { type: "number" },
-    netAmount: { type: "number" },
+    grossAmount: { type: ["number", "null"] },
+    vatAmount: { type: ["number", "null"] },
+    vatPercent: { type: ["number", "null"] },
+    withholdingAmount: { type: ["number", "null"] },
+    withholdingPercent: { type: ["number", "null"] },
+    carInsuranceAmount: { type: ["number", "null"] },
+    guaranteeAmount: { type: ["number", "null"] },
+    netAmount: { type: ["number", "null"] },
     currency: { type: "string" },
     supplierName: { type: "string" },
     supplierNif: { type: "string" },
@@ -49,9 +51,31 @@ const RESPONSE_SCHEMA = {
     projectHint: { type: "string" },
     description: { type: "string" },
     notes: { type: "string" },
-    confidence: { type: "number" },
+    confidence: { type: ["number", "null"] },
   },
-  required: ["docNumber", "docDate", "grossAmount", "currency"],
+  required: [
+    "documentType",
+    "docNumber",
+    "docDate",
+    "dueDate",
+    "grossAmount",
+    "vatAmount",
+    "vatPercent",
+    "withholdingAmount",
+    "withholdingPercent",
+    "carInsuranceAmount",
+    "guaranteeAmount",
+    "netAmount",
+    "currency",
+    "supplierName",
+    "supplierNif",
+    "clientName",
+    "clientNif",
+    "projectHint",
+    "description",
+    "notes",
+    "confidence",
+  ],
 };
 
 const INSTRUCTION = `És um assistente de contabilidade de uma empresa de construção civil em Angola.
@@ -68,7 +92,7 @@ Regras:
 - "supplierName"/"supplierNif" é o emitente; "clientName"/"clientNif" é o destinatário.
 - "projectHint" é a referência à obra/projeto que aparece no documento (ex.: código ou nome da obra), ou string vazia.
 - "confidence" é a tua confiança global (0 a 1) na leitura.
-- Se um campo não existir no documento, devolve string vazia (texto) ou 0 (números). Nunca inventes.
+- Se um campo não existir no documento, devolve string vazia (texto) ou null (números). Nunca inventes nem uses 0 para representar um dado em falta.
 - Não devolvas markdown nem explicações fora do JSON.`;
 
 function isConfigured() {
@@ -163,6 +187,14 @@ function cleanText(value, maxLength = 200) {
   return text.slice(0, maxLength);
 }
 
+function translateInvoiceNote(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (/^VAT assumed to be 0 as no VAT details were provided and subtotal equals total\.?$/i.test(text)) {
+    return "IVA considerado 0, pois não foram indicados detalhes de IVA e o subtotal é igual ao total.";
+  }
+  return text;
+}
+
 /** Confiança 0–1 vem como fração ou percentagem, conforme o modelo. */
 function normalizeConfidence(value) {
   const n = parseNumberValue(value);
@@ -215,9 +247,7 @@ function matchProject(projects, hint) {
 }
 
 async function callGemini({ mimeType, base64Data, projects }) {
-  const url = `${config.ai.geminiBaseUrl.replace(/\/$/, "")}/models/${encodeURIComponent(
-    config.ai.geminiModel
-  )}:generateContent`;
+  const baseUrl = config.ai.geminiBaseUrl.replace(/\/$/, "");
 
   const projectList = (projects || [])
     .slice(0, 200)
@@ -251,24 +281,41 @@ async function callGemini({ mimeType, base64Data, projects }) {
     ],
     generationConfig: {
       temperature: 0,
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
+      responseFormat: {
+        text: {
+          // REST field is a protobuf enum, not an IANA MIME string.
+          mimeType: "APPLICATION_JSON",
+          schema: RESPONSE_SCHEMA,
+        },
+      },
     },
   };
 
-  const attempt = async () =>
-    fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  try {
+    let result;
+    for (const [index, model] of models.entries()) {
+      const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
+      const response = await fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const payloadText = await response.text();
+      result = { response, payloadText, model };
 
-  let response = await attempt();
-  if ([429, 500, 503].includes(response.status)) {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    response = await attempt();
+      // 503 usually means temporary model capacity pressure. Try the next
+      // supported Flash model while preserving the same structured JSON schema.
+      if (response.status !== 503 || index === models.length - 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
+    }
+    return result;
+  } finally {
+    clearTimeout(timeout);
   }
-  return response;
 }
 
 function buildHttpError(status, message, code) {
@@ -312,13 +359,25 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   }
 
   let response;
+  let payloadText;
+  let model = config.ai.geminiModel;
   try {
-    response = await callGemini({
+    const result = await callGemini({
       mimeType: resolvedMime,
       base64Data: buffer.toString("base64"),
       projects,
     });
+    response = result.response;
+    payloadText = result.payloadText;
+    model = result.model;
   } catch (error) {
+    if (error?.name === "AbortError") {
+      throw buildHttpError(
+        504,
+        "A leitura da fatura excedeu 60 segundos. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
+        "AI_TIMEOUT"
+      );
+    }
     console.error("Gemini invoice scan failed:", error);
     throw buildHttpError(
       503,
@@ -327,7 +386,6 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     );
   }
 
-  const payloadText = await response.text();
   let payload;
   try {
     payload = payloadText ? JSON.parse(payloadText) : null;
@@ -366,9 +424,18 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
       );
     }
     console.error("Gemini invoice scan HTTP", response.status, apiMessage || payloadText.slice(0, 400));
+    if (response.status === 503) {
+      throw buildHttpError(
+        503,
+        "Os modelos Gemini estão temporariamente sobrecarregados. Foram tentados modelos alternativos; aguarde um pouco e tente novamente.",
+        "AI_TEMPORARILY_BUSY"
+      );
+    }
     throw buildHttpError(
       502,
-      `Falha na leitura da fatura (HTTP ${response.status}). Tente novamente.`,
+      response.status === 400
+        ? `O Gemini rejeitou a configuração da leitura (HTTP 400): ${apiMessage || "pedido inválido"}`
+        : `Falha na leitura da fatura (HTTP ${response.status}). Tente novamente.`,
       "AI_REQUEST_FAILED"
     );
   }
@@ -376,7 +443,14 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   const candidate = payload?.candidates?.[0];
   const finishReason = candidate?.finishReason;
   const text = (candidate?.content?.parts || []).map((p) => p.text || "").join("");
-  const parsed = extractJsonBlock(text);
+  let parsed = null;
+  try {
+    // JSON mode returns the JSON object directly as text (without Markdown fences).
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    // Keep compatibility with older Gemini models that may still wrap JSON.
+    parsed = extractJsonBlock(text);
+  }
   if (!parsed) {
     if (finishReason === "SAFETY" || finishReason === "PROHIBITED_CONTENT") {
       throw buildHttpError(
@@ -428,9 +502,9 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     suggestedProjectId: suggestedProject?.id || null,
     suggestedProjectLabel: suggestedProject ? `${suggestedProject.code || ""} — ${suggestedProject.name}`.trim() : null,
     description: cleanText(parsed.description, 400),
-    notes: cleanText(parsed.notes, 800),
+    notes: cleanText(translateInvoiceNote(parsed.notes), 800),
     confidence: normalizeConfidence(parsed.confidence),
-    model: config.ai.geminiModel,
+    model,
     raw: parsed,
   };
 }

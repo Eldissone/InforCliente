@@ -4,6 +4,7 @@ const multer = require("multer");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { config } = require("../config");
+const { consultarNifAgt, normalizeNif } = require("../services/agtNifLookup");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase, deleteStoredFile } = require("../utils/storage");
@@ -697,6 +698,17 @@ financeRoutes.post(
           ]
         : [],
     });
+  })
+);
+
+/** Consulta na AGT o NIF extraído do documento, sem bloquear o resultado do scan. */
+financeRoutes.post(
+  "/invoices/lookup-nif",
+  edit,
+  asyncHandler(async (req, res) => {
+    const nif = normalizeNif(req.body?.nif);
+    const data = await consultarNifAgt(nif);
+    return res.json({ found: Boolean(data.found), data });
   })
 );
 

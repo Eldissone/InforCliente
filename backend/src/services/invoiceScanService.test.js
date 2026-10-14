@@ -114,7 +114,30 @@ test("readInvoiceDocument devolve os campos normalizados e sugere a obra", async
     const parts = requestedBody.contents[0].parts;
     assert.equal(parts[1].inline_data.mime_type, "application/pdf");
     assert.equal(Buffer.from(parts[1].inline_data.data, "base64").toString(), PDF.toString());
-    assert.equal(requestedBody.generationConfig.responseMimeType, "application/json");
+    assert.equal(requestedBody.generationConfig.responseFormat.text.mimeType, "APPLICATION_JSON");
+    assert.deepEqual(requestedBody.generationConfig.responseFormat.text.schema.required, [
+      "documentType",
+      "docNumber",
+      "docDate",
+      "dueDate",
+      "grossAmount",
+      "vatAmount",
+      "vatPercent",
+      "withholdingAmount",
+      "withholdingPercent",
+      "carInsuranceAmount",
+      "guaranteeAmount",
+      "netAmount",
+      "currency",
+      "supplierName",
+      "supplierNif",
+      "clientName",
+      "clientNif",
+      "projectHint",
+      "description",
+      "notes",
+      "confidence",
+    ]);
 
     assert.equal(result.docNumber, "FT 2026/145");
     assert.equal(result.docDate, "2026-10-02");
