@@ -163,6 +163,42 @@
 .finance-kpi--red .finance-kpi-value { color: #dc2626; }
 .finance-kpi--blue .finance-kpi-value { color: #2563eb; }
 
+/* Keep the Cash Flow and Aging cards inside the page's horizontal scroll. */
+.finance-overview-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  min-width: 0;
+  margin-bottom: 1.5rem;
+}
+
+.finance-overview-detail-card {
+  min-width: 0;
+}
+
+.finance-overview-detail-card .finance-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.finance-overview-detail-card .fin-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.finance-overview-detail-card .fin-table td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .finance-overview-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ─── Botões ────────────────────────────────────────────────────────────── */
 
 .finance-btn {
@@ -245,6 +281,16 @@
 }
 
 .fin-table .fin-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Override the generic 1150px finance table only inside these overview cards. */
+.finance-overview-detail-card .finance-table-scroll .fin-table {
+  min-width: 0;
+}
+
+.finance-overview-detail-card .finance-table-scroll .fin-table .fin-num {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 .fin-row--overdue { background: #fef2f2; }
 .fin-row--overdue:hover { background: #fee2e2 !important; }

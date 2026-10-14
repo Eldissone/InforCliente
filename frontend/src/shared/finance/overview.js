@@ -36,12 +36,12 @@ function renderShell() {
       <div id="ovProjects" class="finance-table-scroll"></div>
     </section>
 
-    <div style="display:grid;grid-template-columns:1fr;gap:1.5rem" id="ovBottom">
-      <section class="finance-card">
+    <div id="ovBottom" class="finance-overview-detail-grid">
+      <section class="finance-card finance-overview-detail-card">
         <h2 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0 0 1rem">Cash Flow</h2>
         <div id="ovCash" class="finance-table-scroll"></div>
       </section>
-      <section class="finance-card">
+      <section class="finance-card finance-overview-detail-card">
         <h2 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0 0 1rem">Contas a Receber (Aging)</h2>
         <div id="ovAging" class="finance-table-scroll"></div>
       </section>
