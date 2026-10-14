@@ -2051,6 +2051,21 @@ model Invoice {
   receivedDate       DateTime?
   notes              String?
   createdBy          String?
+
+  // Documento físico da fatura (PDF ou imagem) — carregado pelo financeiro
+  // ou anexado automaticamente após a leitura com IA.
+  documentPath       String? // caminho guardado (uploads/...)
+  documentName       String? // nome original do ficheiro
+  documentMimeType   String?
+  documentSize       Int?
+  documentUploadedAt DateTime?
+  documentUploadedBy String?
+
+  // Origem do preenchimento: IA (Gemini) ou MANUAL.
+  scanSource         String?
+  scanModel          String?
+  scanRaw            Json?
+
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
@@ -2063,6 +2078,7 @@ model Invoice {
   @@index([clientId])
   @@index([status])
   @@index([dueDate])
+  @@index([documentPath])
 }
 
 // Recebimento (parcial ou total) de uma fatura.

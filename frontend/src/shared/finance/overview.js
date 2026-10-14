@@ -29,18 +29,19 @@ function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
     <div id="ovCards" class="finance-kpi-grid"></div>
     <div id="ovCards2" class="finance-kpi-grid"></div>
+    <div id="ovCards3" class="finance-kpi-grid"></div>
 
     <section class="finance-card" style="margin-bottom:1.5rem">
       <h2 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0 0 1rem">Resultado por Obra</h2>
       <div id="ovProjects" class="finance-table-scroll"></div>
     </section>
 
-    <div style="display:grid;grid-template-columns:1fr;gap:1.5rem" id="ovBottom">
-      <section class="finance-card">
+    <div id="ovBottom" class="finance-overview-detail-grid">
+      <section class="finance-card finance-overview-detail-card">
         <h2 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0 0 1rem">Cash Flow</h2>
         <div id="ovCash" class="finance-table-scroll"></div>
       </section>
-      <section class="finance-card">
+      <section class="finance-card finance-overview-detail-card">
         <h2 style="font-size:1rem;font-weight:800;color:#0f172a;margin:0 0 1rem">Contas a Receber (Aging)</h2>
         <div id="ovAging" class="finance-table-scroll"></div>
       </section>
@@ -57,10 +58,23 @@ function renderCards(data) {
   ];
   const agingTotal = Number(data.aging?.vencidas || 0) + Number(data.aging?.a_vencer || 0);
   const secondary = [
-    { label: "Previsão", value: money(c.forecast), sub: "Valor total das obras", tone: "slate", icon: "target" },
+    { label: "Venda Prevista", value: money(c.forecast), sub: "Tabela de quantidades das obras", tone: "slate", icon: "target" },
     { label: "Recebido", value: money(c.received), sub: "Entradas de cliente", tone: "emerald", icon: "savings" },
     { label: "Por Receber", value: money(agingTotal), sub: "Faturas em aberto", tone: "amber", icon: "hourglass_bottom" },
     { label: "Custos por Confirmar", value: money(c.costPending), sub: "Aguarda confirmação", tone: "red", icon: "pending_actions" },
+  ];
+  // Ligação à orçamentação: custo previsto vs venda prevista e margem.
+  const planning = [
+    { label: "Custo Previsto", value: money(c.costBudget), sub: "Orçamento dos centros de custo", tone: "blue", icon: "receipt_long" },
+    { label: "Custos Comprometidos", value: money(c.costCommitted), sub: "Assumido e ainda por pagar", tone: "slate", icon: "handshake" },
+    {
+      label: "Margem Prevista",
+      value: money(c.plannedMargin),
+      sub: `${pct(c.plannedMarginPct)} sobre a venda prevista`,
+      tone: Number(c.plannedMargin) >= 0 ? "emerald" : "red",
+      icon: "percent",
+    },
+    { label: "Por Faturar", value: money(c.toInvoice), sub: "Venda prevista ainda não faturada", tone: "amber", icon: "hourglass_top" },
   ];
   const cardHtml = (cards) =>
     cards
@@ -77,6 +91,7 @@ function renderCards(data) {
       .join("");
   document.getElementById("ovCards").innerHTML = cardHtml(primary);
   document.getElementById("ovCards2").innerHTML = cardHtml(secondary);
+  document.getElementById("ovCards3").innerHTML = cardHtml(planning);
 }
 
 function renderProjects(data) {
@@ -95,6 +110,8 @@ function renderProjects(data) {
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.referencia || "—")}</div>
         </td>
         <td class="fin-num">${esc(money(p.forecast))}</td>
+        <td class="fin-num">${esc(money(p.costBudget))}</td>
+        <td class="fin-num ${marginTone(p.plannedMargin)}" style="font-weight:700">${esc(money(p.plannedMargin))}</td>
         <td class="fin-num">${esc(money(p.revenue))}</td>
         <td class="fin-num finance-pos">${esc(money(p.received))}</td>
         <td class="fin-num">${esc(money(p.cost))}</td>
@@ -106,23 +123,28 @@ function renderProjects(data) {
   const totals = items.reduce(
     (acc, p) => {
       acc.forecast += Number(p.forecast) || 0;
+      acc.costBudget += Number(p.costBudget) || 0;
+      acc.plannedMargin += Number(p.plannedMargin) || 0;
       acc.revenue += Number(p.revenue) || 0;
       acc.received += Number(p.received) || 0;
       acc.cost += Number(p.cost) || 0;
       acc.result += Number(p.result) || 0;
       return acc;
     },
-    { forecast: 0, revenue: 0, received: 0, cost: 0, result: 0 }
+    { forecast: 0, costBudget: 0, plannedMargin: 0, revenue: 0, received: 0, cost: 0, result: 0 }
   );
   const margin = totals.revenue > 0 ? (totals.result / totals.revenue) * 100 : 0;
+  const plannedMarginPct = totals.forecast > 0 ? (totals.plannedMargin / totals.forecast) * 100 : 0;
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1050px">
+    <table class="fin-table" style="min-width:1250px">
       <thead><tr>
         <th>Obra</th>
-        <th style="text-align:right">Previsão</th>
+        <th style="text-align:right">Venda Prevista</th>
+        <th style="text-align:right">Custo Previsto</th>
+        <th style="text-align:right">Margem Prevista</th>
         <th style="text-align:right">Receita</th>
         <th style="text-align:right">Recebido</th>
-        <th style="text-align:right">Custo</th>
+        <th style="text-align:right">Custo Realizado</th>
         <th style="text-align:right">Resultado</th>
         <th style="text-align:right">Margem</th>
       </tr></thead>
@@ -130,6 +152,8 @@ function renderProjects(data) {
       <tfoot><tr>
         <td>Totais</td>
         <td class="fin-num">${esc(money(totals.forecast))}</td>
+        <td class="fin-num">${esc(money(totals.costBudget))}</td>
+        <td class="fin-num ${marginTone(totals.plannedMargin)}">${esc(money(totals.plannedMargin))}<br><span style="font-size:11px">${esc(pct(plannedMarginPct))}</span></td>
         <td class="fin-num">${esc(money(totals.revenue))}</td>
         <td class="fin-num">${esc(money(totals.received))}</td>
         <td class="fin-num">${esc(money(totals.cost))}</td>

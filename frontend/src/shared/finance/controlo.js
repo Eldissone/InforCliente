@@ -44,8 +44,16 @@ function renderShell() {
 function renderKpis(data) {
   const t = data.totals || {};
   const cards = [
-    { label: "Custo Previsto", value: money(t.forecastCost), sub: "Valor total das obras", tone: "blue", icon: "target" },
-    { label: "Custo Realizado", value: money(t.realizedCost), sub: "Custos pagos", tone: "amber", icon: "payments" },
+    { label: "Custo Previsto", value: money(t.forecastCost), sub: "Orçamento dos centros de custo", tone: "blue", icon: "target" },
+    { label: "Custo Realizado", value: money(t.realizedCost), sub: "Todas as fontes de custo", tone: "amber", icon: "payments" },
+    { label: "Venda Prevista", value: money(t.saleForecast), sub: "Tabela de quantidades da obra", tone: "slate", icon: "request_quote" },
+    {
+      label: "Margem Prevista",
+      value: money(t.plannedMargin),
+      sub: pct(t.plannedMarginPct) + " sobre a venda prevista",
+      tone: Number(t.plannedMargin) >= 0 ? "emerald" : "red",
+      icon: "percent",
+    },
     { label: "Receita", value: money(t.revenue), sub: "Faturação emitida", tone: "emerald", icon: "receipt_long" },
     { label: "Resultado", value: money(t.result), sub: `Margem ${pct(t.margin)}`, tone: t.result >= 0 ? "emerald" : "red", icon: "trending_up" },
   ];
@@ -81,6 +89,9 @@ function renderProjects(data) {
         <td class="fin-num">${esc(money(p.forecastCost))}</td>
         <td class="fin-num">${esc(money(p.realizedCost))}</td>
         <td class="fin-num ${tone(p.costDeviation)}" style="font-weight:800">${esc(money(p.costDeviation))}</td>
+        <td class="fin-num">${esc(money(p.saleForecast))}</td>
+        <td class="fin-num ${tone(-p.plannedMargin)}" style="font-weight:700">${esc(money(p.plannedMargin))}</td>
+        <td class="fin-num ${tone(-p.plannedMarginPct)}">${esc(pct(p.plannedMarginPct))}</td>
         <td class="fin-num">${esc(money(p.revenue))}</td>
         <td class="fin-num ${tone(-p.result)}" style="font-weight:800">${esc(money(p.result))}</td>
         <td class="fin-num ${tone(-p.margin)}">${esc(pct(p.margin))}</td>
@@ -90,15 +101,18 @@ function renderProjects(data) {
   const t = data.totals || {};
   const dev = (Number(t.realizedCost) || 0) - (Number(t.forecastCost) || 0);
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1150px">
+    <table class="fin-table" style="min-width:1500px">
       <thead><tr>
         <th>Obra</th>
         <th style="text-align:right">Custo Previsto</th>
         <th style="text-align:right">Custo Realizado</th>
         <th style="text-align:right">Desvio de Custo</th>
+        <th style="text-align:right">Venda Prevista</th>
+        <th style="text-align:right">Margem Prevista</th>
+        <th style="text-align:right">% Margem Prev.</th>
         <th style="text-align:right">Receita</th>
         <th style="text-align:right">Resultado</th>
-        <th style="text-align:right">Margem</th>
+        <th style="text-align:right">Margem Realiz.</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
@@ -106,6 +120,9 @@ function renderProjects(data) {
         <td class="fin-num">${esc(money(t.forecastCost))}</td>
         <td class="fin-num">${esc(money(t.realizedCost))}</td>
         <td class="fin-num ${tone(dev)}">${esc(money(dev))}</td>
+        <td class="fin-num">${esc(money(t.saleForecast))}</td>
+        <td class="fin-num">${esc(money(t.plannedMargin))}</td>
+        <td class="fin-num">${esc(pct(t.plannedMarginPct))}</td>
         <td class="fin-num">${esc(money(t.revenue))}</td>
         <td class="fin-num ${tone(-(t.result || 0))}">${esc(money(t.result))}</td>
         <td class="fin-num ${tone(-(t.margin || 0))}">${esc(pct(t.margin))}</td>

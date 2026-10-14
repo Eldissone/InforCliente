@@ -52,6 +52,13 @@ const config = {
   port: process.env.PORT || 4000,
   jwtSecret: requireJwtSecret(),
   frontendOrigin: resolveFrontendOrigin(),
+  // Leitura automática de faturas (Área Financeira) com o Gemini.
+  // Sem GEMINI_API_KEY o ecrã de leitura fica indisponível (não bloqueia o resto).
+  ai: {
+    geminiApiKey: process.env.GEMINI_API_KEY || null,
+    geminiModel: process.env.GEMINI_MODEL || "gemini-3.8-flash",
+    geminiBaseUrl: process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta",
+  },
   // Canais de notificação externos — opcionais. Enquanto não configurados,
   // os respetivos providers ficam em modo "not configured" (no-op seguro).
   notifications: {

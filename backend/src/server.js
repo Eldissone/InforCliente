@@ -152,7 +152,7 @@ app.use((err, _req, res, _next) => {
 
   const status = typeof err?.status === "number" ? err.status : 500;
   const message =
-    status === 503
+    status === 503 || err?.code === "AI_TIMEOUT"
       ? err.message || "Serviço indisponível"
       : status >= 500
         ? "INTERNAL_SERVER_ERROR"
