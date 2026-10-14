@@ -115,6 +115,7 @@ async function loadCostInputs(whereProject) {
         confirmationStatus: true,
         sourceType: true,
         paymentType: true,
+        responsible: true,
       },
     }),
     prisma.extraRequest.findMany({
@@ -212,7 +213,13 @@ async function loadStockOutValue(whereProject) {
   return byProject;
 }
 
-/** Custo realizado por obra, separado por fonte (todas as áreas). */
+/**
+ * Custo por obra separado por fonte (todas as áreas).
+ *
+ * `realized` é apenas dinheiro efetivamente gasto (valor pago / pedido extra
+ * pago). O que ainda não saiu do caixa vai para `committed`, e o que já saiu
+ * mas aguarda confirmação do financeiro fica em `pending`.
+ */
 function aggregateCosts(projectId, inputs) {
   const bucket = newBucket();
 
@@ -221,11 +228,11 @@ function aggregateCosts(projectId, inputs) {
     .forEach((p) => {
       const paid = toNumber(p.paidAmount);
       const budgeted = toNumber(p.budgetedAmount);
-      const value = paid || budgeted;
-      bucket.realized += value;
-      bucket.costPayments += value;
+      bucket.realized += paid;
+      bucket.costPayments += paid;
+      if (p.confirmationStatus === "POR_CONFIRMAR") bucket.pending += paid;
       if (PENDING_COST_STATUSES.includes(p.status)) {
-        bucket.pending += value;
+        bucket.committed += Math.max(budgeted - paid, 0);
       }
     });
 
@@ -236,6 +243,7 @@ function aggregateCosts(projectId, inputs) {
       if (e.status === "PAGO") {
         bucket.realized += amount;
         bucket.extraRequests += amount;
+        bucket.pending += amount;
       } else if (e.status === "APROVADO") {
         bucket.committed += amount;
       }
@@ -537,9 +545,10 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     const project = projectById.get(p.projectId);
     if (!project) return;
     const value = toNumber(p.paidAmount) || toNumber(p.budgetedAmount);
-    const isPending = PENDING_COST_STATUSES.includes(p.status);
+    const paidValue = toNumber(p.paidAmount);
     entries.push({
       id: `cp:${p.id}`,
+      sourceId: p.id,
       source: "PAGAMENTO",
       sourceLabel: SOURCE_LABELS.PAGAMENTO,
       detail: p.sourceType || null,
@@ -557,7 +566,9 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       amount: round2(value),
       confirmationStatus: p.confirmationStatus === "CONFIRMADO" ? "CONFIRMADO" : "POR_CONFIRMAR",
       status: p.status,
-      kind: isPending ? "COMPROMETIDO" : "REALIZADO",
+      responsible: p.responsible || null,
+      kind: paidValue > 0 ? "REALIZADO" : "COMPROMETIDO",
+      remaining: round2(Math.max(toNumber(p.budgetedAmount) - paidValue, 0)),
       currency: project.currency || "AOA",
     });
   });
@@ -568,6 +579,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     const paid = e.status === "PAGO";
     entries.push({
       id: `er:${e.id}`,
+      sourceId: e.id,
       source: "PEDIDO_EXTRA",
       sourceLabel: SOURCE_LABELS.PEDIDO_EXTRA,
       detail: e.paymentSource || null,
@@ -586,6 +598,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       confirmationStatus: paid ? "CONFIRMADO" : "POR_CONFIRMAR",
       status: e.status,
       kind: paid ? "REALIZADO" : "COMPROMETIDO",
+      remaining: paid ? 0 : round2(e.amount),
       currency: e.currency || project.currency || "AOA",
     });
   });
@@ -597,6 +610,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     const realized = toNumber(t.realizedAmount) || toNumber(t.amount);
     entries.push({
       id: `tx:${t.id}`,
+      sourceId: t.id,
       source: "LANCAMENTO",
       sourceLabel: SOURCE_LABELS.LANCAMENTO,
       detail: t.category || null,
@@ -615,6 +629,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       confirmationStatus: paid ? "CONFIRMADO" : "POR_CONFIRMAR",
       status: t.status,
       kind: paid ? "REALIZADO" : "COMPROMETIDO",
+      remaining: paid ? 0 : round2(t.amount),
       currency: project.currency || "AOA",
     });
   });
@@ -624,6 +639,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     if (!project) return;
     entries.push({
       id: `po:${o.id}`,
+      sourceId: o.id,
       source: "PEDIDO_COMPRA",
       sourceLabel: SOURCE_LABELS.PEDIDO_COMPRA,
       detail: o.status,
@@ -642,6 +658,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       confirmationStatus: "POR_CONFIRMAR",
       status: o.status,
       kind: "COMPROMETIDO",
+      remaining: round2(o.totalValue),
       currency: o.currency || project.currency || "AOA",
     });
   });

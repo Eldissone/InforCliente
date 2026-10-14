@@ -151,6 +151,22 @@ async function readStoredFile(rawPath) {
   };
 }
 
+/**
+ * Apaga um ficheiro guardado (`uploads/...`). Devolve `true` quando o
+ * ficheiro existia e foi removido. Nunca falha por ausência do ficheiro.
+ */
+async function deleteStoredFile(rawPath) {
+  const localPath = findExistingLocalFile(rawPath);
+  if (!localPath) return false;
+  try {
+    fs.unlinkSync(localPath);
+    return true;
+  } catch (error) {
+    console.error("Falha ao apagar ficheiro guardado:", localPath, error);
+    return false;
+  }
+}
+
 async function streamStoredFile(res, rawPath) {
   const objectKey = parseStoredObjectKey(rawPath);
   if (!objectKey) {
@@ -178,5 +194,6 @@ module.exports = {
   toStoredPath,
   readStoredFile,
   streamStoredFile,
+  deleteStoredFile,
   ensureUploadsDir,
 };

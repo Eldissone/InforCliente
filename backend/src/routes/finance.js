@@ -1,8 +1,22 @@
 const express = require("express");
+const path = require("path");
+const multer = require("multer");
 const { z } = require("zod");
 const { prisma } = require("../db");
+const { config } = require("../config");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
+const { uploadToSupabase, deleteStoredFile } = require("../utils/storage");
+const {
+  isConfigured: isInvoiceAiConfigured,
+  readInvoiceDocument,
+  MAX_INLINE_BYTES,
+} = require("../services/invoiceScanService");
+const {
+  buildProjectFinancials,
+  buildCostLedger,
+  SOURCE_LABELS,
+} = require("../services/financeLedgerService");
 
 const financeRoutes = express.Router();
 
@@ -11,6 +25,32 @@ financeRoutes.use(authRequired);
 const view = requirePermission("financeiro", "view");
 const edit = requirePermission("financeiro", "edit");
 const approve = requirePermission("financeiro", "approve");
+
+// Documento físico da fatura (PDF/imagem) e leitura com IA. O mesmo limite é
+// usado no upload manual e no envio para o Gemini.
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_INLINE_BYTES },
+});
+
+const ALLOWED_INVOICE_DOC_MIME = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
+/** Nome de ficheiro seguro para guardar em `uploads/finance/invoices/...`. */
+function safeFileName(rawName, fallbackExt = "") {
+  const base = path
+    .basename(String(rawName || "documento"))
+    .replace(/[^\w.\-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+  if (!base) return `documento${fallbackExt}`;
+  return base;
+}
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -62,6 +102,18 @@ function mapInvoice(invoice) {
     receivedAmount: received,
     missingAmount: round2(net - received),
     status: invoiceDerivedStatus(invoice),
+    // Documento físico da fatura (PDF/imagem) — permite ver/abrir a fatura
+    // original a partir da Área Financeira.
+    documentPath: invoice.documentPath || null,
+    documentName: invoice.documentName || null,
+    documentMimeType: invoice.documentMimeType || null,
+    documentSize: invoice.documentSize === null || invoice.documentSize === undefined
+      ? null
+      : Number(invoice.documentSize),
+    documentUploadedAt: invoice.documentUploadedAt || null,
+    hasDocument: Boolean(invoice.documentPath),
+    scanSource: invoice.scanSource || null,
+    scanModel: invoice.scanModel || null,
   };
 }
 
@@ -95,6 +147,30 @@ function computeInvoiceAmounts(raw, config = {}) {
     flagCar: carPercent > 0,
     flagGuarantee: guaranteePercent > 0,
   };
+}
+
+/** Totais da faturação prevista (mantém as chaves antigas do ecrã). */
+function emptyBillingTotals() {
+  return {
+    forecast: 0,
+    costBudget: 0,
+    plannedMargin: 0,
+    plannedMarginPct: 0,
+    billed: 0,
+    toBill: 0,
+    received: 0,
+    missing: 0,
+    costRealized: 0,
+    costCommitted: 0,
+    realizedMargin: 0,
+    realizedMarginPct: 0,
+    executedPct: 0,
+  };
+}
+
+/** Etiquetas das fontes de custo ligadas à área financeira. */
+function buildCostLedgerSources() {
+  return Object.entries(SOURCE_LABELS).map(([key, label]) => ({ key, label }));
 }
 
 // ─── Opções (listas de apoio aos ecrãs) ──────────────────────────────────────
@@ -558,6 +634,153 @@ financeRoutes.post(
   })
 );
 
+// ─── Documento físico da fatura e leitura com IA ─────────────────────────────
+
+/** Estado da leitura automática — permite ao ecrã avisar quando falta a chave. */
+financeRoutes.get(
+  "/ai-status",
+  view,
+  asyncHandler(async (_req, res) => {
+    const configured = isInvoiceAiConfigured();
+    return res.json({ configured, model: configured ? config.ai.geminiModel : null });
+  })
+);
+
+/**
+ * Lê a fatura física (PDF/fotografia) com IA e devolve os campos sugeridos.
+ * Não grava nada: o financeiro revê os valores antes de criar a fatura e só
+ * depois o ficheiro é anexado (`POST /invoices/:id/document`).
+ */
+financeRoutes.post(
+  "/invoices/scan",
+  edit,
+  documentUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({
+        error: "NO_FILE_UPLOADED",
+        message: "Carregue o PDF ou a fotografia da fatura para a leitura automática.",
+      });
+    }
+
+    const projects = await prisma.project.findMany({
+      select: { id: true, code: true, name: true, client: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    });
+
+    const fields = await readInvoiceDocument({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name, clientName: p.client?.name })),
+    });
+
+    // Avisa quando o total não fecha, para o financeiro confirmar antes de gravar.
+    const mismatch =
+      fields.grossAmount !== null &&
+      fields.vatAmount !== null &&
+      fields.netAmount !== null &&
+      Math.abs(fields.grossAmount + fields.vatAmount - fields.netAmount) > 0.05;
+
+    return res.json({
+      fields,
+      warnings: mismatch
+        ? [
+            "Os valores lidos não fecham (ilíquido + IVA ≠ total). Confirme o V. Ilíquido, o IVA e as deduções antes de guardar.",
+          ]
+        : [],
+    });
+  })
+);
+
+/** Anexa/substitui o documento físico de uma fatura já registada. */
+financeRoutes.post(
+  "/invoices/:id/document",
+  edit,
+  documentUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "NO_FILE_UPLOADED", message: "Selecione o PDF ou a imagem da fatura." });
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, documentPath: true },
+    });
+    if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
+
+    const mimeType = String(req.file.mimetype || "").toLowerCase();
+    if (mimeType && !ALLOWED_INVOICE_DOC_MIME.has(mimeType)) {
+      return res.status(415).json({
+        error: "UNSUPPORTED_FILE_TYPE",
+        message: "Formato não suportado. Anexe a fatura em PDF, JPG, PNG ou WEBP.",
+      });
+    }
+
+    const extension = path.extname(req.file.originalname || "").toLowerCase() || ".pdf";
+    const storagePath = `finance/invoices/${invoice.id}/${Date.now()}-${safeFileName(
+      req.file.originalname,
+      extension
+    )}`;
+
+    const documentPath = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    const actor = req.user?.name || req.user?.email || null;
+
+    const updated = await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        documentPath,
+        documentName: req.file.originalname || null,
+        documentMimeType: req.file.mimetype || null,
+        documentSize: req.file.size || null,
+        documentUploadedAt: new Date(),
+        documentUploadedBy: actor,
+      },
+      include: {
+        project: { select: { id: true, code: true, name: true, currency: true } },
+        client: { select: { id: true, name: true, code: true } },
+        measurement: { select: { id: true, reportNumber: true, reportDate: true } },
+      },
+    });
+
+    // Substituição: apaga o ficheiro anterior para não deixar lixo no disco.
+    if (invoice.documentPath && invoice.documentPath !== documentPath) {
+      await deleteStoredFile(invoice.documentPath);
+    }
+
+    return res.status(201).json({ invoice: mapInvoice(updated) });
+  })
+);
+
+/** Remove o documento físico da fatura (a fatura mantém-se). */
+financeRoutes.delete(
+  "/invoices/:id/document",
+  edit,
+  asyncHandler(async (req, res) => {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, documentPath: true },
+    });
+    if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        documentPath: null,
+        documentName: null,
+        documentMimeType: null,
+        documentSize: null,
+        documentUploadedAt: null,
+        documentUploadedBy: null,
+      },
+    });
+
+    if (invoice.documentPath) await deleteStoredFile(invoice.documentPath);
+
+    return res.json({ ok: true });
+  })
+);
+
 // ─── Faturação prevista / resumos ────────────────────────────────────────────
 
 financeRoutes.get(
@@ -569,37 +792,56 @@ financeRoutes.get(
     if (projectId) projectWhere.id = String(projectId);
     if (clientId) projectWhere.clientId = String(clientId);
 
-    const projects = await prisma.project.findMany({
-      where: projectWhere,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        currency: true,
-        budgetTotal: true,
-        client: { select: { id: true, name: true, code: true } },
-      },
-      orderBy: { name: "asc" },
-    });
-
+    const projects = await prisma.project.findMany({ where: projectWhere, select: { id: true } });
     const projectIds = projects.map((p) => p.id);
-    const invoices = await prisma.invoice.findMany({
-      where: projectIds.length ? { projectId: { in: projectIds } } : {},
-      include: { measurement: { select: { reportNumber: true, reportDate: true } } },
-    });
 
-    const byProject = projects.map((project) => {
-      const list = invoices.filter((i) => i.projectId === project.id).map(mapInvoice);
-      const billed = round2(list.reduce((a, i) => a + i.grossAmount, 0));
-      const forecast = toNumber(project.budgetTotal);
-      return {
-        project,
-        forecast: round2(forecast),
-        billed,
-        toBill: round2(Math.max(forecast - billed, 0)),
-        rows: list,
-      };
-    });
+    if (!projectIds.length) {
+      return res.json({
+        byProject: [],
+        byClient: [],
+        totals: emptyBillingTotals(),
+        costSources: buildCostLedgerSources(),
+      });
+    }
+
+    // Os números vêm do ledger financeiro: a faturação prevista fica ligada ao
+    // orçamento de venda (tabela de quantidades), ao orçamento de custo dos
+    // centros de custo e à margem, para além dos custos de todas as áreas.
+    const [financials, invoices] = await Promise.all([
+      buildProjectFinancials({ projectIds }),
+      prisma.invoice.findMany({
+        where: { projectId: { in: projectIds } },
+        include: { measurement: { select: { reportNumber: true, reportDate: true } } },
+        orderBy: [{ docDate: "asc" }, { createdAt: "asc" }],
+      }),
+    ]);
+
+    const byProject = financials.items.map((entry) => ({
+      project: {
+        id: entry.project.id,
+        code: entry.project.code,
+        name: entry.project.name,
+        currency: entry.currency,
+        client: entry.project.client,
+      },
+      forecast: entry.budget.sale,
+      forecastSource: entry.budget.saleSource,
+      costBudget: entry.budget.cost,
+      plannedMargin: entry.margin.planned,
+      plannedMarginPct: entry.margin.plannedPct,
+      billed: entry.revenue.invoiced,
+      toBill: entry.revenue.toInvoice,
+      received: entry.revenue.received,
+      missing: entry.revenue.missing,
+      costRealized: entry.costs.realized,
+      costCommitted: entry.costs.committed,
+      costPending: entry.costs.pending,
+      costBySource: entry.costs.bySource,
+      realizedMargin: entry.margin.realized,
+      realizedMarginPct: entry.margin.realizedPct,
+      executedPct: entry.revenue.executedPct,
+      rows: invoices.filter((i) => i.projectId === entry.project.id).map(mapInvoice),
+    }));
 
     const byClientMap = new Map();
     byProject.forEach((entry) => {
@@ -609,25 +851,45 @@ financeRoutes.get(
           client: entry.project.client || { id: null, name: "Sem cliente" },
           forecast: 0,
           billed: 0,
+          toBill: 0,
+          costBudget: 0,
+          costRealized: 0,
         });
       }
       const bucket = byClientMap.get(key);
       bucket.forecast = round2(bucket.forecast + entry.forecast);
       bucket.billed = round2(bucket.billed + entry.billed);
+      bucket.toBill = round2(bucket.toBill + entry.toBill);
+      bucket.costBudget = round2(bucket.costBudget + entry.costBudget);
+      bucket.costRealized = round2(bucket.costRealized + entry.costRealized);
     });
+    const byClient = [...byClientMap.values()].map((bucket) => ({
+      ...bucket,
+      plannedMargin: round2(bucket.forecast - bucket.costBudget),
+      plannedMarginPct: bucket.forecast > 0 ? round2(((bucket.forecast - bucket.costBudget) / bucket.forecast) * 100) : 0,
+    }));
 
-    const totals = byProject.reduce(
-      (acc, e) => {
-        acc.forecast += e.forecast;
-        acc.billed += e.billed;
-        acc.toBill += e.toBill;
-        return acc;
-      },
-      { forecast: 0, billed: 0, toBill: 0 }
-    );
-    Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
+    const totals = emptyBillingTotals();
+    byProject.forEach((e) => {
+      totals.forecast += e.forecast;
+      totals.costBudget += e.costBudget;
+      totals.billed += e.billed;
+      totals.toBill += e.toBill;
+      totals.received += e.received;
+      totals.missing += e.missing;
+      totals.costRealized += e.costRealized;
+      totals.costCommitted += e.costCommitted;
+    });
+    Object.keys(totals).forEach((k) => {
+      if (typeof totals[k] === "number") totals[k] = round2(totals[k]);
+    });
+    totals.plannedMargin = round2(totals.forecast - totals.costBudget);
+    totals.plannedMarginPct = totals.forecast > 0 ? round2((totals.plannedMargin / totals.forecast) * 100) : 0;
+    totals.realizedMargin = round2(totals.billed - totals.costRealized);
+    totals.realizedMarginPct = totals.billed > 0 ? round2((totals.realizedMargin / totals.billed) * 100) : 0;
+    totals.executedPct = totals.forecast > 0 ? round2((totals.billed / totals.forecast) * 100) : 0;
 
-    return res.json({ byProject, byClient: [...byClientMap.values()], totals });
+    return res.json({ byProject, byClient, totals, costSources: buildCostLedgerSources() });
   })
 );
 
@@ -683,38 +945,31 @@ financeRoutes.get(
   "/costs",
   view,
   asyncHandler(async (req, res) => {
-    const { projectId, status, sourceType } = req.query;
-    const where = {};
-    if (projectId) where.projectId = String(projectId);
-    if (status) where.confirmationStatus = String(status);
-    if (sourceType) where.sourceType = String(sourceType);
+    const { projectId, status, source } = req.query;
 
-    const rows = await prisma.costPayment.findMany({
-      where,
-      include: {
-        project: { select: { id: true, code: true, name: true, currency: true, clientId: true, client: { select: { id: true, name: true, code: true } } } },
-        costCenter: { select: { id: true, code: true, name: true } },
-        supplierRef: { select: { id: true, name: true, nif: true } },
-      },
-      orderBy: [{ paymentDate: "desc" }],
-      take: 500,
-    });
+    // Lista unificada: pagamentos, pedidos extra, lançamentos de obra,
+    // pedidos de compra e mercadoria de stock — todas as áreas num só sítio.
+    const ledger = await buildCostLedger({ projectId, status, source });
 
-    const totals = rows.reduce(
-      (acc, r) => {
-        const paid = toNumber(r.paidAmount);
-        acc.paid += paid;
-        if (r.confirmationStatus === "CONFIRMADO") acc.confirmed += paid;
-        else acc.pending += paid;
-        return acc;
-      },
-      { paid: 0, confirmed: 0, pending: 0 }
-    );
-    Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
+    const totals = {
+      ...ledger.totals,
+      paid: ledger.totals.realized,
+      confirmed: ledger.totals.confirmed,
+      pending: ledger.totals.pending,
+    };
 
-    return res.json({ items: rows, totals });
+    return res.json({ items: ledger.items, totals, sources: ledger.sources });
   })
 );
+
+/**
+ * O ecrã de custos trabalha com a lista unificada (`cp:<id>`); aceita também o
+ * id simples do CostPayment para não quebrar chamadas antigas.
+ */
+function resolveCostPaymentId(rawId) {
+  const value = String(rawId || "");
+  return value.startsWith("cp:") ? value.slice(3) : value;
+}
 
 financeRoutes.patch(
   "/costs/:id",
@@ -731,7 +986,10 @@ financeRoutes.patch(
     const data = { ...body };
     if (body.confirmationStatus === "CONFIRMADO") data.confirmedAt = new Date();
 
-    const cost = await prisma.costPayment.update({ where: { id: req.params.id }, data });
+    const cost = await prisma.costPayment.update({
+      where: { id: resolveCostPaymentId(req.params.id) },
+      data,
+    });
     return res.json({ cost });
   })
 );
@@ -748,7 +1006,7 @@ financeRoutes.post(
       .parse(req.body || {});
 
     const cost = await prisma.costPayment.update({
-      where: { id: req.params.id },
+      where: { id: resolveCostPaymentId(req.params.id) },
       data: {
         confirmationStatus: "CONFIRMADO",
         confirmedAt: new Date(),
@@ -764,46 +1022,50 @@ financeRoutes.get(
   "/costs-overview",
   view,
   asyncHandler(async (req, res) => {
-    const projects = await prisma.project.findMany({
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        currency: true,
-        budgetTotal: true,
-        budgetConsumed: true,
-        budgetCommitted: true,
-        budgetAvailable: true,
+    // `forecast` passa a ser o orçamento de CUSTO da obra (baseline dos centros
+    // de custo) e não o valor de venda, que era a origem da confusão entre o
+    // previsto de custo e a previsão de faturação.
+    const financials = await buildProjectFinancials({ includeInactive: true });
+
+    const items = financials.items.map((entry) => ({
+      project: entry.project,
+      forecast: entry.budget.cost,
+      committed: entry.costs.committed,
+      realized: entry.costs.realized,
+      confirmed: round2(entry.costs.realized - entry.costs.pending),
+      pending: entry.costs.pending,
+      deviation: entry.costs.deviation,
+      deviationPct: entry.costs.deviationPct,
+      // Ligação à orçamentação e à faturação prevista
+      saleForecast: entry.budget.sale,
+      plannedMargin: entry.margin.planned,
+      plannedMarginPct: entry.margin.plannedPct,
+      realizedMargin: entry.margin.realized,
+      realizedMarginPct: entry.margin.realizedPct,
+      bySource: entry.costs.bySource,
+      stockOutValue: entry.costs.stockOutValue,
+    }));
+
+    const totals = items.reduce(
+      (acc, i) => {
+        acc.forecast += i.forecast;
+        acc.committed += i.committed;
+        acc.realized += i.realized;
+        acc.confirmed += i.confirmed;
+        acc.pending += i.pending;
+        acc.saleForecast += i.saleForecast;
+        acc.plannedMargin += i.plannedMargin;
+        return acc;
       },
-      orderBy: { name: "asc" },
-    });
+      { forecast: 0, committed: 0, realized: 0, confirmed: 0, pending: 0, saleForecast: 0, plannedMargin: 0 }
+    );
+    Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
+    totals.deviation = round2(totals.realized - totals.forecast);
+    totals.plannedMarginPct = totals.saleForecast > 0
+      ? round2((totals.plannedMargin / totals.saleForecast) * 100)
+      : 0;
 
-    const grouped = await prisma.costPayment.groupBy({
-      by: ["projectId", "confirmationStatus"],
-      _sum: { paidAmount: true },
-    });
-
-    const items = projects.map((project) => {
-      const rows = grouped.filter((g) => g.projectId === project.id);
-      const realized = round2(rows.reduce((a, r) => a + toNumber(r._sum.paidAmount), 0));
-      const confirmed = round2(
-        rows.filter((r) => r.confirmationStatus === "CONFIRMADO").reduce((a, r) => a + toNumber(r._sum.paidAmount), 0)
-      );
-      const pending = round2(realized - confirmed);
-      const forecast = toNumber(project.budgetTotal);
-      return {
-        project,
-        forecast,
-        committed: toNumber(project.budgetCommitted),
-        realized,
-        confirmed,
-        pending,
-        deviation: round2(realized - forecast),
-        deviationPct: forecast > 0 ? round2(((realized - forecast) / forecast) * 100) : 0,
-      };
-    });
-
-    return res.json({ items });
+    return res.json({ items, totals, costSources: buildCostLedgerSources() });
   })
 );
 
@@ -813,18 +1075,16 @@ financeRoutes.get(
   "/payables",
   view,
   asyncHandler(async (req, res) => {
-    const rows = await prisma.costPayment.findMany({
-      where: { status: { in: ["PENDENTE", "EM_ESPERA"] } },
-      include: {
-        project: { select: { id: true, code: true, name: true, currency: true } },
-        costCenter: { select: { id: true, code: true, name: true } },
-        supplierRef: { select: { id: true, name: true, nif: true } },
-      },
-      orderBy: [{ paymentDate: "asc" }],
-      take: 500,
-    });
-    const total = round2(rows.reduce((a, r) => a + toNumber(r.budgetedAmount), 0));
-    return res.json({ items: rows, total });
+    // Contas a pagar = tudo o que está comprometido e ainda não saiu do caixa:
+    // pagamentos pendentes, pedidos extra aprovados e pedidos de compra abertos.
+    const ledger = await buildCostLedger();
+    const rows = ledger.items.filter((e) => toNumber(e.remaining) > 0);
+    const total = round2(rows.reduce((a, r) => a + toNumber(r.remaining), 0));
+    const bySource = rows.reduce((acc, r) => {
+      acc[r.source] = round2((acc[r.source] || 0) + toNumber(r.remaining));
+      return acc;
+    }, {});
+    return res.json({ items: rows, total, bySource, sources: ledger.sources });
   })
 );
 
@@ -1061,42 +1321,34 @@ financeRoutes.get(
   "/overview",
   view,
   asyncHandler(async (req, res) => {
-    const [projects, invoiceRows, costRows] = await Promise.all([
-      prisma.project.findMany({
-        select: { id: true, code: true, name: true, currency: true, budgetTotal: true },
+    const [financials, invoiceRows] = await Promise.all([
+      buildProjectFinancials({ includeInactive: true }),
+      prisma.invoice.findMany({
+        select: { projectId: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true },
       }),
-      prisma.invoice.findMany({ select: { projectId: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true } }),
-      prisma.costPayment.findMany({ select: { projectId: true, paidAmount: true, confirmationStatus: true } }),
     ]);
 
+    const t = financials.totals;
     const invoiced = invoiceRows.map(mapInvoice);
-    const revenue = round2(invoiced.reduce((a, i) => a + i.grossAmount, 0));
-    const received = round2(invoiced.reduce((a, i) => a + i.receivedAmount, 0));
-    const costRealized = round2(costRows.reduce((a, c) => a + toNumber(c.paidAmount), 0));
-    const costPending = round2(
-      costRows.filter((c) => c.confirmationStatus === "POR_CONFIRMAR").reduce((a, c) => a + toNumber(c.paidAmount), 0)
-    );
-    const forecast = round2(projects.reduce((a, p) => a + toNumber(p.budgetTotal), 0));
-    const result = round2(revenue - costRealized);
-    const margin = revenue > 0 ? round2((result / revenue) * 100) : 0;
 
-    const byProject = projects.map((project) => {
-      const inv = invoiced.filter((i) => i.projectId === project.id);
-      const pRevenue = round2(inv.reduce((a, i) => a + i.grossAmount, 0));
-      const pReceived = round2(inv.reduce((a, i) => a + i.receivedAmount, 0));
-      const pCost = round2(
-        costRows.filter((c) => c.projectId === project.id).reduce((a, c) => a + toNumber(c.paidAmount), 0)
-      );
-      return {
-        project,
-        revenue: pRevenue,
-        received: pReceived,
-        cost: pCost,
-        result: round2(pRevenue - pCost),
-        margin: pRevenue > 0 ? round2(((pRevenue - pCost) / pRevenue) * 100) : 0,
-        forecast: toNumber(project.budgetTotal),
-      };
-    });
+    const byProject = financials.items.map((entry) => ({
+      project: {
+        id: entry.project.id,
+        code: entry.project.code,
+        name: entry.project.name,
+        currency: entry.currency,
+      },
+      // Previsão = orçamento de venda da obra; custo previsto = orçamento de custo.
+      forecast: entry.budget.sale,
+      costBudget: entry.budget.cost,
+      revenue: entry.revenue.invoiced,
+      received: entry.revenue.received,
+      cost: entry.costs.realized,
+      result: entry.margin.realized,
+      margin: entry.margin.realizedPct,
+      plannedMargin: entry.margin.planned,
+      plannedMarginPct: entry.margin.plannedPct,
+    }));
 
     const aging = { vencidas: 0, a_vencer: 0 };
     invoiced.forEach((i) => {
@@ -1108,22 +1360,29 @@ financeRoutes.get(
 
     return res.json({
       cards: {
-        revenue,
-        cost: costRealized,
-        costPending,
-        result,
-        margin,
-        forecast,
-        received,
-        receivables: round2(received === 0 && revenue ? 0 : revenue - received),
+        revenue: t.invoiced,
+        cost: t.costRealized,
+        costPending: t.costPending,
+        costCommitted: t.costCommitted,
+        result: t.realizedMargin,
+        margin: t.realizedMarginPct,
+        forecast: t.saleBudget,
+        costBudget: t.costBudget,
+        plannedMargin: t.plannedMargin,
+        plannedMarginPct: t.plannedMarginPct,
+        received: t.received,
+        receivable: t.missing,
+        receivables: t.missing,
+        toInvoice: t.toInvoice,
       },
       byProject,
       aging,
       cashFlow: {
-        inflow: received,
-        outflow: costRealized,
-        net: round2(received - costRealized),
+        inflow: t.received,
+        outflow: t.costRealized,
+        net: round2(t.received - t.costRealized),
       },
+      costSources: buildCostLedgerSources(),
     });
   })
 );
@@ -1132,49 +1391,58 @@ financeRoutes.get(
   "/control",
   view,
   asyncHandler(async (req, res) => {
-    const [projects, costRows, invoiceRows] = await Promise.all([
-      prisma.project.findMany({
-        select: { id: true, code: true, name: true, currency: true, budgetTotal: true },
-      }),
-      prisma.costPayment.findMany({ select: { projectId: true, paidAmount: true } }),
-      prisma.invoice.findMany({ select: { projectId: true, grossAmount: true, receivedAmount: true, dueDate: true, netAmount: true } }),
-    ]);
+    const financials = await buildProjectFinancials({ includeInactive: true });
 
-    const invoiced = invoiceRows.map(mapInvoice);
-    const totals = { forecastCost: 0, realizedCost: 0, revenue: 0, result: 0 };
-    const byProject = projects.map((project) => {
-      const forecastCost = toNumber(project.budgetTotal);
-      const realizedCost = round2(
-        costRows.filter((c) => c.projectId === project.id).reduce((a, c) => a + toNumber(c.paidAmount), 0)
-      );
-      const revenue = round2(
-        invoiced.filter((i) => i.projectId === project.id).reduce((a, i) => a + i.grossAmount, 0)
-      );
-      const result = round2(revenue - realizedCost);
-      totals.forecastCost += forecastCost;
-      totals.realizedCost += realizedCost;
-      totals.revenue += revenue;
-      totals.result += result;
-      return {
-        project,
-        forecastCost,
-        realizedCost,
-        costDeviation: round2(realizedCost - forecastCost),
-        revenue,
-        result,
-        margin: revenue > 0 ? round2((result / revenue) * 100) : 0,
-      };
-    });
-    Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
-    totals.margin = totals.revenue > 0 ? round2((totals.result / totals.revenue) * 100) : 0;
+    const byProject = financials.items.map((entry) => ({
+      project: {
+        id: entry.project.id,
+        code: entry.project.code,
+        name: entry.project.name,
+        currency: entry.currency,
+        client: entry.project.client,
+      },
+      // Custo previsto = orçamento de custo (baseline) e não o valor de venda.
+      forecastCost: entry.budget.cost,
+      committedCost: entry.costs.committed,
+      realizedCost: entry.costs.realized,
+      costDeviation: entry.costs.deviation,
+      costDeviationPct: entry.costs.deviationPct,
+      // Receita/faturação ligada à orçamentação de venda
+      saleForecast: entry.budget.sale,
+      saleForecastSource: entry.budget.saleSource,
+      revenue: entry.revenue.invoiced,
+      toInvoice: entry.revenue.toInvoice,
+      result: entry.margin.realized,
+      margin: entry.margin.realizedPct,
+      plannedMargin: entry.margin.planned,
+      plannedMarginPct: entry.margin.plannedPct,
+      bySource: entry.costs.bySource,
+      stockOutValue: entry.costs.stockOutValue,
+    }));
+
+    const t = financials.totals;
+    const totals = {
+      forecastCost: t.costBudget,
+      committedCost: t.costCommitted,
+      realizedCost: t.costRealized,
+      costDeviation: t.costDeviation,
+      costDeviationPct: t.costBudget > 0 ? round2((t.costDeviation / t.costBudget) * 100) : 0,
+      saleForecast: t.saleBudget,
+      revenue: t.invoiced,
+      toInvoice: t.toInvoice,
+      result: t.realizedMargin,
+      margin: t.realizedMarginPct,
+      plannedMargin: t.plannedMargin,
+      plannedMarginPct: t.plannedMarginPct,
+    };
 
     const cashFlow = {
-      inflow: round2(invoiced.reduce((a, i) => a + i.receivedAmount, 0)),
-      outflow: totals.realizedCost,
+      inflow: t.received,
+      outflow: t.costRealized,
     };
     cashFlow.net = round2(cashFlow.inflow - cashFlow.outflow);
 
-    return res.json({ totals, byProject, cashFlow });
+    return res.json({ totals, byProject, cashFlow, costSources: buildCostLedgerSources() });
   })
 );
 
