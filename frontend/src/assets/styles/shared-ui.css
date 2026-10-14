@@ -570,6 +570,21 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
   transform: scale(1);
 }
 
+@keyframes modal-keep-open {
+  0%,
+  100% {
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
+  }
+
+  40% {
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.45), 0 25px 60px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.modal-keep-open {
+  animation: modal-keep-open 0.4s ease;
+}
+
 /* Toasts acima de qualquer modal-overlay (z-index 1100) */
 #toast {
   position: fixed;
