@@ -181,6 +181,135 @@ export function toast(message, { type = "info", timeoutMs = 3000, persist = fals
   }, timeoutMs);
 }
 
+const modalDismissState = new WeakMap();
+const trackedOpenOverlays = new WeakSet();
+
+function controlSnapshotValue(el) {
+  if (el.type === "checkbox" || el.type === "radio") return el.checked ? "1" : "0";
+  if (el.type === "file") {
+    return Array.from(el.files || []).map((file) => `${file.name}:${file.size}`).join(",");
+  }
+  return el.value ?? "";
+}
+
+function isDismissTrackedControl(el) {
+  if (!el || el.disabled) return false;
+  if (el.type === "hidden" || el.hidden) return false;
+  return true;
+}
+
+/** Assinatura dos campos visíveis, para saber se o utilizador alterou o formulário. */
+function modalFormSignature(root) {
+  const chunks = [];
+  root.querySelectorAll("input, select, textarea").forEach((el) => {
+    if (!isDismissTrackedControl(el)) return;
+    chunks.push([el.id, el.name, el.type, controlSnapshotValue(el)].join("\u0000"));
+  });
+  return chunks.join("\n");
+}
+
+function nudgeModal(panel) {
+  if (!panel) return;
+  panel.classList.remove("modal-keep-open");
+  void panel.offsetWidth;
+  panel.classList.add("modal-keep-open");
+}
+
+function pauseModalDismissGuard(root) {
+  const state = modalDismissState.get(root);
+  if (!state) return;
+  cancelAnimationFrame(state.raf);
+  state.userEdited = false;
+}
+
+/**
+ * Enquanto o modal está aberto, a base é actualizada até ao primeiro input do utilizador.
+ * Preenchimento feito pelo código (valores por omissão, dados carregados) não conta como edição.
+ */
+function ensureModalDismissGuard(root) {
+  let state = modalDismissState.get(root);
+  if (!state) {
+    state = { baseline: "", userEdited: false, raf: 0 };
+    const onEdit = (event) => {
+      if (!event.isTrusted) return;
+      const field = event.target;
+      if (!(field instanceof Element) || !isDismissTrackedControl(field)) return;
+      state.userEdited = true;
+      cancelAnimationFrame(state.raf);
+    };
+    root.addEventListener("input", onEdit, true);
+    root.addEventListener("change", onEdit, true);
+    modalDismissState.set(root, state);
+  }
+
+  state.userEdited = false;
+  state.baseline = modalFormSignature(root);
+  cancelAnimationFrame(state.raf);
+
+  const tick = () => {
+    if (state.userEdited || !root.isConnected) return;
+    if (root.classList.contains("modal-overlay") && !root.classList.contains("open")) return;
+    state.baseline = modalFormSignature(root);
+    state.raf = requestAnimationFrame(tick);
+  };
+  state.raf = requestAnimationFrame(tick);
+}
+
+function modalDismissBlocked(root) {
+  const state = modalDismissState.get(root);
+  if (!state?.userEdited) return false;
+  return modalFormSignature(root) !== state.baseline;
+}
+
+function syncOverlayDismissGuard(el) {
+  if (!(el instanceof Element) || !el.classList.contains("modal-overlay")) return;
+  const open = el.classList.contains("open");
+  const tracked = trackedOpenOverlays.has(el);
+  if (open && !tracked) {
+    trackedOpenOverlays.add(el);
+    ensureModalDismissGuard(el);
+  } else if (!open && tracked) {
+    trackedOpenOverlays.delete(el);
+    pauseModalDismissGuard(el);
+  }
+}
+
+function installModalOutsideClickGuard() {
+  if (typeof document === "undefined" || document.documentElement.dataset.modalDismissGuard === "1") return;
+  document.documentElement.dataset.modalDismissGuard = "1";
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "attributes") syncOverlayDismissGuard(mutation.target);
+      if (mutation.type !== "childList") continue;
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element)) return;
+        syncOverlayDismissGuard(node);
+        node.querySelectorAll?.(".modal-overlay").forEach(syncOverlayDismissGuard);
+      });
+    }
+  });
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  document.querySelectorAll(".modal-overlay").forEach(syncOverlayDismissGuard);
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.classList.contains("modal-overlay") || !target.classList.contains("open")) return;
+    if (!modalDismissBlocked(target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    nudgeModal(target.querySelector(".modal-box") || target.firstElementChild);
+  }, true);
+}
+
+installModalOutsideClickGuard();
+
 export function openModal({
   title,
   contentHtml,
@@ -191,6 +320,7 @@ export function openModal({
   onRender,
 }) {
   const overlay = document.createElement("div");
+  overlay.setAttribute("data-app-modal", "");
   overlay.className =
     "fixed inset-0 z-[9998] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 transition-opacity duration-300 ease-out opacity-0";
 
@@ -222,6 +352,7 @@ export function openModal({
   });
 
   function close() {
+    pauseModalDismissGuard(overlay);
     overlay.classList.add("opacity-0");
     panel.classList.add("scale-95");
     // Fallback: remove after 400ms even if transitionend never fires
@@ -232,7 +363,12 @@ export function openModal({
   }
 
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) close();
+    if (e.target !== overlay) return;
+    if (modalDismissBlocked(overlay)) {
+      nudgeModal(panel);
+      return;
+    }
+    close();
   });
   panel.querySelector("[data-close]")?.addEventListener("click", close);
   panel.querySelector("[data-secondary]")?.addEventListener("click", async () => {
@@ -262,6 +398,7 @@ export function openModal({
   if (onRender) {
     onRender({ close, overlay, panel });
   }
+  ensureModalDismissGuard(overlay);
 
   return { close, overlay, panel };
 }
