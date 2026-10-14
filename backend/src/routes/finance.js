@@ -1014,10 +1014,16 @@ financeRoutes.patch(
     const data = { ...body };
     if (body.confirmationStatus === "CONFIRMADO") data.confirmedAt = new Date();
 
-    const cost = await prisma.costPayment.update({
-      where: { id: resolveCostPaymentId(req.params.id) },
-      data,
-    });
+    const id = resolveCostPaymentId(req.params.id);
+    const exists = await prisma.costPayment.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) {
+      return res.status(404).json({
+        error: "COST_NOT_FOUND",
+        message: "Custo não encontrado. Só os pagamentos do financeiro podem ser alterados aqui.",
+      });
+    }
+
+    const cost = await prisma.costPayment.update({ where: { id }, data });
     return res.json({ cost });
   })
 );
@@ -1033,8 +1039,17 @@ financeRoutes.post(
       })
       .parse(req.body || {});
 
+    const id = resolveCostPaymentId(req.params.id);
+    const exists = await prisma.costPayment.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) {
+      return res.status(404).json({
+        error: "COST_NOT_FOUND",
+        message: "Custo não encontrado. Só os pagamentos do financeiro podem ser confirmados aqui.",
+      });
+    }
+
     const cost = await prisma.costPayment.update({
-      where: { id: resolveCostPaymentId(req.params.id) },
+      where: { id },
       data: {
         confirmationStatus: "CONFIRMADO",
         confirmedAt: new Date(),
