@@ -11,6 +11,7 @@ function inputs(overrides = {}) {
     extraRequests: [],
     transactions: [],
     purchaseOrders: [],
+    freightAllocations: [],
     ...overrides,
   };
 }
@@ -86,6 +87,19 @@ test("aggregateCosts ignora rejeitados/cancelados e outras obras", () => {
   assert.equal(result.realized, 10);
   assert.equal(result.committed, 0);
   assert.equal(result.bySource.EXTRA_REQUEST, 0);
+});
+
+test("aggregateCosts soma as alocações de frete ainda não enviadas ao financeiro", () => {
+  const result = aggregateCosts("p1", inputs({
+    freightAllocations: [
+      { projectId: "p1", amount: "50000" },
+      { projectId: "p1", amount: "30000" },
+      { projectId: "p2", amount: "20000" },
+    ],
+  }));
+  assert.equal(result.committed, 80000);
+  assert.equal(result.realized, 0);
+  assert.equal(result.bySource.FREIGHT, 80000);
 });
 
 test("round2 e safeDiv tratam valores vazios e divisão por zero", () => {
