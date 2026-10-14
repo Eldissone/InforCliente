@@ -111,11 +111,8 @@ function renderShell() {
   const projectSel = document.getElementById("costProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-<<<<<<< HEAD
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
-=======
     state.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+      .map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
       .join("");
 
   const sourceSel = document.getElementById("costSource");
@@ -123,7 +120,6 @@ function renderShell() {
     `<option value="">Todas as fontes</option>` +
     state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
   sourceSel.value = state.filters.source;
->>>>>>> origin/dev-leite
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -179,26 +175,17 @@ function renderTable() {
     .map((c) => {
       const cur = c.currency || c.project?.currency || "AOA";
       const supplier = c.supplierRef?.name || c.supplier || "—";
-<<<<<<< HEAD
       const obraName = c.project?.name || "—";
       const obraRef = String(c.project?.referencia || "").trim() || "—";
       const description = c.description || "—";
       const docNumber = String(c.docNumber || "").trim();
-      return `
-      <tr data-id="${esc(c.id)}">
-        <td>${esc(dateOnly(c.paymentDate))}</td>
-        <td class="fin-obra-cell">
-          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
-          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
-=======
       const isPayment = c.source === "PAGAMENTO";
       return `
       <tr data-id="${esc(c.id)}">
         <td>${esc(dateOnly(c.date))}</td>
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(c.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.code || "")}</div>
->>>>>>> origin/dev-leite
+        <td class="fin-obra-cell">
+          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
+          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
         </td>
         <td>${esc(c.costCenter?.name || "—")}</td>
         <td>${esc(supplier)}</td>
@@ -243,16 +230,10 @@ function renderTable() {
     <table class="fin-table" style="min-width:1450px">
       <thead>
         <tr>
-<<<<<<< HEAD
           <th>Data</th><th class="fin-obra-cell">Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th class="fin-desc-cell">Descrição</th>
-          <th>Categoria</th><th style="text-align:right">V. Pago</th><th>Confirmação</th>
-          <th>Responsável</th><th>Origem</th><th style="text-align:center">Ações</th>
-=======
-          <th>Data</th><th>Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
           <th>Categoria</th><th>Fonte</th><th style="text-align:right">V. Pago</th>
           <th style="text-align:right">Por Liquidar</th><th>Confirmação</th>
           <th>Responsável</th><th style="text-align:center">Ações</th>
->>>>>>> origin/dev-leite
         </tr>
       </thead>
       <tbody>${rows}</tbody>

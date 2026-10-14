@@ -814,24 +814,7 @@ financeRoutes.get(
     if (projectId) projectWhere.id = String(projectId);
     if (clientId) projectWhere.clientId = String(clientId);
 
-<<<<<<< HEAD
-    const projects = await prisma.project.findMany({
-      where: projectWhere,
-      select: {
-        id: true,
-        code: true,
-        referencia: true,
-        name: true,
-        currency: true,
-        budgetTotal: true,
-        client: { select: { id: true, name: true, code: true } },
-      },
-      orderBy: { name: "asc" },
-    });
-
-=======
     const projects = await prisma.project.findMany({ where: projectWhere, select: { id: true } });
->>>>>>> origin/dev-leite
     const projectIds = projects.map((p) => p.id);
 
     if (!projectIds.length) {
@@ -859,6 +842,7 @@ financeRoutes.get(
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
         client: entry.project.client,
@@ -1007,22 +991,9 @@ financeRoutes.get(
   asyncHandler(async (req, res) => {
     const { projectId, status, source } = req.query;
 
-<<<<<<< HEAD
-    const rows = await prisma.costPayment.findMany({
-      where,
-      include: {
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, clientId: true, client: { select: { id: true, name: true, code: true } } } },
-        costCenter: { select: { id: true, code: true, name: true } },
-        supplierRef: { select: { id: true, name: true, nif: true } },
-      },
-      orderBy: [{ paymentDate: "desc" }],
-      take: 500,
-    });
-=======
     // Lista unificada: pagamentos, pedidos extra, lançamentos de obra,
     // pedidos de compra e mercadoria de stock — todas as áreas num só sítio.
     const ledger = await buildCostLedger({ projectId, status, source });
->>>>>>> origin/dev-leite
 
     const totals = {
       ...ledger.totals,
@@ -1110,19 +1081,6 @@ financeRoutes.get(
   "/costs-overview",
   view,
   asyncHandler(async (req, res) => {
-<<<<<<< HEAD
-    const projects = await prisma.project.findMany({
-      select: {
-        id: true,
-        code: true,
-        referencia: true,
-        name: true,
-        currency: true,
-        budgetTotal: true,
-        budgetConsumed: true,
-        budgetCommitted: true,
-        budgetAvailable: true,
-=======
     // `forecast` passa a ser o orçamento de CUSTO da obra (baseline dos centros
     // de custo) e não o valor de venda, que era a origem da confusão entre o
     // previsto de custo e a previsão de faturação.
@@ -1157,7 +1115,6 @@ financeRoutes.get(
         acc.saleForecast += i.saleForecast;
         acc.plannedMargin += i.plannedMargin;
         return acc;
->>>>>>> origin/dev-leite
       },
       { forecast: 0, committed: 0, realized: 0, confirmed: 0, pending: 0, saleForecast: 0, plannedMargin: 0 }
     );
@@ -1177,20 +1134,6 @@ financeRoutes.get(
   "/payables",
   view,
   asyncHandler(async (req, res) => {
-<<<<<<< HEAD
-    const rows = await prisma.costPayment.findMany({
-      where: { status: { in: ["PENDENTE", "EM_ESPERA"] } },
-      include: {
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-        costCenter: { select: { id: true, code: true, name: true } },
-        supplierRef: { select: { id: true, name: true, nif: true } },
-      },
-      orderBy: [{ paymentDate: "asc" }],
-      take: 500,
-    });
-    const total = round2(rows.reduce((a, r) => a + toNumber(r.budgetedAmount), 0));
-    return res.json({ items: rows, total });
-=======
     // Contas a pagar = tudo o que está comprometido e ainda não saiu do caixa:
     // pagamentos pendentes, pedidos extra aprovados e pedidos de compra abertos.
     const ledger = await buildCostLedger();
@@ -1201,7 +1144,6 @@ financeRoutes.get(
       return acc;
     }, {});
     return res.json({ items: rows, total, bySource, sources: ledger.sources });
->>>>>>> origin/dev-leite
   })
 );
 
@@ -1438,16 +1380,10 @@ financeRoutes.get(
   "/overview",
   view,
   asyncHandler(async (req, res) => {
-<<<<<<< HEAD
-    const [projects, invoiceRows, costRows] = await Promise.all([
-      prisma.project.findMany({
-        select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
-=======
     const [financials, invoiceRows] = await Promise.all([
       buildProjectFinancials({ includeInactive: true }),
       prisma.invoice.findMany({
         select: { projectId: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true },
->>>>>>> origin/dev-leite
       }),
     ]);
 
@@ -1458,6 +1394,7 @@ financeRoutes.get(
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
       },
@@ -1514,22 +1451,13 @@ financeRoutes.get(
   "/control",
   view,
   asyncHandler(async (req, res) => {
-<<<<<<< HEAD
-    const [projects, costRows, invoiceRows] = await Promise.all([
-      prisma.project.findMany({
-        select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
-      }),
-      prisma.costPayment.findMany({ select: { projectId: true, paidAmount: true } }),
-      prisma.invoice.findMany({ select: { projectId: true, grossAmount: true, receivedAmount: true, dueDate: true, netAmount: true } }),
-    ]);
-=======
     const financials = await buildProjectFinancials({ includeInactive: true });
->>>>>>> origin/dev-leite
 
     const byProject = financials.items.map((entry) => ({
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
         client: entry.project.client,

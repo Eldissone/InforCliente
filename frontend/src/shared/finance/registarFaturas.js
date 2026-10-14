@@ -202,10 +202,6 @@ function renderTable() {
         <td class="fin-client-cell">
           <div class="fin-client-name" title="${esc(clientName)}">${esc(clientName)}</div>
         </td>
-<<<<<<< HEAD
-        <td>${esc(inv.docNumber || "—")}</td>
-=======
-        <td>${esc(inv.client?.name || "—")}</td>
         <td>
           ${esc(inv.docNumber || "—")}
           ${
@@ -214,7 +210,6 @@ function renderTable() {
               : ""
           }
         </td>
->>>>>>> origin/dev-leite
         <td>${esc(formatDateOnly(inv.docDate))}</td>
         <td>${esc(formatDateOnly(inv.dueDate))}</td>
         <td>${inv.measurement ? esc(inv.measurement.reportNumber || "AM") : '<span class="fin-empty-cell">—</span>'}</td>
