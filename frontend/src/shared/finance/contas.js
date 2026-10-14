@@ -20,6 +20,16 @@ const COST_STATUS = {
   EM_ESPERA: { label: "Em Espera", badge: "slate" },
   CONFIRMADO: { label: "Confirmado", badge: "emerald" },
   CANCELADO: { label: "Cancelado", badge: "red" },
+  // Pedido Extra
+  APROVADO: { label: "Aprovado", badge: "blue" },
+  PAGO: { label: "Pago", badge: "emerald" },
+  // Pedido de Compra
+  RASCUNHO: { label: "Rascunho", badge: "slate" },
+  PENDENTE_REQUISICAO: { label: "Pend. requisição", badge: "amber" },
+  PENDENTE_APROVACAO: { label: "Pend. aprovação", badge: "amber" },
+  NAO_APROVADO: { label: "Não aprovado", badge: "red" },
+  EM_PAGAMENTO: { label: "Em pagamento", badge: "blue" },
+  CONCLUIDO: { label: "Concluído", badge: "emerald" },
 };
 
 const state = { tab: "pagar", payables: null, receivables: null };
@@ -69,7 +79,7 @@ function renderShell() {
 function renderKpis() {
   const payables = state.payables?.items || [];
   const receivables = state.receivables?.items || [];
-  const totalPay = payables.reduce((a, p) => a + (Number(p.budgetedAmount) || 0), 0);
+  const totalPay = payables.reduce((a, p) => a + (Number(p.remaining) || 0), 0);
   const totalReceive = receivables.reduce((a, r) => a + (Number(r.missingAmount) || 0), 0);
   const balance = totalReceive - totalPay;
   const cards = [
@@ -109,37 +119,41 @@ function renderPayables(wrap) {
     wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">payments</span>Sem contas a pagar pendentes.</div>`;
     return;
   }
+  // Inclui pagamentos pendentes, pedidos extra aprovados e pedidos de compra abertos.
   const body = items
     .map((p) => {
-      const cur = p.project?.currency || "AOA";
+      const cur = p.currency || p.project?.currency || "AOA";
       return `
       <tr>
-        <td>${esc(dateOnly(p.paymentDate))}</td>
+        <td>${esc(dateOnly(p.date))}</td>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(p.project?.name || "—")}</div>
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.code || "")}</div>
         </td>
+        <td>${esc(p.sourceLabel || p.source || "—")}</td>
         <td>${esc(p.costCenter?.name || "—")}</td>
         <td>${esc(p.supplierRef?.name || p.supplier || "—")}</td>
         <td style="max-width:280px">${esc(p.description || "—")}</td>
-        <td class="fin-num">${esc(money(p.budgetedAmount, cur))}</td>
+        <td class="fin-num">${esc(money(p.amount, cur))}</td>
         <td class="fin-num">${esc(money(p.paidAmount, cur))}</td>
+        <td class="fin-num" style="font-weight:800">${esc(money(p.remaining, cur))}</td>
         <td>${badge(COST_STATUS, p.status)}</td>
       </tr>`;
     })
     .join("");
-  const total = items.reduce((a, p) => a + (Number(p.budgetedAmount) || 0), 0);
+  const total = items.reduce((a, p) => a + (Number(p.remaining) || 0), 0);
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1150px">
+    <table class="fin-table" style="min-width:1300px">
       <thead><tr>
-        <th>Data</th><th>Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
-        <th style="text-align:right">Valor Previsto</th><th style="text-align:right">Pago</th><th>Estado</th>
+        <th>Data</th><th>Obra</th><th>Fonte</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
+        <th style="text-align:right">Valor</th><th style="text-align:right">Já Pago</th>
+        <th style="text-align:right">Por Pagar</th><th>Estado</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
-        <td colspan="5">Total a pagar (${items.length})</td>
+        <td colspan="8">Total a pagar (${items.length})</td>
         <td class="fin-num">${esc(money(total))}</td>
-        <td colspan="2"></td>
+        <td></td>
       </tr></tfoot>
     </table>`;
 }

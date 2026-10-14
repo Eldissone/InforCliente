@@ -2,10 +2,17 @@ import { apiRequest } from "../../services/api.js";
 import { toast } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { openInvoiceDocumentModal, invoiceHasDocument } from "./invoiceDocument.js";
 
 /**
  * Ecrã «Faturação Prevista» (Financeiro · Faturação).
- * Faturação emitida vs previsão, agrupada por obra ou por cliente.
+ *
+ * Faturação emitida vs previsão, agora ligada à orçamentação da obra:
+ *  - Previsão de venda  → tabela de quantidades (ou valor global da obra)
+ *  - Custo previsto     → orçamento de custo dos centros de custo
+ *  - Margem prevista    → venda prevista − custo previsto
+ *  - Custo realizado    → todas as áreas (pagamentos, pedidos extra, stock…)
+ *  - Margem realizada   → faturado − custo realizado
  */
 
 const STATUS = {
@@ -13,6 +20,12 @@ const STATUS = {
   PAGO_PARCIAL: { label: "Pago Parcial", badge: "amber" },
   PAGO_TOTAL: { label: "Pago Total", badge: "emerald" },
   ATRASADO: { label: "Atrasado", badge: "red" },
+};
+
+const SALE_SOURCE = {
+  TABELA_QUANTIDADES: "Tabela de quantidades da obra",
+  VALOR_GLOBAL: "Valor global da obra",
+  SEM_ORCAMENTO: "Sem orçamento de venda definido",
 };
 
 const state = {
@@ -32,6 +45,10 @@ function pct(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "0.00%";
   return `${n.toFixed(2)}%`;
+}
+
+function marginTone(value) {
+  return Number(value) >= 0 ? "finance-pos" : "finance-neg";
 }
 
 function dateOnly(value) {
@@ -106,12 +123,56 @@ function renderShell() {
 
 function renderKpis() {
   const t = state.data?.totals || {};
-  const percent = Number(t.forecast) > 0 ? (Number(t.billed) / Number(t.forecast)) * 100 : 0;
   const cards = [
-    { label: "Previsão Total", value: money(t.forecast), sub: "Valor total das obras", tone: "blue", icon: "target" },
-    { label: "Faturado", value: money(t.billed), sub: "% executada acumulada", tone: "emerald", icon: "receipt_long" },
-    { label: "Por Faturar", value: money(t.toBill), sub: "Previsão ainda não faturada", tone: "amber", icon: "hourglass_bottom" },
-    { label: "% Faturado", value: pct(percent), sub: "Do valor total das obras", tone: "slate", icon: "percent" },
+    {
+      label: "Previsão de Venda",
+      value: money(t.forecast),
+      sub: "Tabela de quantidades / valor da obra",
+      tone: "blue",
+      icon: "target",
+    },
+    {
+      label: "Orçamento de Custo",
+      value: money(t.costBudget),
+      sub: "Baseline dos centros de custo",
+      tone: "slate",
+      icon: "receipt_long",
+    },
+    {
+      label: "Margem Prevista",
+      value: money(t.plannedMargin),
+      sub: `${pct(t.plannedMarginPct)} sobre a venda prevista`,
+      tone: Number(t.plannedMargin) >= 0 ? "emerald" : "red",
+      icon: "percent",
+    },
+    {
+      label: "Faturado",
+      value: money(t.billed),
+      sub: `${pct(t.executedPct)} da previsão de venda`,
+      tone: "emerald",
+      icon: "check_circle",
+    },
+    {
+      label: "Por Faturar",
+      value: money(t.toBill),
+      sub: "Previsão ainda não faturada",
+      tone: "amber",
+      icon: "hourglass_bottom",
+    },
+    {
+      label: "Custo Realizado",
+      value: money(t.costRealized),
+      sub: "Todas as áreas (pagamentos, extras, stock)",
+      tone: "amber",
+      icon: "payments",
+    },
+    {
+      label: "Margem Realizada",
+      value: money(t.realizedMargin),
+      sub: pct(t.realizedMarginPct) + " sobre o faturado",
+      tone: Number(t.realizedMargin) >= 0 ? "emerald" : "red",
+      icon: "trending_up",
+    },
   ];
   document.getElementById("forecastKpis").innerHTML = cards
     .map(
@@ -127,84 +188,128 @@ function renderKpis() {
     .join("");
 }
 
-function renderTable() {
-  const wrap = document.getElementById("forecastTable");
+function renderByClient(data) {
   const hint = document.getElementById("forecastHint");
-  if (!wrap) return;
-  const data = state.data;
-  if (!data) return;
+  hint.textContent =
+    "Previsão de venda pela tabela de quantidades de cada obra e custo previsto pelo orçamento dos centros de custo.";
 
-  if (state.group === "client") {
-    hint.textContent = "";
-    const rows = (data.byClient || []).filter((c) => {
-      if (!state.filters.clientId) return true;
-      return (c.client?.id || null) === state.filters.clientId;
-    });
-    if (!rows.length) {
-      wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">groups</span>Sem dados para os filtros selecionados.</div>`;
-      return;
-    }
-    const body = rows
-      .map((c) => {
-        const fp = Number(c.forecast);
-        const percent = fp > 0 ? (Number(c.billed) / fp) * 100 : 0;
-        return `
-        <tr>
-          <td style="font-weight:700;color:#0f172a">${esc(c.client?.name || "Sem cliente")}</td>
-          <td class="fin-num">${esc(money(c.forecast))}</td>
-          <td class="fin-num">${esc(money(c.billed))}</td>
-          <td class="fin-num">${esc(money(Math.max(fp - Number(c.billed), 0)))}</td>
-          <td>${bar(percent, "finance-bar-fill--blue")}</td>
-        </tr>`;
-      })
-      .join("");
-    wrap.innerHTML = `
-      <table class="fin-table">
-        <thead><tr>
-          <th>Cliente</th><th style="text-align:right">Previsão</th>
-          <th style="text-align:right">Faturado</th><th style="text-align:right">Por Faturar</th>
-          <th>% Faturado</th>
-        </tr></thead>
-        <tbody>${body}</tbody>
-        <tfoot><tr>
-          <td>Totais</td>
-          <td class="fin-num">${esc(money(data.totals.forecast))}</td>
-          <td class="fin-num">${esc(money(data.totals.billed))}</td>
-          <td class="fin-num">${esc(money(data.totals.toBill))}</td>
-          <td>${bar(Number(data.totals.forecast) > 0 ? (data.totals.billed / data.totals.forecast) * 100 : 0, "finance-bar-fill--blue")}</td>
-        </tr></tfoot>
-      </table>`;
+  const rows = (data.byClient || []).filter((c) => {
+    if (!state.filters.clientId) return true;
+    return (c.client?.id || null) === state.filters.clientId;
+  });
+  if (!rows.length) {
+    document.getElementById("forecastTable").innerHTML =
+      `<div class="finance-empty"><span class="material-symbols-outlined">groups</span>Sem dados para os filtros selecionados.</div>`;
     return;
   }
 
-  hint.textContent = "Clique numa obra para ver as faturas emitidas.";
+  const body = rows
+    .map((c) => {
+      const fp = Number(c.forecast);
+      const billed = Number(c.billed);
+      const costBudget = Number(c.costBudget);
+      const margin = Number(c.plannedMargin);
+      return `
+      <tr>
+        <td style="font-weight:700;color:#0f172a">${esc(c.client?.name || "Sem cliente")}</td>
+        <td class="fin-num">${esc(money(fp))}</td>
+        <td class="fin-num">${esc(money(costBudget))}</td>
+        <td class="fin-num ${marginTone(margin)}" style="font-weight:700">${esc(money(margin))}</td>
+        <td class="fin-num ${marginTone(margin)}">${esc(pct(c.plannedMarginPct))}</td>
+        <td class="fin-num">${esc(money(billed))}</td>
+        <td class="fin-num">${esc(money(Math.max(fp - billed, 0)))}</td>
+        <td>${bar(fp > 0 ? (billed / fp) * 100 : 0, "finance-bar-fill--blue")}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const t = data.totals || {};
+  document.getElementById("forecastTable").innerHTML = `
+    <table class="fin-table" style="min-width:1150px">
+      <thead><tr>
+        <th>Cliente</th><th style="text-align:right">Venda Prevista</th>
+        <th style="text-align:right">Custo Previsto</th><th style="text-align:right">Margem Prevista</th>
+        <th style="text-align:right">% Margem</th>
+        <th style="text-align:right">Faturado</th><th style="text-align:right">Por Faturar</th>
+        <th>% Faturado</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr>
+        <td>Totais</td>
+        <td class="fin-num">${esc(money(t.forecast))}</td>
+        <td class="fin-num">${esc(money(t.costBudget))}</td>
+        <td class="fin-num ${marginTone(t.plannedMargin)}">${esc(money(t.plannedMargin))}</td>
+        <td class="fin-num ${marginTone(t.plannedMargin)}">${esc(pct(t.plannedMarginPct))}</td>
+        <td class="fin-num">${esc(money(t.billed))}</td>
+        <td class="fin-num">${esc(money(t.toBill))}</td>
+        <td>${bar(t.executedPct, "finance-bar-fill--blue")}</td>
+      </tr></tfoot>
+    </table>`;
+}
+
+function renderInvoiceRows(entry, cur) {
+  const invoices = entry.rows || [];
+  if (!invoices.length) {
+    return `<span class="finance-hint">Sem faturas emitidas para esta obra.</span>`;
+  }
+  const rows = invoices
+    .map(
+      (inv) => `
+      <tr>
+        <td>${esc(inv.docNumber || "—")}</td>
+        <td>${esc(dateOnly(inv.docDate))}</td>
+        <td>${inv.measurement ? esc(inv.measurement.reportNumber || "AM") : "—"}</td>
+        <td class="fin-num">${esc(money(inv.grossAmount, cur))}</td>
+        <td class="fin-num">${esc(money(inv.receivedAmount, cur))}</td>
+        <td class="fin-num">${esc(money(inv.missingAmount, cur))}</td>
+        <td>${badge(inv.status)}</td>
+        <td>
+          ${
+            invoiceHasDocument(inv)
+              ? `<button type="button" class="finance-btn finance-btn--ghost" data-doc="${esc(inv.id)}" style="padding:0.25rem 0.6rem">
+                   <span class="material-symbols-outlined" style="font-size:16px">receipt</span>Ver fatura
+                 </button>`
+              : `<span class="fin-empty-cell" title="Sem fatura física anexada">—</span>`
+          }
+        </td>
+      </tr>`
+    )
+    .join("");
+
+  return `
+    <table class="finance-subtable">
+      <thead><tr>
+        <th>Nº Doc</th><th>Data</th><th>AM</th>
+        <th style="text-align:right">V. Ilíquido</th>
+        <th style="text-align:right">Recebido</th>
+        <th style="text-align:right">Em Falta</th>
+        <th>Estado</th><th>Fatura física</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderByProject(data) {
+  const hint = document.getElementById("forecastHint");
+  hint.textContent = "Clique numa obra para ver as faturas emitidas e a respetiva fatura física.";
+
   const rows = (data.byProject || []).filter((p) => {
     if (state.filters.projectId && p.project.id !== state.filters.projectId) return false;
     if (state.filters.clientId && (p.project.client?.id || null) !== state.filters.clientId) return false;
     return true;
   });
+
   if (!rows.length) {
-    wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">apartment</span>Sem dados para os filtros selecionados.</div>`;
+    document.getElementById("forecastTable").innerHTML =
+      `<div class="finance-empty"><span class="material-symbols-outlined">apartment</span>Sem dados para os filtros selecionados.</div>`;
     return;
   }
 
   const body = rows
     .map((entry) => {
       const cur = entry.project.currency || "AOA";
-      const percent = Number(entry.forecast) > 0 ? (Number(entry.billed) / Number(entry.forecast)) * 100 : 0;
       const open = state.expanded.has(entry.project.id);
-      const invoices = (entry.rows || [])
-        .map(
-          (inv) => `
-          <tr>
-            <td>${esc(inv.docNumber || "—")}</td>
-            <td>${esc(dateOnly(inv.docDate))}</td>
-            <td>${inv.measurement ? esc(inv.measurement.reportNumber || "AM") : "—"}</td>
-            <td class="fin-num">${esc(money(inv.grossAmount, cur))}</td>
-            <td>${badge(inv.status)}</td>
-          </tr>`
-        )
-        .join("");
+      const source = SALE_SOURCE[entry.forecastSource] || "";
       return `
       <tr class="fin-row--clickable" data-project="${esc(entry.project.id)}">
         <td>
@@ -219,46 +324,55 @@ function renderTable() {
           </div>
         </td>
         <td>${esc(entry.project.client?.name || "—")}</td>
-        <td class="fin-num">${esc(money(entry.forecast, cur))}</td>
+        <td class="fin-num" title="${esc(source)}">${esc(money(entry.forecast, cur))}</td>
+        <td class="fin-num">${esc(money(entry.costBudget, cur))}</td>
+        <td class="fin-num ${marginTone(entry.plannedMargin)}" style="font-weight:700">${esc(money(entry.plannedMargin, cur))}</td>
+        <td class="fin-num ${marginTone(entry.plannedMargin)}">${esc(pct(entry.plannedMarginPct))}</td>
         <td class="fin-num">${esc(money(entry.billed, cur))}</td>
         <td class="fin-num">${esc(money(entry.toBill, cur))}</td>
-        <td>${bar(percent, "finance-bar-fill--blue")}</td>
+        <td class="fin-num">${esc(money(entry.costRealized, cur))}</td>
+        <td class="fin-num ${marginTone(entry.realizedMargin)}">${esc(money(entry.realizedMargin, cur))}</td>
+        <td>${bar(entry.executedPct, "finance-bar-fill--blue")}</td>
       </tr>
       <tr class="fin-subrow" data-subrow="${esc(entry.project.id)}" ${open ? "" : "hidden"}>
-        <td colspan="6">
-          ${
-            invoices
-              ? `<table class="finance-subtable">
-                   <thead><tr>
-                     <th>Nº Doc</th><th>Data</th><th>AM</th>
-                     <th style="text-align:right">V. Ilíquido</th><th>Estado</th>
-                   </tr></thead>
-                   <tbody>${invoices}</tbody>
-                 </table>`
-              : `<span class="finance-hint">Sem faturas emitidas para esta obra.</span>`
-          }
+        <td colspan="11">
+          ${renderInvoiceRows(entry, cur)}
         </td>
       </tr>`;
     })
     .join("");
 
-  wrap.innerHTML = `
-    <table class="fin-table">
+  const t = data.totals || {};
+  document.getElementById("forecastTable").innerHTML = `
+    <table class="fin-table" style="min-width:1500px">
       <thead><tr>
         <th>Obra</th><th>Cliente</th>
-        <th style="text-align:right">Previsão</th><th style="text-align:right">Faturado</th>
-        <th style="text-align:right">Por Faturar</th><th>% Faturado</th>
+        <th style="text-align:right">Venda Prevista</th>
+        <th style="text-align:right">Custo Previsto</th>
+        <th style="text-align:right">Margem Prevista</th>
+        <th style="text-align:right">% Margem</th>
+        <th style="text-align:right">Faturado</th>
+        <th style="text-align:right">Por Faturar</th>
+        <th style="text-align:right">Custo Realizado</th>
+        <th style="text-align:right">Margem Realizada</th>
+        <th>% Faturado</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
         <td colspan="2">Totais</td>
-        <td class="fin-num">${esc(money(data.totals.forecast))}</td>
-        <td class="fin-num">${esc(money(data.totals.billed))}</td>
-        <td class="fin-num">${esc(money(data.totals.toBill))}</td>
-        <td>${bar(Number(data.totals.forecast) > 0 ? (data.totals.billed / data.totals.forecast) * 100 : 0, "finance-bar-fill--blue")}</td>
+        <td class="fin-num">${esc(money(t.forecast))}</td>
+        <td class="fin-num">${esc(money(t.costBudget))}</td>
+        <td class="fin-num ${marginTone(t.plannedMargin)}">${esc(money(t.plannedMargin))}</td>
+        <td class="fin-num ${marginTone(t.plannedMargin)}">${esc(pct(t.plannedMarginPct))}</td>
+        <td class="fin-num">${esc(money(t.billed))}</td>
+        <td class="fin-num">${esc(money(t.toBill))}</td>
+        <td class="fin-num">${esc(money(t.costRealized))}</td>
+        <td class="fin-num ${marginTone(t.realizedMargin)}">${esc(money(t.realizedMargin))}</td>
+        <td>${bar(t.executedPct, "finance-bar-fill--blue")}</td>
       </tr></tfoot>
     </table>`;
 
+  const wrap = document.getElementById("forecastTable");
   wrap.querySelectorAll("[data-toggle]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -268,6 +382,26 @@ function renderTable() {
   wrap.querySelectorAll("tr.fin-row--clickable").forEach((tr) => {
     tr.addEventListener("click", () => toggle(tr.dataset.project));
   });
+  wrap.querySelectorAll("[data-doc]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.doc;
+      for (const entry of data.byProject || []) {
+        const invoice = (entry.rows || []).find((i) => i.id === id);
+        if (invoice) {
+          openInvoiceDocumentModal(invoice, { context: { projectName: entry.project.name } });
+          return;
+        }
+      }
+    });
+  });
+}
+
+function renderTable() {
+  const data = state.data;
+  if (!data) return;
+  if (state.group === "client") return renderByClient(data);
+  return renderByProject(data);
 }
 
 function toggle(projectId) {

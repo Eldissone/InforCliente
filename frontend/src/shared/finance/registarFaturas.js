@@ -1,8 +1,9 @@
-import { apiRequest } from "../../services/api.js";
+import { apiRequest, apiUpload } from "../../services/api.js";
 import { openModal, toast, setButtonLoading } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { openInvoiceDocumentModal, invoiceHasDocument } from "./invoiceDocument.js";
 
 /**
  * Ecrã «Registar Faturas» (Financeiro · Faturação).
@@ -24,6 +25,8 @@ const state = {
   clients: [],
   items: [],
   totals: null,
+  // Estado da leitura automática de faturas (Gemini).
+  ai: { configured: false, model: null, loaded: false },
 };
 
 function money(value, currency) {
@@ -194,7 +197,14 @@ function renderTable() {
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(inv.project?.code || "")}</div>
         </td>
         <td>${esc(inv.client?.name || "—")}</td>
-        <td>${esc(inv.docNumber || "—")}</td>
+        <td>
+          ${esc(inv.docNumber || "—")}
+          ${
+            invoiceHasDocument(inv)
+              ? `<span class="material-symbols-outlined" style="font-size:15px;color:#64748b;vertical-align:middle" title="Fatura física anexada">attach_file</span>`
+              : ""
+          }
+        </td>
         <td>${esc(formatDateOnly(inv.docDate))}</td>
         <td>${esc(formatDateOnly(inv.dueDate))}</td>
         <td>${inv.measurement ? esc(inv.measurement.reportNumber || "AM") : '<span class="fin-empty-cell">—</span>'}</td>
@@ -211,6 +221,13 @@ function renderTable() {
         <td>
           <div class="fin-actions">
             ${
+              invoiceHasDocument(inv)
+                ? `<button type="button" class="fin-icon-btn" title="Ver fatura física" data-action="document">
+                     <span class="material-symbols-outlined" style="font-size:17px">receipt</span>
+                   </button>`
+                : ""
+            }
+            ${
               editable
                 ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Registar recebimento" data-action="receipt">
                      <span class="material-symbols-outlined" style="font-size:17px">payments</span>
@@ -221,7 +238,9 @@ function renderTable() {
                    <button type="button" class="fin-icon-btn fin-icon-btn--red" title="Eliminar" data-action="delete">
                      <span class="material-symbols-outlined" style="font-size:17px">delete</span>
                    </button>`
-                : `<span class="fin-empty-cell">—</span>`
+                : invoiceHasDocument(inv)
+                  ? ""
+                  : `<span class="fin-empty-cell">—</span>`
             }
           </div>
         </td>
@@ -273,6 +292,9 @@ function renderTable() {
     tr.querySelector('[data-action="edit"]')?.addEventListener("click", () => openInvoiceModal(inv));
     tr.querySelector('[data-action="receipt"]')?.addEventListener("click", () => openReceiptModal(inv));
     tr.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeInvoice(inv));
+    tr.querySelector('[data-action="document"]')?.addEventListener("click", () =>
+      openInvoiceDocumentModal(inv, { context: { projectName: inv.project?.name } })
+    );
   });
 }
 
@@ -328,10 +350,62 @@ function buildPreview(draft) {
   return { vat, net, workPercent };
 }
 
+/** Resumo legível do que a IA leu, para o financeiro confirmar antes de gravar. */
+function buildScanSummary(fields, warnings) {
+  const parts = [];
+  if (fields.docNumber) parts.push(`Nº ${fields.docNumber}`);
+  if (fields.docDate) parts.push(`Data ${fields.docDate}`);
+  if (fields.supplierName) parts.push(`Fornecedor ${fields.supplierName}`);
+  if (fields.supplierNif) parts.push(`NIF ${fields.supplierNif}`);
+  if (fields.documentType) parts.push(fields.documentType.replace(/_/g, " "));
+  if (fields.confidence != null) parts.push(`confiança ${fields.confidence}%`);
+  const summary = parts.join(" · ");
+  const list = warnings?.length ? ` A confirmar: ${warnings.join(" ")}` : "";
+  return `${summary || "Campos lidos preenchidos abaixo."}${list} Revise e corrija antes de guardar.`;
+}
+
+/**
+ * Lê o PDF/fotografia da fatura com IA e devolve os campos sugeridos.
+ * Devolve também o `File` para ser anexado depois de a fatura existir.
+ */
+async function scanInvoiceFile(file) {
+  const data = await apiUpload("/finance/invoices/scan", { file, fieldName: "file" });
+  return { fields: data.fields || {}, warnings: data.warnings || [] };
+}
+
 async function openInvoiceModal(invoice) {
   const isEdit = Boolean(invoice);
+  const hasDoc = invoiceHasDocument(invoice);
+  const aiReady = state.ai.configured;
   const content = `
     <div class="finance-form-grid finance-form-grid--2">
+      <div class="finance-field finance-field--full">
+        <label class="finance-label" for="inv_docFile">Fatura física (PDF ou fotografia)</label>
+        <input id="inv_docFile" class="finance-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
+        <div class="fin-toolbar" style="margin-top:0.5rem;gap:0.5rem">
+          <button id="inv_scanBtn" type="button" class="finance-btn finance-btn--primary" ${aiReady ? "" : "disabled"}>
+            <span class="material-symbols-outlined">document_scanner</span>Ler fatura com IA
+          </button>
+          ${
+            hasDoc
+              ? `<button id="inv_viewDoc" type="button" class="finance-btn finance-btn--ghost">
+                   <span class="material-symbols-outlined">receipt</span>Ver fatura física
+                 </button>
+                 <button id="inv_removeDoc" type="button" class="finance-btn finance-btn--ghost">
+                   <span class="material-symbols-outlined">delete</span>Remover documento
+                 </button>`
+              : ""
+          }
+        </div>
+        <p class="finance-note" id="inv_docNote">
+          ${
+            aiReady
+              ? "Carregue o PDF ou a fotografia da fatura e use «Ler fatura com IA» para preencher os campos automaticamente."
+              : "Leitura automática indisponível: falta configurar GEMINI_API_KEY no servidor. Pode carregar o PDF e preencher os campos à mão."
+          }
+        </p>
+      </div>
+
       <div class="finance-field finance-field--full">
         <label class="finance-label" for="inv_project">Obra <span style="color:#dc2626">*</span></label>
         <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
@@ -545,6 +619,100 @@ async function openInvoiceModal(invoice) {
         }
       });
 
+      // ── Fatura física: leitura com IA e anexo do documento ──
+      const docFileInput = $("inv_docFile");
+      const docNote = $("inv_docNote");
+      const scanBtn = $("inv_scanBtn");
+
+      if (docFileInput) {
+        scanBtn.disabled = !aiReady;
+        docFileInput.addEventListener("change", () => {
+          const file = docFileInput.files?.[0] || null;
+          scanBtn.disabled = !file || !aiReady;
+          if (file) {
+            docNote.textContent = `${file.name} (${Math.max(1, Math.round((file.size || 0) / 1024))} KB) pronto.${
+              aiReady ? " Use «Ler fatura com IA» para preencher os campos." : ""
+            }`;
+          }
+        });
+      }
+
+      scanBtn?.addEventListener("click", async () => {
+        const file = docFileInput?.files?.[0];
+        if (!file) return toast("Escolha primeiro o PDF ou a fotografia da fatura.", { type: "error" });
+        setButtonLoading(scanBtn, true);
+        docNote.textContent = "A ler a fatura com IA…";
+        try {
+          const { fields, warnings } = await scanInvoiceFile(file);
+
+          // Só preenche o que ainda está vazio (ou o que veio do próprio scan),
+          // para não apagar valores que o financeiro já tenha escrito à mão.
+          const fill = (id, value, { onlyEmpty = true } = {}) => {
+            const el = $(id);
+            if (!el) return;
+            const isEmpty =
+              value === null ||
+              value === undefined ||
+              value === "" ||
+              (typeof value === "number" && !Number.isFinite(value));
+            if (isEmpty) return;
+            if (onlyEmpty && String(el.value ?? "").trim()) return;
+            el.value = typeof value === "number" ? String(value) : value;
+          };
+
+          fill("inv_docNumber", fields.docNumber);
+          fill("inv_docDate", fields.docDate, { onlyEmpty: isEdit });
+          fill("inv_dueDate", fields.dueDate);
+          fill("inv_gross", Number(fields.grossAmount) > 0 ? fields.grossAmount : null, { onlyEmpty: isEdit });
+          fill("inv_vat", fields.vatPercent ?? pctValue(fields.vatAmount, fields.grossAmount));
+          fill(
+            "inv_withholding",
+            fields.withholdingPercent ?? pctValue(fields.withholdingAmount, fields.grossAmount)
+          );
+          fill("inv_car", pctValue(fields.carInsuranceAmount, fields.grossAmount));
+          fill("inv_guarantee", pctValue(fields.guaranteeAmount, fields.grossAmount));
+          fill("inv_notes", fields.notes, { onlyEmpty: false });
+
+          if (fields.suggestedProjectId && !projectSel.disabled && fields.suggestedProjectId !== projectSel.value) {
+            projectSel.value = fields.suggestedProjectId;
+            await loadProjectContext();
+          }
+
+          refreshPreview();
+          docNote.textContent = buildScanSummary(fields, warnings);
+          toast("Fatura lida. Confirme os valores antes de guardar.", { type: "success" });
+        } catch (err) {
+          docNote.textContent = err.message || "Falha ao ler a fatura.";
+          toast(err.message || "Falha ao ler a fatura.", { type: "error" });
+        } finally {
+          setButtonLoading(scanBtn, false);
+          if (scanBtn && !docFileInput?.files?.length) scanBtn.disabled = true;
+          else if (scanBtn) scanBtn.disabled = !aiReady;
+        }
+      });
+
+      $("inv_viewDoc")?.addEventListener("click", () =>
+        openInvoiceDocumentModal(invoice, { context: { projectName: invoice?.project?.name } })
+      );
+
+      $("inv_removeDoc")?.addEventListener("click", async (e) => {
+        if (!window.confirm("Remover a fatura física anexada a esta fatura?")) return;
+        const btn = e.currentTarget;
+        setButtonLoading(btn, true);
+        try {
+          await apiRequest(`/finance/invoices/${invoice.id}/document`, { method: "DELETE" });
+          toast("Documento removido.", { type: "success" });
+          btn.hidden = true;
+          const viewBtn = $("inv_viewDoc");
+          if (viewBtn) viewBtn.hidden = true;
+          docNote.textContent = "Sem fatura física anexada.";
+        } catch (err) {
+          toast(err.message || "Falha ao remover o documento.", { type: "error" });
+        } finally {
+          setButtonLoading(btn, false);
+        }
+      });
+
       if (projectSel.value) loadProjectContext();
       else refreshPreview();
     },
@@ -566,6 +734,9 @@ async function openInvoiceModal(invoice) {
 
       setButtonLoading(btn, true);
       try {
+        const file = $("inv_docFile")?.files?.[0] || null;
+        let targetId = invoice?.id || null;
+
         if (isEdit) {
           await apiRequest(`/finance/invoices/${invoice.id}`, { method: "PATCH", body: raw });
           toast("Fatura actualizada.", { type: "success" });
@@ -575,7 +746,7 @@ async function openInvoiceModal(invoice) {
             setButtonLoading(btn, false);
             return toast("Selecione a obra.", { type: "error" });
           }
-          await apiRequest("/finance/invoices", {
+          const created = await apiRequest("/finance/invoices", {
             method: "POST",
             body: {
               ...raw,
@@ -585,8 +756,19 @@ async function openInvoiceModal(invoice) {
               receivedDate: $("inv_receivedDate").value || null,
             },
           });
+          targetId = created?.invoice?.id || null;
           toast("Fatura criada.", { type: "success" });
         }
+
+        // Anexa a fatura física escolhida (PDF/fotografia).
+        if (file && targetId) {
+          try {
+            await apiUpload(`/finance/invoices/${targetId}/document`, { file, fieldName: "file" });
+          } catch (err) {
+            toast(`Fatura guardada, mas o ficheiro não foi anexado: ${err.message}`, { type: "error" });
+          }
+        }
+
         close();
         await loadInvoices();
       } catch (err) {
@@ -689,9 +871,18 @@ async function removeInvoice(invoice) {
 
 /* ─── Entrada ─────────────────────────────────────────────────────────────── */
 
+async function loadAiStatus() {
+  try {
+    const ai = await apiRequest("/finance/ai-status");
+    state.ai = { configured: Boolean(ai?.configured), model: ai?.model || null, loaded: true };
+  } catch {
+    state.ai = { configured: false, model: null, loaded: true };
+  }
+}
+
 export async function render() {
   try {
-    await loadOptions();
+    await Promise.all([loadOptions(), loadAiStatus()]);
   } catch (err) {
     toast(err.message || "Falha ao carregar obras e clientes.", { type: "error" });
   }

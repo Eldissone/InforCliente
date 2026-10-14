@@ -6,8 +6,11 @@ import { escapeFinanceHtml as esc } from "../financePage.js";
 
 /**
  * Ecrã «Registar Custos» (Financeiro · Custos).
- * Lista os lançamentos de custo (entradas automáticas de stock, pagamentos e
- * ATM) com estado «Por confirmar / Confirmado» e responsável.
+ *
+ * Lista TODOS os custos da plataforma numa só tabela, com a fonte identificada:
+ * pagamentos/cotações, pedidos extra, lançamentos de obra e pedidos de compra.
+ * Os custos realizados mostram o estado «Por confirmar / Confirmado» e podem
+ * ser confirmados pelo financeiro.
  */
 
 const CATEGORY = {
@@ -20,16 +23,24 @@ const CATEGORY = {
   OUTRO: "Outro",
 };
 
-const SOURCE = {
-  MERCADORIA_STOCK: { label: "Stock", tone: "violet" },
-  PAGAMENTO_DIRETO: { label: "Pagamento direto", tone: "blue" },
-  ATM: { label: "ATM", tone: "amber" },
-  MANUAL: { label: "Manual", tone: "" },
+const SOURCE_TONE = {
+  PAGAMENTO: "blue",
+  PEDIDO_EXTRA: "violet",
+  LANCAMENTO: "amber",
+  PEDIDO_COMPRA: "emerald",
+};
+
+const SOURCE_DETAIL = {
+  MERCADORIA_STOCK: "Stock (mercadoria)",
+  PAGAMENTO_DIRETO: "Pagamento direto",
+  ATM: "ATM",
+  MANUAL: "Manual",
 };
 
 const state = {
-  filters: { projectId: "", status: "", sourceType: "" },
+  filters: { projectId: "", status: "", source: "" },
   projects: [],
+  sources: [],
   items: [],
   totals: null,
 };
@@ -53,9 +64,12 @@ function dateOnly(value) {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
-function sourceChip(sourceType) {
-  const s = SOURCE[sourceType] || { label: sourceType || "—", tone: "" };
-  return `<span class="finance-chip ${s.tone ? `finance-chip--${s.tone}` : ""}">${esc(s.label)}</span>`;
+function sourceChip(entry) {
+  const tone = SOURCE_TONE[entry.source] || "";
+  const detail = SOURCE_DETAIL[entry.detail] ? ` · ${SOURCE_DETAIL[entry.detail]}` : "";
+  return `<span class="finance-chip ${tone ? `finance-chip--${tone}` : ""}">${esc(
+    `${entry.sourceLabel || entry.source}${detail}`
+  )}</span>`;
 }
 
 function confirmBadge(status) {
@@ -78,11 +92,7 @@ function renderShell() {
             <option value="CONFIRMADO">Confirmado</option>
           </select>
           <select id="costSource" class="finance-select">
-            <option value="">Todas as origens</option>
-            <option value="MERCADORIA_STOCK">Stock (mercadoria)</option>
-            <option value="PAGAMENTO_DIRETO">Pagamento direto</option>
-            <option value="ATM">ATM</option>
-            <option value="MANUAL">Manual</option>
+            <option value="">Todas as fontes</option>
           </select>
           <button id="costClear" type="button" class="finance-btn finance-btn--ghost">
             <span class="material-symbols-outlined">filter_alt_off</span>Limpar
@@ -90,8 +100,9 @@ function renderShell() {
         </div>
       </div>
       <p class="finance-hint">
-        Os custos entram automaticamente: mercadoria só após a saída de stock, pagamentos diretos de
-        imediato e levantamentos ATM aquando da sua classificação.
+        Todos os custos da plataforma estão ligados aqui: pagamentos e prestações de fornecedor,
+        pedidos extra (caixa, banco e fundo de maneio), lançamentos de obra e pedidos de compra.
+        A mercadoria entra pelo custo da compra, não pela saída de stock.
       </p>
       <div id="costTable" class="finance-table-scroll"></div>
     </section>`;
@@ -99,7 +110,15 @@ function renderShell() {
   const projectSel = document.getElementById("costProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects
+      .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+      .join("");
+
+  const sourceSel = document.getElementById("costSource");
+  sourceSel.innerHTML =
+    `<option value="">Todas as fontes</option>` +
+    state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
+  sourceSel.value = state.filters.source;
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -109,15 +128,15 @@ function renderShell() {
     state.filters.status = e.target.value;
     load();
   });
-  document.getElementById("costSource").addEventListener("change", (e) => {
-    state.filters.sourceType = e.target.value;
+  sourceSel.addEventListener("change", (e) => {
+    state.filters.source = e.target.value;
     load();
   });
   document.getElementById("costClear").addEventListener("click", () => {
-    state.filters = { projectId: "", status: "", sourceType: "" };
+    state.filters = { projectId: "", status: "", source: "" };
     projectSel.value = "";
     document.getElementById("costStatus").value = "";
-    document.getElementById("costSource").value = "";
+    sourceSel.value = "";
     load();
   });
 }
@@ -125,8 +144,8 @@ function renderShell() {
 function renderKpis() {
   const t = state.totals || {};
   const cards = [
-    { label: "Total de Custos", value: money(t.paid), sub: "Valor pago lançado", tone: "blue", icon: "payments" },
-    { label: "Confirmados", value: money(t.confirmed), sub: "Custos confirmados", tone: "emerald", icon: "verified" },
+    { label: "Custos Realizados", value: money(t.realized), sub: "Valor pago em todas as fontes", tone: "blue", icon: "payments" },
+    { label: "Confirmados", value: money(t.confirmed), sub: "Custos confirmados pelo financeiro", tone: "emerald", icon: "verified" },
     { label: "Por Confirmar", value: money(t.pending), sub: "Aguarda confirmação", tone: "amber", icon: "pending_actions" },
     { label: "Lançamentos", value: String(state.items.length), sub: "No filtro actual", tone: "slate", icon: "list_alt" },
   ];
@@ -153,11 +172,12 @@ function renderTable() {
   const editable = canEdit();
   const rows = state.items
     .map((c) => {
-      const cur = c.project?.currency || "AOA";
+      const cur = c.currency || c.project?.currency || "AOA";
       const supplier = c.supplierRef?.name || c.supplier || "—";
+      const isPayment = c.source === "PAGAMENTO";
       return `
       <tr data-id="${esc(c.id)}">
-        <td>${esc(dateOnly(c.paymentDate))}</td>
+        <td>${esc(dateOnly(c.date))}</td>
         <td>
           <div style="font-weight:700;color:#0f172a">${esc(c.project?.name || "—")}</div>
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.code || "")}</div>
@@ -169,24 +189,29 @@ function renderTable() {
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.docNumber || "")}</div>
         </td>
         <td>${esc(CATEGORY[c.category] || c.category || "—")}</td>
+        <td>${sourceChip(c)}</td>
         <td class="fin-num">${esc(money(c.paidAmount, cur))}</td>
+        <td class="fin-num ${Number(c.remaining) > 0 ? "finance-muted" : ""}">${esc(money(c.remaining, cur))}</td>
         <td>${confirmBadge(c.confirmationStatus)}</td>
         <td>${c.responsible ? esc(c.responsible) : '<span class="fin-empty-cell">—</span>'}</td>
-        <td>${sourceChip(c.sourceType)}</td>
         <td>
           <div class="fin-actions">
             ${
               editable
                 ? `${
-                    c.confirmationStatus !== "CONFIRMADO" && canApprove()
+                    isPayment && c.confirmationStatus !== "CONFIRMADO" && canApprove()
                       ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Confirmar custo" data-action="confirm">
                            <span class="material-symbols-outlined" style="font-size:17px">done</span>
                          </button>`
                       : ""
                   }
-                   <button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Detalhe" data-action="edit">
-                     <span class="material-symbols-outlined" style="font-size:17px">edit</span>
-                   </button>`
+                   ${
+                     isPayment
+                       ? `<button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Detalhe do pagamento" data-action="edit">
+                            <span class="material-symbols-outlined" style="font-size:17px">edit</span>
+                          </button>`
+                       : `<span class="fin-empty-cell" title="Gerido na área de origem">—</span>`
+                   }`
                 : `<span class="fin-empty-cell">—</span>`
             }
           </div>
@@ -197,19 +222,20 @@ function renderTable() {
 
   const t = state.totals || {};
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1250px">
+    <table class="fin-table" style="min-width:1450px">
       <thead>
         <tr>
           <th>Data</th><th>Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
-          <th>Categoria</th><th style="text-align:right">V. Pago</th><th>Confirmação</th>
-          <th>Responsável</th><th>Origem</th><th style="text-align:center">Ações</th>
+          <th>Categoria</th><th>Fonte</th><th style="text-align:right">V. Pago</th>
+          <th style="text-align:right">Por Liquidar</th><th>Confirmação</th>
+          <th>Responsável</th><th style="text-align:center">Ações</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
       <tfoot>
         <tr>
-          <td colspan="6">Totais (${state.items.length} lançamentos)</td>
-          <td class="fin-num">${esc(money(t.paid))}</td>
+          <td colspan="7">Totais (${state.items.length} lançamentos)</td>
+          <td class="fin-num">${esc(money(t.realized))}</td>
           <td colspan="4"></td>
         </tr>
       </tfoot>
@@ -234,6 +260,16 @@ async function load() {
     const data = await apiRequest(`/finance/costs?${params.toString()}`);
     state.items = data.items || [];
     state.totals = data.totals || null;
+    if (Array.isArray(data.sources)) {
+      state.sources = data.sources;
+      const sourceSel = document.getElementById("costSource");
+      if (sourceSel) {
+        sourceSel.innerHTML =
+          `<option value="">Todas as fontes</option>` +
+          state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
+        sourceSel.value = state.filters.source;
+      }
+    }
     renderKpis();
     renderTable();
   } catch (err) {
@@ -243,13 +279,13 @@ async function load() {
 }
 
 function openCostModal(cost, confirmMode) {
-  const cur = cost.project?.currency || "AOA";
+  const cur = cost.currency || cost.project?.currency || "AOA";
   openModal({
     title: confirmMode ? "Confirmar Custo" : "Detalhe do Custo",
     contentHtml: `
       <p class="finance-note" style="margin-bottom:1rem">
         ${esc(cost.description || "—")} · ${esc(money(cost.paidAmount, cur))} ·
-        ${esc(cost.project?.name || "")}
+        ${esc(cost.project?.name || "")} · ${esc(cost.sourceLabel || cost.source || "")}
       </p>
       <div class="finance-form-grid finance-form-grid--2">
         <div class="finance-field">
@@ -285,9 +321,9 @@ function openCostModal(cost, confirmMode) {
       try {
         // A confirmação usa o endpoint dedicado (permissão financeiro:approve).
         if (confirmMode) {
-          await apiRequest(`/finance/costs/${cost.id}/confirm`, { method: "POST", body: payload });
+          await apiRequest(`/finance/costs/${cost.sourceId}/confirm`, { method: "POST", body: payload });
         } else {
-          await apiRequest(`/finance/costs/${cost.id}`, {
+          await apiRequest(`/finance/costs/${cost.sourceId}`, {
             method: "PATCH",
             body: { ...payload, confirmationStatus: panel.querySelector("#cst_status").value },
           });
