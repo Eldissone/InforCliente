@@ -5,7 +5,7 @@
 
 /* Create project form */
 .project-create-modal {
-  width: min(1148px, calc(100vw - 1.5rem));
+  width: 800px;
   max-width: none;
   max-height: calc(100vh - 2rem);
 }
@@ -97,14 +97,14 @@
 }
 .project-create-modal [data-primary] {
   border-radius: 10px;
-  background: #2afc8d;
-  color: #10251b;
+  background: #212e3e;
+  color: var(white);
   font-weight: 500;
   box-shadow: none;
 }
-.project-create-modal [data-primary]:hover { background: #20e981; }
+.project-create-modal [data-primary]:hover { background: #11171e; }
 .project-create-modal [data-secondary] {
-  border: 1px solid #2afc8d;
+  border: 1px solid #212e3e;
   border-radius: 10px;
   background: #fff;
   font-weight: 400;
