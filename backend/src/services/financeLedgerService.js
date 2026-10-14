@@ -23,6 +23,9 @@ const { computeProjectBudgetSummary } = require("./projectBudgetSummaryService")
  *    maneio. Não gera CostPayment, por isso é somado à parte.
  *  - ProjectTransaction (lançamento de obra) com estado PAID.
  *  - PurchaseOrder aberta → valor comprometido (ainda não é custo realizado).
+ *  - FreightAllocation de um frete que ainda não foi enviado ao financeiro →
+ *    comprometido por obra (quando é enviado, passa a CostPayment e deixa de
+ *    ser contado aqui, para não duplicar).
  *  - StockMovement de saída de mercadoria → consumo de material, valorizado
  *    informativamente (o custo já entrou na compra, não é somado duas vezes).
  */
@@ -63,6 +66,7 @@ function newBucket(extra = {}) {
     extraRequests: 0,
     projectTransactions: 0,
     purchaseOrders: 0,
+    freight: 0,
     ...extra,
   };
 }
@@ -96,7 +100,7 @@ function computeSaleBudget(tasks, project) {
 async function loadCostInputs(whereProject) {
   const projectFilter = whereProject ? { projectId: { in: whereProject } } : {};
 
-  const [costPayments, extraRequests, transactions, purchaseOrders] = await Promise.all([
+  const [costPayments, extraRequests, transactions, purchaseOrders, freightAllocations] = await Promise.all([
     prisma.costPayment.findMany({
       where: { ...projectFilter },
       select: {
@@ -177,9 +181,34 @@ async function loadCostInputs(whereProject) {
         createdAt: true,
       },
     }),
+    // Fretes ainda não enviados ao financeiro: o custo está assumido por obra
+    // através das alocações e só vira CostPayment quando for enviado.
+    prisma.freightAllocation.findMany({
+      where: {
+        freightOrder: { costPaymentId: null, status: { notIn: ["CANCELADO"] } },
+        ...projectFilter,
+      },
+      select: {
+        id: true,
+        projectId: true,
+        costCenterId: true,
+        description: true,
+        amount: true,
+        freightOrder: {
+          select: {
+            id: true,
+            status: true,
+            currency: true,
+            createdAt: true,
+            supplierId: true,
+            supplier: { select: { id: true, name: true, nif: true } },
+          },
+        },
+      },
+    }),
   ]);
 
-  return { costPayments, extraRequests, transactions, purchaseOrders };
+  return { costPayments, extraRequests, transactions, purchaseOrders, freightAllocations };
 }
 
 /**
@@ -270,6 +299,14 @@ function aggregateCosts(projectId, inputs) {
       bucket.purchaseOrders += value;
     });
 
+  (inputs.freightAllocations || [])
+    .filter((a) => a.projectId === projectId)
+    .forEach((a) => {
+      const value = toNumber(a.amount);
+      bucket.committed += value;
+      bucket.freight += value;
+    });
+
   return {
     realized: round2(bucket.realized),
     pending: round2(bucket.pending),
@@ -279,6 +316,7 @@ function aggregateCosts(projectId, inputs) {
       EXTRA_REQUEST: round2(bucket.extraRequests),
       PROJECT_TRANSACTION: round2(bucket.projectTransactions),
       PURCHASE_ORDER: round2(bucket.purchaseOrders),
+      FREIGHT: round2(bucket.freight),
     },
   };
 }
@@ -485,6 +523,7 @@ const SOURCE_LABELS = {
   PEDIDO_EXTRA: "Pedido Extra",
   LANCAMENTO: "Lançamento de Obra",
   PEDIDO_COMPRA: "Pedido de Compra",
+  FRETE: "Frete",
 };
 
 /**
@@ -509,7 +548,13 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
 
   const costCenterIds = [
     ...new Set(
-      [...inputs.costPayments, ...inputs.extraRequests, ...inputs.transactions, ...inputs.purchaseOrders]
+      [
+        ...inputs.costPayments,
+        ...inputs.extraRequests,
+        ...inputs.transactions,
+        ...inputs.purchaseOrders,
+        ...(inputs.freightAllocations || []),
+      ]
         .map((r) => r.costCenterId)
         .filter(Boolean)
     ),
@@ -660,6 +705,37 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       kind: "COMPROMETIDO",
       remaining: round2(o.totalValue),
       currency: o.currency || project.currency || "AOA",
+    });
+  });
+
+  (inputs.freightAllocations || []).forEach((a) => {
+    const project = projectById.get(a.projectId);
+    if (!project) return;
+    const order = a.freightOrder || {};
+    const amount = toNumber(a.amount);
+    entries.push({
+      id: `fa:${a.id}`,
+      sourceId: a.id,
+      source: "FRETE",
+      sourceLabel: SOURCE_LABELS.FRETE,
+      detail: order.status || null,
+      project,
+      costCenter: centerById.get(a.costCenterId) || null,
+      supplierRef: order.supplier || null,
+      supplier: order.supplier?.name || null,
+      docNumber: null,
+      date: order.createdAt || null,
+      description: a.description || "Frete",
+      category: "TRANSPORTE",
+      budgetedAmount: round2(amount),
+      paidAmount: 0,
+      netAmount: 0,
+      amount: round2(amount),
+      confirmationStatus: "POR_CONFIRMAR",
+      status: order.status || "PENDENTE",
+      kind: "COMPROMETIDO",
+      remaining: round2(amount),
+      currency: order.currency || project.currency || "AOA",
     });
   });
 

@@ -30,6 +30,9 @@ const COST_STATUS = {
   NAO_APROVADO: { label: "Não aprovado", badge: "red" },
   EM_PAGAMENTO: { label: "Em pagamento", badge: "blue" },
   CONCLUIDO: { label: "Concluído", badge: "emerald" },
+  // Frete
+  EM_ANALISE: { label: "Em análise", badge: "amber" },
+  APPROVED: { label: "Aprovado", badge: "blue" },
 };
 
 const state = { tab: "pagar", payables: null, receivables: null };

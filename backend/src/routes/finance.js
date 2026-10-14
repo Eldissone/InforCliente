@@ -15,6 +15,7 @@ const {
 const {
   buildProjectFinancials,
   buildCostLedger,
+  computeSaleBudget,
   SOURCE_LABELS,
 } = require("../services/financeLedgerService");
 
@@ -675,12 +676,18 @@ financeRoutes.post(
       projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name, clientName: p.client?.name })),
     });
 
-    // Avisa quando o total não fecha, para o financeiro confirmar antes de gravar.
-    const mismatch =
-      fields.grossAmount !== null &&
-      fields.vatAmount !== null &&
-      fields.netAmount !== null &&
-      Math.abs(fields.grossAmount + fields.vatAmount - fields.netAmount) > 0.05;
+    // Avisa quando o total não fecha (aplicando as deduções lidas), para o
+    // financeiro confirmar antes de gravar. Sem valor ilíquido ou total não há
+    // nada a conferir.
+    const hasBase = fields.grossAmount !== null && fields.netAmount !== null;
+    const expectedNet = round2(
+      (fields.grossAmount || 0) +
+        (fields.vatAmount || 0) -
+        (fields.withholdingAmount || 0) -
+        (fields.carInsuranceAmount || 0) -
+        (fields.guaranteeAmount || 0)
+    );
+    const mismatch = hasBase && Math.abs(expectedNet - fields.netAmount) > 0.05;
 
     return res.json({
       fields,
@@ -905,6 +912,21 @@ financeRoutes.get(
       orderBy: { name: "asc" },
     });
 
+    // A % executada usa a previsão de venda (tabela de quantidades) para ficar
+    // alinhada com a Faturação Prevista, e não apenas o valor global da obra.
+    const tasks = await prisma.projectProgressTask.findMany({
+      where: where.id ? { projectId: where.id } : {},
+      select: {
+        projectId: true,
+        parentId: true,
+        expectedQty: true,
+        unitValue: true,
+        unitValueMaterial: true,
+        unitValueService: true,
+        totalValue: true,
+      },
+    });
+
     const result = [];
     for (const project of projects) {
       const [reports, invoices] = await Promise.all([
@@ -921,11 +943,17 @@ financeRoutes.get(
       const withAm = reports.filter((r) => r.invoices.length > 0);
       const withoutAm = reports.filter((r) => r.invoices.length === 0);
       const billedValue = round2(invoices.reduce((a, i) => a + toNumber(i.grossAmount), 0));
-      const budgetTotal = toNumber(project.budgetTotal);
-      const executedPct = budgetTotal > 0 ? round2((billedValue / budgetTotal) * 100) : 0;
+      const { saleBudget, saleBudgetSource } = computeSaleBudget(
+        tasks.filter((t) => t.projectId === project.id),
+        project
+      );
+      const executedPct = saleBudget > 0 ? round2((billedValue / saleBudget) * 100) : 0;
 
       result.push({
         project,
+        forecastValue: saleBudget,
+        forecastSource: saleBudgetSource,
+        billedValue,
         withAmCount: withAm.length,
         withAmValue: round2(withAm.reduce((a, r) => a + toNumber(r.periodValTotal), 0)),
         withoutAmCount: withoutAm.length,

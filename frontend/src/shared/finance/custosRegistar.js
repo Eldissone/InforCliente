@@ -28,6 +28,7 @@ const SOURCE_TONE = {
   PEDIDO_EXTRA: "violet",
   LANCAMENTO: "amber",
   PEDIDO_COMPRA: "emerald",
+  FRETE: "slate",
 };
 
 const SOURCE_DETAIL = {

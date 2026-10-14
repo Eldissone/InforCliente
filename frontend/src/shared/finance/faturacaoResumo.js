@@ -33,7 +33,7 @@ function renderKpis(items, totals) {
     { label: "Obras", value: String(items.length), sub: "No âmbito financeiro", tone: "slate", icon: "apartment" },
     { label: "AM com Fatura", value: money(totals.withAmValue), sub: `${totals.withAmCount} autos faturados`, tone: "emerald", icon: "task_alt" },
     { label: "AM sem Fatura", value: money(totals.withoutAmValue), sub: `${totals.withoutAmCount} autos por faturar`, tone: "amber", icon: "pending_actions" },
-    { label: "% Executada", value: pct(weighted), sub: "Faturado / valor das obras", tone: "blue", icon: "percent" },
+    { label: "% Executada", value: pct(weighted), sub: "Faturado / previsão de venda", tone: "blue", icon: "percent" },
   ];
   document.getElementById("summaryKpis").innerHTML = cards
     .map(
@@ -63,6 +63,8 @@ function renderTable(items, totals) {
           <div style="font-weight:700;color:#0f172a">${esc(row.project.name)}</div>
           <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(row.project.code || "")}</div>
         </td>
+        <td class="fin-num">${esc(money(row.forecastValue ?? row.project?.budgetTotal))}</td>
+        <td class="fin-num">${esc(money(row.billedValue))}</td>
         <td class="fin-num">${esc(String(row.withAmCount))}</td>
         <td class="fin-num">${esc(money(row.withAmValue))}</td>
         <td class="fin-num">${esc(String(row.withoutAmCount))}</td>
@@ -79,6 +81,8 @@ function renderTable(items, totals) {
       <thead>
         <tr>
           <th>Obra</th>
+          <th style="text-align:right">Previsão de Venda</th>
+          <th style="text-align:right">Faturado</th>
           <th style="text-align:right">AM c/ Fatura</th>
           <th style="text-align:right">Valor</th>
           <th style="text-align:right">AM s/ Fatura</th>
@@ -90,10 +94,11 @@ function renderTable(items, totals) {
       <tbody>${body}</tbody>
       <tfoot>
         <tr>
-          <td colspan="2">Totais (${items.length} obras)</td>
-          <td class="fin-num">${esc(money(totals.withAmValue))}</td>
-          <td></td>
-          <td class="fin-num">${esc(money(totals.withoutAmValue))}</td>
+          <td>Totais (${items.length} obras)</td>
+          <td class="fin-num">${esc(money(totals.forecast))}</td>
+          <td class="fin-num">${esc(money(totals.billed))}</td>
+          <td class="fin-num" colspan="2">${esc(money(totals.withAmValue))}</td>
+          <td class="fin-num" colspan="2">${esc(money(totals.withoutAmValue))}</td>
           <td>${bar(weighted, "finance-bar-fill--blue")}</td>
           <td>${bar(Math.max(100 - weighted, 0), "finance-bar-fill--amber")}</td>
         </tr>
@@ -113,12 +118,24 @@ async function load() {
         acc.withAmValue += Number(r.withAmValue) || 0;
         acc.withoutAmCount += r.withoutAmCount;
         acc.withoutAmValue += Number(r.withoutAmValue) || 0;
-        const budget = Number(r.project?.budgetTotal) || 0;
+        // A previsão de venda vem da tabela de quantidades (fallback: valor da obra).
+        const budget = Number(r.forecastValue ?? r.project?.budgetTotal) || 0;
         acc.budget += budget;
+        acc.forecast += budget;
+        acc.billed += Number(r.billedValue) || 0;
         acc.executedWeighted += ((Number(r.executedPct) || 0) / 100) * budget;
         return acc;
       },
-      { withAmCount: 0, withAmValue: 0, withoutAmCount: 0, withoutAmValue: 0, budget: 0, executedWeighted: 0 }
+      {
+        withAmCount: 0,
+        withAmValue: 0,
+        withoutAmCount: 0,
+        withoutAmValue: 0,
+        budget: 0,
+        forecast: 0,
+        billed: 0,
+        executedWeighted: 0,
+      }
     );
     renderKpis(items, totals);
     renderTable(items, totals);
