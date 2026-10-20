@@ -5539,7 +5539,9 @@ function renderDailyPlanCard(p, column) {
   if (p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") {
     actions.push(`<button type="button" data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" class="dp-act-icon" title="Editar plano" onclick="event.stopPropagation(); window.openEditPlanModal('${p.id}')"><span class="material-symbols-outlined">edit</span></button>`);
   }
-  if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") {
+  if (p.status === "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="admin" class="dp-act-icon dp-act-danger" title="Apagar plano concluído" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
+  } else if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION") {
     actions.push(`<button type="button" data-role-visible="admin,operador" class="dp-act-icon dp-act-danger" title="Apagar plano" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
   }
   actions.push(`<button type="button" class="dp-act-icon" title="Ver detalhes" onclick="event.stopPropagation(); window.viewPlanDetails('${p.id}')"><span class="material-symbols-outlined">visibility</span></button>`);
@@ -5662,76 +5664,9 @@ function wireDailyPlanBoard() {
   el("dpFilterSearch")?.addEventListener("input", resetAndRender);
   el("dpFilterSort")?.addEventListener("change", resetAndRender);
 
-<<<<<<< HEAD
   container.addEventListener("mousedown", (event) => {
     const card = event.target.closest(".dp-card");
     if (card) card.draggable = !event.target.closest("button");
-=======
-    return `
-      <div class="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4 group w-full">
-        <div>
-          <div class="flex items-center gap-3 mb-2">
-            <span class="text-xs font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.date)}</span>
-            ${statusBadge}
-          </div>
-          <p class="text-sm font-bold text-slate-900 line-clamp-2">${escapeHtml(p.description || "Sem descrição")}</p>
-          <div class="mt-2 text-xs font-semibold text-slate-500 flex flex-wrap gap-4 items-center">
-            <span>${p.tasks.length} Tarefa(s)</span>
-            <span>${p.materials.length} Material(ais)</span>
-            <span class="flex items-center gap-1 text-slate-400 font-medium">
-              <span class="material-symbols-outlined text-xs">person</span> ${escapeHtml(techDisplay)}
-            </span>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar shrink-0">
-          ${p.status === "PENDING_MATERIAL" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.providePlanMaterials('${p.id}')" class="h-10 bg-amber-50 hover:bg-amber-100 text-amber-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">inventory_2</span> Disponibilizar Material
-            </button>
-          ` : ""}
-          ${p.status === "PENDING_VALIDATION" ? `
-            <button data-role-visible="admin,supervisor,operador" onclick="window.validatePlan('${p.id}')" class="h-10 bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">fact_check</span> Validar Relatório
-            </button>
-          ` : ""}
-          ${(p.status === "IN_PROGRESS" || p.status === "DRAFT") ? `
-            <button data-role-visible="admin,tecnico,supervisor,operador" onclick="window.completePlan('${p.id}')" class="h-10 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 px-4 rounded-xl font-bold flex items-center gap-2 transition-all whitespace-nowrap text-xs">
-              <span class="material-symbols-outlined text-sm">check_circle</span> Concluir Plano
-            </button>
-          ` : ""}
-          ${(p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") ? `
-            <button data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" onclick="window.openEditPlanModal('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0" title="Editar plano">
-              <span class="material-symbols-outlined text-sm">edit</span>
-            </button>
-          ` : ""}
-          <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
-            <span class="material-symbols-outlined text-sm">visibility</span>
-          </button>
-          ${p.status === "COMPLETED" ? `
-            <button data-role-visible="admin" onclick="window.deletePlan('${p.id}')" title="Apagar plano concluído" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
-              <span class="material-symbols-outlined text-sm">delete</span>
-            </button>
-          ` : ""}
-          ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
-            <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
-              <span class="material-symbols-outlined text-sm">delete</span>
-            </button>
-          ` : ""}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  renderGeralPagination(pager, {
-    page: window.dailyPlansPage,
-    pageSize: DAILY_PLANS_PAGE_SIZE,
-    total: filtered.length,
-    onPage: (next) => {
-      window.dailyPlansPage = next;
-      renderDailyPlansList();
-      container.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
->>>>>>> origin/main
   });
 
   container.addEventListener("click", (event) => {
