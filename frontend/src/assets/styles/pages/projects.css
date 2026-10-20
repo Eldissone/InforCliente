@@ -1,7 +1,7 @@
 /* projects.css — bloco 1 */
 .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-    }
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
 
 /* Create project form */
 .project-create-modal {
@@ -9,43 +9,53 @@
   max-width: none;
   max-height: calc(100vh - 2rem);
 }
-.project-create-modal > [data-body] {
+
+.project-create-modal>[data-body] {
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
 }
+
 .project-create-body {
   padding: 0 1.5rem 1.25rem;
   background: #f8f9fd;
 }
+
 .project-create-body .obra-form {
   width: 100%;
   max-width: none;
   gap: 16px;
 }
+
 .project-create-body .obra-form .registry-grid {
   width: 100%;
   grid-template-columns: minmax(0, 1fr);
 }
+
 @media (min-width: 720px) {
   .project-create-body .obra-form .registry-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
 .project-create-body .obra-card,
 .project-create-body .obra-form .registry-field {
   overflow: visible;
 }
+
 .project-create-body .obra-multiselect {
   z-index: 2;
 }
+
 .project-create-body .obra-multiselect[open] {
   z-index: 30;
 }
-.project-create-form > div:not([class*="col-span"]) {
+
+.project-create-form>div:not([class*="col-span"]) {
   min-width: 0;
 }
+
 .project-create-form label {
   display: block;
   margin-bottom: .55rem;
@@ -55,6 +65,7 @@
   letter-spacing: 0;
   text-transform: none;
 }
+
 .project-create-form input:not([type="file"]),
 .project-create-form select {
   min-height: 38px;
@@ -66,12 +77,14 @@
   font-size: .875rem;
   box-shadow: none;
 }
+
 .project-create-form input:focus,
 .project-create-form select:focus {
   border-color: #2afc8d;
   outline: 2px solid rgb(42 252 141 / 10%);
   outline-offset: 1px;
 }
+
 .project-create-form h3 {
   margin: .2rem 0 0;
   padding: 0 0 .65rem;
@@ -82,19 +95,23 @@
   letter-spacing: 0;
   text-transform: none;
 }
-.project-create-modal > div:first-child {
+
+.project-create-modal>div:first-child {
   padding: 1.2rem 1.5rem .9rem;
 }
-.project-create-modal > div:first-child h3 {
+
+.project-create-modal>div:first-child h3 {
   color: #111827;
   font-size: 1.25rem;
   font-weight: 600;
 }
-.project-create-modal > div:last-child {
+
+.project-create-modal>div:last-child {
   border-top: 1px solid #f0f0f0;
   background: #fff;
   padding: .9rem 1.5rem;
 }
+
 .project-create-modal [data-primary] {
   border-radius: 10px;
   background: #212e3e;
@@ -102,13 +119,20 @@
   font-weight: 500;
   box-shadow: none;
 }
-.project-create-modal [data-primary]:hover { background: #11171e; }
+
+.project-create-modal [data-primary]:hover {
+  background: #11171e;
+}
+
 .project-create-modal [data-secondary] {
   border: 1px solid #212e3e;
   border-radius: 10px;
   background: #fff;
   font-weight: 400;
 }
+
 @media (max-width: 767px) {
-  .project-create-body { padding: 1rem; }
+  .project-create-body {
+    padding: 1rem;
+  }
 }
