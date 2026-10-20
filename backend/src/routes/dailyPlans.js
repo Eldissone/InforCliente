@@ -911,18 +911,176 @@ dailyPlansRoutes.post(
   })
 );
 
+async function takePlanTaskHistory(tx, plan, task, used) {
+  const qty = Number(task.executedQty || 0);
+  if (qty <= 0) return null;
+  const stamp = utcDayStamp(plan.date);
+  if (stamp == null) return null;
+
+  const histories = await tx.projectProgressHistory.findMany({
+    where: {
+      projectId: plan.projectId,
+      taskId: task.progressTaskId,
+      date: {
+        gte: new Date(stamp),
+        lt: new Date(stamp + 24 * 60 * 60 * 1000),
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const noteCandidates = [task.notes, plan.description]
+    .map((value) => (value == null ? "" : String(value).trim()))
+    .filter(Boolean);
+  const matches = histories.filter((row) => !used.has(row.id) && qtyClose(row.executedQty, qty));
+  const withNote = matches.filter((row) => noteCandidates.includes(String(row.notes || "").trim()));
+  return (withNote.length ? withNote : matches)[0] || null;
+}
+
+/**
+ * Desfaz o que a aprovação de um plano concluído escreveu no avanço físico,
+ * no estaleiro e nas ferramentas, para a informação voltar à origem.
+ */
+async function revertCompletedDailyPlan(tx, plan) {
+  const usedHistories = new Set();
+
+  for (const task of plan.tasks || []) {
+    const qty = Number(task.executedQty || 0);
+    if (qty <= 0 || !task.progressTaskId) continue;
+
+    const current = await tx.projectProgressTask.findUnique({
+      where: { id: task.progressTaskId },
+    });
+    if (current) {
+      await tx.projectProgressTask.update({
+        where: { id: current.id },
+        data: { executedQty: Math.max(0, Number(current.executedQty) - qty) },
+      });
+    }
+
+    const history = await takePlanTaskHistory(tx, plan, task, usedHistories);
+    if (!history) continue;
+    usedHistories.add(history.id);
+
+    const later = await tx.projectProgressHistory.findMany({
+      where: { projectId: plan.projectId, taskId: task.progressTaskId },
+    });
+    const historyDate = new Date(history.date).getTime();
+    const historyCreated = new Date(history.createdAt).getTime();
+    for (const row of later) {
+      if (row.id === history.id) continue;
+      const rowDate = new Date(row.date).getTime();
+      const rowCreated = new Date(row.createdAt).getTime();
+      const after = rowDate > historyDate || (rowDate === historyDate && rowCreated > historyCreated);
+      if (!after) continue;
+      await tx.projectProgressHistory.update({
+        where: { id: row.id },
+        data: { accumulatedQty: Math.max(0, Number(row.accumulatedQty) - qty) },
+      });
+    }
+
+    await tx.projectProgressHistory.delete({ where: { id: history.id } });
+  }
+
+  const movements = await tx.stockMovement.findMany({
+    where: { dailyPlanId: plan.id },
+    include: { product: true },
+  });
+
+  const restoreByStock = new Map();
+  for (const movement of movements) {
+    if (isToolProduct(movement.product)) continue;
+    const qty = Number(movement.quantity || 0);
+    if (!Number.isFinite(qty) || qty === 0) continue;
+    let delta = 0;
+    if (movement.type === "ALLOCATION" || movement.type === "EXIT") delta = qty;
+    else if (movement.type === "RETURN") delta = -qty;
+    if (delta === 0) continue;
+    const key = `${movement.warehouseId}|${movement.productId}`;
+    const bucket = restoreByStock.get(key) || {
+      warehouseId: movement.warehouseId,
+      productId: movement.productId,
+      qty: 0,
+    };
+    bucket.qty += delta;
+    restoreByStock.set(key, bucket);
+  }
+
+  for (const bucket of restoreByStock.values()) {
+    if (Math.abs(bucket.qty) < 1e-9) continue;
+    const existing = await tx.warehouseStock.findFirst({
+      where: { warehouseId: bucket.warehouseId, productId: bucket.productId },
+    });
+    if (existing) {
+      await tx.warehouseStock.update({
+        where: { id: existing.id },
+        data: { quantity: Math.max(0, Number(existing.quantity) + bucket.qty) },
+      });
+    } else if (bucket.qty > 0) {
+      await tx.warehouseStock.create({
+        data: {
+          warehouseId: bucket.warehouseId,
+          productId: bucket.productId,
+          quantity: bucket.qty,
+          ownerId: null,
+        },
+      });
+    }
+  }
+
+  await tx.item.updateMany({
+    where: {
+      OR: [
+        { lastStatusNote: dailyPlanItemNote(plan.id) },
+        { lastStatusNote: `Extraviado no plano ${plan.id}` },
+      ],
+    },
+    data: {
+      status: "AVAILABLE",
+      responsibleId: null,
+      lastStatusNote: null,
+      returnedAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+
+  if (movements.length) {
+    await tx.projectPhoto.updateMany({
+      where: { movementId: { in: movements.map((movement) => movement.id) } },
+      data: { movementId: null },
+    });
+    await tx.stockMovement.deleteMany({ where: { dailyPlanId: plan.id } });
+  }
+}
+
 // DELETE /daily-plans/:id
 dailyPlansRoutes.delete(
   "/:id",
   requirePermission("obras", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const plan = await prisma.dailyPlan.findUnique({ where: { id } });
+    const plan = await prisma.dailyPlan.findUnique({
+      where: { id },
+      include: { tasks: true },
+    });
     if (!plan) return res.status(404).json({ error: "Plano não encontrado" });
     await assertOwnProjectAccess(req, plan.projectId);
 
-    if (plan.status === "IN_PROGRESS" || plan.status === "COMPLETED") {
-      return res.status(400).json({ error: "Não pode apagar um plano já disponibilizado ou concluído." });
+    if (plan.status === "IN_PROGRESS") {
+      return res.status(400).json({ error: "Não pode apagar um plano em execução." });
+    }
+
+    if (plan.status === "COMPLETED") {
+      const role = String(req.user?.role || "").toLowerCase();
+      if (role !== "admin") {
+        return res.status(403).json({ error: "Apenas o administrador pode apagar um plano concluído." });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await revertCompletedDailyPlan(tx, plan);
+        await tx.dailyPlan.delete({ where: { id } });
+      });
+      return res.status(204).send();
     }
 
     await prisma.dailyPlan.delete({ where: { id } });
