@@ -5704,6 +5704,11 @@ function renderDailyPlansList() {
           <button onclick="window.viewPlanDetails('${p.id}')" class="w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-blue-600 flex items-center justify-center transition-all shrink-0">
             <span class="material-symbols-outlined text-sm">visibility</span>
           </button>
+          ${p.status === "COMPLETED" ? `
+            <button data-role-visible="admin" onclick="window.deletePlan('${p.id}')" title="Apagar plano concluído" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
+              <span class="material-symbols-outlined text-sm">delete</span>
+            </button>
+          ` : ""}
           ${(p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") ? `
             <button data-role-visible="admin,operador" onclick="window.deletePlan('${p.id}')" class="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-600 flex items-center justify-center transition-all shrink-0">
               <span class="material-symbols-outlined text-sm">delete</span>
@@ -5792,7 +5797,11 @@ async function providePlanMaterials(planId) {
 window.providePlanMaterials = providePlanMaterials;
 
 async function deletePlan(planId) {
-  if (!confirm("Tem a certeza que deseja apagar este plano?")) return;
+  const plan = (window.dailyPlansState || []).find((p) => p.id === planId);
+  const message = plan?.status === "COMPLETED"
+    ? "Apagar este plano concluído? As quantidades executadas saem do avanço físico e os materiais consumidos regressam ao estaleiro."
+    : "Tem a certeza que deseja apagar este plano?";
+  if (!confirm(message)) return;
   try {
     await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`, { method: "DELETE" });
     toast("Plano apagado com sucesso!", { type: "success" });
