@@ -1,4 +1,5 @@
 import { apiRequest, apiUpload } from "/services/api.js";
+import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
@@ -626,9 +627,80 @@ async function handleMigration(mig, root) {
   return true;
 }
 
+const SUPPLIER_TYPES = { MATERIAL: "Material", SERVICO: "Serviço", TRANSPORTADOR: "Transportador" };
+const CLIENT_STATUS = { ACTIVE: "Activo", AT_RISK: "Em risco", INACTIVE: "Inactivo" };
+const CARD_TYPES = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
+const MOVEMENT_TYPES = { CREDITO: "Crédito", AJUSTE: "Ajuste", DEBITO: "Débito" };
+const EQUIPMENT_KINDS = ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"];
+
+let registryListGen = 0;
+
+function moneyLabel(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "";
+  return amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function dateLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toLocaleDateString("pt-PT");
+}
+
+function equipmentKind(item) {
+  const head = String(item?.description || "").split(" · ")[0];
+  if (EQUIPMENT_KINDS.includes(head)) return head;
+  return item?.category === "TOOL" ? "Ferramenta" : "Equipamento";
+}
+
+async function loadItems(path) {
+  const data = await apiRequest(path);
+  return data?.items || [];
+}
+
+async function loadPaged(path, pageSize) {
+  const items = [];
+  let page = 1;
+  let total = Infinity;
+  while (items.length < total && page <= 30) {
+    const joiner = path.includes("?") ? "&" : "?";
+    const data = await apiRequest(`${path}${joiner}page=${page}&pageSize=${pageSize}`);
+    const batch = data?.items || [];
+    total = Number.isFinite(Number(data?.total)) ? Number(data.total) : items.length + batch.length;
+    items.push(...batch);
+    if (!batch.length || items.length >= total) break;
+    page += 1;
+  }
+  return items;
+}
+
+function paintExistingList(spec) {
+  const root = document.getElementById("registryRoot");
+  if (!root) return;
+  root.querySelector("[data-existing-list]")?.remove();
+  root.insertAdjacentHTML("beforeend", existingListHtml(spec));
+}
+
+function showRegistered({ title, columns, empty, load }) {
+  const gen = registryListGen;
+  paintExistingList({ title, columns, rows: [], empty: "A carregar...", loading: true });
+  Promise.resolve()
+    .then(load)
+    .then((rows) => {
+      if (gen !== registryListGen) return;
+      paintExistingList({ title, columns, rows, empty });
+    })
+    .catch((error) => {
+      if (gen !== registryListGen) return;
+      paintExistingList({ title, columns, rows: [], empty, error: apiMessage(error) });
+    });
+}
+
 function mount(kind, html, onSubmit) {
   const root = document.getElementById("registryRoot");
   if (!root) return;
+  registryListGen += 1;
   root.innerHTML = html;
 
   const mig = checkMigration(kind);
@@ -693,6 +765,15 @@ async function renderContactos() {
       fd.append("photo", file);
       await apiUpload(`/contacts/${res.id}/photo`, fd);
     }
+  });
+  showRegistered({
+    title: "Contactos registados",
+    columns: ["Nome", "Função", "Telefone", "Email"],
+    empty: "Ainda não há contactos registados.",
+    load: async () => {
+      const items = await loadPaged("/contacts", 200);
+      return items.map((item) => [item.name, item.role, item.phone, item.email]);
+    },
   });
 }
 
@@ -1491,6 +1572,15 @@ async function renderSetores() {
       body: { name: nome }
     });
   });
+  showRegistered({
+    title: "Setores registados",
+    columns: ["Nome"],
+    empty: "Ainda não há setores registados.",
+    load: async () => {
+      const items = await loadPaged("/sectors", 200);
+      return items.map((item) => [item.name]);
+    },
+  });
 }
 
 function fornField(label, control, extra = "") {
@@ -1704,6 +1794,21 @@ async function renderFornecedores() {
       setNifLookupStatus(form.querySelector("[data-nif-status]"), "");
     }
   });
+  showRegistered({
+    title: "Fornecedores registados",
+    columns: ["Nome", "NIF", "Tipo", "Telefone", "Email"],
+    empty: "Ainda não há fornecedores registados.",
+    load: async () => {
+      const items = await loadItems("/suppliers");
+      return items.map((item) => [
+        item.name,
+        item.nif,
+        SUPPLIER_TYPES[item.type] || item.type,
+        item.phone,
+        item.email,
+      ]);
+    },
+  });
 }
 
 async function renderClientes() {
@@ -1785,6 +1890,21 @@ async function renderClientes() {
       },
     });
   });
+  showRegistered({
+    title: "Clientes registados",
+    columns: ["Código", "Nome", "Setor", "Região", "Estado"],
+    empty: "Ainda não há clientes registados.",
+    load: async () => {
+      const items = await loadPaged("/clients", 100);
+      return items.map((item) => [
+        item.code,
+        item.name,
+        item.industry,
+        item.region,
+        CLIENT_STATUS[item.status] || item.status,
+      ]);
+    },
+  });
 }
 
 async function renderObras() {
@@ -1815,6 +1935,20 @@ async function renderObras() {
     });
   });
   bindObraForm(form);
+  showRegistered({
+    title: "Obras registadas",
+    columns: ["Código", "Nome", "Cliente", "Estado"],
+    empty: "Ainda não há obras registadas.",
+    load: async () => {
+      const items = await loadPaged("/projects", 100);
+      return items.map((item) => [
+        item.code,
+        item.name,
+        item.client?.name,
+        item.estado || item.phaseLabel,
+      ]);
+    },
+  });
 }
 
 async function renderProdutos() {
@@ -1861,6 +1995,17 @@ async function renderEquipamentos() {
     if (photo && photo.size && created?.id) {
       await apiUpload(`/products/${created.id}/photo`, { file: photo, fieldName: "photo" });
     }
+  });
+  showRegistered({
+    title: "Equipamentos registados",
+    columns: ["Nome", "Tipo", "Matrícula / série", "Unidade"],
+    empty: "Ainda não há equipamentos registados.",
+    load: async () => {
+      const items = await loadItems("/products");
+      return items
+        .filter((item) => item.category === "EQUIPMENT" || item.category === "TOOL")
+        .map((item) => [item.name, equipmentKind(item), item.sku, item.unit]);
+    },
   });
 }
 
@@ -1984,6 +2129,22 @@ async function renderCartoes() {
       },
     });
   });
+  showRegistered({
+    title: "Cartões registados",
+    columns: ["Designação", "Banco", "Titular", "Final", "Tipo", "Saldo"],
+    empty: "Ainda não há cartões registados.",
+    load: async () => {
+      const items = await loadItems("/petty-cash/cards");
+      return items.map((item) => [
+        item.label,
+        item.bank,
+        item.holderName,
+        item.lastDigits ? `•••• ${item.lastDigits}` : "",
+        CARD_TYPES[item.type] || item.type,
+        [moneyLabel(item.currentBalance), item.currency || "AOA"].filter(Boolean).join(" "),
+      ]);
+    },
+  });
 }
 
 async function renderMovimentos() {
@@ -2029,6 +2190,31 @@ async function renderMovimentos() {
         description,
       },
     });
+  });
+  showRegistered({
+    title: "Movimentos registados",
+    columns: ["Cartão", "Movimento", "Valor", "Descrição", "Data"],
+    empty: "Ainda não há movimentos registados.",
+    load: async () => {
+      const cards = await loadItems("/petty-cash/cards");
+      const groups = await Promise.all(cards.map(async (card) => {
+        const data = await apiRequest(`/petty-cash/cards/${encodeURIComponent(card.id)}?pageSize=100`);
+        return (data?.movements?.items || []).map((movement) => ({
+          ...movement,
+          cardLabel: card.label,
+        }));
+      }));
+      return groups
+        .flat()
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+        .map((item) => [
+          item.cardLabel,
+          MOVEMENT_TYPES[item.type] || item.type,
+          moneyLabel(item.amount),
+          item.description,
+          dateLabel(item.createdAt),
+        ]);
+    },
   });
 }
 

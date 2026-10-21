@@ -742,3 +742,68 @@ body[data-registry]:not([data-registry="obras"]) .registry-ghost {
   display: flex;
   justify-content: flex-start;
 }
+
+.reg-existing {
+  margin-top: 1.75rem;
+  padding: 1.15rem 1.15rem 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.reg-existing-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.reg-existing-head h2 {
+  margin: 0;
+  color: #212e3e;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.reg-existing-head span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reg-existing-wrap {
+  overflow-x: auto;
+}
+
+.reg-existing table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.reg-existing th {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.reg-existing td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: top;
+}
+
+.reg-existing-empty {
+  padding: 1.15rem 0.75rem !important;
+  color: #94a3b8;
+  text-align: center;
+}

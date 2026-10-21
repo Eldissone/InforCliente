@@ -1,4 +1,5 @@
 import { apiRequest, apiUpload } from "/services/api.js";
+import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
@@ -191,7 +192,13 @@ async function loadLookups(kind) {
 
   const products = productsRes.status === "fulfilled" ? (productsRes.value?.items || []) : [];
 
-  return { categoryOptions, subcategoryOptions, supplierOptions, products };
+  return {
+    categoryOptions,
+    subcategoryOptions,
+    supplierOptions,
+    products,
+    productsError: productsRes.status === "rejected",
+  };
 }
 
 function filterSubs(allSubs, parentId) {
@@ -294,7 +301,16 @@ export async function renderProdutosForm() {
           ? `<button class="ps-submit" type="submit" data-perm="materiais:manage">${isService ? "Guardar serviço" : "Guardar produto"}</button>`
           : `<p class="ps-denied">Sem permissão para guardar no catálogo.</p>`}
       </div>
-    </form>`;
+    </form>
+    ${existingListHtml({
+      title: isService ? "Serviços registados" : "Produtos registados",
+      columns: ["Nome", "Código", "Unidade"],
+      rows: lookups.products
+        .filter((item) => (isService ? item.category === "CONSUMABLE" : item.category === "MATERIAL"))
+        .map((item) => [item.name, item.sku, UNIT_LABELS[item.unit] || item.unit]),
+      empty: isService ? "Ainda não há serviços registados." : "Ainda não há produtos registados.",
+      error: lookups.productsError ? "Não foi possível carregar os registos já cadastrados." : "",
+    })}`;
 
   const form = root.querySelector("#psForm");
   const categorySelect = form?.querySelector("[name=costCategory]");
