@@ -194,26 +194,57 @@ function stockOwnershipBadgeClass(item) {
     return "bg-emerald-50 text-emerald-700";
 }
 
-function renderWarehouseOwnerOptions(warehouse) {
-    if (!warehouse) {
-        return `<option value="">Empresa</option>`;
+function renderWarehouseOwnerOptions(warehouse, allOwners = [], selectedOwnerId = null) {
+    const warehouseName = warehouse?.name || "Empresa";
+    const projectClient = warehouse?.project?.client;
+    const normSelected = selectedOwnerId && String(selectedOwnerId).trim() !== "" ? String(selectedOwnerId) : "";
+
+    // 1. Stock próprio da Empresa (Armazém)
+    let html = `<option value="" ${!normSelected ? "selected" : ""}>${esc(warehouseName)} (Empresa)</option>`;
+
+    // 2. Cliente da Obra vinculada (se aplicável)
+    if (projectClient?.id && projectClient?.name) {
+        const isProjectClientSelected = normSelected === String(projectClient.id);
+        html += `<option value="${esc(projectClient.id)}" ${isProjectClientSelected ? "selected" : ""}>${esc(projectClient.name)} (Cliente da Obra)</option>`;
     }
-    const client = warehouse.project?.client;
-    let html = `<option value="">${esc(warehouse.name)}</option>`;
-    if (client?.id && client?.name) {
-        html += `<option value="${esc(client.id)}">${esc(client.name)}</option>`;
+
+    // 3. Outros Clientes
+    const otherOwners = allOwners.filter(c => c.id && c.id !== projectClient?.id);
+    if (otherOwners.length > 0) {
+        html += `<optgroup label="Clientes">`;
+        html += otherOwners.map(c => {
+            const isSelected = normSelected === String(c.id);
+            return `<option value="${esc(c.id)}" ${isSelected ? "selected" : ""}>${esc(c.name)}</option>`;
+        }).join("");
+        html += `</optgroup>`;
+    } else if (normSelected && normSelected !== projectClient?.id) {
+        html += `<option value="${esc(normSelected)}" selected>${esc(normSelected)}</option>`;
     }
+
     return html;
 }
 
-function wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehouses) {
+function wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehouses, allOwners = [], initialOwnerId = null) {
     if (!warehouseSelect || !ownerSelect) return;
     const warehouseById = Object.fromEntries(warehouses.map((w) => [w.id, w]));
+    let currentSelectedOwnerId = initialOwnerId;
+
     const refresh = () => {
         const warehouse = warehouseById[warehouseSelect.value];
-        ownerSelect.innerHTML = renderWarehouseOwnerOptions(warehouse);
+        ownerSelect.innerHTML = renderWarehouseOwnerOptions(warehouse, allOwners, currentSelectedOwnerId);
     };
-    warehouseSelect.addEventListener("change", refresh);
+
+    warehouseSelect.addEventListener("change", () => {
+        if (ownerSelect.value) {
+            currentSelectedOwnerId = ownerSelect.value;
+        }
+        refresh();
+    });
+
+    ownerSelect.addEventListener("change", () => {
+        currentSelectedOwnerId = ownerSelect.value || null;
+    });
+
     refresh();
 }
 
@@ -2675,11 +2706,15 @@ async function renderWarehouseDetail(container, warehouseId) {
 }
 
 async function openMovementModal(type = "ENTRY", defaultWarehouseId = null, prefill = null) {
-    const productsRes = await apiRequest("/products");
-    const warehousesRes = await apiRequest("/warehouses");
+    const [productsRes, warehousesRes, ownersRes] = await Promise.all([
+        apiRequest("/products"),
+        apiRequest("/warehouses"),
+        apiRequest("/stock/owners").catch(() => ({ items: [] })),
+    ]);
 
     const materials = productsRes.items.filter(p => p.category === 'MATERIAL' || p.category === 'CONSUMABLE');
     const tools = productsRes.items.filter(p => p.category === 'TOOL' || p.category === 'EQUIPMENT');
+    const allOwners = ownersRes?.items || [];
 
     const contentHtml = `
         <form id="formMovement" class="space-y-6 pt-4">
@@ -2722,10 +2757,10 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null, pref
                     <input type="number" name="quantity" step="0.01" required placeholder="0.00" value="${prefill?.quantity ?? ""}" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Proprietário</label>
+                    <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Propriedade</label>
                     <select name="ownerId" id="movementOwnerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#2afc8d] transition-all">
                     </select>
-                    <p class="text-[9px] font-bold text-slate-400 mt-1">Stock da empresa = nome do armazém; ou cliente da obra vinculada ao armazém.</p>
+                    <p class="text-[9px] font-bold text-slate-400 mt-1">Stock da empresa = nome do armazém; ou selecione o cliente proprietário.</p>
                 </div>
             </div>
 
@@ -2791,7 +2826,7 @@ async function openMovementModal(type = "ENTRY", defaultWarehouseId = null, pref
     setTimeout(() => {
         const warehouseSelect = document.getElementById("movementWarehouseId");
         const ownerSelect = document.getElementById("movementOwnerId");
-        wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehousesRes.items || []);
+        wireWarehouseOwnerSelect(warehouseSelect, ownerSelect, warehousesRes.items || [], allOwners, prefill?.ownerId);
 
         const categoryFilter = document.getElementById("movementCategoryFilter");
         const productSelect = document.getElementById("movementProductId");
@@ -3324,9 +3359,16 @@ window.viewPendingReceipts = async (warehouseId) => {
 };
 
 window.editStockBalance = async (id) => {
-    const { items: allStock } = await apiRequest("/stock/balance");
+    const [{ items: allStock }, warehousesRes, ownersRes] = await Promise.all([
+        apiRequest("/stock/balance"),
+        apiRequest("/warehouses").catch(() => ({ items: [] })),
+        apiRequest("/stock/owners").catch(() => ({ items: [] })),
+    ]);
     const stock = allStock.find(s => s.id === id);
     if (!stock) return;
+
+    const warehouse = (warehousesRes?.items || []).find(w => w.id === stock.warehouseId) || stock.warehouse;
+    const allOwners = ownersRes?.items || [];
 
     const units = ["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"];
     const currentUnit = String(stock.product.unit || "UN").toUpperCase();
@@ -3335,11 +3377,11 @@ window.editStockBalance = async (id) => {
     const contentHtml = `
         <form id="formEditStock" class="space-y-6 pt-4">
             <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center gap-4 mb-4">
-                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm">
+                <div class="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm shrink-0">
                     <span class="material-symbols-outlined text-2xl">edit_note</span>
                 </div>
                 <div>
-                    <p class="text-[10px] font-black text-blue-400 uppercase mb-1">Ajuste de Saldo</p>
+                    <p class="text-[10px] font-black text-blue-400 uppercase mb-1">Ajuste de Saldo · ${esc(warehouse?.name || 'Armazém')}</p>
                     <p class="text-xs text-blue-900 leading-relaxed font-bold">${esc(stock.product.name)}</p>
                 </div>
             </div>
@@ -3358,8 +3400,16 @@ window.editStockBalance = async (id) => {
             </div>
 
             <div class="space-y-2">
+                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Propriedade</label>
+                <select name="ownerId" id="editStockOwnerId" class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500">
+                    ${renderWarehouseOwnerOptions(warehouse, allOwners, stock.ownerId)}
+                </select>
+                <p class="text-[9px] font-bold text-slate-400 mt-1">Defina se este saldo pertence à Empresa (${esc(warehouse?.name || 'Armazém')}) ou a um Cliente.</p>
+            </div>
+
+            <div class="space-y-2">
                 <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Motivo do Ajuste</label>
-                <textarea name="notes" placeholder="Ex: Correção de inventário físico..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 min-h-[80px]"></textarea>
+                <textarea name="notes" placeholder="Ex: Correção de inventário físico, reatribuição de propriedade..." class="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 min-h-[80px]"></textarea>
             </div>
         </form>
     `;
@@ -3369,8 +3419,10 @@ window.editStockBalance = async (id) => {
         contentHtml,
         primaryLabel: "Salvar Alterações",
         onPrimary: async ({ body }) => {
-            const data = Object.fromEntries(new FormData(body.querySelector("#formEditStock")).entries());
+            const formData = new FormData(body.querySelector("#formEditStock"));
+            const data = Object.fromEntries(formData.entries());
             data.quantity = parseFloat(data.quantity);
+            data.ownerId = data.ownerId && data.ownerId.trim() !== "" ? data.ownerId.trim() : null;
             try {
                 await apiRequest(`/stock/balance/${id}`, {
                     method: "PATCH",
@@ -4175,6 +4227,7 @@ function confirmDeliveryArrival(quote) {
         quantity: qty,
         reference: quote.orderRef || "",
         productId: quote.suggestedProductId || null,
+        ownerId: quote.need?.project?.clientId || quote.need?.project?.client?.id || null,
         notes: `Entrada encomenda ${quote.orderRef || ""} — ${quote.supplier?.name || ""} — ${quote.need?.project?.name || ""}`,
     });
 }
