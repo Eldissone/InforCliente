@@ -361,6 +361,29 @@ stockRoutes.get(
   })
 );
 
+// GET - Listar proprietários disponíveis para stock (Empresa e Clientes)
+stockRoutes.get(
+  "/owners",
+  requireStockViewOrClientePortal(),
+  asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      const clientId = req.user?.clientId;
+      if (!clientId) return res.json({ items: [] });
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true, code: true },
+      });
+      return res.json({ items: client ? [client] : [] });
+    }
+
+    const clients = await prisma.client.findMany({
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({ items: clients });
+  })
+);
+
 // GET - Saldo de stock por Projecto (encontra o armazém SITE do projecto)
 stockRoutes.get(
   "/project/:projectId/balance",
@@ -1483,15 +1506,19 @@ stockRoutes.patch(
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { quantity, notes, unit } = z.object({
+    const { quantity, notes, unit, ownerId } = z.object({
       quantity: z.number(),
       notes: z.string().optional().nullable(),
       unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]).optional(),
+      ownerId: z.preprocess(
+        (v) => (v == null || String(v).trim() === "" || String(v) === "null" ? null : String(v).trim()),
+        z.string().nullable().optional()
+      ),
     }).parse(req.body);
 
     const oldStock = await prisma.warehouseStock.findUnique({
       where: { id },
-      include: { product: true },
+      include: { product: true, warehouse: true },
     });
 
     if (!oldStock) return res.status(404).json({ error: "STOCK_NOT_FOUND" });
@@ -1501,6 +1528,8 @@ stockRoutes.patch(
     }
 
     const unitChanged = Boolean(unit && unit !== oldStock.product.unit);
+    const targetOwnerId = ownerId !== undefined ? ownerId : oldStock.ownerId;
+    const ownerChanged = targetOwnerId !== oldStock.ownerId;
 
     const updated = await prisma.$transaction(async (tx) => {
       if (unitChanged) {
@@ -1510,14 +1539,64 @@ stockRoutes.patch(
         });
       }
 
-      // 1. Atualizar o saldo
-      const stock = await tx.warehouseStock.update({
-        where: { id },
-        data: { quantity },
-      });
+      // 1. Obter nomes dos proprietários para histórico
+      let oldOwnerName = oldStock.warehouse?.name || "Empresa";
+      let newOwnerName = oldStock.warehouse?.name || "Empresa";
+      const clientIds = [oldStock.ownerId, targetOwnerId].filter(Boolean);
+      if (clientIds.length > 0) {
+        const clientRecords = await tx.client.findMany({
+          where: { id: { in: clientIds } },
+          select: { id: true, name: true },
+        });
+        const clientMap = Object.fromEntries(clientRecords.map((c) => [c.id, c.name]));
+        if (oldStock.ownerId) oldOwnerName = clientMap[oldStock.ownerId] || oldStock.ownerId;
+        if (targetOwnerId) newOwnerName = clientMap[targetOwnerId] || targetOwnerId;
+      }
+
+      let stock;
+      if (ownerChanged) {
+        // Verificar se já existe registo de saldo para este armazém, produto e novo proprietário
+        const existingTargetStock = await tx.warehouseStock.findFirst({
+          where: {
+            warehouseId: oldStock.warehouseId,
+            productId: oldStock.productId,
+            ownerId: targetOwnerId,
+            id: { not: oldStock.id },
+          },
+        });
+
+        if (existingTargetStock) {
+          // Unificar com o saldo existente do novo proprietário
+          stock = await tx.warehouseStock.update({
+            where: { id: existingTargetStock.id },
+            data: { quantity: { increment: quantity } },
+          });
+          await tx.warehouseStock.delete({
+            where: { id: oldStock.id },
+          });
+        } else {
+          // Atualizar o registo atual com a nova propriedade e quantidade
+          stock = await tx.warehouseStock.update({
+            where: { id: oldStock.id },
+            data: {
+              quantity,
+              ownerId: targetOwnerId,
+            },
+          });
+        }
+      } else {
+        // Propriedade inalterada: atualiza apenas a quantidade
+        stock = await tx.warehouseStock.update({
+          where: { id },
+          data: { quantity },
+        });
+      }
 
       // 2. Registar como um movimento de AJUSTE para histórico
       const unitNote = unitChanged ? ` Unidade: ${oldStock.product.unit} → ${unit}.` : "";
+      const ownerNote = ownerChanged
+        ? ` Propriedade alterada de "${oldOwnerName}" para "${newOwnerName}".`
+        : "";
       await tx.stockMovement.create({
         data: {
           productId: oldStock.productId,
@@ -1525,8 +1604,8 @@ stockRoutes.patch(
           userId: req.user.sub,
           type: "ADJUSTMENT",
           quantity: Math.abs(quantity - Number(oldStock.quantity)),
-          ownerId: oldStock.ownerId,
-          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}.${unitNote}`,
+          ownerId: targetOwnerId,
+          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}.${ownerNote}${unitNote}`,
         },
       });
 
