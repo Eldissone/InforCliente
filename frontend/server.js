@@ -20,6 +20,15 @@ app.get("/services/config.js", (req, res) => {
   res.send(`export const config = ${JSON.stringify(config)};`);
 });
 
+// Redireciona caminhos relativos resolvidos pelo browser (ex: /registos/uploads/... -> /uploads/...)
+app.use((req, res, next) => {
+  const uploadIndex = req.url.indexOf("/uploads/");
+  if (uploadIndex > 0) {
+    return res.redirect(307, req.url.slice(uploadIndex));
+  }
+  next();
+});
+
 // Proxy de uploads para o backend (miniaturas; reencaminha JWT em header ou ?token=)
 app.use("/uploads", (req, res) => {
   const target = `${apiBase}${req.originalUrl}`;
