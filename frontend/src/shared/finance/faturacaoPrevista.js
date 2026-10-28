@@ -638,21 +638,11 @@ function renderByProject(data) {
       return `
       <tr class="fin-row--clickable" data-project="${esc(entry.project.id)}">
         <td>
-<<<<<<< HEAD
-          <div style="display:flex;align-items:center;gap:0.5rem">
-            <button type="button" class="finance-row-toggle ${open ? "open" : ""}" data-toggle="${esc(entry.project.id)}">
-              <span class="material-symbols-outlined">chevron_right</span>
-            </button>
-            <div>
-              <div style="font-weight:700;color:#0f172a">${esc(entry.project.name)}</div>
-              <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(entry.project.referencia || "—")}</div>
-=======
           <div class="inv-doc">
             <span class="material-symbols-outlined inv-toggle ${open ? "open" : ""}">chevron_right</span>
             <div class="ov-project">
               <span class="ov-project-name">${esc(entry.project.name)}</span>
-              <span class="ov-project-meta">${esc([entry.project.code, entry.project.client?.name].filter(Boolean).join(" · "))} · ${count} fatura${count === 1 ? "" : "s"}</span>
->>>>>>> origin/dev-leite
+              <span class="ov-project-meta">${esc([entry.project.referencia || entry.project.code, entry.project.client?.name].filter(Boolean).join(" · "))} · ${count} fatura${count === 1 ? "" : "s"}</span>
             </div>
           </div>
         </td>

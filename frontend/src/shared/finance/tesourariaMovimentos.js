@@ -130,43 +130,8 @@ function page() {
   return document.body.dataset.financePage;
 }
 
-<<<<<<< HEAD
-function renderShell() {
-  const cfg = config();
-  document.getElementById("financeRoot").innerHTML = `
-    <div id="mvKpis" class="finance-kpi-grid"></div>
-    <section class="finance-card">
-      <div class="fin-toolbar" style="margin-bottom:1rem">
-        <div class="finance-filters">
-          <select id="mvProject" class="finance-select fin-proj-filter"></select>
-          <label class="finance-check">
-            <input id="mvPending" type="checkbox" />
-            Só por associar
-          </label>
-        </div>
-      </div>
-      <p class="finance-hint">${esc(cfg.hint)}</p>
-      <div id="mvTable" class="finance-table-scroll"></div>
-    </section>`;
-
-  const projectSel = document.getElementById("mvProject");
-  projectSel.innerHTML =
-    `<option value="">Todas as obras</option>` +
-    state.options.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
-      .join("");
-  projectSel.addEventListener("change", () => {
-    state.filters.projectId = projectSel.value;
-    load();
-  });
-  document.getElementById("mvPending").addEventListener("change", (e) => {
-    state.filters.pendingOnly = e.target.checked;
-    renderTable();
-  });
-=======
 function cfg() {
   return PAGES[page()] || PAGES["tesouraria-pagamentos"];
->>>>>>> origin/dev-leite
 }
 
 function canEdit() {

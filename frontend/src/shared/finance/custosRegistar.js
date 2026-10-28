@@ -178,21 +178,9 @@ function renderShell() {
   const projectSel = document.getElementById("crProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-<<<<<<< HEAD
-    state.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
-      .join("");
-
-  const sourceSel = document.getElementById("costSource");
-  sourceSel.innerHTML =
-    `<option value="">Todas as fontes</option>` +
-    state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
-  sourceSel.value = state.filters.source;
-=======
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`).join("");
   projectSel.value = state.filters.projectId;
   fillSources();
->>>>>>> origin/dev-leite
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -438,53 +426,6 @@ function renderTable() {
   const rows = items
     .map((c) => {
       const cur = c.currency || c.project?.currency || "AOA";
-<<<<<<< HEAD
-      const supplier = c.supplierRef?.name || c.supplier || "—";
-      const obraName = c.project?.name || "—";
-      const obraRef = String(c.project?.referencia || "").trim() || "—";
-      const description = c.description || "—";
-      const docNumber = String(c.docNumber || "").trim();
-      const isPayment = c.source === "PAGAMENTO";
-      return `
-      <tr data-id="${esc(c.id)}">
-        <td>${esc(dateOnly(c.date))}</td>
-        <td class="fin-obra-cell">
-          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
-          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
-        </td>
-        <td>${esc(c.costCenter?.name || "—")}</td>
-        <td>${esc(supplier)}</td>
-        <td class="fin-desc-cell">
-          <div class="fin-desc-name" title="${esc(description)}">${esc(description)}</div>
-          ${docNumber ? `<div class="fin-obra-ref" title="${esc(docNumber)}">${esc(docNumber)}</div>` : ""}
-        </td>
-        <td>${esc(CATEGORY[c.category] || c.category || "—")}</td>
-        <td>${sourceChip(c)}</td>
-        <td class="fin-num">${esc(money(c.paidAmount, cur))}</td>
-        <td class="fin-num ${Number(c.remaining) > 0 ? "finance-muted" : ""}">${esc(money(c.remaining, cur))}</td>
-        <td>${confirmBadge(c.confirmationStatus)}</td>
-        <td>${c.responsible ? esc(c.responsible) : '<span class="fin-empty-cell">—</span>'}</td>
-        <td>
-          <div class="fin-actions">
-            ${
-              editable
-                ? `${
-                    isPayment && c.confirmationStatus !== "CONFIRMADO" && canApprove()
-                      ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Confirmar custo" data-action="confirm">
-                           <span class="material-symbols-outlined" style="font-size:17px">done</span>
-                         </button>`
-                      : ""
-                  }
-                   ${
-                     isPayment
-                       ? `<button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Detalhe do pagamento" data-action="edit">
-                            <span class="material-symbols-outlined" style="font-size:17px">edit</span>
-                          </button>`
-                       : `<span class="fin-empty-cell" title="Gerido na área de origem">—</span>`
-                   }`
-                : `<span class="fin-empty-cell">—</span>`
-            }
-=======
       const open = state.expanded.has(c.id);
       const supplier = c.supplierRef?.name || c.supplier;
       const value = c.kind === "STOCK" ? c.stockValue : c.paidAmount;
@@ -497,13 +438,12 @@ function renderTable() {
               <span class="cr-desc-title">${esc(c.description || "—")}</span>
               <span class="ov-project-meta">${c.docNumber ? `<strong class="cr-doc">${esc(c.docNumber)}</strong> · ` : ""}${esc(dateOnly(c.date))}${supplier ? ` · ${esc(supplier)}` : ""}</span>
             </div>
->>>>>>> origin/dev-leite
           </div>
         </td>
         <td>
           <div class="ov-project">
             <span class="ov-project-name">${esc(c.project?.name || "—")}</span>
-            <span class="ov-project-meta">${esc(c.costCenter?.name || c.project?.code || "")}</span>
+            <span class="ov-project-meta">${esc(c.costCenter?.name || c.project?.referencia || c.project?.code || "")}</span>
           </div>
         </td>
         <td>${sourceChip(c)}</td>
@@ -523,17 +463,10 @@ function renderTable() {
     <table class="fin-table cr-table">
       <thead>
         <tr>
-<<<<<<< HEAD
-          <th>Data</th><th class="fin-obra-cell">Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th class="fin-desc-cell">Descrição</th>
-          <th>Categoria</th><th>Fonte</th><th style="text-align:right">V. Pago</th>
-          <th style="text-align:right">Por Liquidar</th><th>Confirmação</th>
-          <th>Responsável</th><th style="text-align:center">Ações</th>
-=======
           <th>Custo · Nº fatura</th><th>Obra · Centro</th><th>Fonte</th>
           <th style="text-align:right">Realizado</th>
           <th style="text-align:right">Por pagar</th>
           <th>Estado · Ação</th>
->>>>>>> origin/dev-leite
         </tr>
       </thead>
       <tbody>${rows}</tbody>

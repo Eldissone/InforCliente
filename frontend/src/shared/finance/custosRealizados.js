@@ -203,13 +203,9 @@ function renderShell() {
   const projectSel = document.getElementById("rlProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-<<<<<<< HEAD
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`).join("");
-=======
-    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`).join("");
   projectSel.value = state.filters.projectId;
   document.getElementById("rlGroup").value = state.group;
->>>>>>> origin/dev-leite
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
@@ -231,27 +227,6 @@ function renderShell() {
       renderAll();
     });
   });
-<<<<<<< HEAD
-}
-
-function groupKey(item, group) {
-  if (group === "costCenter") return { key: item.costCenter?.id || "__none__", label: item.costCenter?.name || "Sem centro de custo", sub: item.costCenter?.code || "" };
-  if (group === "client") return { key: item.project?.client?.id || "__none__", label: item.project?.client?.name || "Sem cliente", sub: "" };
-  return { key: item.project?.id || "__none__", label: item.project?.name || "Sem obra", sub: item.project?.referencia || "" };
-}
-
-function aggregate() {
-  const buckets = new Map();
-  state.items.forEach((item) => {
-    const { key, label, sub } = groupKey(item, state.group);
-    if (!buckets.has(key)) buckets.set(key, { key, label, sub, count: 0, paid: 0, confirmed: 0, pending: 0 });
-    const b = buckets.get(key);
-    const paid = Number(item.paidAmount) || 0;
-    b.count += 1;
-    b.paid += paid;
-    if (item.confirmationStatus === "CONFIRMADO") b.confirmed += paid;
-    else b.pending += paid;
-=======
   let timer = null;
   document.getElementById("rlSearch").addEventListener("input", (e) => {
     clearTimeout(timer);
@@ -259,7 +234,6 @@ function aggregate() {
       state.query = e.target.value;
       renderAll();
     }, 150);
->>>>>>> origin/dev-leite
   });
 
   const actions = document.getElementById("financePageActions");

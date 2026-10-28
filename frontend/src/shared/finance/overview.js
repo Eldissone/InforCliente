@@ -562,23 +562,6 @@ function renderAlerts() {
   }
   wrap.innerHTML = alerts
     .map(
-<<<<<<< HEAD
-      (p) => `
-      <tr>
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.referencia || "—")}</div>
-        </td>
-        <td class="fin-num">${esc(money(p.forecast))}</td>
-        <td class="fin-num">${esc(money(p.costBudget))}</td>
-        <td class="fin-num ${marginTone(p.plannedMargin)}" style="font-weight:700">${esc(money(p.plannedMargin))}</td>
-        <td class="fin-num">${esc(money(p.revenue))}</td>
-        <td class="fin-num finance-pos">${esc(money(p.received))}</td>
-        <td class="fin-num">${esc(money(p.cost))}</td>
-        <td class="fin-num ${marginTone(p.result)}" style="font-weight:800">${esc(money(p.result))}</td>
-        <td class="fin-num ${marginTone(p.margin)}">${esc(pct(p.margin))}</td>
-      </tr>`
-=======
       (a) => `
       <li>
         <a class="ov-alert ov-alert--${a.tone}" href="${a.href}">
@@ -590,7 +573,6 @@ function renderAlerts() {
           <span class="material-symbols-outlined ov-alert-go">chevron_right</span>
         </a>
       </li>`
->>>>>>> origin/dev-leite
     )
     .join("");
 }
@@ -661,7 +643,7 @@ function renderProjects() {
         <td>
           <div class="ov-project">
             <span class="ov-project-name">${esc(p.project.name)}</span>
-            <span class="ov-project-meta">${esc([p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
+            <span class="ov-project-meta">${esc([p.project.referencia || p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
           </div>
         </td>
         <td class="fin-num">${esc(compact(p.forecast))}</td>

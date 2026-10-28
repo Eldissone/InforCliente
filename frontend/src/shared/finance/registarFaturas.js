@@ -355,20 +355,6 @@ function renderTable() {
   const rows = items
     .map((inv) => {
       const cur = inv.project?.currency || "AOA";
-<<<<<<< HEAD
-      const overdue = inv.status === "ATRASADO";
-      const obraName = inv.project?.name || "—";
-      const obraRef = String(inv.project?.referencia || "").trim() || "—";
-      const clientName = inv.client?.name || "—";
-      return `
-      <tr data-id="${esc(inv.id)}" class="${overdue ? "fin-row--overdue" : ""}">
-        <td class="fin-obra-cell">
-          <div class="fin-obra-name" title="${esc(obraName)}">${esc(obraName)}</div>
-          <div class="fin-obra-ref" title="${esc(obraRef)}">${esc(obraRef)}</div>
-        </td>
-        <td class="fin-client-cell">
-          <div class="fin-client-name" title="${esc(clientName)}">${esc(clientName)}</div>
-=======
       const open = state.expanded.has(inv.id);
       const receivedPct = num(inv.netAmount) > 0 ? (num(inv.receivedAmount) / num(inv.netAmount)) * 100 : 0;
       return `
@@ -385,12 +371,11 @@ function renderTable() {
               <div class="ov-project-meta">${esc(formatDateOnly(inv.docDate))}${inv.measurement ? ` · ${esc(inv.measurement.reportNumber || "AM")}` : ""}</div>
             </div>
           </div>
->>>>>>> origin/dev-leite
         </td>
         <td>
           <div class="ov-project">
             <span class="ov-project-name">${esc(inv.project?.name || "—")}</span>
-            <span class="ov-project-meta">${esc(inv.client?.name || inv.project?.code || "")}</span>
+            <span class="ov-project-meta">${esc(inv.client?.name || inv.project?.referencia || inv.project?.code || "")}</span>
           </div>
         </td>
         <td>
@@ -448,11 +433,7 @@ function renderTable() {
     <table class="fin-table inv-table">
       <thead>
         <tr>
-<<<<<<< HEAD
-          <th class="fin-obra-cell">Obra</th><th class="fin-client-cell">Cliente</th><th>Nº Doc</th><th>Data Doc</th><th>Venc.</th><th>AM</th>
-=======
           <th>Documento</th><th>Obra · Cliente</th><th>Vencimento</th>
->>>>>>> origin/dev-leite
           <th style="text-align:right">V. Ilíquido</th>
           <th style="text-align:right">V. Líquido</th>
           <th style="text-align:right">Recebido</th>
@@ -634,7 +615,7 @@ async function openInvoiceModal(invoice) {
               <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
                 <option value="">Selecionar obra…</option>
                 ${state.projects
-                  .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+                  .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc([p.referencia || p.code, p.name].filter(Boolean).join(" — "))}</option>`)
                   .join("")}
               </select>
             </div>
@@ -800,90 +781,9 @@ async function openInvoiceModal(invoice) {
           </div>
           <p class="finance-scan-status" id="inv_docNote">${
             aiReady
-<<<<<<< HEAD
-              ? "Carregue o PDF ou a fotografia da fatura e use «Ler fatura com IA» para preencher os campos automaticamente."
-              : "Leitura automática indisponível: falta configurar GEMINI_API_KEY no servidor. Pode carregar o PDF e preencher os campos à mão."
-          }
-        </p>
-      </div>
-
-      <div class="finance-field finance-field--full">
-        <label class="finance-label" for="inv_project">Obra <span style="color:#dc2626">*</span></label>
-        <select id="inv_project" class="finance-select" required ${isEdit ? "disabled" : ""}>
-          <option value="">Selecionar obra…</option>
-          ${state.projects
-            .map((p) => `<option value="${esc(p.id)}" ${invoice?.projectId === p.id ? "selected" : ""}>${esc(p.referencia ? `${p.referencia} — ${p.name}` : p.name)}</option>`)
-            .join("")}
-        </select>
-      </div>
-      <div class="finance-field">
-        <label class="finance-label">Cliente</label>
-        <input id="inv_client" class="finance-input" type="text" value="${esc(invoice?.client?.name || "")}" readonly placeholder="—" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_measurement">Auto de Medição (em aberto)</label>
-        <select id="inv_measurement" class="finance-select" ${isEdit ? "disabled" : ""}>
-          <option value="">Sem AM associado</option>
-        </select>
-      </div>
-
-      <p class="finance-section-title">Documento</p>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_docNumber">Nº Doc</label>
-        <input id="inv_docNumber" class="finance-input" type="text" value="${esc(invoice?.docNumber || "")}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_docDate">Data Doc <span style="color:#dc2626">*</span></label>
-        <input id="inv_docDate" class="finance-input" type="date" required value="${invoice?.docDate ? esc(toDateKey(invoice.docDate)) : toDateKey(new Date())}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_dueDate">Data Vencimento</label>
-        <input id="inv_dueDate" class="finance-input" type="date" value="${invoice?.dueDate ? esc(toDateKey(invoice.dueDate)) : ""}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_gross">V. Ilíquido <span style="color:#dc2626">*</span></label>
-        <input id="inv_gross" class="finance-input" type="number" min="0" step="0.01" required value="${invoice ? Number(invoice.grossAmount) : ""}" />
-      </div>
-
-      <p class="finance-section-title">Deduções e impostos (%)</p>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_withholding">Retenção na Fonte (%)</label>
-        <input id="inv_withholding" class="finance-input" type="number" min="0" max="100" step="0.01" value="${numOr(invoice?.withholdingPercent, "")}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_vat">IVA (%)</label>
-        <input id="inv_vat" class="finance-input" type="number" min="0" max="100" step="0.01" value="${numOr(invoice?.vatPercent, "")}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_car">Seguro CAR (%)</label>
-        <input id="inv_car" class="finance-input" type="number" min="0" max="100" step="0.01" value="${numOr(invoice?.carPercent, "")}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_guarantee">Garantia (%)</label>
-        <input id="inv_guarantee" class="finance-input" type="number" min="0" max="100" step="0.01" value="${numOr(invoice?.guaranteePercent, "")}" />
-      </div>
-      <div class="finance-field finance-field--full">
-        <label class="finance-check">
-          <input id="inv_vatCativo" type="checkbox" ${invoice?.flagVatCativo ? "checked" : ""} />
-          IVA cativo (não é somado ao valor do recebimento)
-        </label>
-        <p class="finance-note">A configuração de faturação da obra é carregada automaticamente ao escolher a obra.</p>
-      </div>
-      <div class="finance-field finance-field--full">
-        <button id="inv_saveConfig" type="button" class="finance-btn finance-btn--ghost" style="align-self:flex-start">
-          <span class="material-symbols-outlined">save</span>Guardar % na configuração da obra
-        </button>
-      </div>
-
-      <div class="finance-preview finance-field--full">
-        <div class="finance-preview-item">
-          <span class="finance-preview-label">Valor IVA</span>
-          <span id="pv_vat" class="finance-preview-value">—</span>
-=======
               ? '<span class="material-symbols-outlined">info</span>Escolha o ficheiro e use «Ler com IA» para preencher os campos. Confira sempre os valores.'
               : '<span class="material-symbols-outlined">info</span>Leitura automática indisponível (falta GEMINI_API_KEY). Anexe o ficheiro e preencha à mão.'
           }</p>
->>>>>>> origin/dev-leite
         </div>
 
         <div class="inv-summary">

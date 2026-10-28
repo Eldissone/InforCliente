@@ -485,15 +485,10 @@ function renderTable() {
       return `
       <tr>
         <td>
-<<<<<<< HEAD
-          <div style="font-weight:700;color:#0f172a">${esc(r.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(r.project.referencia || "—")}</div>
-=======
           <div class="ov-project">
             <span class="ov-project-name">${esc(p.project.name)}</span>
-            <span class="ov-project-meta">${esc([p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
+            <span class="ov-project-meta">${esc([p.project.referencia || p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
           </div>
->>>>>>> origin/dev-leite
         </td>
         <td class="fin-num">${forecast > 0 ? esc(money(forecast, cur)) : `<span class="ov-muted">Sem orçamento</span>`}</td>
         <td class="fin-num">

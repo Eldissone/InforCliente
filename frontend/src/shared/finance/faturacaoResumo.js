@@ -212,30 +212,6 @@ function renderPortfolio(t) {
     wrap.innerHTML = `<div class="ov-empty"><span class="material-symbols-outlined">target</span>Nenhuma obra tem venda prevista. Defina a tabela de quantidades ou o valor da obra.</div>`;
     return;
   }
-<<<<<<< HEAD
-  const body = items
-    .map(
-      (row) => `
-      <tr>
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(row.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(row.project.referencia || "—")}</div>
-        </td>
-        <td class="fin-num">${esc(money(row.forecastValue ?? row.project?.budgetTotal))}</td>
-        <td class="fin-num">${esc(money(row.billedValue))}</td>
-        <td class="fin-num">${esc(String(row.withAmCount))}</td>
-        <td class="fin-num">${esc(money(row.withAmValue))}</td>
-        <td class="fin-num">${esc(String(row.withoutAmCount))}</td>
-        <td class="fin-num">${esc(money(row.withoutAmValue))}</td>
-        <td>${bar(row.executedPct, "finance-bar-fill--blue")}</td>
-        <td>${bar(row.remainingPct, "finance-bar-fill--amber")}</td>
-      </tr>`
-    )
-    .join("");
-
-  const weighted = totals.budget > 0 ? totals.executedWeighted / totals.budget : 0;
-=======
->>>>>>> origin/dev-leite
   wrap.innerHTML = `
     ${stackHtml({ ...Object.fromEntries(PARTS.map((p) => [p.pct, t.pcts[p.key]])), ...Object.fromEntries(PARTS.map((p) => [p.value, t.values[p.key]])) }, { tall: true })}
     ${legendHtml(t.values, t.pcts)}`;

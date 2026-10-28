@@ -587,30 +587,6 @@ function renderSchedule(wrap) {
     wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">event_available</span>Nenhuma necessidade à espera de agendamento.</div>`;
     return;
   }
-<<<<<<< HEAD
-  const body = payables
-    .slice(0, 50)
-    .map(
-      (p) => `
-      <tr>
-        <td>${esc(dateOnly(p.paymentDate))}</td>
-        <td>
-          <div style="font-weight:700;color:#0f172a">${esc(p.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project?.referencia || "—")}</div>
-        </td>
-        <td>${esc(p.supplierRef?.name || p.supplier || "—")}</td>
-        <td style="max-width:280px">${esc(p.description || "—")}</td>
-        <td class="fin-num">${esc(money(p.budgetedAmount))}</td>
-        <td>${
-          p.status === "EM_ESPERA"
-            ? `<span class="finance-badge finance-badge--slate">Em Espera</span>`
-            : `<span class="finance-badge finance-badge--amber">Pendente</span>`
-        }</td>
-      </tr>`
-    )
-    .join("");
-=======
->>>>>>> origin/dev-leite
   wrap.innerHTML = `
     <table class="fin-table ac-table">
       <thead><tr><th>Enviado</th><th>Necessidade · Fornecedor</th><th>Obra · Centro</th><th>Prazo do fornecedor</th><th style="text-align:right">Valor</th><th></th></tr></thead>
