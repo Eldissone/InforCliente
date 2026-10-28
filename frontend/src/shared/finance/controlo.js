@@ -2,395 +2,630 @@ import { apiRequest } from "../../services/api.js";
 import { toast } from "../ui.js";
 import { formatCurrency } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, drawAreaChart, drawBarChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
+import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, destroyCharts, TONES } from "./charts.js";
+import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf } from "./widgets.js";
 
 /**
  * Ecrã «Controlo Financeiro».
  *
- * Fecha o ciclo do gestor financeiro: confronta o previsto com o realizado,
- * mostra o onde se está a ganhar ou a perder margem e o dinheiro que entrou e
- * saiu. A parte de cima é o resumo; o «Controlo por obra» abaixo é onde se
- * atua, com o desvio de custo e a margem de cada obra.
+ * Confronta o previsto com o realizado tendo em conta o avanço da obra:
+ *  - custo esperado à data = orçamento de custo × avanço (físico; sem ele, a
+ *    tabela de quantidades; em último caso, a faturação);
+ *  - desvio à data = realizado − esperado (positivo = gasta acima do que devia
+ *    para o que já está feito). Obras sem avanço não entram no desvio à data;
+ *  - custo final previsto = realizado + comprometido, nunca abaixo do orçamento;
+ *  - resultado = faturado − custo realizado, ambos sem IVA (o IVA dedutível
+ *    dos pagamentos sai do custo).
  */
 
-/** Desvio de custo (acima do previsto) a partir do qual se avisa. */
+/** Desvio (em % do esperado / do orçamento) a partir do qual se avisa. */
 const DEVIATION_ALERT_PCT = 5;
+/** Margem realizada abaixo da prevista, em pontos percentuais, que gera aviso. */
+const MARGIN_GAP_ALERT = 5;
 
-function money(value) {
-  return formatCurrency(Number(value) || 0, "AOA");
+const PROGRESS_SOURCE = {
+  FISICO: "avanço físico",
+  QUANTIDADES: "pelas quantidades",
+  FATURACAO: "pela faturação",
+  SEM_AVANCO: "sem avanço",
+};
+
+const state = {
+  months: 12,
+  query: "",
+  scope: "active",
+  sort: "deviation",
+  data: null,
+};
+
+function money(value, currency) {
+  return formatCurrency(Number(value) || 0, currency || "AOA");
 }
 
-function pct(value) {
+function pct(value, digits = 1) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return "0.00%";
-  const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(2)}%`;
+  return Number.isFinite(n) ? `${n.toFixed(digits)}%` : "—";
 }
 
-function deviationTone(value) {
-  const n = Number(value) || 0;
-  if (n > 0.005) return "finance-neg";
-  if (n < -0.005) return "finance-pos";
-  return "finance-muted";
+function signed(value) {
+  const n = num(value);
+  return `${n > 0 ? "+" : ""}${compact(n)}`;
 }
+
+function signedPct(value) {
+  const n = num(value);
+  return `${n > 0 ? "+" : ""}${pct(n)}`;
+}
+
+/** Custo acima do esperado é mau (vermelho); abaixo é bom (verde). */
+function costTone(value) {
+  const n = num(value);
+  if (n > 0.005) return "neg";
+  if (n < -0.005) return "pos";
+  return "muted";
+}
+
+function hasMovement(p) {
+  return [p.forecastCost, p.realizedCost, p.committedCost, p.saleForecast, p.revenue].some((v) => num(v) > 0);
+}
+
+function isTracked(p) {
+  return p.deviationToDate !== null && p.deviationToDate !== undefined && num(p.forecastCost) > 0;
+}
+
+/* ─── Estrutura ───────────────────────────────────────────────────────────── */
 
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
-    <div id="ctrlKpis" class="finance-kpi-grid"></div>
+    <div class="ov">
+      <div id="ctrlKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
+      <div id="ctrlStrip" class="ov-strip">${skeletonHtml(6, "cell")}</div>
 
-    <div class="finance-chart-grid">
-      ${chartCardHtml({
-        id: "ctrlChartCash",
-        title: "Entradas e saídas de dinheiro",
-        subtitle: "Recebimentos do cliente contra custos pagos, nos últimos 12 meses",
-        hint: "Uma barra de saídas acima das entradas no mesmo mês significa que a tesouraria está a ser consumida.",
-        span: 2,
-        height: 320,
-      })}
-      ${chartCardHtml({
-        id: "ctrlChartDeviation",
-        title: "Desvio de custo por obra",
-        subtitle: "Realizado menos previsto (positivo = acima do orçamento)",
-        height: 320,
-      })}
-      ${chartCardHtml({
-        id: "ctrlChartMargins",
-        title: "Margem prevista vs realizada",
-        subtitle: "As 8 obras com maior venda prevista",
-        span: 2,
-        height: 320,
-      })}
-      ${chartCardHtml({
-        id: "ctrlChartSources",
-        title: "Custos por fonte",
-        subtitle: "Onde está o dinheiro a ser gasto",
-        height: 300,
-      })}
-    </div>
-
-    <section id="ctrlAlerts" class="finance-card" style="margin-bottom:1.5rem"></section>
-
-    <section class="finance-card" style="margin-bottom:1.5rem">
-      <div class="finance-chart-head">
-        <h2 class="finance-chart-title">Previsto vs realizado por obra</h2>
-        <p class="finance-chart-subtitle">
-          Custo previsto = orçamento dos centros de custo. Venda prevista = tabela de quantidades da obra.
-        </p>
+      <div class="ov-row ov-row--8-4">
+        ${chartCardHtml({
+          id: "ctrlChartMonthly",
+          title: "Faturado, recebido e custo",
+          subtitle: "Por mês · a linha é o resultado acumulado (faturado − custo)",
+          hint: "Custo pela data do custo, com IVA (como saiu do caixa). O resultado dos cartões de cima é sem IVA.",
+          height: 280,
+          actionsHtml: `
+            <div class="finance-seg finance-seg--sm" id="ctrlRange">
+              <button type="button" data-months="6">6M</button>
+              <button type="button" data-months="12" class="active">12M</button>
+            </div>`,
+          beforeChartHtml: `<div id="ctrlFlowTotals" class="ov-flow-totals"></div>`,
+        })}
+        <section class="finance-card ov-panel">
+          <header class="finance-chart-head">
+            <div>
+              <h2 class="finance-chart-title">Onde atuar</h2>
+              <p class="finance-chart-subtitle">Obras com desvio, margem abaixo da prevista ou dados em falta</p>
+            </div>
+          </header>
+          <ul id="ctrlAlerts" class="ov-alerts">${skeletonHtml(3, "line")}</ul>
+        </section>
       </div>
-      <div id="ctrlProjects" class="finance-table-scroll"></div>
-    </section>
 
-    <section class="finance-card">
-      <div class="finance-chart-head">
-        <h2 class="finance-chart-title">Fluxo de tesouraria</h2>
-        <p class="finance-chart-subtitle">Entradas recebidas contra custos já pagos no total do período.</p>
+      <div class="ov-row ov-row--6-6">
+        ${chartCardHtml({
+          id: "ctrlChartDeviation",
+          title: "Desvio de custo à data",
+          subtitle: "Realizado − esperado para o avanço de cada obra",
+          hint: "Só obras com orçamento de custo e avanço conhecido.",
+          height: 300,
+        })}
+        ${chartCardHtml({
+          id: "ctrlChartMargins",
+          title: "Margem prevista vs realizada",
+          subtitle: "Em % da venda · obras com faturação",
+          hint: "Prevista = venda prevista − orçamento de custo. Realizada = faturado − custo realizado, sem IVA.",
+          height: 300,
+        })}
       </div>
-      <div id="ctrlCash"></div>
-    </section>`;
+
+      <section class="finance-card ov-panel" id="ctrlTableCard">
+        <header class="finance-chart-head finance-chart-head--row">
+          <div>
+            <h2 class="finance-chart-title">Controlo por obra</h2>
+            <p class="finance-chart-subtitle" id="ctrlHint">—</p>
+          </div>
+          <div class="ov-table-tools">
+            <div class="finance-seg finance-seg--sm" id="ctrlScope">
+              <button type="button" data-scope="active" class="active"><span>Com movimento</span></button>
+              <button type="button" data-scope="all"><span>Todas</span></button>
+            </div>
+            <select id="ctrlSort" class="finance-select inv-filter" title="Ordenar">
+              <option value="deviation">Maior desvio à data</option>
+              <option value="eac">Maior derrapagem final</option>
+              <option value="margin">Menor margem</option>
+              <option value="sale">Maior venda prevista</option>
+            </select>
+            <label class="ov-search">
+              <span class="material-symbols-outlined">search</span>
+              <input id="ctrlSearch" type="search" placeholder="Obra ou código…" autocomplete="off" />
+            </label>
+          </div>
+        </header>
+        <div id="ctrlTable" class="finance-table-scroll"></div>
+      </section>
+    </div>`;
+
+  document.querySelectorAll("#ctrlRange button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.months = Number(btn.dataset.months);
+      document.querySelectorAll("#ctrlRange button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderMonthly();
+    });
+  });
+  document.querySelectorAll("#ctrlScope button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.scope = btn.dataset.scope;
+      document.querySelectorAll("#ctrlScope button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderTable();
+    });
+  });
+  document.getElementById("ctrlSort").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    renderTable();
+  });
+  document.getElementById("ctrlSearch").addEventListener("input", (e) => {
+    state.query = e.target.value;
+    renderTable();
+  });
 }
 
 /* ─── Indicadores ─────────────────────────────────────────────────────────── */
 
-function renderKpis(data) {
-  const t = data.totals || {};
+function renderKpis() {
+  const t = state.data.totals || {};
+  const items = state.data.byProject || [];
+  const tracked = items.filter(isTracked);
+  const untracked = items.filter((p) => !isTracked(p) && num(p.realizedCost) > 0).length;
+  const marginGap = num(t.marginBase) - num(t.plannedMarginPct);
+  const cashNet = num(t.received) - num(t.realizedCost);
+  // Só as obras com avanço: realizado delas = esperado + desvio.
+  const trackedRealized = num(t.expectedCost) + num(t.deviationToDate);
+  const realizedVsExpected = num(t.expectedCost) > 0 ? (trackedRealized / num(t.expectedCost)) * 100 : 0;
+
   const cards = [
-    { label: "Custo Previsto", value: money(t.forecastCost), sub: "Orçamento dos centros de custo", tone: "blue", icon: "target" },
-    { label: "Custo Realizado", value: money(t.realizedCost), sub: "Todas as fontes de custo", tone: "amber", icon: "payments" },
-    { label: "Venda Prevista", value: money(t.saleForecast), sub: "Tabela de quantidades da obra", tone: "slate", icon: "request_quote" },
     {
-      label: "Margem Prevista",
-      value: money(t.plannedMargin),
-      sub: `${pct(t.plannedMarginPct)} sobre a venda prevista`,
-      tone: Number(t.plannedMargin) >= 0 ? "emerald" : "red",
-      icon: "percent",
-    },
-    { label: "Receita", value: money(t.revenue), sub: "Faturação emitida", tone: "emerald", icon: "receipt_long" },
-    {
-      label: "Resultado",
-      value: money(t.result),
-      sub: `Margem ${pct(t.margin)}`,
-      tone: Number(t.result) >= 0 ? "emerald" : "red",
+      key: "result",
+      label: "Resultado (sem IVA)",
       icon: "trending_up",
+      tone: num(t.resultBase) >= 0 ? "emerald" : "red",
+      value: compact(t.resultBase),
+      badge: pct(t.marginBase),
+      badgeTone: marginGap >= 0 ? "emerald" : "amber",
+      body: `
+        <div class="ov-kpi-compare">
+          <span>Faturado ${esc(compact(t.revenue))} − custo ${esc(compact(t.realizedCostBase))}</span>
+        </div>`,
+      foot: `Margem prevista ${pct(t.plannedMarginPct)}`,
     },
     {
-      label: "Desvio de Custo",
-      value: money(t.costDeviation),
-      sub: Number(t.costDeviation) > 0 ? "Acima do orçamento previsto" : "Dentro do orçamento previsto",
-      tone: Number(t.costDeviation) > 0 ? "red" : "emerald",
-      icon: "monitor_heart",
+      key: "deviation",
+      label: "Desvio de custo à data",
+      icon: "rule",
+      tone: num(t.deviationToDate) > 0 ? "red" : "emerald",
+      value: tracked.length ? signed(t.deviationToDate) : "—",
+      badge: tracked.length ? signedPct(t.deviationToDatePct) : null,
+      badgeTone: num(t.deviationToDatePct) > DEVIATION_ALERT_PCT ? "red" : num(t.deviationToDate) > 0 ? "amber" : "emerald",
+      body: tracked.length
+        ? meter([{ value: Math.min(realizedVsExpected, 100), tone: num(t.deviationToDate) > 0 ? "red" : "blue" }], { marker: 100 / Math.max(realizedVsExpected / 100, 1), title: "Realizado face ao esperado" })
+        : `<div class="ov-kpi-compare"><span>Nenhuma obra com avanço registado</span></div>`,
+      foot: tracked.length
+        ? `Gasto ${compact(trackedRealized)} de ${compact(t.expectedCost)} esperado · ${tracked.length} obra${tracked.length === 1 ? "" : "s"}${untracked ? ` · ${untracked} sem avanço` : ""}`
+        : "Registe o avanço físico nas obras",
     },
-    { label: "Por Faturar", value: money(t.toInvoice), sub: "Venda prevista ainda não faturada", tone: "blue", icon: "hourglass_top" },
+    {
+      key: "eac",
+      label: "Custo final previsto",
+      icon: "flag",
+      tone: num(t.eacDeviation) > 0 ? "amber" : "blue",
+      value: compact(t.eac),
+      badge: num(t.eacDeviation) > 0 ? signedPct(t.eacDeviationPct) : "No orçamento",
+      badgeTone: num(t.eacDeviation) > 0 ? "red" : "emerald",
+      body: `
+        <div class="ov-kpi-compare">
+          <span>Orçamento de custo ${esc(compact(t.forecastCost))}</span>
+        </div>`,
+      foot: num(t.eacDeviation) > 0 ? `${signed(t.eacDeviation)} acima do orçamento` : "Realizado + comprometido dentro do orçamento",
+    },
+    {
+      key: "cash",
+      label: "Caixa das obras",
+      icon: "account_balance_wallet",
+      tone: cashNet >= 0 ? "violet" : "red",
+      value: signed(cashNet),
+      body: `
+        <div class="ov-kpi-compare">
+          <span>Recebido ${esc(compact(t.received))} − pago ${esc(compact(t.realizedCost))}</span>
+        </div>`,
+      foot: num(t.revenue) > 0 ? `${pct((num(t.received) / num(t.revenue)) * 100)} do faturado recebido` : "Sem faturação",
+    },
   ];
-  document.getElementById("ctrlKpis").innerHTML = cards
-    .map(
-      (c) => `
-      <div class="finance-kpi finance-kpi--${c.tone}">
-        <span class="finance-kpi-label">
-          <span class="material-symbols-outlined" style="font-size:15px">${c.icon}</span>${esc(c.label)}
-        </span>
-        <span class="finance-kpi-value">${esc(c.value)}</span>
-        <span class="finance-kpi-sub">${esc(c.sub)}</span>
-      </div>`
-    )
-    .join("");
+  document.getElementById("ctrlKpis").innerHTML = kpiCardsHtml(cards, "ctrl");
 }
 
-/* ─── Alertas de controlo ─────────────────────────────────────────────────── */
+function renderStrip() {
+  const t = state.data.totals || {};
+  const executed = num(t.saleForecast) > 0 ? (num(t.revenue) / num(t.saleForecast)) * 100 : 0;
+  const consumed = num(t.forecastCost) > 0 ? ((num(t.realizedCost) + num(t.committedCost)) / num(t.forecastCost)) * 100 : 0;
+  document.getElementById("ctrlStrip").innerHTML = stripHtml([
+    { label: "Venda prevista", icon: "request_quote", value: compact(t.saleForecast), sub: "Tabela de quantidades", title: money(t.saleForecast) },
+    { label: "Faturado", icon: "receipt_long", value: compact(t.revenue), sub: `${pct(executed)} da venda`, href: "/Financeiro/faturacao", title: money(t.revenue) },
+    { label: "Por faturar", icon: "pending_actions", value: compact(t.toInvoice), sub: "Venda ainda por faturar", subTone: num(t.toInvoice) > 0 ? "warn" : null, title: money(t.toInvoice) },
+    { label: "Orçamento de custo", icon: "account_tree", value: compact(t.forecastCost), sub: "Centros de custo", title: money(t.forecastCost) },
+    { label: "Custo realizado", icon: "payments", value: compact(t.realizedCost), sub: `IVA dedutível ${compact(num(t.realizedCost) - num(t.realizedCostBase))}`, href: "/Financeiro/custos/realizados", title: money(t.realizedCost) },
+    { label: "Comprometido", icon: "hourglass_top", value: compact(t.committedCost), sub: `${pct(consumed)} do orçamento usado`, subTone: consumed > 100 ? "neg" : null, href: "/Financeiro/contas?tab=pagar", title: money(t.committedCost) },
+  ]);
+}
 
-function renderAlerts(data) {
-  const items = data.byProject || [];
-  const overBudget = items
-    .filter((p) => Number(p.costDeviationPct) > DEVIATION_ALERT_PCT && Number(p.realizedCost) > 0)
-    .sort((a, b) => Number(b.costDeviationPct) - Number(a.costDeviationPct));
+/* ─── Alertas ─────────────────────────────────────────────────────────────── */
 
-  const marginDrop = items
-    .filter(
-      (p) =>
-        Number(p.saleForecast) > 0 &&
-        Number(p.revenue) > 0 &&
-        Number(p.margin) < Number(p.plannedMarginPct) - DEVIATION_ALERT_PCT
-    )
-    .sort((a, b) => Number(a.margin) - Number(b.margin));
+function buildAlerts() {
+  const alerts = [];
+  (state.data.byProject || []).forEach((p) => {
+    const name = p.project.name;
+    if (isTracked(p) && num(p.deviationToDatePct) > DEVIATION_ALERT_PCT) {
+      alerts.push({
+        tone: "red",
+        icon: "trending_up",
+        weight: num(p.deviationToDate),
+        title: `${name}: custo acima do avanço`,
+        text: `${signed(p.deviationToDate)} (${signedPct(p.deviationToDatePct)}) face ao esperado para ${pct(p.progressPct, 0)} de avanço`,
+        project: name,
+      });
+    }
+    if (num(p.eacDeviation) > 0 && num(p.eacDeviationPct) > DEVIATION_ALERT_PCT) {
+      alerts.push({
+        tone: "red",
+        icon: "flag",
+        weight: num(p.eacDeviation),
+        title: `${name}: vai ultrapassar o orçamento`,
+        text: `Realizado + comprometido ${compact(p.eac)} · ${signed(p.eacDeviation)} acima`,
+        project: name,
+      });
+    }
+    if (num(p.revenue) > 0 && num(p.saleForecast) > 0 && num(p.plannedMarginPct) - num(p.marginBase) > MARGIN_GAP_ALERT) {
+      alerts.push({
+        tone: "amber",
+        icon: "percent",
+        weight: num(p.revenue),
+        title: `${name}: margem abaixo da prevista`,
+        text: `Realizada ${pct(p.marginBase)} contra ${pct(p.plannedMarginPct)} prevista`,
+        project: name,
+      });
+    }
+    if (num(p.realizedCost) > 0 && num(p.forecastCost) <= 0) {
+      alerts.push({
+        tone: "amber",
+        icon: "account_tree",
+        weight: num(p.realizedCost),
+        title: `${name}: custos sem orçamento`,
+        text: `${compact(p.realizedCost)} gastos sem orçamento de custo nos centros de custo`,
+        project: name,
+      });
+    } else if (num(p.realizedCost) > 0 && p.progressSource === "SEM_AVANCO") {
+      alerts.push({
+        tone: "amber",
+        icon: "construction",
+        weight: num(p.realizedCost) / 2,
+        title: `${name}: sem avanço registado`,
+        text: `${compact(p.realizedCost)} gastos — registe o avanço físico para medir o desvio`,
+        project: name,
+      });
+    }
+    if (num(p.revenue) > 0 && num(p.saleForecast) <= 0) {
+      alerts.push({
+        tone: "amber",
+        icon: "request_quote",
+        weight: num(p.revenue) / 4,
+        title: `${name}: faturação sem venda prevista`,
+        text: `${compact(p.revenue)} faturados sem tabela de quantidades nem valor global`,
+        project: name,
+      });
+    }
+  });
+  return alerts.sort((a, b) => (a.tone === b.tone ? b.weight - a.weight : a.tone === "red" ? -1 : 1));
+}
 
-  const negative = items.filter((p) => Number(p.result) < 0 && Number(p.revenue) > 0);
-
-  const wrap = document.getElementById("ctrlAlerts");
-  const none = !overBudget.length && !marginDrop.length && !negative.length;
-
-  if (none) {
-    wrap.innerHTML = `
-      <div class="finance-chart-head" style="margin-bottom:0.5rem">
-        <h2 class="finance-chart-title">Alertas de controlo</h2>
-        <p class="finance-chart-subtitle">Só aparecem aqui as obras que precisam de atenção.</p>
-      </div>
-      <div class="finance-empty" style="padding:1.25rem">
-        <span class="material-symbols-outlined">verified</span>
-        Sem alertas: nenhuma obra está acima do orçamento de custo nem com margem abaixo da prevista.
-      </div>`;
+function renderAlerts() {
+  const alerts = buildAlerts();
+  const list = document.getElementById("ctrlAlerts");
+  if (!alerts.length) {
+    list.innerHTML = `<li class="ov-empty"><span class="material-symbols-outlined">verified</span>Tudo dentro do previsto.</li>`;
     return;
   }
+  const shown = alerts.slice(0, 5);
+  list.innerHTML =
+    shown
+      .map(
+        (a) => `
+      <li>
+        <a class="ov-alert ov-alert--${a.tone}" href="#ctrlTableCard" data-project="${esc(a.project)}">
+          <span class="ov-alert-icon"><span class="material-symbols-outlined">${a.icon}</span></span>
+          <span class="ov-alert-text">
+            <strong>${esc(a.title)}</strong>
+            <span title="${esc(a.text)}">${esc(a.text)}</span>
+          </span>
+          <span class="material-symbols-outlined ov-alert-go">chevron_right</span>
+        </a>
+      </li>`
+      )
+      .join("") +
+    (alerts.length > shown.length ? `<li class="ov-table-more">+${alerts.length - shown.length} avisos na tabela abaixo</li>` : "");
 
-  const block = (title, icon, rows, render) =>
-    !rows.length
-      ? ""
-      : `
-      <div style="margin-bottom:1rem">
-        <p class="finance-chart-title" style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.5rem">
-          <span class="material-symbols-outlined" style="font-size:17px;color:#dc2626">${icon}</span>${esc(title)}
-        </p>
-        <div class="finance-table-scroll">
-          <table class="fin-table" style="min-width:720px">
-            <thead><tr><th>Obra</th>${render.header}</tr></thead>
-            <tbody>${rows.map(render.row).join("")}</tbody>
-          </table>
-        </div>
-      </div>`;
-
-  wrap.innerHTML = `
-    <div class="finance-chart-head">
-      <h2 class="finance-chart-title">Alertas de controlo</h2>
-      <p class="finance-chart-subtitle">
-        Obras que precisam de atenção: desvio de custo acima de ${DEVIATION_ALERT_PCT}%, margem realizada
-        abaixo da prevista, ou resultado negativo.
-      </p>
-    </div>
-    ${block("Custo acima do orçamento", "trending_up", overBudget, {
-      header: `<th style="text-align:right">Custo Previsto</th><th style="text-align:right">Realizado</th><th style="text-align:right">Desvio</th><th style="text-align:right">Desvio %</th>`,
-      row: (p) => `
-        <tr>
-          <td><div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div><div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.code || "")}</div></td>
-          <td class="fin-num">${esc(money(p.forecastCost))}</td>
-          <td class="fin-num">${esc(money(p.realizedCost))}</td>
-          <td class="fin-num finance-neg" style="font-weight:800">${esc(money(p.costDeviation))}</td>
-          <td class="fin-num finance-neg">${esc(pct(p.costDeviationPct))}</td>
-        </tr>`,
-    })}
-    ${block("Margem abaixo da prevista", "percent", marginDrop, {
-      header: `<th style="text-align:right">Margem Prev.</th><th style="text-align:right">Margem Realiz.</th><th style="text-align:right">Diferença</th>`,
-      row: (p) => `
-        <tr>
-          <td><div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div><div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.code || "")}</div></td>
-          <td class="fin-num">${esc(pct(p.plannedMarginPct))}</td>
-          <td class="fin-num finance-neg" style="font-weight:700">${esc(pct(p.margin))}</td>
-          <td class="fin-num finance-neg">${esc(pct(Number(p.margin) - Number(p.plannedMarginPct)))}</td>
-        </tr>`,
-    })}
-    ${block("Resultado negativo", "warning", negative, {
-      header: `<th style="text-align:right">Receita</th><th style="text-align:right">Custo</th><th style="text-align:right">Resultado</th>`,
-      row: (p) => `
-        <tr>
-          <td><div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div><div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.code || "")}</div></td>
-          <td class="fin-num">${esc(money(p.revenue))}</td>
-          <td class="fin-num">${esc(money(p.realizedCost))}</td>
-          <td class="fin-num finance-neg" style="font-weight:800">${esc(money(p.result))}</td>
-        </tr>`,
-    })}`;
+  list.querySelectorAll("[data-project]").forEach((a) =>
+    a.addEventListener("click", () => {
+      state.query = a.dataset.project;
+      state.scope = "all";
+      document.getElementById("ctrlSearch").value = state.query;
+      document.querySelectorAll("#ctrlScope button").forEach((b) => b.classList.toggle("active", b.dataset.scope === "all"));
+      renderTable();
+    })
+  );
 }
 
 /* ─── Gráficos ────────────────────────────────────────────────────────────── */
 
-function renderCharts(data) {
-  const monthly = data.charts?.monthly || [];
-  drawAreaChart("ctrlChartCash", {
-    categories: monthly.map((m) => m.label),
-    series: [
-      { name: "Recebimentos", key: "received", color: TONES.emerald, data: monthly.map((m) => Number(m.received) || 0) },
-      { name: "Custos pagos", key: "cost", color: TONES.red, data: monthly.map((m) => Number(m.cost) || 0) },
-    ],
-    height: 320,
-  });
+function renderMonthly() {
+  const monthly = (state.data.charts?.monthly || []).slice(-state.months);
+  const sum = (key) => monthly.reduce((a, m) => a + num(m[key]), 0);
+  const invoiced = sum("invoiced");
+  const received = sum("received");
+  const cost = sum("cost");
+  document.getElementById("ctrlFlowTotals").innerHTML = [
+    { label: "Faturado", value: invoiced, tone: "blue" },
+    { label: "Recebido", value: received, tone: "emerald" },
+    { label: "Custo", value: cost, tone: "red" },
+    { label: "Resultado", value: invoiced - cost, tone: invoiced - cost >= 0 ? "emerald" : "red" },
+  ]
+    .map(
+      (c) => `
+      <div class="ov-flow-total">
+        <span><i class="ov-dot ov-dot--${c.tone}"></i>${c.label}</span>
+        <strong class="${c.label === "Resultado" ? `ov-${toneOf(c.value)}` : ""}">${esc(compact(c.value))}</strong>
+      </div>`
+    )
+    .join("");
 
-  const deviations = [...(data.byProject || [])]
-    .filter((p) => Number(p.forecastCost) || Number(p.realizedCost))
-    .sort((a, b) => Number(b.costDeviationPct) - Number(a.costDeviationPct))
-    .slice(0, 8);
-  drawBarChart("ctrlChartDeviation", {
-    categories: deviations.map((p) => p.project.name),
+  let running = 0;
+  drawComboChart("ctrlChartMonthly", {
+    categories: monthly.map((m) => m.label),
+    height: 280,
     series: [
+      { name: "Faturado", type: "column", data: monthly.map((m) => num(m.invoiced)), color: TONES.blue },
+      { name: "Recebido", type: "column", data: monthly.map((m) => num(m.received)), color: TONES.emerald },
+      { name: "Custo", type: "column", data: monthly.map((m) => num(m.cost)), color: TONES.red },
       {
-        name: "Desvio de custo",
-        data: deviations.map((p) => Number(p.costDeviation) || 0),
-        color: TONES.red,
+        name: "Resultado acumulado",
+        type: "line",
+        data: monthly.map((m) => {
+          running += num(m.invoiced) - num(m.cost);
+          return Math.round(running);
+        }),
+        color: TONES.violet,
       },
     ],
-    height: 320,
+  });
+}
+
+function shortName(p) {
+  const name = p.project.name || p.project.code || "—";
+  return name.length > 28 ? `${name.slice(0, 27)}…` : name;
+}
+
+function renderCharts() {
+  renderMonthly();
+
+  const tracked = (state.data.byProject || [])
+    .filter(isTracked)
+    .sort((a, b) => Math.abs(num(b.deviationToDate)) - Math.abs(num(a.deviationToDate)))
+    .slice(0, 8);
+  drawBarChart("ctrlChartDeviation", {
+    categories: tracked.map(shortName),
+    horizontal: true,
+    stacked: true,
+    height: Math.max(220, tracked.length * 44 + 90),
+    series: [
+      { name: "Acima do esperado", data: tracked.map((p) => Math.max(num(p.deviationToDate), 0)), color: TONES.red },
+      { name: "Abaixo do esperado", data: tracked.map((p) => Math.min(num(p.deviationToDate), 0)), color: TONES.emerald },
+    ],
   });
 
-  const top = [...(data.byProject || [])]
-    .sort((a, b) => (Number(b.saleForecast) || 0) - (Number(a.saleForecast) || 0))
+  const billed = (state.data.byProject || [])
+    .filter((p) => num(p.revenue) > 0 || num(p.saleForecast) > 0)
+    .sort((a, b) => num(b.saleForecast) + num(b.revenue) - (num(a.saleForecast) + num(a.revenue)))
     .slice(0, 8);
   drawBarChart("ctrlChartMargins", {
-    categories: top.map((p) => p.project.name),
-    series: [
-      { name: "Margem prevista", data: top.map((p) => Number(p.plannedMargin) || 0), color: TONES.violet },
-      { name: "Margem realizada", data: top.map((p) => Number(p.result) || 0), color: TONES.emerald },
-    ],
-    height: 320,
-  });
-
-  const sources = (data.charts?.costBySource || []).filter((s) => Number(s.total) > 0);
-  drawDonutChart("ctrlChartSources", {
-    labels: sources.map((s) => s.label || s.source),
-    series: sources.map((s) => Number(s.total) || 0),
-    totalLabel: "Custo total",
+    categories: billed.map(shortName),
     height: 300,
+    percent: true,
+    series: [
+      { name: "Margem prevista", data: billed.map((p) => (num(p.saleForecast) > 0 ? num(p.plannedMarginPct) : 0)), color: "#c4b5fd" },
+      { name: "Margem realizada", data: billed.map((p) => (num(p.revenue) > 0 ? num(p.marginBase) : 0)), color: TONES.violet },
+    ],
   });
 }
 
 /* ─── Tabela ──────────────────────────────────────────────────────────────── */
 
-function renderProjects(data) {
-  const wrap = document.getElementById("ctrlProjects");
-  const items = data.byProject || [];
-  if (!items.length) {
-    wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">analytics</span>Sem obras para apresentar.</div>`;
+function sortValue(p) {
+  if (state.sort === "eac") return num(p.eacDeviation);
+  if (state.sort === "margin") return num(p.revenue) > 0 ? -num(p.marginBase) : -Infinity;
+  if (state.sort === "sale") return num(p.saleForecast);
+  return isTracked(p) ? num(p.deviationToDate) : -Infinity;
+}
+
+function progressCell(p) {
+  if (p.progressSource === "SEM_AVANCO") return `<span class="ov-muted">Sem avanço</span>`;
+  return `
+    <div class="ov-cell-bar">
+      <span>${esc(pct(p.progressPct, 0))}</span>
+      ${meter([{ value: p.progressPct, tone: "violet" }])}
+      <small>${esc(PROGRESS_SOURCE[p.progressSource] || "")}</small>
+    </div>`;
+}
+
+function realizedCell(p, cur) {
+  const budget = num(p.forecastCost);
+  const realized = num(p.realizedCost);
+  const committed = num(p.committedCost);
+  if (budget <= 0) {
+    return realized > 0 ? `<span>${esc(money(realized, cur))}</span>` : `<span class="ov-muted">—</span>`;
+  }
+  const rPct = (realized / budget) * 100;
+  const over = isTracked(p) && num(p.deviationToDate) > 0;
+  return `
+    <div class="ov-cell-bar">
+      <span>${esc(money(realized, cur))}</span>
+      ${meter(
+        [
+          { value: rPct, tone: over ? "red" : "blue" },
+          { value: (committed / budget) * 100, tone: "amber-soft" },
+        ],
+        { marker: isTracked(p) ? p.progressPct : null, title: "Marcador = avanço da obra (onde o realizado devia estar)" }
+      )}
+      <small>${esc(pct(rPct))} de ${esc(compact(budget))}${committed > 0 ? ` · +${esc(compact(committed))} compr.` : ""}</small>
+    </div>`;
+}
+
+function deviationCell(p) {
+  if (!isTracked(p)) return `<span class="ov-muted">—</span>`;
+  const tone = costTone(p.deviationToDate);
+  return `
+    <div class="co-dev">
+      <strong class="ov-${tone}">${esc(signed(p.deviationToDate))}</strong>
+      <small class="ov-${tone}">${esc(signedPct(p.deviationToDatePct))} · esperado ${esc(compact(p.expectedCost))}</small>
+    </div>`;
+}
+
+function eacCell(p, cur) {
+  if (num(p.forecastCost) <= 0) return `<span class="ov-muted">Sem orçamento</span>`;
+  const over = num(p.eacDeviation) > 0;
+  return `
+    <div class="co-dev">
+      <strong>${esc(money(p.eac, cur))}</strong>
+      <small class="ov-${over ? "neg" : "muted"}">${over ? `${esc(signed(p.eacDeviation))} · ${esc(signedPct(p.eacDeviationPct))}` : `de ${esc(compact(p.forecastCost))}`}</small>
+    </div>`;
+}
+
+function revenueCell(p, cur) {
+  const sale = num(p.saleForecast);
+  const revenue = num(p.revenue);
+  if (sale <= 0 && revenue <= 0) return `<span class="ov-muted">—</span>`;
+  if (sale <= 0) {
+    return `<div class="co-dev"><strong>${esc(money(revenue, cur))}</strong><small class="ov-warn">sem venda prevista</small></div>`;
+  }
+  const iPct = (revenue / sale) * 100;
+  return `
+    <div class="ov-cell-bar">
+      <span>${esc(money(revenue, cur))}</span>
+      ${meter(
+        [
+          { value: (num(p.received) / sale) * 100, tone: "emerald" },
+          { value: iPct - (num(p.received) / sale) * 100, tone: "blue" },
+        ],
+        { title: "Verde = recebido · azul = faturado por receber" }
+      )}
+      <small>${esc(pct(iPct))} de ${esc(compact(sale))}</small>
+    </div>`;
+}
+
+function marginCell(p) {
+  const hasRevenue = num(p.revenue) > 0;
+  const hasPlan = num(p.saleForecast) > 0;
+  if (!hasRevenue && !hasPlan) return `<span class="ov-muted">—</span>`;
+  if (!hasRevenue) {
+    return `<div class="co-dev"><span class="ov-muted">Sem faturação</span><small>prevista ${esc(pct(p.plannedMarginPct))}</small></div>`;
+  }
+  const below = hasPlan && num(p.plannedMarginPct) - num(p.marginBase) > MARGIN_GAP_ALERT;
+  return `
+    <div class="co-dev">
+      <strong class="ov-${toneOf(p.resultBase)}">${esc(compact(p.resultBase))} · ${esc(pct(p.marginBase))}</strong>
+      <small class="${below ? "ov-warn" : "ov-muted"}">${hasPlan ? `prevista ${esc(pct(p.plannedMarginPct))}` : "sem margem prevista"}</small>
+    </div>`;
+}
+
+function renderTable() {
+  const wrap = document.getElementById("ctrlTable");
+  const q = state.query.trim().toLowerCase();
+  const rows = (state.data?.byProject || [])
+    .filter((p) => (state.scope === "active" ? hasMovement(p) : true))
+    .filter((p) => !q || [p.project.name, p.project.code, p.project.client?.name].some((v) => String(v || "").toLowerCase().includes(q)))
+    .sort((a, b) => sortValue(b) - sortValue(a));
+
+  document.getElementById("ctrlHint").textContent =
+    `${rows.length} obras · esperado = orçamento de custo × avanço · resultado sem IVA`;
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">apartment</span>Sem obras para os filtros.</div>`;
     return;
   }
-  const body = items
-    .map(
-      (p) => `
+
+  const body = rows
+    .map((p) => {
+      const cur = p.project.currency || "AOA";
+      return `
       <tr>
         <td>
-          <div style="font-weight:700;color:#0f172a">${esc(p.project.name)}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(p.project.code || "")}</div>
+          <div class="ov-project">
+            <span class="ov-project-name">${esc(p.project.name)}</span>
+            <span class="ov-project-meta">${esc([p.project.code, p.project.client?.name].filter(Boolean).join(" · "))}</span>
+          </div>
         </td>
-        <td class="fin-num">${esc(money(p.forecastCost))}</td>
-        <td class="fin-num">${esc(money(p.realizedCost))}</td>
-        <td class="fin-num ${deviationTone(p.costDeviation)}" style="font-weight:800">${esc(money(p.costDeviation))}</td>
-        <td class="fin-num ${deviationTone(p.costDeviation)}">${esc(pct(p.costDeviationPct))}</td>
-        <td class="fin-num">${esc(money(p.saleForecast))}</td>
-        <td class="fin-num ${Number(p.plannedMargin) >= 0 ? "finance-pos" : "finance-neg"}" style="font-weight:700">${esc(money(p.plannedMargin))}</td>
-        <td class="fin-num ${Number(p.plannedMargin) >= 0 ? "finance-pos" : "finance-neg"}">${esc(pct(p.plannedMarginPct))}</td>
-        <td class="fin-num">${esc(money(p.revenue))}</td>
-        <td class="fin-num ${Number(p.result) >= 0 ? "finance-pos" : "finance-neg"}" style="font-weight:800">${esc(money(p.result))}</td>
-        <td class="fin-num ${Number(p.margin) >= 0 ? "finance-pos" : "finance-neg"}">${esc(pct(p.margin))}</td>
-      </tr>`
-    )
+        <td>${progressCell(p)}</td>
+        <td class="fin-num">${realizedCell(p, cur)}</td>
+        <td class="fin-num">${deviationCell(p)}</td>
+        <td class="fin-num">${eacCell(p, cur)}</td>
+        <td class="fin-num">${revenueCell(p, cur)}</td>
+        <td class="fin-num">${marginCell(p)}</td>
+      </tr>`;
+    })
     .join("");
 
-  const t = data.totals || {};
-  const dev = (Number(t.realizedCost) || 0) - (Number(t.forecastCost) || 0);
-  const devPct = Number(t.forecastCost) > 0 ? (dev / Number(t.forecastCost)) * 100 : 0;
+  const sum = (fn) => rows.reduce((a, p) => a + fn(p), 0);
+  const tDev = sum((p) => (isTracked(p) ? num(p.deviationToDate) : 0));
+  const tRevenue = sum((p) => num(p.revenue));
+  const tResult = sum((p) => num(p.resultBase));
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1550px">
+    <table class="fin-table co-table ctrl-table">
       <thead><tr>
         <th>Obra</th>
-        <th style="text-align:right">Custo Previsto</th>
-        <th style="text-align:right">Custo Realizado</th>
-        <th style="text-align:right">Desvio</th>
-        <th style="text-align:right">Desvio %</th>
-        <th style="text-align:right">Venda Prevista</th>
-        <th style="text-align:right">Margem Prevista</th>
-        <th style="text-align:right">% Margem Prev.</th>
-        <th style="text-align:right">Receita</th>
-        <th style="text-align:right">Resultado</th>
-        <th style="text-align:right">Margem Realiz.</th>
+        <th>Avanço</th>
+        <th style="text-align:right">Realizado</th>
+        <th style="text-align:right" title="Realizado − orçamento × avanço">Desvio à data</th>
+        <th style="text-align:right" title="Realizado + comprometido, nunca abaixo do orçamento">Custo final previsto</th>
+        <th style="text-align:right">Faturado</th>
+        <th style="text-align:right" title="Faturado − custo realizado, sem IVA">Resultado</th>
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
-        <td>Totais</td>
-        <td class="fin-num">${esc(money(t.forecastCost))}</td>
-        <td class="fin-num">${esc(money(t.realizedCost))}</td>
-        <td class="fin-num ${deviationTone(dev)}">${esc(money(dev))}</td>
-        <td class="fin-num ${deviationTone(dev)}">${esc(pct(devPct))}</td>
-        <td class="fin-num">${esc(money(t.saleForecast))}</td>
-        <td class="fin-num">${esc(money(t.plannedMargin))}</td>
-        <td class="fin-num">${esc(pct(t.plannedMarginPct))}</td>
-        <td class="fin-num">${esc(money(t.revenue))}</td>
-        <td class="fin-num ${Number(t.result) >= 0 ? "finance-pos" : "finance-neg"}">${esc(money(t.result))}</td>
-        <td class="fin-num ${Number(t.margin) >= 0 ? "finance-pos" : "finance-neg"}">${esc(pct(t.margin))}</td>
+        <td>Totais (${rows.length} obras)</td>
+        <td></td>
+        <td class="fin-num">${esc(compact(sum((p) => num(p.realizedCost))))}</td>
+        <td class="fin-num ov-${costTone(tDev)}">${esc(signed(tDev))}</td>
+        <td class="fin-num">${esc(compact(sum((p) => num(p.eac))))}</td>
+        <td class="fin-num">${esc(compact(tRevenue))}</td>
+        <td class="fin-num ov-${toneOf(tResult)}">${esc(compact(tResult))}${tRevenue > 0 ? ` · ${esc(pct((tResult / tRevenue) * 100))}` : ""}</td>
       </tr></tfoot>
     </table>`;
-}
-
-function renderCash(data) {
-  const flow = data.cashFlow || {};
-  const inflow = Number(flow.inflow) || 0;
-  const outflow = Number(flow.outflow) || 0;
-  const max = Math.max(inflow, outflow, 1);
-  document.getElementById("ctrlCash").innerHTML = `
-    <div class="finance-stat-row" style="margin-bottom:0.85rem">
-      <div class="finance-stat finance-stat--emerald">
-        <span class="finance-stat-label">Entradas recebidas</span>
-        <span class="finance-stat-value">${esc(money(inflow))}</span>
-      </div>
-      <div class="finance-stat finance-stat--red">
-        <span class="finance-stat-label">Saídas pagas</span>
-        <span class="finance-stat-value">${esc(money(outflow))}</span>
-      </div>
-      <div class="finance-stat ${Number(flow.net) >= 0 ? "finance-stat--emerald" : "finance-stat--red"}">
-        <span class="finance-stat-label">Saldo</span>
-        <span class="finance-stat-value">${esc(money(flow.net))}</span>
-      </div>
-    </div>
-    <div class="finance-aging-bars">
-      <div class="finance-aging-row">
-        <span>Entradas</span>
-        <div class="finance-aging-track"><span style="width:${((inflow / max) * 100).toFixed(1)}%;background:#059669"></span></div>
-        <span class="finance-aging-value">${esc(money(inflow))}</span>
-      </div>
-      <div class="finance-aging-row">
-        <span>Saídas</span>
-        <div class="finance-aging-track"><span style="width:${((outflow / max) * 100).toFixed(1)}%;background:#ed3237"></span></div>
-        <span class="finance-aging-value">${esc(money(outflow))}</span>
-      </div>
-    </div>`;
 }
 
 /* ─── Carregamento ────────────────────────────────────────────────────────── */
 
 async function load() {
-  const wrap = document.getElementById("ctrlProjects");
-  if (wrap) wrap.innerHTML = `<div class="finance-empty">A carregar controlo financeiro…</div>`;
   try {
-    const data = await apiRequest("/finance/control");
-    renderKpis(data);
-    renderAlerts(data);
-    renderProjects(data);
-    renderCash(data);
-    renderCharts(data);
+    state.data = await apiRequest("/finance/control");
+    renderKpis();
+    renderStrip();
+    renderAlerts();
+    renderTable();
+    renderCharts();
   } catch (err) {
-    if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
+    const wrap = document.getElementById("ctrlTable");
+    if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar o controlo financeiro.", { type: "error" });
   }
 }

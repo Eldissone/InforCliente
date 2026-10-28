@@ -1,359 +1,669 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast, setButtonLoading } from "../ui.js";
-import { formatCurrency, toDateKey } from "../format.js";
+import { can } from "../permissions.js";
+import { toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, drawAreaChart, drawBarChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
+import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
+import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml } from "./widgets.js";
 import {
-  MOVEMENT_TYPE,
   money,
   dateOnly,
   movementChip,
-  directionChip,
   isIncoming,
   needsCostAssignment,
-  movementStatusCell,
+  isReceiptLinked,
+  receiptFree,
+  receiptStateHtml,
+  costStatusHtml,
   loadMovementOptions,
   openClassifyModal,
   openAssignCostModal,
 } from "./movementsShared.js";
 
 /**
- * Movimentos da Tesouraria (Financeiro · Tesouraria):
- *  - Recebimentos do Cliente
- *  - Transferências Internas
- *  - Levantamentos ATM
- *  - Pagamentos a Fornecedor
+ * Movimentos da Tesouraria (Financeiro · Tesouraria), um ecrã por natureza:
+ *  - Recebimentos do Cliente  → entrada de valores; liga-se à fatura do cliente;
+ *  - Transferências Internas  → entrada de valores nos cartões de obra, com
+ *    origem nas requisições de fundo (requisição → cash flow da obra →
+ *    pagamento a fornecedor);
+ *  - Levantamentos ATM        → saída de valores; o custo separa-se por
+ *    fornecedor e tipo de custo («Separar custos»);
+ *  - Pagamentos a Fornecedor  → saída de valores; crédito (liquida um custo já
+ *    registado) ou pronto pagamento (o custo nasce no pagamento), material ou
+ *    serviço. Mercadoria entra em stock: o custo vem da saída de stock.
  *
- * Regra de negócio: **«Associar Custo» só se aplica a saídas**. Numa entrada não
- * existe custo a associar — o que existe é um recebimento a ligar à fatura do
- * cliente (é isso que faz o valor entrar nas contas a receber) ou uma
- * transferência interna entre cartões/contas.
+ * «Associar Custo» só existe nas saídas.
  */
 
-const PAGE_CONFIG = {
-  "tesouraria-recebimentos": {
-    type: "RECEBIMENTO_CLIENTE",
-    label: "Recebimentos do Cliente",
-    hint:
-      "Entradas de dinheiro do cliente. Um recebimento só fica registado na fatura quando é ligado a ela — " +
-      "use «Registar na fatura» para abater o valor em falta.",
-  },
-  "tesouraria-transferencias": {
-    type: "TRANSFERENCIA_INTERNA",
-    label: "Transferências Internas",
-    hint:
-      "Requisições de fundo e carregamento de cartões de obra. Movem dinheiro dentro da empresa, " +
-      "por isso não entram no resultado nem nas contas a pagar.",
-  },
-  "tesouraria-atm": {
-    type: "LEVANTAMENTO_ATM",
-    label: "Levantamentos ATM",
-    hint:
-      "Saídas de valores em cartões de obra. O custo é separado depois, por fornecedor e tipo, " +
-      "com «Associar Custo» — a mercadoria entra sempre pela saída de stock.",
-  },
-  "tesouraria-pagamentos": {
-    type: null,
-    label: "Pagamentos a Fornecedor",
-    hint: "Pagamentos a fornecedor por cartão de obra e cartão geral (crédito vs pronto pagamento).",
-    supplierPayments: true,
-  },
+const PERIODS = [
+  { key: "30", label: "30 dias", days: 30 },
+  { key: "90", label: "90 dias", days: 90 },
+  { key: "365", label: "12 meses", days: 365 },
+  { key: "all", label: "Tudo", days: null },
+];
+
+/** Saída que ainda precisa de custo (a mercadoria não: o custo vem da saída de stock). */
+function toAssign(m) {
+  return needsCostAssignment(m) && !m.isMerchandise && !m.costAssigned;
+}
+
+const NOT_SUPPLIER_PAYMENT = ["LEVANTAMENTO_ATM", "RECEBIMENTO_CLIENTE", "TRANSFERENCIA_INTERNA", "OPERACAO_ANULADA"];
+
+const SETTLEMENT = {
+  CREDITO: { label: "Crédito", tone: "violet", hint: "Liquida um custo registado a crédito" },
+  PRONTO: { label: "Pronto pagamento", tone: "blue", hint: "O custo nasce no pagamento" },
 };
 
-const HIDDEN_FOR_PAYMENTS = ["LEVANTAMENTO_ATM", "RECEBIMENTO_CLIENTE", "TRANSFERENCIA_INTERNA"];
+const NATURE = {
+  MATERIAL: { label: "Material", tone: "amber" },
+  SERVICO: { label: "Serviço", tone: "emerald" },
+  MISTO: { label: "Misto", tone: "slate" },
+};
+
+const FUND_STATUS = {
+  PENDENTE: { label: "Por aprovar", tone: "amber" },
+  APROVADO: { label: "Aprovada", tone: "emerald" },
+  REJEITADO: { label: "Rejeitada", tone: "red" },
+  CANCELADO: { label: "Cancelada", tone: "slate" },
+};
+
+/* ─── Configuração por ecrã ───────────────────────────────────────────────── */
+
+const PAGES = {
+  "tesouraria-recebimentos": {
+    query: { movementType: "RECEBIMENTO_CLIENTE" },
+    noun: "recebimento",
+    groupBy: "project",
+    views: [
+      { key: "all", label: "Todos" },
+      { key: "toLink", label: "Por ligar à fatura", test: (m) => !isReceiptLinked(m) },
+      { key: "linked", label: "Ligados", test: (m) => isReceiptLinked(m) },
+    ],
+  },
+  "tesouraria-transferencias": {
+    query: { movementType: "TRANSFERENCIA_INTERNA" },
+    noun: "transferência",
+    groupBy: "card",
+    fundRequests: true,
+    views: [
+      { key: "all", label: "Todas" },
+      { key: "in", label: "Entradas no cartão", test: (m) => isIncoming(m) },
+      { key: "out", label: "Saídas da conta", test: (m) => !isIncoming(m) },
+    ],
+  },
+  "tesouraria-atm": {
+    query: { movementType: "LEVANTAMENTO_ATM" },
+    noun: "levantamento",
+    groupBy: "supplier",
+    views: [
+      { key: "all", label: "Todos" },
+      { key: "pending", label: "Por separar", test: toAssign },
+      { key: "done", label: "Separados", test: (m) => m.costAssigned },
+    ],
+  },
+  "tesouraria-pagamentos": {
+    query: { direction: "SAIDA" },
+    filter: (m) => !NOT_SUPPLIER_PAYMENT.includes(m.movementType),
+    noun: "pagamento",
+    groupBy: "supplier",
+    views: [
+      { key: "all", label: "Todos" },
+      { key: "pending", label: "Por associar", test: toAssign },
+      { key: "credit", label: "Crédito", test: (m) => m.costSummary?.settlement === "CREDITO" },
+      { key: "prompt", label: "Pronto pagamento", test: (m) => m.costSummary?.settlement === "PRONTO" },
+      { key: "stock", label: "Mercadoria", test: (m) => m.isMerchandise },
+    ],
+  },
+};
 
 const state = {
   options: null,
   items: [],
-  filters: { projectId: "", pendingOnly: false },
+  fundRequests: [],
+  period: "365",
+  view: "all",
+  projectId: "",
+  query: "",
 };
 
-function config() {
-  return PAGE_CONFIG[document.body.dataset.financePage] || PAGE_CONFIG["tesouraria-pagamentos"];
+function page() {
+  return document.body.dataset.financePage;
 }
 
-function renderShell() {
-  const cfg = config();
-  document.getElementById("financeRoot").innerHTML = `
-    <div id="mvKpis" class="finance-kpi-grid"></div>
-
-    <div class="finance-chart-grid">
-      ${chartCardHtml({
-        id: "mvChartMonthly",
-        title: "Movimentos mês a mês",
-        subtitle: "Entradas e saídas nos últimos 12 meses",
-        span: 2,
-        height: 300,
-      })}
-      ${chartCardHtml({
-        id: "mvChartTypes",
-        title: "Por tipo de movimento",
-        subtitle: "Peso de cada tipo no movimento actual",
-        height: 290,
-      })}
-      ${chartCardHtml({
-        id: "mvChartProjects",
-        title: cfg.supplierPayments ? "Pagamentos por fornecedor" : "Movimentos por obra",
-        subtitle: cfg.supplierPayments ? "Os 8 fornecedores com mais valor pago" : "As 8 obras com maior volume",
-        span: 2,
-        height: 320,
-      })}
-    </div>
-
-    <section class="finance-card">
-      <div class="fin-toolbar" style="margin-bottom:1rem">
-        <div class="finance-filters">
-          <select id="mvProject" class="finance-select fin-proj-filter"></select>
-          <label class="finance-check">
-            <input id="mvPending" type="checkbox" />
-            Só por tratar
-          </label>
-        </div>
-      </div>
-      <p class="finance-hint">${esc(cfg.hint)}</p>
-      <div id="mvTable" class="finance-table-scroll"></div>
-    </section>`;
-
-  const projectSel = document.getElementById("mvProject");
-  projectSel.innerHTML =
-    `<option value="">Todas as obras</option>` +
-    state.options.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
-      .join("");
-  projectSel.addEventListener("change", () => {
-    state.filters.projectId = projectSel.value;
-    load();
-  });
-  document.getElementById("mvPending").addEventListener("change", (e) => {
-    state.filters.pendingOnly = e.target.checked;
-    renderTable();
-    renderKpis();
-  });
+function cfg() {
+  return PAGES[page()] || PAGES["tesouraria-pagamentos"];
 }
 
-function filtered() {
-  const cfg = config();
+function canEdit() {
+  return can("financeiro", "edit") || can("financeiro", "manage");
+}
+
+function sumOf(rows) {
+  return rows.reduce((a, m) => a + num(m.amount), 0);
+}
+
+/** Movimentos do ecrã, já filtrados por período, obra e pesquisa (sem a vista). */
+function scoped() {
+  const c = cfg();
+  const days = PERIODS.find((p) => p.key === state.period)?.days;
+  const since = days ? Date.now() - days * 24 * 60 * 60 * 1000 : null;
+  const q = state.query.trim().toLowerCase();
   return state.items.filter((m) => {
-    if (state.filters.projectId && m.projectId !== state.filters.projectId) return false;
-    if (state.filters.pendingOnly && needsCostAssignment(m) && m.costAssigned) return false;
-    if (cfg.supplierPayments) {
-      if (m.direction !== "SAIDA") return false;
-      if (HIDDEN_FOR_PAYMENTS.includes(m.movementType)) return false;
+    if (c.filter && !c.filter(m)) return false;
+    if (since && new Date(m.movementDate).getTime() < since) return false;
+    if (state.projectId && m.projectId !== state.projectId) return false;
+    if (q) {
+      const hay = [m.description, m.docNumber, m.project?.name, m.supplier?.name, m.card?.label, ...(m.costSummary?.suppliers || [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
 }
 
-function totalsOf(rows) {
-  return rows.reduce(
-    (acc, m) => {
-      const amount = Number(m.amount) || 0;
-      if (m.direction === "ENTRADA") acc.inflow += amount;
-      else acc.outflow += amount;
-      if (needsCostAssignment(m) && !m.costAssigned) acc.pending += 1;
-      return acc;
-    },
-    { inflow: 0, outflow: 0, pending: 0 }
-  );
+function visible() {
+  const view = cfg().views.find((v) => v.key === state.view);
+  const rows = scoped();
+  return view?.test ? rows.filter(view.test) : rows;
 }
 
+/* ─── Estrutura ───────────────────────────────────────────────────────────── */
+
+function renderShell() {
+  const c = cfg();
+  const isPayments = page() === "tesouraria-pagamentos";
+  const side = c.fundRequests
+    ? `
+      <section class="finance-card ov-panel">
+        <header class="finance-chart-head finance-chart-head--row">
+          <div>
+            <h2 class="finance-chart-title">Requisições de fundo</h2>
+            <p class="finance-chart-subtitle">Pedidos de reforço dos cartões de obra · 180 dias</p>
+          </div>
+          <a class="ov-link" href="/Financeiro/centro-pagamentos">Aprovar <span class="material-symbols-outlined">arrow_forward</span></a>
+        </header>
+        <div id="tzFunds">${skeletonHtml(3, "line")}</div>
+      </section>`
+    : chartCardHtml({
+        id: "tzChartSplit",
+        title: isPayments ? "Crédito vs pronto pagamento" : page() === "tesouraria-atm" ? "Separação por fornecedor" : "Por obra",
+        subtitle: isPayments
+          ? "Valor pago no período, pelos custos associados"
+          : page() === "tesouraria-atm"
+            ? "Custos discriminados nos levantamentos do período"
+            : "Valor recebido no período",
+        height: 280,
+      });
+
+  document.getElementById("financeRoot").innerHTML = `
+    <div class="ov">
+      ${flowHtml()}
+      <div id="tzKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
+
+      <div class="ov-row ov-row--8-4">
+        ${chartCardHtml({
+          id: "tzChartMonthly",
+          title: "Mês a mês",
+          subtitle: "Valor por mês, pela data do movimento",
+          height: 280,
+        })}
+        ${side}
+      </div>
+
+      <section class="finance-card ov-panel">
+        <header class="finance-chart-head finance-chart-head--row">
+          <div>
+            <h2 class="finance-chart-title">Movimentos</h2>
+            <p class="finance-chart-subtitle" id="tzHint">—</p>
+          </div>
+          <div class="ov-table-tools">
+            <div class="finance-seg finance-seg--sm" id="tzPeriod">
+              ${PERIODS.map((p) => `<button type="button" data-period="${p.key}" class="${p.key === state.period ? "active" : ""}"><span>${p.label}</span></button>`).join("")}
+            </div>
+            <select id="tzProject" class="finance-select inv-filter" title="Obra">
+              <option value="">Todas as obras</option>
+              ${(state.options?.projects || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}
+            </select>
+            <label class="ov-search">
+              <span class="material-symbols-outlined">search</span>
+              <input id="tzSearch" type="search" placeholder="Descrição, doc, fornecedor…" autocomplete="off" />
+            </label>
+          </div>
+        </header>
+        <div class="finance-seg tz-views" id="tzViews"></div>
+        <div id="tzTable" class="finance-table-scroll"></div>
+      </section>
+    </div>`;
+
+  document.querySelectorAll("#tzPeriod button").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.period = btn.dataset.period;
+      document.querySelectorAll("#tzPeriod button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderAll();
+    })
+  );
+  document.getElementById("tzProject").addEventListener("change", (e) => {
+    state.projectId = e.target.value;
+    renderAll();
+  });
+  document.getElementById("tzSearch").addEventListener("input", (e) => {
+    state.query = e.target.value;
+    renderViews();
+    renderTable();
+  });
+}
+
+/** Faixa com o circuito do dinheiro em cada ecrã (regras de negócio à vista). */
+function flowHtml() {
+  const steps = {
+    "tesouraria-recebimentos": [
+      { icon: "receipt_long", title: "Fatura emitida", text: "Contas a receber" },
+      { icon: "south_west", title: "Entrada no banco", text: "Movimento do extrato" },
+      { icon: "link", title: "Registar na fatura", text: "Abate o valor em falta" },
+    ],
+    "tesouraria-transferencias": [
+      { icon: "request_page", title: "Requisição de fundo", text: "Pedido de reforço do cartão" },
+      { icon: "swap_horiz", title: "Transferência interna", text: "Entra no cash flow da obra" },
+      { icon: "north_east", title: "Pagamento a fornecedor", text: "Sai do cartão da obra" },
+    ],
+    "tesouraria-atm": [
+      { icon: "local_atm", title: "Levantamento", text: "Saída de valores do cartão" },
+      { icon: "call_split", title: "Separar por fornecedor", text: "E por tipo de custo" },
+      { icon: "price_check", title: "Custo da obra", text: "Um custo por item" },
+    ],
+    "tesouraria-pagamentos": [
+      { icon: "credit_score", title: "Crédito", text: "Custo registado antes · o pagamento salda-o" },
+      { icon: "bolt", title: "Pronto pagamento", text: "O custo nasce no pagamento" },
+      { icon: "inventory_2", title: "Mercadoria", text: "Entra em stock · custo na saída para a obra" },
+    ],
+  }[page()];
+  if (!steps) return "";
+  return `
+    <ol class="tz-flow">
+      ${steps
+        .map(
+          (s, i) => `
+        <li>
+          <span class="tz-flow-icon"><span class="material-symbols-outlined">${s.icon}</span></span>
+          <div><strong>${esc(s.title)}</strong><small>${esc(s.text)}</small></div>
+          ${i < steps.length - 1 && page() !== "tesouraria-pagamentos" ? `<span class="material-symbols-outlined tz-flow-arrow">arrow_forward</span>` : ""}
+        </li>`
+        )
+        .join("")}
+    </ol>`;
+}
+
+/* ─── Indicadores ─────────────────────────────────────────────────────────── */
+
 function renderKpis() {
-  const rows = filtered();
-  const totals = totalsOf(rows);
-  const net = totals.inflow - totals.outflow;
-  const cards = [
-    { label: "Movimentos", value: String(rows.length), sub: "No filtro actual", tone: "slate", icon: "swap_vert" },
-    { label: "Entradas", value: money(totals.inflow), sub: "Total a crédito", tone: "emerald", icon: "south_west" },
-    { label: "Saídas", value: money(totals.outflow), sub: "Total a débito", tone: "red", icon: "north_east" },
-    {
-      label: "Saldo",
-      value: money(net),
-      sub: net >= 0 ? "Entradas acima das saídas" : "Saídas acima das entradas",
-      tone: net >= 0 ? "blue" : "red",
-      icon: "balance",
-    },
-    {
-      label: "Saídas por associar",
-      value: String(totals.pending),
-      sub: "Sem custo associado",
-      tone: totals.pending ? "amber" : "emerald",
-      icon: "link_off",
-    },
-  ];
-  document.getElementById("mvKpis").innerHTML = cards
-    .map(
-      (c) => `
-      <div class="finance-kpi finance-kpi--${c.tone}">
-        <span class="finance-kpi-label">
-          <span class="material-symbols-outlined" style="font-size:15px">${c.icon}</span>${esc(c.label)}
-        </span>
-        <span class="finance-kpi-value">${esc(c.value)}</span>
-        <span class="finance-kpi-sub">${esc(c.sub)}</span>
-      </div>`
-    )
+  const rows = scoped();
+  const total = sumOf(rows);
+  const periodLabel = PERIODS.find((p) => p.key === state.period)?.label.toLowerCase();
+  const cards = [];
+
+  if (page() === "tesouraria-recebimentos") {
+    const linkedValue = rows.reduce((a, m) => a + num(m.receiptLink?.linked), 0);
+    const toLink = rows.filter((m) => !isReceiptLinked(m));
+    const linked = rows.filter(isReceiptLinked);
+    const clients = new Set(rows.map((m) => m.projectId).filter(Boolean)).size;
+    cards.push(
+      { key: "in", label: "Recebido", icon: "south_west", tone: "emerald", value: compact(total), foot: `${rows.length} recebimento${rows.length === 1 ? "" : "s"} · ${periodLabel}` },
+      {
+        key: "linked",
+        label: "Ligado a faturas",
+        icon: "link",
+        tone: "blue",
+        value: compact(linkedValue),
+        badge: total > 0 ? `${Math.round((linkedValue / total) * 100)}%` : null,
+        body: meter([{ value: total > 0 ? (linkedValue / total) * 100 : 0, tone: "blue" }]),
+        foot: `${linked.length} de ${rows.length} movimentos`,
+      },
+      {
+        key: "toLink",
+        label: "Por ligar",
+        icon: "link_off",
+        tone: toLink.length ? "amber" : "slate",
+        value: compact(toLink.reduce((a, m) => a + receiptFree(m), 0)),
+        foot: toLink.length ? "A fatura continua em falta até ser ligada" : "Tudo ligado às faturas",
+      },
+      { key: "projects", label: "Obras com recebimentos", icon: "apartment", tone: "violet", value: String(clients), foot: "No período" }
+    );
+  } else if (page() === "tesouraria-transferencias") {
+    const incoming = rows.filter(isIncoming);
+    const pending = state.fundRequests.filter((r) => r.status === "PENDENTE");
+    const approved = state.fundRequests.filter((r) => r.status === "APROVADO");
+    cards.push(
+      { key: "in", label: "Entrou nos cartões", icon: "south_west", tone: "emerald", value: compact(sumOf(incoming)), foot: `${incoming.length} transferência${incoming.length === 1 ? "" : "s"} · ${periodLabel}` },
+      { key: "out", label: "Saiu da conta", icon: "north_east", tone: "blue", value: compact(sumOf(rows.filter((m) => !isIncoming(m)))), foot: "Não é custo: dinheiro dentro da empresa" },
+      {
+        key: "pending",
+        label: "Requisições por aprovar",
+        icon: "pending_actions",
+        tone: pending.length ? "amber" : "slate",
+        value: compact(sumOf(pending)),
+        foot: `${pending.length} pedido${pending.length === 1 ? "" : "s"} de reforço`,
+      },
+      { key: "approved", label: "Requisições aprovadas", icon: "task_alt", tone: "violet", value: compact(sumOf(approved)), foot: `${approved.length} nos últimos 180 dias` }
+    );
+  } else if (page() === "tesouraria-atm") {
+    const pending = rows.filter(toAssign);
+    const done = rows.filter((m) => m.costAssigned);
+    const suppliers = new Set(rows.flatMap((m) => m.costSummary?.suppliers || [])).size;
+    cards.push(
+      { key: "out", label: "Levantado", icon: "local_atm", tone: "red", value: compact(total), foot: `${rows.length} levantamento${rows.length === 1 ? "" : "s"} · ${periodLabel}` },
+      {
+        key: "pending",
+        label: "Por separar",
+        icon: "call_split",
+        tone: pending.length ? "amber" : "slate",
+        value: compact(sumOf(pending)),
+        foot: pending.length ? `${pending.length} sem custos discriminados` : "Tudo separado",
+      },
+      {
+        key: "done",
+        label: "Separado em custos",
+        icon: "price_check",
+        tone: "emerald",
+        value: compact(sumOf(done)),
+        badge: total > 0 ? `${Math.round((sumOf(done) / total) * 100)}%` : null,
+        body: meter([{ value: total > 0 ? (sumOf(done) / total) * 100 : 0, tone: "emerald" }]),
+        foot: `${done.reduce((a, m) => a + num(m.costSummary?.count), 0)} custos criados`,
+      },
+      { key: "suppliers", label: "Fornecedores pagos", icon: "storefront", tone: "violet", value: String(suppliers), foot: "Nos levantamentos separados" }
+    );
+  } else {
+    const pending = rows.filter(toAssign);
+    const credit = rows.filter((m) => m.costSummary?.settlement === "CREDITO");
+    const prompt = rows.filter((m) => m.costSummary?.settlement === "PRONTO");
+    const stock = rows.filter((m) => m.isMerchandise);
+    cards.push(
+      { key: "out", label: "Pago a fornecedores", icon: "north_east", tone: "red", value: compact(total), foot: `${rows.length} pagamento${rows.length === 1 ? "" : "s"} · ${periodLabel}` },
+      {
+        key: "split",
+        label: "Crédito / pronto pagamento",
+        icon: "credit_score",
+        tone: "violet",
+        value: `${compact(sumOf(credit))} / ${compact(sumOf(prompt))}`,
+        body: meter([
+          { value: total > 0 ? (sumOf(credit) / total) * 100 : 0, tone: "violet" },
+          { value: total > 0 ? (sumOf(prompt) / total) * 100 : 0, tone: "blue" },
+        ]),
+        foot: `${credit.length} crédito · ${prompt.length} pronto`,
+      },
+      { key: "stock", label: "Mercadoria (stock)", icon: "inventory_2", tone: "amber", value: compact(sumOf(stock)), foot: "Custo na saída de stock para a obra" },
+      {
+        key: "pending",
+        label: "Por associar",
+        icon: "link_off",
+        tone: pending.length ? "amber" : "slate",
+        value: compact(sumOf(pending)),
+        foot: pending.length ? `${pending.length} pagamento${pending.length === 1 ? "" : "s"} sem custo` : "Todos associados",
+      }
+    );
+  }
+  document.getElementById("tzKpis").innerHTML = kpiCardsHtml(cards, "tz");
+}
+
+function renderViews() {
+  const rows = scoped();
+  document.getElementById("tzViews").innerHTML = cfg()
+    .views.map((v) => {
+      const count = v.test ? rows.filter(v.test).length : rows.length;
+      return `<button type="button" data-view="${v.key}" class="${v.key === state.view ? "active" : ""}"><span>${esc(v.label)}</span><em>${count}</em></button>`;
+    })
     .join("");
+  document.querySelectorAll("#tzViews button").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.view = btn.dataset.view;
+      renderViews();
+      renderTable();
+    })
+  );
 }
 
 /* ─── Gráficos ────────────────────────────────────────────────────────────── */
 
-function lastMonthKeys(count = 12) {
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function monthKeys(rows) {
+  const count = state.period === "30" ? 2 : state.period === "90" ? 4 : 12;
   const now = new Date();
   const keys = [];
   for (let i = count - 1; i >= 0; i -= 1) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
   }
+  if (state.period === "all") {
+    rows.forEach((m) => {
+      const k = toDateKey(m.movementDate)?.slice(0, 7);
+      if (k && !keys.includes(k)) keys.push(k);
+    });
+    keys.sort();
+  }
   return keys;
 }
 
-const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-function monthKeyOf(value) {
-  const key = toDateKey(value);
-  return key ? key.slice(0, 7) : null;
-}
-
-function monthLabelOf(key) {
-  const [y, m] = String(key).split("-").map(Number);
-  if (!y || !m) return String(key);
-  return `${MONTH_LABELS[m - 1]} ${String(y).slice(2)}`;
-}
-
 function renderCharts() {
-  const rows = filtered();
-  const keys = lastMonthKeys();
+  const rows = scoped();
+  const keys = monthKeys(rows);
   const index = new Map(keys.map((k, i) => [k, i]));
-  const inflow = keys.map(() => 0);
-  const outflow = keys.map(() => 0);
-
+  const value = keys.map(() => 0);
   rows.forEach((m) => {
-    const i = index.get(monthKeyOf(m.movementDate));
+    const i = index.get(toDateKey(m.movementDate)?.slice(0, 7));
     if (i === undefined) return;
-    const amount = Number(m.amount) || 0;
-    if (m.direction === "ENTRADA") inflow[i] += amount;
-    else outflow[i] += amount;
+    value[i] += num(m.amount);
   });
-
-  drawAreaChart("mvChartMonthly", {
-    categories: keys.map(monthLabelOf),
+  const incoming = page() === "tesouraria-recebimentos" || page() === "tesouraria-transferencias";
+  drawComboChart("tzChartMonthly", {
+    categories: keys.map((k) => {
+      const [y, m] = k.split("-").map(Number);
+      return `${MONTH_LABELS[m - 1]} ${String(y).slice(2)}`;
+    }),
+    height: 280,
     series: [
-      { name: "Entradas", key: "received", color: TONES.emerald, data: inflow },
-      { name: "Saídas", key: "cost", color: TONES.red, data: outflow },
+      { name: "Valor", type: "column", data: value, color: incoming ? TONES.emerald : TONES.red },
     ],
-    height: 300,
   });
 
-  const byType = new Map();
+  if (cfg().fundRequests) return renderFundRequests();
+
+  if (page() === "tesouraria-pagamentos") {
+    const groups = [
+      { label: "Crédito", value: sumOf(rows.filter((m) => m.costSummary?.settlement === "CREDITO")), color: TONES.violet },
+      { label: "Pronto pagamento", value: sumOf(rows.filter((m) => m.costSummary?.settlement === "PRONTO")), color: TONES.blue },
+      { label: "Mercadoria (stock)", value: sumOf(rows.filter((m) => m.isMerchandise)), color: TONES.amber },
+      { label: "Por associar", value: sumOf(rows.filter(toAssign)), color: TONES.slate },
+    ].filter((g) => g.value > 0);
+    drawDonutChart("tzChartSplit", {
+      labels: groups.map((g) => g.label),
+      series: groups.map((g) => g.value),
+      colors: groups.map((g) => g.color),
+      totalLabel: "Pago",
+      height: 280,
+    });
+    return;
+  }
+
+  // ATM: custos separados por fornecedor; recebimentos: valor por obra.
+  const map = new Map();
   rows.forEach((m) => {
-    const label = MOVEMENT_TYPE[m.movementType]?.label || m.movementType || "Outro";
-    const amount = Number(m.amount) || 0;
-    byType.set(label, (byType.get(label) || 0) + amount);
+    if (page() === "tesouraria-atm") {
+      (m.costSummary?.items || []).forEach((it) => {
+        const k = it.supplier || "Sem fornecedor";
+        map.set(k, (map.get(k) || 0) + num(it.amount));
+      });
+      if (toAssign(m)) map.set("Por separar", (map.get("Por separar") || 0) + num(m.amount));
+    } else {
+      const k = m.project?.name || "Sem obra";
+      map.set(k, (map.get(k) || 0) + num(m.amount));
+    }
   });
-  const typeRows = [...byType.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  drawDonutChart("mvChartTypes", {
-    labels: typeRows.map(([label]) => label),
-    series: typeRows.map(([, value]) => value),
-    totalLabel: "Movimento",
-    height: 290,
+  const top = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7);
+  drawBarChart("tzChartSplit", {
+    categories: top.map(([k]) => (k.length > 22 ? `${k.slice(0, 21)}…` : k)),
+    horizontal: true,
+    height: Math.max(220, top.length * 40 + 70),
+    series: [{ name: "Valor", data: top.map(([, v]) => v), color: incoming ? TONES.emerald : TONES.red }],
   });
+}
 
-  const cfg = config();
-  const groupMap = new Map();
-  rows.forEach((m) => {
-    const label = cfg.supplierPayments
-      ? m.supplier?.name || "Sem fornecedor"
-      : m.project?.name || "Sem obra";
-    if (!groupMap.has(label)) groupMap.set(label, { inflow: 0, outflow: 0 });
-    const bucket = groupMap.get(label);
-    const amount = Number(m.amount) || 0;
-    if (m.direction === "ENTRADA") bucket.inflow += amount;
-    else bucket.outflow += amount;
-  });
-  const groups = [...groupMap.entries()]
-    .map(([label, v]) => ({ label, ...v, total: v.inflow + v.outflow }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 8);
-
-  drawBarChart("mvChartProjects", {
-    categories: groups.map((g) => g.label),
-    series: [
-      { name: "Entradas", data: groups.map((g) => g.inflow), color: TONES.emerald },
-      { name: "Saídas", data: groups.map((g) => g.outflow), color: TONES.red },
-    ],
-    height: 320,
-  });
+function renderFundRequests() {
+  const wrap = document.getElementById("tzFunds");
+  const rows = state.fundRequests;
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="ov-empty"><span class="material-symbols-outlined">request_page</span>Sem requisições de fundo nos últimos 180 dias.</div>`;
+    return;
+  }
+  const sorted = [...rows].sort((a, b) => (a.status === "PENDENTE" ? -1 : 0) - (b.status === "PENDENTE" ? -1 : 0));
+  wrap.innerHTML = `
+    <ul class="ac-feed">
+      ${sorted
+        .slice(0, 6)
+        .map((r) => {
+          const st = FUND_STATUS[r.status] || { label: r.status, tone: "slate" };
+          return `
+        <li>
+          <span class="ac-feed-icon ${r.status === "PENDENTE" ? "ac-feed-icon--late" : "ac-feed-icon--in"}"><span class="material-symbols-outlined">request_page</span></span>
+          <div>
+            <strong>${esc(r.fund?.project?.name || r.fund?.name || "Fundo de maneio")}</strong>
+            <small>${esc([r.card?.label, dateOnly(r.requestedAt), r.requestedBy].filter(Boolean).join(" · "))}</small>
+          </div>
+          <div class="ac-feed-value">
+            <strong>${esc(money(r.amount, r.fund?.currency))}</strong>
+            <span class="finance-chip finance-chip--${st.tone}">${esc(st.label)}</span>
+          </div>
+        </li>`;
+        })
+        .join("")}
+    </ul>
+    ${rows.length > 6 ? `<p class="ov-table-more">+${rows.length - 6} requisições</p>` : ""}`;
 }
 
 /* ─── Tabela ──────────────────────────────────────────────────────────────── */
 
+function docText(m) {
+  const doc = m.docNumber ? (/^(af|ft|fatura)/i.test(m.docNumber) ? m.docNumber : `${m.docType === "AF" ? "AF" : "Fatura"} ${m.docNumber}`) : m.docType ? (m.docType === "AF" ? "Auto de fatura" : "Fatura") : null;
+  return doc || null;
+}
+
+function stateCell(m) {
+  if (page() === "tesouraria-recebimentos") {
+    return receiptStateHtml(m);
+  }
+  if (page() === "tesouraria-transferencias") {
+    return `<span class="finance-chip finance-chip--slate">${isIncoming(m) ? "Entrada no cartão" : "Saída da conta"}</span>`;
+  }
+  const chips = [];
+  const cs = m.costSummary || {};
+  if (cs.settlement) chips.push(`<span class="finance-chip finance-chip--${SETTLEMENT[cs.settlement].tone}" title="${esc(SETTLEMENT[cs.settlement].hint)}">${SETTLEMENT[cs.settlement].label}</span>`);
+  if (cs.nature && NATURE[cs.nature]) chips.push(`<span class="finance-chip finance-chip--${NATURE[cs.nature].tone}">${NATURE[cs.nature].label}</span>`);
+  return `<div class="tz-state">${costStatusHtml(m)}${chips.length ? `<div class="tz-chips">${chips.join("")}</div>` : ""}</div>`;
+}
+
+function actionsCell(m) {
+  if (!canEdit()) return "";
+  const btns = [];
+  if (page() === "tesouraria-recebimentos" && !isReceiptLinked(m)) {
+    btns.push(`<button type="button" class="cr-act cr-act--emerald" data-action="receipt"><span class="material-symbols-outlined">receipt_long</span><span>Registar na fatura</span></button>`);
+  }
+  if (toAssign(m)) {
+    btns.push(
+      page() === "tesouraria-atm"
+        ? `<button type="button" class="cr-act cr-act--amber" data-action="assign"><span class="material-symbols-outlined">call_split</span><span>Separar custos</span></button>`
+        : `<button type="button" class="cr-act cr-act--amber" data-action="assign"><span class="material-symbols-outlined">link</span><span>Associar custo</span></button>`
+    );
+  }
+  btns.push(`<button type="button" class="fin-icon-btn fin-icon-btn--slate" title="Classificar" data-action="classify"><span class="material-symbols-outlined" style="font-size:17px">edit_note</span></button>`);
+  return `<div class="ac-actions">${btns.join("")}</div>`;
+}
+
+function partyCell(m) {
+  const cs = m.costSummary || {};
+  if (page() === "tesouraria-atm" && cs.items?.length) {
+    return `
+      <div class="ov-project">
+        <span class="ov-project-name">${esc(cs.suppliers.length ? cs.suppliers.slice(0, 2).join(", ") : "Sem fornecedor")}${cs.suppliers.length > 2 ? ` +${cs.suppliers.length - 2}` : ""}</span>
+        <span class="ov-project-meta">${cs.items.length} custo${cs.items.length === 1 ? "" : "s"} separado${cs.items.length === 1 ? "" : "s"}</span>
+      </div>`;
+  }
+  const name = m.supplier?.name || cs.suppliers?.[0];
+  if (page() === "tesouraria-recebimentos" || page() === "tesouraria-transferencias") {
+    return `<span>${esc(m.card ? `${m.card.label}${m.card.lastDigits ? ` ••${m.card.lastDigits}` : ""}` : "—")}</span>`;
+  }
+  return name ? `<span>${esc(name)}</span>` : `<span class="ov-warn">Sem fornecedor</span>`;
+}
+
 function renderTable() {
-  const wrap = document.getElementById("mvTable");
-  const rows = filtered();
+  const wrap = document.getElementById("tzTable");
+  const rows = visible();
+  const total = sumOf(rows);
+  const party = page() === "tesouraria-recebimentos" || page() === "tesouraria-transferencias" ? "Cartão / conta" : "Fornecedor";
+  document.getElementById("tzHint").textContent = `${rows.length} ${cfg().noun}${rows.length === 1 ? "" : "s"} · ${compact(total)}`;
+
   if (!rows.length) {
-    wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">account_balance</span>Sem movimentos para os filtros selecionados.</div>`;
+    wrap.innerHTML = `
+      <div class="ov-empty ov-empty--lg">
+        <span class="material-symbols-outlined">account_balance</span>
+        ${state.items.length ? "Sem movimentos para os filtros." : "Ainda não há movimentos. Importe um extrato em Extratos Bancários e classifique os movimentos."}
+        ${state.items.length ? "" : `<a class="ov-link" href="/Financeiro/tesouraria/extratos">Extratos Bancários <span class="material-symbols-outlined">arrow_forward</span></a>`}
+      </div>`;
     return;
   }
+
   const body = rows
     .map((m) => {
       const incoming = isIncoming(m);
-      const isClientReceipt = m.movementType === "RECEBIMENTO_CLIENTE";
+      const doc = docText(m);
       return `
       <tr data-id="${esc(m.id)}">
-        <td>${esc(dateOnly(m.movementDate))}</td>
-        <td>${esc(m.card?.label || "—")}</td>
-        <td>${esc(m.project?.name || "—")}</td>
-        <td>${esc(m.supplier?.name || "—")}</td>
-        <td>${m.docType ? `${esc(m.docType)} ${esc(m.docNumber || "")}` : esc(m.docNumber || "—")}</td>
-        <td>${movementChip(m.movementType)}</td>
-        <td>${directionChip(m.direction)}</td>
-        <td class="fin-num ${incoming ? "finance-pos" : "finance-neg"}">${esc(money(m.amount))}</td>
-        <td>${movementStatusCell(m)}</td>
+        <td class="tz-date">${esc(dateOnly(m.movementDate))}</td>
         <td>
-          <div class="fin-actions">
-            ${
-              isClientReceipt
-                ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Registar na fatura do cliente" data-action="receipt">
-                     <span class="material-symbols-outlined" style="font-size:17px">receipt_long</span>
-                   </button>`
-                : ""
-            }
-            <button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Classificar" data-action="classify">
-              <span class="material-symbols-outlined" style="font-size:17px">edit_note</span>
-            </button>
-            ${
-              needsCostAssignment(m)
-                ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Associar Custo" data-action="assign">
-                     <span class="material-symbols-outlined" style="font-size:17px">link</span>
-                   </button>`
-                : ""
-            }
+          <div class="ov-project">
+            <span class="ov-project-name">${esc(m.description || (page() === "tesouraria-pagamentos" ? "Pagamento" : "Movimento"))}</span>
+            <span class="ov-project-meta">${esc([doc, m.statement?.name].filter(Boolean).join(" · ") || "—")}</span>
           </div>
         </td>
+        <td>${m.project ? esc(m.project.name) : `<span class="${needsCostAssignment(m) || page() === "tesouraria-recebimentos" ? "ov-warn" : "ov-muted"}">Sem obra</span>`}</td>
+        <td>${partyCell(m)}</td>
+        ${page() === "tesouraria-pagamentos" ? `<td>${movementChip(m.movementType)}</td>` : ""}
+        <td class="fin-num"><strong class="${incoming ? "ov-pos" : "ov-neg"}">${incoming ? "+" : "−"}${esc(money(m.amount))}</strong></td>
+        <td>${stateCell(m)}</td>
+        <td>${actionsCell(m)}</td>
       </tr>`;
     })
     .join("");
 
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1250px">
+    <table class="fin-table tz-table">
       <thead><tr>
-        <th>Data</th><th>Cartão</th><th>Obra</th><th>Fornecedor</th><th>Documento</th>
-        <th>Tipo</th><th>Direção</th><th style="text-align:right">Valor</th><th>Estado</th>
-        <th style="text-align:center">Ações</th>
+        <th>Data</th>
+        <th>Movimento</th>
+        <th>Obra</th>
+        <th>${party}</th>
+        ${page() === "tesouraria-pagamentos" ? "<th>Tipo</th>" : ""}
+        <th style="text-align:right">Valor</th>
+        <th>Estado</th>
+        <th></th>
       </tr></thead>
       <tbody>${body}</tbody>
     </table>`;
 
-  wrap.querySelectorAll("tbody tr").forEach((tr) => {
+  wrap.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
     const m = state.items.find((x) => x.id === tr.dataset.id);
     if (!m) return;
-    tr.querySelector('[data-action="classify"]')?.addEventListener("click", () =>
-      openClassifyModal(m, { options: state.options, onSaved: load })
-    );
-    tr.querySelector('[data-action="assign"]')?.addEventListener("click", () =>
-      openAssignCostModal(m, { options: state.options, onSaved: load })
-    );
+    tr.querySelector('[data-action="classify"]')?.addEventListener("click", () => openClassifyModal(m, { options: state.options, onSaved: load }));
+    tr.querySelector('[data-action="assign"]')?.addEventListener("click", () => openAssignCostModal(m, { options: state.options, onSaved: load }));
     tr.querySelector('[data-action="receipt"]')?.addEventListener("click", () => openReceiptLinkModal(m));
   });
+}
+
+function renderAll() {
+  renderKpis();
+  renderViews();
+  renderTable();
+  renderCharts();
 }
 
 /* ─── Ligar um recebimento à fatura do cliente ────────────────────────────── */
@@ -372,77 +682,92 @@ async function openReceiptLinkModal(movement) {
     toast(err.message || "Falha ao carregar faturas em aberto.", { type: "error" });
     return;
   }
-  const candidates = movement.projectId
-    ? receivables.filter((r) => r.projectId === movement.projectId)
-    : receivables;
+  const candidates = movement.projectId ? receivables.filter((r) => r.projectId === movement.projectId) : receivables;
   const list = candidates.length ? candidates : receivables;
   if (!list.length) {
     toast("Não há faturas em aberto para ligar a este recebimento.", { type: "error" });
     return;
   }
 
-  const amount = Number(movement.amount) || 0;
-  const defaultInvoice = list.find((r) => Number(r.missingAmount) >= amount) || list[0];
+  const amount = receiptFree(movement);
+  if (amount <= 0) {
+    toast("Este recebimento já está todo ligado a faturas.", { type: "error" });
+    return;
+  }
+  // Sugere a fatura com o valor em falta mais próximo do recebido.
+  const defaultInvoice = [...list].sort(
+    (a, b) => Math.abs(num(a.missingAmount) - amount) - Math.abs(num(b.missingAmount) - amount)
+  )[0];
 
   openModal({
     title: "Registar recebimento na fatura",
+    width: 620,
     contentHtml: `
-      <p class="finance-note" style="margin-bottom:1rem">
-        Este movimento entrou no banco por ${esc(money(amount))} em ${esc(dateOnly(movement.movementDate))}.
-        Escolha a fatura que ele paga: o valor em falta da fatura é reduzido e o recebimento passa a contar
-        na Faturação, no Overview e nas Contas a Receber.
-      </p>
+      <div class="pay-head">
+        <div class="pay-head-main">
+          <span class="finance-chip finance-chip--emerald">Recebimento</span>
+          <strong>${esc(movement.description || "Entrada no banco")}</strong>
+          <small>${esc([dateOnly(movement.movementDate), movement.project?.name, movement.card?.label].filter(Boolean).join(" · "))}</small>
+        </div>
+        <div class="pay-head-amount">
+          <span>${amount < num(movement.amount) ? "Falta ligar" : "Entrou"}</span>
+          <strong>${esc(money(amount))}</strong>
+          ${amount < num(movement.amount) ? `<small>de ${esc(money(movement.amount))}</small>` : ""}
+        </div>
+      </div>
+      <p class="pay-note"><span class="material-symbols-outlined">info</span><span>
+        O valor em falta da fatura é reduzido e o recebimento passa a contar na Faturação, no Overview e nas Contas a Receber.
+        ${candidates.length ? "" : " <strong>Não há faturas em aberto desta obra</strong> — mostram-se todas."}
+      </span></p>
       <div class="finance-form-grid finance-form-grid--2">
-        <div class="finance-field finance-field--full">
-          <label class="finance-label" for="rl_invoice">Fatura em aberto <span style="color:#dc2626">*</span></label>
-          <select id="rl_invoice" class="finance-select" required>
+        <div class="finance-field" style="grid-column: 1 / -1">
+          <label class="finance-label" for="rl_invoice">Fatura em aberto <span class="inv-req">*</span></label>
+          <select id="rl_invoice" class="finance-select">
             ${list
               .map(
                 (r) =>
-                  `<option value="${esc(r.id)}" data-missing="${Number(r.missingAmount) || 0}" ${
-                    r.id === defaultInvoice.id ? "selected" : ""
-                  }>${esc(
-                    `${r.project?.name || ""} · ${r.docNumber || "sem nº"} · venc. ${dateOnly(r.dueDate)} · em falta ${money(
-                      r.missingAmount,
-                      r.project?.currency
-                    )}`
+                  `<option value="${esc(r.id)}" data-missing="${num(r.missingAmount)}" ${r.id === defaultInvoice.id ? "selected" : ""}>${esc(
+                    `${r.docNumber || "sem nº"} · ${r.project?.name || ""} · em falta ${money(r.missingAmount, r.project?.currency)}`
                   )}</option>`
               )
               .join("")}
           </select>
+          <small class="pay-hint" id="rl_hint"></small>
         </div>
         <div class="finance-field">
-          <label class="finance-label" for="rl_amount">Valor recebido <span style="color:#dc2626">*</span></label>
-          <input id="rl_amount" class="finance-input" type="number" min="0" step="0.01" required value="${amount}" />
+          <label class="finance-label" for="rl_amount">Valor recebido <span class="inv-req">*</span></label>
+          <input id="rl_amount" class="finance-input" type="number" min="0.01" max="${amount}" step="0.01" value="${Math.min(amount, num(defaultInvoice.missingAmount))}" />
         </div>
         <div class="finance-field">
           <label class="finance-label" for="rl_date">Data do recebimento</label>
           <input id="rl_date" class="finance-input" type="date" value="${esc(toDateKey(movement.movementDate) || "")}" />
         </div>
-        <div class="finance-field">
-          <label class="finance-label" for="rl_method">Meio</label>
-          <input id="rl_method" class="finance-input" type="text" value="Transferência bancária" />
-        </div>
-        <div class="finance-field">
+        <div class="finance-field" style="grid-column: 1 / -1">
           <label class="finance-label" for="rl_notes">Notas</label>
           <input id="rl_notes" class="finance-input" type="text" value="${esc(movement.description || "")}" />
         </div>
-      </div>
-      <p class="finance-note" id="rl_hint" style="margin-top:0.75rem"></p>`,
+      </div>`,
     primaryLabel: "Registar recebimento",
     onRender: ({ panel }) => {
       const $ = (id) => panel.querySelector(`#${id}`);
       const refresh = () => {
         const missing = Number($("rl_invoice").selectedOptions[0]?.dataset.missing || 0);
         const value = Number($("rl_amount").value) || 0;
+        const rest = missing - value;
+        const bad = rest < -0.005 || value > amount + 0.005;
         $("rl_hint").textContent =
-          missing > 0
-            ? `Esta fatura tem ${money(missing)} em falta. Recebendo ${money(value)}, ficam ${money(
-                Math.max(missing - value, 0)
-              )} por receber.`
-            : "";
+          value > amount + 0.005
+            ? `Só há ${money(amount)} deste movimento por ligar.`
+            : rest < -0.005
+              ? `A fatura só tem ${money(missing)} em falta: o resto (${money(-rest)}) liga-se a outra fatura.`
+              : `Em falta ${money(missing)} → ficam ${money(Math.max(rest, 0))} por receber${amount - value > 0.005 ? ` · sobram ${money(amount - value)} do movimento para outra fatura` : ""}.`;
+        $("rl_hint").classList.toggle("ov-neg", bad);
       };
-      $("rl_invoice").addEventListener("change", refresh);
+      $("rl_invoice").addEventListener("change", () => {
+        const missing = Number($("rl_invoice").selectedOptions[0]?.dataset.missing || 0);
+        $("rl_amount").value = String(Math.min(amount, missing));
+        refresh();
+      });
       $("rl_amount").addEventListener("input", refresh);
       refresh();
     },
@@ -451,10 +776,11 @@ async function openReceiptLinkModal(movement) {
       const invoiceId = $("rl_invoice").value;
       const value = Number($("rl_amount").value);
       if (!value || value <= 0) return toast("Indique o valor recebido.", { type: "error" });
+      if (value > amount + 0.005) return toast(`Só há ${money(amount)} deste movimento por ligar.`, { type: "error" });
+      const missing = Number($("rl_invoice").selectedOptions[0]?.dataset.missing || 0);
+      if (value > missing + 0.005) return toast(`A fatura só tem ${money(missing)} em falta.`, { type: "error" });
+      if (!$("rl_date").value) return toast("Indique a data do recebimento.", { type: "error" });
       const notes = $("rl_notes").value.trim();
-      const reference = `Recebimento em banco ligado à fatura (${
-        $("rl_invoice").selectedOptions[0]?.textContent?.split("·")[1]?.trim() || "fatura"
-      })`;
 
       setButtonLoading(btn, true);
       try {
@@ -462,23 +788,18 @@ async function openReceiptLinkModal(movement) {
           method: "POST",
           body: {
             amount: value,
-            receivedDate: $("rl_date").value || toDateKey(movement.movementDate),
-            method: $("rl_method").value.trim() || null,
+            receivedDate: $("rl_date").value,
+            method: "Transferência bancária",
             notes: notes || null,
+            bankMovementId: movement.id,
           },
         });
-        // Guarda a ligação no movimento para se saber que já foi tratado.
-        await apiRequest(`/finance/bank-movements/${movement.id}`, {
-          method: "PATCH",
-          body: { notes: movement.notes ? `${movement.notes} · ${reference}` : reference },
-        });
-        toast("Recebimento registado e ligado à fatura.", { type: "success" });
+        toast(value < amount - 0.005 ? `Ligado. Ainda faltam ${money(amount - value)} deste movimento.` : "Recebimento registado e ligado à fatura.", { type: "success" });
         close();
         await load();
       } catch (err) {
-        toast(err.message || "Falha ao registar o recebimento.", { type: "error" });
-      } finally {
         setButtonLoading(btn, false);
+        toast(err.message || "Falha ao registar o recebimento.", { type: "error" });
       }
     },
   });
@@ -487,26 +808,26 @@ async function openReceiptLinkModal(movement) {
 /* ─── Carregamento ────────────────────────────────────────────────────────── */
 
 async function load() {
-  const cfg = config();
-  const wrap = document.getElementById("mvTable");
-  if (wrap) wrap.innerHTML = `<div class="finance-empty">A carregar movimentos…</div>`;
-  const params = new URLSearchParams();
-  if (cfg.type) params.set("movementType", cfg.type);
+  const c = cfg();
   try {
-    const data = await apiRequest(`/finance/bank-movements?${params.toString()}`);
-    state.items = data.items || [];
-    renderKpis();
-    renderTable();
-    renderCharts();
+    const params = new URLSearchParams(c.query);
+    const [movements, funds] = await Promise.all([
+      apiRequest(`/finance/bank-movements?${params.toString()}`),
+      c.fundRequests ? apiRequest("/finance/treasury/fund-requests") : Promise.resolve({ items: [] }),
+    ]);
+    state.items = movements.items || [];
+    state.fundRequests = funds.items || [];
+    renderAll();
   } catch (err) {
-    if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
+    const wrap = document.getElementById("tzTable");
+    if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar movimentos.", { type: "error" });
   }
 }
 
 export async function render() {
   destroyCharts();
-  state.filters = { projectId: "", pendingOnly: false };
+  Object.assign(state, { items: [], fundRequests: [], period: "365", view: "all", projectId: "", query: "" });
   try {
     state.options = await loadMovementOptions();
   } catch (err) {

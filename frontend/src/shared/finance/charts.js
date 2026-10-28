@@ -251,13 +251,16 @@ export function drawAreaChart(id, { categories = [], series = [], currency = "AO
 /**
  * Barras — comparações (por obra, por cliente, por fonte de custo).
  * `series`: [{ name, data: number[] }] e `horizontal: true` para barras deitadas.
+ * `percent: true` mostra os valores em % em vez de moeda.
  */
 export function drawBarChart(
   id,
-  { categories = [], series = [], currency = "AOA", height = 300, stacked = false, horizontal = false } = {}
+  { categories = [], series = [], currency = "AOA", height = 300, stacked = false, horizontal = false, percent = false } = {}
 ) {
   return safeMount(id, () => {
     if (!series.length || !categories.length) return null;
+    const fmt = percent ? (val) => `${(Number(val) || 0).toFixed(1)}%` : (val) => compactMoney(val);
+    const base = baseOptions({ currency, height });
     const axis = {
       categories,
       axisBorder: { show: false },
@@ -279,11 +282,19 @@ export function drawBarChart(
         },
       },
       xaxis: horizontal
-        ? { type: "numeric", labels: { ...axisLabelStyle(), formatter: (val) => compactMoney(val) } }
+        ? {
+            // Em barras horizontais as categorias continuam no xaxis (o Apex
+            // troca os eixos); sem elas o eixo vertical mostra 1, 2, 3…
+            categories,
+            axisBorder: { show: false },
+            axisTicks: { show: false },
+            labels: { ...axisLabelStyle(), formatter: fmt },
+          }
         : axis,
       yaxis: horizontal
         ? { labels: { ...axisLabelStyle(), maxWidth: 160 } }
-        : { labels: { ...axisLabelStyle(), formatter: (val) => compactMoney(val) } },
+        : { labels: { ...axisLabelStyle(), formatter: fmt } },
+      tooltip: percent ? { ...base.tooltip, y: { formatter: fmt } } : base.tooltip,
       fill: { opacity: 1 },
       stroke: { show: false },
       dataLabels: { enabled: false },
@@ -291,6 +302,60 @@ export function drawBarChart(
         ...baseOptions({ currency, height }).grid,
         yaxis: horizontal ? { lines: { show: false } } : undefined,
         xaxis: horizontal ? { lines: { show: true } } : { lines: { show: false } },
+      },
+    };
+  });
+}
+
+/**
+ * Colunas + linha — valores do mês em colunas e um resultado em linha por cima
+ * (ex.: faturação e custos em colunas, resultado do mês em linha).
+ * `series`: [{ name, type: "column" | "line", data: number[], color }]
+ */
+export function drawComboChart(id, { categories = [], series = [], currency = "AOA", height = 300 } = {}) {
+  return safeMount(id, () => {
+    if (!series.length || !categories.length) return null;
+    const base = baseOptions({ currency, height });
+    return {
+      ...base,
+      chart: { ...base.chart, type: "line", stacked: false },
+      series: series.map((s) => ({ name: s.name, type: s.type || "column", data: s.data })),
+      colors: series.map((s, index) => s.color || CHART_COLORS[index % CHART_COLORS.length]),
+      plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: "end", columnWidth: "52%" } },
+      stroke: { width: series.map((s) => (s.type === "line" ? 3 : 0)), curve: "smooth" },
+      markers: { size: series.map((s) => (s.type === "line" ? 4 : 0)), strokeWidth: 2, strokeColors: "#fff", hover: { sizeOffset: 2 } },
+      fill: { opacity: series.map((s) => (s.type === "line" ? 1 : 0.92)) },
+      xaxis: { categories, axisBorder: { show: false }, axisTicks: { show: false }, labels: axisLabelStyle() },
+      yaxis: { labels: { ...axisLabelStyle(), formatter: (val) => compactMoney(val) } },
+      tooltip: { ...base.tooltip, shared: true, intersect: false },
+    };
+  });
+}
+
+/** Mini-gráfico de tendência (sem eixos) para os cartões de indicadores. */
+export function drawSparkline(id, { data = [], color = TONES.blue, height = 44 } = {}) {
+  return safeMount(id, () => {
+    if (!data.length || !data.some((v) => Number(v))) return null;
+    return {
+      chart: {
+        type: "area",
+        height,
+        width: "100%",
+        sparkline: { enabled: true },
+        animations: { enabled: false },
+        redrawOnParentResize: true,
+        fontFamily: "Inter, sans-serif",
+      },
+      series: [{ name: "Valor", data: data.map((v) => Number(v) || 0) }],
+      colors: [color],
+      stroke: { curve: "smooth", width: 2 },
+      fill: { type: "gradient", gradient: { opacityFrom: 0.3, opacityTo: 0, stops: [0, 100] } },
+      tooltip: {
+        fixed: { enabled: false },
+        x: { show: false },
+        marker: { show: false },
+        y: { title: { formatter: () => "" }, formatter: (val) => compactMoney(val) },
+        style: { fontFamily: "Inter, sans-serif", fontSize: "11px" },
       },
     };
   });
@@ -395,7 +460,16 @@ export function drawRadialChart(id, { value = 0, label = "", color = TONES.blue,
 }
 
 /** Cartão de gráfico com título, subtítulo, ações opcionais e legenda de rodapé. */
-export function chartCardHtml({ id, title, subtitle = "", hint = "", span = 1, height = 300, actionsHtml = "" }) {
+export function chartCardHtml({
+  id,
+  title,
+  subtitle = "",
+  hint = "",
+  span = 1,
+  height = 300,
+  actionsHtml = "",
+  beforeChartHtml = "",
+}) {
   const cols = [1, 2, 3].includes(span) ? ` finance-chart-card--span-${span}` : "";
   return `
     <section class="finance-card finance-chart-card${cols}">
@@ -406,6 +480,7 @@ export function chartCardHtml({ id, title, subtitle = "", hint = "", span = 1, h
         </div>
         ${actionsHtml || ""}
       </header>
+      ${beforeChartHtml}
       <div id="${id}" class="finance-chart" style="min-height:${height}px"></div>
       ${hint ? `<p class="finance-chart-hint">${hint}</p>` : ""}
     </section>`;

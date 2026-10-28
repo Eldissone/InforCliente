@@ -189,6 +189,7 @@ export function openModal({
   secondaryLabel = "Cancelar",
   onSecondary,
   onRender,
+  width = null,
 }) {
   const overlay = document.createElement("div");
   overlay.className =
@@ -211,6 +212,9 @@ export function openModal({
       ${primaryLabel ? `<button type="button" data-primary class="h-11 px-6 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-all active:scale-95">${primaryLabel}</button>` : ""}
     </div>
   `;
+
+  // Largura opcional para formulários extensos (por omissão continua 640px).
+  if (width) panel.style.maxWidth = typeof width === "number" ? `${width}px` : width;
 
   overlay.appendChild(panel);
   document.body.appendChild(overlay);

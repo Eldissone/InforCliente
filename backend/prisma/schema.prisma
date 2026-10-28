@@ -624,6 +624,10 @@ model StockMovement {
   dailyPlanId     String?
   userId          String
   warehouseId     String
+  // Saída para a obra = custo da obra: nº da fatura da compra e confirmação do financeiro.
+  costDocNumber   String?
+  costConfirmedAt DateTime?
+  costConfirmedBy String?
   photos          ProjectPhoto[]
   product         Product        @relation(fields: [productId], references: [id])
   project         Project?       @relation(fields: [projectId], references: [id])
@@ -1050,7 +1054,9 @@ model CostPayment {
   certificationNotes String?
   confirmationStatus CostConfirmationStatus @default(POR_CONFIRMAR)
   responsible        String?
-  sourceType         String? // MERCADORIA_STOCK | PAGAMENTO_DIRETO | ATM | MANUAL
+  sourceType             String? // MERCADORIA_STOCK | PAGAMENTO_DIRETO | ATM | MOVIMENTO_BANCARIO | MANUAL
+  bankMovementId         String? // movimento do extrato que originou / reconcilia este custo
+  costCategoryId         Int? // categoria/subcategoria do catálogo de custos
   createdAt          DateTime            @default(now())
   project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   costCenter         CostCenter          @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
@@ -1064,6 +1070,7 @@ model CostPayment {
   @@index([projectId, paymentDate])
   @@index([confirmedAt])
   @@index([certificationStatus])
+  @@index([bankMovementId])
 }
 
 // =============================================
@@ -1154,6 +1161,7 @@ model PettyCashCard {
   reinforcementRequests PettyCashReinforcementRequest[]
   bankStatements        BankStatement[]
   bankMovements         BankMovement[]
+  bankBalances          BankBalance[]
 
   @@index([fundId])
 }
@@ -2091,10 +2099,15 @@ model InvoiceReceipt {
   notes        String?
   createdBy    String?
   createdAt    DateTime @default(now())
+  // Movimento do extrato (entrada) que trouxe este dinheiro. Um movimento pode
+  // pagar várias faturas; a soma dos recebimentos não pode passar o valor dele.
+  bankMovementId String?
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  bankMovement BankMovement? @relation(fields: [bankMovementId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId, receivedDate])
+  @@index([bankMovementId])
 }
 
 // Extrato bancário importado para a área financeira.
@@ -2104,6 +2117,10 @@ model BankStatement {
   name        String
   periodStart DateTime?
   periodEnd   DateTime?
+  // Saldos impressos no extrato: servem para conferir os movimentos e fixam o
+  // saldo da conta na data de fim do período.
+  openingBalance Decimal?  @db.Decimal(16, 2)
+  closingBalance Decimal?  @db.Decimal(16, 2)
   fileName    String?
   notes       String?
   createdBy   String?
@@ -2111,6 +2128,7 @@ model BankStatement {
 
   card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
   movements BankMovement[]
+  balances  BankBalance[]
 
   @@index([cardId])
 }
@@ -2141,9 +2159,30 @@ model BankMovement {
   card      PettyCashCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
   project   Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   supplier  Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  receipts  InvoiceReceipt[]
 
   @@index([statementId])
   @@index([projectId, movementDate])
   @@index([movementType])
   @@index([costAssigned])
+}
+
+// Saldo de um cartão / conta bancária numa data — vem do saldo final de um
+// extrato ou de um acerto manual da tesouraria. O saldo atual da conta é o
+// último registo mais os movimentos do extrato posteriores a essa data.
+model BankBalance {
+  id          String   @id @default(cuid())
+  cardId      String
+  balance     Decimal  @db.Decimal(16, 2)
+  balanceDate DateTime
+  source      String   @default("MANUAL") // EXTRATO | MANUAL
+  statementId String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  card      PettyCashCard  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  statement BankStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
+
+  @@index([cardId, balanceDate])
 }

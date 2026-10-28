@@ -69,12 +69,12 @@ const APP_MENU = [
         label: "Custos",
         icon: "payments",
         children: [
+          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
           { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
           { label: "Custos Realizados", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
-          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
         ],
       },
-      { label: "Contas a Pagar / Receber", icon: "swap_horiz", href: "/Financeiro/contas", perm: "financeiro:view" },
+      { label: "Contas a Receber / Pagar", icon: "swap_horiz", href: "/Financeiro/contas", perm: "financeiro:view" },
       {
         label: "Tesouraria",
         icon: "account_balance_wallet",

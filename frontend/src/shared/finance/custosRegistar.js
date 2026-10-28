@@ -1,28 +1,26 @@
 import { apiRequest } from "../../services/api.js";
-import { openModal, toast, setButtonLoading } from "../ui.js";
+import { toast } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
-import { chartCardHtml, drawAreaChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
+import { chartCardHtml, compactMoney as compact, drawComboChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
+import { AGING_TONES } from "./aging.js";
+import { kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
+import { COST_TYPES, loadCostFormOptions, openConfirmCostModal, openCostForm } from "./costForm.js";
 
 /**
  * Ecrã «Registar Custos» (Financeiro · Custos).
  *
- * Lista TODOS os custos da plataforma numa só tabela, com a fonte identificada:
- * pagamentos/cotações, pedidos extra, lançamentos de obra e pedidos de compra.
- * Os custos realizados mostram o estado «Por confirmar / Confirmado» e podem
- * ser confirmados pelo financeiro.
+ * Lista TODOS os custos da plataforma numa só tabela, com a área de origem:
+ * pagamentos/cotações, pedidos extra, lançamentos de obra, pedidos de compra,
+ * fretes, consumo de stock da obra e levantamentos ATM.
+ *
+ * O trabalho do financeiro é a faixa de ações:
+ *  - registar o nº da fatura e confirmar o custo (pagamentos e consumos);
+ *  - discriminar os levantamentos ATM por fornecedor/produto/categoria;
+ *  - acompanhar a mercadoria paga que ainda está em stock (não é custo da obra
+ *    até sair para a obra).
  */
-
-const CATEGORY = {
-  MATERIAL: "Material",
-  SERVICO: "Serviço",
-  MAO_DE_OBRA: "Mão de Obra",
-  EQUIPAMENTO: "Equipamento",
-  TRANSPORTE: "Transporte",
-  ADMINISTRATIVO: "Administrativo",
-  OUTRO: "Outro",
-};
 
 const SOURCE_TONE = {
   PAGAMENTO: "blue",
@@ -30,27 +28,60 @@ const SOURCE_TONE = {
   LANCAMENTO: "amber",
   PEDIDO_COMPRA: "emerald",
   FRETE: "slate",
+  CONSUMO_STOCK: "emerald",
+  ATM: "red",
 };
 
-const SOURCE_DETAIL = {
-  MERCADORIA_STOCK: "Stock (mercadoria)",
+const SOURCE_COLOR = {
+  PAGAMENTO: TONES.blue,
+  PEDIDO_EXTRA: TONES.violet,
+  LANCAMENTO: TONES.amber,
+  PEDIDO_COMPRA: "#0ea5e9",
+  FRETE: TONES.slate,
+  CONSUMO_STOCK: TONES.emerald,
+  ATM: TONES.red,
+};
+
+const DETAIL = {
+  MERCADORIA_STOCK: "Mercadoria em stock",
   PAGAMENTO_DIRETO: "Pagamento direto",
+  MOVIMENTO_BANCARIO: "Movimento bancário",
   ATM: "ATM",
   MANUAL: "Manual",
+  SAIDA_OBRA: "Saída para a obra",
+};
+
+const VIEWS = {
+  all: { label: "Todos", test: (c) => c.kind !== "STOCK" },
+  action: { label: "Por confirmar", test: (c) => c.action === "CONFIRMAR" || c.action === "REGISTAR_FATURA" },
+  missingDoc: { label: "Sem nº fatura", test: (c) => c.action === "REGISTAR_FATURA" },
+  atm: { label: "ATM por discriminar", test: (c) => c.action === "DISCRIMINAR" },
+  confirmed: { label: "Confirmados", test: (c) => c.confirmationStatus === "CONFIRMADO" && c.kind !== "STOCK" },
+  committed: { label: "Comprometidos", test: (c) => num(c.remaining) > 0 },
+  stock: { label: "Mercadoria em stock", test: (c) => c.kind === "STOCK" },
 };
 
 const state = {
-  filters: { projectId: "", status: "", source: "" },
+  view: "all",
+  query: "",
+  filters: { projectId: "", source: "" },
+  months: 12,
   projects: [],
-  suppliers: [],
   sources: [],
   items: [],
   totals: null,
   charts: null,
+  expanded: new Set(),
+  formOptions: null,
 };
 
 function money(value, currency) {
   return formatCurrency(Number(value) || 0, currency || "AOA");
+}
+
+function pct(value, digits = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(digits)}%` : "—";
 }
 
 function canEdit() {
@@ -68,590 +99,565 @@ function dateOnly(value) {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
-function sourceChip(entry) {
-  const tone = SOURCE_TONE[entry.source] || "";
-  const detail = SOURCE_DETAIL[entry.detail] ? ` · ${SOURCE_DETAIL[entry.detail]}` : "";
-  return `<span class="finance-chip ${tone ? `finance-chip--${tone}` : ""}">${esc(
-    `${entry.sourceLabel || entry.source}${detail}`
-  )}</span>`;
+function sourceChip(c) {
+  const tone = SOURCE_TONE[c.source] || "slate";
+  const detail = c.isMerchandise ? DETAIL.MERCADORIA_STOCK : c.source === "CONSUMO_STOCK" ? null : DETAIL[c.detail];
+  return `
+    <div class="cr-source">
+      <span class="finance-chip finance-chip--${tone}">${esc(c.sourceLabel || c.source)}</span>
+      ${detail ? `<small>${esc(detail)}</small>` : ""}
+    </div>`;
 }
 
-function confirmBadge(status) {
-  if (status === "CONFIRMADO") {
-    return `<span class="finance-badge finance-badge--emerald">Confirmado</span>`;
-  }
-  return `<span class="finance-badge finance-badge--amber">Por confirmar</span>`;
+function stateCell(c) {
+  if (c.kind === "STOCK") return `<span class="finance-badge finance-badge--slate" title="Paga, ainda em armazém">Em stock</span>`;
+  if (c.action === "DISCRIMINAR") return `<span class="finance-badge finance-badge--red">Por discriminar</span>`;
+  if (c.action === "REGISTAR_FATURA") return `<span class="finance-badge finance-badge--amber">Sem nº fatura</span>`;
+  if (c.confirmationStatus === "CONFIRMADO") return `<span class="finance-badge finance-badge--emerald">Confirmado</span>`;
+  if (c.kind === "COMPROMETIDO") return `<span class="finance-badge finance-badge--slate">Comprometido</span>`;
+  if (c.source === "CONSUMO_STOCK" && !c.hasUnitCost) return `<span class="finance-badge finance-badge--amber" title="Não há entradas valorizadas deste produto">Sem custo unitário</span>`;
+  if (c.confirmable) return `<span class="finance-badge finance-badge--amber">Por confirmar</span>`;
+  return `<span class="finance-badge finance-badge--slate" title="Gerido na área de origem">Na origem</span>`;
 }
+
+/* ─── Estrutura ───────────────────────────────────────────────────────────── */
 
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
-    <div id="costKpis" class="finance-kpi-grid"></div>
+    <div class="ov">
+      <div id="crKpis" class="ov-kpis">${skeletonHtml(4, "kpi")}</div>
+      <div id="crStrip" class="ov-strip">${skeletonHtml(6, "cell")}</div>
 
-    <div class="finance-chart-grid">
       ${chartCardHtml({
         id: "crChartMonthly",
         title: "Custos mês a mês",
-        subtitle: "Custo pago e valor por liquidar nos últimos 12 meses",
-        hint: "“Custo pago” é dinheiro que já saiu; “por liquidar” é o que está assumido mas ainda não foi pago.",
-        span: 2,
-        height: 300,
+        subtitle: "Custo realizado e valor comprometido (por pagar) pela data do custo",
+        hint: "Realizado é dinheiro que já saiu (ou material consumido na obra); comprometido é o que está assumido e ainda não foi pago.",
+        height: 280,
+        actionsHtml: `
+          <div class="finance-seg finance-seg--sm" id="crRange">
+            <button type="button" data-months="6">6M</button>
+            <button type="button" data-months="12" class="active">12M</button>
+          </div>`,
+        beforeChartHtml: `<div id="crFlowTotals" class="ov-flow-totals"></div>`,
       })}
-      ${chartCardHtml({
-        id: "crChartSources",
-        title: "Custos por fonte",
-        subtitle: "Origem de cada custo no filtro actual",
-        height: 290,
-      })}
-      ${chartCardHtml({
-        id: "crChartAging",
-        title: "Por pagar por antiguidade",
-        subtitle: "Valor em falta pela data do custo",
-        height: 290,
-      })}
-    </div>
 
-    <section class="finance-card" style="margin-bottom:1.5rem">
-      <div class="finance-chart-head">
-        <h2 class="finance-chart-title">Como é que um custo chega aqui?</h2>
-        <p class="finance-chart-subtitle">
-          Esta página reúne todos os custos da plataforma num só sítio e serve para o financeiro os confirmar.
-          Nada é duplicado: cada custo aparece uma única vez, com a área de onde veio identificada.
-        </p>
+      <div class="ov-row ov-row--6-6">
+        <section class="finance-card ov-panel">
+          <header class="finance-chart-head">
+            <h2 class="finance-chart-title">Por pagar</h2>
+            <p class="finance-chart-subtitle">Valor comprometido por antiguidade da data do custo</p>
+          </header>
+          <div id="crAging">${skeletonHtml(3, "line")}</div>
+        </section>
+        ${chartCardHtml({ id: "crChartSources", title: "Realizado por fonte", subtitle: "Área da plataforma de onde vem cada custo", height: 280 })}
       </div>
-      <ul class="finance-steps">
-        <li><span class="material-symbols-outlined">shopping_cart</span><span><strong>Pagamento / Cotação</strong> — aprovado no Centro de Compras ou lançado no centro de custo da obra. Entra no custo realizado assim que o valor é pago.</span></li>
-        <li><span class="material-symbols-outlined">request_quote</span><span><strong>Pedido Extra</strong> — aprovado na obra ou no Centro de Compras. Fica comprometido e passa a realizado quando é pago.</span></li>
-        <li><span class="material-symbols-outlined">receipt_long</span><span><strong>Lançamento de Obra</strong> — despesa registada no diário financeiro da obra, já paga ou por liquidar.</span></li>
-        <li><span class="material-symbols-outlined">assignment</span><span><strong>Pedido de Compra</strong> — encomenda ainda aberta. Conta como comprometido até chegar a pagamento.</span></li>
-        <li><span class="material-symbols-outlined">local_shipping</span><span><strong>Frete</strong> — alocação por obra que ainda não foi enviada ao financeiro.</span></li>
-      </ul>
-      <p class="finance-note" style="margin-top:0.85rem">
-        Custos que nascem fora destas áreas (rendas, serviços pontuais, despesas administrativas ou pagamentos
-        já feitos ao balcão) registam-se aqui com <strong>«Novo Custo»</strong>: escolhe-se a obra, o centro de custo
-        e indica-se o valor total e o que já foi pago.
-      </p>
-    </section>
 
-    <section class="finance-card">
-      <div class="fin-toolbar" style="margin-bottom:1rem">
-        <div class="fin-toolbar-filters">
-          <select id="costProject" class="finance-select fin-proj-filter"></select>
-          <select id="costStatus" class="finance-select">
-            <option value="">Todos os estados</option>
-            <option value="POR_CONFIRMAR">Por confirmar</option>
-            <option value="CONFIRMADO">Confirmado</option>
-          </select>
-          <select id="costSource" class="finance-select">
-            <option value="">Todas as fontes</option>
-          </select>
-          <button id="costClear" type="button" class="finance-btn finance-btn--ghost">
-            <span class="material-symbols-outlined">filter_alt_off</span>Limpar
-          </button>
-        </div>
-      </div>
-      <p class="finance-hint">
-        Todos os custos da plataforma estão ligados aqui: pagamentos e prestações de fornecedor,
-        pedidos extra (caixa, banco e fundo de maneio), lançamentos de obra e pedidos de compra.
-        A mercadoria entra pelo custo da compra, não pela saída de stock.
-      </p>
-      <div id="costTable" class="finance-table-scroll"></div>
-    </section>`;
+      <section class="finance-card ov-panel">
+        <header class="finance-chart-head finance-chart-head--row">
+          <div>
+            <h2 class="finance-chart-title" id="crTitle">Custos</h2>
+            <p class="finance-chart-subtitle" id="crCount">—</p>
+          </div>
+          <div class="ov-table-tools">
+            <label class="ov-search">
+              <span class="material-symbols-outlined">search</span>
+              <input id="crSearch" type="search" placeholder="Descrição, nº fatura, fornecedor…" autocomplete="off" />
+            </label>
+            <select id="crProject" class="finance-select inv-filter" title="Obra"></select>
+            <select id="crSource" class="finance-select inv-filter" title="Fonte"></select>
+            <button id="crClear" type="button" class="finance-btn finance-btn--ghost inv-filter-clear" title="Limpar filtros">
+              <span class="material-symbols-outlined">filter_alt_off</span>
+            </button>
+          </div>
+        </header>
+        <div id="crTable" class="finance-table-scroll"></div>
+      </section>
+    </div>`;
 
-  const projectSel = document.getElementById("costProject");
+  const projectSel = document.getElementById("crProject");
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
-    state.projects
-      .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
-      .join("");
-
-  const sourceSel = document.getElementById("costSource");
-  sourceSel.innerHTML =
-    `<option value="">Todas as fontes</option>` +
-    state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
-  sourceSel.value = state.filters.source;
+    state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+  projectSel.value = state.filters.projectId;
+  fillSources();
 
   projectSel.addEventListener("change", () => {
     state.filters.projectId = projectSel.value;
     load();
   });
-  document.getElementById("costStatus").addEventListener("change", (e) => {
-    state.filters.status = e.target.value;
-    load();
-  });
-  sourceSel.addEventListener("change", (e) => {
+  document.getElementById("crSource").addEventListener("change", (e) => {
     state.filters.source = e.target.value;
-    load();
+    renderAll();
   });
-  document.getElementById("costClear").addEventListener("click", () => {
-    state.filters = { projectId: "", status: "", source: "" };
+  document.getElementById("crClear").addEventListener("click", () => {
+    const reload = Boolean(state.filters.projectId);
+    state.filters = { projectId: "", source: "" };
+    state.query = "";
+    state.view = "all";
     projectSel.value = "";
-    document.getElementById("costStatus").value = "";
-    sourceSel.value = "";
-    load();
+    document.getElementById("crSource").value = "";
+    document.getElementById("crSearch").value = "";
+    if (reload) load();
+    else renderAll();
+  });
+
+  let timer = null;
+  document.getElementById("crSearch").addEventListener("input", (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      state.query = e.target.value;
+      renderTable();
+    }, 150);
+  });
+
+  document.querySelectorAll("#crRange button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.months = Number(btn.dataset.months);
+      document.querySelectorAll("#crRange button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderMonthly();
+    });
   });
 
   const actions = document.getElementById("financePageActions");
   if (actions) {
     actions.innerHTML = canEdit()
-      ? `<button id="costNew" type="button" class="finance-btn finance-btn--primary">
+      ? `<button id="crNew" type="button" class="finance-btn finance-btn--primary">
            <span class="material-symbols-outlined">add</span>Novo Custo
          </button>`
       : "";
-    document.getElementById("costNew")?.addEventListener("click", openManualCostModal);
+    document.getElementById("crNew")?.addEventListener("click", () => openForm());
   }
 }
+
+function fillSources() {
+  const sel = document.getElementById("crSource");
+  if (!sel) return;
+  sel.innerHTML =
+    `<option value="">Todas as fontes</option>` +
+    state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
+  sel.value = state.filters.source;
+}
+
+/* ─── Indicadores ─────────────────────────────────────────────────────────── */
 
 function renderKpis() {
   const t = state.totals || {};
+  const realized = num(t.realized);
+  const confirmedPct = realized > 0 ? (num(t.confirmed) / realized) * 100 : 0;
+  const stockConsumed = num(t.bySource?.CONSUMO_STOCK);
   const cards = [
-    { label: "Custos Realizados", value: money(t.realized), sub: "Valor pago em todas as fontes", tone: "blue", icon: "payments" },
-    { label: "Confirmados", value: money(t.confirmed), sub: "Custos confirmados pelo financeiro", tone: "emerald", icon: "verified" },
-    { label: "Por Confirmar", value: money(t.pending), sub: "Aguarda confirmação", tone: "amber", icon: "pending_actions" },
-    { label: "Lançamentos", value: String(state.items.length), sub: "No filtro actual", tone: "slate", icon: "list_alt" },
+    {
+      key: "realized",
+      label: "Custo realizado",
+      icon: "payments",
+      tone: "blue",
+      value: money(realized),
+      badge: `${pct(confirmedPct)} confirmado`,
+      badgeTone: confirmedPct >= 100 ? "emerald" : "amber",
+      body: `
+        ${meterHtml([
+          { value: confirmedPct, tone: "emerald" },
+          { value: 100 - confirmedPct, tone: "amber-soft" },
+        ])}
+        <p class="ov-kpi-compare">
+          <span class="ov-legend"><i class="ov-dot ov-dot--emerald"></i>Confirmado ${esc(compact(t.confirmed))}</span>
+          <span class="ov-legend" style="margin-left:0.6rem"><i class="ov-dot ov-dot--amber"></i>Por confirmar ${esc(compact(t.pending))}</span>
+        </p>`,
+    },
+    {
+      key: "action",
+      label: "A tratar pelo financeiro",
+      icon: "task_alt",
+      tone: num(t.actionCount) > 0 ? "amber" : "emerald",
+      value: String(num(t.actionCount)),
+      badge: compact(t.actionValue),
+      badgeTone: num(t.actionCount) > 0 ? "amber" : "emerald",
+      body: `
+        <dl class="ov-kpi-split">
+          <div><dt>Sem nº fatura</dt><dd class="${num(t.missingDocCount) ? "ov-warn" : ""}">${num(t.missingDocCount)}</dd></div>
+          <div><dt>ATM por discriminar</dt><dd class="${num(t.toDiscriminateCount) ? "ov-neg" : ""}">${num(t.toDiscriminateCount)}</dd></div>
+        </dl>`,
+    },
+    {
+      key: "committed",
+      label: "Comprometido",
+      icon: "lock_clock",
+      tone: "slate",
+      value: money(t.committed),
+      badge: "por pagar",
+      badgeTone: "blue",
+      body: `<p class="ov-kpi-compare">Assumido em pagamentos, pedidos e encomendas ainda abertos · projeção <strong>${esc(compact(realized + num(t.committed)))}</strong></p>`,
+    },
+    {
+      key: "stock",
+      label: "Mercadoria",
+      icon: "inventory_2",
+      tone: "emerald",
+      value: money(stockConsumed),
+      badge: "consumida",
+      badgeTone: "emerald",
+      body: `
+        <dl class="ov-kpi-split">
+          <div><dt>Paga, em stock</dt><dd>${esc(compact(t.stock))}</dd></div>
+          <div><dt>Saídas sem custo</dt><dd class="${num(t.noUnitCostCount) ? "ov-warn" : ""}">${num(t.noUnitCostCount)}</dd></div>
+        </dl>`,
+    },
   ];
-  document.getElementById("costKpis").innerHTML = cards
-    .map(
-      (c) => `
-      <div class="finance-kpi finance-kpi--${c.tone}">
-        <span class="finance-kpi-label">
-          <span class="material-symbols-outlined" style="font-size:15px">${c.icon}</span>${esc(c.label)}
-        </span>
-        <span class="finance-kpi-value">${esc(c.value)}</span>
-        <span class="finance-kpi-sub">${esc(c.sub)}</span>
-      </div>`
-    )
-    .join("");
+  document.getElementById("crKpis").innerHTML = kpiCardsHtml(cards, "cr");
+}
+
+function viewCount(key) {
+  return state.items.filter((c) => VIEWS[key].test(c)).length;
+}
+
+function viewValue(key, field = "paidAmount") {
+  return state.items.filter((c) => VIEWS[key].test(c)).reduce((a, c) => a + num(c[field]), 0);
+}
+
+function renderStrip() {
+  const cell = (key, icon, { value, sub, tone } = {}) => ({
+    label: VIEWS[key].label,
+    icon,
+    value: value ?? String(viewCount(key)),
+    valueTone: tone || null,
+    sub,
+    action: key,
+    active: state.view === key,
+  });
+  const actionN = viewCount("action");
+  const missingN = viewCount("missingDoc");
+  const atmN = viewCount("atm");
+  const wrap = document.getElementById("crStrip");
+  wrap.innerHTML = stripHtml([
+    cell("all", "list_alt", { sub: compact(viewValue("all")) + " realizados" }),
+    cell("action", "pending_actions", { tone: actionN ? "warn" : null, sub: compact(viewValue("action")) + " a confirmar" }),
+    cell("missingDoc", "receipt_long", { tone: missingN ? "warn" : null, sub: "registar o nº da fatura" }),
+    cell("atm", "atm", { tone: atmN ? "neg" : null, sub: atmN ? compact(viewValue("atm")) + " por discriminar" : "tudo discriminado" }),
+    cell("confirmed", "verified", { sub: compact(viewValue("confirmed")) + " confirmados" }),
+    cell("stock", "inventory_2", { sub: compact(viewValue("stock", "stockValue")) + " pagos em armazém" }),
+  ]);
+  wrap.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.view = state.view === btn.dataset.action && btn.dataset.action !== "all" ? "all" : btn.dataset.action;
+      renderStrip();
+      renderTable();
+    });
+  });
+}
+
+/* ─── Tabela ──────────────────────────────────────────────────────────────── */
+
+function visibleItems() {
+  const q = state.query.trim().toLowerCase();
+  return state.items.filter((c) => {
+    if (!VIEWS[state.view].test(c)) return false;
+    if (state.filters.source && c.source !== state.filters.source) return false;
+    if (!q) return true;
+    return [c.description, c.docNumber, c.supplierRef?.name, c.supplier, c.project?.name, c.project?.code, c.costCenter?.name]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  });
+}
+
+function detailRow(c, cur) {
+  const item = (label, value, cls = "") => `
+    <div class="inv-detail-item">
+      <span>${esc(label)}</span>
+      <strong class="${cls}">${value}</strong>
+    </div>`;
+  const cat = c.costCategory ? [c.costCategory.parentName, c.costCategory.name].filter(Boolean).join(" › ") : null;
+  const parts = [
+    item("Centro de custo", esc(c.costCenter ? `${c.costCenter.code || ""} ${c.costCenter.name}`.trim() : "—")),
+    item("Tipo custo", esc(COST_TYPES[c.category] || c.category || "—")),
+    item("Categoria / subcategoria", esc(cat || "—")),
+    item("Valor do custo", esc(money(c.amount, cur))),
+  ];
+  if (c.source === "CONSUMO_STOCK") {
+    parts.push(
+      item("Quantidade", esc(String(c.quantity ?? "—"))),
+      item("Custo médio unitário", c.hasUnitCost ? esc(money(c.unitCost, cur)) : "Sem entradas valorizadas", c.hasUnitCost ? "" : "ov-warn")
+    );
+  }
+  if (c.kind === "STOCK") parts.push(item("Pago, em stock", esc(money(c.stockValue, cur))));
+  parts.push(
+    item("Responsável", esc(c.responsible || "—")),
+    item("Estado na origem", esc(c.status || "—")),
+    item("Movimento bancário", c.bankMovementId ? "Ligado ao extrato" : "—", c.bankMovementId ? "ov-pos" : "")
+  );
+  return `<div class="inv-detail">${parts.join("")}</div>`;
+}
+
+function actionButtons(c) {
+  if (!canEdit()) return "";
+  if (c.action === "DISCRIMINAR") {
+    return `<button type="button" class="cr-act cr-act--red" data-act="split"><span class="material-symbols-outlined">call_split</span>Discriminar</button>`;
+  }
+  if (c.action === "REGISTAR_FATURA") {
+    return `<button type="button" class="cr-act cr-act--amber" data-act="confirm"><span class="material-symbols-outlined">receipt_long</span>Nº fatura</button>`;
+  }
+  if (c.action === "CONFIRMAR") {
+    return canApprove()
+      ? `<button type="button" class="cr-act cr-act--emerald" data-act="confirm"><span class="material-symbols-outlined">done</span>Confirmar</button>`
+      : `<span class="finance-badge finance-badge--amber" title="Aguarda aprovação do financeiro">Por confirmar</span>`;
+  }
+  if (c.confirmable && c.confirmationStatus === "CONFIRMADO") {
+    return `<div class="cr-state">${stateCell(c)}<button type="button" class="fin-icon-btn" data-act="edit" title="Corrigir nº da fatura"><span class="material-symbols-outlined" style="font-size:16px">edit</span></button></div>`;
+  }
+  return "";
 }
 
 function renderTable() {
-  const wrap = document.getElementById("costTable");
-  if (!state.items.length) {
-    wrap.innerHTML = `<div class="finance-empty"><span class="material-symbols-outlined">request_quote</span>Sem custos para os filtros selecionados.</div>`;
+  const wrap = document.getElementById("crTable");
+  if (!wrap) return;
+  const items = visibleItems();
+  document.getElementById("crTitle").textContent = state.view === "all" ? "Custos" : VIEWS[state.view].label;
+  document.getElementById("crCount").textContent =
+    `${items.length} de ${state.items.length} lançamentos · clique numa linha para ver centro de custo, categoria e responsável`;
+
+  if (!items.length) {
+    wrap.innerHTML = `
+      <div class="ov-empty ov-empty--lg">
+        <span class="material-symbols-outlined">${state.view === "all" ? "request_quote" : "task_alt"}</span>
+        ${state.items.length ? (state.view === "all" ? "Nenhum custo corresponde aos filtros." : "Nada a tratar nesta vista.") : "Ainda não há custos registados."}
+      </div>`;
     return;
   }
-  const editable = canEdit();
-  const rows = state.items
+
+  const rows = items
     .map((c) => {
       const cur = c.currency || c.project?.currency || "AOA";
-      const supplier = c.supplierRef?.name || c.supplier || "—";
-      const isPayment = c.source === "PAGAMENTO";
+      const open = state.expanded.has(c.id);
+      const supplier = c.supplierRef?.name || c.supplier;
+      const value = c.kind === "STOCK" ? c.stockValue : c.paidAmount;
       return `
-      <tr data-id="${esc(c.id)}">
-        <td>${esc(dateOnly(c.date))}</td>
+      <tr data-id="${esc(c.id)}" class="fin-row--clickable ${c.action === "DISCRIMINAR" ? "fin-row--overdue" : ""}">
         <td>
-          <div style="font-weight:700;color:#0f172a">${esc(c.project?.name || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.project?.code || "")}</div>
-        </td>
-        <td>${esc(c.costCenter?.name || "—")}</td>
-        <td>${esc(supplier)}</td>
-        <td style="max-width:260px">
-          <div style="font-weight:600;color:#0f172a">${esc(c.description || "—")}</div>
-          <div style="font-size:11px;color:#94a3b8;font-weight:600">${esc(c.docNumber || "")}</div>
-        </td>
-        <td>${esc(CATEGORY[c.category] || c.category || "—")}</td>
-        <td>${sourceChip(c)}</td>
-        <td class="fin-num">${esc(money(c.paidAmount, cur))}</td>
-        <td class="fin-num ${Number(c.remaining) > 0 ? "finance-muted" : ""}">${esc(money(c.remaining, cur))}</td>
-        <td>${confirmBadge(c.confirmationStatus)}</td>
-        <td>${c.responsible ? esc(c.responsible) : '<span class="fin-empty-cell">—</span>'}</td>
-        <td>
-          <div class="fin-actions">
-            ${
-              editable
-                ? `${
-                    isPayment && c.confirmationStatus !== "CONFIRMADO" && canApprove()
-                      ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Confirmar custo" data-action="confirm">
-                           <span class="material-symbols-outlined" style="font-size:17px">done</span>
-                         </button>`
-                      : ""
-                  }
-                   ${
-                     isPayment
-                       ? `<button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Detalhe do pagamento" data-action="edit">
-                            <span class="material-symbols-outlined" style="font-size:17px">edit</span>
-                          </button>`
-                       : `<span class="fin-empty-cell" title="Gerido na área de origem">—</span>`
-                   }`
-                : `<span class="fin-empty-cell">—</span>`
-            }
+          <div class="inv-doc">
+            <span class="material-symbols-outlined inv-toggle ${open ? "open" : ""}">chevron_right</span>
+            <div class="cr-desc">
+              <span class="cr-desc-title">${esc(c.description || "—")}</span>
+              <span class="ov-project-meta">${c.docNumber ? `<strong class="cr-doc">${esc(c.docNumber)}</strong> · ` : ""}${esc(dateOnly(c.date))}${supplier ? ` · ${esc(supplier)}` : ""}</span>
+            </div>
           </div>
         </td>
+        <td>
+          <div class="ov-project">
+            <span class="ov-project-name">${esc(c.project?.name || "—")}</span>
+            <span class="ov-project-meta">${esc(c.costCenter?.name || c.project?.code || "")}</span>
+          </div>
+        </td>
+        <td>${sourceChip(c)}</td>
+        <td class="fin-num ${c.kind === "STOCK" ? "ov-muted" : ""}"><strong>${esc(money(value, cur))}</strong></td>
+        <td class="fin-num ${num(c.remaining) > 0 ? "ov-warn" : "ov-muted"}">${num(c.remaining) > 0 ? esc(money(c.remaining, cur)) : "—"}</td>
+        <td>${actionButtons(c) || stateCell(c)}</td>
+      </tr>
+      <tr class="fin-subrow" ${open ? "" : "hidden"}>
+        <td colspan="6">${detailRow(c, cur)}</td>
       </tr>`;
     })
     .join("");
 
-  const t = state.totals || {};
+  const paid = items.filter((c) => c.kind !== "STOCK").reduce((a, c) => a + num(c.paidAmount), 0);
+  const remaining = items.reduce((a, c) => a + num(c.remaining), 0);
   wrap.innerHTML = `
-    <table class="fin-table" style="min-width:1450px">
+    <table class="fin-table cr-table">
       <thead>
         <tr>
-          <th>Data</th><th>Obra</th><th>Centro de Custo</th><th>Fornecedor</th><th>Descrição</th>
-          <th>Categoria</th><th>Fonte</th><th style="text-align:right">V. Pago</th>
-          <th style="text-align:right">Por Liquidar</th><th>Confirmação</th>
-          <th>Responsável</th><th style="text-align:center">Ações</th>
+          <th>Custo · Nº fatura</th><th>Obra · Centro</th><th>Fonte</th>
+          <th style="text-align:right">Realizado</th>
+          <th style="text-align:right">Por pagar</th>
+          <th>Estado · Ação</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
       <tfoot>
         <tr>
-          <td colspan="7">Totais (${state.items.length} lançamentos)</td>
-          <td class="fin-num">${esc(money(t.realized))}</td>
-          <td colspan="4"></td>
+          <td colspan="3">Totais (${items.length} lançamentos)</td>
+          <td class="fin-num">${esc(money(paid))}</td>
+          <td class="fin-num">${esc(money(remaining))}</td>
+          <td></td>
         </tr>
       </tfoot>
     </table>`;
 
-  wrap.querySelectorAll("tbody tr").forEach((tr) => {
+  wrap.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
     const cost = state.items.find((c) => c.id === tr.dataset.id);
     if (!cost) return;
-    tr.querySelector('[data-action="edit"]')?.addEventListener("click", () => openCostModal(cost, false));
-    tr.querySelector('[data-action="confirm"]')?.addEventListener("click", () => openCostModal(cost, true));
+    tr.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-act]");
+      if (act) {
+        e.stopPropagation();
+        if (act.dataset.act === "split") return openSplit(cost);
+        return openConfirmCostModal(cost, { canApprove: act.dataset.act === "confirm" && canApprove(), onSaved: load });
+      }
+      if (state.expanded.has(cost.id)) state.expanded.delete(cost.id);
+      else state.expanded.add(cost.id);
+      renderTable();
+    });
   });
 }
 
-async function load() {
-  const wrap = document.getElementById("costTable");
-  if (wrap) wrap.innerHTML = `<div class="finance-empty">A carregar custos…</div>`;
-  const params = new URLSearchParams();
-  Object.entries(state.filters).forEach(([k, v]) => {
-    if (v) params.set(k, v);
+/* ─── Gráficos ────────────────────────────────────────────────────────────── */
+
+/** Estado vazio no lugar de um gráfico (liberta primeiro o gráfico anterior). */
+async function emptyChart(id, icon, message) {
+  await drawComboChart(id, {});
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">${icon}</span>${esc(message)}</div>`;
+}
+
+function renderMonthly() {
+  const months = (state.charts?.monthly || []).slice(-state.months);
+  const cost = months.reduce((a, m) => a + num(m.cost), 0);
+  const committed = months.reduce((a, m) => a + num(m.committed), 0);
+  const avg = months.length ? cost / months.length : 0;
+  document.getElementById("crFlowTotals").innerHTML = [
+    { label: "Realizado", value: compact(cost), dot: TONES.blue },
+    { label: "Comprometido", value: compact(committed), dot: TONES.amber },
+    { label: "Média mensal", value: compact(avg), dot: TONES.slate },
+  ]
+    .map((t) => `<div class="ov-flow-total"><span><i style="background:${t.dot}"></i>${esc(t.label)}</span><strong>${esc(t.value)}</strong></div>`)
+    .join("");
+  drawComboChart("crChartMonthly", {
+    categories: months.map((m) => m.label),
+    series: [
+      { name: "Realizado", type: "column", data: months.map((m) => num(m.cost)), color: TONES.blue },
+      { name: "Comprometido", type: "line", data: months.map((m) => num(m.committed)), color: TONES.amber },
+    ],
+    height: 280,
   });
+}
+
+function renderAging() {
+  const columns = state.charts?.payablesAging || [];
+  const total = columns.reduce((a, col) => a + num(col.value), 0);
+  const wrap = document.getElementById("crAging");
+  if (total <= 0) {
+    wrap.innerHTML = `<div class="ov-empty"><span class="material-symbols-outlined">task_alt</span>Sem valores por pagar.</div>`;
+    return;
+  }
+  const open = state.items.filter((c) => num(c.remaining) > 0).length;
+  wrap.innerHTML = `
+    <div class="ov-aging-total">
+      <strong>${esc(money(total))}</strong>
+      <span>${open} custos com valor por pagar</span>
+    </div>
+    <div class="ov-stack">
+      ${columns
+        .map((col, i) =>
+          num(col.value) > 0
+            ? `<span style="width:${((num(col.value) / total) * 100).toFixed(2)}%;background:${AGING_TONES[i]}" title="${esc(col.label)}: ${esc(money(col.value))}"></span>`
+            : ""
+        )
+        .join("")}
+    </div>
+    <ul class="ov-aging-list">
+      ${columns
+        .map(
+          (col, i) => `
+        <li>
+          <span><i class="ov-dot" style="background:${AGING_TONES[i]}"></i>${esc(col.label)}</span>
+          <span class="ov-aging-pct">${esc(pct((num(col.value) / total) * 100))}</span>
+          <strong>${esc(compact(col.value))}</strong>
+        </li>`
+        )
+        .join("")}
+    </ul>`;
+}
+
+function renderCharts() {
+  renderMonthly();
+  renderAging();
+  const sources = (state.charts?.costBySource || []).filter((s) => num(s.realized) > 0);
+  if (!sources.length) return emptyChart("crChartSources", "donut_large", "Sem custo realizado no filtro.");
+  drawDonutChart("crChartSources", {
+    labels: sources.map((s) => s.label),
+    series: sources.map((s) => num(s.realized)),
+    colors: sources.map((s) => SOURCE_COLOR[s.source] || TONES.slate),
+    height: 280,
+  });
+}
+
+/* ─── Ações ───────────────────────────────────────────────────────────────── */
+
+async function formOptions() {
+  if (!state.formOptions) state.formOptions = await loadCostFormOptions();
+  return state.formOptions;
+}
+
+async function openForm(movement = null) {
+  try {
+    const options = await formOptions();
+    openCostForm({
+      movement,
+      options,
+      onSaved: () => {
+        state.formOptions = null;
+        load();
+      },
+    });
+  } catch (err) {
+    toast(err.message || "Falha ao abrir o formulário.", { type: "error" });
+  }
+}
+
+async function openSplit(cost) {
+  try {
+    const options = await loadCostFormOptions({ withMovements: true });
+    const movement = options.movements.find((m) => m.id === cost.sourceId);
+    if (!movement) return toast("Este levantamento já foi discriminado.", { type: "info" });
+    openCostForm({
+      movement,
+      options,
+      onSaved: () => {
+        state.formOptions = null;
+        load();
+      },
+    });
+  } catch (err) {
+    toast(err.message || "Falha ao abrir o levantamento.", { type: "error" });
+  }
+}
+
+/* ─── Carregamento ────────────────────────────────────────────────────────── */
+
+function renderAll() {
+  renderKpis();
+  renderStrip();
+  renderTable();
+}
+
+async function load() {
+  const wrap = document.getElementById("crTable");
+  if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">A carregar custos…</div>`;
+  const params = new URLSearchParams();
+  if (state.filters.projectId) params.set("projectId", state.filters.projectId);
   try {
     const data = await apiRequest(`/finance/costs?${params.toString()}`);
     state.items = data.items || [];
     state.totals = data.totals || null;
     state.charts = data.charts || null;
-    if (Array.isArray(data.sources)) {
-      state.sources = data.sources;
-      const sourceSel = document.getElementById("costSource");
-      if (sourceSel) {
-        sourceSel.innerHTML =
-          `<option value="">Todas as fontes</option>` +
-          state.sources.map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
-        sourceSel.value = state.filters.source;
-      }
-    }
-    renderKpis();
-    renderTable();
+    const sources = data.sources || {};
+    state.sources = Array.isArray(sources) ? sources : Object.entries(sources).map(([key, label]) => ({ key, label }));
+    fillSources();
+    renderAll();
     renderCharts();
   } catch (err) {
-    if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar custos: ${esc(err.message)}</div>`;
+    if (wrap) wrap.innerHTML = `<div class="ov-empty ov-empty--lg">Falha ao carregar custos: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar custos.", { type: "error" });
   }
 }
 
-/* ─── Gráficos ────────────────────────────────────────────────────────────── */
-
-function renderCharts() {
-  const charts = state.charts || {};
-  const monthly = charts.monthly || [];
-
-  drawAreaChart("crChartMonthly", {
-    categories: monthly.map((m) => m.label),
-    series: [
-      { name: "Custo pago", key: "cost", color: TONES.red, data: monthly.map((m) => Number(m.cost) || 0) },
-      { name: "Por liquidar", key: "committed", color: TONES.amber, data: monthly.map((m) => Number(m.committed) || 0) },
-    ],
-  });
-
-  const sources = (charts.costBySource || []).filter((s) => Number(s.total) > 0);
-  drawDonutChart("crChartSources", {
-    labels: sources.map((s) => s.label || s.source),
-    series: sources.map((s) => Number(s.total) || 0),
-    totalLabel: "Custo total",
-  });
-
-  const aging = (charts.payablesAging || []).filter((a) => Number(a.value) > 0);
-  drawDonutChart("crChartAging", {
-    labels: aging.map((a) => a.label),
-    series: aging.map((a) => Number(a.value) || 0),
-    colors: [TONES.emerald, TONES.amber, "#f97316", TONES.red, "#991b1b"],
-    totalLabel: "Por pagar",
-  });
-}
-
-function openCostModal(cost, confirmMode) {
-  const cur = cost.currency || cost.project?.currency || "AOA";
-  openModal({
-    title: confirmMode ? "Confirmar Custo" : "Detalhe do Custo",
-    contentHtml: `
-      <p class="finance-note" style="margin-bottom:1rem">
-        ${esc(cost.description || "—")} · ${esc(money(cost.paidAmount, cur))} ·
-        ${esc(cost.project?.name || "")} · ${esc(cost.sourceLabel || cost.source || "")}
-      </p>
-      <div class="finance-form-grid finance-form-grid--2">
-        <div class="finance-field">
-          <label class="finance-label" for="cst_doc">Nº Documento</label>
-          <input id="cst_doc" class="finance-input" type="text" value="${esc(cost.docNumber || "")}" />
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="cst_resp">Responsável</label>
-          <input id="cst_resp" class="finance-input" type="text" value="${esc(cost.responsible || "")}" />
-        </div>
-        <div class="finance-field finance-field--full">
-          <label class="finance-label" for="cst_status">Estado de Confirmação</label>
-          <select id="cst_status" class="finance-select">
-            <option value="POR_CONFIRMAR" ${cost.confirmationStatus !== "CONFIRMADO" ? "selected" : ""}>Por confirmar</option>
-            <option value="CONFIRMADO" ${cost.confirmationStatus === "CONFIRMADO" ? "selected" : ""}>Confirmado</option>
-          </select>
-        </div>
-      </div>`,
-    primaryLabel: confirmMode ? "Confirmar" : "Guardar",
-    onRender: ({ panel }) => {
-      if (confirmMode) {
-        const sel = panel.querySelector("#cst_status");
-        sel.value = "CONFIRMADO";
-        sel.disabled = true;
-      }
-    },
-    onPrimary: async ({ btn, close, panel }) => {
-      const payload = {
-        docNumber: panel.querySelector("#cst_doc").value.trim() || null,
-        responsible: panel.querySelector("#cst_resp").value.trim() || null,
-      };
-      setButtonLoading(btn, true);
-      try {
-        // A confirmação usa o endpoint dedicado (permissão financeiro:approve).
-        if (confirmMode) {
-          await apiRequest(`/finance/costs/${cost.sourceId}/confirm`, { method: "POST", body: payload });
-        } else {
-          await apiRequest(`/finance/costs/${cost.sourceId}`, {
-            method: "PATCH",
-            body: { ...payload, confirmationStatus: panel.querySelector("#cst_status").value },
-          });
-        }
-        toast(confirmMode ? "Custo confirmado." : "Custo actualizado.", { type: "success" });
-        close();
-        await load();
-      } catch (err) {
-        toast(err.message || "Falha ao guardar o custo.", { type: "error" });
-      } finally {
-        setButtonLoading(btn, false);
-      }
-    },
-  });
-}
-
-/* ─── Lançamento manual de custo ──────────────────────────────────────────── */
-
-const PAYMENT_METHODS = ["Caixa", "Banco", "Transferência", "Cheque", "Multicaixa"];
-
-/**
- * Registo manual de um custo do financeiro.
- * Serve para despesas que não nascem nas outras áreas (cotações, pedidos extra,
- * pedidos de compra, fretes): rendas, serviços pontuais, pagamentos ao balcão.
- */
-function openManualCostModal() {
-  const today = toDateKey(new Date());
-  const content = `
-    <p class="finance-note" style="margin-bottom:1rem">
-      Use este formulário para despesas que não vêm de cotações, pedidos extra, pedidos de compra ou fretes
-      — rendas, serviços pontuais, despesas administrativas ou pagamentos já feitos. O registo fica confirmado
-      e assinado por si, e o que ficar por pagar aparece nas Contas a Pagar.
-    </p>
-    <div class="finance-form-grid finance-form-grid--2">
-      <div class="finance-field finance-field--full">
-        <label class="finance-label" for="mc_project">Obra <span style="color:#dc2626">*</span></label>
-        <select id="mc_project" class="finance-select" required>
-          <option value="">Selecionar obra…</option>
-          ${state.projects
-            .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
-            .join("")}
-        </select>
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_center">Centro de custo <span style="color:#dc2626">*</span></label>
-        <select id="mc_center" class="finance-select" required disabled>
-          <option value="">Escolha primeiro a obra</option>
-        </select>
-        <p class="finance-note" id="mc_centerHint">O custo é imputado a um centro de custo da obra.</p>
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_category">Categoria</label>
-        <select id="mc_category" class="finance-select">
-          ${Object.entries(CATEGORY)
-            .map(([key, label]) => `<option value="${key}">${esc(label)}</option>`)
-            .join("")}
-        </select>
-      </div>
-
-      <p class="finance-section-title">Documento e fornecedor</p>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_supplier">Fornecedor</label>
-        <select id="mc_supplier" class="finance-select">
-          <option value="">—</option>
-          ${state.suppliers.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}
-        </select>
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_doc">Nº documento / fatura</label>
-        <input id="mc_doc" class="finance-input" type="text" placeholder="Ex.: FT 2026/123" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_date">Data do custo <span style="color:#dc2626">*</span></label>
-        <input id="mc_date" class="finance-input" type="date" required value="${today}" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_desc">Descrição <span style="color:#dc2626">*</span></label>
-        <input id="mc_desc" class="finance-input" type="text" required placeholder="Ex.: Renda do escritório — Outubro" />
-      </div>
-
-      <p class="finance-section-title">Valores</p>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_budgeted">Valor total do custo <span style="color:#dc2626">*</span></label>
-        <input id="mc_budgeted" class="finance-input" type="number" min="0" step="0.01" required />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_paid">Valor pago agora</label>
-        <input id="mc_paid" class="finance-input" type="number" min="0" step="0.01" value="0" />
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_method">Meio de pagamento</label>
-        <select id="mc_method" class="finance-select">
-          <option value="">—</option>
-          ${PAYMENT_METHODS.map((m) => `<option value="${m}">${m}</option>`).join("")}
-        </select>
-      </div>
-      <div class="finance-field">
-        <label class="finance-label" for="mc_type">Forma de pagamento</label>
-        <select id="mc_type" class="finance-select">
-          <option value="PRONTO_PAGAMENTO">Pronto pagamento</option>
-          <option value="CREDITO">Crédito (a pagar)</option>
-        </select>
-      </div>
-      <div class="finance-field finance-field--full">
-        <label class="finance-label" for="mc_notes">Notas</label>
-        <input id="mc_notes" class="finance-input" type="text" />
-      </div>
-
-      <div class="finance-stat-row finance-field--full">
-        <div class="finance-stat finance-stat--blue">
-          <span class="finance-stat-label">Custo total</span>
-          <span class="finance-stat-value" id="mc_sum_total">—</span>
-        </div>
-        <div class="finance-stat finance-stat--emerald">
-          <span class="finance-stat-label">Pago agora</span>
-          <span class="finance-stat-value" id="mc_sum_paid">—</span>
-        </div>
-        <div class="finance-stat finance-stat--amber">
-          <span class="finance-stat-label">Fica por pagar</span>
-          <span class="finance-stat-value" id="mc_sum_remaining">—</span>
-        </div>
-      </div>
-    </div>`;
-
-  openModal({
-    title: "Novo Custo (lançamento manual)",
-    contentHtml: content,
-    primaryLabel: "Registar Custo",
-    onRender: ({ panel }) => {
-      const $ = (id) => panel.querySelector(`#${id}`);
-      const projectSel = $("mc_project");
-      const centerSel = $("mc_center");
-      const hint = $("mc_centerHint");
-
-      const refreshSummary = () => {
-        const total = Number($("mc_budgeted").value) || 0;
-        const paid = Math.min(Number($("mc_paid").value) || 0, total);
-        $("mc_sum_total").textContent = money(total);
-        $("mc_sum_paid").textContent = money(paid);
-        $("mc_sum_remaining").textContent = money(Math.max(total - paid, 0));
-      };
-
-      const loadCenters = async () => {
-        const projectId = projectSel.value;
-        centerSel.innerHTML = `<option value="">Escolha primeiro a obra</option>`;
-        centerSel.disabled = true;
-        if (!projectId) {
-          hint.textContent = "O custo é imputado a um centro de custo da obra.";
-          return;
-        }
-        hint.textContent = "A carregar centros de custo…";
-        try {
-          const data = await apiRequest(
-            `/finance/options/cost-centers?projectId=${encodeURIComponent(projectId)}`
-          );
-          const centers = data.items || [];
-          centerSel.innerHTML = centers.length
-            ? `<option value="">Selecionar centro de custo…</option>` +
-              centers
-                .map((c) => `<option value="${esc(c.id)}">${esc(`${c.code} — ${c.name}`)}</option>`)
-                .join("")
-            : `<option value="">Sem centros de custo ativos</option>`;
-          centerSel.disabled = !centers.length;
-          hint.textContent = centers.length
-            ? `Centros de custo ativos desta obra (${centers.length}).`
-            : "Esta obra ainda não tem centros de custo ativos. Crie um na vista da obra antes de lançar o custo.";
-        } catch (err) {
-          hint.textContent = err.message || "Falha ao carregar os centros de custo.";
-        }
-      };
-
-      projectSel.addEventListener("change", loadCenters);
-      ["mc_budgeted", "mc_paid"].forEach((id) => $(id).addEventListener("input", refreshSummary));
-      loadCenters();
-      refreshSummary();
-    },
-    onPrimary: async ({ btn, close, panel }) => {
-      const $ = (id) => panel.querySelector(`#${id}`);
-      const projectId = $("mc_project").value;
-      if (!projectId) return toast("Selecione a obra.", { type: "error" });
-      if (!$("mc_center").value) return toast("Selecione o centro de custo da obra.", { type: "error" });
-      const description = $("mc_desc").value.trim();
-      if (description.length < 2) return toast("Indique a descrição do custo.", { type: "error" });
-      const budgetedAmount = Number($("mc_budgeted").value);
-      if (!budgetedAmount || budgetedAmount <= 0) {
-        return toast("Indique o valor total do custo.", { type: "error" });
-      }
-      const paidAmount = Number($("mc_paid").value) || 0;
-      if (paidAmount > budgetedAmount) {
-        return toast("O valor pago não pode ser maior do que o valor total do custo.", { type: "error" });
-      }
-
-      setButtonLoading(btn, true);
-      try {
-        await apiRequest("/finance/costs", {
-          method: "POST",
-          body: {
-            projectId,
-            costCenterId: $("mc_center").value,
-            supplierId: $("mc_supplier").value || null,
-            docNumber: $("mc_doc").value.trim() || null,
-            paymentDate: $("mc_date").value,
-            category: $("mc_category").value,
-            description,
-            budgetedAmount,
-            paidAmount,
-            paymentMethod: $("mc_method").value || null,
-            paymentType: $("mc_type").value,
-            notes: $("mc_notes").value.trim() || null,
-          },
-        });
-        toast(
-          paidAmount > 0 ? "Custo registado e contabilizado como pago." : "Custo registado e por pagar.",
-          { type: "success" }
-        );
-        close();
-        await load();
-      } catch (err) {
-        toast(err.message || "Falha ao registar o custo.", { type: "error" });
-      } finally {
-        setButtonLoading(btn, false);
-      }
-    },
-  });
-}
-
 export async function render() {
   destroyCharts();
-  state.filters = { projectId: "", status: "", source: "" };
+  state.expanded = new Set();
+  state.formOptions = null;
+  // Atalho vindo da Overview: /Financeiro/custos/registar?view=atm
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view && VIEWS[view]) state.view = view;
   try {
-    const [projects, suppliers] = await Promise.all([
-      apiRequest("/finance/options/projects"),
-      apiRequest("/finance/options/suppliers"),
-    ]);
+    const projects = await apiRequest("/finance/options/projects");
     state.projects = projects.items || [];
-    state.suppliers = suppliers.items || [];
   } catch (err) {
     toast(err.message || "Falha ao carregar obras.", { type: "error" });
   }

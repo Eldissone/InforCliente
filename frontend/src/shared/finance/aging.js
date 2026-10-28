@@ -65,3 +65,41 @@ export function agingSeries(buckets) {
 export function overdueTotal(buckets) {
   return buckets.d0_30 + buckets.d31_60 + buckets.d61_90 + buckets.d90_mais;
 }
+
+/**
+ * Painel de antiguidade: total, barra empilhada e lista por escalão.
+ * `columns`: saída de `agingSeries`; `formatMoney`/`formatCompact` formatam valores.
+ */
+export function agingPanelHtml(columns, { caption = "", formatMoney, formatCompact, escape, emptyText = "Sem valores em aberto." }) {
+  const total = columns.reduce((a, col) => a + (Number(col.value) || 0), 0);
+  if (total <= 0) {
+    return `<div class="ov-empty"><span class="material-symbols-outlined">task_alt</span>${escape(emptyText)}</div>`;
+  }
+  const share = (v) => ((Number(v) || 0) / total) * 100;
+  return `
+    <div class="ov-aging-total">
+      <strong>${escape(formatMoney(total))}</strong>
+      <span>${escape(caption)}</span>
+    </div>
+    <div class="ov-stack">
+      ${columns
+        .map((col, i) =>
+          Number(col.value) > 0
+            ? `<span style="width:${share(col.value).toFixed(2)}%;background:${AGING_TONES[i]}" title="${escape(col.label)}: ${escape(formatMoney(col.value))}"></span>`
+            : ""
+        )
+        .join("")}
+    </div>
+    <ul class="ov-aging-list">
+      ${columns
+        .map(
+          (col, i) => `
+        <li>
+          <span><i class="ov-dot" style="background:${AGING_TONES[i]}"></i>${escape(col.label)}</span>
+          <span class="ov-aging-pct">${share(col.value).toFixed(0)}%</span>
+          <strong>${escape(formatCompact(col.value))}</strong>
+        </li>`
+        )
+        .join("")}
+    </ul>`;
+}
