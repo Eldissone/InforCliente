@@ -228,7 +228,7 @@ async function syncInvoiceReceived(tx, invoiceId) {
       status: received <= 0 ? "EM_ABERTO" : net > 0 && received >= net - 0.005 ? "PAGO_TOTAL" : "PAGO_PARCIAL",
     },
     include: {
-      project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+      project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
       client: { select: { id: true, name: true, code: true } },
       measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       receipts: { orderBy: { receivedDate: "desc" } },
@@ -809,11 +809,7 @@ financeRoutes.get(
     const rows = await prisma.invoice.findMany({
       where,
       include: {
-<<<<<<< HEAD
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-=======
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
->>>>>>> origin/dev-leite
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -954,11 +950,7 @@ financeRoutes.post(
         createdBy: req.user?.name || req.user?.email || null,
       },
       include: {
-<<<<<<< HEAD
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-=======
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
->>>>>>> origin/dev-leite
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -988,11 +980,7 @@ financeRoutes.get(
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
       include: {
-<<<<<<< HEAD
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-=======
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
->>>>>>> origin/dev-leite
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         receipts: { orderBy: { receivedDate: "desc" } },
@@ -1069,7 +1057,7 @@ financeRoutes.patch(
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
         },
         include: {
-          project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+          project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
           client: { select: { id: true, name: true, code: true } },
           measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         },
@@ -1136,11 +1124,7 @@ financeRoutes.patch(
         flagGuarantee: amounts.flagGuarantee,
       },
       include: {
-<<<<<<< HEAD
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-=======
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
->>>>>>> origin/dev-leite
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -1242,23 +1226,7 @@ financeRoutes.post(
           createdBy: req.user?.name || req.user?.email || null,
         },
       });
-<<<<<<< HEAD
-      return tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          receivedAmount,
-          receivedDate: new Date(body.receivedDate),
-          status: net > 0 && receivedAmount >= net - 0.005 ? "PAGO_TOTAL" : "PAGO_PARCIAL",
-        },
-        include: {
-          project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-          client: { select: { id: true, name: true, code: true } },
-          measurement: { select: { id: true, reportNumber: true, reportDate: true } },
-        },
-      });
-=======
       return syncInvoiceReceived(tx, invoice.id);
->>>>>>> origin/dev-leite
     });
 
     return res.status(201).json({ invoice: mapInvoice(updated) });
@@ -1400,7 +1368,7 @@ financeRoutes.post(
         documentUploadedBy: actor,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -1586,18 +1554,15 @@ financeRoutes.get(
     const where = projectId ? { id: String(projectId) } : {};
     const projects = await prisma.project.findMany({
       where,
-<<<<<<< HEAD
-      select: { id: true, code: true, referencia: true, name: true, currency: true, budgetTotal: true },
-=======
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
         client: { select: { id: true, name: true } },
       },
->>>>>>> origin/dev-leite
       orderBy: { name: "asc" },
     });
 
@@ -2160,7 +2125,7 @@ async function buildPayables(ledgerArg) {
 async function buildReceivables() {
   const rows = await prisma.invoice.findMany({
     include: {
-      project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+      project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
       client: { select: { id: true, name: true, code: true } },
       measurement: { select: { id: true, reportNumber: true } },
     },
@@ -2211,17 +2176,6 @@ financeRoutes.get(
 financeRoutes.get(
   "/receivables",
   view,
-<<<<<<< HEAD
-  asyncHandler(async (req, res) => {
-    const rows = await prisma.invoice.findMany({
-      where: { status: { in: ["EM_ABERTO", "PAGO_PARCIAL", "ATRASADO"] } },
-      include: {
-        project: { select: { id: true, code: true, referencia: true, name: true, currency: true } },
-        client: { select: { id: true, name: true, code: true } },
-      },
-      orderBy: [{ dueDate: "asc" }],
-      take: 500,
-=======
   asyncHandler(async (_req, res) => {
     const [items, receipts] = await Promise.all([
       buildReceivables(),
@@ -2233,7 +2187,7 @@ financeRoutes.get(
               id: true,
               docNumber: true,
               docDate: true,
-              project: { select: { id: true, code: true, name: true } },
+              project: { select: { id: true, code: true, referencia: true, name: true } },
               client: { select: { id: true, name: true } },
             },
           },
@@ -2250,7 +2204,6 @@ financeRoutes.get(
       const days = Math.max(0, Math.round((new Date(r.receivedDate) - new Date(r.invoice.docDate)) / DAY_MS));
       weighted += days * toNumber(r.amount);
       weight += toNumber(r.amount);
->>>>>>> origin/dev-leite
     });
 
     const monthly = lastMonthKeys(12).map((key) => ({ key, label: monthLabelOf(key), received: 0 }));
