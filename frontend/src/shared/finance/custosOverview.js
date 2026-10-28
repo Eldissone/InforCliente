@@ -2,6 +2,14 @@ import { apiRequest } from "../../services/api.js";
 import { toast } from "../ui.js";
 import { formatCurrency } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import {
+  chartCardHtml,
+  drawAreaChart,
+  drawBarChart,
+  drawDonutChart,
+  destroyCharts,
+  TONES,
+} from "./charts.js";
 
 /**
  * Ecrã «Overview Custos» (Financeiro · Custos).
@@ -167,6 +175,48 @@ function renderTable(items) {
     </table>`;
 }
 
+/* ─── Gráficos ────────────────────────────────────────────────────────────── */
+
+function renderCharts(data, items) {
+  const monthly = data.charts?.monthly || [];
+  drawAreaChart("coChartMonthly", {
+    categories: monthly.map((m) => m.label),
+    series: [
+      { name: "Custo pago", key: "cost", color: TONES.red, data: monthly.map((m) => Number(m.cost) || 0) },
+      { name: "Comprometido", key: "committed", color: TONES.slate, data: monthly.map((m) => Number(m.committed) || 0) },
+    ],
+  });
+
+  const sources = (data.charts?.costBySource || []).filter((s) => Number(s.total) > 0);
+  drawDonutChart("coChartSources", {
+    labels: sources.map((s) => s.label || s.source),
+    series: sources.map((s) => Number(s.total) || 0),
+    totalLabel: "Custo total",
+  });
+
+  const top = [...items]
+    .filter((r) => Number(r.forecast) || Number(r.realized))
+    .sort((a, b) => (Number(b.forecast) || 0) - (Number(a.forecast) || 0))
+    .slice(0, 8);
+  drawBarChart("coChartProjects", {
+    categories: top.map((r) => r.project.name),
+    series: [
+      { name: "Custo previsto", data: top.map((r) => Number(r.forecast) || 0), color: TONES.violet },
+      { name: "Comprometido", data: top.map((r) => Number(r.committed) || 0), color: TONES.slate },
+      { name: "Realizado", data: top.map((r) => Number(r.realized) || 0), color: TONES.red },
+    ],
+    height: 320,
+  });
+
+  const aging = (data.charts?.payablesAging || []).filter((a) => Number(a.value) > 0);
+  drawDonutChart("coChartPayables", {
+    labels: aging.map((a) => a.label),
+    series: aging.map((a) => Number(a.value) || 0),
+    colors: [TONES.emerald, TONES.amber, "#f97316", TONES.red, "#991b1b"],
+    totalLabel: "Por pagar",
+  });
+}
+
 async function load() {
   const wrap = document.getElementById("costOverviewTable");
   if (wrap) wrap.innerHTML = `<div class="finance-empty">A carregar overview de custos…</div>`;
@@ -175,6 +225,7 @@ async function load() {
     const items = data.items || [];
     renderKpis(items);
     renderTable(items);
+    renderCharts(data, items);
   } catch (err) {
     if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar overview de custos.", { type: "error" });
@@ -182,8 +233,40 @@ async function load() {
 }
 
 export async function render() {
+  destroyCharts();
   document.getElementById("financeRoot").innerHTML = `
     <div id="costOverviewKpis" class="finance-kpi-grid"></div>
+
+    <div class="finance-chart-grid">
+      ${chartCardHtml({
+        id: "coChartMonthly",
+        title: "Custos mês a mês",
+        subtitle: "Custo pago e valor comprometido nos últimos 12 meses",
+        hint: "Comprometido é o que já está assumido (pedidos de compra abertos, extras aprovados) e ainda não saiu do caixa.",
+        span: 2,
+        height: 300,
+      })}
+      ${chartCardHtml({
+        id: "coChartSources",
+        title: "Custos por fonte",
+        subtitle: "Pago e comprometido por origem do custo",
+        height: 290,
+      })}
+      ${chartCardHtml({
+        id: "coChartProjects",
+        title: "Previsto vs comprometido vs realizado",
+        subtitle: "As 8 obras com maior orçamento de custo",
+        span: 2,
+        height: 320,
+      })}
+      ${chartCardHtml({
+        id: "coChartPayables",
+        title: "Por pagar por antiguidade",
+        subtitle: "Contas a pagar pela data do custo",
+        height: 290,
+      })}
+    </div>
+
     <section class="finance-card">
       <p class="finance-hint" style="margin-bottom:0.75rem">
         O custo previsto vem do orçamento dos centros de custo da obra (baseline aprovado) e a venda

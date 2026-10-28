@@ -29,6 +29,12 @@ const state = {
   ai: { configured: false, model: null, loaded: false },
 };
 
+/**
+ * Metadados da última leitura com IA feita no formulário aberto — guardados
+ * com a fatura para se saber que foi lida automaticamente e por que modelo.
+ */
+let lastScan = null;
+
 function money(value, currency) {
   return formatCurrency(Number(value) || 0, currency || "AOA");
 }
@@ -204,6 +210,11 @@ function renderTable() {
               ? `<span class="material-symbols-outlined" style="font-size:15px;color:#64748b;vertical-align:middle" title="Fatura física anexada">attach_file</span>`
               : ""
           }
+          ${
+            inv.scanSource === "IA"
+              ? `<span class="finance-chip finance-chip--violet" style="margin-left:0.35rem" title="Lida automaticamente com IA${inv.scanModel ? ` (${esc(inv.scanModel)})` : ""}">IA</span>`
+              : ""
+          }
         </td>
         <td>${esc(formatDateOnly(inv.docDate))}</td>
         <td>${esc(formatDateOnly(inv.dueDate))}</td>
@@ -347,7 +358,7 @@ function buildPreview(draft) {
   const net = g + vat - withholding - car - guarantee;
   const budget = Number(draft.budgetTotal) || 0;
   const workPercent = budget > 0 ? (g / budget) * 100 : null;
-  return { vat, net, workPercent };
+  return { gross: g, vat, withholding, car, guarantee, net, workPercent };
 }
 
 /** Resumo legível do que a IA leu, para o financeiro confirmar antes de gravar. */
@@ -399,12 +410,22 @@ async function openInvoiceModal(invoice) {
   const isEdit = Boolean(invoice);
   const hasDoc = invoiceHasDocument(invoice);
   const aiReady = state.ai.configured;
+  lastScan = null;
   const content = `
     <div class="finance-form-grid finance-form-grid--2">
-      <div class="finance-field finance-field--full">
-        <label class="finance-label" for="inv_docFile">Fatura física (PDF ou fotografia)</label>
-        <input id="inv_docFile" class="finance-input" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" />
-        <div class="fin-toolbar" style="margin-top:0.5rem;gap:0.5rem">
+      <div class="finance-scan" id="inv_scanPanel">
+        <div class="finance-scan-head">
+          <span class="finance-scan-icon"><span class="material-symbols-outlined">document_scanner</span></span>
+          <div style="min-width:0">
+            <p class="finance-scan-title">Fatura física (PDF ou fotografia)</p>
+            <p class="finance-scan-file" id="inv_docFile">Nenhum ficheiro selecionado</p>
+          </div>
+        </div>
+        <input id="inv_docFileInput" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden />
+        <div class="finance-scan-actions">
+          <button id="inv_pickBtn" type="button" class="finance-btn finance-btn--ghost">
+            <span class="material-symbols-outlined">upload_file</span>Escolher ficheiro
+          </button>
           <button id="inv_scanBtn" type="button" class="finance-btn finance-btn--primary" ${aiReady ? "" : "disabled"}>
             <span class="material-symbols-outlined">document_scanner</span>Ler fatura com IA
           </button>
@@ -419,13 +440,11 @@ async function openInvoiceModal(invoice) {
               : ""
           }
         </div>
-        <p class="finance-note" id="inv_docNote">
-          ${
-            aiReady
-              ? "Carregue o PDF ou a fotografia da fatura e use «Ler fatura com IA» para preencher os campos automaticamente."
-              : "Leitura automática indisponível: falta configurar GEMINI_API_KEY no servidor. Pode carregar o PDF e preencher os campos à mão."
-          }
-        </p>
+        <p class="finance-scan-status" id="inv_docNote">${
+          aiReady
+            ? "<span class=\"material-symbols-outlined\">info</span>1.º Escolha o PDF ou a fotografia · 2.º Use «Ler fatura com IA» e confira os valores lidos antes de guardar."
+            : "<span class=\"material-symbols-outlined\">info</span>Leitura automática indisponível: falta configurar GEMINI_API_KEY no servidor. Pode anexar o ficheiro e preencher os campos à mão."
+        }</p>
       </div>
 
       <div class="finance-field finance-field--full">
@@ -496,33 +515,111 @@ async function openInvoiceModal(invoice) {
         </button>
       </div>
 
+      <p class="finance-section-title">Resumo de valores</p>
       <div class="finance-preview finance-field--full">
         <div class="finance-preview-item">
-          <span class="finance-preview-label">Valor IVA</span>
+          <span class="finance-preview-label">V. Ilíquido</span>
+          <span id="pv_gross" class="finance-preview-value">—</span>
+        </div>
+        <div class="finance-preview-item">
+          <span class="finance-preview-label">IVA</span>
           <span id="pv_vat" class="finance-preview-value">—</span>
         </div>
         <div class="finance-preview-item">
-          <span class="finance-preview-label">V. Líquido</span>
+          <span class="finance-preview-label">Retenção na fonte</span>
+          <span id="pv_withholding" class="finance-preview-value finance-preview-value--neg">—</span>
+        </div>
+        <div class="finance-preview-item">
+          <span class="finance-preview-label">Seguro CAR</span>
+          <span id="pv_car" class="finance-preview-value finance-preview-value--neg">—</span>
+        </div>
+        <div class="finance-preview-item">
+          <span class="finance-preview-label">Garantia</span>
+          <span id="pv_guarantee" class="finance-preview-value finance-preview-value--neg">—</span>
+        </div>
+        <div class="finance-preview-item">
+          <span class="finance-preview-label">V. Líquido a receber</span>
           <span id="pv_net" class="finance-preview-value finance-preview-value--accent">—</span>
         </div>
         <div class="finance-preview-item">
-          <span class="finance-preview-label">% Obra</span>
+          <span class="finance-preview-label">% da obra</span>
           <span id="pv_work" class="finance-preview-value">—</span>
         </div>
       </div>
 
-      <p class="finance-section-title">Recebimento</p>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_received">V. Recebido</label>
-        <input id="inv_received" class="finance-input" type="number" min="0" step="0.01" value="${invoice ? Number(invoice.receivedAmount) : 0}" ${isEdit ? "disabled" : ""} />
+      <p class="finance-section-title">Recebimento do cliente</p>
+      <div class="finance-receipt">
+        <div class="finance-receipt-head">
+          <p class="finance-receipt-title">
+            <span class="material-symbols-outlined">payments</span>Como entra esta fatura na tesouraria?
+          </p>
+          <div class="finance-receipt-balance">
+            <span>Valor líquido</span>
+            <span id="rcv_net">—</span>
+          </div>
+        </div>
+        <p class="finance-note">
+          Escolha uma das duas opções. <strong>Fica em aberto</strong> significa que ainda não entrou dinheiro:
+          o valor vai para as Contas a Receber (com a data de vencimento a definir o atraso).
+          <strong>Já recebi</strong> regista logo uma entrada de tesouraria — total ou parcial — e o que faltar
+          continua a ser cobrado na lista de faturas, com o botão «Registar recebimento».
+        </p>
+        <div class="finance-choice-grid" id="rcv_choice" ${isEdit ? "hidden" : ""}>
+          <button type="button" class="finance-choice" data-mode="aberto">
+            <span class="finance-choice-icon"><span class="material-symbols-outlined">schedule</span></span>
+            <span>
+              <span class="finance-choice-title">Fica em aberto</span>
+              <span class="finance-choice-desc">Ainda não recebi nada. Entra nas contas a receber e no aging.</span>
+            </span>
+          </button>
+          <button type="button" class="finance-choice" data-mode="recebido">
+            <span class="finance-choice-icon"><span class="material-symbols-outlined">savings</span></span>
+            <span>
+              <span class="finance-choice-title">Já recebi do cliente</span>
+              <span class="finance-choice-desc">Registo agora a entrada, com valor, data e meio de recebimento.</span>
+            </span>
+          </button>
+        </div>
+        <div id="rcv_fields" class="finance-form-grid finance-form-grid--3">
+          <div class="finance-field">
+            <label class="finance-label" for="inv_received">Valor recebido</label>
+            <input id="inv_received" class="finance-input" type="number" min="0" step="0.01" value="${invoice ? Number(invoice.receivedAmount) : 0}" ${isEdit ? "disabled" : ""} />
+          </div>
+          <div class="finance-field">
+            <label class="finance-label" for="inv_receivedDate">Data do recebimento</label>
+            <input id="inv_receivedDate" class="finance-input" type="date" value="${invoice?.receivedDate ? esc(toDateKey(invoice.receivedDate)) : toDateKey(new Date())}" ${isEdit ? "disabled" : ""} />
+          </div>
+          <div class="finance-field">
+            <label class="finance-label" for="inv_receivedMethod">Meio de recebimento</label>
+            <select id="inv_receivedMethod" class="finance-select" ${isEdit ? "disabled" : ""}>
+              <option value="">—</option>
+              <option value="Transferência bancária">Transferência bancária</option>
+              <option value="Depósito em conta">Depósito em conta</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Numerário">Numerário</option>
+              <option value="Compensação">Compensação</option>
+            </select>
+          </div>
+        </div>
+        <div class="finance-stat-row">
+          <div class="finance-stat finance-stat--blue">
+            <span class="finance-stat-label">Valor líquido da fatura</span>
+            <span class="finance-stat-value" id="rcv_sum_net">—</span>
+          </div>
+          <div class="finance-stat finance-stat--emerald">
+            <span class="finance-stat-label">Recebido agora</span>
+            <span class="finance-stat-value" id="rcv_sum_received">—</span>
+          </div>
+          <div class="finance-stat finance-stat--amber">
+            <span class="finance-stat-label">Fica em falta</span>
+            <span class="finance-stat-value" id="rcv_sum_missing">—</span>
+          </div>
+        </div>
       </div>
-      <div class="finance-field">
-        <label class="finance-label" for="inv_receivedDate">Data Recebido</label>
-        <input id="inv_receivedDate" class="finance-input" type="date" value="${invoice?.receivedDate ? esc(toDateKey(invoice.receivedDate)) : ""}" ${isEdit ? "disabled" : ""} />
-      </div>
+
       <div class="finance-field finance-field--full">
         <label class="finance-label" for="inv_notes">Notas</label>
-        <input id="inv_notes" class="finance-input" type="text" value="${esc(invoice?.notes || "")}" />
+        <input id="inv_notes" class="finance-input" type="text" value="${esc(invoice?.notes || "")}" placeholder="Referência ao auto de medição, retenção, condições de pagamento…" />
       </div>
     </div>`;
 
@@ -541,8 +638,16 @@ async function openInvoiceModal(invoice) {
         $("inv_client").value = p?.clientName || "";
       };
 
-      const refreshPreview = () => {
-        const pv = buildPreview({
+      // ── Recebimento: as duas opções e o que cada uma implica ──
+      const rcvChoice = $("rcv_choice");
+      const rcvFields = $("rcv_fields");
+      const rcvAmount = $("inv_received");
+      const rcvDate = $("inv_receivedDate");
+      const rcvMethod = $("inv_receivedMethod");
+      let rcvMode = isEdit ? "recebido" : "aberto";
+
+      const draftPreview = () =>
+        buildPreview({
           grossAmount: $("inv_gross").value,
           vatPercent: $("inv_vat").value,
           withholdingPercent: $("inv_withholding").value,
@@ -551,12 +656,59 @@ async function openInvoiceModal(invoice) {
           flagVatCativo: $("inv_vatCativo").checked,
           budgetTotal: currentProject?.budgetTotal,
         });
+
+      function refreshReceipt() {
         const cur = currentProject?.currency || "AOA";
+        const pv = draftPreview();
+        $("rcv_net").textContent = money(pv.net, cur);
+        rcvChoice?.querySelectorAll(".finance-choice").forEach((btn) => {
+          btn.classList.toggle("active", !isEdit && btn.dataset.mode === rcvMode);
+        });
+        if (!isEdit) {
+          const paying = rcvMode === "recebido";
+          if (rcvFields) rcvFields.hidden = !paying;
+          if (rcvAmount) rcvAmount.disabled = !paying;
+          if (rcvDate) rcvDate.disabled = !paying;
+          if (rcvMethod) rcvMethod.disabled = !paying;
+          // Sugere o valor líquido quando o financeiro indica que já recebeu.
+          if (paying && Number(rcvAmount?.value || 0) === 0 && pv.net > 0) {
+            rcvAmount.value = pv.net.toFixed(2);
+          }
+        }
+        const received = rcvMode === "recebido" ? Number(rcvAmount?.value) || 0 : 0;
+        $("rcv_sum_net").textContent = money(pv.net, cur);
+        $("rcv_sum_received").textContent = money(received, cur);
+        $("rcv_sum_missing").textContent = money(Math.max(pv.net - received, 0), cur);
+      }
+
+      const refreshPreview = () => {
+        const pv = draftPreview();
+        const cur = currentProject?.currency || "AOA";
+        $("pv_gross").textContent = money(pv.gross, cur);
         $("pv_vat").textContent = $("inv_vatCativo").checked ? "Cativo" : money(pv.vat, cur);
+        $("pv_withholding").textContent = `- ${money(pv.withholding, cur)}`;
+        $("pv_car").textContent = `- ${money(pv.car, cur)}`;
+        $("pv_guarantee").textContent = `- ${money(pv.guarantee, cur)}`;
         $("pv_net").textContent = money(pv.net, cur);
         $("pv_work").textContent = pv.workPercent === null ? "—" : `${pv.workPercent.toFixed(2)}%`;
         $("inv_vat").disabled = $("inv_vatCativo").checked;
+        refreshReceipt();
       };
+
+      rcvChoice?.querySelectorAll(".finance-choice").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          rcvMode = btn.dataset.mode;
+          if (rcvMode === "aberto" && rcvAmount) rcvAmount.value = 0;
+          refreshPreview();
+          if (rcvMode === "recebido") rcvAmount?.focus();
+        });
+      });
+
+      // Escrever um valor também passa a opção para «Já recebi do cliente».
+      rcvAmount?.addEventListener("input", () => {
+        if (Number(rcvAmount.value) > 0 && rcvMode !== "recebido") rcvMode = "recebido";
+        refreshReceipt();
+      });
 
       const applyBillingConfig = (cfg) => {
         if (cfg.billingVatPercent !== null && cfg.billingVatPercent !== undefined) $("inv_vat").value = Number(cfg.billingVatPercent);
@@ -641,20 +793,40 @@ async function openInvoiceModal(invoice) {
         }
       });
 
-      // ── Fatura física: leitura com IA e anexo do documento ──
-      const docFileInput = $("inv_docFile");
+      // ── Fatura física: escolha do ficheiro e leitura com IA ──
+      const docFileInput = $("inv_docFileInput");
+      const docFileName = $("inv_docFile");
       const docNote = $("inv_docNote");
       const scanBtn = $("inv_scanBtn");
+      const scanPanel = $("inv_scanPanel");
+
+      const setScanState = (mode, html) => {
+        if (scanPanel) {
+          scanPanel.classList.toggle("finance-scan--ready", mode === "ready");
+          scanPanel.classList.toggle("finance-scan--busy", mode === "busy");
+        }
+        if (html !== undefined && docNote) docNote.innerHTML = html;
+      };
+
+      $("inv_pickBtn")?.addEventListener("click", () => docFileInput?.click());
 
       if (docFileInput) {
         scanBtn.disabled = !aiReady;
         docFileInput.addEventListener("change", () => {
           const file = docFileInput.files?.[0] || null;
           scanBtn.disabled = !file || !aiReady;
+          if (docFileName) {
+            docFileName.textContent = file
+              ? `${file.name} · ${Math.max(1, Math.round((file.size || 0) / 1024))} KB`
+              : "Nenhum ficheiro selecionado";
+          }
           if (file) {
-            docNote.textContent = `${file.name} (${Math.max(1, Math.round((file.size || 0) / 1024))} KB) pronto.${
-              aiReady ? " Use «Ler fatura com IA» para preencher os campos." : ""
-            }`;
+            setScanState(
+              aiReady ? "ready" : "idle",
+              aiReady
+                ? `<span class="material-symbols-outlined">task_alt</span>Ficheiro pronto para leitura. Use «Ler fatura com IA» para preencher os campos automaticamente.`
+                : `<span class="material-symbols-outlined">info</span>Leitura automática indisponível (falta GEMINI_API_KEY). Anexe o ficheiro e preencha os campos à mão.`
+            );
           }
         });
       }
@@ -663,7 +835,10 @@ async function openInvoiceModal(invoice) {
         const file = docFileInput?.files?.[0];
         if (!file) return toast("Escolha primeiro o PDF ou a fotografia da fatura.", { type: "error" });
         setButtonLoading(scanBtn, true);
-        docNote.textContent = "A ler a fatura com IA…";
+        setScanState(
+          "busy",
+          `<span class="material-symbols-outlined">hourglass_top</span>A ler a fatura com IA… os campos lidos são sugeridos abaixo e devem ser confirmados.`
+        );
         try {
           const { fields, warnings } = await scanInvoiceFile(file);
 
@@ -693,7 +868,7 @@ async function openInvoiceModal(invoice) {
           );
           fill("inv_car", pctValue(fields.carInsuranceAmount, fields.grossAmount));
           fill("inv_guarantee", pctValue(fields.guaranteeAmount, fields.grossAmount));
-          fill("inv_notes", fields.notes, { onlyEmpty: false });
+          fill("inv_notes", fields.notes || fields.description, { onlyEmpty: false });
 
           if (fields.suggestedProjectId && !projectSel.disabled && fields.suggestedProjectId !== projectSel.value) {
             projectSel.value = fields.suggestedProjectId;
@@ -701,14 +876,19 @@ async function openInvoiceModal(invoice) {
           }
 
           refreshPreview();
+          // Guarda a origem da leitura para ficar ligada à fatura criada.
+          lastScan = { source: "IA", model: fields.model || null, raw: fields.raw || null };
           const scanSummary = buildScanSummary(fields, warnings);
-          docNote.textContent = scanSummary;
+          setScanState("ready", `<span class="material-symbols-outlined">task_alt</span>${esc(scanSummary)}`);
           toast("Fatura lida. Confirme os valores antes de guardar.", { type: "success" });
           // The AGT portal can be slow, so its lookup runs after the form fields
           // have been populated and does not keep the scan button spinning.
           void lookupScannedInvoiceNif(fields, docNote, scanSummary);
         } catch (err) {
-          docNote.textContent = err.message || "Falha ao ler a fatura.";
+          setScanState(
+            "idle",
+            `<span class="material-symbols-outlined">error</span>${esc(err.message || "Falha ao ler a fatura.")}`
+          );
           toast(err.message || "Falha ao ler a fatura.", { type: "error" });
         } finally {
           setButtonLoading(scanBtn, false);
@@ -780,7 +960,12 @@ async function openInvoiceModal(invoice) {
 
       setButtonLoading(btn, true);
       try {
-        const file = $("inv_docFile")?.files?.[0] || null;
+        const file = $("inv_docFileInput")?.files?.[0] || null;
+        // Sem a opção «Já recebi», a fatura fica em aberto (nada entrou no caixa).
+        const receivedAmount =
+          $("rcv_choice")?.querySelector(".finance-choice.active")?.dataset.mode === "recebido"
+            ? numOrNull($("inv_received")?.value) || 0
+            : 0;
         let targetId = invoice?.id || null;
 
         if (isEdit) {
@@ -798,8 +983,12 @@ async function openInvoiceModal(invoice) {
               ...raw,
               projectId,
               measurementId: $("inv_measurement").value || null,
-              receivedAmount: numOrNull($("inv_received").value) || 0,
-              receivedDate: $("inv_receivedDate").value || null,
+              receivedAmount,
+              receivedDate: receivedAmount > 0 ? $("inv_receivedDate").value || null : null,
+              receivedMethod: receivedAmount > 0 ? $("inv_receivedMethod").value || null : null,
+              scanSource: lastScan?.source || null,
+              scanModel: lastScan?.model || null,
+              scanRaw: lastScan?.raw || null,
             },
           });
           targetId = created?.invoice?.id || null;

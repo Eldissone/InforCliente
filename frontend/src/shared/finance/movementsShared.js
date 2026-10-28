@@ -44,6 +44,104 @@ export function directionChip(direction) {
   return `<span class="finance-badge finance-badge--red">Saída</span>`;
 }
 
+/**
+ * Regra de negócio partilhada: «Associar Custo» só se aplica a SAÍDAS.
+ * Numa entrada não há custo a associar — ou é um recebimento a ligar à fatura
+ * do cliente, ou uma transferência interna entre contas/cartões da empresa.
+ */
+export function isIncoming(movement) {
+  return movement?.direction === "ENTRADA";
+}
+
+export function needsCostAssignment(movement) {
+  return !isIncoming(movement);
+}
+
+/** Estado do movimento na coluna «Custo»/«Estado» das listas. */
+export function movementStatusCell(movement) {
+  if (!needsCostAssignment(movement)) {
+    if (movement.movementType === "RECEBIMENTO_CLIENTE") {
+      return /fatura/i.test(String(movement.notes || ""))
+        ? `<span class="finance-badge finance-badge--emerald">Ligado à fatura</span>`
+        : `<span class="finance-badge finance-badge--slate">Recebimento</span>`;
+    }
+    return `<span class="finance-badge finance-badge--slate">—</span>`;
+  }
+  return movement.costAssigned
+    ? `<span class="finance-badge finance-badge--emerald">Associado</span>`
+    : `<span class="finance-badge finance-badge--slate">Por associar</span>`;
+}
+
+/** Lê valores no formato português (1.234,56) ou inglês (1,234.56). */
+export function parseMoneyCell(raw) {
+  let text = String(raw ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/Kz|AOA/gi, "");
+  if (!text) return null;
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+  if (hasComma && hasDot) {
+    text =
+      text.lastIndexOf(",") > text.lastIndexOf(".")
+        ? text.replace(/\./g, "").replace(",", ".")
+        : text.replace(/,/g, "");
+  } else if (hasComma) {
+    text = text.replace(",", ".");
+  } else if (hasDot && /^[+-]?\d{1,3}(\.\d{3})+$/.test(text)) {
+    // "45.000" num extrato em português são 45 000. Só tratamos o ponto como
+    // separador de milhares quando todos os grupos têm exatamente 3 dígitos
+    // ("45.00" e "45.5" continuam a ser valores decimais).
+    text = text.replace(/\./g, "");
+  }
+  const n = Number(text.replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Data em AAAA-MM-DD (aceita AAAA-MM-DD e DD/MM/AAAA). */
+export function parseDateCell(raw) {
+  const text = String(raw || "").trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+  if (dmy) {
+    let year = Number(dmy[3]);
+    if (year < 100) year += year < 70 ? 2000 : 1900;
+    return `${year}-${String(Number(dmy[2])).padStart(2, "0")}-${String(Number(dmy[1])).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/**
+ * Lê o texto de um extrato colado do banco: uma linha por movimento com
+ * `data ; descrição ; valor` (também aceita tabulação ou `|`).
+ * Valores negativos são saídas; positivos são entradas.
+ */
+export function parseStatementText(text) {
+  const rows = [];
+  String(text || "")
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const raw = line.trim();
+      if (!raw) return;
+      const parts = raw
+        .split(/[;\t|]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return;
+      const movementDate = parseDateCell(parts[0]);
+      const value = parseMoneyCell(parts[parts.length - 1]);
+      if (!movementDate || value === null || value === 0) return;
+      rows.push({
+        movementDate,
+        amount: Math.abs(value),
+        direction: value < 0 ? "SAIDA" : "ENTRADA",
+        description: parts.slice(1, -1).join(" · ") || parts[1] || "",
+      });
+    });
+  return rows;
+}
+
 /** Carrega obras, fornecedores, categorias de custo e cartões. */
 export async function loadMovementOptions() {
   const [projects, suppliers, categories, cards] = await Promise.all([

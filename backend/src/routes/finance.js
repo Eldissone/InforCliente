@@ -175,6 +175,260 @@ function buildCostLedgerSources() {
   return Object.entries(SOURCE_LABELS).map(([key, label]) => ({ key, label }));
 }
 
+// ─── Séries e escalões usados pelos gráficos dos ecrãs ───────────────────────
+
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+/** Chave AAAA-MM (UTC) de uma data — usada para agrupar por mês. */
+function monthKeyOf(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelOf(key) {
+  const [y, m] = String(key).split("-").map(Number);
+  if (!y || !m) return String(key);
+  return `${MONTH_LABELS[m - 1]} ${String(y).slice(2)}`;
+}
+
+/** Últimos `count` meses (incluindo o actual), do mais antigo para o mais recente. */
+function lastMonthKeys(count = 12) {
+  const now = new Date();
+  const keys = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return keys;
+}
+
+/** Escalões de antiguidade (aging) partilhados pelos gráficos e pelas tabelas. */
+const AGING_COLUMNS = [
+  { key: "a_vencer", label: "A vencer" },
+  { key: "d0_30", label: "0–30 dias" },
+  { key: "d31_60", label: "31–60 dias" },
+  { key: "d61_90", label: "61–90 dias" },
+  { key: "d90_mais", label: "+90 dias" },
+];
+
+function emptyAging() {
+  return { a_vencer: 0, d0_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 };
+}
+
+/** Coluna de aging de um valor em falta, a partir da data de vencimento. */
+function agingColumn(dueDate) {
+  if (!dueDate) return "a_vencer";
+  const d = new Date(dueDate);
+  if (Number.isNaN(d.getTime())) return "a_vencer";
+  const today = startOfToday();
+  const ref = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.floor((today - ref) / 86400000);
+  if (days <= 0) return "a_vencer";
+  if (days <= 30) return "d0_30";
+  if (days <= 60) return "d31_60";
+  if (days <= 90) return "d61_90";
+  return "d90_mais";
+}
+
+function agingToSeries(buckets) {
+  return AGING_COLUMNS.map((c) => ({ key: c.key, label: c.label, value: round2(buckets[c.key]) }));
+}
+
+/**
+ * Séries mensais da faturação emitida vs recebida, para um conjunto de faturas
+ * já filtrado (obra/cliente). Usado pelos gráficos da Faturação.
+ */
+function buildBillingCharts(invoices, { months = 12 } = {}) {
+  const keys = lastMonthKeys(months);
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const billed = keys.map(() => 0);
+  const received = keys.map(() => 0);
+  const aging = emptyAging();
+
+  const addTo = (list, value, date) => {
+    const i = index.get(monthKeyOf(date));
+    if (i === undefined) return;
+    list[i] = round2(list[i] + toNumber(value));
+  };
+
+  invoices.forEach((i) => {
+    addTo(billed, i.grossAmount, i.docDate);
+    addTo(received, i.receivedAmount, i.receivedDate || i.docDate);
+    const net = toNumber(i.netAmount ?? i.grossAmount);
+    const missing = round2(net - toNumber(i.receivedAmount));
+    if (missing > 0) aging[agingColumn(i.dueDate)] = round2(aging[agingColumn(i.dueDate)] + missing);
+  });
+
+  return {
+    months,
+    monthly: keys.map((key, i) => ({
+      key,
+      label: monthLabelOf(key),
+      billed: billed[i],
+      received: received[i],
+    })),
+    receivablesAging: agingToSeries(aging),
+    receivablesTotal: round2(Object.values(aging).reduce((a, b) => a + b, 0)),
+  };
+}
+
+/**
+ * Séries dos gráficos dos custos a partir da lista unificada do ledger.
+ * Respeita os filtros do ecrã (obra, confirmação, fonte) porque recebe já a
+ * lista filtrada.
+ */
+function buildLedgerCharts(items, { months = 12 } = {}) {
+  const keys = lastMonthKeys(months);
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const realized = keys.map(() => 0);
+  const committed = keys.map(() => 0);
+  const aging = emptyAging();
+  const sourceMap = new Map();
+
+  (items || []).forEach((entry) => {
+    const paid = toNumber(entry.paidAmount);
+    const remaining = toNumber(entry.remaining);
+    const i = index.get(monthKeyOf(entry.date));
+    if (i !== undefined) {
+      realized[i] = round2(realized[i] + paid);
+      committed[i] = round2(committed[i] + remaining);
+    }
+    if (remaining > 0) aging[agingColumn(entry.date)] = round2(aging[agingColumn(entry.date)] + remaining);
+
+    if (!sourceMap.has(entry.source)) {
+      sourceMap.set(entry.source, {
+        source: entry.source,
+        label: entry.sourceLabel || entry.source,
+        realized: 0,
+        committed: 0,
+        total: 0,
+      });
+    }
+    const bucket = sourceMap.get(entry.source);
+    bucket.realized = round2(bucket.realized + paid);
+    bucket.committed = round2(bucket.committed + remaining);
+    bucket.total = round2(bucket.realized + bucket.committed);
+  });
+
+  return {
+    months,
+    monthly: keys.map((key, i) => ({
+      key,
+      label: monthLabelOf(key),
+      cost: realized[i],
+      committed: committed[i],
+    })),
+    costBySource: [...sourceMap.values()].sort((a, b) => b.total - a.total),
+    payablesAging: agingToSeries(aging),
+  };
+}
+
+/** Gráficos vazios da Faturação (sem obras no filtro). */
+function emptyBillingCharts() {
+  const keys = lastMonthKeys(12);
+  return {
+    months: 12,
+    monthly: keys.map((key) => ({ key, label: monthLabelOf(key), billed: 0, received: 0 })),
+    receivablesAging: agingToSeries(emptyAging()),
+    receivablesTotal: 0,
+  };
+}
+
+/**
+ * Séries mensais (faturação, recebimento, custo e compromisso), escalões de
+ * antiguidade e custo por fonte — o que os gráficos do Overview, da Faturação
+ * e dos Custos mostram.
+ */
+async function buildFinanceCharts({ months = 12 } = {}) {
+  const keys = lastMonthKeys(months);
+  const index = new Map(keys.map((k, i) => [k, i]));
+
+  const [invoices, receipts, ledger] = await Promise.all([
+    prisma.invoice.findMany({
+      select: { docDate: true, dueDate: true, grossAmount: true, netAmount: true, receivedAmount: true },
+    }),
+    prisma.invoiceReceipt.findMany({ select: { receivedDate: true, amount: true } }),
+    buildCostLedger(),
+  ]);
+
+  const invoiced = keys.map(() => 0);
+  const received = keys.map(() => 0);
+  const cost = keys.map(() => 0);
+  const committed = keys.map(() => 0);
+
+  const addTo = (list, value, date) => {
+    const i = index.get(monthKeyOf(date));
+    if (i === undefined) return;
+    list[i] = round2(list[i] + toNumber(value));
+  };
+
+  invoices.forEach((i) => addTo(invoiced, i.grossAmount, i.docDate));
+  receipts.forEach((r) => addTo(received, r.amount, r.receivedDate));
+
+  const receivablesAging = emptyAging();
+  const payablesAging = emptyAging();
+  const statusMix = new Map();
+
+  invoices.forEach((i) => {
+    const net = toNumber(i.netAmount ?? i.grossAmount);
+    const missing = round2(net - toNumber(i.receivedAmount));
+    if (missing > 0) {
+      receivablesAging[agingColumn(i.dueDate)] = round2(receivablesAging[agingColumn(i.dueDate)] + missing);
+    }
+    const status = invoiceDerivedStatus(i);
+    if (!statusMix.has(status)) statusMix.set(status, { value: 0, count: 0 });
+    const bucket = statusMix.get(status);
+    bucket.value = round2(bucket.value + toNumber(i.grossAmount));
+    bucket.count += 1;
+  });
+
+  const sourceMap = new Map();
+  ledger.items.forEach((entry) => {
+    const paid = toNumber(entry.paidAmount);
+    addTo(cost, paid, entry.date);
+    addTo(committed, toNumber(entry.remaining), entry.date);
+
+    if (!sourceMap.has(entry.source)) {
+      sourceMap.set(entry.source, { source: entry.source, label: entry.sourceLabel, realized: 0, committed: 0, total: 0 });
+    }
+    const bucket = sourceMap.get(entry.source);
+    bucket.realized = round2(bucket.realized + paid);
+    bucket.committed = round2(bucket.committed + toNumber(entry.remaining));
+    bucket.total = round2(bucket.realized + bucket.committed);
+
+    const remaining = toNumber(entry.remaining);
+    if (remaining > 0) {
+      payablesAging[agingColumn(entry.date)] = round2(payablesAging[agingColumn(entry.date)] + remaining);
+    }
+  });
+
+  const monthly = keys.map((key, i) => ({
+    key,
+    label: monthLabelOf(key),
+    invoiced: invoiced[i],
+    received: received[i],
+    cost: cost[i],
+    committed: committed[i],
+  }));
+
+  const sumAging = (buckets) => round2(Object.values(buckets).reduce((a, b) => a + b, 0));
+
+  return {
+    months,
+    monthly,
+    aging: {
+      receivables: agingToSeries(receivablesAging),
+      payables: agingToSeries(payablesAging),
+      receivablesTotal: sumAging(receivablesAging),
+      payablesTotal: sumAging(payablesAging),
+    },
+    costBySource: [...sourceMap.values()].sort((a, b) => b.total - a.total),
+    statusMix: [...statusMix.entries()].map(([status, data]) => ({ status, ...data })),
+  };
+}
+
 // ─── Opções (listas de apoio aos ecrãs) ──────────────────────────────────────
 
 financeRoutes.get(
@@ -254,6 +508,34 @@ financeRoutes.get(
       orderBy: { label: "asc" },
     });
     return res.json({ items: cards });
+  })
+);
+
+/**
+ * Centros de custo ativos — de uma obra (`?projectId=`) ou de todas.
+ * Apoia o lançamento manual de custos e os filtros dos ecrãs de custos.
+ */
+financeRoutes.get(
+  "/options/cost-centers",
+  view,
+  asyncHandler(async (req, res) => {
+    const { projectId } = req.query;
+    const centers = await prisma.costCenter.findMany({
+      where: {
+        active: true,
+        ...(projectId ? { projectId: String(projectId) } : {}),
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        projectId: true,
+        project: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: [{ code: "asc" }],
+    });
+    return res.json({ items: centers });
   })
 );
 
@@ -397,6 +679,11 @@ financeRoutes.post(
         flagVatCativo: z.boolean().optional(),
         receivedAmount: z.number().min(0).optional(),
         receivedDate: z.string().nullable().optional(),
+        receivedMethod: z.string().nullable().optional(),
+        // Origem do preenchimento (leitura automática com IA ou manual).
+        scanSource: z.string().nullable().optional(),
+        scanModel: z.string().nullable().optional(),
+        scanRaw: z.unknown().nullable().optional(),
         notes: z.string().nullable().optional(),
       })
       .parse(req.body);
@@ -447,6 +734,9 @@ financeRoutes.post(
         receivedAmount,
         receivedDate: parseOptionalDate(body.receivedDate),
         notes: body.notes || null,
+        scanSource: body.scanSource || null,
+        scanModel: body.scanModel || null,
+        scanRaw: body.scanRaw ?? undefined,
         createdBy: req.user?.name || req.user?.email || null,
       },
       include: {
@@ -462,6 +752,7 @@ financeRoutes.post(
           invoiceId: invoice.id,
           amount: receivedAmount,
           receivedDate: parseOptionalDate(body.receivedDate) || new Date(),
+          method: body.receivedMethod || null,
           createdBy: req.user?.name || req.user?.email || null,
         },
       });
@@ -820,6 +1111,7 @@ financeRoutes.get(
         byClient: [],
         totals: emptyBillingTotals(),
         costSources: buildCostLedgerSources(),
+        charts: emptyBillingCharts(),
       });
     }
 
@@ -908,7 +1200,13 @@ financeRoutes.get(
     totals.realizedMarginPct = totals.billed > 0 ? round2((totals.realizedMargin / totals.billed) * 100) : 0;
     totals.executedPct = totals.forecast > 0 ? round2((totals.billed / totals.forecast) * 100) : 0;
 
-    return res.json({ byProject, byClient, totals, costSources: buildCostLedgerSources() });
+    return res.json({
+      byProject,
+      byClient,
+      totals,
+      costSources: buildCostLedgerSources(),
+      charts: buildBillingCharts(invoices),
+    });
   })
 );
 
@@ -998,7 +1296,12 @@ financeRoutes.get(
       pending: ledger.totals.pending,
     };
 
-    return res.json({ items: ledger.items, totals, sources: ledger.sources });
+    return res.json({
+      items: ledger.items,
+      totals,
+      sources: ledger.sources,
+      charts: buildLedgerCharts(ledger.items),
+    });
   })
 );
 
@@ -1073,6 +1376,77 @@ financeRoutes.post(
   })
 );
 
+/**
+ * Lançamento manual de custo pelo financeiro (obra + centro de custo).
+ *
+ * Cria um pagamento direto com `sourceType: MANUAL`, já confirmado e assinado
+ * por quem o registou. O valor pago representa o que saiu do caixa e o que
+ * ficar por pagar aparece naturalmente nas contas a pagar.
+ */
+financeRoutes.post(
+  "/costs",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        projectId: z.string().min(1),
+        costCenterId: z.string().min(1),
+        supplierId: z.string().nullable().optional(),
+        docNumber: z.string().nullable().optional(),
+        paymentDate: z.string(),
+        category: z
+          .enum(["MATERIAL", "SERVICO", "MAO_DE_OBRA", "EQUIPAMENTO", "TRANSPORTE", "ADMINISTRATIVO", "OUTRO"])
+          .optional(),
+        description: z.string().min(2),
+        budgetedAmount: z.number().min(0),
+        paidAmount: z.number().min(0).optional(),
+        paymentMethod: z.string().nullable().optional(),
+        paymentType: z.string().nullable().optional(),
+        notes: z.string().nullable().optional(),
+      })
+      .parse(req.body);
+
+    const [project, costCenter] = await Promise.all([
+      prisma.project.findUnique({ where: { id: body.projectId }, select: { id: true, currency: true } }),
+      prisma.costCenter.findUnique({ where: { id: body.costCenterId }, select: { id: true, projectId: true } }),
+    ]);
+    if (!project) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+    if (!costCenter || costCenter.projectId !== body.projectId) {
+      return res.status(400).json({
+        error: "COST_CENTER_MISMATCH",
+        message: "O centro de custo escolhido não pertence à obra selecionada.",
+      });
+    }
+
+    const budgeted = round2(body.budgetedAmount);
+    const paid = round2(Math.min(body.paidAmount || 0, budgeted));
+
+    const cost = await prisma.costPayment.create({
+      data: {
+        projectId: body.projectId,
+        costCenterId: body.costCenterId,
+        supplierId: body.supplierId || null,
+        docNumber: body.docNumber || null,
+        paymentDate: parseOptionalDate(body.paymentDate) || new Date(),
+        category: body.category || "OUTRO",
+        description: body.description,
+        budgetedAmount: budgeted,
+        paidAmount: paid,
+        paymentMethod: body.paymentMethod || null,
+        paymentType: body.paymentType || "PRONTO_PAGAMENTO",
+        status: budgeted > 0 && paid >= budgeted ? "CONFIRMADO" : "PENDENTE",
+        notes: body.notes || null,
+        sourceType: "MANUAL",
+        confirmationStatus: "CONFIRMADO",
+        confirmedAt: new Date(),
+        responsible: req.user?.name || req.user?.email || null,
+      },
+    });
+
+    return res.status(201).json({ cost });
+  })
+);
+
 financeRoutes.get(
   "/costs-overview",
   view,
@@ -1080,7 +1454,10 @@ financeRoutes.get(
     // `forecast` passa a ser o orçamento de CUSTO da obra (baseline dos centros
     // de custo) e não o valor de venda, que era a origem da confusão entre o
     // previsto de custo e a previsão de faturação.
-    const financials = await buildProjectFinancials({ includeInactive: true });
+    const [financials, charts] = await Promise.all([
+      buildProjectFinancials({ includeInactive: true }),
+      buildFinanceCharts({ months: 12 }),
+    ]);
 
     const items = financials.items.map((entry) => ({
       project: entry.project,
@@ -1120,7 +1497,18 @@ financeRoutes.get(
       ? round2((totals.plannedMargin / totals.saleForecast) * 100)
       : 0;
 
-    return res.json({ items, totals, costSources: buildCostLedgerSources() });
+    return res.json({
+      items,
+      totals,
+      costSources: buildCostLedgerSources(),
+      charts: {
+        months: charts.months,
+        monthly: charts.monthly,
+        costBySource: charts.costBySource,
+        payablesAging: charts.aging.payables,
+        receivablesAging: charts.aging.receivables,
+      },
+    });
   })
 );
 
@@ -1376,11 +1764,12 @@ financeRoutes.get(
   "/overview",
   view,
   asyncHandler(async (req, res) => {
-    const [financials, invoiceRows] = await Promise.all([
+    const [financials, invoiceRows, charts] = await Promise.all([
       buildProjectFinancials({ includeInactive: true }),
       prisma.invoice.findMany({
         select: { projectId: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true },
       }),
+      buildFinanceCharts({ months: 12 }),
     ]);
 
     const t = financials.totals;
@@ -1438,6 +1827,7 @@ financeRoutes.get(
         net: round2(t.received - t.costRealized),
       },
       costSources: buildCostLedgerSources(),
+      charts,
     });
   })
 );
@@ -1446,7 +1836,10 @@ financeRoutes.get(
   "/control",
   view,
   asyncHandler(async (req, res) => {
-    const financials = await buildProjectFinancials({ includeInactive: true });
+    const [financials, charts] = await Promise.all([
+      buildProjectFinancials({ includeInactive: true }),
+      buildFinanceCharts({ months: 12 }),
+    ]);
 
     const byProject = financials.items.map((entry) => ({
       project: {
@@ -1497,7 +1890,19 @@ financeRoutes.get(
     };
     cashFlow.net = round2(cashFlow.inflow - cashFlow.outflow);
 
-    return res.json({ totals, byProject, cashFlow, costSources: buildCostLedgerSources() });
+    return res.json({
+      totals,
+      byProject,
+      cashFlow,
+      costSources: buildCostLedgerSources(),
+      charts: {
+        months: charts.months,
+        monthly: charts.monthly,
+        costBySource: charts.costBySource,
+        payablesAging: charts.aging.payables,
+        receivablesAging: charts.aging.receivables,
+      },
+    });
   })
 );
 

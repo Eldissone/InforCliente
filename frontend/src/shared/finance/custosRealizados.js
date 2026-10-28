@@ -2,6 +2,7 @@ import { apiRequest } from "../../services/api.js";
 import { toast } from "../ui.js";
 import { formatCurrency } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { chartCardHtml, drawBarChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 
 /**
  * Ecrã «Custos Realizados» (Financeiro · Custos).
@@ -13,6 +14,7 @@ const state = {
   filters: { projectId: "", status: "" },
   projects: [],
   items: [],
+  charts: null,
 };
 
 function money(value) {
@@ -22,6 +24,24 @@ function money(value) {
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
     <div id="realKpis" class="finance-kpi-grid"></div>
+
+    <div class="finance-chart-grid">
+      ${chartCardHtml({
+        id: "realChartGroup",
+        title: "Custos por agrupamento",
+        subtitle: "Segue a vista escolhida: obra, centro de custo ou cliente",
+        hint: "Mostra os 10 maiores. Use os botões acima da tabela para mudar de agrupamento.",
+        span: 2,
+        height: 320,
+      })}
+      ${chartCardHtml({
+        id: "realChartSource",
+        title: "Custos por fonte",
+        subtitle: "De onde vem o valor pago no filtro actual",
+        height: 300,
+      })}
+    </div>
+
     <section class="finance-card">
       <div class="fin-toolbar" style="margin-bottom:1rem">
         <div class="finance-seg" id="realGroup">
@@ -65,7 +85,30 @@ function renderShell() {
       state.group = btn.dataset.group;
       document.querySelectorAll("#realGroup button").forEach((b) => b.classList.toggle("active", b === btn));
       renderTable();
+      renderCharts();
     });
+  });
+}
+
+/* ─── Gráficos ────────────────────────────────────────────────────────────── */
+
+function renderCharts() {
+  const buckets = aggregate().slice(0, 10);
+  drawBarChart("realChartGroup", {
+    categories: buckets.map((b) => b.label),
+    series: [
+      { name: "V. Pago", data: buckets.map((b) => b.paid), color: TONES.red },
+      { name: "Confirmado", data: buckets.map((b) => b.confirmed), color: TONES.emerald },
+      { name: "Por confirmar", data: buckets.map((b) => b.pending), color: TONES.amber },
+    ],
+    height: 320,
+  });
+
+  const sources = (state.charts?.costBySource || []).filter((s) => Number(s.total) > 0);
+  drawDonutChart("realChartSource", {
+    labels: sources.map((s) => s.label || s.source),
+    series: sources.map((s) => Number(s.total) || 0),
+    totalLabel: "Custo",
   });
 }
 
@@ -188,8 +231,10 @@ async function load() {
   try {
     const data = await apiRequest(`/finance/costs?${params.toString()}`);
     state.items = data.items || [];
+    state.charts = data.charts || null;
     renderKpis();
     renderTable();
+    renderCharts();
   } catch (err) {
     if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar custos realizados.", { type: "error" });
@@ -197,6 +242,7 @@ async function load() {
 }
 
 export async function render() {
+  destroyCharts();
   try {
     const projects = await apiRequest("/finance/options/projects");
     state.projects = projects.items || [];

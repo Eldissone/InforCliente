@@ -3,6 +3,7 @@ import { openModal, toast, setButtonLoading } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { can } from "../permissions.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { chartCardHtml, drawAreaChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 
 /**
  * Ecrã «Registar Custos» (Financeiro · Custos).
@@ -41,9 +42,11 @@ const SOURCE_DETAIL = {
 const state = {
   filters: { projectId: "", status: "", source: "" },
   projects: [],
+  suppliers: [],
   sources: [],
   items: [],
   totals: null,
+  charts: null,
 };
 
 function money(value, currency) {
@@ -83,6 +86,52 @@ function confirmBadge(status) {
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
     <div id="costKpis" class="finance-kpi-grid"></div>
+
+    <div class="finance-chart-grid">
+      ${chartCardHtml({
+        id: "crChartMonthly",
+        title: "Custos mês a mês",
+        subtitle: "Custo pago e valor por liquidar nos últimos 12 meses",
+        hint: "“Custo pago” é dinheiro que já saiu; “por liquidar” é o que está assumido mas ainda não foi pago.",
+        span: 2,
+        height: 300,
+      })}
+      ${chartCardHtml({
+        id: "crChartSources",
+        title: "Custos por fonte",
+        subtitle: "Origem de cada custo no filtro actual",
+        height: 290,
+      })}
+      ${chartCardHtml({
+        id: "crChartAging",
+        title: "Por pagar por antiguidade",
+        subtitle: "Valor em falta pela data do custo",
+        height: 290,
+      })}
+    </div>
+
+    <section class="finance-card" style="margin-bottom:1.5rem">
+      <div class="finance-chart-head">
+        <h2 class="finance-chart-title">Como é que um custo chega aqui?</h2>
+        <p class="finance-chart-subtitle">
+          Esta página reúne todos os custos da plataforma num só sítio e serve para o financeiro os confirmar.
+          Nada é duplicado: cada custo aparece uma única vez, com a área de onde veio identificada.
+        </p>
+      </div>
+      <ul class="finance-steps">
+        <li><span class="material-symbols-outlined">shopping_cart</span><span><strong>Pagamento / Cotação</strong> — aprovado no Centro de Compras ou lançado no centro de custo da obra. Entra no custo realizado assim que o valor é pago.</span></li>
+        <li><span class="material-symbols-outlined">request_quote</span><span><strong>Pedido Extra</strong> — aprovado na obra ou no Centro de Compras. Fica comprometido e passa a realizado quando é pago.</span></li>
+        <li><span class="material-symbols-outlined">receipt_long</span><span><strong>Lançamento de Obra</strong> — despesa registada no diário financeiro da obra, já paga ou por liquidar.</span></li>
+        <li><span class="material-symbols-outlined">assignment</span><span><strong>Pedido de Compra</strong> — encomenda ainda aberta. Conta como comprometido até chegar a pagamento.</span></li>
+        <li><span class="material-symbols-outlined">local_shipping</span><span><strong>Frete</strong> — alocação por obra que ainda não foi enviada ao financeiro.</span></li>
+      </ul>
+      <p class="finance-note" style="margin-top:0.85rem">
+        Custos que nascem fora destas áreas (rendas, serviços pontuais, despesas administrativas ou pagamentos
+        já feitos ao balcão) registam-se aqui com <strong>«Novo Custo»</strong>: escolhe-se a obra, o centro de custo
+        e indica-se o valor total e o que já foi pago.
+      </p>
+    </section>
+
     <section class="finance-card">
       <div class="fin-toolbar" style="margin-bottom:1rem">
         <div class="fin-toolbar-filters">
@@ -140,6 +189,16 @@ function renderShell() {
     sourceSel.value = "";
     load();
   });
+
+  const actions = document.getElementById("financePageActions");
+  if (actions) {
+    actions.innerHTML = canEdit()
+      ? `<button id="costNew" type="button" class="finance-btn finance-btn--primary">
+           <span class="material-symbols-outlined">add</span>Novo Custo
+         </button>`
+      : "";
+    document.getElementById("costNew")?.addEventListener("click", openManualCostModal);
+  }
 }
 
 function renderKpis() {
@@ -261,6 +320,7 @@ async function load() {
     const data = await apiRequest(`/finance/costs?${params.toString()}`);
     state.items = data.items || [];
     state.totals = data.totals || null;
+    state.charts = data.charts || null;
     if (Array.isArray(data.sources)) {
       state.sources = data.sources;
       const sourceSel = document.getElementById("costSource");
@@ -273,10 +333,41 @@ async function load() {
     }
     renderKpis();
     renderTable();
+    renderCharts();
   } catch (err) {
     if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar custos: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar custos.", { type: "error" });
   }
+}
+
+/* ─── Gráficos ────────────────────────────────────────────────────────────── */
+
+function renderCharts() {
+  const charts = state.charts || {};
+  const monthly = charts.monthly || [];
+
+  drawAreaChart("crChartMonthly", {
+    categories: monthly.map((m) => m.label),
+    series: [
+      { name: "Custo pago", key: "cost", color: TONES.red, data: monthly.map((m) => Number(m.cost) || 0) },
+      { name: "Por liquidar", key: "committed", color: TONES.amber, data: monthly.map((m) => Number(m.committed) || 0) },
+    ],
+  });
+
+  const sources = (charts.costBySource || []).filter((s) => Number(s.total) > 0);
+  drawDonutChart("crChartSources", {
+    labels: sources.map((s) => s.label || s.source),
+    series: sources.map((s) => Number(s.total) || 0),
+    totalLabel: "Custo total",
+  });
+
+  const aging = (charts.payablesAging || []).filter((a) => Number(a.value) > 0);
+  drawDonutChart("crChartAging", {
+    labels: aging.map((a) => a.label),
+    series: aging.map((a) => Number(a.value) || 0),
+    colors: [TONES.emerald, TONES.amber, "#f97316", TONES.red, "#991b1b"],
+    totalLabel: "Por pagar",
+  });
 }
 
 function openCostModal(cost, confirmMode) {
@@ -341,10 +432,226 @@ function openCostModal(cost, confirmMode) {
   });
 }
 
+/* ─── Lançamento manual de custo ──────────────────────────────────────────── */
+
+const PAYMENT_METHODS = ["Caixa", "Banco", "Transferência", "Cheque", "Multicaixa"];
+
+/**
+ * Registo manual de um custo do financeiro.
+ * Serve para despesas que não nascem nas outras áreas (cotações, pedidos extra,
+ * pedidos de compra, fretes): rendas, serviços pontuais, pagamentos ao balcão.
+ */
+function openManualCostModal() {
+  const today = toDateKey(new Date());
+  const content = `
+    <p class="finance-note" style="margin-bottom:1rem">
+      Use este formulário para despesas que não vêm de cotações, pedidos extra, pedidos de compra ou fretes
+      — rendas, serviços pontuais, despesas administrativas ou pagamentos já feitos. O registo fica confirmado
+      e assinado por si, e o que ficar por pagar aparece nas Contas a Pagar.
+    </p>
+    <div class="finance-form-grid finance-form-grid--2">
+      <div class="finance-field finance-field--full">
+        <label class="finance-label" for="mc_project">Obra <span style="color:#dc2626">*</span></label>
+        <select id="mc_project" class="finance-select" required>
+          <option value="">Selecionar obra…</option>
+          ${state.projects
+            .map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`)
+            .join("")}
+        </select>
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_center">Centro de custo <span style="color:#dc2626">*</span></label>
+        <select id="mc_center" class="finance-select" required disabled>
+          <option value="">Escolha primeiro a obra</option>
+        </select>
+        <p class="finance-note" id="mc_centerHint">O custo é imputado a um centro de custo da obra.</p>
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_category">Categoria</label>
+        <select id="mc_category" class="finance-select">
+          ${Object.entries(CATEGORY)
+            .map(([key, label]) => `<option value="${key}">${esc(label)}</option>`)
+            .join("")}
+        </select>
+      </div>
+
+      <p class="finance-section-title">Documento e fornecedor</p>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_supplier">Fornecedor</label>
+        <select id="mc_supplier" class="finance-select">
+          <option value="">—</option>
+          ${state.suppliers.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_doc">Nº documento / fatura</label>
+        <input id="mc_doc" class="finance-input" type="text" placeholder="Ex.: FT 2026/123" />
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_date">Data do custo <span style="color:#dc2626">*</span></label>
+        <input id="mc_date" class="finance-input" type="date" required value="${today}" />
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_desc">Descrição <span style="color:#dc2626">*</span></label>
+        <input id="mc_desc" class="finance-input" type="text" required placeholder="Ex.: Renda do escritório — Outubro" />
+      </div>
+
+      <p class="finance-section-title">Valores</p>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_budgeted">Valor total do custo <span style="color:#dc2626">*</span></label>
+        <input id="mc_budgeted" class="finance-input" type="number" min="0" step="0.01" required />
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_paid">Valor pago agora</label>
+        <input id="mc_paid" class="finance-input" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_method">Meio de pagamento</label>
+        <select id="mc_method" class="finance-select">
+          <option value="">—</option>
+          ${PAYMENT_METHODS.map((m) => `<option value="${m}">${m}</option>`).join("")}
+        </select>
+      </div>
+      <div class="finance-field">
+        <label class="finance-label" for="mc_type">Forma de pagamento</label>
+        <select id="mc_type" class="finance-select">
+          <option value="PRONTO_PAGAMENTO">Pronto pagamento</option>
+          <option value="CREDITO">Crédito (a pagar)</option>
+        </select>
+      </div>
+      <div class="finance-field finance-field--full">
+        <label class="finance-label" for="mc_notes">Notas</label>
+        <input id="mc_notes" class="finance-input" type="text" />
+      </div>
+
+      <div class="finance-stat-row finance-field--full">
+        <div class="finance-stat finance-stat--blue">
+          <span class="finance-stat-label">Custo total</span>
+          <span class="finance-stat-value" id="mc_sum_total">—</span>
+        </div>
+        <div class="finance-stat finance-stat--emerald">
+          <span class="finance-stat-label">Pago agora</span>
+          <span class="finance-stat-value" id="mc_sum_paid">—</span>
+        </div>
+        <div class="finance-stat finance-stat--amber">
+          <span class="finance-stat-label">Fica por pagar</span>
+          <span class="finance-stat-value" id="mc_sum_remaining">—</span>
+        </div>
+      </div>
+    </div>`;
+
+  openModal({
+    title: "Novo Custo (lançamento manual)",
+    contentHtml: content,
+    primaryLabel: "Registar Custo",
+    onRender: ({ panel }) => {
+      const $ = (id) => panel.querySelector(`#${id}`);
+      const projectSel = $("mc_project");
+      const centerSel = $("mc_center");
+      const hint = $("mc_centerHint");
+
+      const refreshSummary = () => {
+        const total = Number($("mc_budgeted").value) || 0;
+        const paid = Math.min(Number($("mc_paid").value) || 0, total);
+        $("mc_sum_total").textContent = money(total);
+        $("mc_sum_paid").textContent = money(paid);
+        $("mc_sum_remaining").textContent = money(Math.max(total - paid, 0));
+      };
+
+      const loadCenters = async () => {
+        const projectId = projectSel.value;
+        centerSel.innerHTML = `<option value="">Escolha primeiro a obra</option>`;
+        centerSel.disabled = true;
+        if (!projectId) {
+          hint.textContent = "O custo é imputado a um centro de custo da obra.";
+          return;
+        }
+        hint.textContent = "A carregar centros de custo…";
+        try {
+          const data = await apiRequest(
+            `/finance/options/cost-centers?projectId=${encodeURIComponent(projectId)}`
+          );
+          const centers = data.items || [];
+          centerSel.innerHTML = centers.length
+            ? `<option value="">Selecionar centro de custo…</option>` +
+              centers
+                .map((c) => `<option value="${esc(c.id)}">${esc(`${c.code} — ${c.name}`)}</option>`)
+                .join("")
+            : `<option value="">Sem centros de custo ativos</option>`;
+          centerSel.disabled = !centers.length;
+          hint.textContent = centers.length
+            ? `Centros de custo ativos desta obra (${centers.length}).`
+            : "Esta obra ainda não tem centros de custo ativos. Crie um na vista da obra antes de lançar o custo.";
+        } catch (err) {
+          hint.textContent = err.message || "Falha ao carregar os centros de custo.";
+        }
+      };
+
+      projectSel.addEventListener("change", loadCenters);
+      ["mc_budgeted", "mc_paid"].forEach((id) => $(id).addEventListener("input", refreshSummary));
+      loadCenters();
+      refreshSummary();
+    },
+    onPrimary: async ({ btn, close, panel }) => {
+      const $ = (id) => panel.querySelector(`#${id}`);
+      const projectId = $("mc_project").value;
+      if (!projectId) return toast("Selecione a obra.", { type: "error" });
+      if (!$("mc_center").value) return toast("Selecione o centro de custo da obra.", { type: "error" });
+      const description = $("mc_desc").value.trim();
+      if (description.length < 2) return toast("Indique a descrição do custo.", { type: "error" });
+      const budgetedAmount = Number($("mc_budgeted").value);
+      if (!budgetedAmount || budgetedAmount <= 0) {
+        return toast("Indique o valor total do custo.", { type: "error" });
+      }
+      const paidAmount = Number($("mc_paid").value) || 0;
+      if (paidAmount > budgetedAmount) {
+        return toast("O valor pago não pode ser maior do que o valor total do custo.", { type: "error" });
+      }
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest("/finance/costs", {
+          method: "POST",
+          body: {
+            projectId,
+            costCenterId: $("mc_center").value,
+            supplierId: $("mc_supplier").value || null,
+            docNumber: $("mc_doc").value.trim() || null,
+            paymentDate: $("mc_date").value,
+            category: $("mc_category").value,
+            description,
+            budgetedAmount,
+            paidAmount,
+            paymentMethod: $("mc_method").value || null,
+            paymentType: $("mc_type").value,
+            notes: $("mc_notes").value.trim() || null,
+          },
+        });
+        toast(
+          paidAmount > 0 ? "Custo registado e contabilizado como pago." : "Custo registado e por pagar.",
+          { type: "success" }
+        );
+        close();
+        await load();
+      } catch (err) {
+        toast(err.message || "Falha ao registar o custo.", { type: "error" });
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
 export async function render() {
+  destroyCharts();
+  state.filters = { projectId: "", status: "", source: "" };
   try {
-    const projects = await apiRequest("/finance/options/projects");
+    const [projects, suppliers] = await Promise.all([
+      apiRequest("/finance/options/projects"),
+      apiRequest("/finance/options/suppliers"),
+    ]);
     state.projects = projects.items || [];
+    state.suppliers = suppliers.items || [];
   } catch (err) {
     toast(err.message || "Falha ao carregar obras.", { type: "error" });
   }

@@ -3,6 +3,14 @@ import { toast } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { openInvoiceDocumentModal, invoiceHasDocument } from "./invoiceDocument.js";
+import {
+  chartCardHtml,
+  drawAreaChart,
+  drawBarChart,
+  drawDonutChart,
+  destroyCharts,
+  TONES,
+} from "./charts.js";
 
 /**
  * Ecrã «Faturação Prevista» (Financeiro · Faturação).
@@ -75,6 +83,37 @@ function bar(percent, tone = "") {
 function renderShell() {
   document.getElementById("financeRoot").innerHTML = `
     <div id="forecastKpis" class="finance-kpi-grid"></div>
+
+    <div class="finance-chart-grid">
+      ${chartCardHtml({
+        id: "fpChartMonthly",
+        title: "Faturação emitida vs recebida",
+        subtitle: "Últimos 12 meses",
+        hint: "A recebida segue a data do último recebimento registado em cada fatura.",
+        span: 2,
+        height: 300,
+      })}
+      ${chartCardHtml({
+        id: "fpChartAging",
+        title: "Por receber por antiguidade",
+        subtitle: "Faturas em aberto pela data de vencimento",
+        height: 290,
+      })}
+      ${chartCardHtml({
+        id: "fpChartPipeline",
+        title: "Venda prevista vs faturado",
+        subtitle: "As 8 obras com maior previsão de venda",
+        span: 2,
+        height: 320,
+      })}
+      ${chartCardHtml({
+        id: "fpChartMargin",
+        title: "Margem prevista vs realizada",
+        subtitle: "As 8 obras com maior previsão de venda",
+        height: 290,
+      })}
+    </div>
+
     <section class="finance-card">
       <div class="fin-toolbar" style="margin-bottom:1rem">
         <div class="finance-seg" id="forecastGroup">
@@ -397,6 +436,51 @@ function renderByProject(data) {
   });
 }
 
+/* ─── Gráficos ────────────────────────────────────────────────────────────── */
+
+function renderCharts() {
+  const data = state.data || {};
+  const monthly = data.charts?.monthly || [];
+
+  drawAreaChart("fpChartMonthly", {
+    categories: monthly.map((m) => m.label),
+    series: [
+      { name: "Faturado", key: "invoiced", color: TONES.blue, data: monthly.map((m) => Number(m.billed) || 0) },
+      { name: "Recebido", key: "received", color: TONES.emerald, data: monthly.map((m) => Number(m.received) || 0) },
+    ],
+  });
+
+  const aging = (data.charts?.receivablesAging || []).filter((a) => Number(a.value) > 0);
+  drawDonutChart("fpChartAging", {
+    labels: aging.map((a) => a.label),
+    series: aging.map((a) => Number(a.value) || 0),
+    colors: [TONES.emerald, TONES.amber, "#f97316", TONES.red, "#991b1b"],
+    totalLabel: "Por receber",
+  });
+
+  const top = [...(data.byProject || [])]
+    .sort((a, b) => (Number(b.forecast) || 0) - (Number(a.forecast) || 0))
+    .slice(0, 8);
+  drawBarChart("fpChartPipeline", {
+    categories: top.map((p) => p.project.name),
+    series: [
+      { name: "Venda prevista", data: top.map((p) => Number(p.forecast) || 0), color: TONES.violet },
+      { name: "Faturado", data: top.map((p) => Number(p.billed) || 0), color: TONES.blue },
+      { name: "Por faturar", data: top.map((p) => Number(p.toBill) || 0), color: TONES.amber },
+    ],
+    height: 320,
+  });
+
+  drawBarChart("fpChartMargin", {
+    categories: top.map((p) => p.project.name),
+    series: [
+      { name: "Margem prevista", data: top.map((p) => Number(p.plannedMargin) || 0), color: TONES.emerald },
+      { name: "Margem realizada", data: top.map((p) => Number(p.realizedMargin) || 0), color: TONES.sky },
+    ],
+    height: 290,
+  });
+}
+
 function renderTable() {
   const data = state.data;
   if (!data) return;
@@ -420,6 +504,7 @@ async function load() {
     state.data = await apiRequest(`/finance/billing-forecast?${params.toString()}`);
     renderKpis();
     renderTable();
+    renderCharts();
   } catch (err) {
     if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar faturação prevista.", { type: "error" });
@@ -427,6 +512,7 @@ async function load() {
 }
 
 export async function render() {
+  destroyCharts();
   try {
     const [projects, clients] = await Promise.all([
       apiRequest("/finance/options/projects"),

@@ -1,7 +1,9 @@
 import { apiRequest } from "../../services/api.js";
 import { openModal, toast, setButtonLoading } from "../ui.js";
 import { can } from "../permissions.js";
+import { toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { chartCardHtml, drawAreaChart, destroyCharts, TONES } from "./charts.js";
 import {
   MOVEMENT_TYPE,
   DOC_TYPE,
@@ -9,6 +11,10 @@ import {
   dateOnly,
   movementChip,
   directionChip,
+  isIncoming,
+  needsCostAssignment,
+  movementStatusCell,
+  parseStatementText,
   loadMovementOptions,
   openClassifyModal,
   openAssignCostModal,
@@ -143,15 +149,16 @@ function renderDetail() {
   const root = document.getElementById("stmtRoot");
   if (!s) return renderList();
   const movements = s.movements || [];
-  const inflow = movements.filter((m) => m.direction === "ENTRADA").reduce((a, m) => a + (Number(m.amount) || 0), 0);
-  const outflow = movements.filter((m) => m.direction === "SAIDA").reduce((a, m) => a + (Number(m.amount) || 0), 0);
-  const pending = movements.filter((m) => !m.costAssigned).length;
+  const inflow = movements.filter(isIncoming).reduce((a, m) => a + (Number(m.amount) || 0), 0);
+  const outflow = movements.filter(needsCostAssignment).reduce((a, m) => a + (Number(m.amount) || 0), 0);
+  // Só as saídas têm custo para associar (as entradas são recebimentos ou transferências).
+  const pending = movements.filter((m) => needsCostAssignment(m) && !m.costAssigned).length;
 
   const cards = [
     { label: "Movimentos", value: String(movements.length), sub: s.name, tone: "slate", icon: "swap_vert" },
     { label: "Entradas", value: money(inflow), sub: "Total a crédito", tone: "emerald", icon: "south_west" },
     { label: "Saídas", value: money(outflow), sub: "Total a débito", tone: "red", icon: "north_east" },
-    { label: "Por Associar", value: String(pending), sub: "Sem custo associado", tone: "amber", icon: "link_off" },
+    { label: "Saídas por Associar", value: String(pending), sub: "Sem custo associado", tone: pending ? "amber" : "emerald", icon: "link_off" },
   ];
   const kpis = `<div class="finance-kpi-grid">${cards
     .map(
@@ -177,20 +184,20 @@ function renderDetail() {
           <td>${m.docType ? `${esc(m.docType)} ${esc(m.docNumber || "")}` : esc(m.docNumber || "—")}</td>
           <td>${movementChip(m.movementType)}</td>
           <td>${directionChip(m.direction)}</td>
-          <td class="fin-num ${m.direction === "ENTRADA" ? "finance-pos" : "finance-neg"}">${esc(money(m.amount))}</td>
-          <td>${
-            m.costAssigned
-              ? `<span class="finance-badge finance-badge--emerald">Associado</span>`
-              : `<span class="finance-badge finance-badge--slate">Por associar</span>`
-          }</td>
+          <td class="fin-num ${isIncoming(m) ? "finance-pos" : "finance-neg"}">${esc(money(m.amount))}</td>
+          <td>${movementStatusCell(m)}</td>
           <td>
             <div class="fin-actions">
               <button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Classificar" data-action="classify">
                 <span class="material-symbols-outlined" style="font-size:17px">edit_note</span>
               </button>
-              <button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Associar Custo" data-action="assign">
-                <span class="material-symbols-outlined" style="font-size:17px">link</span>
-              </button>
+              ${
+                needsCostAssignment(m)
+                  ? `<button type="button" class="fin-icon-btn fin-icon-btn--emerald" title="Associar Custo" data-action="assign">
+                          <span class="material-symbols-outlined" style="font-size:17px">link</span>
+                        </button>`
+                  : ""
+              }
             </div>
           </td>
         </tr>`
@@ -212,6 +219,15 @@ function renderDetail() {
       </div>
     </div>
     ${kpis}
+    <div class="finance-chart-grid">
+      ${chartCardHtml({
+        id: "stmtChartMonthly",
+        title: "Entradas e saídas do extrato",
+        subtitle: "Movimento mês a mês",
+        span: 2,
+        height: 290,
+      })}
+    </div>
     <section class="finance-card">
       <div class="finance-table-scroll">
         <table class="fin-table" style="min-width:1150px">
@@ -228,8 +244,11 @@ function renderDetail() {
   document.getElementById("stmtBack").addEventListener("click", () => {
     state.selectedId = null;
     state.detail = null;
+    destroyCharts(root);
     renderList();
   });
+
+  renderDetailCharts(movements);
 
   root.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
     const m = movements.find((x) => x.id === tr.dataset.id);
@@ -240,6 +259,41 @@ function renderDetail() {
     tr.querySelector('[data-action="assign"]')?.addEventListener("click", () =>
       openAssignCostModal(m, { options: state.options, onSaved: () => openDetail(s.id) })
     );
+  });
+}
+
+/** Entradas e saídas do extrato agrupadas por mês. */
+function renderDetailCharts(movements) {
+  const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const keys = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i -= 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const inflow = keys.map(() => 0);
+  const outflow = keys.map(() => 0);
+
+  movements.forEach((m) => {
+    const key = toDateKey(m.movementDate)?.slice(0, 7);
+    const i = index.get(key);
+    if (i === undefined) return;
+    const amount = Number(m.amount) || 0;
+    if (isIncoming(m)) inflow[i] += amount;
+    else outflow[i] += amount;
+  });
+
+  drawAreaChart("stmtChartMonthly", {
+    categories: keys.map((k) => {
+      const [y, m] = k.split("-").map(Number);
+      return `${MONTH_LABELS[m - 1]} ${String(y).slice(2)}`;
+    }),
+    series: [
+      { name: "Entradas", key: "received", color: TONES.emerald, data: inflow },
+      { name: "Saídas", key: "cost", color: TONES.red, data: outflow },
+    ],
+    height: 290,
   });
 }
 
@@ -349,6 +403,27 @@ function openImportModal() {
           <input id="st_end" class="finance-input" type="date" />
         </div>
       </div>
+
+      <p class="finance-section-title">Colar do extrato (opcional)</p>
+      <div class="finance-field finance-field--full">
+        <label class="finance-label" for="st_paste">Uma linha por movimento: data, descrição e valor</label>
+        <textarea id="st_paste" class="finance-textarea" rows="4"
+          placeholder="2026-10-01; Pagamento fornecedor X; -150000&#10;2026-10-03; Recebimento do cliente; 250000"></textarea>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem">
+          <button type="button" id="st_parse" class="finance-btn finance-btn--ghost">
+            <span class="material-symbols-outlined">playlist_add</span>Preencher movimentos
+          </button>
+          <button type="button" id="st_csvBtn" class="finance-btn finance-btn--ghost">
+            <span class="material-symbols-outlined">upload_file</span>Carregar CSV
+          </button>
+          <input id="st_csv" type="file" accept=".csv,text/csv,text/plain" hidden />
+        </div>
+        <p class="finance-note" id="st_pasteNote">
+          Aceita separador «;», tabulação ou «|», e valores com vírgula ou ponto decimal. Valores negativos são
+          tratados como saídas. As linhas de cabeçalho são ignoradas.
+        </p>
+      </div>
+
       <p class="finance-section-title">Movimentos</p>
       <div id="importRows"></div>
       <div style="display:flex;justify-content:flex-start;margin-top:0.5rem">
@@ -359,16 +434,60 @@ function openImportModal() {
     primaryLabel: "Importar",
     onRender: ({ panel }) => {
       const rows = panel.querySelector("#importRows");
+      const pasteNote = panel.querySelector("#st_pasteNote");
       let counter = 0;
-      const addRow = () => {
+
+      // `prefill` permite trazer já os movimentos lidos do extrato colado/CSV.
+      const addRow = (prefill = null) => {
         rows.insertAdjacentHTML("beforeend", movementRowHtml(counter));
+        const rowEl = rows.lastElementChild;
+        if (prefill && rowEl) {
+          rowEl.querySelector('[data-f="movementDate"]').value = prefill.movementDate || "";
+          rowEl.querySelector('[data-f="amount"]').value = prefill.amount ?? "";
+          rowEl.querySelector('[data-f="direction"]').value = prefill.direction || "SAIDA";
+          rowEl.querySelector('[data-f="description"]').value = prefill.description || "";
+        }
         counter += 1;
       };
       addRow();
-      panel.querySelector("#importAddRow").addEventListener("click", addRow);
+      panel.querySelector("#importAddRow").addEventListener("click", () => addRow());
       rows.addEventListener("click", (e) => {
         const btn = e.target.closest("[data-remove]");
         if (btn) btn.closest("[data-row]").remove();
+      });
+
+      // Colar / carregar o extrato do banco e criar uma linha por movimento.
+      const fillFromText = (text) => {
+        const parsed = parseStatementText(text);
+        if (!parsed.length) {
+          pasteNote.textContent =
+            "Não foi possível ler nenhum movimento. Use o formato «data; descrição; valor», uma linha por movimento.";
+          return;
+        }
+        // Se a grelha só tem a linha-modelo vazia, é substituída pelas lidas.
+        const onlyPlaceholder = rows.children.length === 1 && !rows.querySelector('[data-f="amount"]')?.value;
+        if (onlyPlaceholder) {
+          rows.innerHTML = "";
+          counter = 0;
+        }
+        parsed.forEach((movement) => addRow(movement));
+        pasteNote.textContent = `${parsed.length} movimento(s) lido(s) do extrato. Confirme a obra, o fornecedor e o tipo de cada um antes de importar.`;
+      };
+
+      panel.querySelector("#st_parse").addEventListener("click", () => {
+        fillFromText(panel.querySelector("#st_paste").value);
+      });
+
+      const csvInput = panel.querySelector("#st_csv");
+      panel.querySelector("#st_csvBtn").addEventListener("click", () => csvInput.click());
+      csvInput.addEventListener("change", async () => {
+        const file = csvInput.files?.[0];
+        if (!file) return;
+        try {
+          fillFromText(await file.text());
+        } catch (err) {
+          pasteNote.textContent = err.message || "Falha ao ler o ficheiro.";
+        }
       });
     },
     onPrimary: async ({ btn, close, panel }) => {
