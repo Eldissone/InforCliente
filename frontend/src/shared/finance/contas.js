@@ -1,84 +1,41 @@
-import { apiRequest } from "../../services/api.js";
-import { toast } from "../ui.js";
-import { formatCurrency, toDateKey } from "../format.js";
-import { escapeFinanceHtml as esc } from "../financePage.js";
+import { destroyCharts } from "./charts.js";
 
 /**
- * Ecrã «Contas a Pagar / Receber» (Financeiro).
- * Confronto entre contas a pagar (custos pendentes) e a receber (faturas).
+ * Ecrã «Contas a Receber / Pagar»: uma só página com três separadores —
+ * Recebimentos, Pagamentos e Cash Flow. Cada separador é um módulo próprio que
+ * desenha em #financeRoot; aqui só se escolhe qual e se guarda em `?tab=`.
  */
 
-const INVOICE_STATUS = {
-  EM_ABERTO: { label: "Em Aberto", badge: "slate" },
-  PAGO_PARCIAL: { label: "Pago Parcial", badge: "amber" },
-  PAGO_TOTAL: { label: "Pago Total", badge: "emerald" },
-  ATRASADO: { label: "Atrasado", badge: "red" },
+const TABS = {
+  receber: { label: "Recebimentos", icon: "south_west", load: () => import("./contasRecebimentos.js") },
+  pagar: { label: "Pagamentos", icon: "north_east", load: () => import("./contasPagamentos.js") },
+  cashflow: { label: "Cash Flow", icon: "waterfall_chart", load: () => import("./contasCashflow.js") },
 };
 
-const COST_STATUS = {
-  PENDENTE: { label: "Pendente", badge: "amber" },
-  EM_ESPERA: { label: "Em Espera", badge: "slate" },
-  CONFIRMADO: { label: "Confirmado", badge: "emerald" },
-  CANCELADO: { label: "Cancelado", badge: "red" },
-  // Pedido Extra
-  APROVADO: { label: "Aprovado", badge: "blue" },
-  PAGO: { label: "Pago", badge: "emerald" },
-  // Pedido de Compra
-  RASCUNHO: { label: "Rascunho", badge: "slate" },
-  PENDENTE_REQUISICAO: { label: "Pend. requisição", badge: "amber" },
-  PENDENTE_APROVACAO: { label: "Pend. aprovação", badge: "amber" },
-  NAO_APROVADO: { label: "Não aprovado", badge: "red" },
-  EM_PAGAMENTO: { label: "Em pagamento", badge: "blue" },
-  CONCLUIDO: { label: "Concluído", badge: "emerald" },
-  // Frete
-  EM_ANALISE: { label: "Em análise", badge: "amber" },
-  APPROVED: { label: "Aprovado", badge: "blue" },
-};
+let current = null;
 
-const state = { tab: "pagar", payables: null, receivables: null };
-
-function money(value, currency) {
-  return formatCurrency(Number(value) || 0, currency || "AOA");
-}
-
-function dateOnly(value) {
-  const key = toDateKey(value);
-  if (!key) return "—";
-  const [y, m, d] = key.split("-").map(Number);
-  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-}
-
-function badge(map, status) {
-  const s = map[status] || { label: status || "—", badge: "slate" };
-  return `<span class="finance-badge finance-badge--${s.badge}">${esc(s.label)}</span>`;
-}
-
-function renderShell() {
-  document.getElementById("financeRoot").innerHTML = `
-    <div id="contasKpis" class="finance-kpi-grid"></div>
-    <section class="finance-card">
-      <div class="fin-toolbar" style="margin-bottom:1rem">
-        <div class="finance-seg" id="contasSeg">
-          <button type="button" data-tab="pagar" class="active">
-            <span class="material-symbols-outlined">north_east</span>A Pagar
-          </button>
-          <button type="button" data-tab="receber">
-            <span class="material-symbols-outlined">south_west</span>A Receber
-          </button>
-        </div>
-      </div>
-      <div id="contasTable" class="finance-table-scroll"></div>
-    </section>`;
-
-  document.querySelectorAll("#contasSeg button").forEach((btn) => {
+function renderTabs() {
+  const actions = document.getElementById("financePageActions");
+  if (!actions) return;
+  actions.innerHTML = `
+    <div class="finance-seg ac-tabs" role="tablist">
+      ${Object.entries(TABS)
+        .map(
+          ([key, t]) => `
+        <button type="button" role="tab" data-tab="${key}" class="${key === current ? "active" : ""}" aria-selected="${key === current}">
+          <span class="material-symbols-outlined">${t.icon}</span><span>${t.label}</span>
+        </button>`
+        )
+        .join("")}
+    </div>`;
+  actions.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      state.tab = btn.dataset.tab;
-      document.querySelectorAll("#contasSeg button").forEach((b) => b.classList.toggle("active", b === btn));
-      renderTable();
+      if (btn.dataset.tab !== current) openTab(btn.dataset.tab);
     });
   });
 }
 
+<<<<<<< HEAD
 function renderKpis() {
   const payables = state.payables?.items || [];
   const receivables = state.receivables?.items || [];
@@ -219,9 +176,25 @@ async function load() {
     if (wrap) wrap.innerHTML = `<div class="finance-empty">Falha ao carregar: ${esc(err.message)}</div>`;
     toast(err.message || "Falha ao carregar contas.", { type: "error" });
   }
+=======
+async function openTab(key) {
+  current = TABS[key] ? key : "receber";
+  const url = new URL(window.location.href);
+  url.searchParams.set("tab", current);
+  // O filtro rápido (?view=) é de cada separador: não passa para o seguinte.
+  if (key !== new URLSearchParams(window.location.search).get("tab")) url.searchParams.delete("view");
+  window.history.replaceState({}, "", url);
+  renderTabs();
+  destroyCharts();
+  const mod = await TABS[current].load();
+  await mod.render();
+>>>>>>> origin/dev-leite
 }
 
 export async function render() {
-  renderShell();
-  await load();
+  const params = new URLSearchParams(window.location.search);
+  current = TABS[params.get("tab")] ? params.get("tab") : "receber";
+  renderTabs();
+  const mod = await TABS[current].load();
+  await mod.render();
 }

@@ -2,6 +2,7 @@ import { apiRequest } from "../../services/api.js";
 import { openModal, toast, setButtonLoading } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
+import { openCostForm, isAssignableMovement } from "./costForm.js";
 
 /**
  * Utilitários partilhados dos movimentos bancários (Tesouraria):
@@ -15,7 +16,7 @@ export const MOVEMENT_TYPE = {
   OPERACAO_ANULADA: { label: "Operação anulada", tone: "" },
   RECEBIMENTO_CLIENTE: { label: "Recebimento cliente", tone: "emerald" },
   LEVANTAMENTO_ATM: { label: "Levantamento ATM", tone: "violet" },
-  OUTRO: { label: "Outro", tone: "" },
+  OUTRO: { label: "Pagamento / outro", tone: "" },
 };
 
 export const DOC_TYPE = {
@@ -42,6 +43,127 @@ export function movementChip(type) {
 export function directionChip(direction) {
   if (direction === "ENTRADA") return `<span class="finance-badge finance-badge--emerald">Entrada</span>`;
   return `<span class="finance-badge finance-badge--red">Saída</span>`;
+}
+
+/**
+ * Regra de negócio partilhada: «Associar Custo» só se aplica a SAÍDAS.
+ * Numa entrada não há custo a associar — ou é um recebimento a ligar à fatura
+ * do cliente, ou uma transferência interna entre contas/cartões da empresa.
+ */
+export function isIncoming(movement) {
+  return movement?.direction === "ENTRADA";
+}
+
+export function needsCostAssignment(movement) {
+  return !isIncoming(movement) && isAssignableMovement({ ...movement, costAssigned: false });
+}
+
+/**
+ * Recebimento todo registado em faturas do cliente. A ligação é guardada no
+ * recebimento da fatura (`InvoiceReceipt.bankMovementId`); o servidor devolve
+ * o resumo em `receiptLink` (LIGADO / PARCIAL / POR_LIGAR).
+ */
+export function isReceiptLinked(movement) {
+  return movement?.receiptLink?.state === "LIGADO";
+}
+
+/** Valor do recebimento ainda por ligar a faturas. */
+export function receiptFree(movement) {
+  const link = movement?.receiptLink;
+  return link ? Number(link.free) || 0 : Number(movement?.amount) || 0;
+}
+
+export function receiptStateHtml(movement) {
+  const link = movement?.receiptLink || { state: "POR_LIGAR", invoices: [] };
+  const docs = (link.invoices || []).map((i) => i.docNumber || "s/ nº").join(", ");
+  if (link.state === "LIGADO") {
+    return `<span class="finance-chip finance-chip--emerald" title="${esc(docs)}">Ligado · ${esc(docs || "fatura")}</span>`;
+  }
+  if (link.state === "PARCIAL") {
+    return `<span class="finance-chip finance-chip--amber" title="Ligado a ${esc(docs)}">Parcial · falta ${esc(money(link.free))}</span>`;
+  }
+  return `<span class="finance-chip finance-chip--red">Por ligar</span>`;
+}
+
+/** Estado do custo de uma saída: associado, por associar ou mercadoria (via stock). */
+export function costStatusHtml(movement) {
+  if (isIncoming(movement)) return `<span class="finance-chip finance-chip--slate">Entrada</span>`;
+  if (movement.isMerchandise) return `<span class="finance-chip finance-chip--amber" title="O custo nasce na saída de stock para a obra">Via stock</span>`;
+  if (!needsCostAssignment(movement) && !movement.costAssigned) return `<span class="finance-chip finance-chip--slate">Sem custo</span>`;
+  if (!movement.costAssigned) return `<span class="finance-chip finance-chip--red">Por associar</span>`;
+  const n = movement.costSummary?.count || 0;
+  return `<span class="finance-chip finance-chip--emerald">Associado${n > 1 ? ` · ${n} custos` : ""}</span>`;
+}
+
+
+/** Lê valores no formato português (1.234,56) ou inglês (1,234.56). */
+export function parseMoneyCell(raw) {
+  let text = String(raw ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/Kz|AOA/gi, "");
+  if (!text) return null;
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+  if (hasComma && hasDot) {
+    text =
+      text.lastIndexOf(",") > text.lastIndexOf(".")
+        ? text.replace(/\./g, "").replace(",", ".")
+        : text.replace(/,/g, "");
+  } else if (hasComma) {
+    text = text.replace(",", ".");
+  } else if (hasDot && /^[+-]?\d{1,3}(\.\d{3})+$/.test(text)) {
+    // "45.000" num extrato em português são 45 000. Só tratamos o ponto como
+    // separador de milhares quando todos os grupos têm exatamente 3 dígitos
+    // ("45.00" e "45.5" continuam a ser valores decimais).
+    text = text.replace(/\./g, "");
+  }
+  const n = Number(text.replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Data em AAAA-MM-DD (aceita AAAA-MM-DD e DD/MM/AAAA). */
+export function parseDateCell(raw) {
+  const text = String(raw || "").trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+  if (dmy) {
+    let year = Number(dmy[3]);
+    if (year < 100) year += year < 70 ? 2000 : 1900;
+    return `${year}-${String(Number(dmy[2])).padStart(2, "0")}-${String(Number(dmy[1])).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/**
+ * Lê o texto de um extrato colado do banco: uma linha por movimento com
+ * `data ; descrição ; valor` (também aceita tabulação ou `|`).
+ * Valores negativos são saídas; positivos são entradas.
+ */
+export function parseStatementText(text) {
+  const rows = [];
+  String(text || "")
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const raw = line.trim();
+      if (!raw) return;
+      const parts = raw
+        .split(/[;\t|]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return;
+      const movementDate = parseDateCell(parts[0]);
+      const value = parseMoneyCell(parts[parts.length - 1]);
+      if (!movementDate || value === null || value === 0) return;
+      rows.push({
+        movementDate,
+        amount: Math.abs(value),
+        direction: value < 0 ? "SAIDA" : "ENTRADA",
+        description: parts.slice(1, -1).join(" · ") || parts[1] || "",
+      });
+    });
+  return rows;
 }
 
 /** Carrega obras, fornecedores, categorias de custo e cartões. */
@@ -180,101 +302,12 @@ export function openClassifyModal(movement, { options, onSaved }) {
 }
 
 /**
- * «Associar Custo» — associa a categoria/subcategoria ao movimento. As compras
- * de mercadorias não podem ter custo direto (o custo vem da saída de stock).
+ * «Associar e Confirmar Custo» de um movimento do extrato — usa o formulário
+ * partilhado dos Custos (cria o custo da obra ou liga a um pagamento existente).
  */
 export function openAssignCostModal(movement, { options, onSaved }) {
-  const { suppliers, categories } = options;
-  const blocked = Boolean(movement.isMerchandise);
-  openModal({
-    title: "Associar Custo",
-    contentHtml: `
-      ${
-        blocked
-          ? `<div class="finance-card" style="border-color:#fecaca;background:#fef2f2;margin-bottom:1rem;padding:1rem">
-               <strong style="color:#b91c1c">Compra de mercadorias</strong>
-               <p class="finance-note" style="margin:0.4rem 0 0;color:#b91c1c">
-                 O custo desta compra é gerado pela saída de stock, pelo que não pode ser associado diretamente.
-               </p>
-             </div>`
-          : ""
-      }
-      <div class="finance-form-grid finance-form-grid--2">
-        <div class="finance-field">
-          <label class="finance-label" for="ac_category">Categoria</label>
-          <select id="ac_category" class="finance-select"></select>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="ac_subcategory">Subcategoria</label>
-          <select id="ac_subcategory" class="finance-select"></select>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="ac_supplier">Fornecedor</label>
-          <select id="ac_supplier" class="finance-select">
-            ${optionsHtml(suppliers, { selected: movement.supplierId || "" })}
-          </select>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="ac_docType">Tipo de Documento</label>
-          <select id="ac_docType" class="finance-select">
-            <option value="">—</option>
-            ${optionsHtml(
-              Object.entries(DOC_TYPE).map(([k, v]) => ({ id: k, name: v })),
-              { selected: movement.docType || "", placeholder: null }
-            )}
-          </select>
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="ac_docNumber">Nº Documento</label>
-          <input id="ac_docNumber" class="finance-input" type="text" value="${esc(movement.docNumber || "")}" />
-        </div>
-        <div class="finance-field">
-          <label class="finance-label" for="ac_desc">Descrição</label>
-          <input id="ac_desc" class="finance-input" type="text" value="${esc(movement.description || "")}" />
-        </div>
-      </div>`,
-    primaryLabel: "Associar Custo",
-    onRender: ({ panel }) => {
-      const cat = panel.querySelector("#ac_category");
-      const sub = panel.querySelector("#ac_subcategory");
-      const fillSubs = () => {
-        const subs = subCategories(categories, cat.value);
-        sub.innerHTML = optionsHtml(subs, { selected: movement.subcategoryId || "" });
-        sub.disabled = !subs.length;
-      };
-      cat.innerHTML = optionsHtml(topCategories(categories), { selected: movement.costCategoryId || "" });
-      fillSubs();
-      cat.addEventListener("change", fillSubs);
-      if (blocked) {
-        panel.querySelector("#ac_category").disabled = true;
-        panel.querySelector("#ac_subcategory").disabled = true;
-      }
-    },
-    onPrimary: async ({ btn, close, panel }) => {
-      if (blocked) {
-        return toast("Mercadoria: o custo é gerado pela saída de stock.", { type: "error" });
-      }
-      setButtonLoading(btn, true);
-      try {
-        await apiRequest(`/finance/bank-movements/${movement.id}/assign-cost`, {
-          method: "POST",
-          body: {
-            costCategoryId: panel.querySelector("#ac_category").value || null,
-            subcategoryId: panel.querySelector("#ac_subcategory").value || null,
-            supplierId: panel.querySelector("#ac_supplier").value || null,
-            docType: panel.querySelector("#ac_docType").value || null,
-            docNumber: panel.querySelector("#ac_docNumber").value.trim() || null,
-            description: panel.querySelector("#ac_desc").value.trim() || null,
-          },
-        });
-        toast("Custo associado.", { type: "success" });
-        close();
-        onSaved?.();
-      } catch (err) {
-        toast(err.message || "Falha ao associar custo.", { type: "error" });
-      } finally {
-        setButtonLoading(btn, false);
-      }
-    },
-  });
+  if (!isAssignableMovement(movement)) {
+    return toast(movement.costAssigned ? "Este movimento já tem custo associado." : "Só as saídas de valores têm custo associado.", { type: "error" });
+  }
+  openCostForm({ movement, options, onSaved });
 }
