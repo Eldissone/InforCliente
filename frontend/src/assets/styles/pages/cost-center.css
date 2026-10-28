@@ -290,10 +290,15 @@
             }
         }
 
+        html.is-embed body,
         body.is-embed {
             background: #fff;
         }
 
+        html.is-embed .app-top-nav,
+        html.is-embed #navMenu,
+        html.is-embed #sidebar,
+        html.is-embed #floatingToggleBtn,
         body.is-embed .app-top-nav,
         body.is-embed #navMenu,
         body.is-embed #sidebar,
@@ -303,6 +308,7 @@
             display: none !important;
         }
 
+        html.is-embed body > .flex.flex-1,
         body.is-embed > .flex.flex-1 {
             padding: 0 0 1.5rem !important;
             margin: 0 !important;
@@ -310,12 +316,16 @@
             gap: 0;
         }
 
+        html.is-embed #projectContent > header nav,
+        html.is-embed #projectContent > header h1,
+        html.is-embed #projectContent > header #selectedProjCode,
         body.is-embed #projectContent > header nav,
         body.is-embed #projectContent > header h1,
         body.is-embed #projectContent > header #selectedProjCode {
             display: none;
         }
 
+        html.is-embed #kpiRow,
         body.is-embed #kpiRow {
             display: none;
         }

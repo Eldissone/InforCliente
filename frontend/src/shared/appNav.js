@@ -305,6 +305,7 @@ function rebuildMobileMenu(nav, source) {
 
 /** Builds the shared desktop sidebar and the mobile menu from APP_MENU. */
 export function transformDesktopNavToDropdowns() {
+  if (document.documentElement.classList.contains("is-embed") || document.body?.classList.contains("is-embed")) return;
   const source = getDesktopNavLinksContainer();
   const nav = getTopNav();
   if (document.body.dataset.appSidebar === "off" || document.body.dataset.appNav === "off" || !nav) return;

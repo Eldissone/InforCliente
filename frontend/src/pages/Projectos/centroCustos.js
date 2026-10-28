@@ -1,3 +1,4 @@
+import { applyEmbedMode } from "/shared/embedMode.js";
 import { apiRequest, getAssetUrl, apiUpload } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { getSessionUser } from "/services/auth.js";
@@ -9,6 +10,8 @@ import { computeFiscalBreakdown, paymentPayableAmount } from "/shared/supplierFi
 import { renderAsideProductSection, renderAsideAccountingLine } from "/shared/paymentDetailAside.js";
 import { initMobileMenu } from "/shared/ui.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
+
+applyEmbedMode();
 
 const CENTRO_CUSTOS_ORIGIN_KEY = "InfoCliente.centroCustos.origin";
 const DEFAULT_BACK_HREF = "./ProjectGeral.html";

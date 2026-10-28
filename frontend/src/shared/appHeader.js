@@ -55,6 +55,8 @@ function renderAppHeader() {
 }
 
 export function mountAppHeader() {
+  if (document.documentElement.classList.contains("is-embed") || document.body?.classList.contains("is-embed")) return;
+  if (new URLSearchParams(window.location.search).get("embed") === "1") return;
   if (document.body?.dataset.shell !== "figma") return;
   if (document.querySelector("nav.app-top-nav[data-shared-header]")) return;
 

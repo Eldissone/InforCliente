@@ -1,3 +1,20 @@
+html.is-embed nav.app-top-nav,
+html.is-embed #appHeader,
+html.is-embed #navMenu,
+html.is-embed #sidebar,
+html.is-embed #floatingToggleBtn,
+html.is-embed #chatFab,
+html.is-embed #helpFab,
+html.is-embed #globalChatFab,
+html.is-embed [data-chat-fab],
+html.is-embed [data-help-fab] {
+  display: none !important;
+}
+
+html.is-embed body {
+  padding-top: 0 !important;
+}
+
 /* Shell Figma. Activo em body[data-shell=figma]. */
 body[data-shell="figma"] {
   background: var(--color-canvas, #f2f2f2);
@@ -346,6 +363,26 @@ body[data-shell="figma"] table tbody tr {
     top: 5.5rem;
     padding-top: 1rem;
   }
+}
+
+html.is-embed #appHeader,
+html.is-embed nav.app-top-nav,
+html.is-embed #navMenu,
+html.is-embed .app-primary-sidebar,
+html.is-embed #cotacaoPageHead {
+  display: none !important;
+}
+
+html.is-embed body.app-sidebar-layout > main,
+html.is-embed body[data-shell="figma"].app-sidebar-layout > main {
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-top: 0.75rem !important;
+}
+
+html.is-embed body[data-shell="figma"].app-sidebar-layout > nav.app-top-nav {
+  display: none !important;
 }
 
 @media (max-width:1023px) {
