@@ -96,6 +96,8 @@
                         class="pv-tab-item" role="menuitem">Orçamento Previsional de Custo</button>
                     <button type="button" data-tab-trigger="orcamento_vendas" data-perm="obras:tab_planning_budget_sales"
                         class="pv-tab-item" role="menuitem">Orçamento Previsional de Vendas</button>
+                    <button type="button" data-tab-trigger="orcamento_cotacao" data-perm="obras:view"
+                        class="pv-tab-item" role="menuitem">Cotação</button>
                 </div>
             </div>
 
@@ -748,11 +750,11 @@
             <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Custo</h2>
-                    <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — baseline dos centros de custo.</p>
+                    <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — crie centros, linhas e aprove o previsto nesta obra.</p>
                 </div>
-                <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all">
+                <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">open_in_new</span>
-                    Abrir Orçamento Geral
+                    Página completa
                 </a>
             </div>
             <div id="plOrcamentoCustoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
@@ -780,6 +782,11 @@
                     </table>
                 </div>
             </div>
+            <div class="mt-6">
+                <h3 class="font-bold text-slate-900 mb-2">Registar orçamento desta obra</h3>
+                <p class="text-[11px] text-slate-400 mb-3 font-medium">Crie centros de custo, linhas e aprove o previsto sem sair da obra.</p>
+                <iframe id="plOrcamentoCustoFrame" class="pv-embed-frame" title="Registo de orçamento da obra" loading="lazy"></iframe>
+            </div>
         </div>
 
         <!-- Orçamento: Previsional de Vendas -->
@@ -787,12 +794,24 @@
             <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Vendas</h2>
-                    <p class="text-sm text-slate-500 font-medium">Quanto prevemos faturar nesta obra, com base na tabela de quantidades.</p>
+                    <p class="text-sm text-slate-500 font-medium">Quanto prevemos faturar — registe a tabela de quantidades e os preços de venda desta obra.</p>
                 </div>
-                <button type="button" data-pl-open-tab="relatorio" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
-                    <span class="material-symbols-outlined text-base">straighten</span>
-                    Ver Avanço Físico
-                </button>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    <button type="button" data-pl-open-tab="relatorio" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-base">straighten</span>
+                        Avanço Físico
+                    </button>
+                    <button type="button" id="plOrcamentoVendasExcel" data-role-visible="admin,operador"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-emerald-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">file_upload</span>
+                        Excel
+                    </button>
+                    <button type="button" id="plOrcamentoVendasAdd" data-role-visible="admin,operador"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
+                        <span class="material-symbols-outlined text-base">add_task</span>
+                        Novo item
+                    </button>
+                </div>
             </div>
             <div id="plOrcamentoVendasKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -817,6 +836,45 @@
                     </table>
                 </div>
             </div>
+            <div class="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Tabela de quantidades desta obra</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Itens de venda — edite quantidades e preços sem sair do orçamento</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Item</th>
+                                <th class="text-left">Descrição</th>
+                                <th class="text-right">Qtd</th>
+                                <th class="text-center">UN</th>
+                                <th class="text-right">P. Unit.</th>
+                                <th class="text-right">Previsto</th>
+                                <th class="text-center">Acção</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoVendasItems">
+                            <tr><td colspan="7" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orçamento: Cotação -->
+        <div id="tab_orcamento_cotacao" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Cotação desta obra</h2>
+                    <p class="text-sm text-slate-500 font-medium">Precifique necessidades, escolha fornecedor e aprove propostas sem sair da obra.</p>
+                </div>
+                <a id="plOrcamentoCotacaoLink" href="./Cotacao/index.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    Página completa
+                </a>
+            </div>
+            <iframe id="plOrcamentoCotacaoFrame" class="pv-embed-frame" title="Cotação da obra" loading="lazy"></iframe>
         </div>
 
         <!-- Planeamento: Plano de Execução (Gantt) -->

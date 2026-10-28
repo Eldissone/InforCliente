@@ -1000,6 +1000,7 @@ function wireTabs() {
       if (
         tabId === "orcamento_custo" ||
         tabId === "orcamento_vendas" ||
+        tabId === "orcamento_cotacao" ||
         tabId === "plano_gantt" ||
         tabId === "plano_financeiro" ||
         tabId === "recursos_equipamentos" ||
@@ -1867,6 +1868,9 @@ async function loadProgressTasks() {
     }
   } catch (err) {
     toast("Erro ao carregar o relatório de avanço", { type: "error" });
+  }
+  if (!el("tab_orcamento_vendas")?.classList.contains("hidden")) {
+    loadPlaneamentoTab("orcamento_vendas");
   }
 }
 

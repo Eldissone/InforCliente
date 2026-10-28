@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
+import { apiRequest, apiUpload } from "/services/api.js";
 import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
@@ -288,8 +288,7 @@ function checkGrid(name, options, selected = []) {
     const label = typeof option === "string" ? option : option.label;
     const photo = typeof option === "string" ? "" : option.photo;
     const checked = selectedSet.has(value) ? " checked" : "";
-    const photoSrc = photo ? (getAssetUrl(photo) || photo) : "";
-    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}"${checked}>${photoSrc ? `<img src="${esc(photoSrc)}" alt="" onerror="this.style.display='none'">` : ""}<span>${label}</span></label>`;
+    return `<label class="registry-check"><input type="checkbox" name="${esc(name)}" value="${esc(value)}"${checked}>${photo ? `<img src="${esc(photo)}" alt="">` : ""}<span>${label}</span></label>`;
   }).join("")}</div>`;
 }
 
@@ -401,7 +400,7 @@ export function obraFormSectionsHtml({ clients = [], contacts = [], values = {} 
   const contactOptions = contacts.map((contact) => ({
     value: contact.id,
     label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
-    photo: getAssetUrl(contact.photoUrl || contact.foto) || contact.photoUrl || contact.foto || "",
+    photo: contact.photoUrl || contact.foto || "",
   }));
   const tipos = Array.isArray(values.tipos) ? values.tipos : [];
   const servicos = Array.isArray(values.servicos) ? values.servicos : [];
@@ -975,10 +974,8 @@ function renderPessoal() {
     view.formProjectIds = personnelProjectIdsFromItem(current);
     const selectedTipo = mapPessoalTipo(current?.type || current?.tipo || "INTERNO");
     const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
-    const rawFoto = current?.photoUrl || current?.foto;
-    const resolvedFoto = rawFoto ? (getAssetUrl(rawFoto) || rawFoto) : "";
-    const foto = resolvedFoto
-      ? `<img src="${esc(resolvedFoto)}" alt="" onerror="this.style.display='none'">`
+    const foto = current?.photoUrl || current?.foto
+      ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
 
     const obraOptions = (selectedId = "", excludeIds = []) => view.obras
@@ -1938,6 +1935,20 @@ async function renderObras() {
     });
   });
   bindObraForm(form);
+  showRegistered({
+    title: "Obras registadas",
+    columns: ["Código", "Nome", "Cliente", "Estado"],
+    empty: "Ainda não há obras registadas.",
+    load: async () => {
+      const items = await loadPaged("/projects", 100);
+      return items.map((item) => [
+        item.code,
+        item.name,
+        item.client?.name,
+        item.estado || item.phaseLabel,
+      ]);
+    },
+  });
 }
 
 async function renderProdutos() {

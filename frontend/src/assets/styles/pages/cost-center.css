@@ -290,6 +290,36 @@
             }
         }
 
+        body.is-embed {
+            background: #fff;
+        }
+
+        body.is-embed .app-top-nav,
+        body.is-embed #navMenu,
+        body.is-embed #sidebar,
+        body.is-embed #floatingToggleBtn,
+        body.is-embed #btnBackToOrigin,
+        body.is-embed #viewProjectBtn {
+            display: none !important;
+        }
+
+        body.is-embed > .flex.flex-1 {
+            padding: 0 0 1.5rem !important;
+            margin: 0 !important;
+            max-width: none;
+            gap: 0;
+        }
+
+        body.is-embed #projectContent > header nav,
+        body.is-embed #projectContent > header h1,
+        body.is-embed #projectContent > header #selectedProjCode {
+            display: none;
+        }
+
+        body.is-embed #kpiRow {
+            display: none;
+        }
+
         /* ── IMPORT MODAL ── */
         #importDropZone {
             border: 2px dashed #cbd5e1;

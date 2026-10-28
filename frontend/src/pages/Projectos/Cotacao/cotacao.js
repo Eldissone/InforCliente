@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("embed") === "1") document.body.classList.add("is-embed");
   const scope = urlParams.get("scope");
   currentProjectId =
     scope === "geral"
@@ -69,7 +70,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   initEvents();
 
   const backBtn = document.getElementById("btnBackToBudget");
-  if (isGeralScope()) {
+  if (document.body.classList.contains("is-embed")) {
+    if (backBtn) backBtn.style.display = "none";
+  } else if (isGeralScope()) {
     if (backBtn) backBtn.style.display = "none";
     document.getElementById("selectedProjName").textContent = "Pedidos Gerais";
   } else {
@@ -97,18 +100,19 @@ async function loadProjects() {
           )
           .join("");
       
-      selector.classList.remove("hidden");
-      
-      selector.addEventListener("change", (e) => {
-        const id = e.target.value;
-        if (id === GERAL_SCOPE || !id) {
-          localStorage.removeItem("InfoCliente.currentProjectId");
-          window.location.href = `?scope=geral`;
-          return;
-        }
-        localStorage.setItem("InfoCliente.currentProjectId", id);
-        window.location.href = `?project=${id}`;
-      });
+      if (!document.body.classList.contains("is-embed")) {
+        selector.classList.remove("hidden");
+        selector.addEventListener("change", (e) => {
+          const id = e.target.value;
+          if (id === GERAL_SCOPE || !id) {
+            localStorage.removeItem("InfoCliente.currentProjectId");
+            window.location.href = `?scope=geral`;
+            return;
+          }
+          localStorage.setItem("InfoCliente.currentProjectId", id);
+          window.location.href = `?project=${id}`;
+        });
+      }
       
       if (currentProjectId) {
         const p = allProjects.find(x => x.id === currentProjectId);

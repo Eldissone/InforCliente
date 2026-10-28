@@ -130,6 +130,16 @@
             color: #0f172a;
         }
 
+        .pv-embed-frame {
+            display: block;
+            width: 100%;
+            min-height: 720px;
+            height: calc(100vh - 230px);
+            border: 1px solid #e8e8e8;
+            border-radius: 1rem;
+            background: #fff;
+        }
+
         .measurement-table thead th {
             border: 1px solid #e2e8f0;
         }

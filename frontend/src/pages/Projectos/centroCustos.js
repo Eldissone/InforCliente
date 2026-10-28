@@ -109,6 +109,7 @@ let currentSuppliers = [];
 
   // Se veio URL com ?projectId=xxx, selecionar automaticamente
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("embed") === "1") document.body.classList.add("is-embed");
   const urlPid = urlParams.get("projectId");
   const urlTab = urlParams.get("tab");
   const urlNeedId = urlParams.get("needId");

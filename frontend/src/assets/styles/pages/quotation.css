@@ -146,3 +146,23 @@ body {
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
         }
+
+        body.is-embed {
+            background: #fff;
+        }
+
+        body.is-embed #appHeader {
+            display: none !important;
+        }
+
+        body.is-embed > main {
+            padding-top: 0.75rem !important;
+            margin-top: 0 !important;
+            max-width: none;
+        }
+
+        body.is-embed #projectSelector,
+        body.is-embed #btnBackToBudget,
+        body.is-embed > main > div:first-child nav {
+            display: none !important;
+        }

@@ -30,6 +30,7 @@ const BAREM_KEY = "InfoCliente.registo.barem";
 const PLAN_TABS = new Set([
   "orcamento_custo",
   "orcamento_vendas",
+  "orcamento_cotacao",
   "plano_gantt",
   "plano_financeiro",
   "recursos_equipamentos",
@@ -373,11 +374,25 @@ export function initProjectPlaneamento(options = {}) {
   document.getElementById("plBaremCreateBtn")?.addEventListener("click", () => openBaremModal());
   document.getElementById("plPessoalCreateBtn")?.addEventListener("click", () => openPessoalModal());
   document.getElementById("plPontoCreateBtn")?.addEventListener("click", () => openPontoModal());
+  document.getElementById("plOrcamentoVendasAdd")?.addEventListener("click", () => {
+    document.getElementById("addProgressTaskBtn")?.click();
+  });
+  document.getElementById("plOrcamentoVendasExcel")?.addEventListener("click", () => {
+    document.getElementById("importExcelBtn")?.click();
+  });
 
   ["plPessoalNome", "plPessoalDe", "plPessoalAte", "plPessoalTipo", "plPessoalCusto"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", () => renderPessoalCustos());
     document.getElementById(id)?.addEventListener("change", () => renderPessoalCustos());
   });
+}
+
+function mountObraFrame(id, url) {
+  const frame = document.getElementById(id);
+  if (!frame || !url) return;
+  if (frame.dataset.loaded === url) return;
+  frame.dataset.loaded = url;
+  frame.src = url;
 }
 
 export function loadPlaneamentoTab(tabId) {
@@ -388,16 +403,53 @@ export function loadPlaneamentoTab(tabId) {
   const centro = `./centroCustos.html?projectId=${encodeURIComponent(id)}`;
   const custoLink = document.getElementById("plOrcamentoCustoLink");
   if (custoLink) custoLink.href = `${centro}&tab=necessidades`;
+  const cotacaoHref = `./Cotacao/index.html?project=${encodeURIComponent(id)}`;
+  const cotacaoLink = document.getElementById("plOrcamentoCotacaoLink");
+  if (cotacaoLink) cotacaoLink.href = cotacaoHref;
   const finLink = document.getElementById("plFinanceiroCronogramaLink");
   if (finLink) finLink.href = `${centro}&tab=cronograma`;
 
-  if (tabId === "orcamento_custo") return loadOrcamentoCusto();
+  if (tabId === "orcamento_custo") {
+    mountObraFrame("plOrcamentoCustoFrame", `${centro}&tab=necessidades&embed=1`);
+    return loadOrcamentoCusto();
+  }
   if (tabId === "orcamento_vendas") return loadOrcamentoVendas();
+  if (tabId === "orcamento_cotacao") {
+    mountObraFrame("plOrcamentoCotacaoFrame", `${cotacaoHref}&embed=1`);
+    return;
+  }
   if (tabId === "plano_gantt") return loadGantt();
   if (tabId === "plano_financeiro") return loadFinanceiro();
   if (tabId === "recursos_equipamentos") return loadEquipamentos();
   if (tabId === "recursos_materiais") return loadMateriais();
   if (tabId === "recursos_pessoal") return loadPessoal();
+}
+
+function vendaPrevistaFromTasks(tasks) {
+  return (tasks || [])
+    .filter((t) => !t.parentId)
+    .reduce((sum, t) => sum + taskUnitValue(t) * num(t.expectedQty), 0);
+}
+
+function flattenSalesTasks(tasks) {
+  const byParent = new Map();
+  (tasks || []).forEach((t) => {
+    const key = t.parentId || "";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(t);
+  });
+  const rows = [];
+  const walk = (parentId, depth) => {
+    (byParent.get(parentId) || []).forEach((t) => {
+      rows.push({ task: t, depth });
+      walk(t.id, depth + 1);
+    });
+  };
+  walk("", 0);
+  (tasks || []).forEach((t) => {
+    if (!rows.some((row) => row.task.id === t.id)) rows.push({ task: t, depth: 0 });
+  });
+  return rows;
 }
 
 async function loadOrcamentoCusto() {
@@ -415,13 +467,21 @@ async function loadOrcamentoCusto() {
     const analise = num(totals.emAnaliseOrcamento ?? totals.realizadoOrcamento ?? totals.realizado);
     const liquidado = num(totals.liquidado);
     const pct = previsto > 0 ? (liquidado / previsto) * 100 : 0;
+    let venda = 0;
+    try {
+      const taskData = await apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`);
+      venda = vendaPrevistaFromTasks(taskData.tasks);
+    } catch {
+      venda = 0;
+    }
+    const margem = venda - previsto;
 
     if (kpis) {
       kpis.innerHTML = [
-        kpiCard("Previsto", formatCurrency(previsto, cur), "Baseline aprovado"),
-        kpiCard("Em análise", formatCurrency(analise, cur), "Propostas em revisão"),
-        kpiCard("Liquidado", formatCurrency(liquidado, cur), "Pagamentos confirmados"),
-        kpiCard("% Liquidado", `${pct.toFixed(0)}%`, "Sobre o previsto"),
+        kpiCard("Quanto deveria custar", formatCurrency(previsto, cur), "Orçamento de custo previsto"),
+        kpiCard("Quanto prevemos faturar", formatCurrency(venda, cur), "Tabela de quantidades"),
+        kpiCard("Margem prevista", formatCurrency(margem, cur), venda ? `${previsto > 0 ? ((margem / venda) * 100).toFixed(0) : "—"}% sobre a venda` : "Registe a venda"),
+        kpiCard("Liquidado", formatCurrency(liquidado, cur), `${pct.toFixed(0)}% do custo previsto`),
       ].join("");
     }
 
@@ -455,10 +515,8 @@ async function loadOrcamentoVendas() {
   if (!body) return;
   body.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
   try {
-    const [taskData, payData] = await Promise.all([
-      apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`),
-      apiRequest(`/projects/${encodeURIComponent(projectId())}/payments`).catch(() => ({ items: [], totals: {} })),
-    ]);
+    const taskData = await apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`);
+    window.projectProgressTasksCache = taskData.tasks || [];
     const tasks = (taskData.tasks || []).filter((t) => !t.parentId);
     const cur = currency();
     const groups = new Map();
@@ -475,18 +533,51 @@ async function loadOrcamentoVendas() {
       previsto += exp;
       medido += exe;
     });
-    const global = num(project()?.budgetTotal) || previsto;
-    const recebido = num(payData.totalPago ?? payData.totals?.pago);
+    let custoPrevisto = 0;
+    try {
+      const costData = await apiRequest(`/cost-centers/project/${encodeURIComponent(projectId())}/summary`);
+      const totalsMap = costData.totals || {};
+      const totals = totalsMap[cur] || Object.values(totalsMap)[0] || {};
+      custoPrevisto = num(totals.basePrevisto ?? totals.previsto);
+    } catch {
+      custoPrevisto = 0;
+    }
+    const margem = previsto - custoPrevisto;
     if (kpis) {
       kpis.innerHTML = [
-        kpiCard("Contrato / global", formatCurrency(global, cur), "Orçamento da obra"),
-        kpiCard("Faturação prevista", formatCurrency(previsto, cur), "Tabela de quantidades"),
+        kpiCard("Quanto prevemos faturar", formatCurrency(previsto, cur), "Tabela de quantidades"),
+        kpiCard("Quanto deveria custar", formatCurrency(custoPrevisto, cur), "Orçamento de custo"),
+        kpiCard("Margem prevista", formatCurrency(margem, cur), previsto ? `${((margem / previsto) * 100).toFixed(0)}% sobre a venda` : "Registe a venda"),
         kpiCard("Já medido", formatCurrency(medido, cur), "Quantidade executada"),
-        kpiCard("Recebido", formatCurrency(recebido, cur), "Pagamentos do cliente"),
       ].join("");
     }
+    const itemsBody = document.getElementById("plOrcamentoVendasItems");
+    const itemRows = flattenSalesTasks(taskData.tasks || []);
+    if (itemsBody) {
+      itemsBody.innerHTML = itemRows.length
+        ? itemRows.map(({ task: t, depth }) => {
+          const uv = taskUnitValue(t);
+          const exp = num(t.expectedQty);
+          const uvM = num(t.unitValueMaterial);
+          const uvS = num(t.unitValueService);
+          const wbs = t.wbsCode || t.itemCode || "";
+          const pad = depth ? ` style="padding-left:${0.75 + depth * 1.1}rem"` : "";
+          return `<tr>
+            <td class="font-mono text-xs text-slate-500">${escapeHtml(wbs)}</td>
+            <td${pad}><span class="font-bold text-slate-900">${escapeHtml(t.description || "—")}</span>${t.itemGroup ? `<div class="text-[10px] text-slate-400 uppercase">${escapeHtml(t.itemGroup)}</div>` : ""}</td>
+            <td class="text-right tabular-nums">${exp.toLocaleString("pt-PT")}</td>
+            <td class="text-center text-xs font-bold text-slate-500">${escapeHtml(t.unit || "un")}</td>
+            <td class="text-right tabular-nums">${formatCurrency(uv, t.currency || cur)}</td>
+            <td class="text-right tabular-nums font-bold">${formatCurrency(uv * exp, t.currency || cur)}</td>
+            <td class="text-center">
+              <button type="button" data-edit-task="${escapeHtml(t.id)}" data-task-desc="${escapeHtml(t.description || "")}" data-task-wbs="${escapeHtml(wbs)}" data-task-exe="${num(t.executedQty)}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit || "un")}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${uv}" data-task-total-value="${t.totalValue || ""}" data-task-currency="${escapeHtml(t.currency || cur)}" title="Editar item" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+            </td>
+          </tr>`;
+        }).join("")
+        : emptyRow(7, "add_task", "Ainda não há itens de venda. Use Novo item ou Excel.");
+    }
     if (!groups.size) {
-      body.innerHTML = emptyRow(5, "request_quote", "Sem itens de avanço físico para estimar vendas.");
+      body.innerHTML = emptyRow(5, "request_quote", "Sem itens de venda. Crie a tabela de quantidades nesta aba.");
       return;
     }
     const rows = [...groups.values()].map((g) => {
