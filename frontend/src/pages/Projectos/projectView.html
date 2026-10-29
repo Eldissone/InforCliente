@@ -879,31 +879,96 @@
 
         <!-- Planeamento: Plano de Execução (Gantt) -->
         <div id="tab_plano_gantt" class="tab-content hidden">
-            <div class="flex flex-row flex-wrap justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900">Plano de Execução</h2>
-                    <p class="text-sm text-slate-500 font-medium">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
-                </div>
-                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    <div id="plGanttScale" class="ex-gantt-scale" role="tablist" aria-label="Escala do Gantt">
-                        <button type="button" data-gantt-scale="day" role="tab" aria-pressed="false">Dia</button>
-                        <button type="button" data-gantt-scale="week" role="tab" aria-pressed="true" class="is-active">Semana</button>
-                        <button type="button" data-gantt-scale="month" role="tab" aria-pressed="false">Mês</button>
-                        <button type="button" data-gantt-scale="quarter" role="tab" aria-pressed="false">Trimestre</button>
-                        <button type="button" data-gantt-scale="year" role="tab" aria-pressed="false">Ano</button>
+            <div class="ex-plan">
+                <header class="ex-plan-head">
+                    <div>
+                        <h2 class="ex-plan-title">Plano de Execução</h2>
+                        <p class="ex-plan-sub">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
                     </div>
-                    <button type="button" id="plGanttRefresh" class="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200" title="Atualizar">
-                        <span class="material-symbols-outlined text-lg">refresh</span>
-                    </button>
-                    <button type="button" data-pl-open-tab="planos_diarios" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
-                        <span class="material-symbols-outlined text-base">event_note</span>
-                        Planos Diários
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="plGanttRefresh" class="ex-plan-icon-btn" title="Atualizar">
+                            <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                        <button type="button" id="plGanttAddActivity" data-pl-open-tab="planos_diarios" class="ex-plan-primary">
+                            <span class="material-symbols-outlined">add</span>
+                            Adicionar atividade
+                        </button>
+                    </div>
+                </header>
+
+                <div class="ex-plan-toolbar">
+                    <label class="ex-plan-select">
+                        <span>Vista:</span>
+                        <select id="plGanttScaleSelect" aria-label="Escala do Gantt">
+                            <option value="day">Gantt diário</option>
+                            <option value="week">Gantt semanal</option>
+                            <option value="month">Gantt mensal</option>
+                            <option value="quarter">Gantt trimestral</option>
+                            <option value="year">Gantt anual</option>
+                        </select>
+                        <span class="material-symbols-outlined">expand_more</span>
+                    </label>
+                    <label class="ex-plan-select">
+                        <span>Responsável:</span>
+                        <select id="plGanttPerson" aria-label="Filtrar por responsável">
+                            <option value="">Todos</option>
+                        </select>
+                        <span class="material-symbols-outlined">expand_more</span>
+                    </label>
+                    <label class="ex-plan-select">
+                        <span>Estado:</span>
+                        <select id="plGanttState" aria-label="Filtrar por estado">
+                            <option value="">Todos</option>
+                            <option value="todo">Por iniciar</option>
+                            <option value="doing">Em curso</option>
+                            <option value="late">Em atraso</option>
+                            <option value="done">Concluídas</option>
+                        </select>
+                        <span class="material-symbols-outlined">expand_more</span>
+                    </label>
+                    <button type="button" id="plGanttExport" class="ex-plan-btn">Exportar</button>
                 </div>
-            </div>
-            <div id="plGanttMeta" class="hidden mb-4 flex flex-wrap gap-4 text-[11px] font-bold text-slate-500"></div>
-            <div id="plGanttRoot" class="ex-gantt-wrap">
-                <div class="py-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400">A carregar Gantt...</div>
+
+                <div id="plGanttKpis" class="ex-plan-kpis"></div>
+
+                <section class="ex-plan-card">
+                    <div class="ex-plan-card-head">
+                        <h3>Cronograma de execução</h3>
+                        <p id="plGanttMeta">Planeamento das atividades em obra</p>
+                    </div>
+                    <div id="plGanttRoot" class="ex-gantt-wrap">
+                        <div class="py-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400">A carregar Gantt...</div>
+                    </div>
+                    <p class="ex-plan-legend">
+                        <span class="material-symbols-outlined">info</span>
+                        <span><i class="lg-plan"></i>Barra clara: duração planeada</span>
+                        <span><i class="lg-exec"></i>Esmeralda: executado</span>
+                        <span><i class="lg-today"></i>Linha âmbar: hoje</span>
+                        <span>Dependências detalhadas na tabela abaixo.</span>
+                    </p>
+                </section>
+
+                <section class="ex-plan-card">
+                    <div class="ex-plan-card-head">
+                        <h3>Datas, dependências e responsáveis</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="ex-plan-table">
+                            <thead>
+                                <tr>
+                                    <th>Atividade</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                    <th>Predecessora</th>
+                                    <th>Responsável</th>
+                                    <th>Planeada</th>
+                                    <th>Executada</th>
+                                </tr>
+                            </thead>
+                            <tbody id="plGanttTable"></tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
 
