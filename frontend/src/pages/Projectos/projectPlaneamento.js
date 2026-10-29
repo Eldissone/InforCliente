@@ -18,6 +18,7 @@ const GANTT_LABEL_PX = 280;
 const GANTT_DEP_TYPES = ["FS", "SS", "FF", "SF"];
 const PT_MONTHS_TINY = ["Jan.", "Fev.", "Mar.", "Abr.", "Mai.", "Jun.", "Jul.", "Ago.", "Set.", "Out.", "Nov.", "Dez."];
 const ganttFilter = { person: "", state: "" };
+const expandedActivities = new Set();
 const PONTO_KEY = "InfoCliente.registo.folhaPonto";
 const BAREM_KEY = "InfoCliente.registo.barem";
 const PLAN_TABS = new Set([
@@ -345,10 +346,42 @@ export function initProjectPlaneamento(options = {}) {
   wired = true;
 
   document.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-toggle-act]");
+    if (toggle) {
+      event.preventDefault();
+      event.stopPropagation();
+      const actId = String(toggle.getAttribute("data-toggle-act"));
+      if (expandedActivities.has(actId)) {
+        expandedActivities.delete(actId);
+      } else {
+        expandedActivities.add(actId);
+      }
+      if (cache.gantt) renderGantt(cache.gantt);
+      return;
+    }
+
+    const toggleAll = event.target.closest("#plGanttToggleAll");
+    if (toggleAll) {
+      event.preventDefault();
+      event.stopPropagation();
+      const allActs = cache.gantt?.activities || [];
+      const expandable = allActs.filter((a) => a.hasChildren);
+      const allExpanded = expandable.length > 0 && expandable.every((a) => expandedActivities.has(String(a.id)));
+      if (allExpanded) {
+        expandedActivities.clear();
+      } else {
+        expandable.forEach((a) => expandedActivities.add(String(a.id)));
+      }
+      if (cache.gantt) renderGantt(cache.gantt);
+      return;
+    }
+
     const btn = event.target.closest("[data-pl-open-tab]");
-    if (!btn) return;
-    event.preventDefault();
-    openExistingTab(btn.getAttribute("data-pl-open-tab"));
+    if (btn) {
+      event.preventDefault();
+      openExistingTab(btn.getAttribute("data-pl-open-tab"));
+      return;
+    }
   });
 
   document.getElementById("plGanttRefresh")?.addEventListener("click", () => {
@@ -383,6 +416,7 @@ export function initProjectPlaneamento(options = {}) {
   });
   document.getElementById("plGanttExport")?.addEventListener("click", () => exportGanttCsv());
   document.getElementById("plGanttRoot")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-toggle-act]")) return;
     const hit = event.target.closest("[data-gantt-id]");
     if (!hit || !cache.gantt?.fromPlans) return;
     event.preventDefault();
@@ -745,49 +779,159 @@ function ganttPeopleFromLines(lines) {
 }
 
 function collectGanttFromDailyPlans(plans, tasksById) {
-  const sorted = [...plans].sort((a, b) => {
+  const sortedPlans = [...plans].sort((a, b) => {
     const da = parseLocalDate(a.date)?.getTime() || 0;
     const db = parseLocalDate(b.date)?.getTime() || 0;
     if (da !== db) return da - db;
     return String(a.id || "").localeCompare(String(b.id || ""));
   });
 
-  const byId = new Map(sorted.map((plan) => [String(plan.id), plan]));
-  return sorted.map((plan) => {
+  const byId = new Map(sortedPlans.map((plan) => [String(plan.id), plan]));
+  const groupsMap = new Map();
+
+  sortedPlans.forEach((plan) => {
     const date = parseLocalDate(plan.date);
     const end = planDisplayEnd(plan, date);
-    const first = (plan.tasks || [])[0];
-    const firstTask = progressTaskOfLine(first, tasksById);
-    const predecessors = explicitPredecessors(plan);
-    const names = predecessors.map((dep) => {
-      const pred = byId.get(String(dep.predecessorId));
-      return pred ? dailyPlanLabel(pred, tasksById) : "";
-    }).filter(Boolean);
-    let plannedQty = 0;
-    let executedQty = 0;
-    (plan.tasks || []).forEach((line) => {
-      plannedQty += num(line.plannedQty);
-      executedQty += num(line.executedQty);
-    });
-    const pct = plannedQty > 0 ? Math.min(100, (executedQty / plannedQty) * 100) : 0;
-    const wbsName = dailyPlanWbsName(plan, tasksById);
-    return {
-      id: plan.id,
-      name: dailyPlanLabel(plan, tasksById),
-      wbsName,
-      start: date,
-      end,
-      pct,
-      execPct: pct,
-      status: plan.status || "DRAFT",
-      predecessors,
-      predecessorId: predecessors[0]?.predecessorId || null,
-      dependency: names.join(", "),
-      people: ganttPeopleFromLines(plan.tasks),
-      wbs: firstTask?.wbsCode || "",
-      group: firstTask?.itemGroup || "",
-    };
+    const firstLine = (plan.tasks || [])[0];
+    const task = progressTaskOfLine(firstLine, tasksById);
+    const label = dailyPlanLabel(plan, tasksById);
+
+    // Chave de agrupamento: se tiver tarefa WBS vinculada, usa a tarefa.
+    // Caso contrário, normaliza o nome da atividade (descrição).
+    const groupKey = task?.id
+      ? `task_${task.id}`
+      : `name_${label.toLowerCase().trim()}`;
+
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, {
+        key: groupKey,
+        taskId: task?.id || null,
+        task: task || null,
+        name: task?.description || label,
+        wbsName: dailyPlanWbsName(plan, tasksById) || task?.description || label,
+        wbs: task?.wbsCode || "",
+        group: task?.itemGroup || "",
+        plans: [],
+      });
+    }
+
+    const grp = groupsMap.get(groupKey);
+    grp.plans.push({ plan, date, end, task });
   });
+
+  const activities = [];
+  groupsMap.forEach((grp) => {
+    const childActivities = grp.plans.map(({ plan, date, end }) => {
+      let plannedQty = 0;
+      let executedQty = 0;
+      (plan.tasks || []).forEach((line) => {
+        plannedQty += num(line.plannedQty);
+        executedQty += num(line.executedQty);
+      });
+      const pct = plannedQty > 0 ? Math.min(100, (executedQty / plannedQty) * 100) : 0;
+      const predecessors = explicitPredecessors(plan);
+      const names = predecessors.map((dep) => {
+        const pred = byId.get(String(dep.predecessorId));
+        return pred ? dailyPlanLabel(pred, tasksById) : "";
+      }).filter(Boolean);
+      const people = ganttPeopleFromLines(plan.tasks);
+      const dateLabel = date ? formatShortDate(date) : "";
+      const planResumo = dailyPlanResumo(plan);
+      const childName = planResumo && planResumo !== grp.name
+        ? `${dateLabel ? `${dateLabel} · ` : ""}${planResumo}`
+        : (dateLabel ? `Plano ${dateLabel}` : "Plano diário");
+
+      return {
+        id: String(plan.id),
+        name: childName,
+        wbsName: grp.wbsName,
+        start: date,
+        end,
+        pct,
+        execPct: pct,
+        status: plan.status || "DRAFT",
+        predecessors,
+        predecessorId: predecessors[0]?.predecessorId || null,
+        dependency: names.join(", "),
+        people,
+        wbs: grp.wbs,
+        group: grp.group,
+        isChild: true,
+        parentId: grp.key,
+      };
+    });
+
+    // Datas consolidadas da atividade: da primeira data até a última data
+    const validStarts = childActivities.filter((c) => c.start).map((c) => c.start.getTime());
+    const validEnds = childActivities.filter((c) => c.end || c.start).map((c) => (c.end || c.start).getTime());
+    const minStart = validStarts.length ? new Date(Math.min(...validStarts)) : null;
+    const maxEnd = validEnds.length ? new Date(Math.max(...validEnds)) : minStart;
+
+    // Progresso consolidado:
+    let overallPct = 0;
+    if (grp.task && num(grp.task.expectedQty) > 0) {
+      overallPct = executedPct(grp.task);
+    } else {
+      let totalPlanned = 0;
+      let totalExecuted = 0;
+      grp.plans.forEach(({ plan }) => {
+        (plan.tasks || []).forEach((line) => {
+          totalPlanned += num(line.plannedQty);
+          totalExecuted += num(line.executedQty);
+        });
+      });
+      overallPct = totalPlanned > 0
+        ? Math.min(100, (totalExecuted / totalPlanned) * 100)
+        : (childActivities.length ? childActivities.reduce((s, c) => s + c.pct, 0) / childActivities.length : 0);
+    }
+
+    const allPeople = [...new Set(childActivities.flatMap((c) => c.people))];
+    const allPredecessors = childActivities.flatMap((c) => c.predecessors || []);
+    const seenPreds = new Set();
+    const uniquePredecessors = [];
+    allPredecessors.forEach((p) => {
+      if (p.predecessorId && !seenPreds.has(p.predecessorId)) {
+        seenPreds.add(p.predecessorId);
+        uniquePredecessors.push(p);
+      }
+    });
+
+    const allDone = childActivities.length > 0 && childActivities.every((c) => c.pct >= 99.5);
+    const anyProgress = childActivities.some((c) => c.pct > 0);
+    const status = allDone ? "COMPLETED" : (anyProgress ? "IN_PROGRESS" : "DRAFT");
+
+    activities.push({
+      id: grp.key,
+      rawId: grp.taskId || grp.key,
+      name: grp.name,
+      wbsName: grp.wbsName,
+      start: minStart,
+      end: maxEnd,
+      pct: overallPct,
+      execPct: overallPct,
+      status,
+      predecessors: uniquePredecessors,
+      predecessorId: uniquePredecessors[0]?.predecessorId || null,
+      dependency: childActivities.map((c) => c.dependency).filter(Boolean).join(", "),
+      people: allPeople,
+      wbs: grp.wbs,
+      group: grp.group,
+      isGroup: true,
+      hasChildren: childActivities.length > 1,
+      childrenCount: childActivities.length,
+      children: childActivities,
+    });
+  });
+
+  // Ordenar cronologicamente pela data de início
+  activities.sort((a, b) => {
+    const da = a.start ? a.start.getTime() : 0;
+    const db = b.start ? b.start.getTime() : 0;
+    if (da !== db) return da - db;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  return activities;
 }
 
 function collectGanttFromWbs(tasks, plans) {
@@ -1011,18 +1155,57 @@ function renderGanttTable(activities, ref) {
     body.innerHTML = `<tr><td colspan="7" class="ex-plan-table-empty">Sem atividades para mostrar.</td></tr>`;
     return;
   }
-  body.innerHTML = activities.map((a) => {
+  const rows = [];
+  activities.forEach((a) => {
     const st = ganttActivityState(a, ref);
-    return `<tr>
-      <td class="ex-plan-table-name" title="${escapeHtml(a.wbsName || a.name)}"><span class="ex-plan-dot is-${st}"></span>${escapeHtml(a.name)}</td>
+    const isExpanded = expandedActivities.has(String(a.id));
+    const toggleBtn = a.hasChildren
+      ? `<button type="button" class="ex-table-toggle" data-toggle-act="${escapeHtml(String(a.id))}" title="${isExpanded ? 'Recolher detalhamento' : `Expandir detalhamento (${a.childrenCount} planos)`}"><span class="material-symbols-outlined">${isExpanded ? 'expand_more' : 'chevron_right'}</span></button>`
+      : `<span class="ex-table-toggle-spacer"></span>`;
+    const badge = a.hasChildren
+      ? `<span class="ex-table-badge">${a.childrenCount} planos</span>`
+      : "";
+
+    rows.push(`<tr class="ex-table-row-parent">
+      <td class="ex-plan-table-name" title="${escapeHtml(a.wbsName || a.name)}">
+        <div class="flex items-center gap-1.5 min-w-0">
+          ${toggleBtn}
+          <span class="ex-plan-dot is-${st}"></span>
+          <span class="font-bold text-slate-900 truncate">${escapeHtml(a.name)}</span>
+          ${badge}
+        </div>
+      </td>
       <td title="${escapeHtml(formatPtLongDate(a.start))}">${formatShortDate(a.start)}</td>
       <td title="${escapeHtml(formatPtLongDate(a.end || a.start))}">${formatShortDate(a.end || a.start)}</td>
       <td>${escapeHtml(a.dependency || "—")}</td>
       <td>${escapeHtml((a.people || []).join(", ") || "—")}</td>
       <td>${ganttPlannedPctAt(a, ref).toFixed(0)}%</td>
       <td class="${st === "late" ? "is-late" : ""}">${ganttExecPct(a).toFixed(0)}%</td>
-    </tr>`;
-  }).join("");
+    </tr>`);
+
+    if (a.hasChildren && isExpanded) {
+      (a.children || []).forEach((c) => {
+        const cSt = ganttActivityState(c, ref);
+        rows.push(`<tr class="ex-table-row-child">
+          <td class="ex-plan-table-name ex-table-child-indent" title="${escapeHtml(c.name)}">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="ex-table-tree-branch">└</span>
+              <span class="ex-plan-dot is-${cSt}"></span>
+              <span class="text-slate-600 truncate">${escapeHtml(c.name)}</span>
+            </div>
+          </td>
+          <td title="${escapeHtml(formatPtLongDate(c.start))}">${formatShortDate(c.start)}</td>
+          <td title="${escapeHtml(formatPtLongDate(c.end || c.start))}">${formatShortDate(c.end || c.start)}</td>
+          <td>${escapeHtml(c.dependency || "—")}</td>
+          <td>${escapeHtml((c.people || []).join(", ") || "—")}</td>
+          <td>${ganttPlannedPctAt(c, ref).toFixed(0)}%</td>
+          <td class="${cSt === "late" ? "is-late" : ""}">${ganttExecPct(c).toFixed(0)}%</td>
+        </tr>`);
+      });
+    }
+  });
+
+  body.innerHTML = rows.join("");
 }
 
 function exportGanttCsv() {
@@ -1035,12 +1218,36 @@ function exportGanttCsv() {
   const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const iso = (d) => (d ? toDateKey(d) : "");
   const rows = [
-    ["Atividade", "WBS", "Início", "Fim", "Predecessora", "Responsável", "Planeada (%)", "Executada (%)"],
-    ...list.map((a) => [
-      a.name, a.wbs || "", iso(a.start), iso(a.end || a.start), a.dependency || "",
-      (a.people || []).join(", "), ganttPlannedPctAt(a, ref).toFixed(0), ganttExecPct(a).toFixed(0),
-    ]),
+    ["Atividade", "Tipo", "WBS", "Início", "Fim", "Predecessora", "Responsável", "Planeada (%)", "Executada (%)"],
   ];
+  list.forEach((a) => {
+    rows.push([
+      a.name,
+      a.hasChildren ? `Consolidada (${a.childrenCount} planos)` : "Atividade",
+      a.wbs || "",
+      iso(a.start),
+      iso(a.end || a.start),
+      a.dependency || "",
+      (a.people || []).join(", "),
+      ganttPlannedPctAt(a, ref).toFixed(0),
+      ganttExecPct(a).toFixed(0),
+    ]);
+    if (expandedActivities.has(String(a.id))) {
+      (a.children || []).forEach((c) => {
+        rows.push([
+          `  └ ${c.name}`,
+          "Plano diário",
+          c.wbs || "",
+          iso(c.start),
+          iso(c.end || c.start),
+          c.dependency || "",
+          (c.people || []).join(", "),
+          ganttPlannedPctAt(c, ref).toFixed(0),
+          ganttExecPct(c).toFixed(0),
+        ]);
+      });
+    }
+  });
   const csv = `\ufeff${rows.map((r) => r.map(cell).join(";")).join("\r\n")}`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1153,7 +1360,13 @@ function refreshGanttFromCache() {
 }
 
 function ganttActivityById(id) {
-  return (cache.gantt?.activities || []).find((a) => String(a.id) === String(id)) || null;
+  for (const a of (cache.gantt?.activities || [])) {
+    if (String(a.id) === String(id) || String(a.rawId) === String(id)) return a;
+    for (const c of (a.children || [])) {
+      if (String(c.id) === String(id)) return c;
+    }
+  }
+  return null;
 }
 
 function predOptionsHtml(successorId, selectedId) {
@@ -1358,12 +1571,15 @@ function renderGantt(model) {
   renderGanttKpis(activities, ref);
   renderGanttTable(activities, ref);
   if (meta) {
-    const filtered = activities.length !== allActivities.length ? ` de ${allActivities.length}` : "";
-    meta.textContent = [
-      `${activities.length}${filtered} atividade${activities.length === 1 ? "" : "s"}`,
-      fromPlans ? "cada linha é um plano diário" : "itens da tabela de quantidades",
-      fromPlans ? "clique numa barra para editar dependências" : "",
-    ].filter(Boolean).join(" · ");
+    const totalPlans = allActivities.reduce((s, a) => s + (a.childrenCount || 1), 0);
+    const hasAnyChildren = allActivities.some((a) => a.hasChildren);
+    const allExpanded = hasAnyChildren && allActivities.filter((a) => a.hasChildren).every((a) => expandedActivities.has(String(a.id)));
+    const toggleLabel = allExpanded ? "Recolher tudo" : "Expandir tudo";
+    const toggleBtn = hasAnyChildren
+      ? `<button type="button" id="plGanttToggleAll" class="ex-meta-toggle-btn">${toggleLabel}</button>`
+      : "";
+
+    meta.innerHTML = `<span>${activities.length} atividade${activities.length === 1 ? "" : "s"} consolidada${activities.length === 1 ? "" : "s"} (${totalPlans} planos diários)</span> · <span>clique na barra para dependências ou em ▶ para detalhar</span>${toggleBtn}`;
   }
   if (!allActivities.length) {
     root.innerHTML = `<div class="pl-empty"><span class="material-symbols-outlined">view_timeline</span><p class="text-sm font-semibold">Sem atividades no avanço físico.</p><p class="text-xs mt-1">Importe a tabela de quantidades ou crie itens em Operação → Avanço Físico.</p></div>`;
@@ -1400,10 +1616,12 @@ function renderGantt(model) {
     ? `<div class="ex-gantt-hoje" style="--hoje-left:${todayLeft.toFixed(1)}px"><span class="ex-gantt-hoje-flag">Hoje</span></div>`
     : "";
 
-  const body = activities.map((a, idx) => {
+  const bodyRows = [];
+  activities.forEach((a, idx) => {
     const pct = ganttExecPct(a);
     const state = ganttActivityState(a, ref);
     const id = escapeHtml(String(a.id || idx));
+    const isExpanded = expandedActivities.has(String(a.id));
     let bar = "";
     const layout = a.start ? ganttBarLayout(a, scale, units, unitPx) : null;
     if (layout) {
@@ -1418,13 +1636,65 @@ function renderGantt(model) {
     const depBtn = fromPlans
       ? `<button type="button" class="ex-gantt-dep-btn" data-gantt-id="${id}" title="Editar dependências"><span class="material-symbols-outlined">account_tree</span></button>`
       : "";
-    return `<tr>
-      <td class="ex-gantt-sticky ex-gantt-col-act"><div class="ex-gantt-act-wrap"><span class="ex-gantt-act" title="${escapeHtml(ganttActivityTooltip(a) || a.name)}">${escapeHtml(a.name)}</span><span class="ex-gantt-act-pct is-${state}">· ${pct.toFixed(0)}%</span>${depBtn}</div></td>
+    const toggleBtn = a.hasChildren
+      ? `<button type="button" class="ex-gantt-toggle" data-toggle-act="${id}" title="${isExpanded ? 'Recolher detalhamento' : `Expandir detalhamento (${a.childrenCount} planos)`}"><span class="material-symbols-outlined">${isExpanded ? 'expand_more' : 'chevron_right'}</span></button>`
+      : `<span class="ex-gantt-toggle-spacer"></span>`;
+    const badge = a.hasChildren
+      ? `<span class="ex-gantt-badge">${a.childrenCount} planos</span>`
+      : "";
+
+    bodyRows.push(`<tr class="ex-gantt-row-parent">
+      <td class="ex-gantt-sticky ex-gantt-col-act">
+        <div class="ex-gantt-act-wrap">
+          ${toggleBtn}
+          <span class="ex-gantt-act" title="${escapeHtml(ganttActivityTooltip(a) || a.name)}">${escapeHtml(a.name)}</span>
+          ${badge}
+          <span class="ex-gantt-act-pct is-${state}">· ${pct.toFixed(0)}%</span>
+          ${depBtn}
+        </div>
+      </td>
       <td colspan="${units.length}" class="!p-0">
         <div class="ex-gantt-track" style="width:${trackWidth}px;background-size:${unitPx}px 100%">${bar}</div>
       </td>
-    </tr>`;
-  }).join("");
+    </tr>`);
+
+    if (a.hasChildren && isExpanded) {
+      (a.children || []).forEach((c, cIdx) => {
+        const cPct = ganttExecPct(c);
+        const cState = ganttActivityState(c, ref);
+        const cId = escapeHtml(String(c.id || `${a.id}_${cIdx}`));
+        let cBar = "";
+        const cLayout = c.start ? ganttBarLayout(c, scale, units, unitPx) : null;
+        if (cLayout) {
+          const cTitle = [
+            c.name,
+            ganttActivityTooltip(c),
+            `Executado: ${cPct.toFixed(0)}%`,
+            fromPlans ? "Clique para editar dependências" : "",
+          ].filter(Boolean).join(" · ");
+          cBar = `<div class="ex-gantt-bar is-child is-${cState}" data-gantt-id="${cId}" role="button" tabindex="0" style="left:${cLayout.left.toFixed(1)}px;width:${cLayout.width.toFixed(1)}px" title="${escapeHtml(cTitle)}"><div class="ex-gantt-bar-fill" style="width:${cPct.toFixed(1)}%"></div></div>`;
+        }
+        const cDepBtn = fromPlans
+          ? `<button type="button" class="ex-gantt-dep-btn" data-gantt-id="${cId}" title="Editar dependências"><span class="material-symbols-outlined">account_tree</span></button>`
+          : "";
+        bodyRows.push(`<tr class="ex-gantt-row-child">
+          <td class="ex-gantt-sticky ex-gantt-col-act">
+            <div class="ex-gantt-act-wrap ex-gantt-child-indent">
+              <span class="ex-gantt-tree-branch">└</span>
+              <span class="ex-gantt-act is-child" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+              <span class="ex-gantt-act-pct is-${cState}">· ${cPct.toFixed(0)}%</span>
+              ${cDepBtn}
+            </div>
+          </td>
+          <td colspan="${units.length}" class="!p-0">
+            <div class="ex-gantt-track" style="width:${trackWidth}px;background-size:${unitPx}px 100%">${cBar}</div>
+          </td>
+        </tr>`);
+      });
+    }
+  });
+
+  const body = bodyRows.join("");
 
   root.dataset.ganttScale = scale;
   root.innerHTML = `${hint ? `<p class="px-6 py-3 text-xs font-semibold text-slate-500 border-b border-slate-100">${escapeHtml(hint)}</p>` : ""}
