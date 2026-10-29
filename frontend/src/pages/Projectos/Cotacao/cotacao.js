@@ -1,4 +1,3 @@
-import { applyEmbedMode } from "/shared/embedMode.js";
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
