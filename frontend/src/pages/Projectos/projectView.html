@@ -897,35 +897,38 @@
                 </header>
 
                 <div class="ex-plan-toolbar">
-                    <label class="ex-plan-select">
-                        <span>Vista:</span>
-                        <select id="plGanttScaleSelect" aria-label="Escala do Gantt">
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Vista:</span>
+                        <span class="ex-plan-select-value" id="plGanttScaleVal">Gantt mensal</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttScaleSelect" class="ex-plan-select-native" aria-label="Escala do Gantt">
                             <option value="day">Gantt diário</option>
                             <option value="week">Gantt semanal</option>
-                            <option value="month">Gantt mensal</option>
+                            <option value="month" selected>Gantt mensal</option>
                             <option value="quarter">Gantt trimestral</option>
                             <option value="year">Gantt anual</option>
                         </select>
-                        <span class="material-symbols-outlined">expand_more</span>
-                    </label>
-                    <label class="ex-plan-select">
-                        <span>Responsável:</span>
-                        <select id="plGanttPerson" aria-label="Filtrar por responsável">
+                    </div>
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Responsável:</span>
+                        <span class="ex-plan-select-value" id="plGanttPersonVal">Todos</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttPerson" class="ex-plan-select-native" aria-label="Filtrar por responsável">
                             <option value="">Todos</option>
                         </select>
-                        <span class="material-symbols-outlined">expand_more</span>
-                    </label>
-                    <label class="ex-plan-select">
-                        <span>Estado:</span>
-                        <select id="plGanttState" aria-label="Filtrar por estado">
+                    </div>
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Estado:</span>
+                        <span class="ex-plan-select-value" id="plGanttStateVal">Todos</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttState" class="ex-plan-select-native" aria-label="Filtrar por estado">
                             <option value="">Todos</option>
                             <option value="todo">Por iniciar</option>
                             <option value="doing">Em curso</option>
                             <option value="late">Em atraso</option>
                             <option value="done">Concluídas</option>
                         </select>
-                        <span class="material-symbols-outlined">expand_more</span>
-                    </label>
+                    </div>
                     <button type="button" id="plGanttExport" class="ex-plan-btn">Exportar</button>
                 </div>
 

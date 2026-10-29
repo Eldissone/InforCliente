@@ -135,7 +135,7 @@ function getGanttScale() {
   } catch {
     /* ignore */
   }
-  return "week";
+  return "month";
 }
 
 function setGanttScale(scale) {
@@ -156,6 +156,15 @@ function syncGanttScaleButtons() {
   });
   const select = document.getElementById("plGanttScaleSelect");
   if (select && select.value !== scale) select.value = scale;
+  const scaleMap = {
+    day: "Gantt diário",
+    week: "Gantt semanal",
+    month: "Gantt mensal",
+    quarter: "Gantt trimestral",
+    year: "Gantt anual",
+  };
+  const valSpan = document.getElementById("plGanttScaleVal");
+  if (valSpan) valSpan.textContent = scaleMap[scale] || "Gantt mensal";
 }
 
 function buildGanttUnits(scale, rangeStart, rangeEnd) {
@@ -355,10 +364,21 @@ export function initProjectPlaneamento(options = {}) {
   });
   document.getElementById("plGanttPerson")?.addEventListener("change", (event) => {
     ganttFilter.person = event.target.value || "";
+    const personSpan = document.getElementById("plGanttPersonVal");
+    if (personSpan) personSpan.textContent = ganttFilter.person || "Todos";
     if (cache.gantt) renderGantt(cache.gantt);
   });
   document.getElementById("plGanttState")?.addEventListener("change", (event) => {
     ganttFilter.state = event.target.value || "";
+    const stateMap = {
+      "": "Todos",
+      todo: "Por iniciar",
+      doing: "Em curso",
+      late: "Em atraso",
+      done: "Concluídas",
+    };
+    const stateSpan = document.getElementById("plGanttStateVal");
+    if (stateSpan) stateSpan.textContent = stateMap[ganttFilter.state] || "Todos";
     if (cache.gantt) renderGantt(cache.gantt);
   });
   document.getElementById("plGanttExport")?.addEventListener("click", () => exportGanttCsv());
@@ -920,8 +940,20 @@ function syncGanttPersonOptions(activities) {
   select.innerHTML = `<option value="">Todos</option>${people.map((p) =>
     `<option value="${escapeHtml(p)}"${p === ganttFilter.person ? " selected" : ""}>${escapeHtml(p)}</option>`
   ).join("")}`;
+  const personSpan = document.getElementById("plGanttPersonVal");
+  if (personSpan) personSpan.textContent = ganttFilter.person || "Todos";
+
   const stateSel = document.getElementById("plGanttState");
   if (stateSel) stateSel.value = ganttFilter.state;
+  const stateMap = {
+    "": "Todos",
+    todo: "Por iniciar",
+    doing: "Em curso",
+    late: "Em atraso",
+    done: "Concluídas",
+  };
+  const stateSpan = document.getElementById("plGanttStateVal");
+  if (stateSpan) stateSpan.textContent = stateMap[ganttFilter.state] || "Todos";
 }
 
 function ganttKpiCard(label, value, hint, tone = "") {

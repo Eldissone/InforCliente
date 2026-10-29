@@ -1187,63 +1187,132 @@ body[data-shell="figma"] .dp-add-form input:focus {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
             gap: 12px;
+            align-items: center;
         }
 
         .ex-plan-select {
             position: relative;
             display: flex;
             align-items: center;
-            gap: 4px;
-            height: 40px;
-            padding: 0 12px;
-            background: #fff;
+            gap: 8px;
+            height: 42px;
+            padding: 0 14px;
+            background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            color: #334155;
             cursor: pointer;
-            transition: border-color 0.15s ease;
-        }
-
-        .ex-plan-select:hover,
-        .ex-plan-select:focus-within { border-color: #94a3b8; }
-        .ex-plan-select > span:first-child { white-space: nowrap; }
-
-        .ex-plan-select select {
-            appearance: none;
-            border: 0;
-            background: transparent;
-            font: inherit;
-            color: #0f172a;
-            padding: 0 22px 0 0;
-            flex: 1;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+            user-select: none;
             min-width: 0;
-            cursor: pointer;
-            outline: none;
+            overflow: hidden;
+            box-sizing: border-box;
         }
 
-        .ex-plan-select .material-symbols-outlined {
-            position: absolute;
-            right: 10px;
-            font-size: 16px;
+        .ex-plan-select:hover {
+            border-color: #cbd5e1;
+            background-color: #fafbfc;
+        }
+
+        .ex-plan-select:focus-within {
+            border-color: #0f7b63;
+            box-shadow: 0 0 0 3px rgba(15, 123, 99, 0.14);
+            background-color: #ffffff;
+        }
+
+        .ex-plan-select-label {
+            font-size: 13px;
+            font-weight: 500;
             color: #64748b;
+            white-space: nowrap;
+            flex-shrink: 0;
             pointer-events: none;
         }
 
-        .ex-plan-btn {
-            height: 40px;
-            padding: 0 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #fff;
-            color: #0f172a;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
+        .ex-plan-select-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+            min-width: 0;
+            pointer-events: none;
         }
 
-        .ex-plan-btn:hover { background: #f8fafc; border-color: #94a3b8; }
+        .ex-plan-select-arrow {
+            font-size: 20px !important;
+            color: #94a3b8;
+            flex-shrink: 0;
+            pointer-events: none;
+            transition: color 0.15s ease;
+            line-height: 1;
+            margin-left: auto;
+        }
+
+        .ex-plan-select:hover .ex-plan-select-arrow {
+            color: #475569;
+        }
+
+        /* O select nativo sobrepõe 100% a pílula de forma invisível, garantindo clique e teclado sem falhas visuais */
+        body[data-shell="figma"] main .ex-plan-select select.ex-plan-select-native,
+        .ex-plan-select select.ex-plan-select-native {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 28px 0 12px !important;
+            opacity: 0 !important;
+            cursor: pointer !important;
+            border: 0 !important;
+            border-radius: 8px !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background: transparent none !important;
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            font-size: 13px !important;
+            z-index: 5 !important;
+        }
+
+        body[data-shell="figma"] main .ex-plan-select select.ex-plan-select-native:focus,
+        .ex-plan-select select.ex-plan-select-native:focus {
+            outline: none !important;
+            box-shadow: none !important;
+            border: 0 !important;
+        }
+
+        .ex-plan-btn {
+            height: 42px;
+            padding: 0 24px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #1e293b;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ex-plan-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+
+        .ex-plan-btn:active {
+            transform: translateY(1px);
+        }
 
         .ex-plan-kpis {
             display: grid;
