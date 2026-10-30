@@ -250,7 +250,7 @@ function renderRow(p, idx = 1) {
   const numStr = String(idx).padStart(2, '0');
 
   return `
-    <tr data-view-project="${p.id}" class="hover:bg-slate-200 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
+    <tr data-view-project="${p.id}" class="hover:bg-slate-100 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
           <div class="relative min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
@@ -268,13 +268,13 @@ function renderRow(p, idx = 1) {
       <td class="px-8 py-5">
         <span class="block max-w-[160px] truncate text-xs font-bold text-slate-700" title="${escapeHtml(p.client?.name || "-")}">${escapeHtml(p.client?.name || "-")}</span>
       </td>
-      <td class="px-8 py-5">
+      <td class="px-8 py-5 min-w-[200px]">
         <span class="text-[11px] text-slate-400 font-medium">${escapeHtml(p.contact || "-")}</span>
       </td>
       <td class="px-8 py-5">
         <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${escapeHtml(p.location || "-")}</div>
       </td>
-      <td class="px-8 py-5 text-right font-black text-xs text-slate-900">
+      <td class="px-8 py-5 text-right min-w-[200px] font-black text-xs text-slate-900">
         ${formatCurrency(p.budgetTotal || 0, p.currency)}
       </td>
       <td class="px-8 py-5 min-w-[140px]">
@@ -285,13 +285,9 @@ function renderRow(p, idx = 1) {
           <span class="text-[10px] font-black text-slate-900">${progress}%</span>
         </div>
       </td>
-      <td class="px-8 py-5 text-center">${renderStatusPill(p)}</td>
+      <td class="px-8 py-5 min-w-[200px] text-center">${renderStatusPill(p)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1">
-          <a href="./centroCustos.html?projectId=${p.id}" title="Planeamento" onclick="event.stopPropagation()"
-            class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#2afc8d]/10 text-slate-400 hover:text-[#059669] transition-all">
-            <span class="material-symbols-outlined text-lg">account_balance</span>
-          </a>
           <button data-edit-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
             <span class="material-symbols-outlined text-lg">edit</span>
           </button>
