@@ -1,11 +1,12 @@
 const { config } = require("../config");
 
 /**
- * Leitura automática de faturas (Área Financeira) com o Google Gemini.
+ * Leitura automática de faturas, proformas e cotações com o Google Gemini.
  *
- * O financeiro carrega o PDF/imagem da fatura física e a IA devolve os campos
- * já estruturados (nº do documento, datas, valores, IVA, retenção, fornecedor
- * e a obra provável). Nada é gravado aqui — o serviço apenas lê o documento.
+ * Carrega o PDF/imagem do documento e a IA devolve os campos estruturados
+ * (nº do documento, datas, valores, IVA, retenção, descontos, fornecedor,
+ * obra provável, centro de custo / categoria sugerida e linhas/itens detalhados).
+ * Nada é gravado aqui — o serviço apenas lê o documento.
  *
  * Requer `GEMINI_API_KEY` no .env. Sem chave, `isConfigured()` é falso e as
  * rotas respondem com um erro explícito em vez de rebentar a área financeira.
@@ -22,9 +23,142 @@ const SUPPORTED_MIME_TYPES = new Map([
 ]);
 
 const MAX_INLINE_BYTES = 12 * 1024 * 1024; // 12MB — limite do payload inline do Gemini
-const GEMINI_TIMEOUT_MS = 60_000;
-const GEMINI_FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash"];
+const GEMINI_PER_MODEL_TIMEOUT_MS = 90_000;
+const GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-3.6-flash"];
 
+const CATEGORY_ENUM = [
+  "MATERIAIS_INSUMOS",
+  "SERVICOS_MAO_DE_OBRA",
+  "EQUIPAMENTO",
+  "TRANSPORTE",
+  "GASTOS_PESSOAL",
+  "DESPESAS_OPERACIONAIS",
+  "INVESTIMENTOS",
+  "IMPOSTOS",
+  "OUTRAS_DESPESAS",
+];
+
+const CategoryKeySet = new Set(CATEGORY_ENUM);
+
+const INVOICE_CATEGORY_META = {
+  MATERIAIS_INSUMOS: {
+    key: "MATERIAIS_INSUMOS",
+    code: "MAT",
+    name: "Materiais e Insumos",
+    cbsCategory: "MATERIAIS_INSUMOS",
+  },
+  SERVICOS_MAO_DE_OBRA: {
+    key: "SERVICOS_MAO_DE_OBRA",
+    code: "MDO",
+    name: "Serviços e Mão de Obra",
+    cbsCategory: "SERVICOS_MAO_DE_OBRA",
+  },
+  EQUIPAMENTO: {
+    key: "EQUIPAMENTO",
+    code: "EQP",
+    name: "Equipamentos e Ferramentas",
+    cbsCategory: "DESPESAS_OPERACIONAIS",
+  },
+  TRANSPORTE: {
+    key: "TRANSPORTE",
+    code: "TRP",
+    name: "Transporte e Logística",
+    cbsCategory: "DESPESAS_OPERACIONAIS",
+  },
+  GASTOS_PESSOAL: {
+    key: "GASTOS_PESSOAL",
+    code: "PES",
+    name: "Gastos com Pessoal",
+    cbsCategory: "GASTOS_PESSOAL",
+  },
+  DESPESAS_OPERACIONAIS: {
+    key: "DESPESAS_OPERACIONAIS",
+    code: "OPE",
+    name: "Despesas Operacionais",
+    cbsCategory: "DESPESAS_OPERACIONAIS",
+  },
+  INVESTIMENTOS: {
+    key: "INVESTIMENTOS",
+    code: "INV",
+    name: "Investimentos",
+    cbsCategory: "INVESTIMENTOS",
+  },
+  IMPOSTOS: {
+    key: "IMPOSTOS",
+    code: "IMP",
+    name: "Impostos e Taxas",
+    cbsCategory: "IMPOSTOS",
+  },
+  OUTRAS_DESPESAS: {
+    key: "OUTRAS_DESPESAS",
+    code: "OUT",
+    name: "Outras Despesas",
+    cbsCategory: "DESPESAS_OPERACIONAIS",
+  },
+};
+
+function inferCostCategoryFromText(rawText, fallback = "MATERIAIS_INSUMOS") {
+  const upper = String(rawText || "").toUpperCase().trim();
+  if (CategoryKeySet.has(upper)) return upper;
+
+  const t = String(rawText || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!t) return INVOICE_CATEGORY_META[fallback] ? fallback : "MATERIAIS_INSUMOS";
+
+  if (
+    /(mao de obra|subempreitad|empreitad|servic|instalac|montagem|manutenc|reparac|consultor|projecto|projeto|fiscalizac|ensaio|topograf|carpintari|serralhari|pintura|canalizac|electricist|pedreiro)/.test(
+      t
+    )
+  ) {
+    return "SERVICOS_MAO_DE_OBRA";
+  }
+  if (
+    /(aluguer|equipament|maquin|gerador|grua|betoneir|andaim|ferrament|escavador|retroescavador|compactador|martelo|compressor|bomba de betao)/.test(
+      t
+    )
+  ) {
+    return "EQUIPAMENTO";
+  }
+  if (
+    /(transport|frete|logistic|combustiv|gasoleo|gasolina|deslocac|viatura|camiao|reboque|portagem)/.test(
+      t
+    )
+  ) {
+    return "TRANSPORTE";
+  }
+  if (
+    /(pessoal|salari|ordenad|alimentac|refeic|fardament|epi|bota|capacete|seguro de trabalho|subsidi)/.test(
+      t
+    )
+  ) {
+    return "GASTOS_PESSOAL";
+  }
+  if (/(impost|taxa|licenc|iva|irt|inss|aduaneir|alfandeg|emolument)/.test(t)) {
+    return "IMPOSTOS";
+  }
+  if (/(investiment|aquisicao de viatura|imovel|terreno|activo fixo|ativo fixo)/.test(t)) {
+    return "INVESTIMENTOS";
+  }
+  if (
+    /(operacion|agua|energia|electricidad|internet|comunicac|expedient|limpez|seguranc|vigilanc|escritorio|consumiveis de escritorio|renda|alojamento)/.test(
+      t
+    )
+  ) {
+    return "DESPESAS_OPERACIONAIS";
+  }
+  if (
+    /(material|materiais|insumo|cimento|ferro|aco|areia|brita|tijolo|bloco|tinta|tubo|cabo|madeira|ceramica|telha|gesso|argamassa|parafuso|valvula|bomba|disjuntor|quadro|lampada|vidro|aluminio|pvc|betum|impermeabiliz)/.test(
+      t
+    )
+  ) {
+    return "MATERIAIS_INSUMOS";
+  }
+  return INVOICE_CATEGORY_META[fallback] ? fallback : "MATERIAIS_INSUMOS";
+}
+
+// Schema enxuto para evitar atraso de compilação de gramática no Gemini
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
@@ -36,6 +170,8 @@ const RESPONSE_SCHEMA = {
     docDate: { type: "string" },
     dueDate: { type: "string" },
     grossAmount: { type: ["number", "null"] },
+    discountAmount: { type: ["number", "null"] },
+    discountPercent: { type: ["number", "null"] },
     vatAmount: { type: ["number", "null"] },
     vatPercent: { type: ["number", "null"] },
     withholdingAmount: { type: ["number", "null"] },
@@ -46,12 +182,31 @@ const RESPONSE_SCHEMA = {
     currency: { type: "string" },
     supplierName: { type: "string" },
     supplierNif: { type: "string" },
+    supplierPhone: { type: "string" },
+    supplierEmail: { type: "string" },
+    supplierIban: { type: "string" },
     clientName: { type: "string" },
     clientNif: { type: "string" },
     projectHint: { type: "string" },
+    suggestedCategory: { type: "string" },
     description: { type: "string" },
     notes: { type: "string" },
     confidence: { type: ["number", "null"] },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          unit: { type: "string" },
+          quantity: { type: ["number", "null"] },
+          unitPrice: { type: ["number", "null"] },
+          total: { type: ["number", "null"] },
+          costCenterHint: { type: "string" },
+        },
+        required: ["description", "unit", "quantity", "unitPrice", "total", "costCenterHint"],
+      },
+    },
   },
   required: [
     "documentType",
@@ -63,37 +218,38 @@ const RESPONSE_SCHEMA = {
     "vatPercent",
     "withholdingAmount",
     "withholdingPercent",
-    "carInsuranceAmount",
-    "guaranteeAmount",
     "netAmount",
     "currency",
     "supplierName",
     "supplierNif",
-    "clientName",
-    "clientNif",
     "projectHint",
     "description",
     "notes",
     "confidence",
+    "items",
   ],
 };
 
-const INSTRUCTION = `És um assistente de contabilidade de uma empresa de construção civil em Angola.
-Recebes o PDF ou a fotografia de uma fatura/documento e tens de devolver APENAS um JSON com os dados lidos.
+const INSTRUCTION = `És um assistente de contabilidade e orçamentação de construção civil em Angola.
+Recebes o PDF ou imagem de uma fatura, proforma ou cotação e devolves APENAS um JSON com os dados lidos.
 
 Regras:
-- Valores sempre em número (1234.56), nunca em texto, sem símbolos de moeda e sem separador de milhares.
-- Datas no formato AAAA-MM-DD. Se só existir mês/ano, usa o dia 1. Se não existir, devolve string vazia.
-- "grossAmount" é o valor ilíquido (base tributável, SEM IVA). Se o documento só tiver o total com IVA, calcula o ilíquido removendo o IVA e explica-o em "notes".
-- "vatAmount" é o valor do IVA e "vatPercent" a taxa aplicada (ex.: 14).
-- "withholdingAmount"/"withholdingPercent" correspondem à retenção na fonte, quando existir.
-- "netAmount" é o valor total a pagar/receber indicado no documento.
-- "docNumber" é o número do documento (ex.: FT 2026/123).
-- "supplierName"/"supplierNif" é o emitente; "clientName"/"clientNif" é o destinatário.
-- "projectHint" é a referência à obra/projeto que aparece no documento (ex.: código ou nome da obra), ou string vazia.
-- "confidence" é a tua confiança global (0 a 1) na leitura.
-- Se um campo não existir no documento, devolve string vazia (texto) ou null (números). Nunca inventes nem uses 0 para representar um dado em falta.
-- Não devolvas markdown nem explicações fora do JSON.`;
+- Valores sempre em número (1234.56), sem símbolos de moeda.
+- Datas no formato AAAA-MM-DD (ou string vazia se não existir).
+- "grossAmount": valor ilíquido (base tributável SEM IVA).
+- "vatAmount" / "vatPercent": valor e taxa do IVA (ex.: 14).
+- "withholdingAmount" / "withholdingPercent": retenção na fonte, quando existir.
+- "discountAmount" / "discountPercent": desconto global, quando existir.
+- "netAmount": valor total a pagar indicado no documento.
+- "supplierName" / "supplierNif": nome e NIF do fornecedor emitente.
+- "items": lista de linhas/artigos discriminados no documento (até 40 itens):
+  - "description": designação do material/serviço.
+  - "unit": unidade ("un", "m2", "m3", "kg", "saco", "vg", "h", "m").
+  - "quantity": quantidade numérica (1 se não explícita).
+  - "unitPrice": preço unitário sem IVA.
+  - "total": subtotal ilíquido da linha.
+  - "costCenterHint": código do Centro de Custo da obra mais adequado (se a lista de Centros de Custo foi indicada) ou categoria (MATERIAIS_INSUMOS, SERVICOS_MAO_DE_OBRA, EQUIPAMENTO, TRANSPORTE, GASTOS_PESSOAL, DESPESAS_OPERACIONAIS).
+- Se um campo não existir, devolve string vazia (texto) ou null (números).`;
 
 function isConfigured() {
   return Boolean(config.ai.geminiApiKey);
@@ -153,7 +309,6 @@ function parseNumberValue(raw) {
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
   let text = String(raw).trim();
   if (!text) return null;
-  // "1.234,56" (pt) vs "1,234.56" (en)
   const hasComma = text.includes(",");
   const hasDot = text.includes(".");
   if (hasComma && hasDot) {
@@ -195,7 +350,6 @@ function translateInvoiceNote(value) {
   return text;
 }
 
-/** Confiança 0–1 vem como fração ou percentagem, conforme o modelo. */
 function normalizeConfidence(value) {
   const n = parseNumberValue(value);
   if (n === null) return null;
@@ -219,7 +373,6 @@ function extractJsonBlock(text) {
   }
 }
 
-/** Sugere a obra a partir do texto lido (código exato → nome → conteúdo). */
 function matchProject(projects, hint) {
   const text = String(hint || "").trim().toLowerCase();
   if (!text || !projects?.length) return null;
@@ -246,57 +399,150 @@ function matchProject(projects, hint) {
   return reversed[0] || null;
 }
 
-async function callGemini({ mimeType, base64Data, projects }) {
+function normalizeInvoiceItems(rawItems, fallbackContext = {}) {
+  const list = Array.isArray(rawItems) ? rawItems : [];
+  const defaultCategory = inferCostCategoryFromText(
+    fallbackContext.suggestedCategory || fallbackContext.description || "",
+    "MATERIAIS_INSUMOS"
+  );
+  const normalized = [];
+
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const description = cleanText(raw.description, 300);
+    const qtyRaw = parseNumberValue(raw.quantity);
+    const quantity = qtyRaw && qtyRaw > 0 ? round2(qtyRaw) : 1;
+    let unitPrice = round2(parseNumberValue(raw.unitPrice));
+    let total = round2(parseNumberValue(raw.total));
+    const discountPercent = clampPercent(raw.discountPercent) ?? fallbackContext.discountPercent ?? 0;
+    const vatPercent = clampPercent(raw.vatPercent) ?? fallbackContext.vatPercent ?? null;
+
+    if (unitPrice === null && total !== null && quantity > 0) {
+      unitPrice = round2(total / quantity);
+    }
+    if (total === null && unitPrice !== null) {
+      const discFactor = discountPercent ? Math.max(0, 1 - discountPercent / 100) : 1;
+      total = round2(quantity * unitPrice * discFactor);
+    }
+    if (!description && total === null && unitPrice === null) continue;
+
+    const hintStr = cleanText(raw.costCenterHint, 80) || "";
+    const categoryKey = inferCostCategoryFromText(
+      raw.category || (CategoryKeySet.has(hintStr.toUpperCase()) ? hintStr : description),
+      defaultCategory
+    );
+    const catMeta = INVOICE_CATEGORY_META[categoryKey] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+    normalized.push({
+      description: description || "Artigo / Serviço de Fatura",
+      unit: cleanText(raw.unit, 20) || "un",
+      quantity,
+      unitPrice: unitPrice ?? 0,
+      discountPercent,
+      vatPercent,
+      total: total ?? round2(quantity * (unitPrice ?? 0)) ?? 0,
+      category: catMeta.key,
+      categoryCode: catMeta.code,
+      categoryName: catMeta.name,
+      cbsCategory: catMeta.cbsCategory,
+      costCenterHint: hintStr || null,
+    });
+  }
+
+  if (!normalized.length) {
+    const baseTotal = fallbackContext.grossAmount ?? fallbackContext.netAmount ?? null;
+    if (baseTotal !== null && baseTotal > 0) {
+      const catMeta =
+        INVOICE_CATEGORY_META[defaultCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+      normalized.push({
+        description:
+          fallbackContext.description ||
+          (fallbackContext.supplierName
+            ? `Fornecimento / Serviço — ${fallbackContext.supplierName}`
+            : "Item de Fatura / Cotação"),
+        unit: "vg",
+        quantity: 1,
+        unitPrice: baseTotal,
+        discountPercent: fallbackContext.discountPercent ?? 0,
+        vatPercent: fallbackContext.vatPercent ?? null,
+        total: baseTotal,
+        category: catMeta.key,
+        categoryCode: catMeta.code,
+        categoryName: catMeta.name,
+        cbsCategory: catMeta.cbsCategory,
+        costCenterHint: null,
+      });
+    }
+  }
+
+  return normalized;
+}
+
+function buildThinkingConfigForModel(modelName) {
+  const m = String(modelName || "").toLowerCase();
+  if (m.includes("gemini-3")) {
+    return { thinkingLevel: "MINIMAL" };
+  }
+  if (m.includes("gemini-2.5")) {
+    return { thinkingBudget: 0 };
+  }
+  return undefined;
+}
+
+async function callGemini({ mimeType, base64Data, projects, costCenters = [] }) {
   const baseUrl = config.ai.geminiBaseUrl.replace(/\/$/, "");
 
   const projectList = (projects || [])
-    .slice(0, 200)
+    .slice(0, 80)
     .map((p) => `- ${p.code || "—"} | ${p.name}`)
     .join("\n");
-  const clientList = (projects || [])
-    .filter((p) => p.clientName)
-    .map((p) => `- ${p.clientName}`)
-    .slice(0, 200)
+  const ccList = (costCenters || [])
+    .map((cc) => `- ${cc.code} | ${cc.name}`)
     .join("\n");
 
   const promptParts = [INSTRUCTION];
+  if (ccList) {
+    promptParts.push(
+      `Centros de Custo (Categorias) desta obra (indica o código mais adequado em "costCenterHint" de cada item):\n${ccList}`
+    );
+  }
   if (projectList) {
     promptParts.push(
       `Obras existentes no sistema (usa a mais provável em "projectHint"):\n${projectList}`
     );
   }
-  if (clientList) {
-    promptParts.push(`Clientes existentes no sistema:\n${clientList}`);
-  }
-
-  const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: promptParts.join("\n\n") },
-          { inline_data: { mime_type: mimeType, data: base64Data } },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0,
-      responseFormat: {
-        text: {
-          // REST field is a protobuf enum, not an IANA MIME string.
-          mimeType: "APPLICATION_JSON",
-          schema: RESPONSE_SCHEMA,
-        },
-      },
-    },
-  };
 
   const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-  try {
-    let result;
-    for (const [index, model] of models.entries()) {
+  let lastResult = null;
+  let lastError = null;
+
+  for (const [index, model] of models.entries()) {
+    const thinkingConfig = buildThinkingConfigForModel(model);
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: promptParts.join("\n\n") },
+            { inline_data: { mime_type: mimeType, data: base64Data } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+        responseFormat: {
+          text: {
+            mimeType: "APPLICATION_JSON",
+            schema: RESPONSE_SCHEMA,
+          },
+        },
+      },
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), GEMINI_PER_MODEL_TIMEOUT_MS);
+    try {
       const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
       const response = await fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
         method: "POST",
@@ -305,17 +551,35 @@ async function callGemini({ mimeType, base64Data, projects }) {
         signal: controller.signal,
       });
       const payloadText = await response.text();
-      result = { response, payloadText, model };
+      lastResult = { response, payloadText, model };
 
-      // 503 usually means temporary model capacity pressure. Try the next
-      // supported Flash model while preserving the same structured JSON schema.
-      if (response.status !== 503 || index === models.length - 1) break;
-      await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
+      if (response.ok) {
+        return lastResult;
+      }
+
+      // Se o modelo rejeitar thinkingConfig ou estiver sobrecarregado (503/429/404), tenta o próximo modelo
+      if (
+        (response.status === 503 || response.status === 429 || response.status === 404 || response.status === 400) &&
+        index < models.length - 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        continue;
+      }
+      return lastResult;
+    } catch (err) {
+      lastError = err;
+      // Se excedeu o tempo neste modelo e há outro modelo de fallback (ex.: gemini-2.5-flash), tenta o próximo
+      if (index < models.length - 1) {
+        continue;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
     }
-    return result;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  if (lastResult) return lastResult;
+  throw lastError || new Error("Gemini request failed");
 }
 
 function buildHttpError(status, message, code) {
@@ -328,9 +592,9 @@ function buildHttpError(status, message, code) {
 /**
  * Lê um documento (PDF/imagem) e devolve os campos normalizados da fatura.
  *
- * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array }} input
+ * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array }} input
  */
-async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }) {
+async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [] }) {
   if (!isConfigured()) {
     throw buildHttpError(
       503,
@@ -366,6 +630,7 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
       mimeType: resolvedMime,
       base64Data: buffer.toString("base64"),
       projects,
+      costCenters,
     });
     response = result.response;
     payloadText = result.payloadText;
@@ -374,7 +639,7 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     if (error?.name === "AbortError") {
       throw buildHttpError(
         504,
-        "A leitura da fatura excedeu 60 segundos. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
+        "A leitura da fatura excedeu o tempo limite. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
         "AI_TIMEOUT"
       );
     }
@@ -442,13 +707,11 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
 
   const candidate = payload?.candidates?.[0];
   const finishReason = candidate?.finishReason;
-  const text = (candidate?.content?.parts || []).map((p) => p.text || "").join("");
+  const text = (candidate?.content?.parts || []).map((p) => p.text || "").filter(Boolean).join("");
   let parsed = null;
   try {
-    // JSON mode returns the JSON object directly as text (without Markdown fences).
     parsed = text ? JSON.parse(text) : null;
   } catch {
-    // Keep compatibility with older Gemini models that may still wrap JSON.
     parsed = extractJsonBlock(text);
   }
   if (!parsed) {
@@ -467,6 +730,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   }
 
   const grossAmount = round2(parseNumberValue(parsed.grossAmount));
+  const discountAmount = round2(parseNumberValue(parsed.discountAmount));
+  const discountPercent = clampPercent(parsed.discountPercent);
   const vatAmount = round2(parseNumberValue(parsed.vatAmount));
   const vatPercent = clampPercent(parsed.vatPercent);
   const withholdingAmount = round2(parseNumberValue(parsed.withholdingAmount));
@@ -479,6 +744,24 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   const dueDate = parseDateValue(parsed.dueDate);
 
   const suggestedProject = matchProject(projects, parsed.projectHint);
+  const description = cleanText(parsed.description, 400);
+  const supplierName = cleanText(parsed.supplierName, 120);
+  const suggestedCategory = inferCostCategoryFromText(
+    parsed.suggestedCategory || description || "",
+    "MATERIAIS_INSUMOS"
+  );
+  const categoryMeta =
+    INVOICE_CATEGORY_META[suggestedCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+  const items = normalizeInvoiceItems(parsed.items, {
+    grossAmount,
+    netAmount,
+    vatPercent,
+    discountPercent,
+    description,
+    supplierName,
+    suggestedCategory,
+  });
 
   return {
     documentType: cleanText(parsed.documentType, 40) || "OUTRO",
@@ -486,6 +769,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     docDate: dateToKey(docDate),
     dueDate: dateToKey(dueDate),
     grossAmount,
+    discountAmount,
+    discountPercent,
     vatAmount,
     vatPercent,
     withholdingAmount,
@@ -494,16 +779,23 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     guaranteeAmount,
     netAmount,
     currency: cleanText(parsed.currency, 8) || "AOA",
-    supplierName: cleanText(parsed.supplierName, 120),
+    supplierName,
     supplierNif: cleanText(parsed.supplierNif, 30),
+    supplierPhone: cleanText(parsed.supplierPhone, 40),
+    supplierEmail: cleanText(parsed.supplierEmail, 120),
+    supplierIban: cleanText(parsed.supplierIban, 50),
     clientName: cleanText(parsed.clientName, 120),
     clientNif: cleanText(parsed.clientNif, 30),
     projectHint: cleanText(parsed.projectHint, 120),
     suggestedProjectId: suggestedProject?.id || null,
     suggestedProjectLabel: suggestedProject ? `${suggestedProject.code || ""} — ${suggestedProject.name}`.trim() : null,
-    description: cleanText(parsed.description, 400),
+    suggestedCategory: categoryMeta.key,
+    suggestedCategoryCode: categoryMeta.code,
+    suggestedCategoryName: categoryMeta.name,
+    description,
     notes: cleanText(translateInvoiceNote(parsed.notes), 800),
     confidence: normalizeConfidence(parsed.confidence),
+    items,
     model,
     raw: parsed,
   };
@@ -516,6 +808,9 @@ module.exports = {
   parseDateValue,
   parseNumberValue,
   matchProject,
+  inferCostCategoryFromText,
+  INVOICE_CATEGORY_META,
+  CATEGORY_ENUM,
   SUPPORTED_MIME_TYPES,
   MAX_INLINE_BYTES,
 };

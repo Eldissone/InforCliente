@@ -43,6 +43,11 @@ const {
 } = require("../services/deliveryFieldBridge");
 const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
 const { normalizeDateOnly } = require("../utils/dateOnly");
+const { readInvoiceDocument } = require("../services/invoiceScanService");
+const {
+  resolveOrCreateSupplierFromInvoice,
+  matchInvoiceItemsToNeeds,
+} = require("../services/invoiceSupplierMatchService");
 const multer = require("multer");
 const path = require("path");
 
@@ -1495,6 +1500,87 @@ quoteRoutes.post(
     });
 
     res.json({ purchaseOrderUrl, documentId: documentId || null });
+  })
+);
+
+// Leitura inteligente de Fatura / Proforma / Cotação para autopreenchimento de cotação e precificação
+quoteRoutes.post(
+  "/scan-document",
+  fileUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "Nenhum ficheiro carregado para leitura." });
+    }
+
+    const rawNeedIds = req.body?.needIds || req.body?.needId || "";
+    let needIds = [];
+    if (Array.isArray(rawNeedIds)) {
+      needIds = rawNeedIds.map(String).filter(Boolean);
+    } else if (typeof rawNeedIds === "string" && rawNeedIds.trim()) {
+      const trimmed = rawNeedIds.trim();
+      if (trimmed.startsWith("[")) {
+        try {
+          needIds = JSON.parse(trimmed).map(String).filter(Boolean);
+        } catch {
+          needIds = [];
+        }
+      } else {
+        needIds = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+
+    const autoCreateSupplier =
+      req.body?.autoCreateSupplier === undefined ||
+      String(req.body?.autoCreateSupplier) === "true" ||
+      String(req.body?.autoCreateSupplier) === "1";
+
+    const projects = await prisma.project.findMany({
+      where: { id: "__none__" },
+      select: { id: true, code: true, name: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const fields = await readInvoiceDocument({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      projects,
+    });
+
+    const { supplier, created: supplierCreated } =
+      await resolveOrCreateSupplierFromInvoice(fields, {
+        autoCreate: autoCreateSupplier,
+      });
+
+    let needMappings = [];
+    if (needIds.length > 0) {
+      const needs = await prisma.workNeed.findMany({
+        where: { id: { in: needIds } },
+        select: {
+          id: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          originalUnitPrice: true,
+          costCenterId: true,
+          projectId: true,
+        },
+      });
+      // Preserva a ordem pedida pelo cliente
+      const byId = new Map(needs.map((n) => [n.id, n]));
+      const orderedNeeds = needIds.map((id) => byId.get(id)).filter(Boolean);
+      needMappings = matchInvoiceItemsToNeeds(fields.items, orderedNeeds, fields);
+    }
+
+    return res.json({
+      ok: true,
+      fields,
+      items: fields.items || [],
+      supplier: supplier || null,
+      supplierCreated,
+      needMappings,
+    });
   })
 );
 

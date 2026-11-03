@@ -686,6 +686,7 @@ function openBatchQuoteModal() {
   document.getElementById("batchQuoteItemsBody")?.querySelectorAll("[data-qty], [data-price], [data-vat], [data-wh], [data-disc]").forEach((el) => {
     el.addEventListener("input", refreshBatchFiscalTotals);
   });
+  wireBatchQuoteInvoiceScanner(needs);
   document.getElementById("modalBatchQuote")?.classList.add("open");
   refreshBatchFiscalTotals();
 }
@@ -1672,3 +1673,142 @@ window.closeProformaViewer = function() {
     document.getElementById('sideViewerIframe').src = '';
   }, 300);
 };
+
+function wireBatchQuoteInvoiceScanner(needs = []) {
+  const proformaInput = document.getElementById("batchQuoteProforma");
+  if (!proformaInput) return;
+
+  let container = document.getElementById("batchQuoteAiScanBox");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "batchQuoteAiScanBox";
+    container.className = "mt-2 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs";
+    container.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 font-semibold text-indigo-900">
+          <i class="fas fa-magic text-indigo-600"></i>
+          <span>Preenchimento Automático por Leitura de Fatura / Proforma (IA)</span>
+        </div>
+        <button type="button" id="btnBatchQuoteAiScan" class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 transition">
+          <i class="fas fa-bolt"></i> Ler Fatura e Preencher Lote
+        </button>
+      </div>
+      <div id="batchQuoteAiBanner" class="hidden mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900"></div>
+    `;
+    proformaInput.parentElement?.appendChild(container);
+  }
+
+  const banner = document.getElementById("batchQuoteAiBanner");
+  if (banner) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+  }
+
+  const runBatchScan = async (file) => {
+    if (!file) {
+      showToast("Selecione primeiro o PDF ou imagem da fatura/proforma.", "warning");
+      proformaInput.click();
+      return;
+    }
+
+    const btn = document.getElementById("btnBatchQuoteAiScan");
+    const prevHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> A ler fatura...`;
+    }
+    if (banner) {
+      banner.classList.remove("hidden");
+      banner.className = "mt-2 rounded border border-indigo-200 bg-white p-2 text-[11px] text-indigo-800";
+      banner.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> A associar linhas da fatura aos ${needs.length} itens selecionados...`;
+    }
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("needIds", JSON.stringify(needs.map((n) => n.id)));
+      fd.append("autoCreateSupplier", "true");
+
+      const res = await apiUpload("/quotes/scan-document", fd, "POST");
+      const supplier = res?.supplier || null;
+      const fields = res?.fields || {};
+      const mappings = res?.needMappings || [];
+
+      if (supplier) {
+        if (!currentSuppliers.some((s) => s.id === supplier.id)) {
+          currentSuppliers.push(supplier);
+        }
+        const sel = document.getElementById("batchQuoteSupplier");
+        if (sel) {
+          let opt = sel.querySelector(`option[value="${supplier.id}"]`);
+          if (!opt) {
+            opt = document.createElement("option");
+            opt.value = supplier.id;
+            opt.textContent = supplier.name;
+            sel.appendChild(opt);
+          }
+          sel.value = supplier.id;
+        }
+      }
+
+      const mapByNeed = new Map(mappings.map((m) => [m.needId, m]));
+      let filledCount = 0;
+
+      document.querySelectorAll("#batchQuoteItemsBody tr").forEach((tr) => {
+        const needId = tr.dataset.needId;
+        const m = mapByNeed.get(needId);
+        if (!m) return;
+
+        const priceInput = tr.querySelector("[data-price]");
+        const qtyInput = tr.querySelector("[data-qty]");
+        const vatInput = tr.querySelector("[data-vat]");
+        const whInput = tr.querySelector("[data-wh]");
+        const discInput = tr.querySelector("[data-disc]");
+
+        if (priceInput && m.quotedPrice != null && Number(m.quotedPrice) > 0) {
+          priceInput.value = Number(m.quotedPrice);
+          filledCount += 1;
+        }
+        if (qtyInput && m.quantity != null && Number(m.quantity) > 0) {
+          qtyInput.value = Number(m.quantity);
+        }
+        if (vatInput && m.vatPercent != null) vatInput.value = m.vatPercent;
+        if (whInput && m.withholdingPercent != null) whInput.value = m.withholdingPercent;
+        if (discInput && m.discountPercent != null) discInput.value = m.discountPercent;
+      });
+
+      const notesEl = document.getElementById("batchQuoteNotes");
+      if (notesEl && !notesEl.value && fields.docNumber) {
+        notesEl.value = `Doc: ${fields.docNumber}`;
+      }
+
+      refreshBatchFiscalTotals();
+
+      if (banner) {
+        banner.className = "mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900";
+        banner.innerHTML = `
+          <div><i class="fas fa-check-circle mr-1"></i> <strong>${filledCount} de ${needs.length} itens</strong> preenchidos automaticamente.</div>
+          <div>Fornecedor: <strong>${escapeHtml(supplier?.name || fields.supplierName || "—")}</strong>${fields.docNumber ? ` · Doc: ${escapeHtml(fields.docNumber)}` : ""}</div>
+        `;
+      }
+      showToast("Lote preenchido automaticamente a partir da fatura!", "success");
+    } catch (err) {
+      if (banner) {
+        banner.className = "mt-2 rounded border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800";
+        banner.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${escapeHtml(err.message || "Falha na leitura da fatura.")}`;
+      }
+      showToast(err.message || "Erro ao ler fatura", "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = prevHtml || `<i class="fas fa-bolt"></i> Ler Fatura e Preencher Lote`;
+      }
+    }
+  };
+
+  const btnScan = document.getElementById("btnBatchQuoteAiScan");
+  if (btnScan) btnScan.onclick = () => runBatchScan(proformaInput.files?.[0]);
+  proformaInput.onchange = () => {
+    if (proformaInput.files?.[0]) runBatchScan(proformaInput.files[0]);
+  };
+}

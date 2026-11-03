@@ -66,6 +66,21 @@ const { buildDeliveryTimeline, suggestProductId } = require("../services/deliver
 const { fetchDeliveryFieldsByQuoteIds } = require("../services/deliveryFieldBridge");
 const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
 const { normalizeDateOnly } = require("../utils/dateOnly");
+const path = require("path");
+const {
+  readInvoiceDocument,
+  INVOICE_CATEGORY_META,
+  inferCostCategoryFromText,
+} = require("../services/invoiceScanService");
+const {
+  resolveOrCreateSupplierFromInvoice,
+  inferCategoryKeyFromCostCenter,
+  matchCostCenterForCategory,
+  matchItemToProjectCostCenter,
+} = require("../services/invoiceSupplierMatchService");
+const { syncQuoteFiscalSnapshot } = require("../services/quoteFiscalSnapshotService");
+const { syncNeedFromSelectedQuotes } = require("../services/quoteAllocationService");
+const { syncPurchaseRequisitionFromNeed } = require("../services/purchaseQuoteBridge");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2526,6 +2541,468 @@ costCenterRoutes.get(
         budgetedAmount: String(p.budgetedAmount),
         paidAmount: String(p.paidAmount),
       })),
+    });
+  })
+);
+
+// Helper: calcula o resumo atual de orçamento de custo da obra POR CENTRO DE CUSTO (cada Centro de Custo é uma categoria da obra)
+async function buildProjectCategoryBudgetMap(projectId) {
+  const [costCenters, needs] = await Promise.all([
+    prisma.costCenter.findMany({
+      where: { projectId },
+      orderBy: { code: "asc" },
+    }),
+    prisma.workNeed.findMany({
+      where: { projectId, status: { not: "REJECTED" } },
+    }),
+  ]);
+
+  const map = {};
+
+  if (costCenters.length > 0) {
+    for (const cc of costCenters) {
+      const semKey = inferCategoryKeyFromCostCenter(cc);
+      const meta = INVOICE_CATEGORY_META[semKey] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+      map[cc.id] = {
+        category: cc.id,
+        costCenterId: cc.id,
+        code: cc.code,
+        name: cc.name,
+        currency: cc.currency || "AOA",
+        cbsCategory: meta.cbsCategory,
+        semanticCategory: semKey,
+        costCenterExists: true,
+        currentPrevisto: 0,
+        currentRealizado: 0,
+        incrementAmount: 0,
+        newPrevisto: 0,
+        itemCount: 0,
+      };
+    }
+
+    for (const need of needs) {
+      const bucket = map[need.costCenterId];
+      if (!bucket) continue;
+      bucket.currentPrevisto += needLineTotal(need, "previsto");
+      if (needRealizadoUnitPrice(need) != null) {
+        bucket.currentRealizado += needLineTotal(need, "realizado");
+      }
+    }
+
+    for (const cc of costCenters) {
+      const bucket = map[cc.id];
+      if (bucket && Number(cc.budget || 0) > bucket.currentPrevisto) {
+        bucket.currentPrevisto = Number(cc.budget || 0);
+      }
+    }
+  } else {
+    // Obra ainda sem Centros de Custo criados — sugere modelos padrão para criação imediata
+    for (const [key, meta] of Object.entries(INVOICE_CATEGORY_META)) {
+      map[key] = {
+        category: key,
+        costCenterId: null,
+        code: meta.code,
+        name: meta.name,
+        currency: "AOA",
+        cbsCategory: meta.cbsCategory,
+        semanticCategory: key,
+        costCenterExists: false,
+        currentPrevisto: 0,
+        currentRealizado: 0,
+        incrementAmount: 0,
+        newPrevisto: 0,
+        itemCount: 0,
+      };
+    }
+  }
+
+  for (const bucket of Object.values(map)) {
+    bucket.currentPrevisto = Math.round((bucket.currentPrevisto + Number.EPSILON) * 100) / 100;
+    bucket.currentRealizado = Math.round((bucket.currentRealizado + Number.EPSILON) * 100) / 100;
+    bucket.newPrevisto = bucket.currentPrevisto;
+  }
+
+  return { costCenters, categoryMap: map };
+}
+
+// GET /cost-centers/project/:projectId/categories-overview — Resumo do orçamento de custo por Centro de Custo (Categoria)
+costCenterRoutes.get(
+  "/project/:projectId/categories-overview",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const { costCenters, categoryMap } = await buildProjectCategoryBudgetMap(projectId);
+    return res.json({
+      categories: Object.values(categoryMap),
+      costCenters: costCenters.map((cc) => ({
+        id: cc.id,
+        code: cc.code,
+        name: cc.name,
+        budget: String(cc.budget || 0),
+        currency: cc.currency || "AOA",
+        category: cc.id,
+        semanticCategory: inferCategoryKeyFromCostCenter(cc),
+      })),
+    });
+  })
+);
+
+// POST /cost-centers/project/:projectId/scan-invoice — Lê fatura/proforma/cotação e prepara incremento por Centro de Custo
+costCenterRoutes.post(
+  "/project/:projectId/scan-invoice",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    if (!req.file) {
+      return res.status(400).json({ error: "Selecione um ficheiro PDF ou imagem da fatura/cotação." });
+    }
+
+    const [rawProjects, { costCenters, categoryMap }] = await Promise.all([
+      prisma.project.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          client: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        where: { id: projectId },
+        take: 1,
+      }),
+      buildProjectCategoryBudgetMap(projectId),
+    ]);
+
+    const projects = rawProjects.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      clientName: p.client?.name || null,
+    }));
+
+    const fields = await readInvoiceDocument({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      projects,
+      costCenters,
+    });
+
+    const { supplier, created: supplierCreated } =
+      await resolveOrCreateSupplierFromInvoice(fields, { autoCreate: true });
+
+    const enrichedItems = (fields.items || []).map((item) => {
+      const catKey = INVOICE_CATEGORY_META[item.category]
+        ? item.category
+        : inferCostCategoryFromText(item.description, fields.suggestedCategory || "MATERIAIS_INSUMOS");
+      const meta = INVOICE_CATEGORY_META[catKey] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+      const matchedCC = matchItemToProjectCostCenter(item, costCenters, catKey);
+      const lineTotal =
+        Math.round(((Number(item.quantity) || 1) * (Number(item.unitPrice) || 0) + Number.EPSILON) * 100) /
+        100;
+
+      const mapKey = matchedCC?.id || catKey;
+      if (categoryMap[mapKey]) {
+        categoryMap[mapKey].incrementAmount =
+          Math.round((categoryMap[mapKey].incrementAmount + lineTotal + Number.EPSILON) * 100) / 100;
+        categoryMap[mapKey].newPrevisto =
+          Math.round(
+            (categoryMap[mapKey].currentPrevisto +
+              categoryMap[mapKey].incrementAmount +
+              Number.EPSILON) *
+              100
+          ) / 100;
+        categoryMap[mapKey].itemCount += 1;
+      }
+
+      return {
+        ...item,
+        category: matchedCC?.id || catKey,
+        semanticCategory: catKey,
+        categoryCode: matchedCC?.code || meta.code,
+        categoryName: matchedCC?.name || meta.name,
+        costCenterId: matchedCC?.id || null,
+        costCenterExists: Boolean(matchedCC),
+        total: lineTotal,
+      };
+    });
+
+    const firstMatchedCC = enrichedItems[0]?.costCenterId
+      ? costCenters.find((c) => c.id === enrichedItems[0].costCenterId)
+      : null;
+    if (firstMatchedCC) {
+      fields.suggestedCategoryCode = firstMatchedCC.code;
+      fields.suggestedCategoryName = `${firstMatchedCC.code} — ${firstMatchedCC.name}`;
+    }
+
+    return res.json({
+      ok: true,
+      fields,
+      items: enrichedItems,
+      supplier: supplier || null,
+      supplierCreated,
+      categories: Object.values(categoryMap),
+      costCenters: costCenters.map((cc) => ({
+        id: cc.id,
+        code: cc.code,
+        name: cc.name,
+        budget: String(cc.budget || 0),
+        currency: cc.currency || "AOA",
+        category: cc.id,
+        semanticCategory: inferCategoryKeyFromCostCenter(cc),
+      })),
+    });
+  })
+);
+
+// POST /cost-centers/project/:projectId/apply-category-increment — Incrementa o orçamento de custo da obra por Centro de Custo (e opcionalmente regista cotação/realizado)
+costCenterRoutes.post(
+  "/project/:projectId/apply-category-increment",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    let rawPayload = req.body || {};
+    if (typeof rawPayload.payload === "string") {
+      try {
+        rawPayload = { ...rawPayload, ...JSON.parse(rawPayload.payload) };
+      } catch {
+        return res.status(400).json({ error: "Formato inválido no payload de itens." });
+      }
+    }
+
+    let rawItems = rawPayload.items;
+    if (typeof rawItems === "string") {
+      try {
+        rawItems = JSON.parse(rawItems);
+      } catch {
+        rawItems = [];
+      }
+    }
+
+    const parsed = z
+      .object({
+        mode: z
+          .enum(["PREVISTO_ONLY", "PREVISTO_AND_REALIZADO", "REALIZADO_ONLY"])
+          .default("PREVISTO_AND_REALIZADO"),
+        supplierId: z.string().optional().nullable(),
+        supplierName: z.string().optional().nullable(),
+        supplierNif: z.string().optional().nullable(),
+        currency: z.string().default("AOA"),
+        docNumber: z.string().optional().nullable(),
+        vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        withholdingPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+        items: z
+          .array(
+            z.object({
+              description: z.string().min(1),
+              unit: z.string().optional().default("un"),
+              quantity: z.coerce.number().positive().default(1),
+              unitPrice: z.coerce.number().min(0),
+              previstoUnitPrice: z.coerce.number().min(0).optional().nullable(),
+              category: z.string().optional().default("MATERIAIS_INSUMOS"),
+              costCenterId: z.string().optional().nullable(),
+              newCostCenterCode: z.string().optional().nullable(),
+              newCostCenterName: z.string().optional().nullable(),
+              vatPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+              discountPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+            })
+          )
+          .min(1),
+      })
+      .parse({ ...rawPayload, items: rawItems });
+
+    // Upload do ficheiro da fatura/proforma se enviado
+    let proformaUrl = null;
+    if (req.file) {
+      const extension = path.extname(req.file.originalname).toLowerCase() || ".pdf";
+      const storagePath = `quotes/project-${projectId}/invoice-${Date.now()}${extension}`;
+      proformaUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
+    }
+
+    // Resolve ou cria fornecedor se necessário
+    let supplierId = parsed.supplierId ? String(parsed.supplierId).trim() : null;
+    if (!supplierId && parsed.supplierName) {
+      const resolved = await resolveOrCreateSupplierFromInvoice(
+        {
+          supplierName: parsed.supplierName,
+          supplierNif: parsed.supplierNif,
+          vatPercent: parsed.vatPercent,
+          withholdingPercent: parsed.withholdingPercent,
+          discountPercent: parsed.discountPercent,
+          suggestedCategory: parsed.items[0]?.category || "MATERIAIS_INSUMOS",
+        },
+        { autoCreate: true }
+      );
+      supplierId = resolved.supplier?.id || null;
+    }
+
+    const existingCCs = await prisma.costCenter.findMany({
+      where: { projectId },
+      orderBy: { code: "asc" },
+    });
+    const ccByCategory = new Map();
+    const ccById = new Map();
+    for (const cc of existingCCs) {
+      ccById.set(cc.id, cc);
+      const catKey = inferCategoryKeyFromCostCenter(cc);
+      if (!ccByCategory.has(catKey)) ccByCategory.set(catKey, cc);
+    }
+
+    const createdCostCenters = [];
+    const createdNeeds = [];
+    const createdQuotes = [];
+    const budgetIncrementsByCC = new Map();
+
+    for (const item of parsed.items) {
+      const rawCat = String(item.category || "").replace(/^__NEW__:/, "");
+      const catKey = INVOICE_CATEGORY_META[rawCat]
+        ? rawCat
+        : inferCostCategoryFromText(item.description, "MATERIAIS_INSUMOS");
+      const meta = INVOICE_CATEGORY_META[catKey] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+      let targetCC =
+        (item.costCenterId && ccById.get(item.costCenterId)) ||
+        (item.category && ccById.get(item.category)) ||
+        ccByCategory.get(catKey) ||
+        matchItemToProjectCostCenter(item, [...ccById.values()], catKey);
+
+      if (!targetCC) {
+        let candidateCode = (item.newCostCenterCode || meta.code).toUpperCase().trim();
+        let suffix = 1;
+        while ([...ccById.values()].some((c) => String(c.code).toUpperCase() === candidateCode)) {
+          suffix += 1;
+          candidateCode = `${meta.code}-${String(suffix).padStart(2, "0")}`;
+        }
+        const ccName = (item.newCostCenterName || meta.name).trim();
+        targetCC = await prisma.costCenter.create({
+          data: {
+            projectId,
+            code: candidateCode,
+            name: ccName,
+            active: true,
+            requiresQuotation: true,
+
+            currency: parsed.currency || "AOA",
+          },
+        });
+        ccById.set(targetCC.id, targetCC);
+        ccByCategory.set(catKey, targetCC);
+        createdCostCenters.push(targetCC);
+      }
+
+      const qty = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+      const realizedUnit = Number(item.unitPrice) || 0;
+      const previstoUnit =
+        item.previstoUnitPrice != null && Number(item.previstoUnitPrice) >= 0
+          ? Number(item.previstoUnitPrice)
+          : realizedUnit;
+
+      const incrementPrevistoTotal =
+        parsed.mode === "REALIZADO_ONLY" ? 0 : Math.round((qty * previstoUnit + Number.EPSILON) * 100) / 100;
+
+      if (incrementPrevistoTotal > 0) {
+        budgetIncrementsByCC.set(
+          targetCC.id,
+          (budgetIncrementsByCC.get(targetCC.id) || 0) + incrementPrevistoTotal
+        );
+      }
+
+      const shouldPriceRealizado =
+        parsed.mode === "PREVISTO_AND_REALIZADO" || parsed.mode === "REALIZADO_ONLY";
+
+      const need = await prisma.workNeed.create({
+        data: {
+          projectId,
+          costCenterId: targetCC.id,
+          description: item.description.trim(),
+          quantity: qty,
+          unit: (item.unit || "un").trim(),
+          originalUnitPrice: previstoUnit,
+          unitPrice: shouldPriceRealizado ? realizedUnit : previstoUnit,
+          status: shouldPriceRealizado && supplierId ? "APPROVED" : "APPROVED",
+          priority: "MEDIA",
+          responsible: req.user?.name || req.user?.email || "Orçamento Automático",
+          notes: parsed.docNumber ? `Doc: ${parsed.docNumber}` : null,
+
+
+        },
+      });
+      createdNeeds.push(need);
+
+      if (shouldPriceRealizado && supplierId) {
+        const lineTotal = Math.round((qty * realizedUnit + Number.EPSILON) * 100) / 100;
+        const quote = await prisma.needQuote.create({
+          data: {
+            needId: need.id,
+            supplierId,
+            quotedPrice: realizedUnit,
+            quantity: qty,
+            totalValue: lineTotal,
+            currency: parsed.currency || targetCC.currency || "AOA",
+            selected: true,
+            proformaUrl,
+            notes: parsed.docNumber ? `Fatura/Cotação ${parsed.docNumber}` : "Leitura automática de fatura",
+            vatPercent: item.vatPercent ?? parsed.vatPercent ?? null,
+            withholdingPercent: parsed.withholdingPercent ?? null,
+            discountPercent: item.discountPercent ?? parsed.discountPercent ?? null,
+          },
+        });
+        createdQuotes.push(quote);
+        await syncQuoteFiscalSnapshot(quote.id);
+        await syncNeedFromSelectedQuotes(prisma, need.id);
+      }
+
+      await syncPurchaseRequisitionFromNeed(prisma, need.id);
+    }
+
+    // Incrementa o budget de cada CostCenter afetado e da obra
+    let totalProjectIncrement = 0;
+    for (const [ccId, incAmount] of budgetIncrementsByCC.entries()) {
+      const currentCC = ccById.get(ccId);
+      const nextBudget = Math.round(((Number(currentCC?.budget || 0) + incAmount) + Number.EPSILON) * 100) / 100;
+      if (false) await prisma.costCenter.update({
+        where: { id: ccId },
+        data: { budget: nextBudget },
+      });
+      totalProjectIncrement += incAmount;
+    }
+
+    if (totalProjectIncrement > 0) {
+      const proj = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { budgetAllocated: true },
+      });
+      if (proj) {
+        const currentAllocated = Number(proj.budgetAllocated || 0);
+        const allNeeds = await prisma.workNeed.findMany({
+          where: { projectId, status: { not: "REJECTED" } },
+        });
+        const totalPrevistoNeeds = allNeeds.reduce(
+          (acc, n) => acc + needLineTotal(n, "previsto"),
+          0
+        );
+        const nextProjectBudget = Math.max(currentAllocated + totalProjectIncrement, totalPrevistoNeeds);
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { budgetAllocated: Math.round((nextProjectBudget + Number.EPSILON) * 100) / 100 },
+        });
+      }
+    }
+
+    const { categoryMap } = await buildProjectCategoryBudgetMap(projectId);
+
+    return res.status(201).json({
+      ok: true,
+      createdCostCentersCount: createdCostCenters.length,
+      createdNeedsCount: createdNeeds.length,
+      createdQuotesCount: createdQuotes.length,
+      totalProjectIncrement: Math.round((totalProjectIncrement + Number.EPSILON) * 100) / 100,
+      categories: Object.values(categoryMap),
     });
   })
 );

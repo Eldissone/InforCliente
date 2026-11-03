@@ -557,7 +557,13 @@ async function loadOrcamentoCusto() {
       const pc = p > 0 ? (l / p) * 100 : 0;
       const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
       return `<tr>
-        <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
+        <td class="font-bold text-slate-900 flex items-center justify-between gap-2">
+          <span>${escapeHtml(label)}</span>
+          <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment', '${escapeHtml(row.id || "")}')"
+            class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[10px] font-bold transition shrink-0">
+            + Incrementar
+          </button>
+        </td>
         <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
         <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
         <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
@@ -2347,3 +2353,38 @@ function openPontoModal() {
     },
   });
 }
+
+window.triggerOrcamentoCustoAction = function (action, category = "") {
+  const frame = document.getElementById("plOrcamentoCustoFrame");
+  if (!frame) return;
+  const id = projectId();
+  if (!frame.dataset.loaded && id) {
+    const centro = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades&embed=1`;
+    mountObraFrame("plOrcamentoCustoFrame", centro);
+  }
+  frame.scrollIntoView({ behavior: "smooth", block: "center" });
+  const sendMsg = () => {
+    try {
+      frame.contentWindow?.postMessage(
+        {
+          type: "orcamento-custo-action",
+          action,
+          category,
+        },
+        "*"
+      );
+    } catch {
+      // ignore
+    }
+  };
+  setTimeout(sendMsg, 120);
+};
+
+window.addEventListener("message", (event) => {
+  const data = event?.data;
+  if (!data || data.type !== "orcamento-custo-updated") return;
+  loadOrcamentoCusto();
+  if (typeof window.refreshProjectBudgetFromCusto === "function") {
+    window.refreshProjectBudgetFromCusto();
+  }
+});

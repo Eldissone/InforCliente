@@ -26,6 +26,9 @@ const {
   contactSnapshot,
 } = require("../services/projectRegistryService");
 const { computeProjectBudgetSummary } = require("../services/projectBudgetSummaryService");
+const { INVOICE_CATEGORY_META } = require("../services/invoiceScanService");
+const { inferCategoryKeyFromCostCenter } = require("../services/invoiceSupplierMatchService");
+const { needLineTotal, needRealizadoUnitPrice } = require("../services/needBudgetService");
 const path = require("path");
 const fs = require("fs");
 function ensureDir(dir) {
@@ -549,6 +552,81 @@ projectRoutes.get(
       }
     });
 
+    // Integrar Centros de Custo + Orçamento Geral (WorkNeed) + Pagamentos de Custo (CostPayment) por categoria
+    const [costCenters, workNeeds, costPayments] = await Promise.all([
+      prisma.costCenter.findMany({ where: { projectId: id } }),
+      prisma.workNeed.findMany({
+        where: { projectId: id, status: { not: "REJECTED" } },
+      }),
+      prisma.costPayment.findMany({
+        where: { projectId: id, status: { not: "CANCELADO" } },
+      }),
+    ]);
+
+    const ccById = new Map(costCenters.map((cc) => [cc.id, cc]));
+    const ccNeedsPrevisto = new Map();
+    const ccNeedsRealizado = new Map();
+    let totalCostBudgetPrevisto = 0;
+    let totalCostBudgetRealizado = 0;
+
+    for (const need of workNeeds) {
+      const prev = needLineTotal(need, "previsto");
+      const real =
+        needRealizadoUnitPrice(need) != null ? needLineTotal(need, "realizado") : 0;
+      ccNeedsPrevisto.set(need.costCenterId, (ccNeedsPrevisto.get(need.costCenterId) || 0) + prev);
+      ccNeedsRealizado.set(need.costCenterId, (ccNeedsRealizado.get(need.costCenterId) || 0) + real);
+    }
+
+    const cbsCostCenterBudgeted = {};
+    const cbsCostCenterRealized = {};
+
+    for (const cc of costCenters) {
+      const catKey = inferCategoryKeyFromCostCenter(cc);
+      const cbsCat =
+        INVOICE_CATEGORY_META[catKey]?.cbsCategory || "DESPESAS_OPERACIONAIS";
+      const ccManualBudget = Number(cc.budget || 0);
+      const ccPrevistoItems = ccNeedsPrevisto.get(cc.id) || 0;
+      const effectiveBudget = Math.max(ccManualBudget, ccPrevistoItems);
+      const effectiveRealized = ccNeedsRealizado.get(cc.id) || 0;
+
+      cbsCostCenterBudgeted[cbsCat] = (cbsCostCenterBudgeted[cbsCat] || 0) + effectiveBudget;
+      cbsCostCenterRealized[cbsCat] = (cbsCostCenterRealized[cbsCat] || 0) + effectiveRealized;
+      totalCostBudgetPrevisto += effectiveBudget;
+      totalCostBudgetRealizado += effectiveRealized;
+    }
+
+    let totalCostPaid = 0;
+    let totalCostCommitted = 0;
+    const cbsCostPaid = {};
+    for (const cp of costPayments) {
+      const cc = ccById.get(cp.costCenterId);
+      const catKey = inferCategoryKeyFromCostCenter(cc);
+      const cbsCat =
+        INVOICE_CATEGORY_META[catKey]?.cbsCategory || "DESPESAS_OPERACIONAIS";
+      const paidVal = Number(cp.paidAmount || 0);
+      if (cp.status === "CONFIRMADO") {
+        totalCostPaid += paidVal;
+        cbsCostPaid[cbsCat] = (cbsCostPaid[cbsCat] || 0) + paidVal;
+      } else if (cp.status === "PENDENTE") {
+        totalCostCommitted += paidVal;
+      }
+    }
+
+    for (const [cbsCat, amount] of Object.entries(cbsCostCenterBudgeted)) {
+      if (!cbsSummary[cbsCat]) cbsSummary[cbsCat] = { budgeted: 0, realized: 0 };
+      if (amount > cbsSummary[cbsCat].budgeted) {
+        cbsSummary[cbsCat].budgeted = Math.round((amount + Number.EPSILON) * 100) / 100;
+      }
+    }
+    for (const [cbsCat, amount] of Object.entries(cbsCostCenterRealized)) {
+      if (!cbsSummary[cbsCat]) cbsSummary[cbsCat] = { budgeted: 0, realized: 0 };
+      const paidInCat = cbsCostPaid[cbsCat] || 0;
+      const effectiveCatRealized = Math.max(amount, paidInCat);
+      if (effectiveCatRealized > cbsSummary[cbsCat].realized) {
+        cbsSummary[cbsCat].realized = Math.round((effectiveCatRealized + Number.EPSILON) * 100) / 100;
+      }
+    }
+
     // Aggregate Payments (confirmed)
     const paymentAgg = await prisma.projectPayment.aggregate({
       where: { projectId: id, status: "CONFIRMADO" },
@@ -571,6 +649,14 @@ projectRoutes.get(
         budgetCommitted: String(project.budgetCommitted || 0),
         budgetAvailable: String(project.budgetAvailable || 0),
         cbsSummary,
+        costBudgetSummary: {
+          totalPrevisto: Math.round((totalCostBudgetPrevisto + Number.EPSILON) * 100) / 100,
+          totalRealizado: Math.round((totalCostBudgetRealizado + Number.EPSILON) * 100) / 100,
+          totalPaid: Math.round((totalCostPaid + Number.EPSILON) * 100) / 100,
+          totalCommitted: Math.round((totalCostCommitted + Number.EPSILON) * 100) / 100,
+          costCenterCount: costCenters.length,
+          needCount: workNeeds.length,
+        },
         totalPago,
         divida,
         percentualPago,

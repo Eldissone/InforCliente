@@ -636,6 +636,10 @@ async function loadBudgetExecution() {
   const linesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
   const lines = linesRes.items || [];
   await renderOperationStatus(lines);
+  window.refreshProjectBudgetFromCusto = async () => {
+    await loadProject();
+    await loadBudgetExecution();
+  };
 }
 
 async function renderOperationStatus(lines) {
@@ -666,6 +670,21 @@ async function renderOperationStatus(lines) {
       cats[group].total += Number(l.total || 0);
     }
   });
+
+  // Integrar também o orçamento de custo por categoria (cbsSummary dos Centros de Custo / WorkNeed)
+  const cbs = projectState?.cbsSummary || {};
+  const cbsToGroup = {
+    MATERIAIS_INSUMOS: "MATERIALS",
+    SERVICOS_MAO_DE_OBRA: "LABOR",
+    GASTOS_PESSOAL: "PESSOAL",
+    DESPESAS_OPERACIONAIS: "OPERACIONAL",
+  };
+  for (const [cbsKey, grp] of Object.entries(cbsToGroup)) {
+    const bVal = Number(cbs[cbsKey]?.budgeted || 0);
+    const rVal = Number(cbs[cbsKey]?.realized || 0);
+    if (bVal > cats[grp].total) cats[grp].total = bVal;
+    if (rVal > cats[grp].consumed) cats[grp].consumed = rVal;
+  }
 
   // Somar todos os custos lançados por categoria
   (txData.items || []).forEach(t => {

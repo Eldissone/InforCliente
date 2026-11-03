@@ -1110,6 +1110,11 @@ export async function loadPresentedPrices({
         await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
         window.onQuoteApproved?.();
+    const scanBanner = document.getElementById("quoteAiScanBanner");
+    if (scanBanner) {
+      scanBanner.innerHTML = "";
+      scanBanner.classList.add("hidden");
+    }
 
       });
 
@@ -1142,6 +1147,11 @@ export async function loadPresentedPrices({
             await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
             window.onQuoteApproved?.();
+    const scanBanner = document.getElementById("quoteAiScanBanner");
+    if (scanBanner) {
+      scanBanner.innerHTML = "";
+      scanBanner.classList.add("hidden");
+    }
 
           } catch (err) {
 
@@ -1172,6 +1182,11 @@ export async function loadPresentedPrices({
         await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
         window.onQuoteApproved?.();
+    const scanBanner = document.getElementById("quoteAiScanBanner");
+    if (scanBanner) {
+      scanBanner.innerHTML = "";
+      scanBanner.classList.add("hidden");
+    }
 
       });
 
@@ -1606,6 +1621,11 @@ export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast
     if (keepModalOpen) {
       await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
       window.onQuoteApproved?.();
+    const scanBanner = document.getElementById("quoteAiScanBanner");
+    if (scanBanner) {
+      scanBanner.innerHTML = "";
+      scanBanner.classList.add("hidden");
+    }
     } else {
       document.getElementById("modalQuote")?.classList.remove("open");
       await onApproved?.();
@@ -1682,6 +1702,8 @@ export async function openQuotePricingModal({
   const proformaInput = document.getElementById("quoteProforma");
 
   if (proformaInput) proformaInput.value = "";
+
+  wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast });
 
   document.getElementById("quoteProductRow").style.display = "none";
 
@@ -1859,6 +1881,8 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
 
     if (proformaInput) proformaInput.value = "";
 
+  wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast });
+
     setQuoteNewPanelVisible(false);
 
 
@@ -1878,6 +1902,11 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
     });
 
     window.onQuoteApproved?.();
+    const scanBanner = document.getElementById("quoteAiScanBanner");
+    if (scanBanner) {
+      scanBanner.innerHTML = "";
+      scanBanner.classList.add("hidden");
+    }
 
   } catch (err) {
 
@@ -1888,3 +1917,168 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
 }
 
 
+
+function wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast }) {
+  const proformaInput = document.getElementById("quoteProforma");
+  const formQuote = document.getElementById("formQuote");
+  if (!proformaInput || !formQuote) return;
+
+  let container = document.getElementById("quoteAiScanContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "quoteAiScanContainer";
+    container.className = "mt-2 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs";
+    container.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-indigo-900 font-semibold">
+          <i class="fas fa-magic text-indigo-600"></i>
+          <span>Leitura Automática de Fatura / Proforma (IA)</span>
+        </div>
+        <button type="button" id="btnQuoteAiScan" class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 transition">
+          <i class="fas fa-bolt"></i> Ler Fatura Selecionada
+        </button>
+      </div>
+      <p class="mt-1 text-[11px] text-indigo-700/80">
+        Ao selecionar um PDF ou imagem da fatura/cotação acima, os dados do fornecedor, preço unitário e impostos são preenchidos automaticamente.
+      </p>
+      <div id="quoteAiScanBanner" class="hidden mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900"></div>
+    `;
+    const parentGroup = proformaInput.closest(".form-group") || proformaInput.parentElement;
+    if (parentGroup) {
+      parentGroup.appendChild(container);
+    } else {
+      formQuote.prepend(container);
+    }
+  }
+
+  const banner = document.getElementById("quoteAiScanBanner");
+  if (banner) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+  }
+
+  const runScan = async (file) => {
+    if (!file) {
+      showToast?.("Selecione primeiro o ficheiro PDF ou imagem da fatura/proforma.", "warning");
+      proformaInput.click();
+      return;
+    }
+
+    const btn = document.getElementById("btnQuoteAiScan");
+    const prevHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> A ler fatura com IA...`;
+    }
+    if (banner) {
+      banner.classList.remove("hidden");
+      banner.className = "mt-2 rounded border border-indigo-200 bg-white p-2 text-[11px] text-indigo-800";
+      banner.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> A extrair fornecedor, preço e impostos do documento...`;
+    }
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (need?.id) fd.append("needId", need.id);
+      fd.append("autoCreateSupplier", "true");
+
+      const res = await apiUpload("/quotes/scan-document", fd, "POST");
+      const fields = res?.fields || {};
+      const supplier = res?.supplier || null;
+      const mapping = (res?.needMappings || [])[0] || null;
+      const firstItem = (res?.items || [])[0] || null;
+
+      // 1) Selecionar ou adicionar fornecedor
+      const supplierSel = document.getElementById("quoteSupplier");
+      if (supplier && supplierSel) {
+        const existsInList = Array.isArray(suppliers) && suppliers.some((s) => s.id === supplier.id);
+        if (!existsInList && Array.isArray(suppliers)) {
+          suppliers.push(supplier);
+        }
+        let opt = supplierSel.querySelector(`option[value="${supplier.id}"]`);
+        if (!opt) {
+          opt = document.createElement("option");
+          opt.value = supplier.id;
+          opt.textContent = supplier.name;
+          supplierSel.appendChild(opt);
+        }
+        supplierSel.value = supplier.id;
+      }
+
+      // 2) Preço unitário e quantidade
+      const extractedUnitPrice =
+        mapping?.quotedPrice ??
+        firstItem?.unitPrice ??
+        fields.grossAmount ??
+        fields.netAmount ??
+        null;
+      const priceEl = document.getElementById("quotePrice");
+      if (priceEl && extractedUnitPrice != null && Number(extractedUnitPrice) > 0) {
+        priceEl.value = Number(extractedUnitPrice);
+      }
+
+      const qtyEl = document.getElementById("quoteQuantity");
+      if (qtyEl && (!qtyEl.value || Number(qtyEl.value) <= 0)) {
+        qtyEl.value = mapping?.quantity || need?.quantity || firstItem?.quantity || 1;
+      }
+
+      // 3) Moeda e impostos
+      const currEl = document.getElementById("quoteCurrency");
+      if (currEl && fields.currency && ["AOA", "USD", "EUR"].includes(fields.currency.toUpperCase())) {
+        currEl.value = fields.currency.toUpperCase();
+      }
+
+      const vatVal = mapping?.vatPercent ?? fields.vatPercent ?? supplier?.vatPercent;
+      const whVal = mapping?.withholdingPercent ?? fields.withholdingPercent ?? supplier?.withholdingPercent;
+      const discVal = mapping?.discountPercent ?? fields.discountPercent ?? supplier?.discountPercent;
+
+      const vatEl = document.getElementById("quoteVatPercent");
+      const whEl = document.getElementById("quoteWithholdingPercent");
+      const discEl = document.getElementById("quoteDiscountPercent");
+      if (vatEl && vatVal != null) vatEl.value = vatVal;
+      if (whEl && whVal != null) whEl.value = whVal;
+      if (discEl && discVal != null) discEl.value = discVal;
+
+      if (banner) {
+        banner.className = "mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900";
+        const supLabel = supplier
+          ? `<strong>${supplier.name}</strong>${res.supplierCreated ? " <em>(novo fornecedor registado)</em>" : ""}`
+          : fields.supplierName || "Não identificado";
+        const priceLabel =
+          extractedUnitPrice != null
+            ? `${Number(extractedUnitPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${fields.currency || "AOA"}`
+            : "—";
+        banner.innerHTML = `
+          <div class="font-semibold text-emerald-800 mb-0.5">
+            <i class="fas fa-check-circle mr-1"></i> Dados extraídos automaticamente da fatura:
+          </div>
+          <div>Fornecedor: ${supLabel}${fields.supplierNif ? ` · NIF: ${fields.supplierNif}` : ""}</div>
+          <div>Preço Unit.: <strong>${priceLabel}</strong>${vatVal != null ? ` · IVA: ${vatVal}%` : ""}${fields.docNumber ? ` · Doc: ${fields.docNumber}` : ""}</div>
+        `;
+      }
+
+      showToast?.("Fatura lida com sucesso! Confirme os valores e clique em Adicionar Preço.", "success");
+    } catch (err) {
+      if (banner) {
+        banner.className = "mt-2 rounded border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800";
+        banner.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${err.message || "Não foi possível ler a fatura."}`;
+      }
+      showToast?.("Erro na leitura da fatura: " + (err.message || "Tente novamente"), "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = prevHtml || `<i class="fas fa-bolt"></i> Ler Fatura Selecionada`;
+      }
+    }
+  };
+
+  const btnScan = document.getElementById("btnQuoteAiScan");
+  if (btnScan) {
+    btnScan.onclick = () => runScan(proformaInput.files?.[0]);
+  }
+  proformaInput.onchange = () => {
+    if (proformaInput.files?.[0]) {
+      runScan(proformaInput.files[0]);
+    }
+  };
+}

@@ -752,11 +752,28 @@
                     <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Custo</h2>
                     <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — crie centros, linhas e aprove o previsto nesta obra.</p>
                 </div>
-                <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-scan')"
+                        class="h-10 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">document_scanner</span>
+                        Ler Fatura / Cotação (IA)
+                    </button>
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment')"
+                        class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">add_chart</span>
+                        Incrementar por Categoria
+                    </button>
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-new-need')"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">add</span>
+                        Novo Item
+                    </button>
+                    <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
                     <span class="material-symbols-outlined text-base">open_in_new</span>
                     Página completa
                 </a>
             </div>
+                </div>
             <div id="plOrcamentoCustoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div class="px-6 py-5 border-b border-slate-50 flex items-center justify-between gap-3">
