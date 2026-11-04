@@ -1,4 +1,4 @@
-import { applyEmbedMode } from "/shared/embedMode.js";
+import { applyEmbedMode, isEmbeddedView } from "/shared/embedMode.js";
 import { apiRequest, getAssetUrl, apiUpload } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer, can } from "/shared/permissions.js";
 import { getSessionUser } from "/services/auth.js";
@@ -112,16 +112,29 @@ let currentSuppliers = [];
 
   // Se veio URL com ?projectId=xxx, selecionar automaticamente
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("embed") === "1") document.body.classList.add("is-embed");
+  const isEmbed = isEmbeddedView() || urlParams.get("embed") === "1" || document.documentElement.classList.contains("is-embed") || document.body.classList.contains("is-embed");
+  if (isEmbed) {
+    document.documentElement.classList.add("is-embed");
+    document.body.classList.add("is-embed");
+  }
   const urlPid = urlParams.get("projectId");
   const urlTab = urlParams.get("tab");
   const urlNeedId = urlParams.get("needId");
   if (urlPid) {
-    const p = allProjects.find((x) => x.id === urlPid);
+    let p = allProjects.find((x) => x.id === urlPid);
+    if (!p) {
+      try {
+        const direct = await apiRequest(`/projects/${encodeURIComponent(urlPid)}`);
+        p = direct?.project || direct || null;
+        if (p) allProjects.unshift(p);
+      } catch (err) {
+        console.warn("Não foi possível carregar projeto direto:", err);
+      }
+    }
     if (p) {
       await selectProject(p);
       if (urlTab) {
-        switchTab(urlTab);
+        switchTab(isEmbed && (urlTab === "dashboard" || urlTab === "cronograma" || urlTab === "pendentes" || urlTab === "historico") ? "necessidades" : urlTab);
         if (urlNeedId && urlTab === "cronograma") {
           window.__pendingOpenCronogramaNeedId = urlNeedId;
           window.__pendingOpenCronogramaQuoteId = urlParams.get("quoteId");
@@ -290,7 +303,13 @@ async function selectProject(project) {
 
   // Load data
   await Promise.all([loadCostCenters(), loadSummary()]);
-  switchTab("dashboard");
+  const isEmbed = isEmbeddedView() || document.documentElement.classList.contains("is-embed") || document.body.classList.contains("is-embed");
+  const urlTab = new URLSearchParams(window.location.search).get("tab");
+  if (isEmbed) {
+    switchTab(urlTab === "centros" ? "centros" : "necessidades");
+  } else {
+    switchTab(urlTab || "dashboard");
+  }
 }
 
 // ── Orçamento Geral: Previsto vs Realizado ─────────────────────────────────────
@@ -1242,6 +1261,10 @@ function renderNeedsTable(items) {
 
 // ── Tabs ───────────────────────────────────────────────────────────────────────
 function switchTab(tabName) {
+  const isEmbed = isEmbeddedView() || document.documentElement.classList.contains("is-embed") || document.body.classList.contains("is-embed");
+  if (isEmbed && (tabName === "dashboard" || tabName === "cronograma" || tabName === "pendentes" || tabName === "historico")) {
+    tabName = "necessidades";
+  }
   document.querySelectorAll(".cc-tab-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });

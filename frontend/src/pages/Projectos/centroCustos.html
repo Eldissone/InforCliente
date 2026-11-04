@@ -23,9 +23,10 @@
 
     <link href="/assets/styles/pages/cost-center.css" rel="stylesheet" />
     <script>
-      if (new URLSearchParams(location.search).get("embed") === "1") {
+      try {
+      if (new URLSearchParams(location.search).get("embed") === "1" || window.self !== window.top) {
         document.documentElement.classList.add("is-embed");
-      }
+      } } catch (_) {}
     </script>
 </head>
 

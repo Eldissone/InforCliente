@@ -330,6 +330,26 @@
             display: none;
         }
 
+        /* ── No modo embutido ("Registar orçamento desta obra"), manter apenas Custos de Obra e Orçamento Geral ── */
+        html.is-embed .cc-tab-btn[data-tab="dashboard"],
+        html.is-embed .cc-tab-btn[data-tab="cronograma"],
+        html.is-embed .cc-tab-btn[data-tab="pendentes"],
+        html.is-embed .cc-tab-btn[data-tab="historico"],
+        body.is-embed .cc-tab-btn[data-tab="dashboard"],
+        body.is-embed .cc-tab-btn[data-tab="cronograma"],
+        body.is-embed .cc-tab-btn[data-tab="pendentes"],
+        body.is-embed .cc-tab-btn[data-tab="historico"],
+        html.is-embed #tab-dashboard,
+        html.is-embed #tab-cronograma,
+        html.is-embed #tab-pendentes,
+        html.is-embed #tab-historico,
+        body.is-embed #tab-dashboard,
+        body.is-embed #tab-cronograma,
+        body.is-embed #tab-pendentes,
+        body.is-embed #tab-historico {
+            display: none !important;
+        }
+
         /* ── IMPORT MODAL ── */
         #importDropZone {
             border: 2px dashed #cbd5e1;
