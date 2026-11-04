@@ -3935,7 +3935,7 @@ function renderNeedsCategoryOverviewBar(categories = []) {
       </div>
       <div class="flex items-center gap-2">
         <button type="button" onclick="openCategoryIncrementModal('', true)"
-          class="h-7 px-2.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-bold hover:bg-indigo-100 transition inline-flex items-center gap-1">
+          class="h-7 px-2.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-100 transition inline-flex items-center gap-1">
           <span class="material-symbols-outlined text-sm">document_scanner</span>
           Incrementar / Cotar por Leitura de Fatura
         </button>
@@ -3950,12 +3950,12 @@ function renderNeedsCategoryOverviewBar(categories = []) {
           const catTarget = c.costCenterId || c.category;
           const cur = c.currency || "AOA";
           return `
-            <div class="rounded-xl border ${hasValue ? "border-slate-200 bg-white" : "border-dashed border-slate-200 bg-white/60"} p-2.5 flex flex-col justify-between gap-1.5 shadow-2xs hover:border-indigo-300 transition">
+            <div class="rounded-xl border ${hasValue ? "border-slate-200 bg-white" : "border-dashed border-slate-200 bg-white/60"} p-2.5 flex flex-col justify-between gap-1.5 shadow-2xs hover:border-slate-300 transition">
               <div class="flex items-center justify-between gap-1">
                 <span class="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${c.code}</span>
                 <button type="button" onclick="openCategoryIncrementModal('${catTarget}')"
                   title="Incrementar orçamento no centro de custo ${c.name}"
-                  class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-0.5">
+                  class="text-[10px] font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-0.5">
                   <span class="material-symbols-outlined text-xs">add_circle</span> Incrementar
                 </button>
               </div>
@@ -4240,7 +4240,7 @@ window.scanInvoiceForCategoryIncrement = async function (fileOverride = null) {
 
   if (statusEl) {
     statusEl.classList.remove("hidden");
-    statusEl.className = "mt-3 rounded-lg border border-indigo-200 bg-white px-3.5 py-2.5 text-xs text-indigo-800";
+    statusEl.className = "mt-3 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700";
     statusEl.innerHTML = `<span class="material-symbols-outlined text-sm align-middle animate-spin mr-1">progress_activity</span> A ler fatura com Inteligência Artificial e a associar itens aos Centros de Custo da obra...`;
   }
 

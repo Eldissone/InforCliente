@@ -400,7 +400,7 @@
                                 <!-- ── IMPORT EXCEL BUTTON ── -->
                                 <button id="btnInvoiceIncrementModal" type="button" onclick="openCategoryIncrementModal()"
                                     title="Ler Fatura/Proforma com IA ou Incrementar Orçamento por Categoria"
-                                    class="h-9 px-3.5 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20">
+                                    class="h-9 px-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50 transition-all shadow-xs">
                                     <span class="material-symbols-outlined text-base">document_scanner</span>
                                     Ler Fatura / + Categoria
                                 </button>
@@ -1744,7 +1744,7 @@
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
                 <div>
                     <div class="flex items-center gap-2">
-                        <span class="material-symbols-outlined text-indigo-600">document_scanner</span>
+                        <span class="material-symbols-outlined text-slate-800">document_scanner</span>
                         <h2 class="text-lg font-bold text-slate-900">Registar / Incrementar Orçamento de Custo por Categoria</h2>
                     </div>
                     <p class="text-xs text-slate-500 mt-0.5">
@@ -1760,31 +1760,31 @@
 
             <div class="flex flex-col gap-4 max-h-[78vh] overflow-y-auto pr-1 custom-scroll">
                 <!-- Bloco 1: Upload e Leitura de Fatura com IA -->
-                <div class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div class="flex-1">
-                            <label class="block text-xs font-extrabold uppercase tracking-wider text-indigo-900 mb-1">
+                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-800 mb-1">
                                 1. Leitura Automática de Fatura, Proforma ou Cotação (IA)
                             </label>
-                            <p class="text-xs text-indigo-700/80">
+                            <p class="text-xs text-slate-500">
                                 A IA extrai fornecedor, NIF, impostos, artigos, quantidades, preços unitários e classifica cada item na categoria correta da obra.
                             </p>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <input type="file" id="incInvoiceFile" accept=".pdf,image/*" class="hidden">
                             <button type="button" onclick="document.getElementById('incInvoiceFile').click()"
-                                class="h-10 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 transition shadow-sm">
+                                class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
                                 <span class="material-symbols-outlined text-base">upload_file</span>
                                 Selecionar Fatura / Cotação (PDF/Img)
                             </button>
                             <button type="button" id="btnRunInvoiceScanIncrement" onclick="scanInvoiceForCategoryIncrement()"
-                                class="h-10 px-3.5 rounded-xl bg-white border border-indigo-300 text-indigo-700 text-xs font-bold flex items-center gap-1.5 hover:bg-indigo-100 transition hidden">
+                                class="h-10 px-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-100 transition hidden">
                                 <span class="material-symbols-outlined text-base">auto_awesome</span>
                                 Reler com IA
                             </button>
                         </div>
                     </div>
-                    <div id="incInvoiceScanStatus" class="hidden mt-3 rounded-lg border border-indigo-200 bg-white px-3.5 py-2.5 text-xs text-slate-700"></div>
+                    <div id="incInvoiceScanStatus" class="hidden mt-3 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700"></div>
                 </div>
 
                 <!-- Bloco 2: Modo de Incremento e Dados do Fornecedor / Fatura -->

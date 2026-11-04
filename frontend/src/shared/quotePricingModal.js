@@ -1927,18 +1927,18 @@ function wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast }) {
   if (!container) {
     container = document.createElement("div");
     container.id = "quoteAiScanContainer";
-    container.className = "mt-2 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs";
+    container.className = "mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs";
     container.innerHTML = `
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-1.5 text-indigo-900 font-semibold">
-          <i class="fas fa-magic text-indigo-600"></i>
+        <div class="flex items-center gap-1.5 text-slate-800 font-bold">
+          <i class="fas fa-magic text-emerald-600"></i>
           <span>Leitura Automática de Fatura / Proforma (IA)</span>
         </div>
-        <button type="button" id="btnQuoteAiScan" class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700 transition">
+        <button type="button" id="btnQuoteAiScan" class="inline-flex items-center gap-1.5 rounded-lg bg-[#212e3e] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-slate-800 transition">
           <i class="fas fa-bolt"></i> Ler Fatura Selecionada
         </button>
       </div>
-      <p class="mt-1 text-[11px] text-indigo-700/80">
+      <p class="mt-1 text-[11px] text-slate-500">
         Ao selecionar um PDF ou imagem da fatura/cotação acima, os dados do fornecedor, preço unitário e impostos são preenchidos automaticamente.
       </p>
       <div id="quoteAiScanBanner" class="hidden mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900"></div>
@@ -1972,7 +1972,7 @@ function wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast }) {
     }
     if (banner) {
       banner.classList.remove("hidden");
-      banner.className = "mt-2 rounded border border-indigo-200 bg-white p-2 text-[11px] text-indigo-800";
+      banner.className = "mt-2 rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-700";
       banner.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> A extrair fornecedor, preço e impostos do documento...`;
     }
 

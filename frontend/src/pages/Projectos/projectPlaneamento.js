@@ -546,7 +546,7 @@ async function loadOrcamentoCusto() {
     }
 
     if (!summary.length) {
-      body.innerHTML = emptyRow(5, "account_balance", "Sem centros de custo nesta obra.");
+      body.innerHTML = emptyRow(6, "account_balance", "Sem centros de custo nesta obra.");
       return;
     }
 
@@ -557,21 +557,21 @@ async function loadOrcamentoCusto() {
       const pc = p > 0 ? (l / p) * 100 : 0;
       const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
       return `<tr>
-        <td class="font-bold text-slate-900 flex items-center justify-between gap-2">
-          <span>${escapeHtml(label)}</span>
-          <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment', '${escapeHtml(row.id || "")}')"
-            class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[10px] font-bold transition shrink-0">
-            + Incrementar
-          </button>
-        </td>
+        <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
         <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
         <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
         <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
         <td>${progressBar(pc)}</td>
+        <td class="text-right">
+          <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment', '${escapeHtml(row.id || "")}')"
+            class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
+            <span class="material-symbols-outlined text-xs">add</span> Incrementar
+          </button>
+        </td>
       </tr>`;
     }).join("");
   } catch (err) {
-    body.innerHTML = emptyRow(5, "error", err.message || "Não foi possível carregar o orçamento de custo.");
+    body.innerHTML = emptyRow(6, "error", err.message || "Não foi possível carregar o orçamento de custo.");
   }
 }
 

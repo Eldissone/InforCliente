@@ -754,14 +754,14 @@
                 </div>
                 <div class="flex items-center gap-2 flex-wrap justify-end">
                     <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-scan')"
-                        class="h-10 px-4 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-sm">
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-emerald-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-base">document_scanner</span>
-                        Ler Fatura / Cotação (IA)
+                        Ler Fatura / Cotação
                     </button>
                     <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment')"
-                        class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm">
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-base">add_chart</span>
-                        Incrementar por Categoria
+                        Incrementar Orçamento
                     </button>
                     <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-new-need')"
                         class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm">
@@ -791,10 +791,11 @@
                                 <th class="text-right">Em análise</th>
                                 <th class="text-right">Liquidado</th>
                                 <th class="text-left" style="min-width:140px">% Liquidado</th>
+                                <th class="text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="plOrcamentoCustoBody">
-                            <tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                            <tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
                         </tbody>
                     </table>
                 </div>
