@@ -60,10 +60,21 @@ async function setQuoteDeliveryPending(quoteId, tx = prisma) {
   );
 }
 
+async function revertQuoteDeliveryToPending(quoteId, tx = prisma) {
+  await tx.$executeRawUnsafe(
+    `UPDATE "NeedQuote"
+     SET "deliveryStatus" = 'PENDENTE'::"DeliveryStatus",
+         "receivedAt" = NULL
+     WHERE id = $1`,
+    quoteId
+  );
+}
+
 module.exports = {
   fetchDeliveryFieldsByQuoteIds,
   getQuoteDeliveryGuard,
   markQuoteReceived,
   setMovementSourceQuote,
   setQuoteDeliveryPending,
+  revertQuoteDeliveryToPending,
 };

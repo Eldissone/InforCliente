@@ -1954,6 +1954,7 @@ async function renderMovements(container) {
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Armazém</th>
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Entregou → Recebeu</th>
                             <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Qtd.</th>
+                            <th class="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right w-16">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-50" id="movementsTableBody">
@@ -2019,6 +2020,11 @@ async function renderMovements(container) {
                     <td class="px-6 py-5 text-right whitespace-nowrap">
                         <span class="text-lg font-black" style="color:${qtyColor}">${qtySign}${parseFloat(m.quantity)}</span>
                         <span class="text-[9px] font-black text-slate-400 uppercase block">${esc(m.product.unit)}</span>
+                    </td>
+                    <td class="px-6 py-5 text-right whitespace-nowrap">
+                        <button onclick="event.stopPropagation(); window.deleteStockMovement('${m.id}')" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-600 inline-flex items-center justify-center transition-all" title="Eliminar movimento e reverter stock">
+                            <span class="material-symbols-outlined text-sm">delete</span>
+                        </button>
                     </td>
                 </tr>
             `;
@@ -3313,11 +3319,17 @@ window.editStockBalance = async (id) => {
 };
 
 window.deleteStockBalance = async (id) => {
-    if (!confirm("Tem a certeza que deseja remover este produto deste armazém? Esta ação não pode ser desfeita e o saldo será zerado sem registo de saída.")) return;
+    if (!confirm("Tem a certeza que deseja remover este registo de produto deste armazém? Apenas produtos sem histórico de movimentações podem ser removidos diretamente.")) return;
     try {
         await apiRequest(`/stock/balance/${id}`, { method: "DELETE" });
+        if (typeof toast === "function") {
+            toast("Produto removido do armazém com sucesso", { type: "success" });
+        }
         loadTabContent(currentTab);
-    } catch (error) { alert("Erro ao remover: " + error.message); }
+    } catch (error) {
+        const msg = error.data?.message || error.message || "Erro ao remover produto do armazém.";
+        alert(msg);
+    }
 };
 
 // Cache de planos pendentes para uso no modal de disponibilização
@@ -4109,3 +4121,18 @@ function confirmDeliveryArrival(quote) {
     });
 }
 
+
+window.deleteStockMovement = async (moveId) => {
+    if (!confirm("Tem certeza que deseja ELIMINAR esta movimentação? O saldo no armazém e o histórico serão revertidos automaticamente.")) return;
+    try {
+        await apiRequest(`/stock/movements/${encodeURIComponent(moveId)}`, { method: "DELETE" });
+        if (typeof toast === "function") {
+            toast("Movimento eliminado e saldo revertido com sucesso", { type: "success" });
+        } else {
+            alert("Movimento eliminado e saldo revertido com sucesso");
+        }
+        loadTabContent(currentTab);
+    } catch (err) {
+        alert(err.message || "Erro ao eliminar movimento");
+    }
+};

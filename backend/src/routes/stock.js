@@ -23,6 +23,7 @@ const {
   getQuoteDeliveryGuard,
   markQuoteReceived,
   setMovementSourceQuote,
+  revertQuoteDeliveryToPending,
 } = require("../services/deliveryFieldBridge");
 const { repairConsumedPlanAllocations } = require("../services/planAllocationConsumption");
 
@@ -1102,11 +1103,12 @@ async function deleteMovementAndRevertStock(tx, req, movementId) {
     },
   });
   if (stock) {
+    const nextQty = Math.max(0, Number(stock.quantity) + delta);
     await tx.warehouseStock.update({
       where: { id: stock.id },
-      data: { quantity: { increment: delta } },
+      data: { quantity: nextQty },
     });
-  } else {
+  } else if (delta > 0) {
     await tx.warehouseStock.create({
       data: {
         productId: oldMovement.productId,
@@ -1116,6 +1118,39 @@ async function deleteMovementAndRevertStock(tx, req, movementId) {
       },
     });
   }
+
+  // Se for ferramenta/equipamento e for ENTRADA, remover itens disponíveis criados
+  if (oldMovement.type === "ENTRY" && isToolProduct(oldMovement.product)) {
+    const qtyToDelete = Math.floor(Number(oldMovement.quantity));
+    if (qtyToDelete > 0) {
+      const availableItems = await tx.item.findMany({
+        where: {
+          productId: oldMovement.productId,
+          warehouseId: oldMovement.warehouseId,
+          status: "AVAILABLE",
+        },
+        take: qtyToDelete,
+        select: { id: true },
+        orderBy: { createdAt: "desc" },
+      });
+      if (availableItems.length > 0) {
+        await tx.item.deleteMany({
+          where: { id: { in: availableItems.map((i) => i.id) } },
+        });
+      }
+    }
+  }
+
+  // Se tiver cotação vinculada, reverter estado de entrega para PENDENTE
+  if (oldMovement.sourceQuoteId) {
+    await revertQuoteDeliveryToPending(oldMovement.sourceQuoteId, tx);
+  }
+
+  // Desassociar fotos para evitar violação de Foreign Key constraint
+  await tx.projectPhoto.updateMany({
+    where: { movementId },
+    data: { movementId: null },
+  });
 
   await tx.stockMovement.delete({ where: { id: movementId } });
 
@@ -1463,10 +1498,10 @@ stockRoutes.post(
 );
 
 stockRoutes.delete(
-  "/:projectId/movements/:id",
+  ["/:projectId/movements/:id", "/movements/:id"],
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
-    const projectId = String(req.params.projectId);
+    const projectId = req.params.projectId ? String(req.params.projectId) : null;
     const movementId = String(req.params.id);
 
     if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -1475,7 +1510,10 @@ stockRoutes.delete(
       where: { id: movementId },
       include: { product: true },
     });
-    if (!movement || movement.projectId !== projectId) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (!movement) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (projectId && movement.projectId && movement.projectId !== projectId) {
+      return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    }
 
     await assertWarehouseAccessible(req, movement.warehouseId);
 
@@ -1484,13 +1522,18 @@ stockRoutes.delete(
         where: { id: movementId },
         include: { product: true },
       });
-      if (!fresh || fresh.projectId !== projectId) return null;
-      const processed = await isMovementProcessed(tx, fresh);
-      if (processed) {
-        const err = new Error("MOVEMENT_ALREADY_PROCESSED");
-        err.code = "MOVEMENT_ALREADY_PROCESSED";
-        throw err;
+      if (!fresh) return null;
+      if (projectId && fresh.projectId && fresh.projectId !== projectId) return null;
+
+      if (fresh.type !== "ENTRY" && fresh.type !== "TRANSFER_IN") {
+        const processed = await isMovementProcessed(tx, fresh);
+        if (processed) {
+          const err = new Error("MOVEMENT_ALREADY_PROCESSED");
+          err.code = "MOVEMENT_ALREADY_PROCESSED";
+          throw err;
+        }
       }
+
       await deleteMovementAndRevertStock(tx, req, movementId);
       return { ok: true };
     });
@@ -1628,6 +1671,20 @@ stockRoutes.delete(
     await assertWarehouseAccessible(req, oldStock.warehouseId);
     if (isClienteRole(req)) {
       return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    const activeMovementsCount = await prisma.stockMovement.count({
+      where: {
+        productId: oldStock.productId,
+        warehouseId: oldStock.warehouseId,
+      },
+    });
+
+    if (activeMovementsCount > 0) {
+      return res.status(400).json({
+        error: "HAS_ACTIVE_MOVEMENTS",
+        message: "Este produto possui movimentações no histórico deste armazém. Para anular uma entrada errada, elimine o movimento correspondente na aba Movimentações. Para retificar o saldo atual, utilize o botão de Editar Saldo.",
+      });
     }
 
     await prisma.warehouseStock.delete({ where: { id } });
