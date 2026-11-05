@@ -346,30 +346,22 @@ body[data-app-nav="off"] > nav.app-top-nav [data-nav-users] {
   display: none !important;
 }
 
-/* Com a barra lateral, a navegação superior flutua e os links passam para a sidebar. */
+/* Com a barra lateral flutuante, a navegação superior flutua no topo. */
 @media (min-width: 1024px) {
   .app-sidebar-layout > nav.app-top-nav {
-    top: 5px !important;
-    right: 1rem !important;
-    left: 1rem !important;
+    top: 1rem !important;
+    right: 1.25rem !important;
+    left: 1.25rem !important;
     width: auto !important;
-    min-height: 70px;
+    height: 4rem !important;
+    min-height: 4rem;
     border: 0 !important;
-    border-radius: 1rem;
-    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
-  }
-
-  .app-sidebar-layout > nav.app-top-nav > div:first-child {
-    max-width: none !important;
-    min-height: 2rem;
+    border-radius: 1.35rem !important;
+    background: #212e3e !important;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
   }
 
   .app-nav-desktop-source {
-    display: none !important;
-  }
-
-  .app-sidebar-layout > nav.app-top-nav [data-nav-users],
-  .app-sidebar-layout > nav.app-top-nav > div:first-child [data-logout] {
     display: none !important;
   }
 }
