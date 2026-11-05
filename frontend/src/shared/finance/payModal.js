@@ -3,6 +3,7 @@ import { openModal, toast, setButtonLoading } from "../ui.js";
 import { formatCurrency, toDateKey, dateInputToUtcNoonIso } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { num } from "./widgets.js";
+import { bindMoneyInputs, formatMoneyValue, readMoney } from "./moneyInput.js";
 
 /**
  * Pagar / confirmar o pagamento de uma conta a pagar (Contas › Pagamentos).
@@ -87,7 +88,7 @@ export function openPayModal(item, { onSaved } = {}) {
       <div class="finance-form-grid finance-form-grid--2">
         <div class="finance-field">
           <label class="finance-label" for="pay_amount">Valor pago <span class="inv-req">*</span></label>
-          <input id="pay_amount" class="finance-input" type="number" min="0" step="0.01" value="${due > 0 ? due : ""}" />
+          <input id="pay_amount" class="finance-input" type="text" inputmode="decimal" data-money value="${due > 0 ? esc(formatMoneyValue(due)) : ""}" />
           ${num(item.paidAmount) > 0 ? `<small class="pay-hint">Já pago antes: ${esc(money(item.paidAmount, cur))}</small>` : ""}
         </div>
         ${
@@ -109,12 +110,23 @@ export function openPayModal(item, { onSaved } = {}) {
         ${isCost || isOrder ? fileField("pay_invoice", "Fatura final", { hint: "Opcional — pode anexar mais tarde." }) : ""}
       </div>`,
     primaryLabel: "Confirmar pagamento",
+    onRender: ({ panel }) => bindMoneyInputs(panel),
     onPrimary: async ({ btn, close, panel }) => {
-      const amount = Number(panel.querySelector("#pay_amount").value);
+      const amount = readMoney(panel.querySelector("#pay_amount")) || 0;
       if (!amount || amount <= 0) return toast("Indique o valor pago.", { type: "error" });
       const proof = panel.querySelector("#pay_proof")?.files?.[0] || null;
       if (needsProof && !proof) return toast("Anexe o comprovativo do pagamento.", { type: "error" });
       if (amount > due + 0.005 && !window.confirm(`O valor é superior ao que está por pagar (${money(due, cur)}). Continuar?`)) return;
+      // Custo e encomenda ficam liquidados com este pagamento: o que faltar deixa
+      // de estar por pagar (desconto, acerto com o fornecedor…).
+      if (
+        (isCost || isOrder) &&
+        amount < due - 0.005 &&
+        !window.confirm(
+          `O valor é inferior ao que está por pagar (${money(due, cur)}). A conta fica liquidada por ${money(amount, cur)} e a diferença de ${money(due - amount, cur)} deixa de estar por pagar. Continuar?`
+        )
+      )
+        return;
 
       setButtonLoading(btn, true);
       try {

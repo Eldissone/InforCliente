@@ -13,9 +13,11 @@ import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf 
  *    tabela de quantidades; em último caso, a faturação);
  *  - desvio à data = realizado − esperado (positivo = gasta acima do que devia
  *    para o que já está feito). Obras sem avanço não entram no desvio à data;
- *  - custo final previsto = realizado + comprometido, nunca abaixo do orçamento;
+ *  - custo final previsto = realizado + o orçamento da parte por executar
+ *    (orçamento × (1 − avanço)), ou o comprometido se for maior; sem avanço,
+ *    realizado + comprometido, nunca abaixo do orçamento;
  *  - resultado = faturado − custo realizado, ambos sem IVA (o IVA dedutível
- *    dos pagamentos sai do custo).
+ *    dos pagamentos sai do custo). Custos, comprometido e orçamento: sem IVA.
  */
 
 /** Desvio (em % do esperado / do orçamento) a partir do qual se avisa. */
@@ -84,9 +86,9 @@ function renderShell() {
       <div class="ov-row ov-row--8-4">
         ${chartCardHtml({
           id: "ctrlChartMonthly",
-          title: "Faturado, recebido e custo",
-          subtitle: "Por mês · a linha é o resultado acumulado (faturado − custo)",
-          hint: "Custo pela data do custo, com IVA (como saiu do caixa). O resultado dos cartões de cima é sem IVA.",
+          title: "Receita, recebido e custo",
+          subtitle: "Por mês · a linha é o resultado acumulado (receita − custo)",
+          hint: "Receita = valor dos trabalhos faturados (o adiantamento só conta quando é amortizado). Custo sem IVA dedutível, pela data do pagamento. Recebido inclui garantias devolvidas.",
           height: 280,
           actionsHtml: `
             <div class="finance-seg finance-seg--sm" id="ctrlRange">
@@ -182,7 +184,11 @@ function renderKpis() {
   const tracked = items.filter(isTracked);
   const untracked = items.filter((p) => !isTracked(p) && num(p.realizedCost) > 0).length;
   const marginGap = num(t.marginBase) - num(t.plannedMarginPct);
-  const cashNet = num(t.received) - num(t.realizedCost);
+  // Caixa das obras calculado no servidor: recebido (faturas + garantias
+  // devolvidas) − pago às obras, sem o consumo de stock e com as compras para stock.
+  const cash = state.data.cashFlow || {};
+  const cashNet = num(cash.net);
+  const billedNet = num(t.received) + num(t.receivable);
   // Só as obras com avanço: realizado delas = esperado + desvio.
   const trackedRealized = num(t.expectedCost) + num(t.deviationToDate);
   const realizedVsExpected = num(t.expectedCost) > 0 ? (trackedRealized / num(t.expectedCost)) * 100 : 0;
@@ -223,13 +229,18 @@ function renderKpis() {
       icon: "flag",
       tone: num(t.eacDeviation) > 0 ? "amber" : "blue",
       value: compact(t.eac),
-      badge: num(t.eacDeviation) > 0 ? signedPct(t.eacDeviationPct) : "No orçamento",
+      badge: Math.abs(num(t.eacDeviation)) > 0.5 ? signedPct(t.eacDeviationPct) : "No orçamento",
       badgeTone: num(t.eacDeviation) > 0 ? "red" : "emerald",
       body: `
         <div class="ov-kpi-compare">
           <span>Orçamento de custo ${esc(compact(t.forecastCost))}</span>
         </div>`,
-      foot: num(t.eacDeviation) > 0 ? `${signed(t.eacDeviation)} acima do orçamento` : "Realizado + comprometido dentro do orçamento",
+      foot:
+        num(t.eacDeviation) > 0.5
+          ? `${signed(t.eacDeviation)} acima do orçamento`
+          : num(t.eacDeviation) < -0.5
+            ? `${compact(-num(t.eacDeviation))} abaixo do orçamento`
+            : "Fecha no orçamento",
     },
     {
       key: "cash",
@@ -239,9 +250,9 @@ function renderKpis() {
       value: signed(cashNet),
       body: `
         <div class="ov-kpi-compare">
-          <span>Recebido ${esc(compact(t.received))} − pago ${esc(compact(t.realizedCost))}</span>
+          <span>Recebido ${esc(compact(cash.inflow))} − pago ${esc(compact(cash.outflow))}</span>
         </div>`,
-      foot: num(t.revenue) > 0 ? `${pct((num(t.received) / num(t.revenue)) * 100)} do faturado recebido` : "Sem faturação",
+      foot: billedNet > 0 ? `${pct((num(t.received) / billedNet) * 100)} do líquido faturado recebido` : "Sem faturação",
     },
   ];
   document.getElementById("ctrlKpis").innerHTML = kpiCardsHtml(cards, "ctrl");
@@ -250,14 +261,14 @@ function renderKpis() {
 function renderStrip() {
   const t = state.data.totals || {};
   const executed = num(t.saleForecast) > 0 ? (num(t.revenue) / num(t.saleForecast)) * 100 : 0;
-  const consumed = num(t.forecastCost) > 0 ? ((num(t.realizedCost) + num(t.committedCost)) / num(t.forecastCost)) * 100 : 0;
+  const consumed = num(t.forecastCost) > 0 ? ((num(t.realizedCostBase) + num(t.committedCostBase)) / num(t.forecastCost)) * 100 : 0;
   document.getElementById("ctrlStrip").innerHTML = stripHtml([
     { label: "Venda prevista", icon: "request_quote", value: compact(t.saleForecast), sub: "Tabela de quantidades", title: money(t.saleForecast) },
     { label: "Faturado", icon: "receipt_long", value: compact(t.revenue), sub: `${pct(executed)} da venda`, href: "/Financeiro/faturacao", title: money(t.revenue) },
     { label: "Por faturar", icon: "pending_actions", value: compact(t.toInvoice), sub: "Venda ainda por faturar", subTone: num(t.toInvoice) > 0 ? "warn" : null, title: money(t.toInvoice) },
     { label: "Orçamento de custo", icon: "account_tree", value: compact(t.forecastCost), sub: "Centros de custo", title: money(t.forecastCost) },
-    { label: "Custo realizado", icon: "payments", value: compact(t.realizedCost), sub: `IVA dedutível ${compact(num(t.realizedCost) - num(t.realizedCostBase))}`, href: "/Financeiro/custos/realizados", title: money(t.realizedCost) },
-    { label: "Comprometido", icon: "hourglass_top", value: compact(t.committedCost), sub: `${pct(consumed)} do orçamento usado`, subTone: consumed > 100 ? "neg" : null, href: "/Financeiro/contas?tab=pagar", title: money(t.committedCost) },
+    { label: "Custo realizado", icon: "payments", value: compact(t.realizedCostBase), sub: `Sem IVA · pago c/ IVA ${compact(t.realizedCost)}`, href: "/Financeiro/custos/realizados", title: money(t.realizedCostBase) },
+    { label: "Comprometido", icon: "hourglass_top", value: compact(t.committedCostBase), sub: `Sem IVA · ${pct(consumed)} do orçamento usado`, subTone: consumed > 100 ? "neg" : null, href: "/Financeiro/contas?tab=pagar", title: `${money(t.committedCostBase)} sem IVA · ${money(t.committedCost)} a pagar com IVA` },
   ]);
 }
 
@@ -283,7 +294,7 @@ function buildAlerts() {
         icon: "flag",
         weight: num(p.eacDeviation),
         title: `${name}: vai ultrapassar o orçamento`,
-        text: `Realizado + comprometido ${compact(p.eac)} · ${signed(p.eacDeviation)} acima`,
+        text: `Custo final previsto ${compact(p.eac)} · ${signed(p.eacDeviation)} acima`,
         project: name,
       });
     }
@@ -372,11 +383,11 @@ function renderAlerts() {
 function renderMonthly() {
   const monthly = (state.data.charts?.monthly || []).slice(-state.months);
   const sum = (key) => monthly.reduce((a, m) => a + num(m[key]), 0);
-  const invoiced = sum("invoiced");
+  const invoiced = sum("revenue");
   const received = sum("received");
-  const cost = sum("cost");
+  const cost = sum("costBase");
   document.getElementById("ctrlFlowTotals").innerHTML = [
-    { label: "Faturado", value: invoiced, tone: "blue" },
+    { label: "Receita", value: invoiced, tone: "blue" },
     { label: "Recebido", value: received, tone: "emerald" },
     { label: "Custo", value: cost, tone: "red" },
     { label: "Resultado", value: invoiced - cost, tone: invoiced - cost >= 0 ? "emerald" : "red" },
@@ -395,14 +406,14 @@ function renderMonthly() {
     categories: monthly.map((m) => m.label),
     height: 280,
     series: [
-      { name: "Faturado", type: "column", data: monthly.map((m) => num(m.invoiced)), color: TONES.blue },
+      { name: "Receita", type: "column", data: monthly.map((m) => num(m.revenue)), color: TONES.blue },
       { name: "Recebido", type: "column", data: monthly.map((m) => num(m.received)), color: TONES.emerald },
-      { name: "Custo", type: "column", data: monthly.map((m) => num(m.cost)), color: TONES.red },
+      { name: "Custo (s/ IVA)", type: "column", data: monthly.map((m) => num(m.costBase)), color: TONES.red },
       {
         name: "Resultado acumulado",
         type: "line",
         data: monthly.map((m) => {
-          running += num(m.invoiced) - num(m.cost);
+          running += num(m.revenue) - num(m.costBase);
           return Math.round(running);
         }),
         color: TONES.violet,
@@ -470,8 +481,8 @@ function progressCell(p) {
 
 function realizedCell(p, cur) {
   const budget = num(p.forecastCost);
-  const realized = num(p.realizedCost);
-  const committed = num(p.committedCost);
+  const realized = num(p.realizedCostBase ?? p.realizedCost);
+  const committed = num(p.committedCostBase ?? p.committedCost);
   if (budget <= 0) {
     return realized > 0 ? `<span>${esc(money(realized, cur))}</span>` : `<span class="ov-muted">—</span>`;
   }
@@ -487,7 +498,7 @@ function realizedCell(p, cur) {
         ],
         { marker: isTracked(p) ? p.progressPct : null, title: "Marcador = avanço da obra (onde o realizado devia estar)" }
       )}
-      <small>${esc(pct(rPct))} de ${esc(compact(budget))}${committed > 0 ? ` · +${esc(compact(committed))} compr.` : ""}</small>
+      <small title="Pago com IVA ${esc(money(p.realizedCost, cur))}">${esc(pct(rPct))} de ${esc(compact(budget))}${committed > 0 ? ` · +${esc(compact(committed))} compr.` : ""}</small>
     </div>`;
 }
 
@@ -503,11 +514,14 @@ function deviationCell(p) {
 
 function eacCell(p, cur) {
   if (num(p.forecastCost) <= 0) return `<span class="ov-muted">Sem orçamento</span>`;
-  const over = num(p.eacDeviation) > 0;
+  const dev = num(p.eacDeviation);
+  const moved = Math.abs(dev) > 0.5;
   return `
     <div class="co-dev">
       <strong>${esc(money(p.eac, cur))}</strong>
-      <small class="ov-${over ? "neg" : "muted"}">${over ? `${esc(signed(p.eacDeviation))} · ${esc(signedPct(p.eacDeviationPct))}` : `de ${esc(compact(p.forecastCost))}`}</small>
+      <small class="ov-${moved ? costTone(dev) : "muted"}">${
+        moved ? `${esc(signed(dev))} · ${esc(signedPct(p.eacDeviationPct))} vs ${esc(compact(p.forecastCost))}` : `no orçamento (${esc(compact(p.forecastCost))})`
+      }</small>
     </div>`;
 }
 
@@ -594,9 +608,9 @@ function renderTable() {
       <thead><tr>
         <th>Obra</th>
         <th>Avanço</th>
-        <th style="text-align:right">Realizado</th>
+        <th style="text-align:right" title="Custo realizado sem IVA dedutível · barra âmbar = comprometido · marcador = avanço">Realizado (s/ IVA)</th>
         <th style="text-align:right" title="Realizado − orçamento × avanço">Desvio à data</th>
-        <th style="text-align:right" title="Realizado + comprometido, nunca abaixo do orçamento">Custo final previsto</th>
+        <th style="text-align:right" title="Realizado + orçamento da parte por executar (ou o comprometido, se for maior)">Custo final previsto</th>
         <th style="text-align:right">Faturado</th>
         <th style="text-align:right" title="Faturado − custo realizado, sem IVA">Resultado</th>
       </tr></thead>
@@ -604,7 +618,7 @@ function renderTable() {
       <tfoot><tr>
         <td>Totais (${rows.length} obras)</td>
         <td></td>
-        <td class="fin-num">${esc(compact(sum((p) => num(p.realizedCost))))}</td>
+        <td class="fin-num">${esc(compact(sum((p) => num(p.realizedCostBase ?? p.realizedCost))))}</td>
         <td class="fin-num ov-${costTone(tDev)}">${esc(signed(tDev))}</td>
         <td class="fin-num">${esc(compact(sum((p) => num(p.eac))))}</td>
         <td class="fin-num">${esc(compact(tRevenue))}</td>

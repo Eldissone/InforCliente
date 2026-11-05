@@ -1,4 +1,5 @@
 const { prisma } = require("../db");
+const { billedRevenue, invoiceOpenAmount } = require("./invoiceAmountsService");
 const { computeProjectBudgetSummary } = require("./projectBudgetSummaryService");
 
 /**
@@ -515,8 +516,11 @@ function computeProgress({ physicalPct, tasks, invoiced, saleBudget }) {
  * Desvio de custo à data e custo final previsto.
  *  - custo esperado à data = orçamento de custo × avanço;
  *  - desvio à data = realizado − esperado (positivo = gasta mais do que devia);
- *  - custo final previsto = realizado + comprometido, nunca abaixo do orçamento
- *    (o que falta executar ainda vai custar);
+ *  - custo final previsto = realizado + o que falta gastar. O que falta é o
+ *    orçamento da parte por executar (orçamento × (1 − avanço)), mas nunca
+ *    menos do que já está comprometido. Assim uma obra concluída fecha no
+ *    realizado e uma obra que gasta acima do avanço leva esse desvio até ao fim;
+ *    sem avanço conhecido: realizado + comprometido, nunca abaixo do orçamento;
  *  - desvio final = custo final previsto − orçamento.
  * Sem avanço conhecido (progressPct null) não há desvio à data: comparar com
  * zero faria parecer que todo o gasto é derrapagem.
@@ -528,7 +532,8 @@ function computeCostControl({ budget, realized, committed, progressPct }) {
   const tracked = progressPct !== null && progressPct !== undefined;
   const expectedToDate = tracked ? round2((b * toNumber(progressPct)) / 100) : null;
   const deviationToDate = tracked ? round2(r - expectedToDate) : null;
-  const eac = round2(Math.max(b, r + c));
+  const remainingBudget = tracked ? Math.max(b - expectedToDate, 0) : null;
+  const eac = tracked && b > 0 ? round2(r + Math.max(remainingBudget, c)) : round2(Math.max(b, r + c));
   return {
     expectedToDate,
     deviationToDate,
@@ -578,6 +583,9 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
         vatAmount: true,
         withholdingAmount: true,
         receivedAmount: true,
+        creditedAmount: true,
+        kind: true,
+        advanceDeductionAmount: true,
         dueDate: true,
         status: true,
       },
@@ -626,11 +634,12 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
     const costInputs = aggregateCosts(project.id, inputs);
     const costPlan = costBudgetByProject.get(project.id) || { budget: 0, committedMarket: 0, settled: 0 };
 
-    const invoiced = round2(projectInvoices.reduce((a, i) => a + toNumber(i.grossAmount), 0));
+    // Faturado = ilíquidos menos o adiantamento por amortizar (ainda não é receita).
+    const { invoiced, advanceOutstanding } = billedRevenue(projectInvoices);
     const received = round2(projectInvoices.reduce((a, i) => a + toNumber(i.receivedAmount), 0));
     const missing = round2(
       projectInvoices.reduce(
-        (a, i) => a + (toNumber(i.netAmount ?? i.grossAmount) - toNumber(i.receivedAmount)),
+        (a, i) => a + invoiceOpenAmount(i),
         0
       )
     );
@@ -696,6 +705,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
       control,
       revenue: {
         invoiced,
+        advanceOutstanding,
         received,
         missing,
         toInvoice: round2(Math.max(saleBudget - invoiced, 0)),
@@ -739,6 +749,7 @@ function emptyTotals() {
     received: 0,
     missing: 0,
     toInvoice: 0,
+    invoicedOnBudget: 0,
     executedPct: 0,
     realizedMargin: 0,
     realizedMarginPct: 0,
@@ -772,11 +783,13 @@ function sumTotals(items) {
     t.received += i.revenue.received;
     t.missing += i.revenue.missing;
     t.toInvoice += i.revenue.toInvoice;
+    // Execução só conta o faturado das obras com venda prevista (até ao previsto).
+    if (i.budget.sale > 0) t.invoicedOnBudget += Math.min(i.revenue.invoiced, i.budget.sale);
     t.realizedMargin += i.margin.realized;
   });
   Object.keys(t).forEach((k) => (t[k] = round2(t[k])));
   t.plannedMarginPct = safeDiv(t.plannedMargin, t.saleBudget);
-  t.executedPct = safeDiv(t.invoiced, t.saleBudget);
+  t.executedPct = safeDiv(t.invoicedOnBudget, t.saleBudget);
   t.realizedMarginPct = safeDiv(t.realizedMargin, t.invoiced);
   t.realizedMarginBasePct = safeDiv(t.realizedMarginBase, t.invoiced);
   return t;
@@ -929,6 +942,8 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       // Só os pagamentos ainda abertos têm valor por pagar (como no agregado por obra):
       // o que vai sair do caixa — líquido do documento (com IVA, sem retenção) ou da prestação.
       remaining: open ? round2(cashDueOf(p)) : 0,
+      // Por pagar sem o IVA dedutível (compara com o orçamento de custo).
+      remainingBase: open ? round2(costBaseOf(p, cashDueOf(p))) : 0,
       payable: open ? round2(cashDueOf(p)) : 0,
       dueDate: p.paymentInstallment?.dueDate || p.paymentDate,
       payStage: open ? "A_PAGAR" : null,
@@ -1149,6 +1164,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     e.payable = e.payable || 0;
     e.dueDate = e.dueDate || null;
     if (e.paidBase === undefined) e.paidBase = toNumber(e.paidAmount);
+    if (e.remainingBase === undefined) e.remainingBase = toNumber(e.remaining);
     e.payStage = e.payable > 0 ? e.payStage || "A_PAGAR" : null;
   });
 
@@ -1175,6 +1191,8 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     (acc, e) => {
       const paid = toNumber(e.paidAmount);
       acc.realized += paid;
+      // Sem o IVA dedutível: o custo que conta para a obra.
+      acc.realizedBase += toNumber(e.paidBase);
       acc.amount += toNumber(e.amount);
       if (e.confirmationStatus === "CONFIRMADO") acc.confirmed += paid;
       else acc.pending += paid;
@@ -1191,6 +1209,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     },
     {
       realized: 0,
+      realizedBase: 0,
       amount: 0,
       confirmed: 0,
       pending: 0,

@@ -55,6 +55,13 @@ const COMMITMENT_LINK = {
   FRETE: { href: "/Financeiro/centrodecompras", label: "Compras" },
 };
 
+/** Meio de pagamento guardado como código (pedidos extra) → texto. */
+const METHOD_LABEL = {
+  SOLICITACAO_TRANSFERENCIA: "Transferência bancária",
+  FUNDO_MANEIO: "Fundo de maneio",
+  TRANSFERENCIA_INTERNA_CARTAO: "Carregamento de cartão",
+};
+
 const LINKS = [
   { label: "Centro de Compras", href: "/Financeiro/centrodecompras", icon: "shopping_cart" },
   { label: "Novo pedido", href: "/Financeiro/novoPedido", icon: "playlist_add" },
@@ -194,7 +201,9 @@ function renderKpis() {
       value: money(week.outflow),
       badge: `${week.outflowCount || 0} conta${week.outflowCount === 1 ? "" : "s"}`,
       badgeTone: "amber",
-      body: `<p class="ov-kpi-compare">Entra de clientes: <strong class="ov-pos">${esc(compact(week.inflow))}</strong> (${week.inflowCount || 0} fatura${week.inflowCount === 1 ? "" : "s"}).</p>`,
+      body: `<p class="ov-kpi-compare">Entra de clientes: <strong class="ov-pos">${esc(compact(week.inflow))}</strong> (${week.inflowCount || 0} fatura${week.inflowCount === 1 ? "" : "s"})${
+        num(week.inBank) > 0 ? ` · ${esc(compact(week.inBank))} já no banco` : ""
+      }.</p>`,
     },
     {
       key: "balance",
@@ -202,7 +211,7 @@ function renderKpis() {
       icon: "account_balance",
       tone: afterWeek >= 0 ? "emerald" : "red",
       value: money(balance),
-      badge: coverage === null ? "sem saídas" : `cobre ${Math.round(Math.min(coverage, 999))}%`,
+      badge: coverage === null ? "sem saídas" : coverage >= 100 ? "cobre a semana" : `cobre ${Math.round(coverage)}%`,
       badgeTone: coverage === null || coverage >= 100 ? "emerald" : "red",
       body: `<p class="ov-kpi-compare">Depois da semana: <strong class="${afterWeek < 0 ? "ov-neg" : "ov-pos"}">${esc(compact(afterWeek))}</strong>${bal.estimated ? ` · <span class="ov-warn">saldo sem extrato</span>` : ""}</p>`,
     },
@@ -214,7 +223,7 @@ function renderKpis() {
       value: money(t.paid30),
       badge: `${(state.data?.paid || []).length} pagamento${(state.data?.paid || []).length === 1 ? "" : "s"}`,
       badgeTone: "emerald",
-      body: `<p class="ov-kpi-compare">Liquidações registadas com comprovativo.</p>`,
+      body: `<p class="ov-kpi-compare">Custos, pedidos extra e prestações de encomendas liquidados.</p>`,
     },
   ];
   document.getElementById("cpKpis").innerHTML = kpiCardsHtml(cards, "cp");
@@ -307,6 +316,7 @@ function renderPlan() {
     { label: "Vencido", value: compact(plan.rows[0].out), dot: TONES.red },
     { label: "Próximas 8 semanas", value: compact(plan.rows.slice(1).reduce((a, r) => a + r.out, 0)), dot: TONES.amber },
     { label: "Saldo mais baixo", value: compact(lowest), dot: lowest < 0 ? TONES.red : TONES.emerald },
+    ...(plan.noDate > 0 ? [{ label: "Sem data de vencimento", value: compact(plan.noDate), dot: TONES.slate }] : []),
   ]
     .map((t) => `<div class="ov-flow-total"><span><i style="background:${t.dot}"></i>${esc(t.label)}</span><strong>${esc(t.value)}</strong></div>`)
     .join("");
@@ -328,6 +338,11 @@ function renderPlan() {
     <div class="cp-week">
       <div class="cp-week-row"><span>Saldo bancário</span><strong>${esc(money(balance))}</strong></div>
       <div class="cp-week-row"><span>+ Recebimentos previstos</span><strong class="ov-pos">${esc(money(inflow))}</strong></div>
+      ${
+        num(state.data?.week?.inBank) > 0
+          ? `<p class="cp-week-note">${esc(compact(state.data.week.inBank))} destas faturas já entraram no banco (estão no saldo) — falta ligar o recebimento à fatura.</p>`
+          : ""
+      }
       <div class="cp-week-row"><span>− Pagamentos a fazer</span><strong class="ov-neg">${esc(money(out))}</strong></div>
       <div class="cp-week-row cp-week-row--total"><span>Fica em caixa</span><strong class="${afterWeek < 0 ? "ov-neg" : ""}">${esc(money(afterWeek))}</strong></div>
       ${
@@ -358,7 +373,7 @@ function renderPlan() {
               )
               .join("")}
           </ul>
-          ${week.length > 5 ? `<button type="button" class="fl-link cp-more" data-goto="overdue">Ver as ${week.length} contas</button>` : ""}`
+          ${week.length > 5 ? `<button type="button" class="fl-link cp-more" data-goto="pay">Ver as ${week.length} contas</button>` : ""}`
         : `<div class="ov-empty"><span class="material-symbols-outlined">event_available</span>Nada a pagar esta semana.</div>`
     }`;
   bindPay(document.getElementById("cpWeek"));
@@ -665,7 +680,7 @@ function renderPaid(wrap) {
           <td><div class="ov-project cr-desc"><span class="ov-project-name cr-desc-title">${esc(p.party || "—")}</span><span class="ov-project-meta">${esc(p.description || "")}</span></div></td>
           <td>${esc(p.project?.name || "—")}</td>
           <td><span class="finance-chip finance-chip--${SOURCE_TONE[p.source] || "slate"}">${esc(p.sourceLabel)}</span></td>
-          <td>${esc(p.method || "—")}${p.hasProof === false ? ` <span class="inv-due inv-due--soon" title="Sem comprovativo anexado">sem comprovativo</span>` : ""}</td>
+          <td>${esc(METHOD_LABEL[p.method] || p.method || "—")}${p.hasProof === false ? ` <span class="inv-due inv-due--soon" title="Sem comprovativo anexado">sem comprovativo</span>` : ""}</td>
           <td class="fin-num"><strong class="ov-pos">${esc(money(p.amount))}</strong></td>
         </tr>`
         )

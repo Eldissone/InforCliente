@@ -3,6 +3,14 @@ import { openModal, toast, setButtonLoading } from "../ui.js";
 import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { meterHtml } from "./widgets.js";
+import { bindMoneyInputs, readMoney, setMoney } from "./moneyInput.js";
+
+/** Escreve um valor num campo de dinheiro (vazio quando não há valor). */
+function putMoney(input, value) {
+  if (!input) return;
+  if (value === "" || value === null || value === undefined) input.value = "";
+  else setMoney(input, Number(value) || 0);
+}
 
 /**
  * «Associar e Confirmar Custo» — formulário partilhado.
@@ -27,6 +35,33 @@ export const COST_TYPES = {
   ADMINISTRATIVO: "Administrativo",
   OUTRO: "Outro",
 };
+
+// Categorias dos lançamentos de obra (ProjectTransaction), que também aparecem nas listas de custos.
+const TRANSACTION_TYPES = {
+  MATERIALS: "Material",
+  MATERIAIS_INSUMOS: "Material",
+  EQUIPMENT: "Equipamento",
+  LABOR: "Mão de obra",
+  SERVICOS_MAO_DE_OBRA: "Serviço",
+  GASTOS_PESSOAL: "Mão de obra",
+  DESPESAS_OPERACIONAIS: "Despesas operacionais",
+  INVESTIMENTOS: "Investimentos",
+  DEPRECIACAO: "Depreciação",
+  OUTRAS_DESPESAS: "Outro",
+  DEDUCOES: "Deduções",
+  IMPOSTOS: "Impostos e taxas",
+  OTHER: "Outro",
+};
+
+/** Nome legível do tipo de custo (pagamentos e lançamentos). */
+export function costTypeLabel(category) {
+  if (!category) return "Sem tipo";
+  return (
+    COST_TYPES[category] ||
+    TRANSACTION_TYPES[category] ||
+    String(category).replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
+  );
+}
 
 const MOVEMENT_LABEL = {
   PF: "Pagamento fornecedor",
@@ -137,7 +172,7 @@ function itemRowHtml(index, { multi, suppliers, roots }) {
         </div>
         <div class="finance-field">
           <label class="finance-label">Valor <span class="inv-req">*</span></label>
-          <input class="finance-input" data-f="amount" type="number" min="0" step="0.01" placeholder="0,00" />
+          <input class="finance-input" data-f="amount" data-money placeholder="0,00" />
         </div>
         <div class="finance-field">
           <label class="finance-label">Categoria</label>
@@ -257,7 +292,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
                 ? ""
                 : `<div class="finance-field">
                      <label class="finance-label" for="cf_paid">Valor pago</label>
-                     <input id="cf_paid" class="finance-input" type="number" min="0" step="0.01" placeholder="0,00" />
+                     <input id="cf_paid" class="finance-input" data-money placeholder="0,00" />
                      <div class="inv-quick">
                        <button type="button" data-paid="all">Tudo pago</button>
                        <button type="button" data-paid="none">Nada pago</button>
@@ -324,7 +359,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
         row,
         description: get("description").value.trim(),
         category: get("category").value,
-        amount: round2(get("amount").value),
+        amount: round2(readMoney(get("amount")) || 0),
         // Subcategoria escolhida; senão a própria categoria, se for selecionável.
         costCategoryId: sub ? Number(sub) : rootNode && rootNode.isSelectable !== false ? Number(root) : null,
         needsSub: Boolean(root) && !sub && hasSubs && rootNode?.isSelectable === false,
@@ -342,6 +377,8 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
       const $ = (id) => panel.querySelector(`#${id}`);
       const state = { multi: false, linkCostId: null, centersReq: 0, paidTouched: false };
       panel.__cf = state;
+      // Valores formatam-se enquanto se escreve (como no formulário da fatura).
+      bindMoneyInputs(panel);
 
       const total = () => round2(readItems(panel).reduce((a, i) => a + i.amount, 0));
 
@@ -358,6 +395,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
             : `<option value="">${rootSel.value ? "Sem subcategorias" : "Escolha a categoria"}</option>`;
           subSel.disabled = !subs.length;
         });
+        bindMoneyInputs(row);
         row.querySelectorAll("input").forEach((el) => el.addEventListener("input", refresh));
         row.querySelectorAll("select").forEach((el) => el.addEventListener("change", refresh));
         row.querySelector("[data-remove]").addEventListener("click", () => {
@@ -401,10 +439,10 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
             rootSel.dispatchEvent(new Event("change"));
             row.querySelector('[data-f="sub"]').value = prev.sub;
           }
-          if (prev.amount) row.querySelector('[data-f="amount"]').value = prev.amount;
+          if (prev.amount) putMoney(row.querySelector('[data-f="amount"]'), prev.amount);
         });
         // Um só item: o valor é o do movimento.
-        if (m && !state.multi) wrap.querySelector('[data-f="amount"]').value = round2(m.amount);
+        if (m && !state.multi) putMoney(wrap.querySelector('[data-f="amount"]'), round2(m.amount));
         $("cf_addItem").hidden = !state.multi;
         if ($("cf_splitLabel")) $("cf_splitLabel").textContent = state.multi ? "Um só item" : "Discriminar em vários itens";
       };
@@ -481,7 +519,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
         $("cf_itemsSection").classList.toggle("cf-disabled", linking);
 
         // O valor pago acompanha o total até o utilizador o alterar.
-        if (!m && !state.paidTouched) $("cf_paid").value = sum || "";
+        if (!m && !state.paidTouched) putMoney($("cf_paid"), sum || "");
 
         $("cfs_origin").textContent = linking ? "Ligar a pagamento existente" : m ? MOVEMENT_LABEL[m.movementType] || "Movimento" : "Lançamento manual";
         $("cfs_project").textContent = project ? project.name : "—";
@@ -502,7 +540,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
             Math.abs(diff) <= 0.01 ? "Os itens batem com o movimento." : diff > 0 ? `Falta discriminar ${money(diff, currency)}` : `Os itens excedem o movimento em ${money(-diff, currency)}`;
         }
 
-        const paid = m ? sum : Math.min(Number($("cf_paid").value) || 0, sum);
+        const paid = m ? sum : Math.min(readMoney($("cf_paid")) || 0, sum);
         const remaining = m || linking ? 0 : Math.max(round2(sum - paid), 0);
         $("cfs_remaining").textContent = money(remaining, currency);
         $("cfs_remaining").className = remaining > 0 ? "ov-warn" : "ov-pos";
@@ -542,7 +580,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
         panel.querySelectorAll("[data-paid]").forEach((btn) =>
           btn.addEventListener("click", () => {
             state.paidTouched = btn.dataset.paid !== "all";
-            $("cf_paid").value = btn.dataset.paid === "all" ? total() || "" : 0;
+            putMoney($("cf_paid"), btn.dataset.paid === "all" ? total() || "" : 0);
             refresh();
           })
         );
@@ -658,7 +696,7 @@ export function openCostForm({ movement = null, options, onSaved } = {}) {
       }
 
       const item = items[0];
-      const paidAmount = Math.min(round2($("cf_paid").value), item.amount);
+      const paidAmount = Math.min(round2(readMoney($("cf_paid")) || 0), item.amount);
       const method = $("cf_method").value || null;
       if (paidAmount > 0 && !method) {
         $("cf_method").focus();

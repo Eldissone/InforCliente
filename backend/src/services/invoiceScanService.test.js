@@ -125,6 +125,8 @@ test("readInvoiceDocument devolve os campos normalizados e sugere a obra", async
       "vatPercent",
       "withholdingAmount",
       "withholdingPercent",
+      "vatCativoAmount",
+      "vatCativoPercent",
       "carInsuranceAmount",
       "guaranteeAmount",
       "netAmount",

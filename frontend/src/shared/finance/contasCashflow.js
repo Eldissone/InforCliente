@@ -5,6 +5,7 @@ import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawComboChart, destroyCharts, TONES } from "./charts.js";
 import { kpiCardsHtml, meterHtml, num, skeletonHtml } from "./widgets.js";
+import { bindMoneyInputs, readMoney } from "./moneyInput.js";
 
 /**
  * Ecrã «Cash Flow» (Financeiro · Contas a Receber e a Pagar).
@@ -17,6 +18,8 @@ import { kpiCardsHtml, meterHtml, num, skeletonHtml } from "./widgets.js";
  *
  * Parte do saldo bancário atual (último extrato ou acerto de cada conta, mais
  * os movimentos seguintes); a linha é o saldo projetado no fim de cada período.
+ * O que o cliente já transferiu (entrada no extrato) mas ainda não foi ligado à
+ * fatura já está no saldo: a entrada prevista dessa fatura vem abatida.
  * Contas sem saldo registado usam o saldo do cartão e ficam assinaladas.
  */
 
@@ -245,7 +248,11 @@ function renderKpis(b) {
       value: money(inflow),
       badge: `${b.rows.reduce((a, r) => a + r.inItems.length, 0)} faturas`,
       badgeTone: "emerald",
-      body: `<p class="ov-kpi-compare">Faturas que vencem no horizonte${b.late.inflow ? ` · <span class="ov-warn">+ ${esc(compact(b.late.inflow))} em atraso</span>` : ""}.</p>`,
+      body: `<p class="ov-kpi-compare">Faturas que vencem no horizonte${b.late.inflow ? ` · <span class="ov-warn">+ ${esc(compact(b.late.inflow))} em atraso</span>` : ""}.</p>${
+        num(state.data?.bankReceipts?.matched) > 0
+          ? `<p class="ov-kpi-compare ov-muted">Sem ${esc(compact(state.data.bankReceipts.matched))} que já estão no banco por ligar à fatura.</p>`
+          : ""
+      }`,
     },
     {
       key: "out",
@@ -255,7 +262,11 @@ function renderKpis(b) {
       value: money(outflow),
       badge: `${b.rows.reduce((a, r) => a + r.outItems.length, 0)} contas`,
       badgeTone: "red",
-      body: `<p class="ov-kpi-compare">Contas a pagar${state.commitments ? " e compromissos" : ""}${b.late.outflow ? ` · <span class="ov-neg">− ${esc(compact(b.late.outflow))} em atraso</span>` : ""}.</p>`,
+      body: `<p class="ov-kpi-compare">Contas a pagar${state.commitments ? " e compromissos" : ""}${b.late.outflow ? ` · <span class="ov-neg">− ${esc(compact(b.late.outflow))} em atraso</span>` : ""}.</p>${
+        b.noDate.outflow > 0
+          ? `<p class="ov-kpi-compare ov-warn">+ ${esc(compact(b.noDate.outflow))} sem data de vencimento (fora do saldo projetado).</p>`
+          : ""
+      }`,
     },
     {
       key: "end",
@@ -291,7 +302,7 @@ function itemListHtml(items, kind) {
           </div>
           <div class="fl-items-value">
             <strong class="${kind === "in" ? "ov-pos" : "ov-neg"}">${kind === "in" ? "+" : "−"} ${esc(compact(i.amount))}</strong>
-            <small>${esc(i.date ? dateOnly(i.date) : "sem data")}</small>
+            <small>${esc(i.date ? dateOnly(i.date) : "sem data")}${num(i.inBank) > 0 ? ` · ${esc(compact(i.inBank))} já no banco` : ""}</small>
           </div>
         </li>`
         )
@@ -461,7 +472,7 @@ function openBalanceModal(cardId = "") {
         </div>
         <div class="finance-field">
           <label class="finance-label" for="bal_value">Saldo <span class="inv-req">*</span></label>
-          <input id="bal_value" class="finance-input" type="number" step="0.01" />
+          <input id="bal_value" class="finance-input" type="text" inputmode="decimal" data-money="signed" placeholder="0,00" />
         </div>
         <div class="finance-field">
           <label class="finance-label" for="bal_date">Data do saldo <span class="inv-req">*</span></label>
@@ -481,12 +492,13 @@ function openBalanceModal(cardId = "") {
           : "";
       };
       panel.querySelector("#bal_card").addEventListener("change", sync);
+      bindMoneyInputs(panel);
       sync();
     },
     onPrimary: async ({ btn, close, panel }) => {
-      const value = panel.querySelector("#bal_value").value;
+      const value = readMoney(panel.querySelector("#bal_value"));
       const date = panel.querySelector("#bal_date").value;
-      if (value === "" || !Number.isFinite(Number(value))) return toast("Indique o saldo.", { type: "error" });
+      if (value === null) return toast("Indique o saldo.", { type: "error" });
       if (!date) return toast("Indique a data do saldo.", { type: "error" });
       if (date > today) return toast("A data do saldo não pode ser futura.", { type: "error" });
       setButtonLoading(btn, true);
@@ -497,7 +509,7 @@ function openBalanceModal(cardId = "") {
           method: "POST",
           body: {
             cardId: panel.querySelector("#bal_card").value,
-            balance: Number(value),
+            balance: value,
             balanceDate: (end > new Date() ? new Date() : end).toISOString(),
             notes: panel.querySelector("#bal_notes").value.trim() || null,
           },

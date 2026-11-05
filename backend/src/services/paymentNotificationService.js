@@ -77,9 +77,19 @@ function buildPaymentLink(payment, event) {
   return `/Financeiro/financeiro.html?${params}`;
 }
 
+/**
+ * Valor a mostrar: o pago quando já há pagamento; senão o valor do documento
+ * (com IVA e retenção) ou, sem documento, o orçamentado. Os valores vêm como
+ * Decimal do Prisma — um Decimal 0 é «truthy», daí a conversão para número.
+ */
+function paymentAmount(payment) {
+  const n = (v) => Number(v) || 0;
+  return n(payment.paidAmount) || n(payment.netAmount) || n(payment.budgetedAmount);
+}
+
 function buildNotificationContent(payment, event) {
   const cur = payment.costCenter?.currency || "AOA";
-  const amount = formatMoney(payment.paidAmount || payment.budgetedAmount, cur);
+  const amount = formatMoney(paymentAmount(payment), cur);
   const projectName = payment.project?.name || "Obra";
   const supplier = payment.supplier || "—";
   const title = `${EVENT_LABELS[event] || "Pagamento"} · ${projectName}`;
@@ -115,7 +125,7 @@ async function notifyPaymentEvent(io, payment, event, actor = {}, options = {}) 
     projectId: payment.projectId,
     costCenterId: payment.costCenterId,
     comprovativoUrl: payment.comprovativoUrl || null,
-    amount: String(payment.paidAmount || payment.budgetedAmount),
+    amount: String(paymentAmount(payment)),
     supplier: payment.supplier || null,
     actorId: actor.sub || null,
     actorName: actor.name || null,

@@ -14,7 +14,8 @@ import { canPayHere, openPayModal } from "./payModal.js";
  *
  * Contas a pagar = dinheiro que ainda vai sair do caixa, pelo valor do
  * documento (com IVA e retenção) e pela data de vencimento da prestação:
- * pagamentos aprovados, pedidos extra aprovados e lançamentos por liquidar.
+ * pagamentos aprovados, pedidos extra aprovados (das obras e gerais — renda da
+ * sede, frota…) e lançamentos por liquidar.
  * Encomendas abertas, pedidos extra por aprovar e fretes por enviar ainda não
  * são dívida: aparecem à parte como compromissos.
  *
@@ -197,7 +198,7 @@ function renderKpis() {
       badgeTone: "blue",
       body: `
         ${meterHtml([{ value: overduePct, tone: "red" }, { value: 100 - overduePct, tone: "amber-soft" }])}
-        <p class="ov-kpi-compare">Valor dos documentos, com IVA e retenção.</p>`,
+        <p class="ov-kpi-compare">O que vai sair do banco: com IVA, já sem a retenção na fonte.</p>`,
     },
     {
       key: "overdue",

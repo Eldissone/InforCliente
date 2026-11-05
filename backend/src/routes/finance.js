@@ -22,6 +22,13 @@ const {
 } = require("../services/financeLedgerService");
 const { listPendingFinanceScheduling } = require("../services/needInstallmentSchedulingService");
 const { syncNeedPaymentStatus } = require("../services/needPaymentStatusService");
+const {
+  billedRevenue,
+  CATIVO_LEVELS,
+  computeInvoiceAmounts,
+  creditNoteAmounts,
+  invoiceOpenAmount,
+} = require("../services/invoiceAmountsService");
 
 const financeRoutes = express.Router();
 
@@ -103,15 +110,31 @@ function toDateKeyUtc(value) {
 
 /** Estado derivado da fatura (Em Aberto, Pago-Parcial, Pago-Total, Atrasado). */
 function invoiceDerivedStatus(invoice) {
+  if (invoice.kind === "NOTA_CREDITO") return "NOTA_CREDITO";
   const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
   const received = toNumber(invoice.receivedAmount);
-  if (net > 0 && received >= net - 0.005) return "PAGO_TOTAL";
+  const credited = toNumber(invoice.creditedAmount);
+  // Anulada por nota(s) de crédito sem nada recebido.
+  if (credited > 0 && received <= 0.005 && credited >= net - 0.005) return "ANULADA";
+  const open = invoiceOpenAmount(invoice);
+  if (net > 0 && open <= 0.005) return "PAGO_TOTAL";
   const due = invoiceDueOf(invoice);
   const overdue = due && due < startOfToday();
-  if (overdue && received < net - 0.005) return "ATRASADO";
+  if (overdue && open > 0.005) return "ATRASADO";
   if (received > 0) return "PAGO_PARCIAL";
   return "EM_ABERTO";
 }
+
+/** Estado guardado (enum) a partir do valor em aberto. */
+function invoiceStoredStatus(invoice) {
+  const received = toNumber(invoice.receivedAmount);
+  const credited = toNumber(invoice.creditedAmount);
+  if (invoice.kind === "NOTA_CREDITO") return "PAGO_TOTAL";
+  if (invoiceOpenAmount(invoice) <= 0.005 && (received > 0 || credited > 0)) return "PAGO_TOTAL";
+  return received > 0 ? "PAGO_PARCIAL" : "EM_ABERTO";
+}
+
+const INVOICE_KIND_LABELS = { FATURA: "Fatura", ADIANTAMENTO: "Fatura de adiantamento", NOTA_CREDITO: "Nota de crédito" };
 
 function mapInvoice(invoice) {
   const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
@@ -121,12 +144,34 @@ function mapInvoice(invoice) {
     grossAmount: toNumber(invoice.grossAmount),
     withholdingAmount: toNumber(invoice.withholdingAmount),
     vatAmount: toNumber(invoice.vatAmount),
+    vatCativoAmount: toNumber(invoice.vatCativoAmount),
+    vatCativoPercent:
+      invoice.vatCativoPercent === null || invoice.vatCativoPercent === undefined
+        ? invoice.flagVatCativo
+          ? 100
+          : 0
+        : toNumber(invoice.vatCativoPercent),
     carInsuranceAmount: toNumber(invoice.carInsuranceAmount),
     guaranteeAmount: toNumber(invoice.guaranteeAmount),
     netAmount: net,
+    kind: invoice.kind || "FATURA",
+    kindLabel: INVOICE_KIND_LABELS[invoice.kind || "FATURA"],
+    workValue: invoice.workValue === null || invoice.workValue === undefined ? toNumber(invoice.grossAmount) : toNumber(invoice.workValue),
+    advanceDeductionAmount: toNumber(invoice.advanceDeductionAmount),
+    creditedAmount: toNumber(invoice.creditedAmount),
+    creditNotes: Array.isArray(invoice.creditNotes)
+      ? invoice.creditNotes.map((n) => ({
+          id: n.id,
+          docNumber: n.docNumber,
+          docDate: n.docDate,
+          grossAmount: toNumber(n.grossAmount),
+          netAmount: toNumber(n.netAmount),
+          notes: n.notes || null,
+        }))
+      : undefined,
     workPercent: invoice.workPercent === null ? null : toNumber(invoice.workPercent),
     receivedAmount: received,
-    missingAmount: round2(net - received),
+    missingAmount: invoiceOpenAmount(invoice),
     status: invoiceDerivedStatus(invoice),
     // Sem cliente na fatura, vale o cliente da obra.
     client: invoice.client || invoice.project?.client || null,
@@ -167,18 +212,28 @@ async function loadProjectBillingBase(projectId, { excludeInvoiceId = null } = {
         totalValue: true,
       },
     }),
-    prisma.invoice.aggregate({
+    prisma.invoice.groupBy({
+      by: ["kind"],
       where: { projectId, ...(excludeInvoiceId ? { id: { not: excludeInvoiceId } } : {}) },
-      _sum: { grossAmount: true },
+      _sum: { grossAmount: true, advanceDeductionAmount: true },
     }),
   ]);
   const { saleBudget, saleBudgetSource } = computeSaleBudget(tasks, project);
-  const alreadyBilled = round2(billed._sum.grossAmount);
+  const byKind = Object.fromEntries(billed.map((g) => [g.kind, g._sum]));
+  // Adiantamentos faturados menos o já amortizado nas faturas de trabalhos.
+  const advancesBilled = round2(byKind.ADIANTAMENTO?.grossAmount);
+  const advancesAmortized = round2(byKind.FATURA?.advanceDeductionAmount);
+  const advanceOutstanding = round2(Math.max(advancesBilled - advancesAmortized, 0));
+  // Já faturado (receita): o adiantamento por amortizar ainda não conta.
+  const alreadyBilled = round2(billed.reduce((a, g) => a + toNumber(g._sum.grossAmount), 0) - advanceOutstanding);
   return {
     saleBudget,
     saleBudgetSource,
     alreadyBilled,
     toInvoice: round2(Math.max(saleBudget - alreadyBilled, 0)),
+    advancesBilled,
+    advancesAmortized,
+    advanceOutstanding,
   };
 }
 
@@ -219,13 +274,12 @@ async function syncInvoiceReceived(tx, invoiceId) {
     orderBy: { receivedDate: "desc" },
   });
   const received = round2(receipts.reduce((a, r) => a + toNumber(r.amount), 0));
-  const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
   return tx.invoice.update({
     where: { id: invoiceId },
     data: {
       receivedAmount: received,
       receivedDate: receipts[0]?.receivedDate || null,
-      status: received <= 0 ? "EM_ABERTO" : net > 0 && received >= net - 0.005 ? "PAGO_TOTAL" : "PAGO_PARCIAL",
+      status: invoiceStoredStatus({ ...invoice, receivedAmount: received }),
     },
     include: {
       project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
@@ -234,6 +288,40 @@ async function syncInvoiceReceived(tx, invoiceId) {
       receipts: { orderBy: { receivedDate: "desc" } },
     },
   });
+}
+
+/** Recalcula o líquido anulado por notas de crédito numa fatura (dentro da transação). */
+async function syncInvoiceCredited(tx, invoiceId) {
+  const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
+  const notes = await tx.invoice.findMany({
+    where: { creditedInvoiceId: invoiceId, kind: "NOTA_CREDITO" },
+    select: { netAmount: true },
+  });
+  const credited = round2(notes.reduce((a, n) => a - toNumber(n.netAmount), 0));
+  return tx.invoice.update({
+    where: { id: invoiceId },
+    data: { creditedAmount: credited, status: invoiceStoredStatus({ ...invoice, creditedAmount: credited }) },
+  });
+}
+
+/**
+ * Aviso quando o valor dos trabalhos da fatura difere do valor do auto de
+ * medição associado (não bloqueia: pode haver acertos combinados com o cliente).
+ */
+async function measurementValueWarning(measurementId, workValue) {
+  if (!measurementId) return null;
+  const report = await prisma.measurementReport.findUnique({
+    where: { id: measurementId },
+    select: { reportNumber: true, periodValTotal: true },
+  });
+  if (!report || report.periodValTotal === null) return null;
+  const amValue = round2(report.periodValTotal);
+  const diff = round2(toNumber(workValue) - amValue);
+  if (Math.abs(diff) <= 0.5) return null;
+  return {
+    code: "VALOR_DIFERE_DO_AM",
+    message: `O valor dos trabalhos (${round2(workValue)}) difere do auto ${report.reportNumber} (${amValue}) em ${diff > 0 ? "+" : ""}${diff}.`,
+  };
 }
 
 /** % Obra = V. Ilíquido da fatura sobre a venda prevista da obra. */
@@ -288,36 +376,21 @@ async function measurementError(measurementId, projectId, { excludeInvoiceId = n
   return null;
 }
 
-/**
- * Cálculo automático dos valores da fatura a partir do V. Ilíquido e da
- * configuração de faturação da obra. O IVA cativo não é somado ao líquido.
- */
-function computeInvoiceAmounts(raw, config = {}) {
-  const gross = round2(raw.grossAmount);
-  const isVatCativo = raw.flagVatCativo ?? Boolean(config.billingVatCativo);
-  const vatPercent = raw.vatPercent ?? toNumber(config.billingVatPercent);
-  const withholdingPercent = raw.withholdingPercent ?? toNumber(config.billingWithholdingPercent);
-  const carPercent = raw.carPercent ?? toNumber(config.billingCarPercent);
-  const guaranteePercent = raw.guaranteePercent ?? toNumber(config.billingGuaranteePercent);
-
-  const vatAmount = isVatCativo ? 0 : round2((gross * vatPercent) / 100);
-  const withholdingAmount = round2((gross * withholdingPercent) / 100);
-  const carInsuranceAmount = round2((gross * carPercent) / 100);
-  const guaranteeAmount = round2((gross * guaranteePercent) / 100);
-  const netAmount = round2(gross + vatAmount - withholdingAmount - carInsuranceAmount - guaranteeAmount);
-
-  return {
-    grossAmount: gross,
-    vatAmount,
-    withholdingAmount,
-    carInsuranceAmount,
-    guaranteeAmount,
-    netAmount,
-    flagVatCativo: isVatCativo,
-    flagRetention: withholdingPercent > 0,
-    flagCar: carPercent > 0,
-    flagGuarantee: guaranteePercent > 0,
-  };
+/** A amortização não pode passar o adiantamento por amortizar da obra nem o valor dos trabalhos. */
+async function advanceDeductionError(projectId, amounts, { excludeInvoiceId = null } = {}) {
+  const deduction = toNumber(amounts.advanceDeductionAmount);
+  if (deduction <= 0) return null;
+  if (amounts.grossAmount <= 0) {
+    return { error: "ADVANCE_EXCEEDS_WORK", message: "A amortização tem de ser menor do que o valor dos trabalhos." };
+  }
+  const base = await loadProjectBillingBase(projectId, { excludeInvoiceId });
+  if (deduction > base.advanceOutstanding + 0.005) {
+    return {
+      error: "ADVANCE_EXCEEDS_OUTSTANDING",
+      message: `A obra só tem ${base.advanceOutstanding} de adiantamento por amortizar.`,
+    };
+  }
+  return null;
 }
 
 /** Totais da faturação prevista (mantém as chaves antigas do ecrã). */
@@ -414,6 +487,8 @@ function buildBillingCharts(invoices, { months = 12 } = {}) {
   const keys = lastMonthKeys(months);
   const index = new Map(keys.map((k, i) => [k, i]));
   const billed = keys.map(() => 0);
+  // Líquido a receber (com IVA, sem deduções): a mesma base do recebido.
+  const billedNet = keys.map(() => 0);
   const received = keys.map(() => 0);
   const aging = emptyAging();
 
@@ -425,11 +500,11 @@ function buildBillingCharts(invoices, { months = 12 } = {}) {
 
   invoices.forEach((i) => {
     addTo(billed, i.grossAmount, i.docDate);
+    addTo(billedNet, i.netAmount ?? i.grossAmount, i.docDate);
     // Cada recebimento no mês em que entrou; sem histórico, na data registada.
     if (Array.isArray(i.receipts)) i.receipts.forEach((r) => addTo(received, r.amount, r.receivedDate));
     else addTo(received, i.receivedAmount, i.receivedDate || i.docDate);
-    const net = toNumber(i.netAmount ?? i.grossAmount);
-    const missing = round2(net - toNumber(i.receivedAmount));
+    const missing = invoiceOpenAmount(i);
     if (missing > 0) aging[agingColumn(invoiceDueOf(i))] = round2(aging[agingColumn(invoiceDueOf(i))] + missing);
   });
 
@@ -439,6 +514,7 @@ function buildBillingCharts(invoices, { months = 12 } = {}) {
       key,
       label: monthLabelOf(key),
       billed: billed[i],
+      billedNet: billedNet[i],
       received: received[i],
     })),
     receivablesAging: agingToSeries(aging),
@@ -467,7 +543,8 @@ function buildLedgerCharts(items, { months = 12 } = {}) {
       realized[i] = round2(realized[i] + paid);
       committed[i] = round2(committed[i] + remaining);
     }
-    if (remaining > 0) aging[agingColumn(entry.date)] = round2(aging[agingColumn(entry.date)] + remaining);
+    // Antiguidade pelo vencimento (sem data, p.ex. encomendas por aprovar: a vencer).
+    if (remaining > 0) aging[agingColumn(entry.dueDate)] = round2(aging[agingColumn(entry.dueDate)] + remaining);
 
     if (!sourceMap.has(entry.source)) {
       sourceMap.set(entry.source, {
@@ -497,6 +574,21 @@ function buildLedgerCharts(items, { months = 12 } = {}) {
   };
 }
 
+/** Entradas de dinheiro dos clientes: recebimentos de faturas e devoluções de garantias. */
+async function loadCashReceipts() {
+  const [receipts, releases] = await Promise.all([
+    prisma.invoiceReceipt.findMany({ select: { amount: true, receivedDate: true } }),
+    prisma.guaranteeRelease.findMany({ select: { amount: true, releasedDate: true } }),
+  ]);
+  return [...receipts, ...releases.map((r) => ({ amount: r.amount, receivedDate: r.releasedDate }))];
+}
+
+/** Garantias devolvidas pelos clientes: dinheiro que entrou (fora dos recebimentos de faturas). */
+async function loadGuaranteeReleasedTotal() {
+  const agg = await prisma.guaranteeRelease.aggregate({ _sum: { amount: true } });
+  return round2(agg._sum.amount);
+}
+
 /** Gráficos vazios da Faturação (sem obras no filtro). */
 function emptyBillingCharts() {
   const keys = lastMonthKeys(12);
@@ -519,17 +611,31 @@ async function buildFinanceCharts({ months = 12 } = {}) {
 
   const [invoices, receipts, ledger] = await Promise.all([
     prisma.invoice.findMany({
-      select: { docDate: true, dueDate: true, grossAmount: true, netAmount: true, receivedAmount: true },
+      select: {
+        kind: true,
+        docDate: true,
+        dueDate: true,
+        grossAmount: true,
+        advanceDeductionAmount: true,
+        netAmount: true,
+        receivedAmount: true,
+        creditedAmount: true,
+      },
     }),
-    prisma.invoiceReceipt.findMany({ select: { receivedDate: true, amount: true } }),
+    loadCashReceipts(),
     buildCostLedger(),
   ]);
 
   const invoiced = keys.map(() => 0);
+  // Receita do mês (como a receita faturada dos cartões): o valor dos trabalhos
+  // faturados (ilíquido + adiantamento amortizado), notas de crédito a negativo;
+  // a fatura de adiantamento não é receita — passa a sê-lo quando é amortizada.
+  const revenue = keys.map(() => 0);
   const received = keys.map(() => 0);
   const cost = keys.map(() => 0);
   const costBase = keys.map(() => 0);
   const committed = keys.map(() => 0);
+  const committedBase = keys.map(() => 0);
 
   const addTo = (list, value, date) => {
     const i = index.get(monthKeyOf(date));
@@ -537,7 +643,10 @@ async function buildFinanceCharts({ months = 12 } = {}) {
     list[i] = round2(list[i] + toNumber(value));
   };
 
-  invoices.forEach((i) => addTo(invoiced, i.grossAmount, i.docDate));
+  invoices.forEach((i) => {
+    addTo(invoiced, i.grossAmount, i.docDate);
+    if (i.kind !== "ADIANTAMENTO") addTo(revenue, toNumber(i.grossAmount) + toNumber(i.advanceDeductionAmount), i.docDate);
+  });
   receipts.forEach((r) => addTo(received, r.amount, r.receivedDate));
 
   const receivablesAging = emptyAging();
@@ -545,11 +654,11 @@ async function buildFinanceCharts({ months = 12 } = {}) {
   const statusMix = new Map();
 
   invoices.forEach((i) => {
-    const net = toNumber(i.netAmount ?? i.grossAmount);
-    const missing = round2(net - toNumber(i.receivedAmount));
+    const missing = invoiceOpenAmount(i);
     if (missing > 0) {
       receivablesAging[agingColumn(invoiceDueOf(i))] = round2(receivablesAging[agingColumn(invoiceDueOf(i))] + missing);
     }
+    if (i.kind === "NOTA_CREDITO") return;
     const status = invoiceDerivedStatus(i);
     if (!statusMix.has(status)) statusMix.set(status, { value: 0, count: 0 });
     const bucket = statusMix.get(status);
@@ -563,14 +672,26 @@ async function buildFinanceCharts({ months = 12 } = {}) {
     addTo(cost, paid, entry.paidAt || entry.date);
     addTo(costBase, entry.paidBase, entry.paidAt || entry.date);
     addTo(committed, toNumber(entry.remaining), entry.date);
+    addTo(committedBase, entry.remainingBase, entry.date);
 
     if (!sourceMap.has(entry.source)) {
-      sourceMap.set(entry.source, { source: entry.source, label: entry.sourceLabel, realized: 0, committed: 0, total: 0 });
+      sourceMap.set(entry.source, {
+        source: entry.source,
+        label: entry.sourceLabel,
+        realized: 0,
+        committed: 0,
+        total: 0,
+        realizedBase: 0,
+        committedBase: 0,
+      });
     }
     const bucket = sourceMap.get(entry.source);
     bucket.realized = round2(bucket.realized + paid);
     bucket.committed = round2(bucket.committed + toNumber(entry.remaining));
     bucket.total = round2(bucket.realized + bucket.committed);
+    // Sem o IVA dedutível (o que conta para o orçamento e para a margem).
+    bucket.realizedBase = round2(bucket.realizedBase + toNumber(entry.paidBase));
+    bucket.committedBase = round2(bucket.committedBase + toNumber(entry.remainingBase));
 
     // Contas a pagar pelo valor em caixa e pela data de vencimento.
     const payable = entry.payStage === "A_PAGAR" ? toNumber(entry.payable) : 0;
@@ -583,10 +704,12 @@ async function buildFinanceCharts({ months = 12 } = {}) {
     key,
     label: monthLabelOf(key),
     invoiced: invoiced[i],
+    revenue: revenue[i],
     received: received[i],
     cost: cost[i],
     costBase: costBase[i],
     committed: committed[i],
+    committedBase: committedBase[i],
   }));
 
   const sumAging = (buckets) => round2(Object.values(buckets).reduce((a, b) => a + b, 0));
@@ -731,6 +854,7 @@ financeRoutes.get(
         budgetTotal: true,
         clientId: true,
         billingVatCativo: true,
+        billingVatCativoPercent: true,
         billingVatPercent: true,
         billingWithholdingPercent: true,
         billingCarPercent: true,
@@ -751,6 +875,11 @@ financeRoutes.patch(
     const body = z
       .object({
         billingVatCativo: z.boolean().optional(),
+        billingVatCativoPercent: z
+          .number()
+          .refine((v) => CATIVO_LEVELS.includes(v), "A cativação do IVA é 0%, 50% ou 100%.")
+          .nullable()
+          .optional(),
         billingVatPercent: z.number().min(0).max(100).nullable().optional(),
         billingWithholdingPercent: z.number().min(0).max(100).nullable().optional(),
         billingCarPercent: z.number().min(0).max(100).nullable().optional(),
@@ -758,6 +887,10 @@ financeRoutes.patch(
       })
       .parse(req.body);
 
+    // A marca antiga acompanha a % (cativo = qualquer cativação).
+    if (body.billingVatCativoPercent !== undefined && body.billingVatCativo === undefined) {
+      body.billingVatCativo = Number(body.billingVatCativoPercent) > 0;
+    }
     const project = await prisma.project.update({
       where: { id: req.params.id },
       data: body,
@@ -809,6 +942,12 @@ financeRoutes.get(
         project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
+        receipts: {
+          select: { id: true, amount: true, receivedDate: true, method: true, notes: true, bankMovementId: true, createdBy: true },
+          orderBy: { receivedDate: "desc" },
+        },
+        creditNotes: { select: { id: true, docNumber: true, docDate: true, grossAmount: true, netAmount: true, notes: true }, orderBy: { docDate: "asc" } },
+        creditedInvoice: { select: { id: true, docNumber: true } },
       },
       orderBy: [{ docDate: "desc" }, { createdAt: "desc" }],
     });
@@ -820,17 +959,22 @@ financeRoutes.get(
       (acc, i) => {
         acc.gross += i.grossAmount;
         acc.vat += i.vatAmount;
+        acc.vatCativo += i.vatCativoAmount;
         acc.withholding += i.withholdingAmount;
         acc.car += i.carInsuranceAmount;
         acc.guarantee += i.guaranteeAmount;
         acc.net += i.netAmount;
         acc.received += i.receivedAmount;
         acc.missing += i.missingAmount;
+        acc.credited += i.kind === "NOTA_CREDITO" ? -i.netAmount : 0;
+        if (i.kind === "ADIANTAMENTO") acc.advances += i.grossAmount;
+        acc.amortized += i.advanceDeductionAmount;
         return acc;
       },
-      { gross: 0, vat: 0, withholding: 0, car: 0, guarantee: 0, net: 0, received: 0, missing: 0 }
+      { gross: 0, vat: 0, vatCativo: 0, withholding: 0, car: 0, guarantee: 0, net: 0, received: 0, missing: 0, credited: 0, advances: 0, amortized: 0 }
     );
     Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
+    totals.advanceOutstanding = round2(Math.max(totals.advances - totals.amortized, 0));
 
     return res.json({ items: filtered, totals });
   })
@@ -843,17 +987,25 @@ financeRoutes.post(
     const body = z
       .object({
         projectId: z.string().min(1),
+        kind: z.enum(["FATURA", "ADIANTAMENTO"]).optional(),
         clientId: z.string().nullable().optional(),
         measurementId: z.string().nullable().optional(),
         docNumber: z.string().nullable().optional(),
         docDate: z.string(),
         dueDate: z.string().nullable().optional(),
+        // Valor dos trabalhos (com amortização, o ilíquido = este valor − amortização).
         grossAmount: z.number().positive(),
+        advanceDeductionAmount: z.number().min(0).nullable().optional(),
         vatPercent: z.number().min(0).max(100).nullable().optional(),
         withholdingPercent: z.number().min(0).max(100).nullable().optional(),
         carPercent: z.number().min(0).max(100).nullable().optional(),
         guaranteePercent: z.number().min(0).max(100).nullable().optional(),
         flagVatCativo: z.boolean().optional(),
+        vatCativoPercent: z
+          .number()
+          .refine((v) => CATIVO_LEVELS.includes(v), "A cativação do IVA é 0%, 50% ou 100%.")
+          .nullable()
+          .optional(),
         receivedAmount: z.number().min(0).optional(),
         receivedDate: z.string().nullable().optional(),
         receivedMethod: z.string().nullable().optional(),
@@ -872,6 +1024,7 @@ financeRoutes.post(
         clientId: true,
         budgetTotal: true,
         billingVatCativo: true,
+        billingVatCativoPercent: true,
         billingVatPercent: true,
         billingWithholdingPercent: true,
         billingCarPercent: true,
@@ -894,10 +1047,20 @@ financeRoutes.post(
       });
     }
 
+    const kind = body.kind || "FATURA";
+    if (kind === "ADIANTAMENTO" && (body.measurementId || toNumber(body.advanceDeductionAmount) > 0)) {
+      return res.status(400).json({
+        error: "ADVANCE_INVALID",
+        message: "Uma fatura de adiantamento não tem auto de medição nem amortização.",
+      });
+    }
+
     const amError = await measurementError(body.measurementId, project.id);
     if (amError) return res.status(409).json({ error: "MEASUREMENT_NOT_BILLABLE", message: amError });
 
     const amounts = computeInvoiceAmounts(body, project);
+    const advanceError = await advanceDeductionError(project.id, amounts);
+    if (advanceError) return res.status(400).json(advanceError);
 
     const receivedAmount = round2(body.receivedAmount || 0);
     if (receivedAmount > amounts.netAmount + 0.005) {
@@ -915,12 +1078,17 @@ financeRoutes.post(
     const base = await loadProjectBillingBase(project.id);
     const workPercent = invoiceWorkPercent(amounts.grossAmount, base);
     const warnings = invoiceWarnings(amounts.grossAmount, base);
+    const amWarning = await measurementValueWarning(body.measurementId, amounts.workValue);
+    if (amWarning) warnings.push(amWarning);
 
     // Fatura e recebimento inicial gravam-se juntos (tudo ou nada).
     const invoice = await prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
       data: {
+        kind,
         projectId: body.projectId,
+        workValue: amounts.advanceDeductionAmount > 0 ? amounts.workValue : null,
+        advanceDeductionAmount: amounts.advanceDeductionAmount > 0 ? amounts.advanceDeductionAmount : null,
         clientId: body.clientId ?? project.clientId ?? null,
         measurementId: body.measurementId || null,
         docNumber,
@@ -928,6 +1096,8 @@ financeRoutes.post(
         dueDate,
         grossAmount: amounts.grossAmount,
         vatAmount: amounts.vatAmount,
+        vatCativoPercent: amounts.vatCativoPercent,
+        vatCativoAmount: amounts.vatCativoAmount,
         withholdingAmount: amounts.withholdingAmount,
         carInsuranceAmount: amounts.carInsuranceAmount,
         guaranteeAmount: amounts.guaranteeAmount,
@@ -1000,11 +1170,17 @@ financeRoutes.patch(
         docDate: z.string().optional(),
         dueDate: z.string().nullable().optional(),
         grossAmount: z.number().positive().optional(),
+        advanceDeductionAmount: z.number().min(0).nullable().optional(),
         vatPercent: z.number().min(0).max(100).nullable().optional(),
         withholdingPercent: z.number().min(0).max(100).nullable().optional(),
         carPercent: z.number().min(0).max(100).nullable().optional(),
         guaranteePercent: z.number().min(0).max(100).nullable().optional(),
         flagVatCativo: z.boolean().optional(),
+        vatCativoPercent: z
+          .number()
+          .refine((v) => CATIVO_LEVELS.includes(v), "A cativação do IVA é 0%, 50% ou 100%.")
+          .nullable()
+          .optional(),
         notes: z.string().nullable().optional(),
       })
       .parse(req.body);
@@ -1034,6 +1210,7 @@ financeRoutes.patch(
       select: {
         budgetTotal: true,
         billingVatCativo: true,
+        billingVatCativoPercent: true,
         billingVatPercent: true,
         billingWithholdingPercent: true,
         billingCarPercent: true,
@@ -1043,7 +1220,20 @@ financeRoutes.patch(
 
     // Só dados do documento (cliente, vencimento, nº, notas): não se recalculam
     // os valores, para não arredondar as deduções já guardadas.
-    const AMOUNT_KEYS = ["grossAmount", "vatPercent", "withholdingPercent", "carPercent", "guaranteePercent", "flagVatCativo", "docDate", "measurementId"];
+    const AMOUNT_KEYS = ["grossAmount", "advanceDeductionAmount", "vatPercent", "withholdingPercent", "carPercent", "guaranteePercent", "flagVatCativo", "vatCativoPercent", "docDate", "measurementId"];
+    const VALUE_KEYS = AMOUNT_KEYS.filter((k) => k !== "docDate");
+    if (existing.kind === "NOTA_CREDITO" && VALUE_KEYS.some((key) => body[key] !== undefined)) {
+      return res.status(400).json({
+        error: "CREDIT_NOTE_LOCKED",
+        message: "Os valores de uma nota de crédito não se alteram: elimine-a e emita outra.",
+      });
+    }
+    if (existing.kind === "ADIANTAMENTO" && (body.measurementId || toNumber(body.advanceDeductionAmount) > 0)) {
+      return res.status(400).json({
+        error: "ADVANCE_INVALID",
+        message: "Uma fatura de adiantamento não tem auto de medição nem amortização.",
+      });
+    }
     if (!AMOUNT_KEYS.some((key) => body[key] !== undefined)) {
       const invoice = await prisma.invoice.update({
         where: { id: req.params.id },
@@ -1068,14 +1258,36 @@ financeRoutes.patch(
     const derivedPct = (amount) =>
       existingBase > 0 ? round2((toNumber(amount) / existingBase) * 100) : null;
 
+    if (existing.kind === "NOTA_CREDITO") {
+      // Só a data mudou: os valores ficam.
+      const invoice = await prisma.invoice.update({
+        where: { id: req.params.id },
+        data: {
+          ...(body.docDate ? { docDate: parseOptionalDate(body.docDate) } : {}),
+          ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
+          ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        },
+      });
+      return res.json({ invoice: mapInvoice(invoice), warnings: [] });
+    }
+
+    const existingWork = existing.workValue === null ? existingBase : toNumber(existing.workValue);
     const amounts = computeInvoiceAmounts(
       {
-        grossAmount: body.grossAmount ?? existingBase,
+        workValue: body.grossAmount ?? existingWork,
+        advanceDeductionAmount: body.advanceDeductionAmount ?? existing.advanceDeductionAmount,
         vatPercent: body.vatPercent ?? derivedPct(existing.vatAmount),
         withholdingPercent: body.withholdingPercent ?? derivedPct(existing.withholdingAmount),
         carPercent: body.carPercent ?? derivedPct(existing.carInsuranceAmount),
         guaranteePercent: body.guaranteePercent ?? derivedPct(existing.guaranteeAmount),
-        flagVatCativo: body.flagVatCativo ?? existing.flagVatCativo,
+        // Cativação: a enviada, senão a já gravada na fatura (marca antiga = 100%).
+        vatCativoPercent:
+          body.vatCativoPercent ??
+          (body.flagVatCativo !== undefined
+            ? body.flagVatCativo
+              ? 100
+              : 0
+            : existing.vatCativoPercent ?? (existing.flagVatCativo ? 100 : 0)),
       },
       project || {}
     );
@@ -1087,17 +1299,40 @@ financeRoutes.patch(
       if (amError) return res.status(409).json({ error: "MEASUREMENT_NOT_BILLABLE", message: amError });
     }
 
-    // O líquido não pode ficar abaixo do que o cliente já pagou.
-    if (amounts.netAmount + 0.005 < toNumber(existing.receivedAmount)) {
+    const advanceError = await advanceDeductionError(existing.projectId, amounts, { excludeInvoiceId: existing.id });
+    if (advanceError) return res.status(400).json(advanceError);
+
+    // O líquido não pode ficar abaixo do que já foi recebido ou anulado por notas de crédito.
+    if (amounts.netAmount + 0.005 < toNumber(existing.receivedAmount) + toNumber(existing.creditedAmount)) {
       return res.status(400).json({
         error: "NET_BELOW_RECEIVED",
-        message: "O novo valor líquido fica abaixo do que já foi recebido do cliente.",
+        message: "O novo valor líquido fica abaixo do que já foi recebido do cliente (ou anulado por nota de crédito).",
       });
+    }
+
+    // A fatura não pode passar a ter data posterior a um recebimento já registado.
+    if (body.docDate) {
+      const firstReceipt = await prisma.invoiceReceipt.findFirst({
+        where: { invoiceId: existing.id },
+        orderBy: { receivedDate: "asc" },
+        select: { receivedDate: true },
+      });
+      if (firstReceipt && toDateKeyUtc(firstReceipt.receivedDate) < toDateKeyUtc(parseOptionalDate(body.docDate))) {
+        return res.status(400).json({
+          error: "DOC_AFTER_RECEIPT",
+          message: `Já há um recebimento a ${toDateKeyUtc(firstReceipt.receivedDate)}: a data da fatura não pode ser posterior.`,
+        });
+      }
     }
 
     const base = await loadProjectBillingBase(existing.projectId, { excludeInvoiceId: existing.id });
     const workPercent = invoiceWorkPercent(amounts.grossAmount, base);
     const warnings = invoiceWarnings(amounts.grossAmount, base);
+    const amWarning = await measurementValueWarning(
+      body.measurementId !== undefined ? body.measurementId : existing.measurementId,
+      amounts.workValue
+    );
+    if (amWarning) warnings.push(amWarning);
 
     const invoice = await prisma.invoice.update({
       where: { id: req.params.id },
@@ -1109,12 +1344,18 @@ financeRoutes.patch(
         ...(body.dueDate !== undefined ? { dueDate: parseOptionalDate(body.dueDate) } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         grossAmount: amounts.grossAmount,
+        workValue: amounts.advanceDeductionAmount > 0 ? amounts.workValue : null,
+        advanceDeductionAmount: amounts.advanceDeductionAmount > 0 ? amounts.advanceDeductionAmount : null,
         vatAmount: amounts.vatAmount,
+        vatCativoPercent: amounts.vatCativoPercent,
+        vatCativoAmount: amounts.vatCativoAmount,
         withholdingAmount: amounts.withholdingAmount,
         carInsuranceAmount: amounts.carInsuranceAmount,
         guaranteeAmount: amounts.guaranteeAmount,
         netAmount: amounts.netAmount,
         workPercent,
+        // Estado guardado acompanha o novo líquido.
+        status: invoiceStoredStatus({ ...existing, netAmount: amounts.netAmount }),
         flagVatCativo: amounts.flagVatCativo,
         flagRetention: amounts.flagRetention,
         flagCar: amounts.flagCar,
@@ -1136,7 +1377,13 @@ financeRoutes.delete(
   asyncHandler(async (req, res) => {
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
-      select: { id: true, documentPath: true, _count: { select: { receipts: true } } },
+      select: {
+        id: true,
+        kind: true,
+        creditedInvoiceId: true,
+        documentPath: true,
+        _count: { select: { receipts: true, creditNotes: true } },
+      },
     });
     if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
     if (invoice._count.receipts > 0) {
@@ -1145,7 +1392,19 @@ financeRoutes.delete(
         message: "Esta fatura tem recebimentos registados. Anule primeiro os recebimentos.",
       });
     }
-    await prisma.invoice.delete({ where: { id: invoice.id } });
+    if (invoice._count.creditNotes > 0) {
+      return res.status(409).json({
+        error: "INVOICE_HAS_CREDIT_NOTES",
+        message: "Esta fatura tem notas de crédito. Elimine primeiro as notas de crédito.",
+      });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice.delete({ where: { id: invoice.id } });
+      // Eliminar uma nota de crédito devolve o valor à fatura corrigida.
+      if (invoice.kind === "NOTA_CREDITO" && invoice.creditedInvoiceId) {
+        await syncInvoiceCredited(tx, invoice.creditedInvoiceId);
+      }
+    });
     if (invoice.documentPath) await deleteStoredFile(invoice.documentPath).catch(() => null);
     return res.json({ ok: true });
   })
@@ -1176,9 +1435,11 @@ financeRoutes.post(
     const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
     if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
 
+    if (invoice.kind === "NOTA_CREDITO") {
+      return res.status(400).json({ error: "CREDIT_NOTE_NO_RECEIPTS", message: "Uma nota de crédito não tem recebimentos." });
+    }
     const amount = round2(body.amount);
-    const net = toNumber(invoice.netAmount ?? invoice.grossAmount);
-    const missing = round2(net - toNumber(invoice.receivedAmount));
+    const missing = invoiceOpenAmount(invoice);
     if (amount > missing + 0.005) {
       return res.status(400).json({
         error: "RECEIPT_EXCEEDS_MISSING",
@@ -1230,6 +1491,143 @@ financeRoutes.post(
   })
 );
 
+/**
+ * Entradas do extrato (recebimentos de clientes) que ainda têm valor por ligar a
+ * faturas — para escolher o movimento bancário ao registar o recebimento.
+ */
+financeRoutes.get(
+  "/invoices/:id/movement-candidates",
+  view,
+  asyncHandler(async (req, res) => {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, projectId: true, docDate: true, kind: true, netAmount: true, grossAmount: true, receivedAmount: true, creditedAmount: true },
+    });
+    if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
+    const open = invoiceOpenAmount(invoice);
+    const rows = await prisma.bankMovement.findMany({
+      where: {
+        direction: "ENTRADA",
+        movementType: "RECEBIMENTO_CLIENTE",
+        movementDate: { gte: invoice.docDate },
+      },
+      include: {
+        card: { select: { id: true, label: true, bank: true, lastDigits: true } },
+        statement: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
+        receipts: { select: { amount: true } },
+      },
+      orderBy: { movementDate: "desc" },
+      take: 300,
+    });
+    const items = rows
+      .map((m) => {
+        const free = round2(toNumber(m.amount) - m.receipts.reduce((a, r) => a + toNumber(r.amount), 0));
+        return {
+          id: m.id,
+          movementDate: m.movementDate,
+          amount: toNumber(m.amount),
+          free,
+          description: m.description || m.docNumber || null,
+          account: m.card ? [m.card.bank, m.card.label, m.card.lastDigits ? `•••${m.card.lastDigits}` : null].filter(Boolean).join(" · ") : m.statement?.name || null,
+          project: m.project,
+          sameProject: m.projectId === invoice.projectId,
+        };
+      })
+      .filter((m) => m.free > 0.005)
+      // Primeiro os da obra e os de valor mais próximo do que falta receber.
+      .sort((a, b) => Number(b.sameProject) - Number(a.sameProject) || Math.abs(a.free - open) - Math.abs(b.free - open))
+      .slice(0, 40);
+    return res.json({ items, open });
+  })
+);
+
+/**
+ * Nota de crédito sobre uma fatura: anula (total ou parcialmente) o ilíquido,
+ * com as mesmas percentagens da fatura. Valores gravados a negativo.
+ */
+financeRoutes.post(
+  "/invoices/:id/credit-notes",
+  approve,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        docNumber: z.string().trim().min(1, "Indique o número da nota de crédito."),
+        docDate: z.string(),
+        grossAmount: z.number().positive(),
+        notes: z.string().trim().min(3, "Indique o motivo da nota de crédito."),
+      })
+      .parse(req.body);
+
+    const original = await prisma.invoice.findUnique({
+      where: { id: req.params.id },
+      include: { creditNotes: { select: { grossAmount: true } } },
+    });
+    if (!original) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
+    if (original.kind === "NOTA_CREDITO") {
+      return res.status(400).json({ error: "CREDIT_NOTE_ON_CREDIT_NOTE", message: "Não se emite uma nota de crédito sobre outra." });
+    }
+
+    const docDate = parseOptionalDate(body.docDate);
+    const dateError = invoiceDatesError(docDate, null);
+    if (dateError) return res.status(dateError.status).json(dateError.body);
+    if (toDateKeyUtc(docDate) < toDateKeyUtc(original.docDate)) {
+      return res.status(400).json({ error: "CREDIT_BEFORE_INVOICE", message: "A nota de crédito não pode ser anterior à fatura." });
+    }
+
+    const alreadyCredited = round2(original.creditNotes.reduce((a, n) => a - toNumber(n.grossAmount), 0));
+    const creditable = round2(toNumber(original.grossAmount) - alreadyCredited);
+    const gross = round2(body.grossAmount);
+    if (gross > creditable + 0.005) {
+      return res.status(400).json({
+        error: "CREDIT_EXCEEDS_INVOICE",
+        message: `Só há ${creditable} de ilíquido por anular nesta fatura.`,
+      });
+    }
+
+    const duplicate = await duplicateInvoiceNumber(body.docNumber);
+    if (duplicate) {
+      return res.status(409).json({ error: "DUPLICATE_DOC_NUMBER", message: `Já existe o documento ${duplicate.docNumber}.` });
+    }
+
+    const amounts = creditNoteAmounts(original, gross);
+    const base = await loadProjectBillingBase(original.projectId);
+    const result = await prisma.$transaction(async (tx) => {
+      const note = await tx.invoice.create({
+        data: {
+          kind: "NOTA_CREDITO",
+          creditedInvoiceId: original.id,
+          projectId: original.projectId,
+          clientId: original.clientId,
+          docNumber: body.docNumber,
+          docDate,
+          grossAmount: amounts.grossAmount,
+          vatAmount: amounts.vatAmount,
+          vatCativoPercent: original.vatCativoPercent,
+          vatCativoAmount: amounts.vatCativoAmount,
+          withholdingAmount: amounts.withholdingAmount,
+          carInsuranceAmount: amounts.carInsuranceAmount,
+          guaranteeAmount: amounts.guaranteeAmount,
+          netAmount: amounts.netAmount,
+          workPercent: invoiceWorkPercent(amounts.grossAmount, base),
+          flagVatCativo: original.flagVatCativo,
+          flagRetention: original.flagRetention,
+          flagCar: original.flagCar,
+          flagGuarantee: original.flagGuarantee,
+          status: "PAGO_TOTAL",
+          receivedAmount: 0,
+          notes: body.notes,
+          createdBy: req.user?.name || req.user?.email || null,
+        },
+      });
+      const updated = await syncInvoiceCredited(tx, original.id);
+      return { note, updated };
+    });
+
+    return res.status(201).json({ creditNote: mapInvoice(result.note), invoice: mapInvoice(result.updated) });
+  })
+);
+
 /** Anula um recebimento registado por engano (o valor volta a ficar em falta). */
 financeRoutes.delete(
   "/invoices/:id/receipts/:receiptId",
@@ -1242,6 +1640,229 @@ financeRoutes.delete(
       return syncInvoiceReceived(tx, receipt.invoiceId);
     });
     return res.json({ invoice: mapInvoice(updated) });
+  })
+);
+
+// ─── Garantias retidas ───────────────────────────────────────────────────────
+
+/** Garantias retidas pelo cliente, devolvidas e por devolver, por obra. */
+financeRoutes.get(
+  "/guarantees",
+  view,
+  asyncHandler(async (req, res) => {
+    const { projectId, clientId } = req.query;
+    const where = {};
+    if (projectId) where.id = String(projectId);
+    if (clientId) where.clientId = String(clientId);
+    const projects = await prisma.project.findMany({
+      where,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        client: { select: { id: true, name: true } },
+        invoices: { select: { guaranteeAmount: true, docDate: true } },
+        guaranteeReleases: { orderBy: { releasedDate: "desc" } },
+      },
+      orderBy: { name: "asc" },
+    });
+    const items = projects
+      .map((p) => {
+        const retained = round2(p.invoices.reduce((a, i) => a + toNumber(i.guaranteeAmount), 0));
+        const released = round2(p.guaranteeReleases.reduce((a, r) => a + toNumber(r.amount), 0));
+        return {
+          project: { id: p.id, code: p.code, name: p.name, currency: p.currency, client: p.client },
+          retained,
+          released,
+          outstanding: round2(retained - released),
+          releases: p.guaranteeReleases.map((r) => ({ ...r, amount: toNumber(r.amount) })),
+        };
+      })
+      .filter((i) => i.retained > 0 || i.released > 0);
+    const totals = items.reduce(
+      (acc, i) => ({
+        retained: round2(acc.retained + i.retained),
+        released: round2(acc.released + i.released),
+        outstanding: round2(acc.outstanding + i.outstanding),
+      }),
+      { retained: 0, released: 0, outstanding: 0 }
+    );
+    return res.json({ items, totals });
+  })
+);
+
+/** Regista a devolução (total ou parcial) das garantias de uma obra. */
+financeRoutes.post(
+  "/projects/:id/guarantee-releases",
+  edit,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        amount: z.number().positive(),
+        releasedDate: z.string(),
+        method: z.string().nullable().optional(),
+        notes: z.string().nullable().optional(),
+      })
+      .parse(req.body);
+    const releasedDate = parseOptionalDate(body.releasedDate);
+    if (!releasedDate) return res.status(400).json({ error: "INVALID_DATE", message: "Data inválida." });
+    if (releasedDate.getTime() > Date.now() + DAY_MS) {
+      return res.status(400).json({ error: "FUTURE_DATE", message: "A data da devolução não pode ser futura." });
+    }
+    const project = await prisma.project.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, invoices: { select: { guaranteeAmount: true } }, guaranteeReleases: { select: { amount: true } } },
+    });
+    if (!project) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+    const retained = round2(project.invoices.reduce((a, i) => a + toNumber(i.guaranteeAmount), 0));
+    const released = round2(project.guaranteeReleases.reduce((a, r) => a + toNumber(r.amount), 0));
+    const outstanding = round2(retained - released);
+    const amount = round2(body.amount);
+    if (amount > outstanding + 0.005) {
+      return res.status(400).json({
+        error: "RELEASE_EXCEEDS_RETAINED",
+        message: `Só há ${outstanding} de garantias por devolver nesta obra.`,
+      });
+    }
+    const release = await prisma.guaranteeRelease.create({
+      data: {
+        projectId: project.id,
+        amount,
+        releasedDate,
+        method: body.method || null,
+        notes: body.notes || null,
+        createdBy: req.user?.name || req.user?.email || null,
+      },
+    });
+    return res.status(201).json({ release: { ...release, amount: toNumber(release.amount) } });
+  })
+);
+
+financeRoutes.delete(
+  "/guarantee-releases/:id",
+  approve,
+  asyncHandler(async (req, res) => {
+    const release = await prisma.guaranteeRelease.findUnique({ where: { id: req.params.id } });
+    if (!release) return res.status(404).json({ error: "RELEASE_NOT_FOUND" });
+    await prisma.guaranteeRelease.delete({ where: { id: release.id } });
+    return res.json({ ok: true });
+  })
+);
+
+// ─── Extrato de conta corrente do cliente ────────────────────────────────────
+
+/**
+ * Conta corrente do cliente: faturas e adiantamentos (débito, pelo líquido a
+ * receber), notas de crédito e recebimentos (crédito), com saldo acumulado.
+ * As garantias retidas ficam à parte (são devolvidas com a receção da obra).
+ */
+financeRoutes.get(
+  "/clients/:id/statement",
+  view,
+  asyncHandler(async (req, res) => {
+    const client = await prisma.client.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, name: true, code: true, region: true },
+    });
+    if (!client) return res.status(404).json({ error: "CLIENT_NOT_FOUND" });
+    const from = parseOptionalDate(req.query.from);
+    const to = parseOptionalDate(req.query.to);
+    if (to) to.setUTCHours(23, 59, 59, 999);
+
+    // Documentos do cliente: com o cliente na fatura, ou sem cliente numa obra dele.
+    const invoices = await prisma.invoice.findMany({
+      where: { OR: [{ clientId: client.id }, { clientId: null, project: { clientId: client.id } }] },
+      include: {
+        project: { select: { id: true, code: true, name: true } },
+        creditedInvoice: { select: { docNumber: true } },
+        receipts: { select: { id: true, amount: true, receivedDate: true, method: true } },
+      },
+      orderBy: [{ docDate: "asc" }, { createdAt: "asc" }],
+    });
+
+    const lines = [];
+    invoices.forEach((inv) => {
+      const net = toNumber(inv.netAmount ?? inv.grossAmount);
+      const project = inv.project ? { id: inv.project.id, code: inv.project.code, name: inv.project.name } : null;
+      if (inv.kind === "NOTA_CREDITO") {
+        lines.push({
+          date: inv.docDate,
+          type: "NOTA_CREDITO",
+          document: inv.docNumber,
+          description: `Nota de crédito${inv.creditedInvoice?.docNumber ? ` à ${inv.creditedInvoice.docNumber}` : ""}${inv.notes ? ` · ${inv.notes}` : ""}`,
+          project,
+          debit: 0,
+          credit: round2(-net),
+        });
+      } else {
+        lines.push({
+          date: inv.docDate,
+          dueDate: invoiceDueOf(inv),
+          type: inv.kind,
+          document: inv.docNumber,
+          description: inv.kind === "ADIANTAMENTO" ? "Fatura de adiantamento" : "Fatura",
+          project,
+          debit: net,
+          credit: 0,
+          gross: toNumber(inv.grossAmount),
+          guarantee: toNumber(inv.guaranteeAmount),
+        });
+      }
+      inv.receipts.forEach((r) =>
+        lines.push({
+          date: r.receivedDate,
+          type: "RECEBIMENTO",
+          document: inv.docNumber,
+          description: `Recebimento${r.method ? ` · ${r.method}` : ""}`,
+          project,
+          debit: 0,
+          credit: toNumber(r.amount),
+        })
+      );
+    });
+    const order = { FATURA: 0, ADIANTAMENTO: 0, NOTA_CREDITO: 1, RECEBIMENTO: 2 };
+    lines.sort((a, b) => new Date(a.date) - new Date(b.date) || order[a.type] - order[b.type]);
+
+    let opening = 0;
+    const inPeriod = [];
+    lines.forEach((l) => {
+      const d = new Date(l.date);
+      if (from && d < from) opening = round2(opening + l.debit - l.credit);
+      else if (!to || d <= to) inPeriod.push(l);
+    });
+    let balance = opening;
+    inPeriod.forEach((l) => {
+      balance = round2(balance + l.debit - l.credit);
+      l.balance = balance;
+    });
+
+    const projectIds = [...new Set(invoices.map((i) => i.projectId))];
+    const releases = await prisma.guaranteeRelease.findMany({ where: { projectId: { in: projectIds } }, select: { amount: true } });
+    const retained = round2(invoices.reduce((a, i) => a + toNumber(i.guaranteeAmount), 0));
+    const released = round2(releases.reduce((a, r) => a + toNumber(r.amount), 0));
+
+    const overdue = round2(
+      invoices
+        .map(mapInvoice)
+        .filter((i) => i.status === "ATRASADO")
+        .reduce((a, i) => a + i.missingAmount, 0)
+    );
+    return res.json({
+      client,
+      from: from || null,
+      to: to || null,
+      generatedAt: new Date(),
+      opening,
+      lines: inPeriod,
+      totals: {
+        debit: round2(inPeriod.reduce((a, l) => a + l.debit, 0)),
+        credit: round2(inPeriod.reduce((a, l) => a + l.credit, 0)),
+        closing: balance,
+        overdue,
+      },
+      guarantees: { retained, released, outstanding: round2(retained - released) },
+    });
   })
 );
 
@@ -1293,6 +1914,7 @@ financeRoutes.post(
     const expectedNet = round2(
       (fields.grossAmount || 0) +
         (fields.vatAmount || 0) -
+        (fields.vatCativoAmount || 0) -
         (fields.withholdingAmount || 0) -
         (fields.carInsuranceAmount || 0) -
         (fields.guaranteeAmount || 0)
@@ -1303,7 +1925,7 @@ financeRoutes.post(
       fields,
       warnings: mismatch
         ? [
-            "Os valores lidos não fecham (ilíquido + IVA ≠ total). Confirme o V. Ilíquido, o IVA e as deduções antes de guardar.",
+            "Os valores lidos não fecham (ilíquido + IVA − IVA cativo − retenção − CAR − garantia ≠ total). Confirme o V. Ilíquido, o IVA e as deduções antes de guardar.",
           ]
         : [],
     });
@@ -1487,6 +2109,7 @@ financeRoutes.get(
           toBill: 0,
           costBudget: 0,
           costRealized: 0,
+          costRealizedBase: 0,
           billedWithoutForecast: 0,
         });
       }
@@ -1497,6 +2120,7 @@ financeRoutes.get(
       bucket.toBill = round2(bucket.toBill + entry.toBill);
       bucket.costBudget = round2(bucket.costBudget + entry.costBudget);
       bucket.costRealized = round2(bucket.costRealized + entry.costRealized);
+      bucket.costRealizedBase = round2(bucket.costRealizedBase + entry.costRealizedBase);
     });
     const byClient = [...byClientMap.values()].map((bucket) => ({
       ...bucket,
@@ -1590,7 +2214,7 @@ financeRoutes.get(
       }),
       prisma.invoice.findMany({
         where: { projectId: { in: ids } },
-        select: { projectId: true, grossAmount: true, measurementId: true },
+        select: { projectId: true, kind: true, grossAmount: true, advanceDeductionAmount: true, measurementId: true },
       }),
     ]);
 
@@ -1625,9 +2249,13 @@ financeRoutes.get(
       const measuredValue = round2(withAmValue + withoutAmValue);
 
       const projectInvoices = invoices.filter((i) => i.projectId === project.id);
-      const billedValue = round2(projectInvoices.reduce((a, i) => a + toNumber(i.grossAmount), 0));
+      // Faturado (receita): sem o adiantamento por amortizar.
+      const billedValue = billedRevenue(projectInvoices).invoiced;
+      // Faturas de trabalhos sem auto (os adiantamentos e as NC não contam aqui).
       const billedWithoutAm = round2(
-        projectInvoices.filter((i) => !i.measurementId).reduce((a, i) => a + toNumber(i.grossAmount), 0)
+        projectInvoices
+          .filter((i) => i.kind === "FATURA" && !i.measurementId)
+          .reduce((a, i) => a + toNumber(i.advanceDeductionAmount) + toNumber(i.grossAmount), 0)
       );
 
       // Decomposição da venda prevista (soma 100% quando há orçamento):
@@ -1975,7 +2603,10 @@ financeRoutes.get(
       forecast: entry.budget.cost,
       committed: entry.costs.committed,
       realized: entry.costs.realized,
+      // Sem o IVA dedutível: é o que se compara com o orçamento de custo.
       realizedBase: entry.costs.realizedBase,
+      committedBase: entry.costs.committedBase,
+      realizedVat: entry.costs.realizedVat,
       confirmed: round2(entry.costs.realized - entry.costs.pending),
       pending: entry.costs.pending,
       deviation: entry.costs.deviation,
@@ -1996,7 +2627,8 @@ financeRoutes.get(
     const byCategory = new Map();
     const byCenter = new Map();
     ledger.items.forEach((e) => {
-      const paid = toNumber(e.paidAmount);
+      // Custo sem o IVA dedutível (a mesma base do orçamento e da margem).
+      const paid = toNumber(e.paidBase);
       if (!(paid > 0)) return;
       const cat = e.category || "OUTRO";
       byCategory.set(cat, round2((byCategory.get(cat) || 0) + paid));
@@ -2020,13 +2652,26 @@ financeRoutes.get(
         acc.committed += i.committed;
         acc.realized += i.realized;
         acc.realizedBase += i.realizedBase;
+        acc.committedBase += i.committedBase;
+        acc.realizedVat += i.realizedVat;
         acc.confirmed += i.confirmed;
         acc.pending += i.pending;
         acc.saleForecast += i.saleForecast;
         acc.plannedMargin += i.plannedMargin;
         return acc;
       },
-      { forecast: 0, committed: 0, realized: 0, realizedBase: 0, confirmed: 0, pending: 0, saleForecast: 0, plannedMargin: 0 }
+      {
+        forecast: 0,
+        committed: 0,
+        realized: 0,
+        realizedBase: 0,
+        committedBase: 0,
+        realizedVat: 0,
+        confirmed: 0,
+        pending: 0,
+        saleForecast: 0,
+        plannedMargin: 0,
+      }
     );
     Object.keys(totals).forEach((k) => (totals[k] = round2(totals[k])));
     // O orçamento de custo é sem IVA: o desvio também.
@@ -2038,6 +2683,7 @@ financeRoutes.get(
     totals.stockConsumption = financials.totals.stockConsumption;
     // Projeção de fecho: o que já está gasto + o que já está assumido.
     totals.projected = round2(totals.realized + totals.committed);
+    totals.projectedBase = round2(totals.realizedBase + totals.committedBase);
 
     return res.json({
       items,
@@ -2135,12 +2781,86 @@ async function buildReceivables() {
     });
 }
 
+/**
+ * Todas as contas a pagar da empresa: as das obras (ledger) e os pedidos extra
+ * gerais aprovados (renda da sede, frota…), que não pertencem a nenhuma obra
+ * mas também saem do caixa. Ordenadas pelo vencimento.
+ */
+async function buildAllPayables(ledgerArg) {
+  const [projectPayables, general] = await Promise.all([buildPayables(ledgerArg), loadGeneralExtraPayables()]);
+  return [...projectPayables, ...general].sort(
+    (a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity)
+  );
+}
+
+/**
+ * Entradas do extrato classificadas como «recebimento de cliente» que ainda não
+ * estão (todas) ligadas a faturas. O dinheiro já está no saldo bancário, mas a
+ * fatura continua em aberto até alguém registar o recebimento.
+ */
+async function loadUnallocatedClientReceipts() {
+  const rows = await prisma.bankMovement.findMany({
+    where: { direction: "ENTRADA", movementType: "RECEBIMENTO_CLIENTE" },
+    select: {
+      id: true,
+      amount: true,
+      movementDate: true,
+      description: true,
+      docNumber: true,
+      projectId: true,
+      project: { select: { id: true, code: true, name: true } },
+      card: { select: { label: true, bank: true } },
+      receipts: { select: { amount: true } },
+    },
+    orderBy: { movementDate: "asc" },
+  });
+  const items = rows
+    .map((m) => ({
+      id: m.id,
+      date: m.movementDate,
+      amount: toNumber(m.amount),
+      free: round2(toNumber(m.amount) - m.receipts.reduce((a, r) => a + toNumber(r.amount), 0)),
+      description: m.description || m.docNumber || null,
+      account: m.card ? [m.card.bank, m.card.label].filter(Boolean).join(" · ") : null,
+      projectId: m.projectId || null,
+      project: m.project || null,
+    }))
+    .filter((m) => m.free > 0.005);
+  return { total: round2(items.reduce((a, m) => a + m.free, 0)), count: items.length, items };
+}
+
+/**
+ * Previsão de entradas sem contar a dobrar: o valor que já entrou no banco por
+ * ligar abate às faturas em aberto da mesma obra (a que vence primeiro), ou de
+ * qualquer obra se o movimento não tiver obra. Devolve as faturas com o valor
+ * que ainda falta entrar e quanto de cada uma já está no banco.
+ */
+function netOfBankReceipts(receivables, unallocated) {
+  const rows = receivables
+    .map((i) => ({ invoice: i, open: toNumber(i.missingAmount), inBank: 0 }))
+    .sort((a, b) => new Date(a.invoice.effectiveDue || 0) - new Date(b.invoice.effectiveDue || 0));
+  let unmatched = 0;
+  (unallocated?.items || []).forEach((m) => {
+    let left = m.free;
+    const pool = m.projectId ? rows.filter((r) => r.invoice.project?.id === m.projectId) : rows;
+    pool.forEach((r) => {
+      if (left <= 0.005 || r.open <= 0.005) return;
+      const take = Math.min(left, r.open);
+      r.open = round2(r.open - take);
+      r.inBank = round2(r.inBank + take);
+      left = round2(left - take);
+    });
+    unmatched = round2(unmatched + Math.max(left, 0));
+  });
+  return { rows, unmatched };
+}
+
 financeRoutes.get(
   "/payables",
   view,
   asyncHandler(async (_req, res) => {
-    const ledger = await buildCostLedger();
-    const items = await buildPayables(ledger);
+    const [ledger, general] = await Promise.all([buildCostLedger(), loadGeneralCosts()]);
+    const items = await buildAllPayables(ledger);
     const sum = (list) => round2(list.reduce((a, r) => a + r.payable, 0));
     const due = items.filter((r) => r.stage === "A_PAGAR");
     // Pago = dinheiro que saiu, na data da liquidação (sem ela, a do documento);
@@ -2153,6 +2873,12 @@ financeRoutes.get(
       if (!(value > 0)) return;
       const i = index.get(monthKeyOf(e.paidAt || e.date));
       if (i !== undefined) monthly[i].paid = round2(monthly[i].paid + value);
+    });
+    // Estrutura da empresa (pedidos extra gerais pagos): também saiu do caixa.
+    general.items.forEach((g) => {
+      if (!g.paid) return;
+      const i = index.get(monthKeyOf(g.date));
+      if (i !== undefined) monthly[i].paid = round2(monthly[i].paid + g.amount);
     });
     return res.json({
       items,
@@ -2172,8 +2898,9 @@ financeRoutes.get(
   "/receivables",
   view,
   asyncHandler(async (_req, res) => {
-    const [items, receipts] = await Promise.all([
+    const [items, unallocated, receipts] = await Promise.all([
       buildReceivables(),
+      loadUnallocatedClientReceipts(),
       prisma.invoiceReceipt.findMany({
         where: { receivedDate: { gte: new Date(Date.now() - 365 * DAY_MS) } },
         include: {
@@ -2209,6 +2936,11 @@ financeRoutes.get(
     });
     const since30 = Date.now() - 30 * DAY_MS;
 
+    // Faturas cujo dinheiro já entrou no banco mas ainda não foi ligado (registar o recebimento).
+    const inBank = new Map(netOfBankReceipts(items, unallocated).rows.filter((r) => r.inBank > 0).map((r) => [r.invoice.id, r.inBank]));
+    items.forEach((i) => {
+      i.inBank = inBank.get(i.id) || 0;
+    });
     return res.json({
       items,
       totals: {
@@ -2220,6 +2952,7 @@ financeRoutes.get(
         dso: weight > 0 ? Math.round(weighted / weight) : null,
       },
       monthly,
+      unallocatedReceipts: unallocated,
       recentReceipts: receipts.slice(0, 8).map((r) => ({
         id: r.id,
         amount: toNumber(r.amount),
@@ -2245,13 +2978,15 @@ financeRoutes.get(
   view,
   asyncHandler(async (req, res) => {
     const months = Math.min(Math.max(Number(req.query.months) || 6, 3), 24);
-    const [receipts, ledger, receivables, balances] = await Promise.all([
-      prisma.invoiceReceipt.findMany({ select: { amount: true, receivedDate: true } }),
+    const [receipts, ledger, receivables, balances, general, unallocated] = await Promise.all([
+      loadCashReceipts(),
       buildCostLedger(),
       buildReceivables(),
       loadBankBalances(),
+      loadGeneralCosts(),
+      loadUnallocatedClientReceipts(),
     ]);
-    const payables = await buildPayables(ledger);
+    const payables = await buildAllPayables(ledger);
 
     const history = lastMonthKeys(months).map((key) => ({ key, label: monthLabelOf(key), inflow: 0, outflow: 0 }));
     const index = new Map(history.map((m, i) => [m.key, i]));
@@ -2265,20 +3000,30 @@ financeRoutes.get(
       // Saída de caixa na data em que foi liquidado (sem ela, a data do documento).
       add("outflow", e.kind === "STOCK" ? e.stockValue : e.paidAmount, e.paidAt || e.date);
     });
+    // Estrutura da empresa (pedidos extra gerais pagos).
+    general.items.forEach((g) => {
+      if (g.paid) add("outflow", g.amount, g.date);
+    });
     history.forEach((m) => {
       m.net = round2(m.inflow - m.outflow);
     });
 
-    const inflows = receivables.map((i) => ({
-      id: i.id,
-      date: i.effectiveDue,
-      amount: i.missingAmount,
-      label: i.docNumber || "Fatura",
-      party: i.client?.name || null,
-      project: i.project,
-      daysLate: i.daysLate,
-      noDueDate: i.noDueDate,
-    }));
+    // O que já entrou no banco por ligar à fatura está no saldo: não entra outra vez.
+    const netted = netOfBankReceipts(receivables, unallocated);
+    const inflows = netted.rows
+      .filter((r) => r.open > 0.005)
+      .map(({ invoice: i, open, inBank }) => ({
+        id: i.id,
+        date: i.effectiveDue,
+        amount: open,
+        missingAmount: i.missingAmount,
+        inBank,
+        label: i.docNumber || "Fatura",
+        party: i.client?.name || null,
+        project: i.project,
+        daysLate: i.daysLate,
+        noDueDate: i.noDueDate,
+      }));
     const outflows = payables.map((p) => ({
       id: p.id,
       date: p.dueDate,
@@ -2291,7 +3036,28 @@ financeRoutes.get(
       daysLate: p.daysLate,
     }));
 
-    return res.json({ today: startOfToday(), balances, history, inflows, outflows });
+    return res.json({
+      today: startOfToday(),
+      balances,
+      history,
+      inflows,
+      outflows,
+      bankReceipts: {
+        total: unallocated.total,
+        count: unallocated.count,
+        matched: round2(netted.rows.reduce((a, r) => a + r.inBank, 0)),
+        unmatched: netted.unmatched,
+        invoices: netted.rows
+          .filter((r) => r.inBank > 0)
+          .map((r) => ({
+            id: r.invoice.id,
+            label: r.invoice.docNumber || "Fatura",
+            party: r.invoice.client?.name || null,
+            project: r.invoice.project,
+            amount: r.inBank,
+          })),
+      },
+    });
   })
 );
 
@@ -2450,10 +3216,10 @@ financeRoutes.get(
   "/payment-center",
   view,
   asyncHandler(async (_req, res) => {
-    const [payables, generalExtras, receivables, balances, schedule, reinforcements, paid] = await Promise.all([
-      buildPayables(),
-      loadGeneralExtraPayables(),
+    const [items, receivables, unallocated, balances, schedule, reinforcements, paid] = await Promise.all([
+      buildAllPayables(),
       buildReceivables(),
+      loadUnallocatedClientReceipts(),
       loadBankBalances(),
       listPendingFinanceScheduling().catch(() => []),
       prisma.pettyCashReinforcementRequest.findMany({
@@ -2472,15 +3238,15 @@ financeRoutes.get(
       loadRecentPayments(30),
     ]);
 
-    const items = [...payables, ...generalExtras].sort(
-      (a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity)
-    );
     const due = items.filter((p) => p.stage === "A_PAGAR");
     const sum = (list, key = "payable") => round2(list.reduce((a, r) => a + toNumber(r[key]), 0));
     const within = (days, list, dayKey = "daysLate") => list.filter((r) => r[dayKey] !== null && r[dayKey] >= -days);
 
     const weekOut = within(7, due);
-    const weekIn = within(7, receivables);
+    // Entradas da semana sem o que já está no banco por ligar (já conta no saldo).
+    const netted = netOfBankReceipts(receivables, unallocated);
+    const inWeek = (r) => r.invoice.daysLate !== null && r.invoice.daysLate >= -7;
+    const weekIn = netted.rows.filter((r) => r.open > 0.005 && inWeek(r)).map((r) => ({ ...r.invoice, missingAmount: r.open }));
     const scheduleItems = schedule.map((n) => ({
       id: n.id,
       quoteId: n.quoteId,
@@ -2520,7 +3286,10 @@ financeRoutes.get(
         outflowCount: weekOut.length,
         inflow: round2(weekIn.reduce((a, r) => a + toNumber(r.missingAmount), 0)),
         inflowCount: weekIn.length,
+        // Já no saldo bancário, por ligar às faturas desta semana.
+        inBank: round2(netted.rows.filter((r) => r.inBank > 0 && inWeek(r)).reduce((a, r) => a + r.inBank, 0)),
       },
+      bankReceipts: { total: unallocated.total, count: unallocated.count },
       totals: {
         payable: sum(due),
         overdue: sum(due.filter((p) => p.daysLate > 0)),
@@ -3381,13 +4150,14 @@ financeRoutes.get(
   "/overview",
   view,
   asyncHandler(async (req, res) => {
-    const [financials, invoiceRows, charts, general] = await Promise.all([
+    const [financials, invoiceRows, charts, general, guaranteeReleased] = await Promise.all([
       buildProjectFinancials({ includeInactive: true }),
       prisma.invoice.findMany({
-        select: { projectId: true, docDate: true, grossAmount: true, netAmount: true, receivedAmount: true, dueDate: true },
+        select: { kind: true, projectId: true, docDate: true, grossAmount: true, netAmount: true, receivedAmount: true, creditedAmount: true, dueDate: true },
       }),
       buildFinanceCharts({ months: 12 }),
       loadGeneralCosts(),
+      loadGuaranteeReleasedTotal(),
     ]);
 
     const t = financials.totals;
@@ -3458,6 +4228,8 @@ financeRoutes.get(
         costVat: round2(t.costRealized - t.costRealizedBase),
         costPending: t.costPending,
         costCommitted: t.costCommittedBase,
+        // O mesmo por pagar em dinheiro (com IVA), como no Centro de Pagamentos.
+        costCommittedCash: t.costCommitted,
         result: t.realizedMargin,
         margin: t.realizedMarginPct,
         forecast: t.saleBudget,
@@ -3478,12 +4250,16 @@ financeRoutes.get(
       },
       byProject,
       aging,
+      // Caixa gerado: recebido dos clientes (faturas + garantias devolvidas)
+      // − o que saiu para as obras (incluindo compras para stock) − estrutura.
       cashFlow: {
-        inflow: t.received,
+        inflow: round2(t.received + guaranteeReleased),
+        received: t.received,
+        guaranteeReleased,
         outflow: round2(projectOutflow + general.realized),
         projectOutflow,
         generalOutflow: general.realized,
-        net: round2(t.received - projectOutflow - general.realized),
+        net: round2(t.received + guaranteeReleased - projectOutflow - general.realized),
       },
       generalCosts: { realized: general.realized, committed: general.committed, byCenter: general.byCenter },
       costSources: buildCostLedgerSources(),
@@ -3497,9 +4273,10 @@ financeRoutes.get(
   "/control",
   view,
   asyncHandler(async (req, res) => {
-    const [financials, charts] = await Promise.all([
+    const [financials, charts, guaranteeReleased] = await Promise.all([
       buildProjectFinancials({ includeInactive: true }),
       buildFinanceCharts({ months: 12 }),
+      loadGuaranteeReleasedTotal(),
     ]);
 
     const byProject = financials.items.map((entry) => ({
@@ -3570,11 +4347,19 @@ financeRoutes.get(
       resultBase: t.realizedMarginBase,
       marginBase: t.realizedMarginBasePct,
       received: t.received,
+      receivable: t.missing,
     };
 
+    // Caixa das obras: o que entrou dos clientes (faturas + garantias devolvidas)
+    // − o que saiu para as obras. O consumo de stock não é saída de caixa; a
+    // compra de mercadoria para stock é. A estrutura da empresa fica de fora.
     const cashFlow = {
-      inflow: t.received,
+      inflow: round2(t.received + guaranteeReleased),
+      received: t.received,
+      guaranteeReleased,
       outflow: round2(t.costRealized - t.stockConsumption + t.stockPurchases),
+      stockConsumption: t.stockConsumption,
+      stockPurchases: t.stockPurchases,
     };
     cashFlow.net = round2(cashFlow.inflow - cashFlow.outflow);
 

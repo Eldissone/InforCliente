@@ -8,6 +8,8 @@ import { compactMoney as compact } from "./charts.js";
 import { daysLate } from "./aging.js";
 import { openReceiptModal, RECEIPT_METHODS } from "./receiptModal.js";
 import { kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
+import { bindMoneyInputs, readMoney, setMoney } from "./moneyInput.js";
+import { creditableGross, openCreditNoteModal, openGuaranteesModal, openStatementModal } from "./invoiceExtras.js";
 
 /**
  * Ecrã «Registar Faturas» (Financeiro · Faturação).
@@ -24,6 +26,8 @@ const STATUS = {
   PAGO_PARCIAL: { label: "Pago Parcial", badge: "amber" },
   PAGO_TOTAL: { label: "Pago Total", badge: "emerald" },
   ATRASADO: { label: "Atrasado", badge: "red" },
+  ANULADA: { label: "Anulada", badge: "slate" },
+  NOTA_CREDITO: { label: "Nota de crédito", badge: "violet" },
 };
 
 const state = {
@@ -48,6 +52,12 @@ function money(value, currency) {
   return formatCurrency(Number(value) || 0, currency || "AOA");
 }
 
+/** Valor numa célula da tabela: sem «Kz» (a moeda está no subtítulo); outras moedas mostram o código. */
+function amount(value, currency) {
+  const cur = currency || "AOA";
+  return cur === "AOA" ? formatCurrency(Number(value) || 0, "AOA").replace(/\s*Kz$/, "") : money(value, cur);
+}
+
 function pct(value, digits = 2) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
@@ -56,6 +66,10 @@ function pct(value, digits = 2) {
 
 function canEdit() {
   return can("financeiro", "edit") || can("financeiro", "approve") || can("financeiro", "manage");
+}
+
+function canApprove() {
+  return can("financeiro", "approve") || can("financeiro", "manage");
 }
 
 function projectById(id) {
@@ -159,12 +173,32 @@ function renderShell() {
 
   const actions = document.getElementById("financePageActions");
   if (actions) {
-    actions.innerHTML = canEdit()
-      ? `<button id="invNew" type="button" class="finance-btn finance-btn--primary">
-           <span class="material-symbols-outlined">add</span>Nova Fatura
-         </button>`
-      : "";
+    actions.innerHTML = `
+      <button id="invGuarantees" type="button" class="finance-btn finance-btn--ghost" title="Garantias retidas e devoluções">
+        <span class="material-symbols-outlined">verified_user</span>Garantias
+      </button>
+      <button id="invStatement" type="button" class="finance-btn finance-btn--ghost" title="Extrato de conta corrente do cliente">
+        <span class="material-symbols-outlined">description</span>Extrato de cliente
+      </button>
+      ${
+        canEdit()
+          ? `<button id="invNew" type="button" class="finance-btn finance-btn--primary">
+               <span class="material-symbols-outlined">add</span>Nova Fatura
+             </button>`
+          : ""
+      }`;
     document.getElementById("invNew")?.addEventListener("click", () => openInvoiceModal(null));
+    document.getElementById("invGuarantees")?.addEventListener("click", () =>
+      openGuaranteesModal({
+        projectId: state.filters.projectId,
+        clientId: state.filters.clientId,
+        canEdit: canEdit(),
+        canApprove: canApprove(),
+      })
+    );
+    document.getElementById("invStatement")?.addEventListener("click", () =>
+      openStatementModal({ clients: state.clients, clientId: state.filters.clientId })
+    );
   }
 }
 
@@ -194,9 +228,19 @@ function renderKpis() {
   const net = sum("netAmount");
   const received = sum("receivedAmount");
   const missing = sum("missingAmount");
-  const deductions = sum("withholdingAmount") + sum("carInsuranceAmount") + sum("guaranteeAmount");
+  const vat = sum("vatAmount");
+  const guarantee = sum("guaranteeAmount");
+  const deductions = sum("vatCativoAmount") + sum("withholdingAmount") + sum("carInsuranceAmount");
   const overdue = items.filter((i) => i.status === "ATRASADO");
   const overdueValue = overdue.reduce((a, i) => a + num(i.missingAmount), 0);
+  const credited = items.filter((i) => i.kind === "NOTA_CREDITO").reduce((a, i) => a - num(i.netAmount), 0);
+  const advanceOutstanding = Math.max(
+    items.filter((i) => i.kind === "ADIANTAMENTO").reduce((a, i) => a + num(i.grossAmount), 0) -
+      items.reduce((a, i) => a + num(i.advanceDeductionAmount), 0),
+    0
+  );
+  // Recebido sobre o líquido a receber: o líquido já vem abatido das notas de
+  // crédito (entram a negativo), que é o que o cliente efetivamente paga.
   const receivedPct = net > 0 ? (received / net) * 100 : 0;
   const oldest = overdue.reduce((max, i) => Math.max(max, daysLate(i.dueDate || i.effectiveDueDate) || 0), 0);
 
@@ -207,12 +251,16 @@ function renderKpis() {
       icon: "receipt_long",
       tone: "blue",
       value: money(gross),
-      badge: `${items.length} fatura${items.length === 1 ? "" : "s"}`,
+      badge: `${items.length} documento${items.length === 1 ? "" : "s"}`,
       badgeTone: "blue",
       body: `
         <dl class="ov-kpi-split">
-          <div><dt>Valor líquido</dt><dd>${esc(compact(net))}</dd></div>
-          <div><dt>Retenções, CAR e garantia</dt><dd class="ov-neg">− ${esc(compact(deductions))}</dd></div>
+          <div><dt>IVA</dt><dd>+ ${esc(compact(vat))}</dd></div>
+          <div><dt>IVA cativo, retenção e CAR</dt><dd class="ov-neg">− ${esc(compact(deductions))}</dd></div>
+          <div><dt title="Retida pelo cliente até à receção da obra">Garantia retida (a recuperar)</dt><dd class="ov-neg">− ${esc(compact(guarantee))}</dd></div>
+          <div><dt>Valor líquido a receber</dt><dd>${esc(compact(net))}</dd></div>
+          ${credited > 0 ? `<div><dt>Inclui notas de crédito</dt><dd class="ov-neg">− ${esc(compact(credited))}</dd></div>` : ""}
+          ${advanceOutstanding > 0 ? `<div><dt title="Adiantamentos faturados ainda não descontados nas faturas de trabalhos">Adiantamento por amortizar</dt><dd class="ov-warn">${esc(compact(advanceOutstanding))}</dd></div>` : ""}
         </dl>`,
     },
     {
@@ -321,16 +369,98 @@ function detailRow(inv, cur) {
       <span>${esc(label)}</span>
       <strong class="${cls}">${value}</strong>
     </div>`;
+  if (inv.kind === "NOTA_CREDITO") {
+    return `
+    <div class="inv-detail">
+      ${item("Corrige a fatura", esc(inv.creditedInvoice?.docNumber || "—"))}
+      ${item("V. Ilíquido anulado", esc(money(-num(inv.grossAmount), cur)))}
+      ${item("IVA anulado", esc(money(-num(inv.vatAmount), cur)))}
+      ${item("Líquido anulado", esc(money(-num(inv.netAmount), cur)), "ov-neg")}
+      ${inv.notes ? `<div class="inv-detail-item inv-detail-item--wide"><span>Motivo</span><strong>${esc(inv.notes)}</strong></div>` : ""}
+    </div>`;
+  }
+  const credits = (inv.creditNotes || []).length
+    ? `<div class="inv-detail-item inv-detail-item--wide">
+        <span>Notas de crédito (${inv.creditNotes.length})</span>
+        <ul class="inv-receipts">${inv.creditNotes
+          .map(
+            (n) => `<li><span>${esc(formatDateOnly(n.docDate))}</span><strong>${esc(n.docNumber || "NC")}</strong><span class="ov-neg">− ${esc(money(-num(n.netAmount), cur))}</span><span class="ov-muted">${esc(n.notes || "")}</span></li>`
+          )
+          .join("")}</ul>
+      </div>`
+    : "";
   return `
     <div class="inv-detail">
+      ${num(inv.advanceDeductionAmount) > 0 ? item("Valor dos trabalhos", esc(money(inv.workValue, cur))) : ""}
+      ${num(inv.advanceDeductionAmount) > 0 ? item("Amortização do adiantamento", `− ${esc(money(inv.advanceDeductionAmount, cur))}`, "ov-neg") : ""}
       ${item("Retenção na fonte", `− ${esc(money(inv.withholdingAmount, cur))}`, "ov-neg")}
-      ${item("IVA", inv.flagVatCativo ? "Cativo pelo cliente" : esc(money(inv.vatAmount, cur)))}
+      ${item("IVA", `+ ${esc(money(inv.vatAmount, cur))}`)}
+      ${num(inv.vatCativoPercent) > 0 ? item(`IVA cativo (${num(inv.vatCativoPercent)}%)`, `− ${esc(money(inv.vatCativoAmount, cur))}`, "ov-neg") : ""}
       ${item("Seguro CAR", `− ${esc(money(inv.carInsuranceAmount, cur))}`, "ov-neg")}
       ${item("Garantia", `− ${esc(money(inv.guaranteeAmount, cur))}`, "ov-neg")}
       ${item("% da obra", inv.workPercent === null ? "—" : esc(pct(inv.workPercent)))}
       ${item("Último recebimento", esc(formatDateOnly(inv.receivedDate)))}
       ${inv.notes ? `<div class="inv-detail-item inv-detail-item--wide"><span>Notas</span><strong>${esc(inv.notes)}</strong></div>` : ""}
+      ${receiptsHtml(inv, cur)}
+      ${credits}
     </div>`;
+}
+
+/** Etiqueta do tipo de documento (as faturas de trabalhos não levam etiqueta). */
+function kindChip(inv) {
+  if (inv.kind === "ADIANTAMENTO") return ` <span class="finance-chip finance-chip--amber">Adiantamento</span>`;
+  if (inv.kind === "NOTA_CREDITO") {
+    return ` <span class="finance-chip finance-chip--violet">NC${inv.creditedInvoice?.docNumber ? ` · ${esc(inv.creditedInvoice.docNumber)}` : ""}</span>`;
+  }
+  if (num(inv.advanceDeductionAmount) > 0) return ` <span class="finance-chip finance-chip--slate" title="Amortiza adiantamento">− adiant.</span>`;
+  return "";
+}
+
+/** Recebimentos registados na fatura; quem aprova pode anular um lançado por engano. */
+function receiptsHtml(inv, cur) {
+  const receipts = inv.receipts || [];
+  if (!receipts.length) {
+    return `<div class="inv-detail-item inv-detail-item--wide"><span>Recebimentos</span><strong class="ov-muted">Nenhum recebimento registado</strong></div>`;
+  }
+  const undo = canApprove();
+  return `
+    <div class="inv-detail-item inv-detail-item--wide">
+      <span>Recebimentos (${receipts.length})</span>
+      <ul class="inv-receipts">
+        ${receipts
+          .map(
+            (r) => `
+          <li>
+            <span>${esc(formatDateOnly(r.receivedDate))}</span>
+            <strong>${esc(money(r.amount, cur))}</strong>
+            <span class="ov-muted">${esc([r.method, r.bankMovementId ? "ligado ao extrato" : null].filter(Boolean).join(" · ") || "—")}</span>
+            ${
+              undo
+                ? `<button type="button" class="inv-link-btn inv-link-btn--danger" data-undo-receipt="${esc(r.id)}" data-invoice="${esc(inv.id)}">
+                     <span class="material-symbols-outlined">undo</span>Anular
+                   </button>`
+                : ""
+            }
+          </li>`
+          )
+          .join("")}
+      </ul>
+    </div>`;
+}
+
+async function undoReceipt(invoiceId, receiptId) {
+  const inv = state.items.find((i) => i.id === invoiceId);
+  const receipt = inv?.receipts?.find((r) => r.id === receiptId);
+  if (!receipt) return;
+  const cur = inv.project?.currency || "AOA";
+  if (!window.confirm(`Anular o recebimento de ${money(receipt.amount, cur)} de ${formatDateOnly(receipt.receivedDate)}? O valor volta a ficar em falta na fatura.`)) return;
+  try {
+    await apiRequest(`/finance/invoices/${invoiceId}/receipts/${receiptId}`, { method: "DELETE" });
+    toast("Recebimento anulado.", { type: "success" });
+    await loadInvoices();
+  } catch (err) {
+    toast(err.message || "Falha ao anular o recebimento.", { type: "error" });
+  }
 }
 
 function renderTable() {
@@ -339,7 +469,7 @@ function renderTable() {
   const items = visibleItems();
   const count = document.getElementById("invCount");
   if (count) {
-    count.textContent = `${items.length} de ${state.items.length} faturas · clique numa linha para ver retenção, IVA, CAR e garantia`;
+    count.textContent = `${items.length} de ${state.items.length} documentos · valores em Kz · clique numa linha para ver deduções e recebimentos`;
   }
 
   if (!items.length) {
@@ -358,7 +488,7 @@ function renderTable() {
       const open = state.expanded.has(inv.id);
       const receivedPct = num(inv.netAmount) > 0 ? (num(inv.receivedAmount) / num(inv.netAmount)) * 100 : 0;
       return `
-      <tr data-id="${esc(inv.id)}" class="fin-row--clickable ${inv.status === "ATRASADO" ? "fin-row--overdue" : ""}">
+      <tr data-id="${esc(inv.id)}" class="fin-row--clickable ${inv.status === "ATRASADO" ? "fin-row--overdue" : ""} ${inv.kind === "NOTA_CREDITO" ? "inv-row--credit" : ""}">
         <td>
           <div class="inv-doc">
             <span class="material-symbols-outlined inv-toggle ${open ? "open" : ""}">chevron_right</span>
@@ -368,7 +498,7 @@ function renderTable() {
                 ${invoiceHasDocument(inv) ? `<span class="material-symbols-outlined inv-doc-icon" title="Fatura física anexada">attach_file</span>` : ""}
                 ${inv.scanSource === "IA" ? `<span class="finance-chip finance-chip--violet" title="Lida automaticamente com IA${inv.scanModel ? ` (${esc(inv.scanModel)})` : ""}">IA</span>` : ""}
               </div>
-              <div class="ov-project-meta">${esc(formatDateOnly(inv.docDate))}${inv.measurement ? ` · ${esc(inv.measurement.reportNumber || "AM")}` : ""}</div>
+              <div class="ov-project-meta">${esc(formatDateOnly(inv.docDate))}${inv.measurement ? ` · ${esc(inv.measurement.reportNumber || "AM")}` : ""}${kindChip(inv)}</div>
             </div>
           </div>
         </td>
@@ -383,16 +513,20 @@ function renderTable() {
             inv.dueEstimated ? `<span class="inv-due inv-due--est" title="Sem vencimento registado: data do documento + 30 dias">estimado</span>` : ""
           }${dueChip(inv)}</div>
         </td>
-        <td class="fin-num">${esc(money(inv.grossAmount, cur))}</td>
-        <td class="fin-num"><strong>${esc(money(inv.netAmount, cur))}</strong></td>
+        <td class="fin-num">${esc(amount(inv.grossAmount, cur))}</td>
+        <td class="fin-num"><strong>${esc(amount(inv.netAmount, cur))}</strong></td>
         <td class="fin-num">
           <div class="ov-cell-bar">
-            <span>${esc(money(inv.receivedAmount, cur))}</span>
+            <span>${esc(amount(inv.receivedAmount, cur))}</span>
             ${meterHtml([{ value: receivedPct, tone: "emerald" }])}
           </div>
         </td>
-        <td class="fin-num ${num(inv.missingAmount) > 0 ? "ov-neg" : "ov-pos"}"><strong>${esc(money(inv.missingAmount, cur))}</strong></td>
-        <td>${statusBadge(inv.status)}</td>
+        <td class="fin-num">
+          <div class="inv-missing">
+            <strong class="${num(inv.missingAmount) > 0 ? "ov-neg" : "ov-pos"}">${esc(amount(inv.missingAmount, cur))}</strong>
+            ${statusBadge(inv.status)}
+          </div>
+        </td>
         <td>
           <div class="fin-actions">
             ${
@@ -410,10 +544,19 @@ function renderTable() {
                            <span class="material-symbols-outlined" style="font-size:17px">payments</span>
                          </button>`
                       : ""
+                  }${
+                    canApprove() && inv.kind !== "NOTA_CREDITO" && creditableGross(inv) > 0.005
+                      ? `<button type="button" class="fin-icon-btn fin-icon-btn--violet" title="Emitir nota de crédito" data-action="credit">
+                           <span class="material-symbols-outlined" style="font-size:17px">assignment_return</span>
+                         </button>`
+                      : ""
+                  }${
+                    inv.kind === "NOTA_CREDITO"
+                      ? ""
+                      : `<button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Editar" data-action="edit">
+                           <span class="material-symbols-outlined" style="font-size:17px">edit</span>
+                         </button>`
                   }
-                   <button type="button" class="fin-icon-btn fin-icon-btn--blue" title="Editar" data-action="edit">
-                     <span class="material-symbols-outlined" style="font-size:17px">edit</span>
-                   </button>
                    <button type="button" class="fin-icon-btn fin-icon-btn--red" title="Eliminar" data-action="delete">
                      <span class="material-symbols-outlined" style="font-size:17px">delete</span>
                    </button>`
@@ -423,7 +566,7 @@ function renderTable() {
         </td>
       </tr>
       <tr class="fin-subrow" ${open ? "" : "hidden"}>
-        <td colspan="9">${detailRow(inv, cur)}</td>
+        <td colspan="8">${detailRow(inv, cur)}</td>
       </tr>`;
     })
     .join("");
@@ -437,23 +580,29 @@ function renderTable() {
           <th style="text-align:right">V. Ilíquido</th>
           <th style="text-align:right">V. Líquido</th>
           <th style="text-align:right">Recebido</th>
-          <th style="text-align:right">Em Falta</th>
-          <th>Estado</th>
+          <th style="text-align:right">Em falta · estado</th>
           <th style="text-align:center">Ações</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
       <tfoot>
         <tr>
-          <td colspan="3">Totais (${items.length} faturas)</td>
-          <td class="fin-num">${esc(money(sum("grossAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("netAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("receivedAmount")))}</td>
-          <td class="fin-num">${esc(money(sum("missingAmount")))}</td>
-          <td colspan="2"></td>
+          <td colspan="3">Totais (${items.length} documentos)</td>
+          <td class="fin-num">${esc(amount(sum("grossAmount")))}</td>
+          <td class="fin-num">${esc(amount(sum("netAmount")))}</td>
+          <td class="fin-num">${esc(amount(sum("receivedAmount")))}</td>
+          <td class="fin-num">${esc(amount(sum("missingAmount")))}</td>
+          <td></td>
         </tr>
       </tfoot>
     </table>`;
+
+  wrap.querySelectorAll("[data-undo-receipt]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      undoReceipt(btn.dataset.invoice, btn.dataset.undoReceipt);
+    })
+  );
 
   wrap.querySelectorAll("tbody tr[data-id]").forEach((tr) => {
     const inv = state.items.find((i) => i.id === tr.dataset.id);
@@ -466,6 +615,7 @@ function renderTable() {
     });
     tr.querySelector('[data-action="edit"]')?.addEventListener("click", () => openInvoiceModal(inv));
     tr.querySelector('[data-action="receipt"]')?.addEventListener("click", () => openReceiptModal(inv, { onSaved: loadInvoices }));
+    tr.querySelector('[data-action="credit"]')?.addEventListener("click", () => openCreditNoteModal(inv, { onSaved: loadInvoices }));
     tr.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeInvoice(inv));
     tr.querySelector('[data-action="document"]')?.addEventListener("click", () =>
       openInvoiceDocumentModal(inv, { context: { projectName: inv.project?.name } })
@@ -511,17 +661,34 @@ async function loadInvoices() {
 
 /* ─── Formulário de fatura ────────────────────────────────────────────────── */
 
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Valores da fatura — o mesmo cálculo e arredondamentos do servidor
+ * (invoiceAmountsService): líquido = ilíquido + IVA − IVA cativo − retenção − CAR − garantia.
+ */
 function buildPreview(draft) {
-  const g = Number(draft.grossAmount) || 0;
-  const vat = draft.flagVatCativo ? 0 : (g * (Number(draft.vatPercent) || 0)) / 100;
-  const withholding = (g * (Number(draft.withholdingPercent) || 0)) / 100;
-  const car = (g * (Number(draft.carPercent) || 0)) / 100;
-  const guarantee = (g * (Number(draft.guaranteePercent) || 0)) / 100;
-  const net = g + vat - withholding - car - guarantee;
+  const workValue = round2(draft.grossAmount);
+  const amort = round2(Math.max(Number(draft.advanceDeductionAmount) || 0, 0));
+  const g = round2(workValue - amort);
+  const vat = round2((g * (Number(draft.vatPercent) || 0)) / 100);
+  const cativoPct = Number(draft.vatCativoPercent) || 0;
+  const vatCativo = round2((vat * cativoPct) / 100);
+  const withholding = round2((g * (Number(draft.withholdingPercent) || 0)) / 100);
+  const car = round2((g * (Number(draft.carPercent) || 0)) / 100);
+  const guarantee = round2((g * (Number(draft.guaranteePercent) || 0)) / 100);
+  const net = round2(g + vat - vatCativo - withholding - car - guarantee);
   const budget = Number(draft.saleBudget) || 0;
   const workPercent = budget > 0 ? (g / budget) * 100 : null;
-  return { gross: g, vat, withholding, car, guarantee, net, workPercent };
+  return { workValue, amort, gross: g, vat, cativoPct, vatCativo, withholding, car, guarantee, net, workPercent };
 }
+
+/** Cativação do IVA: 0, 50 ou 100%. */
+const CATIVO_OPTIONS = [
+  [0, "0%"],
+  [50, "50%"],
+  [100, "100%"],
+];
 
 /** Resumo legível do que a IA leu, para o financeiro confirmar antes de gravar. */
 function buildScanSummary(fields, warnings) {
@@ -608,7 +775,22 @@ async function openInvoiceModal(invoice) {
       <div class="inv-form-main">
 
         <section class="inv-section">
-          ${stepTitle(1, "Identificação", "Obra, terceiro e auto de medição a faturar")}
+          ${stepTitle(1, "Identificação", "Tipo de documento, obra, terceiro e auto de medição a faturar")}
+          <input id="inv_kind" type="hidden" value="${esc(invoice?.kind || "FATURA")}" />
+          ${
+            isEdit
+              ? ""
+              : `<div class="inv-kind" id="inv_kindChoice">
+                   <button type="button" data-kind="FATURA" class="active">
+                     <span class="material-symbols-outlined">receipt_long</span>
+                     <span><strong>Fatura de trabalhos</strong><small>Trabalhos executados (com ou sem auto de medição)</small></span>
+                   </button>
+                   <button type="button" data-kind="ADIANTAMENTO">
+                     <span class="material-symbols-outlined">forward</span>
+                     <span><strong>Fatura de adiantamento</strong><small>Adiantamento do cliente, descontado nas faturas seguintes</small></span>
+                   </button>
+                 </div>`
+          }
           <div class="finance-form-grid finance-form-grid--2">
             <div class="finance-field finance-field--full">
               <label class="finance-label" for="inv_project">Obra <span class="inv-req">*</span></label>
@@ -635,7 +817,7 @@ async function openInvoiceModal(invoice) {
             </div>
           </div>
           <div id="inv_context" class="inv-context" hidden></div>
-          <div class="finance-field" style="margin-top:0.9rem">
+          <div class="finance-field" style="margin-top:0.9rem" id="inv_amField" ${invoice?.kind === "ADIANTAMENTO" ? "hidden" : ""}>
             <span class="finance-label">Auto de medição em aberto</span>
             <input id="inv_measurement" type="hidden" value="" />
             <div id="inv_amList" class="inv-am-list">
@@ -660,7 +842,7 @@ async function openInvoiceModal(invoice) {
             </div>
             <div class="finance-field">
               <label class="finance-label" for="inv_docDate">Data doc. <span class="inv-req">*</span></label>
-              <input id="inv_docDate" class="finance-input" type="date" required value="${invoice?.docDate ? esc(toDateKey(invoice.docDate)) : today}" />
+              <input id="inv_docDate" class="finance-input" type="date" required max="${today}" value="${invoice?.docDate ? esc(toDateKey(invoice.docDate)) : today}" />
             </div>
             <div class="finance-field">
               <label class="finance-label" for="inv_dueDate">Vencimento</label>
@@ -676,10 +858,28 @@ async function openInvoiceModal(invoice) {
         <section class="inv-section">
           ${stepTitle(3, "Valores", "Retenção, IVA, seguro CAR e garantia são calculados a partir da configuração da obra")}
           <div class="finance-field">
-            <label class="finance-label" for="inv_gross">Valor ilíquido <span class="inv-req">*</span></label>
+            <label class="finance-label" for="inv_gross" id="inv_grossLabel">Valor ilíquido <span class="inv-req">*</span></label>
             <div class="inv-money-input">
-              <input id="inv_gross" class="finance-input" type="number" min="0" step="0.01" required placeholder="0,00" value="${invoice ? Number(invoice.grossAmount) : ""}" />
+              <input id="inv_gross" class="finance-input" data-money required placeholder="0,00" value="${invoice ? Number(invoice.grossAmount) : ""}" />
               <span id="inv_grossCur">${esc(invoice?.project?.currency || "AOA")}</span>
+            </div>
+            <p id="inv_amWarning" class="inv-am-warning" hidden></p>
+          </div>
+          <div class="inv-amort" id="inv_amortRow" hidden>
+            <div class="inv-ded-label">
+              <span>Amortização do adiantamento</span>
+              <small id="inv_amortHint">Parte do adiantamento descontada nesta fatura</small>
+            </div>
+            <div class="inv-amort-input">
+              <div class="inv-money-input">
+                <input id="inv_amort" class="finance-input" data-money placeholder="0,00" value="${num(invoice?.advanceDeductionAmount) > 0 ? num(invoice.advanceDeductionAmount) : ""}" />
+                <span>${esc(invoice?.project?.currency || "AOA")}</span>
+              </div>
+              <div class="inv-quick" id="inv_amortQuick">
+                <button type="button" data-amort="prop">Proporcional</button>
+                <button type="button" data-amort="all">Tudo</button>
+                <button type="button" data-amort="none">Nada</button>
+              </div>
             </div>
           </div>
           <div class="inv-ded">
@@ -688,13 +888,22 @@ async function openInvoiceModal(invoice) {
               id: "inv_vat",
               label: "IVA",
               value: numOr(invoice?.vatPercent, ""),
-              hint: "Automático · não soma se for cativo",
+              hint: "Automático · configuração da obra",
               sign: "+",
-              extra: `<label class="inv-switch" title="IVA cativo pelo cliente">
-                        <input id="inv_vatCativo" type="checkbox" ${invoice?.flagVatCativo ? "checked" : ""} />
-                        <span></span>Cativo
-                      </label>`,
             })}
+            <div class="inv-ded-row">
+              <div class="inv-ded-label">
+                <span>IVA cativo</span>
+                <small>Parte do IVA que o cliente entrega diretamente ao Estado</small>
+              </div>
+              <select id="inv_vatCativo" class="finance-select inv-cativo-select" title="Percentagem do IVA cativo pelo cliente">
+                ${CATIVO_OPTIONS.map(
+                  ([value, label]) =>
+                    `<option value="${value}" ${num(invoice?.vatCativoPercent) === value ? "selected" : ""}>${label}</option>`
+                ).join("")}
+              </select>
+              <div class="inv-ded-amount" id="inv_vatCativo_amount">− —</div>
+            </div>
             ${deductionRowHtml({ id: "inv_car", label: "Seguro CAR", value: numOr(invoice?.carPercent, ""), hint: "Automático · contrato da obra" })}
             ${deductionRowHtml({ id: "inv_guarantee", label: "Garantia", value: numOr(invoice?.guaranteePercent, ""), hint: "Automático · contrato da obra" })}
           </div>
@@ -728,12 +937,12 @@ async function openInvoiceModal(invoice) {
           }
           <div id="rcv_fields" class="finance-form-grid finance-form-grid--3" style="margin-top:0.75rem">
             <div class="finance-field">
-              <label class="finance-label" for="inv_receivedDate">Data recebimento</label>
+              <label class="finance-label" for="inv_receivedDate">Data recebimento <span class="inv-req">*</span></label>
               <input id="inv_receivedDate" class="finance-input" type="date" value="${invoice?.receivedDate ? esc(toDateKey(invoice.receivedDate)) : today}" ${isEdit ? "disabled" : ""} />
             </div>
             <div class="finance-field">
-              <label class="finance-label" for="inv_received">Valor recebido</label>
-              <input id="inv_received" class="finance-input" type="number" min="0" step="0.01" value="${invoice ? Number(invoice.receivedAmount) : 0}" ${isEdit ? "disabled" : ""} />
+              <label class="finance-label" for="inv_received">Valor recebido <span class="inv-req">*</span></label>
+              <input id="inv_received" class="finance-input" data-money placeholder="0,00" value="${invoice ? Number(invoice.receivedAmount) : ""}" ${isEdit ? "disabled" : ""} />
             </div>
             <div class="finance-field">
               <label class="finance-label" for="inv_receivedMethod">Meio</label>
@@ -789,8 +998,11 @@ async function openInvoiceModal(invoice) {
         <div class="inv-summary">
           <p class="inv-summary-title">Resumo da fatura</p>
           <dl class="inv-summary-lines">
+            <div id="pv_workRow" hidden><dt>Valor dos trabalhos</dt><dd id="pv_workValue">—</dd></div>
+            <div id="pv_amortRow" hidden><dt>Amortização adiant.</dt><dd id="pv_amort" class="ov-neg">—</dd></div>
             <div><dt>V. Ilíquido</dt><dd id="pv_gross">—</dd></div>
             <div><dt>IVA</dt><dd id="pv_vat">—</dd></div>
+            <div id="pv_cativoRow" hidden><dt>IVA cativo</dt><dd id="pv_cativo" class="ov-neg">—</dd></div>
             <div><dt>Retenção na fonte</dt><dd id="pv_withholding" class="ov-neg">—</dd></div>
             <div><dt>Seguro CAR</dt><dd id="pv_car" class="ov-neg">—</dd></div>
             <div><dt>Garantia</dt><dd id="pv_guarantee" class="ov-neg">—</dd></div>
@@ -823,12 +1035,18 @@ async function openInvoiceModal(invoice) {
     width: 1120,
     onRender: ({ panel }) => {
       const $ = (id) => panel.querySelector(`#${id}`);
+      bindMoneyInputs(panel);
       const projectSel = $("inv_project");
       const amHidden = $("inv_measurement");
       const amList = $("inv_amList");
       let currentProject = projectById(invoice?.projectId || projectSel.value) || null;
 
       const cur = () => currentProject?.currency || invoice?.project?.currency || "AOA";
+      const kind = () => $("inv_kind").value || "FATURA";
+      // Adiantamento por amortizar disponível para esta fatura (em edição, inclui o que ela já amortiza).
+      const advanceAvailable = () =>
+        round2((Number(currentProject?.advanceOutstanding) || 0) + (isEdit ? num(invoice.advanceDeductionAmount) : 0));
+      const amortActive = () => kind() === "FATURA" && !$("inv_amortRow").hidden;
 
       // ── Recebimento: as duas opções e o que cada uma implica ──
       const rcvChoice = $("rcv_choice");
@@ -840,12 +1058,13 @@ async function openInvoiceModal(invoice) {
 
       const draftPreview = () =>
         buildPreview({
-          grossAmount: $("inv_gross").value,
+          grossAmount: readMoney($("inv_gross")),
+          advanceDeductionAmount: amortActive() ? readMoney($("inv_amort")) || 0 : 0,
           vatPercent: $("inv_vat").value,
           withholdingPercent: $("inv_withholding").value,
           carPercent: $("inv_car").value,
           guaranteePercent: $("inv_guarantee").value,
-          flagVatCativo: $("inv_vatCativo").checked,
+          vatCativoPercent: Number($("inv_vatCativo").value) || 0,
           saleBudget: currentProject?.saleBudget ?? currentProject?.budgetTotal,
         });
 
@@ -860,35 +1079,52 @@ async function openInvoiceModal(invoice) {
           if (rcvAmount) rcvAmount.disabled = !paying;
           if (rcvDate) rcvDate.disabled = !paying;
           if (rcvMethod) rcvMethod.disabled = !paying;
-          // Sugere o valor líquido quando o financeiro indica que já recebeu.
-          if (paying && Number(rcvAmount?.value || 0) === 0 && pv.net > 0) {
-            rcvAmount.value = pv.net.toFixed(2);
-          }
         }
         const received = isEdit
           ? Number(invoice.receivedAmount) || 0
           : rcvMode === "recebido"
-            ? Number(rcvAmount?.value) || 0
+            ? readMoney(rcvAmount) || 0
             : 0;
         $("rcv_sum_received").textContent = money(received, cur());
         $("rcv_sum_missing").textContent = money(Math.max(pv.net - received, 0), cur());
       }
 
       const refreshPreview = () => {
-        const pv = draftPreview();
         const c = cur();
-        const cativo = $("inv_vatCativo").checked;
+        // Amortização: só em faturas de trabalhos de obras com adiantamento por amortizar.
+        const showAmort = kind() === "FATURA" && advanceAvailable() > 0.005;
+        $("inv_amortRow").hidden = !showAmort;
+        const pv = draftPreview();
+        if (showAmort) {
+          $("inv_amortHint").textContent = `Por amortizar nesta obra: ${money(advanceAvailable(), c)}`;
+        }
+        $("pv_workRow").hidden = !(pv.amort > 0);
+        $("pv_amortRow").hidden = !(pv.amort > 0);
+        $("pv_workValue").textContent = money(pv.workValue, c);
+        $("pv_amort").textContent = `− ${money(pv.amort, c)}`;
+        $("inv_grossLabel").innerHTML = `${showAmort ? "Valor dos trabalhos (ilíquido)" : kind() === "ADIANTAMENTO" ? "Valor do adiantamento (ilíquido)" : "Valor ilíquido"} <span class="inv-req">*</span>`;
+        // Aviso: valor diferente do auto de medição escolhido.
+        const amBtn = amList.querySelector("[data-am].active");
+        const amTotal = Number(amBtn?.dataset.total || 0);
+        const amWarn = $("inv_amWarning");
+        const diff = round2(pv.workValue - amTotal);
+        amWarn.hidden = !(amBtn && amBtn.dataset.am && amTotal > 0 && Math.abs(diff) > 0.5);
+        if (!amWarn.hidden) {
+          amWarn.textContent = `O valor difere do auto ${amBtn.querySelector("strong")?.textContent || ""} (${money(amTotal, c)}) em ${diff > 0 ? "+" : "−"}${money(Math.abs(diff), c)}. Confirme se foi combinado com o cliente.`;
+        }
         $("pv_gross").textContent = money(pv.gross, c);
-        $("pv_vat").textContent = cativo ? "Cativo" : `+ ${money(pv.vat, c)}`;
+        $("pv_vat").textContent = `+ ${money(pv.vat, c)}`;
+        $("pv_cativoRow").hidden = !(pv.cativoPct > 0);
+        $("pv_cativo").textContent = `− ${money(pv.vatCativo, c)}`;
+        $("inv_vatCativo_amount").textContent = pv.cativoPct > 0 ? `− ${money(pv.vatCativo, c)}` : "—";
         $("pv_withholding").textContent = `− ${money(pv.withholding, c)}`;
         $("pv_car").textContent = `− ${money(pv.car, c)}`;
         $("pv_guarantee").textContent = `− ${money(pv.guarantee, c)}`;
         $("pv_net").textContent = money(pv.net, c);
         $("inv_withholding_amount").textContent = `− ${money(pv.withholding, c)}`;
-        $("inv_vat_amount").textContent = cativo ? "Cativo" : `+ ${money(pv.vat, c)}`;
+        $("inv_vat_amount").textContent = `+ ${money(pv.vat, c)}`;
         $("inv_car_amount").textContent = `− ${money(pv.car, c)}`;
         $("inv_guarantee_amount").textContent = `− ${money(pv.guarantee, c)}`;
-        $("inv_vat").disabled = cativo;
         $("inv_grossCur").textContent = c;
 
         // % da obra: o que já foi faturado + esta fatura sobre a venda prevista.
@@ -924,7 +1160,12 @@ async function openInvoiceModal(invoice) {
       rcvChoice?.querySelectorAll(".finance-choice").forEach((btn) => {
         btn.addEventListener("click", () => {
           rcvMode = btn.dataset.mode;
-          if (rcvMode === "aberto" && rcvAmount) rcvAmount.value = 0;
+          if (rcvMode === "aberto" && rcvAmount) rcvAmount.value = "";
+          // Ao escolher «Já recebi», sugere o líquido (o utilizador pode alterar ou apagar).
+          if (rcvMode === "recebido" && rcvAmount && !readMoney(rcvAmount)) {
+            const net = draftPreview().net;
+            if (net > 0) setMoney(rcvAmount, Math.round(net * 100) / 100);
+          }
           refreshPreview();
           if (rcvMode === "recebido") rcvAmount?.focus();
         });
@@ -932,7 +1173,7 @@ async function openInvoiceModal(invoice) {
 
       // Escrever um valor também passa a opção para «Já recebi do cliente».
       rcvAmount?.addEventListener("input", () => {
-        if (Number(rcvAmount.value) > 0 && rcvMode !== "recebido") rcvMode = "recebido";
+        if (readMoney(rcvAmount) > 0 && rcvMode !== "recebido") rcvMode = "recebido";
         refreshReceipt();
       });
 
@@ -941,7 +1182,13 @@ async function openInvoiceModal(invoice) {
         if (cfg.billingWithholdingPercent !== null && cfg.billingWithholdingPercent !== undefined) $("inv_withholding").value = Number(cfg.billingWithholdingPercent);
         if (cfg.billingCarPercent !== null && cfg.billingCarPercent !== undefined) $("inv_car").value = Number(cfg.billingCarPercent);
         if (cfg.billingGuaranteePercent !== null && cfg.billingGuaranteePercent !== undefined) $("inv_guarantee").value = Number(cfg.billingGuaranteePercent);
-        $("inv_vatCativo").checked = Boolean(cfg.billingVatCativo);
+        const cativo =
+          cfg.billingVatCativoPercent !== null && cfg.billingVatCativoPercent !== undefined
+            ? Number(cfg.billingVatCativoPercent)
+            : cfg.billingVatCativo
+              ? 100
+              : 0;
+        $("inv_vatCativo").value = String([0, 50, 100].includes(cativo) ? cativo : 0);
       };
 
       const renderContext = () => {
@@ -956,7 +1203,8 @@ async function openInvoiceModal(invoice) {
         ctx.innerHTML = `
           <div><span>Venda prevista</span><strong class="${hasSale ? "" : "ov-warn"}">${hasSale ? esc(money(currentProject.saleBudget, c)) : "Sem venda prevista"}</strong></div>
           <div><span>Já faturado</span><strong>${esc(money(currentProject.alreadyBilled, c))}</strong></div>
-          <div><span>Por faturar</span><strong class="ov-warn">${hasSale ? esc(money(currentProject.toInvoice, c)) : "—"}</strong></div>`;
+          <div><span>Por faturar</span><strong class="ov-warn">${hasSale ? esc(money(currentProject.toInvoice, c)) : "—"}</strong></div>
+          ${Number(currentProject.advanceOutstanding) > 0 ? `<div><span>Adiantamento por amortizar</span><strong class="ov-warn">${esc(money(currentProject.advanceOutstanding, c))}</strong></div>` : ""}`;
       };
 
       const selectAm = (id) => {
@@ -991,7 +1239,7 @@ async function openInvoiceModal(invoice) {
           btn.addEventListener("click", () => {
             selectAm(btn.dataset.am);
             const total = Number(btn.dataset.total || 0);
-            if (total > 0) $("inv_gross").value = total;
+            if (total > 0) setMoney($("inv_gross"), total);
             refreshPreview();
           });
         });
@@ -1028,8 +1276,47 @@ async function openInvoiceModal(invoice) {
         refreshPreview();
       };
 
+      // Tipo de documento (só ao criar).
+      $("inv_kindChoice")?.querySelectorAll("[data-kind]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          $("inv_kind").value = btn.dataset.kind;
+          $("inv_kindChoice").querySelectorAll("[data-kind]").forEach((b) => b.classList.toggle("active", b === btn));
+          const advance = btn.dataset.kind === "ADIANTAMENTO";
+          $("inv_amField").hidden = advance;
+          if (advance) {
+            selectAm("");
+            // O adiantamento normalmente não tem garantia de boa execução.
+            $("inv_guarantee").value = 0;
+            setMoney($("inv_amort"), 0);
+          } else if (currentProject?.billingGuaranteePercent !== null && currentProject?.billingGuaranteePercent !== undefined) {
+            $("inv_guarantee").value = Number(currentProject.billingGuaranteePercent);
+          }
+          refreshPreview();
+        })
+      );
+
+      // Amortização: atalhos.
+      $("inv_amortQuick").querySelectorAll("[data-amort]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const work = readMoney($("inv_gross")) || 0;
+          const available = advanceAvailable();
+          let value = 0;
+          if (btn.dataset.amort === "all") value = Math.min(available, work);
+          if (btn.dataset.amort === "prop") {
+            // Proporcional: % do adiantamento sobre a venda prevista, aplicada ao valor dos trabalhos.
+            const sale = Number(currentProject?.saleBudget) || 0;
+            const advRatio = sale > 0 ? (Number(currentProject?.advancesBilled) || 0) / sale : 0;
+            value = Math.min(round2(work * advRatio), available, work);
+          }
+          setMoney($("inv_amort"), value);
+          refreshPreview();
+        })
+      );
+      $("inv_amort").addEventListener("input", refreshPreview);
+
       // Pré-enche os campos com a fatura existente (modo edição).
       if (isEdit) {
+        setMoney($("inv_gross"), num(invoice.workValue) || num(invoice.grossAmount));
         $("inv_withholding").value = pctValue(invoice.withholdingAmount, invoice.grossAmount);
         $("inv_vat").value = pctValue(invoice.vatAmount, invoice.grossAmount);
         $("inv_car").value = pctValue(invoice.carInsuranceAmount, invoice.grossAmount);
@@ -1058,7 +1345,7 @@ async function openInvoiceModal(invoice) {
           await apiRequest(`/finance/projects/${id}/billing`, {
             method: "PATCH",
             body: {
-              billingVatCativo: $("inv_vatCativo").checked,
+              billingVatCativoPercent: Number($("inv_vatCativo").value) || 0,
               billingVatPercent: numOrNull($("inv_vat").value),
               billingWithholdingPercent: numOrNull($("inv_withholding").value),
               billingCarPercent: numOrNull($("inv_car").value),
@@ -1148,7 +1435,15 @@ async function openInvoiceModal(invoice) {
           );
           fill("inv_car", pctValue(fields.carInsuranceAmount, fields.grossAmount));
           fill("inv_guarantee", pctValue(fields.guaranteeAmount, fields.grossAmount));
+          // IVA cativo: só existe 0 / 50 / 100 % (do IVA).
+          const cativoRead = fields.vatCativoPercent ?? pctValue(fields.vatCativoAmount, fields.vatAmount);
+          if (Number(cativoRead) > 0 && $("inv_vatCativo")) {
+            const snapped = [50, 100].reduce((best, v) => (Math.abs(v - cativoRead) < Math.abs(best - cativoRead) ? v : best), 50);
+            $("inv_vatCativo").value = String(snapped);
+          }
           fill("inv_notes", fields.notes || fields.description, { onlyEmpty: false });
+          // O valor lido entra como número simples: mostra-o formatado.
+          if ($("inv_gross").value) setMoney($("inv_gross"), readMoney($("inv_gross")));
 
           if (fields.suggestedProjectId && !projectSel.disabled && fields.suggestedProjectId !== projectSel.value) {
             projectSel.value = fields.suggestedProjectId;
@@ -1210,17 +1505,37 @@ async function openInvoiceModal(invoice) {
         docDate: $("inv_docDate").value,
         // Sem vencimento indicado, aplica-se o prazo padrão de 30 dias.
         dueDate: $("inv_dueDate").value || ($("inv_docDate").value ? addDays($("inv_docDate").value, 30) || null : null),
-        grossAmount: Number($("inv_gross").value),
+        grossAmount: readMoney($("inv_gross")),
+        advanceDeductionAmount: $("inv_amortRow").hidden ? (isEdit && num(invoice.advanceDeductionAmount) > 0 ? 0 : null) : readMoney($("inv_amort")) || 0,
         vatPercent: numOrNull($("inv_vat").value),
         withholdingPercent: numOrNull($("inv_withholding").value),
         carPercent: numOrNull($("inv_car").value),
         guaranteePercent: numOrNull($("inv_guarantee").value),
-        flagVatCativo: $("inv_vatCativo").checked,
+        vatCativoPercent: Number($("inv_vatCativo").value) || 0,
         notes: $("inv_notes").value.trim() || null,
       };
+      const today = toDateKey(new Date());
+      if (!isEdit && !$("inv_project").value) {
+        $("inv_project").focus();
+        return toast("Selecione a obra.", { type: "error" });
+      }
+      if (!raw.docDate) {
+        $("inv_docDate").focus();
+        return toast("Indique a data da fatura.", { type: "error" });
+      }
+      if (raw.docDate > today) {
+        $("inv_docDate").focus();
+        return toast("A data da fatura não pode ser futura.", { type: "error" });
+      }
       if (!raw.grossAmount || raw.grossAmount <= 0) {
         $("inv_gross").focus();
         return toast("Indique o valor ilíquido.", { type: "error" });
+      }
+      if (raw.advanceDeductionAmount > 0) {
+        if (raw.advanceDeductionAmount >= raw.grossAmount) {
+          $("inv_amort").focus();
+          return toast("A amortização tem de ser menor do que o valor dos trabalhos.", { type: "error" });
+        }
       }
       if (raw.dueDate && raw.docDate && raw.dueDate < raw.docDate) {
         $("inv_dueDate").focus();
@@ -1246,14 +1561,34 @@ async function openInvoiceModal(invoice) {
         return;
       }
 
+      // Sem a opção «Já recebi», a fatura fica em aberto (nada entrou no caixa).
+      const receiving =
+        !isEdit && $("rcv_choice")?.querySelector(".finance-choice.active")?.dataset.mode === "recebido";
+      const receivedAmount = receiving ? readMoney($("inv_received")) || 0 : 0;
+      if (receiving) {
+        const preview = buildPreview({ ...raw, saleBudget: 0 });
+        const receivedDate = $("inv_receivedDate").value;
+        if (receivedAmount <= 0) {
+          $("inv_received").focus();
+          return toast("Indique o valor recebido, ou escolha «Fica em aberto».", { type: "error" });
+        }
+        if (receivedAmount > preview.net + 0.005) {
+          $("inv_received").focus();
+          return toast(`O valor recebido não pode ser maior do que o líquido da fatura (${money(preview.net)}).`, { type: "error" });
+        }
+        if (!receivedDate) {
+          $("inv_receivedDate").focus();
+          return toast("Indique a data do recebimento.", { type: "error" });
+        }
+        if (receivedDate < raw.docDate || receivedDate > today) {
+          $("inv_receivedDate").focus();
+          return toast("A data do recebimento tem de estar entre a data da fatura e hoje.", { type: "error" });
+        }
+      }
+
       setButtonLoading(btn, true);
       try {
         const file = $("inv_docFileInput")?.files?.[0] || null;
-        // Sem a opção «Já recebi», a fatura fica em aberto (nada entrou no caixa).
-        const receivedAmount =
-          $("rcv_choice")?.querySelector(".finance-choice.active")?.dataset.mode === "recebido"
-            ? numOrNull($("inv_received")?.value) || 0
-            : 0;
         let targetId = invoice?.id || null;
         let result = null;
 
@@ -1262,14 +1597,11 @@ async function openInvoiceModal(invoice) {
           toast("Fatura actualizada.", { type: "success" });
         } else {
           const projectId = $("inv_project").value;
-          if (!projectId) {
-            setButtonLoading(btn, false);
-            return toast("Selecione a obra.", { type: "error" });
-          }
           result = await apiRequest("/finance/invoices", {
             method: "POST",
             body: {
               ...raw,
+              kind: $("inv_kind").value || "FATURA",
               projectId,
               measurementId: $("inv_measurement").value || null,
               receivedAmount,
@@ -1352,6 +1684,9 @@ async function loadAiStatus() {
 
 export async function render() {
   state.expanded = new Set();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("projectId")) state.filters.projectId = params.get("projectId");
+  if (params.get("clientId")) state.filters.clientId = params.get("clientId");
   try {
     await Promise.all([loadOptions(), loadAiStatus()]);
   } catch (err) {

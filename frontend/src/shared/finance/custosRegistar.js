@@ -6,7 +6,7 @@ import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawComboChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 import { AGING_TONES } from "./aging.js";
 import { kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
-import { COST_TYPES, loadCostFormOptions, openConfirmCostModal, openCostForm } from "./costForm.js";
+import { costTypeLabel, loadCostFormOptions, openConfirmCostModal, openCostForm } from "./costForm.js";
 
 /**
  * Ecrã «Registar Custos» (Financeiro · Custos).
@@ -146,7 +146,7 @@ function renderShell() {
         <section class="finance-card ov-panel">
           <header class="finance-chart-head">
             <h2 class="finance-chart-title">Por pagar</h2>
-            <p class="finance-chart-subtitle">Valor comprometido por antiguidade da data do custo</p>
+            <p class="finance-chart-subtitle">Comprometido por vencimento · sem data (encomendas, fretes) = a vencer</p>
           </header>
           <div id="crAging">${skeletonHtml(3, "line")}</div>
         </section>
@@ -249,7 +249,7 @@ function renderKpis() {
   const cards = [
     {
       key: "realized",
-      label: "Custo realizado",
+      label: "Realizado (pago)",
       icon: "payments",
       tone: "blue",
       value: money(realized),
@@ -263,7 +263,8 @@ function renderKpis() {
         <p class="ov-kpi-compare">
           <span class="ov-legend"><i class="ov-dot ov-dot--emerald"></i>Confirmado ${esc(compact(t.confirmed))}</span>
           <span class="ov-legend" style="margin-left:0.6rem"><i class="ov-dot ov-dot--amber"></i>Por confirmar ${esc(compact(t.pending))}</span>
-        </p>`,
+        </p>
+        <p class="ov-kpi-compare" title="Valores pagos com IVA; o IVA das compras é dedutível. O custo da obra (Overview, margem) é sem IVA.">Custo da obra sem IVA <strong>${esc(compact(t.realizedBase ?? realized))}</strong></p>`,
     },
     {
       key: "action",
@@ -368,7 +369,7 @@ function detailRow(c, cur) {
   const cat = c.costCategory ? [c.costCategory.parentName, c.costCategory.name].filter(Boolean).join(" › ") : null;
   const parts = [
     item("Centro de custo", esc(c.costCenter ? `${c.costCenter.code || ""} ${c.costCenter.name}`.trim() : "—")),
-    item("Tipo custo", esc(COST_TYPES[c.category] || c.category || "—")),
+    item("Tipo custo", esc(c.category ? costTypeLabel(c.category) : "—")),
     item("Categoria / subcategoria", esc(cat || "—")),
     item("Valor do custo", esc(money(c.amount, cur))),
   ];

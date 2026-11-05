@@ -295,10 +295,12 @@ model Project {
   pauses              ProjectPause[]
   projectContacts     ProjectContact[]
   invoices            Invoice[]
+  guaranteeReleases GuaranteeRelease[]
   bankMovements       BankMovement[]
 
   // ─── Configuração de faturação da obra (Área Financeira) ───
   billingVatCativo          Boolean @default(false) // IVA cativo: recebimento não considera IVA
+  billingVatCativoPercent   Decimal? @db.Decimal(5, 2) // % do IVA cativo pelo cliente (0, 50, 100)
   billingVatPercent         Decimal? @db.Decimal(5, 2) // % IVA aplicada
   billingWithholdingPercent Decimal? @db.Decimal(5, 2) // % Retenção na Fonte
   billingCarPercent         Decimal? @db.Decimal(5, 2) // % Seguro CAR
@@ -2002,6 +2004,12 @@ model RegistryImportBatch {
 // e regras de confirmação de custos.
 // =============================================
 
+enum InvoiceKind {
+  FATURA
+  ADIANTAMENTO
+  NOTA_CREDITO
+}
+
 enum InvoiceStatus {
   EM_ABERTO
   PAGO_PARCIAL
@@ -2037,6 +2045,9 @@ enum CostConfirmationStatus {
 // Fatura emitida ao cliente (receita) — folha "RECEBIMENTOS – REGISTO".
 model Invoice {
   id                 String        @id @default(cuid())
+  // FATURA (trabalhos), ADIANTAMENTO (fatura de adiantamento) ou NOTA_CREDITO
+  // (valores gravados a negativo, ligada à fatura que corrige).
+  kind               InvoiceKind   @default(FATURA)
   projectId          String
   clientId           String?
   measurementId      String? // Auto de Medição (AM) associado
@@ -2044,8 +2055,14 @@ model Invoice {
   docDate            DateTime
   dueDate            DateTime?
   grossAmount        Decimal       @db.Decimal(16, 2) // V. Ilíquido Doc
+  workValue          Decimal?      @db.Decimal(16, 2) // Valor dos trabalhos (antes da amortização do adiantamento)
+  advanceDeductionAmount Decimal?  @db.Decimal(16, 2) // Amortização do adiantamento deduzida nesta fatura
+  creditedInvoiceId  String? // Nota de crédito: fatura corrigida
+  creditedAmount     Decimal       @default(0) @db.Decimal(16, 2) // Líquido anulado por notas de crédito
   withholdingAmount  Decimal?      @db.Decimal(16, 2) // V. Retenção na Fonte
-  vatAmount          Decimal?      @db.Decimal(16, 2) // V. IVA
+  vatAmount          Decimal?      @db.Decimal(16, 2) // V. IVA (do documento)
+  vatCativoPercent   Decimal?      @db.Decimal(5, 2) // % do IVA cativo pelo cliente
+  vatCativoAmount    Decimal?      @db.Decimal(16, 2) // IVA cativo (deduzido no líquido)
   carInsuranceAmount Decimal?      @db.Decimal(16, 2) // Seguro CAR
   guaranteeAmount    Decimal?      @db.Decimal(16, 2) // Garantia
   netAmount          Decimal?      @db.Decimal(16, 2) // V. Líq. Doc
@@ -2081,12 +2098,32 @@ model Invoice {
   client      Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
   measurement MeasurementReport? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
   receipts    InvoiceReceipt[]
+  creditedInvoice Invoice?  @relation("InvoiceCreditNotes", fields: [creditedInvoiceId], references: [id], onDelete: Restrict)
+  creditNotes     Invoice[] @relation("InvoiceCreditNotes")
 
   @@index([projectId, docDate])
   @@index([clientId])
   @@index([status])
   @@index([dueDate])
   @@index([documentPath])
+  @@index([creditedInvoiceId])
+  @@index([kind])
+}
+
+/// Devolução (total ou parcial) das garantias retidas pelo cliente numa obra.
+model GuaranteeRelease {
+  id           String   @id @default(cuid())
+  projectId    String
+  amount       Decimal  @db.Decimal(16, 2)
+  releasedDate DateTime
+  method       String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, releasedDate])
 }
 
 // Recebimento (parcial ou total) de uma fatura.

@@ -4,7 +4,7 @@ import { formatCurrency, toDateKey } from "../format.js";
 import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawBarChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 import { drawKpiSparks, kpiCardsHtml, meterHtml, num, skeletonHtml, stripHtml } from "./widgets.js";
-import { COST_TYPES } from "./costForm.js";
+import { costTypeLabel } from "./costForm.js";
 
 /**
  * Ecrã «Custos Realizados» (Financeiro · Custos).
@@ -104,7 +104,7 @@ function groupOf(item) {
       return { key: item.supplierRef?.id || name || "__none__", label: name || "Sem fornecedor", sub: "" };
     }
     case "category":
-      return { key: item.category || "__none__", label: COST_TYPES[item.category] || "Sem tipo", sub: "" };
+      return { key: item.category || "__none__", label: costTypeLabel(item.category), sub: "" };
     case "source":
       return { key: item.source, label: item.sourceLabel || item.source, sub: "" };
     default:
@@ -141,7 +141,8 @@ function aggregate(items) {
     b.paid += paid;
     if (item.confirmationStatus === "CONFIRMADO") b.confirmed += paid;
     else b.pending += paid;
-    if (!item.docNumber) b.missingDoc += 1;
+    // Mesmo critério do Registar Custos: custos a confirmar ainda sem nº de fatura.
+    if (item.action === "REGISTAR_FATURA") b.missingDoc += 1;
   });
   return [...buckets.values()].sort((a, b) => b.paid - a.paid);
 }
@@ -255,8 +256,10 @@ function renderKpis(items, buckets, months) {
   const withDoc = items.filter((c) => c.docNumber).length;
   const docPct = items.length ? (withDoc / items.length) * 100 : 0;
   const avg = months.length ? paid / months.length : 0;
-  const last = months[months.length - 1];
-  const prev = months[months.length - 2];
+  const currentKey = toDateKey(new Date()).slice(0, 7);
+  const closed = months.filter((m) => m.key < currentKey);
+  const last = closed[closed.length - 1];
+  const prev = closed[closed.length - 2];
   const lastValue = last ? last.confirmed + last.pending : 0;
   const prevValue = prev ? prev.confirmed + prev.pending : 0;
   const trend = prevValue > 0 ? ((lastValue - prevValue) / prevValue) * 100 : null;
@@ -280,7 +283,7 @@ function renderKpis(items, buckets, months) {
       badge: `${items.length} lançamentos`,
       badgeTone: "blue",
       body: `<p class="ov-kpi-compare">Média mensal <strong>${esc(compact(avg))}</strong>${
-        trend === null ? "" : ` · último mês <strong class="ov-${trend > 0 ? "neg" : "pos"}">${trend > 0 ? "+" : ""}${esc(trend.toFixed(0))}%</strong>`
+        trend === null ? "" : ` · ${esc(last.label)} vs mês anterior <strong class="ov-${trend > 0 ? "neg" : "pos"}">${trend > 0 ? "+" : ""}${esc(trend.toFixed(0))}%</strong>`
       }</p>`,
       spark: months.length > 1 ? { data: months.map((m) => m.confirmed + m.pending), color: TONES.blue } : null,
     },
@@ -306,7 +309,7 @@ function renderKpis(items, buckets, months) {
       badgeTone: "violet",
       body: forecast > 0
         ? `${meterHtml([{ value: execPct, tone: execPct > 100 ? "red" : "violet" }], { marker: 100 })}
-           <p class="ov-kpi-compare"><strong>${esc(compact(realizedAll))}</strong> de ${esc(compact(forecast))} previstos nos centros de custo</p>`
+           <p class="ov-kpi-compare"><strong>${esc(compact(realizedAll))}</strong> sem IVA de ${esc(compact(forecast))} previstos nos centros de custo</p>`
         : `<p class="ov-kpi-compare">Sem orçamento de custo definido nas obras do filtro.</p>`,
     },
     {
@@ -334,7 +337,7 @@ function renderStrip(items) {
   const stock = bySource("CONSUMO_STOCK");
   const atm = bySource("ATM");
   const general = items.filter((c) => !c.project?.id).reduce((a, c) => a + num(c.paidAmount), 0);
-  const noDoc = items.filter((c) => !c.docNumber);
+  const noDoc = items.filter((c) => c.action === "REGISTAR_FATURA");
   document.getElementById("rlStrip").innerHTML = stripHtml([
     { label: "Pagamentos", icon: "shopping_cart", value: compact(payments), sub: share(payments) },
     { label: "Pedidos extra", icon: "request_quote", value: compact(extra), sub: share(extra) },
@@ -346,7 +349,7 @@ function renderStrip(items) {
       icon: "report",
       value: String(noDoc.length),
       valueTone: noDoc.length ? "warn" : null,
-      sub: noDoc.length ? `${compact(noDoc.reduce((a, c) => a + num(c.paidAmount), 0))} sem documento` : "tudo documentado",
+      sub: noDoc.length ? `${compact(noDoc.reduce((a, c) => a + num(c.paidAmount), 0))} por registar o documento` : "tudo documentado",
       href: "/Financeiro/custos/registar?view=missingDoc",
     },
   ]);
@@ -392,7 +395,7 @@ function renderCharts(items, buckets, months) {
     emptyChart("rlChartType", "donut_large", "Sem custo realizado no período.");
   } else {
     drawDonutChart("rlChartType", {
-      labels: typeRows.map(([k]) => COST_TYPES[k] || k),
+      labels: typeRows.map(([k]) => costTypeLabel(k)),
       series: typeRows.map(([, v]) => v),
       totalLabel: "Realizado",
       height: 280,
@@ -505,7 +508,7 @@ function renderTable(items, buckets) {
                   : `<div class="ov-cell-bar">
                        <span class="${exec > 100 ? "ov-neg" : ""}">${esc(pct(exec))}</span>
                        ${meterHtml([{ value: exec, tone: exec > 100 ? "red" : "violet" }], { marker: 100 })}
-                       <small>${esc(compact(budget.realized))} de ${esc(compact(budget.forecast))}</small>
+                       <small>${esc(compact(budget.realized))} s/ IVA de ${esc(compact(budget.forecast))}</small>
                      </div>`
               }</td>`
             : ""
@@ -526,8 +529,8 @@ function renderTable(items, buckets) {
         <th style="text-align:right">Realizado</th>
         <th style="text-align:right">Peso</th>
         <th style="text-align:right">Confirmado</th>
-        <th style="text-align:right" title="Lançamentos sem nº de fatura">Sem nº</th>
-        ${showBudget ? `<th style="text-align:right" title="Custo realizado acumulado sobre o custo previsto da obra">Orçamento executado</th>` : ""}
+        <th style="text-align:right" title="Custos a confirmar ainda sem nº de fatura">Sem nº</th>
+        ${showBudget ? `<th style="text-align:right" title="Custo realizado acumulado, sem IVA dedutível, sobre o custo previsto da obra (sem IVA)">Orçamento executado</th>` : ""}
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
@@ -569,7 +572,7 @@ function exportCsv() {
       c.costCenter?.name,
       c.supplierRef?.name || c.supplier,
       c.description,
-      COST_TYPES[c.category] || c.category,
+      costTypeLabel(c.category),
       c.sourceLabel || c.source,
       c.docNumber,
       num(c.paidAmount).toFixed(2).replace(".", ","),
@@ -617,7 +620,7 @@ async function load() {
     // Realizado = valor já pago ou consumido; mercadoria em stock e comprometido ficam de fora.
     state.items = (costs.items || []).filter((c) => c.kind === "REALIZADO" && num(c.paidAmount) > 0);
     state.budgets = new Map(
-      (overview.items || []).map((r) => [r.project.id, { id: r.project.id, forecast: r.forecast, realized: r.realized }])
+      (overview.items || []).map((r) => [r.project.id, { id: r.project.id, forecast: r.forecast, realized: r.realizedBase ?? r.realized }])
     );
     state.expanded = new Set();
     renderAll();

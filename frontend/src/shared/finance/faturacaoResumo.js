@@ -34,6 +34,12 @@ function money(value, currency) {
   return formatCurrency(Number(value) || 0, currency || "AOA");
 }
 
+/** Valor numa célula da tabela: sem «Kz» (a moeda está no subtítulo); outras moedas mostram o código. */
+function amount(value, currency) {
+  const cur = currency || "AOA";
+  return cur === "AOA" ? formatCurrency(Number(value) || 0, "AOA").replace(/\s*Kz$/, "") : money(value, cur);
+}
+
 function pct(value, digits = 1) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
@@ -112,7 +118,7 @@ function renderShell() {
         <header class="finance-chart-head finance-chart-head--row">
           <div>
             <h2 class="finance-chart-title">Resumo por obra</h2>
-            <p class="finance-chart-subtitle">Passe o cursor sobre a barra para ver cada parte · % sobre a venda prevista da obra</p>
+            <p class="finance-chart-subtitle">Valores em Kz · % sobre a venda prevista da obra · passe o cursor sobre a barra para ver cada parte</p>
           </div>
           <div class="ov-table-tools">
             <div class="finance-seg finance-seg--sm" id="rsScope">
@@ -221,7 +227,7 @@ function renderStrip(t) {
   document.getElementById("rsStrip").innerHTML = stripHtml([
     { label: "Venda prevista", icon: "target", value: compact(t.forecast), sub: `${t.withForecast} de ${t.count} obras` },
     { label: "Medido (AM)", icon: "fact_check", value: compact(t.measured), sub: `${pct(t.forecast > 0 ? (t.measured / t.forecast) * 100 : 0)} da previsão` },
-    { label: "Faturado", icon: "receipt_long", value: compact(t.billed), sub: "total emitido", href: "/Financeiro/faturacao/registar" },
+    { label: "Faturado", icon: "receipt_long", value: compact(t.billed), sub: "sem adiantamentos por amortizar", href: "/Financeiro/faturacao/registar" },
     {
       label: "Faturado sem AM",
       icon: "receipt",
@@ -252,7 +258,7 @@ function renderStrip(t) {
 const COLUMNS = [
   { key: "project", label: "Obra" },
   { key: "forecastValue", label: "Venda prevista", num: true },
-  { key: "composition", label: "Composição do caderno de encargos", sortable: false },
+  { key: "composition", label: "Composição da venda", sortable: false },
   { key: "withAmValue", label: "AM faturados", num: true },
   { key: "withoutAmValue", label: "AM por faturar", num: true },
   { key: "billedValue", label: "Faturado", num: true },
@@ -303,9 +309,13 @@ function renderTable() {
           <div class="ov-project">
             <span class="ov-project-name">${esc(i.project?.name || "—")}</span>
             <span class="ov-project-meta">${esc([i.project?.code, i.project?.client?.name].filter(Boolean).join(" · "))}</span>
+            <span class="rs-links">
+              <a href="/Financeiro/faturacao/registar?projectId=${encodeURIComponent(i.project?.id || "")}" title="Faturas emitidas desta obra"><span class="material-symbols-outlined">receipt_long</span>Faturas</a>
+              <a href="/Financeiro/faturacao/prevista?projectId=${encodeURIComponent(i.project?.id || "")}" title="Prevista vs realizada desta obra"><span class="material-symbols-outlined">query_stats</span>Prevista</a>
+            </span>
           </div>
         </td>
-        <td class="fin-num">${hasForecast ? esc(money(i.forecastValue, cur)) : `<span class="ov-muted">Sem previsão</span>`}</td>
+        <td class="fin-num">${hasForecast ? esc(amount(i.forecastValue, cur)) : `<span class="ov-muted">Sem previsão</span>`}</td>
         <td class="rs-comp-cell">
           ${
             hasForecast
@@ -318,14 +328,14 @@ function renderTable() {
           }
         </td>
         <td class="fin-num">
-          <div class="ov-margin-cell"><strong>${esc(money(i.withAmValue, cur))}</strong><small class="ov-muted">${i.withAmCount} auto${i.withAmCount === 1 ? "" : "s"}</small></div>
+          <div class="ov-margin-cell"><strong>${esc(amount(i.withAmValue, cur))}</strong><small class="ov-muted">${i.withAmCount} auto${i.withAmCount === 1 ? "" : "s"}</small></div>
         </td>
         <td class="fin-num">
-          <div class="ov-margin-cell"><strong class="${num(i.withoutAmValue) > 0 ? "ov-warn" : ""}">${esc(money(i.withoutAmValue, cur))}</strong><small class="ov-muted">${i.withoutAmCount} auto${i.withoutAmCount === 1 ? "" : "s"}</small></div>
+          <div class="ov-margin-cell"><strong class="${num(i.withoutAmValue) > 0 ? "ov-warn" : ""}">${esc(amount(i.withoutAmValue, cur))}</strong><small class="ov-muted">${i.withoutAmCount} auto${i.withoutAmCount === 1 ? "" : "s"}</small></div>
         </td>
         <td class="fin-num">
           <div class="ov-margin-cell">
-            <strong>${esc(money(i.billedValue, cur))}</strong>
+            <strong>${esc(amount(i.billedValue, cur))}</strong>
             <small class="${num(i.billedWithoutAm) > 0 ? "ov-warn" : "ov-muted"}">${num(i.billedWithoutAm) > 0 ? `${esc(compact(i.billedWithoutAm))} sem AM` : hasForecast ? `${esc(pct(i.billedPct))} da previsão` : "—"}</small>
           </div>
         </td>

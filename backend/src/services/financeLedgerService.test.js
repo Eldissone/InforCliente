@@ -184,11 +184,22 @@ test("computeCostControl compara o realizado com o esperado para o avanço", () 
   assert.equal(c.expectedToDate, 500);
   assert.equal(c.deviationToDate, 100);
   assert.equal(c.deviationToDatePct, 20);
-  assert.equal(c.eac, 1000);
-  assert.equal(c.eacDeviation, 0);
+  // Gastou 100 a mais para metade da obra: o fecho leva esse desvio (600 + 500 por executar).
+  assert.equal(c.eac, 1100);
+  assert.equal(c.eacDeviation, 100);
+  // O comprometido (300) é menor do que o orçamento por executar (400): conta o orçamento.
   const over = computeCostControl({ budget: 1000, realized: 900, committed: 300, progressPct: 60 });
-  assert.equal(over.eac, 1200);
-  assert.equal(over.eacDeviationPct, 20);
+  assert.equal(over.eac, 1300);
+  assert.equal(over.eacDeviationPct, 30);
+  // Comprometido acima do orçamento por executar: conta o comprometido.
+  const heavy = computeCostControl({ budget: 1000, realized: 400, committed: 700, progressPct: 50 });
+  assert.equal(heavy.eac, 1100);
+});
+
+test("computeCostControl: obra concluída fecha no realizado", () => {
+  const c = computeCostControl({ budget: 96, realized: 94, committed: 0, progressPct: 100 });
+  assert.equal(c.eac, 94);
+  assert.equal(c.eacDeviation, -2);
 });
 
 test("computeCostControl sem avanço conhecido não calcula desvio à data", () => {

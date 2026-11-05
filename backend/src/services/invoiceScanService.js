@@ -23,6 +23,8 @@ const SUPPORTED_MIME_TYPES = new Map([
 
 const MAX_INLINE_BYTES = 12 * 1024 * 1024; // 12MB — limite do payload inline do Gemini
 const GEMINI_TIMEOUT_MS = 60_000;
+/** Limite de cada modelo antes de passar ao de reserva (o último usa o tempo que sobra). */
+const GEMINI_MODEL_TIMEOUT_MS = 20_000;
 const GEMINI_FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash"];
 
 const RESPONSE_SCHEMA = {
@@ -40,6 +42,8 @@ const RESPONSE_SCHEMA = {
     vatPercent: { type: ["number", "null"] },
     withholdingAmount: { type: ["number", "null"] },
     withholdingPercent: { type: ["number", "null"] },
+    vatCativoAmount: { type: ["number", "null"] },
+    vatCativoPercent: { type: ["number", "null"] },
     carInsuranceAmount: { type: ["number", "null"] },
     guaranteeAmount: { type: ["number", "null"] },
     netAmount: { type: ["number", "null"] },
@@ -63,6 +67,8 @@ const RESPONSE_SCHEMA = {
     "vatPercent",
     "withholdingAmount",
     "withholdingPercent",
+    "vatCativoAmount",
+    "vatCativoPercent",
     "carInsuranceAmount",
     "guaranteeAmount",
     "netAmount",
@@ -87,6 +93,11 @@ Regras:
 - "grossAmount" é o valor ilíquido (base tributável, SEM IVA). Se o documento só tiver o total com IVA, calcula o ilíquido removendo o IVA e explica-o em "notes".
 - "vatAmount" é o valor do IVA e "vatPercent" a taxa aplicada (ex.: 14).
 - "withholdingAmount"/"withholdingPercent" correspondem à retenção na fonte, quando existir.
+- "vatCativoAmount"/"vatCativoPercent" são o IVA cativo (IVA retido pelo cliente e entregue ao Estado, típico de entidades públicas): valor e percentagem DO IVA que fica cativa (ex.: 100 ou 50).
+- "carInsuranceAmount" é o desconto do seguro de obra (CAR / todos os riscos), quando existir.
+- "guaranteeAmount" é a garantia / caução de boa execução retida pelo cliente, quando existir.
+- Valores descontados no documento (IVA cativo, retenção, CAR, garantia) são devolvidos como números positivos; não os ponhas apenas em "notes".
+- "documentType": um documento intitulado «Fatura» é "FATURA", mesmo que tenha avisos ou notas no rodapé.
 - "netAmount" é o valor total a pagar/receber indicado no documento.
 - "docNumber" é o número do documento (ex.: FT 2026/123).
 - "supplierName"/"supplierNif" é o emitente; "clientName"/"clientNif" é o destinatário.
@@ -124,12 +135,14 @@ function parseDateValue(raw) {
   const text = String(raw).trim();
   if (!text) return null;
 
-  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  // A data pode vir com texto à volta («Data de emissão: 04/11/2026»).
+  const iso = text.match(/(?:^|\D)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/);
   if (iso) {
     const d = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+  // Em Angola a data é dia/mês/ano: nunca deixar o JavaScript ler 04/11 como 11 de abril.
+  const dmy = text.match(/(?:^|\D)(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4}|\d{2})(?!\d)/);
   if (dmy) {
     let year = Number(dmy[3]);
     if (year < 100) year += year < 70 ? 2000 : 1900;
@@ -292,11 +305,17 @@ async function callGemini({ mimeType, base64Data, projects }) {
   };
 
   const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-  try {
-    let result;
-    for (const [index, model] of models.entries()) {
+  const deadline = Date.now() + GEMINI_TIMEOUT_MS;
+  let result;
+  for (const [index, model] of models.entries()) {
+    const last = index === models.length - 1;
+    const remaining = deadline - Date.now();
+    if (remaining <= 1000) break;
+    // Cada modelo tem o seu próprio limite: um modelo que fica pendurado (sem
+    // responder) não pode gastar o tempo todo e impedir os de reserva.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), last ? remaining : Math.min(GEMINI_MODEL_TIMEOUT_MS, remaining));
+    try {
       const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
       const response = await fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
         method: "POST",
@@ -306,16 +325,25 @@ async function callGemini({ mimeType, base64Data, projects }) {
       });
       const payloadText = await response.text();
       result = { response, payloadText, model };
-
-      // 503 usually means temporary model capacity pressure. Try the next
-      // supported Flash model while preserving the same structured JSON schema.
-      if (response.status !== 503 || index === models.length - 1) break;
-      await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
+    } catch (error) {
+      // Sem resposta a tempo: passa ao modelo seguinte (no último, o erro sobe).
+      if (error?.name !== "AbortError" || last) throw error;
+      continue;
+    } finally {
+      clearTimeout(timer);
     }
-    return result;
-  } finally {
-    clearTimeout(timeout);
+
+    // 503 usually means temporary model capacity pressure. Try the next
+    // supported Flash model while preserving the same structured JSON schema.
+    if (result.response.status !== 503 || last) break;
+    await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
   }
+  if (!result) {
+    const err = new Error("Sem resposta dos modelos de IA dentro do tempo limite.");
+    err.name = "AbortError";
+    throw err;
+  }
+  return result;
 }
 
 function buildHttpError(status, message, code) {
@@ -471,6 +499,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   const vatPercent = clampPercent(parsed.vatPercent);
   const withholdingAmount = round2(parseNumberValue(parsed.withholdingAmount));
   const withholdingPercent = clampPercent(parsed.withholdingPercent);
+  const vatCativoAmount = round2(parseNumberValue(parsed.vatCativoAmount));
+  const vatCativoPercent = clampPercent(parsed.vatCativoPercent);
   const carInsuranceAmount = round2(parseNumberValue(parsed.carInsuranceAmount));
   const guaranteeAmount = round2(parseNumberValue(parsed.guaranteeAmount));
   const netAmount = round2(parseNumberValue(parsed.netAmount));
@@ -490,6 +520,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     vatPercent,
     withholdingAmount,
     withholdingPercent,
+    vatCativoAmount,
+    vatCativoPercent,
     carInsuranceAmount,
     guaranteeAmount,
     netAmount,

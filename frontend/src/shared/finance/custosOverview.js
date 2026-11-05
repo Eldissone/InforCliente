@@ -5,7 +5,7 @@ import { escapeFinanceHtml as esc } from "../financePage.js";
 import { chartCardHtml, compactMoney as compact, drawBarChart, drawComboChart, drawDonutChart, destroyCharts, TONES } from "./charts.js";
 import { AGING_TONES } from "./aging.js";
 import { drawKpiSparks, kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf } from "./widgets.js";
-import { COST_TYPES } from "./costForm.js";
+import { costTypeLabel } from "./costForm.js";
 
 /**
  * Ecrã «Overview Custos» (Financeiro · Custos).
@@ -17,8 +17,16 @@ import { COST_TYPES } from "./costForm.js";
  *  - Projeção   → realizado + comprometido; o desvio projetado compara-a com
  *    o previsto (positivo = a obra vai gastar acima do orçamento)
  *
+ * O orçamento de custo é sem IVA e o IVA das compras é dedutível: todos os
+ * valores do ecrã são custo sem IVA (a mesma base do Overview e da margem).
+ * O valor pago com IVA aparece só como referência no cartão do realizado.
+ *
  * A mercadoria paga e ainda em armazém não é custo da obra: aparece à parte.
  */
+
+/** Realizado / comprometido sem o IVA dedutível (com recurso ao valor pago). */
+const realOf = (p) => num(p.realizedBase ?? p.realized);
+const commOf = (p) => num(p.committedBase ?? p.committed);
 
 const state = {
   months: 12,
@@ -54,7 +62,7 @@ function renderShell() {
         ${chartCardHtml({
           id: "coChartMonthly",
           title: "Custo realizado vs comprometido",
-          subtitle: "Por mês, pela data do custo",
+          subtitle: "Por mês, pela data do custo · sem IVA",
           hint: "Comprometido é o que já está assumido (pagamentos abertos, pedidos extra aprovados, encomendas) e ainda não saiu do caixa.",
           height: 280,
           actionsHtml: `
@@ -68,9 +76,9 @@ function renderShell() {
           <header class="finance-chart-head finance-chart-head--row">
             <div>
               <h2 class="finance-chart-title">Por pagar</h2>
-              <p class="finance-chart-subtitle">Comprometido por antiguidade da data do custo</p>
+              <p class="finance-chart-subtitle">Contas a pagar por vencimento</p>
             </div>
-            <a class="ov-link" href="/Financeiro/custos/registar?view=committed">Custos <span class="material-symbols-outlined">arrow_forward</span></a>
+            <a class="ov-link" href="/Financeiro/contas">Contas a pagar <span class="material-symbols-outlined">arrow_forward</span></a>
           </header>
           <div id="coAging">${skeletonHtml(3, "line")}</div>
         </section>
@@ -92,7 +100,7 @@ function renderShell() {
           <header class="finance-chart-head finance-chart-head--row">
             <div>
               <h2 class="finance-chart-title">Maiores centros de custo</h2>
-              <p class="finance-chart-subtitle">Realizado acumulado por centro de custo da obra</p>
+              <p class="finance-chart-subtitle">Realizado acumulado por centro de custo da obra · sem IVA</p>
             </div>
             <a class="ov-link" href="/Financeiro/custos/realizados">Realizados <span class="material-symbols-outlined">arrow_forward</span></a>
           </header>
@@ -162,16 +170,17 @@ function renderKpis() {
   const projects = state.data?.items || [];
   const monthly = state.data?.charts?.monthly || [];
   const forecast = num(t.forecast);
-  const realized = num(t.realized);
-  const committed = num(t.committed);
-  const projected = num(t.projected) || realized + committed;
+  const realized = realOf(t);
+  const committed = commOf(t);
+  const projected = realized + committed;
   const realizedPct = forecast > 0 ? (realized / forecast) * 100 : 0;
   const committedPct = forecast > 0 ? (committed / forecast) * 100 : 0;
   const projectedPct = forecast > 0 ? (projected / forecast) * 100 : 0;
   const deviation = projected - forecast;
-  const over = projects.filter((p) => num(p.forecast) > 0 && num(p.realized) + num(p.committed) > num(p.forecast)).length;
+  const over = projects.filter((p) => num(p.forecast) > 0 && realOf(p) + commOf(p) > num(p.forecast)).length;
   const withBudget = projects.filter((p) => num(p.forecast) > 0).length;
-  const confirmedPct = realized > 0 ? (num(t.confirmed) / realized) * 100 : 0;
+  // Conferência sobre o valor pago (o que o financeiro confirma são documentos).
+  const confirmedPct = num(t.realized) > 0 ? (num(t.confirmed) / num(t.realized)) * 100 : 0;
 
   const cards = [
     {
@@ -198,8 +207,9 @@ function renderKpis() {
       badgeTone: realizedPct > 100 ? "red" : "blue",
       body: `
         ${meter([{ value: realizedPct, tone: realizedPct > 100 ? "red" : "blue" }], { marker: forecast > 0 ? 100 : null })}
-        <p class="ov-kpi-compare"><strong class="${confirmedPct < 100 ? "ov-warn" : "ov-pos"}">${esc(pct(confirmedPct, 0))}</strong> confirmado pelo financeiro</p>`,
-      spark: monthly.length > 1 ? { data: monthly.map((m) => num(m.cost)), color: TONES.blue } : null,
+        <p class="ov-kpi-compare"><strong class="${confirmedPct < 100 ? "ov-warn" : "ov-pos"}">${esc(pct(confirmedPct, 0))}</strong> confirmado pelo financeiro</p>
+        <p class="ov-kpi-compare" title="Valor pago aos fornecedores, com IVA; o IVA das compras é dedutível e não é custo da obra">Pago c/ IVA <strong>${esc(compact(t.realized))}</strong> · IVA dedutível ${esc(compact(t.realizedVat))}</p>`,
+      spark: monthly.length > 1 ? { data: monthly.map((m) => num(m.costBase ?? m.cost)), color: TONES.blue } : null,
     },
     {
       key: "committed",
@@ -233,7 +243,7 @@ function renderKpis() {
       body: `<p class="ov-kpi-compare">${
         forecast > 0
           ? over
-            ? `<strong class="ov-neg">${over} obra${over === 1 ? "" : "s"}</strong> vão gastar acima do orçamento`
+            ? `<strong class="ov-neg">${over} obra${over === 1 ? "" : "s"}</strong> ${over === 1 ? "vai" : "vão"} gastar acima do orçamento`
             : `<strong class="ov-pos">Todas as obras</strong> dentro do orçamento de custo`
           : "Defina o orçamento dos centros de custo para medir o desvio."
       }</p>`,
@@ -305,8 +315,10 @@ async function emptyChart(id, icon, message) {
 
 function renderMonthly() {
   const months = (state.data?.charts?.monthly || []).slice(-state.months);
-  const cost = months.reduce((a, m) => a + num(m.cost), 0);
-  const committed = months.reduce((a, m) => a + num(m.committed), 0);
+  const costOf = (m) => num(m.costBase ?? m.cost);
+  const commOfMonth = (m) => num(m.committedBase ?? m.committed);
+  const cost = months.reduce((a, m) => a + costOf(m), 0);
+  const committed = months.reduce((a, m) => a + commOfMonth(m), 0);
   const invoiced = months.reduce((a, m) => a + num(m.invoiced), 0);
   document.getElementById("coFlowTotals").innerHTML = [
     { label: "Realizado", value: compact(cost), dot: TONES.blue },
@@ -319,8 +331,8 @@ function renderMonthly() {
   drawComboChart("coChartMonthly", {
     categories: months.map((m) => m.label),
     series: [
-      { name: "Realizado", type: "column", data: months.map((m) => num(m.cost)), color: TONES.blue },
-      { name: "Comprometido", type: "line", data: months.map((m) => num(m.committed)), color: TONES.amber },
+      { name: "Realizado", type: "column", data: months.map(costOf), color: TONES.blue },
+      { name: "Comprometido", type: "line", data: months.map(commOfMonth), color: TONES.amber },
     ],
     height: 280,
   });
@@ -337,7 +349,7 @@ function renderAging() {
   wrap.innerHTML = `
     <div class="ov-aging-total">
       <strong>${esc(money(total))}</strong>
-      <span>comprometido por pagar</span>
+      <span>a pagar aos fornecedores (valor do documento)</span>
     </div>
     <div class="ov-stack">
       ${columns
@@ -395,8 +407,8 @@ function renderCharts() {
   renderCenters();
 
   const top = [...(state.data?.items || [])]
-    .filter((p) => num(p.forecast) > 0 || num(p.realized) + num(p.committed) > 0)
-    .sort((a, b) => Math.max(num(b.forecast), num(b.realized) + num(b.committed)) - Math.max(num(a.forecast), num(a.realized) + num(a.committed)))
+    .filter((p) => num(p.forecast) > 0 || realOf(p) + commOf(p) > 0)
+    .sort((a, b) => Math.max(num(b.forecast), realOf(b) + commOf(b)) - Math.max(num(a.forecast), realOf(a) + commOf(a)))
     .slice(0, 8);
   if (!top.length) {
     emptyChart("coChartProjects", "target", "Sem orçamento de custo nem custos nas obras.");
@@ -405,8 +417,8 @@ function renderCharts() {
       categories: top.map((p) => p.project.code || p.project.name),
       series: [
         { name: "Previsto", data: top.map((p) => num(p.forecast)), color: "#c4b5fd" },
-        { name: "Realizado", data: top.map((p) => num(p.realized)), color: TONES.blue },
-        { name: "Comprometido", data: top.map((p) => num(p.committed)), color: "#fcd34d" },
+        { name: "Realizado", data: top.map(realOf), color: TONES.blue },
+        { name: "Comprometido", data: top.map(commOf), color: "#fcd34d" },
       ],
       horizontal: true,
       height: Math.max(220, top.length * 58 + 90),
@@ -418,22 +430,24 @@ function renderCharts() {
     emptyChart("coChartType", "donut_large", "Sem custo realizado.");
   } else {
     drawDonutChart("coChartType", {
-      labels: types.map((c) => COST_TYPES[c.category] || c.category || "Sem tipo"),
+      labels: types.map((c) => costTypeLabel(c.category)),
       series: types.map((c) => num(c.value)),
       totalLabel: "Realizado",
       height: 300,
     });
   }
 
-  const sources = (state.data?.charts?.costBySource || []).filter((s) => num(s.total) > 0);
+  const srcReal = (s) => num(s.realizedBase ?? s.realized);
+  const srcComm = (s) => num(s.committedBase ?? s.committed);
+  const sources = (state.data?.charts?.costBySource || []).filter((s) => srcReal(s) + srcComm(s) > 0);
   if (!sources.length) {
     emptyChart("coChartSources", "hub", "Sem custos registados.");
   } else {
     drawBarChart("coChartSources", {
       categories: sources.map((s) => s.label || s.source),
       series: [
-        { name: "Realizado", data: sources.map((s) => num(s.realized)), color: TONES.blue },
-        { name: "Comprometido", data: sources.map((s) => num(s.committed)), color: "#fcd34d" },
+        { name: "Realizado", data: sources.map(srcReal), color: TONES.blue },
+        { name: "Comprometido", data: sources.map(srcComm), color: "#fcd34d" },
       ],
       stacked: true,
       horizontal: true,
@@ -449,10 +463,10 @@ function hasMovement(p) {
 }
 
 function sortValue(p) {
-  if (state.sort === "deviation") return num(p.realized) + num(p.committed) - num(p.forecast);
+  if (state.sort === "deviation") return realOf(p) + commOf(p) - num(p.forecast);
   if (state.sort === "forecast") return num(p.forecast);
   if (state.sort === "pending") return num(p.pending);
-  return num(p.realized) + num(p.committed);
+  return realOf(p) + commOf(p);
 }
 
 function renderTable() {
@@ -464,7 +478,7 @@ function renderTable() {
     .sort((a, b) => sortValue(b) - sortValue(a));
 
   document.getElementById("coHint").textContent =
-    `${rows.length} obras · previsto = orçamento dos centros de custo · projeção = realizado + comprometido`;
+    `${rows.length} obras · valores sem IVA · previsto = orçamento dos centros de custo · projeção = realizado + comprometido`;
 
   if (!rows.length) {
     wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">apartment</span>Sem obras para os filtros.</div>`;
@@ -475,13 +489,13 @@ function renderTable() {
     .map((p) => {
       const cur = p.project.currency || "AOA";
       const forecast = num(p.forecast);
-      const realized = num(p.realized);
-      const committed = num(p.committed);
+      const realized = realOf(p);
+      const committed = commOf(p);
       const projected = realized + committed;
       const dev = projected - forecast;
       const rPct = forecast > 0 ? (realized / forecast) * 100 : 0;
       const cPct = forecast > 0 ? (committed / forecast) * 100 : 0;
-      const confirmedPct = realized > 0 ? (num(p.confirmed) / realized) * 100 : 0;
+      const confirmedPct = num(p.realized) > 0 ? (num(p.confirmed) / num(p.realized)) * 100 : 0;
       return `
       <tr>
         <td>
@@ -493,7 +507,7 @@ function renderTable() {
         <td class="fin-num">${forecast > 0 ? esc(money(forecast, cur)) : `<span class="ov-muted">Sem orçamento</span>`}</td>
         <td class="fin-num">
           <div class="ov-cell-bar">
-            <span>${esc(money(realized, cur))}</span>
+            <span title="Pago c/ IVA: ${esc(money(p.realized, cur))}">${esc(money(realized, cur))}</span>
             ${forecast > 0 ? meter([{ value: rPct, tone: "blue" }, { value: cPct, tone: "amber-soft" }], { marker: 100 }) : ""}
             <small>${forecast > 0 ? `${esc(pct(rPct))} do previsto` : num(p.stockOutValue) > 0 ? `${esc(compact(p.stockOutValue))} de stock` : "—"}</small>
           </div>
@@ -530,8 +544,8 @@ function renderTable() {
 
   const sum = (fn) => rows.reduce((a, p) => a + fn(p), 0);
   const tForecast = sum((p) => num(p.forecast));
-  const tRealized = sum((p) => num(p.realized));
-  const tCommitted = sum((p) => num(p.committed));
+  const tRealized = sum(realOf);
+  const tCommitted = sum(commOf);
   const tDev = tRealized + tCommitted - tForecast;
   wrap.innerHTML = `
     <table class="fin-table co-table">

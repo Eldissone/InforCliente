@@ -21,7 +21,8 @@ import { kpiCardsHtml, meterHtml as meter, num, skeletonHtml, stripHtml, toneOf 
  *  - Previsão de venda  → tabela de quantidades (ou valor global da obra)
  *  - Custo previsto     → orçamento de custo dos centros de custo
  *  - Margem prevista    → venda prevista − custo previsto
- *  - Custo realizado    → todas as áreas (pagamentos, pedidos extra, stock…)
+ *  - Custo realizado    → todas as áreas (pagamentos, pedidos extra, stock…),
+ *                         sem o IVA dedutível (como a venda e o orçamento)
  *  - Margem realizada   → faturado − custo realizado
  *
  * A faturação de obras sem venda prevista não conta para a execução da
@@ -33,6 +34,8 @@ const STATUS = {
   PAGO_PARCIAL: { label: "Pago Parcial", badge: "amber" },
   PAGO_TOTAL: { label: "Pago Total", badge: "emerald" },
   ATRASADO: { label: "Atrasado", badge: "red" },
+  ANULADA: { label: "Anulada", badge: "slate" },
+  NOTA_CREDITO: { label: "Nota de crédito", badge: "violet" },
 };
 
 const SALE_SOURCE = {
@@ -63,6 +66,14 @@ function pct(value, digits = 1) {
   return `${n.toFixed(digits)}%`;
 }
 
+/** Margem legível: sobre faturação quase nula a % explode, por isso tem limite. */
+function marginPct(value) {
+  const n = num(value);
+  if (n > 999) return "> 999%";
+  if (n < -999) return "< −999%";
+  return pct(n);
+}
+
 function dateOnly(value) {
   const key = toDateKey(value);
   if (!key) return "—";
@@ -87,8 +98,8 @@ function renderShell() {
         ${chartCardHtml({
           id: "fpChartMonthly",
           title: "Faturação emitida vs recebida",
-          subtitle: "Faturado pela data do documento e recebido pela data do recebimento",
-          hint: "A recebida segue a data do último recebimento registado em cada fatura.",
+          subtitle: "Líquido a receber pela data da fatura e recebido pela data do recebimento",
+          hint: "Cada recebimento conta no mês em que entrou (um pagamento parcial aparece no seu mês).",
           height: 280,
           actionsHtml: `
             <div class="finance-seg finance-seg--sm" id="fpRange">
@@ -119,7 +130,7 @@ function renderShell() {
         ${chartCardHtml({
           id: "fpChartMargin",
           title: "Margem prevista vs realizada",
-          subtitle: "Nas mesmas obras · realizada = faturado − custo realizado",
+          subtitle: "Nas mesmas obras · realizada = faturado − custo realizado (sem IVA)",
           height: 300,
         })}
       </div>
@@ -163,6 +174,9 @@ function renderShell() {
   projectSel.innerHTML =
     `<option value="">Todas as obras</option>` +
     state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.code ? `${p.code} — ${p.name}` : p.name)}</option>`).join("");
+
+  clientSel.value = state.filters.clientId;
+  projectSel.value = state.filters.projectId;
 
   clientSel.addEventListener("change", () => {
     state.filters.clientId = clientSel.value;
@@ -314,14 +328,14 @@ function renderStrip() {
     {
       label: "Custo realizado",
       icon: "payments",
-      value: compact(t.costRealized),
-      sub: costScale > 0 ? `${pct((num(t.costRealized) / costScale) * 100)} do previsto` : "sem custo previsto",
+      value: compact(t.costRealizedBase),
+      sub: costScale > 0 ? `sem IVA · ${pct((num(t.costRealizedBase) / costScale) * 100)} do previsto` : "sem IVA · sem custo previsto",
     },
     {
       label: "Comprometido",
       icon: "lock_clock",
       value: compact(t.costCommitted),
-      sub: "custos assumidos por pagar",
+      sub: "por pagar (com IVA)",
     },
     {
       label: "Sem previsão",
@@ -338,11 +352,13 @@ function renderStrip() {
 function renderMonthly() {
   const all = state.data?.charts?.monthly || [];
   const months = all.slice(-state.months);
-  const billed = months.reduce((a, m) => a + num(m.billed), 0);
+  // Recebido compara-se com o líquido faturado (IVA incluído, retenções deduzidas).
+  const netOf = (m) => num(m.billedNet ?? m.billed);
+  const billed = months.reduce((a, m) => a + netOf(m), 0);
   const received = months.reduce((a, m) => a + num(m.received), 0);
 
   document.getElementById("fpFlowTotals").innerHTML = [
-    { label: "Faturado", value: compact(billed), dot: TONES.blue },
+    { label: "Faturado (líquido)", value: compact(billed), dot: TONES.blue },
     { label: "Recebido", value: compact(received), dot: TONES.emerald },
     { label: "Diferença", value: compact(billed - received), dot: TONES.amber },
     { label: "Taxa de recebimento", value: billed > 0 ? pct((received / billed) * 100) : "—", dot: TONES.slate },
@@ -359,7 +375,7 @@ function renderMonthly() {
   return drawComboChart("fpChartMonthly", {
     categories: months.map((m) => m.label),
     series: [
-      { name: "Faturado", type: "column", data: months.map((m) => num(m.billed)), color: TONES.blue },
+      { name: "Faturado (líquido)", type: "column", data: months.map(netOf), color: TONES.blue },
       { name: "Recebido", type: "line", data: months.map((m) => num(m.received)), color: TONES.emerald },
     ],
     height: 280,
@@ -413,7 +429,11 @@ function renderCharts() {
     .filter((p) => num(p.forecast) > 0)
     .sort((a, b) => num(b.forecast) - num(a.forecast))
     .slice(0, 8);
-  const label = (p) => p.project.code || p.project.name;
+  // Nome da obra (encurtado) — o código interno não diz nada a quem lê o gráfico.
+  const label = (p) => {
+    const name = p.project.name || p.project.code || "";
+    return name.length > 26 ? `${name.slice(0, 25)}…` : name;
+  };
   // Barras com espessura constante: a altura acompanha o número de obras.
   const height = Math.max(200, top.length * 46 + 90);
 
@@ -480,7 +500,7 @@ function marginCell(value, percent, cur, show = true) {
   return `
     <div class="ov-margin-cell">
       <strong class="ov-${toneOf(value)}">${esc(money(value, cur))}</strong>
-      <small class="ov-${toneOf(value)}">${esc(pct(percent))}</small>
+      <small class="ov-${toneOf(value)}" title="${esc(pct(percent))}">${esc(marginPct(percent))}</small>
     </div>`;
 }
 
@@ -501,7 +521,7 @@ function renderByClient(data) {
   const body = rows
     .map((c) => {
       const count = projects.filter((p) => (p.project.client?.id || null) === (c.client?.id || null)).length;
-      const realized = num(c.billed) - num(c.costRealized);
+      const realized = num(c.billed) - num(c.costRealizedBase);
       return `
       <tr>
         <td>
@@ -519,7 +539,7 @@ function renderByClient(data) {
         <td class="fin-num ov-warn"><strong>${esc(money(c.toBill))}</strong></td>
         <td class="fin-num">${esc(money(c.costBudget))}</td>
         <td class="fin-num">${marginCell(c.plannedMargin, c.plannedMarginPct, undefined, num(c.forecast) > 0)}</td>
-        <td class="fin-num">${esc(money(c.costRealized))}</td>
+        <td class="fin-num">${esc(money(c.costRealizedBase))}</td>
         <td class="fin-num">${marginCell(realized, num(c.billed) > 0 ? (realized / num(c.billed)) * 100 : 0, undefined, num(c.billed) > 0)}</td>
       </tr>`;
     })
@@ -535,7 +555,7 @@ function renderByClient(data) {
         <th style="text-align:right">Por faturar</th>
         <th style="text-align:right">Custo previsto</th>
         <th style="text-align:right">Margem prevista</th>
-        <th style="text-align:right">Custo realizado</th>
+        <th style="text-align:right" title="Sem o IVA dedutível, como a venda e o orçamento">Custo realizado</th>
         <th style="text-align:right">Margem realizada</th>
       </tr></thead>
       <tbody>${body}</tbody>
@@ -546,7 +566,7 @@ function renderByClient(data) {
         <td class="fin-num">${esc(money(t.toBill))}</td>
         <td class="fin-num">${esc(money(t.costBudget))}</td>
         <td class="fin-num">${esc(money(t.plannedMargin))}</td>
-        <td class="fin-num">${esc(money(t.costRealized))}</td>
+        <td class="fin-num">${esc(money(t.costRealizedBase))}</td>
         <td class="fin-num">${esc(money(t.realizedMargin))}</td>
       </tr></tfoot>
     </table>`;
@@ -567,7 +587,7 @@ function renderInvoiceRows(entry, cur) {
         <td><strong>${esc(inv.docNumber || "—")}</strong></td>
         <td>${inv.measurement ? esc(inv.measurement.reportNumber || "AM") : `<span class="ov-muted">—</span>`}</td>
         <td>${esc(dateOnly(inv.docDate))}</td>
-        <td>${esc(dateOnly(inv.dueDate))}</td>
+        <td>${esc(dateOnly(inv.dueDate || inv.effectiveDueDate))}${inv.dueEstimated ? ` <span class="inv-due inv-due--est" title="Sem vencimento registado: data do documento + 30 dias">estimado</span>` : ""}</td>
         <td class="fin-num">${esc(money(inv.grossAmount, cur))}</td>
         <td class="fin-num" title="Peso desta fatura na venda prevista da obra">${inv.workPercent === null || inv.workPercent === undefined ? "—" : esc(pct(inv.workPercent, 2))}</td>
         <td class="fin-num" title="Peso desta fatura no total faturado da obra">${billed > 0 ? esc(pct((num(inv.grossAmount) / billed) * 100)) : "—"}</td>
@@ -614,7 +634,7 @@ function hasMovement(p) {
 
 function renderByProject(data) {
   document.getElementById("fpHint").textContent =
-    "Clique numa obra para ver as faturas emitidas, com a % da obra e o peso de cada fatura.";
+    "Valores sem IVA · clique numa obra para ver as faturas emitidas, com a % da obra e o peso de cada fatura.";
 
   const rows = (data.byProject || []).filter((p) => {
     if (state.filters.projectId && p.project.id !== state.filters.projectId) return false;
@@ -654,8 +674,8 @@ function renderByProject(data) {
         <td class="fin-num">${marginCell(entry.plannedMargin, entry.plannedMarginPct, cur, hasForecast)}</td>
         <td class="fin-num">
           <div class="ov-cell-bar">
-            <span>${esc(money(entry.costRealized, cur))}</span>
-            ${num(entry.costBudget) > 0 ? meter([{ value: (num(entry.costRealized) / num(entry.costBudget)) * 100, tone: num(entry.costRealized) > num(entry.costBudget) ? "red" : "slate" }]) : ""}
+            <span>${esc(money(entry.costRealizedBase, cur))}</span>
+            ${num(entry.costBudget) > 0 ? meter([{ value: (num(entry.costRealizedBase) / num(entry.costBudget)) * 100, tone: num(entry.costRealizedBase) > num(entry.costBudget) ? "red" : "slate" }]) : ""}
             <small>${num(entry.costBudget) > 0 ? `de ${esc(compact(entry.costBudget))} previstos` : "sem custo previsto"}</small>
           </div>
         </td>
@@ -676,7 +696,7 @@ function renderByProject(data) {
         <th style="text-align:right">Faturado</th>
         <th style="text-align:right">Por faturar</th>
         <th style="text-align:right">Margem prevista</th>
-        <th style="text-align:right">Custo realizado</th>
+        <th style="text-align:right" title="Sem o IVA dedutível, como a venda e o orçamento">Custo realizado</th>
         <th style="text-align:right">Margem realizada</th>
       </tr></thead>
       <tbody>${body}</tbody>
@@ -686,7 +706,7 @@ function renderByProject(data) {
         <td class="fin-num">${esc(money(t.billed))}</td>
         <td class="fin-num">${esc(money(t.toBill))}</td>
         <td class="fin-num">${esc(money(t.plannedMargin))}</td>
-        <td class="fin-num">${esc(money(t.costRealized))}</td>
+        <td class="fin-num">${esc(money(t.costRealizedBase))}</td>
         <td class="fin-num">${esc(money(t.realizedMargin))}</td>
       </tr></tfoot>
     </table>`;
@@ -753,6 +773,12 @@ export async function render() {
     state.clients = clients.items || [];
   } catch (err) {
     toast(err.message || "Falha ao carregar obras e clientes.", { type: "error" });
+  }
+  // Filtro inicial vindo de outro ecrã (ex.: Resumo → «Prevista» de uma obra).
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("projectId")) {
+    state.filters.projectId = params.get("projectId");
+    state.expanded.add(state.filters.projectId);
   }
   renderShell();
   await load();

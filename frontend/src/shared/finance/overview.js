@@ -67,6 +67,14 @@ function pct(value, digits = 1) {
   return `${(Number.isFinite(n) ? n : 0).toFixed(digits)}%`;
 }
 
+/** Margem legível: sobre faturação quase nula a % explode, por isso tem limite. */
+function marginPct(value) {
+  const n = num(value);
+  if (n > 999) return "> 999%";
+  if (n < -999) return "< −999%";
+  return pct(n);
+}
+
 function signedPp(value) {
   const n = num(value);
   return `${n > 0 ? "+" : ""}${n.toFixed(1)} pp`;
@@ -119,7 +127,7 @@ function renderShell() {
         ${chartCardHtml({
           id: "ovChartSources",
           title: "Custos por fonte",
-          subtitle: "Realizado + comprometido, por origem",
+          subtitle: "Pago + por pagar (com IVA), por origem",
           height: 260,
         })}
         <section class="finance-card ov-panel">
@@ -310,8 +318,8 @@ function renderStrip() {
     { label: "Por faturar", value: c.toInvoice, sub: "Venda prevista em falta", href: LINKS.toInvoice, icon: "hourglass_top" },
     {
       label: "Comprometido",
-      value: num(c.costCommitted) + num(c.generalCommitted),
-      sub: "Assumido, ainda por pagar",
+      value: num(c.costCommittedCash ?? c.costCommitted) + num(c.generalCommitted),
+      sub: "Assumido, por pagar (com IVA)",
       href: LINKS.committed,
       icon: "handshake",
     },
@@ -324,10 +332,10 @@ function renderStrip() {
       icon: "pending_actions",
     },
     {
-      label: "Saldo de tesouraria",
+      label: "Caixa gerado",
       value: cash.net,
       valueTone: toneOf(cash.net),
-      sub: "Recebido − pago",
+      sub: "Recebido − pago (acumulado)",
       href: LINKS.control,
       icon: "account_balance_wallet",
     },
@@ -549,7 +557,7 @@ function renderAlerts() {
     alerts.push({
       tone: "amber",
       icon: "account_balance_wallet",
-      title: "Tesouraria negativa",
+      title: "Caixa gerado negativo",
       text: `Pagou-se mais ${compact(Math.abs(num(d.cashFlow.net)))} do que se recebeu`,
       href: LINKS.control,
     });
@@ -666,10 +674,10 @@ function renderProjects() {
           ${
             hasRevenue
               ? `<div class="ov-margin-cell">
-                   <span class="ov-badge ov-badge--${toneOf(p.margin) === "pos" ? "emerald" : "red"}">${esc(pct(p.margin))}</span>
+                   <span class="ov-badge ov-badge--${toneOf(p.margin) === "pos" ? "emerald" : "red"}" title="${esc(pct(p.margin))}">${esc(marginPct(p.margin))}</span>
                    ${
                      hasForecast
-                       ? `<small class="ov-${marginDiff >= 0 ? "pos" : "neg"}">${esc(signedPp(marginDiff))} vs ${esc(pct(p.plannedMarginPct, 0))}</small>`
+                       ? `<small class="ov-${marginDiff >= 0 ? "pos" : "neg"}">${esc(Math.abs(marginDiff) > 999 ? "fora de escala" : signedPp(marginDiff))} vs ${esc(pct(p.plannedMarginPct, 0))}</small>`
                        : `<small class="ov-muted">sem venda prevista</small>`
                    }
                  </div>`

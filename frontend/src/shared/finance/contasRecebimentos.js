@@ -153,6 +153,7 @@ function renderKpis() {
   const overduePct = total > 0 ? (num(t.overdue) / total) * 100 : 0;
   const overdueItems = items.filter((i) => i.daysLate > 0);
   const maxLate = overdueItems.reduce((a, i) => Math.max(a, i.daysLate), 0);
+  const bank = state.data?.unallocatedReceipts || {};
   const cards = [
     {
       key: "receivable",
@@ -167,7 +168,14 @@ function renderKpis() {
         <p class="ov-kpi-compare">
           <span class="ov-legend"><i class="ov-dot ov-dot--red"></i>Vencido</span>
           <span class="ov-legend" style="margin-left:0.6rem"><i class="ov-dot ov-dot--emerald"></i>A vencer</span>
-        </p>`,
+        </p>
+        ${
+          num(bank.total) > 0
+            ? `<p class="ov-kpi-compare ov-warn" title="Entradas do extrato classificadas como recebimento de cliente, ainda sem fatura ligada">
+                <strong>${esc(compact(bank.total))}</strong> já no banco por ligar a faturas (${bank.count} movimento${bank.count === 1 ? "" : "s"})
+              </p>`
+            : ""
+        }`,
     },
     {
       key: "overdue",
@@ -438,7 +446,14 @@ function renderByInvoice(wrap, items) {
             ${meterHtml([{ value: receivedPct, tone: "emerald" }])}
           </div>
         </td>
-        <td class="fin-num ${i.daysLate > 0 ? "ov-neg" : "ov-warn"}"><strong>${esc(money(i.missingAmount, cur))}</strong></td>
+        <td class="fin-num ${i.daysLate > 0 ? "ov-neg" : "ov-warn"}">
+          <strong>${esc(money(i.missingAmount, cur))}</strong>
+          ${
+            num(i.inBank) > 0
+              ? `<small class="rc-inbank" title="Há uma entrada no extrato desta obra por ligar: registe o recebimento e escolha o movimento">${esc(compact(i.inBank))} já no banco · ligar</small>`
+              : ""
+          }
+        </td>
         <td>${
           editable
             ? `<div class="ac-actions">
