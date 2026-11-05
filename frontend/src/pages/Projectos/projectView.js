@@ -3571,6 +3571,9 @@ function renderStockMovements(items) {
            <button type="button" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all" title="Ver detalhe">
              <span class="material-symbols-outlined text-sm">visibility</span>
            </button>
+           <button type="button" data-delete-stock-move="${m.id}" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all" title="Eliminar movimento e reverter stock">
+             <span class="material-symbols-outlined text-sm">delete</span>
+           </button>
         </td>
       </tr>
     `;
@@ -3897,7 +3900,14 @@ async function openStockMovementDetailModal(moveId) {
         warehouseName: m.warehouse?.name,
       },
       entryHistory: entries,
-    }),
+    }) + `
+      <div class="pt-6 border-t border-slate-100 flex justify-end">
+        <button type="button" data-delete-stock-move="${m.id}" class="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white text-xs font-bold transition-all flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">delete</span>
+          Eliminar este Movimento
+        </button>
+      </div>
+    `,
     primaryLabel: "Fechar",
     onPrimary: async ({ close }) => close(),
   });
