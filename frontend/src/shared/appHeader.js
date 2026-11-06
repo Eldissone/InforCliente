@@ -25,15 +25,11 @@ function renderAppHeader() {
         </div>
       </div>
       <div class="flex flex-1 items-center justify-end gap-3 min-w-0">
-        <a data-nav-users class="hidden px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-all flex items-center gap-2" href="/Users">
-          <span class="material-symbols-outlined text-lg">manage_accounts</span>
-          Gestão
-        </a>
+      
         <button data-user-profile class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all" type="button">
           <span class="material-symbols-outlined text-sm">person</span>
           <span data-user-role></span>
         </button>
-        <button data-logout class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all" type="button">Sair</button>
         <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors" type="button">
           <span class="material-symbols-outlined">menu</span>
         </button>
