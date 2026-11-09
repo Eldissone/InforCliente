@@ -150,20 +150,30 @@ app.use((err, _req, res, _next) => {
     });
   }
 
-  const status = typeof err?.status === "number" ? err.status : 500;
+  const status =
+    typeof err?.status === "number"
+      ? err.status
+      : err?.code && err.code !== "INTERNAL_SERVER_ERROR"
+        ? 400
+        : 500;
+
   const message =
     status === 503 || err?.code === "AI_TIMEOUT"
       ? err.message || "Serviço indisponível"
       : status >= 500
         ? "INTERNAL_SERVER_ERROR"
-        : err.message;
+        : (err.message || err.code || "Bad Request");
 
   if (status >= 500) {
-
     console.error(err);
   }
 
-  return res.status(status).json({ error: message });
+  return res.status(status).json({
+    error: message,
+    code: err?.code,
+    previstoUnitPrice: err?.previstoUnitPrice,
+    requestedUnitPrice: err?.requestedUnitPrice,
+  });
 });
 
 const server = http.createServer(app);

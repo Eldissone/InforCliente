@@ -800,10 +800,61 @@
                     </table>
                 </div>
             </div>
-            <div class="mt-6">
-                <h3 class="font-bold text-slate-900 mb-2">Registar orçamento desta obra</h3>
-                <p class="text-[11px] text-slate-400 mb-3 font-medium">Crie centros de custo, linhas e aprove o previsto sem sair da obra.</p>
-                <iframe id="plOrcamentoCustoFrame" class="pv-embed-frame" title="Registo de orçamento da obra" loading="lazy"></iframe>
+            <div class="mt-8 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h3 class="font-bold text-slate-900">Linhas do Orçamento de Custo</h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Itens previstos por centro de custo, quantidades, preços e estado de aprovação</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">search</span>
+                            <input id="plCustoSearch" type="text" placeholder="Filtrar itens..." class="h-9 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-400">
+                        </div>
+                        <select id="plCustoCCFilter" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                            <option value="">Todos os CCs</option>
+                        </select>
+                        <select id="plCustoStatusFilter" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                            <option value="">Todos Status</option>
+                            <option value="APPROVED">Aprovado</option>
+                            <option value="PENDING">Pendente</option>
+                            <option value="IN_QUOTATION">Em Cotação</option>
+                            <option value="ORDERED">Encomenda</option>
+                            <option value="EM_ANALISE">Em Análise</option>
+                            <option value="PAID">Pago</option>
+                            <option value="REJECTED">Rejeitado</option>
+                        </select>
+                        <button type="button" id="plCustoNewItemBtn" class="h-9 px-3.5 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-1.5 hover:bg-slate-800 transition-all shadow-xs">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Novo Item
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-center w-12">Nº</th>
+                                <th class="text-left">Descrição</th>
+                                <th class="text-left">Centro de Custo</th>
+                                <th class="text-center">UN</th>
+                                <th class="text-right">Qtde</th>
+                                <th class="text-right">P. Unit.</th>
+                                <th class="text-center">Hrs</th>
+                                <th class="text-right">Total Obra</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center" style="min-width: 110px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoCustoItems">
+                            <tr><td colspan="10" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+                    <span id="plCustoItemsCount">0 itens</span>
+                    <span id="plCustoItemsTotal">Total: 0,00 Kz</span>
+                </div>
             </div>
         </div>
 

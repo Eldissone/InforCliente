@@ -68,13 +68,15 @@ function calcEmAnaliseNeedTotal(need) {
 function assertPriceWithinPrevistoOrException(need, newUnitPrice, { priceExceptionReason, actorName }) {
   const previsto = needPrevistoUnitPrice(need);
   const next = Number(newUnitPrice) || 0;
+  if (previsto <= 0) return null;
   if (next <= previsto + 1e-6) return null;
   const reason = String(priceExceptionReason || "").trim();
   if (!reason) {
-    const err = new Error("PRICE_EXCEEDS_PREVISTO");
+    const err = new Error(
+      "O preço realizado excede o previsto. Indique uma justificação de excepção para continuar."
+    );
+    err.status = 400;
     err.code = "PRICE_EXCEEDS_PREVISTO";
-    err.message =
-      "O preço realizado excede o previsto. Indique uma justificação de excepção para continuar.";
     err.previstoUnitPrice = previsto;
     err.requestedUnitPrice = next;
     throw err;

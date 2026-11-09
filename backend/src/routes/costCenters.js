@@ -1535,10 +1535,11 @@ costCenterRoutes.patch(
     if (body.unitPrice !== undefined) {
       const current = await prisma.workNeed.findUnique({
         where: { id: needId },
-        select: { status: true },
+        select: { status: true, originalUnitPrice: true },
       });
       const effectiveStatus = body.status || current?.status;
-      syncOriginalPrice = ["PENDING", "IN_QUOTATION"].includes(effectiveStatus);
+      const hadNoOriginalPrice = !current?.originalUnitPrice || Number(current?.originalUnitPrice) === 0;
+      syncOriginalPrice = ["PENDING", "IN_QUOTATION"].includes(effectiveStatus) || hadNoOriginalPrice;
     }
 
     const currentForLock = await prisma.workNeed.findUnique({

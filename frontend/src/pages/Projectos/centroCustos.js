@@ -3917,88 +3917,20 @@ window.notifyParentBudgetUpdated = function () {
 };
 
 window.refreshNeedsCategoryOverviewBar = async function () {
+  const bar = document.getElementById("needsCategoryOverviewBar");
+  if (bar) bar.remove();
   if (!selectedProject?.id) return;
   try {
     const data = await apiRequest(`/cost-centers/project/${selectedProject.id}/categories-overview`);
     cachedCategoryOverview = data?.categories || [];
-    renderNeedsCategoryOverviewBar(cachedCategoryOverview);
   } catch {
     // ignore non-critical overview error
   }
 };
 
 function renderNeedsCategoryOverviewBar(categories = []) {
-  const needsTable = document.getElementById("needsTableBody")?.closest(".overflow-x-auto");
-  if (!needsTable || !needsTable.parentElement) return;
-
-  let bar = document.getElementById("needsCategoryOverviewBar");
-  if (!bar) {
-    bar = document.createElement("div");
-    bar.id = "needsCategoryOverviewBar";
-    bar.className = "px-6 py-3.5 bg-slate-50/80 border-b border-slate-100";
-    needsTable.parentElement.insertBefore(bar, needsTable);
-  }
-
-  // As categorias da obra são os seus próprios Centros de Custo
-  const visibleCats = categories.length > 0 ? categories : [];
-
-  const totalPrevisto = visibleCats.reduce((acc, c) => acc + (Number(c.currentPrevisto) || 0), 0);
-  const totalRealizado = visibleCats.reduce((acc, c) => acc + (Number(c.currentRealizado) || 0), 0);
-
-  bar.innerHTML = `
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-      <div class="flex items-center gap-2">
-        <span class="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-          Orçamento de Custo por Centro de Custo (Categoria)
-        </span>
-        <span class="text-[11px] font-semibold text-slate-500">
-          · Previsto Total: <strong class="text-slate-900">${formatCurrency(totalPrevisto, "AOA")}</strong>
-          · Realizado: <strong class="text-emerald-700">${formatCurrency(totalRealizado, "AOA")}</strong>
-        </span>
-      </div>
-      <div class="flex items-center gap-2">
-        <button type="button" onclick="openCategoryIncrementModal('', true)"
-          class="h-7 px-2.5 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-bold hover:bg-slate-100 transition inline-flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">document_scanner</span>
-          Incrementar / Cotar por Leitura de Fatura
-        </button>
-      </div>
-    </div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-      ${visibleCats
-        .map((c) => {
-          const prev = Number(c.currentPrevisto) || 0;
-          const real = Number(c.currentRealizado) || 0;
-          const hasValue = prev > 0 || real > 0;
-          const catTarget = c.costCenterId || c.category;
-          const cur = c.currency || "AOA";
-          return `
-            <div class="rounded-xl border ${hasValue ? "border-slate-200 bg-white" : "border-dashed border-slate-200 bg-white/60"} p-2.5 flex flex-col justify-between gap-1.5 shadow-2xs hover:border-slate-300 transition">
-              <div class="flex items-center justify-between gap-1">
-                <span class="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${c.code}</span>
-                <button type="button" onclick="openCategoryIncrementModal('${catTarget}')"
-                  title="Incrementar orçamento no centro de custo ${c.name}"
-                  class="text-[10px] font-bold text-slate-600 hover:text-slate-900 inline-flex items-center gap-0.5">
-                  <span class="material-symbols-outlined text-xs">add_circle</span> Incrementar
-                </button>
-              </div>
-              <p class="text-xs font-bold text-slate-800 truncate" title="${c.name}">${c.name}</p>
-              <div class="text-[11px] leading-tight">
-                <div class="flex justify-between text-slate-500">
-                  <span>Previsto:</span>
-                  <strong class="text-slate-900 tabular-nums">${formatCurrency(prev, cur)}</strong>
-                </div>
-                <div class="flex justify-between text-slate-400 mt-0.5">
-                  <span>Realizado:</span>
-                  <span class="font-semibold text-emerald-700 tabular-nums">${formatCurrency(real, cur)}</span>
-                </div>
-              </div>
-            </div>
-          `;
-        })
-        .join("")}
-    </div>
-  `;
+  const bar = document.getElementById("needsCategoryOverviewBar");
+  if (bar) bar.remove();
 }
 
 window.openCategoryIncrementModal = async function (preselectCategory = "", autoPromptFile = false) {

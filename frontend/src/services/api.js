@@ -98,6 +98,7 @@ async function parseJsonSafe(res) {
 }
 
 const API_ERROR_MESSAGES = {
+  PRICE_EXCEEDS_PREVISTO: "O preço realizado excede o previsto. Indique uma justificação de excepção para continuar.",
   COMPROVATIVO_REQUIRED: "Comprovativo de pagamento é obrigatório para liquidar.",
   FINANCEIRO_ONLY: "Liquidação apenas no Perfil Financeiro.",
   PAYMENT_NOT_FOUND: "Lançamento não encontrado.",
@@ -118,10 +119,11 @@ const API_ERROR_MESSAGES = {
 function resolveApiErrorMessage(data, status) {
   if (data?.message) return data.message;
   if (data?.error && API_ERROR_MESSAGES[data.error]) return API_ERROR_MESSAGES[data.error];
+  if (data?.code && API_ERROR_MESSAGES[data.code]) return API_ERROR_MESSAGES[data.code];
   if (status === 403 || String(data?.error || "").includes("FORBIDDEN")) {
     return "Acesso negado: você não tem permissão para realizar esta ação.";
   }
-  return data?.error || `HTTP_${status}`;
+  return data?.error || data?.code || `HTTP_${status}`;
 }
 
 export async function apiRequest(path, { method = "GET", body, headers } = {}) {

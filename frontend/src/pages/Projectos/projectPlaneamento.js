@@ -470,7 +470,6 @@ export function loadPlaneamentoTab(tabId) {
   if (finLink) finLink.href = `${centro}&tab=cronograma`;
 
   if (tabId === "orcamento_custo") {
-    mountObraFrame("plOrcamentoCustoFrame", `${centro}&tab=necessidades&embed=1`);
     return loadOrcamentoCusto();
   }
   if (tabId === "orcamento_vendas") return loadOrcamentoVendas();
@@ -512,28 +511,429 @@ function flattenSalesTasks(tasks) {
   return rows;
 }
 
+let cachedCostCenters = [];
+let cachedCostNeeds = [];
+let costNeedsListenersBound = false;
+
+const NEED_STATUS_CONFIG = {
+  APPROVED: { label: "Aprovado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  PENDING: { label: "Pendente", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+  IN_QUOTATION: { label: "Em Cotação", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
+  ORDERED: { label: "Encomenda", cls: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
+  EM_ANALISE: { label: "Em Análise", cls: "bg-purple-50 text-purple-700 border border-purple-200" },
+  PAID: { label: "Pago", cls: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
+  REJECTED: { label: "Rejeitado", cls: "bg-rose-50 text-rose-700 border border-rose-200" },
+};
+
+function renderCostNeedsTable() {
+  const tbody = document.getElementById("plOrcamentoCustoItems");
+  const countEl = document.getElementById("plCustoItemsCount");
+  const totalEl = document.getElementById("plCustoItemsTotal");
+  if (!tbody) return;
+
+  const search = (document.getElementById("plCustoSearch")?.value || "").trim().toLowerCase();
+  const ccFilter = document.getElementById("plCustoCCFilter")?.value || "";
+  const statusFilter = document.getElementById("plCustoStatusFilter")?.value || "";
+  const cur = currency();
+
+  let filtered = (cachedCostNeeds || []).slice();
+
+  if (ccFilter) {
+    filtered = filtered.filter((n) => n.costCenterId === ccFilter);
+  }
+
+  if (statusFilter) {
+    filtered = filtered.filter((n) => (n.status || "PENDING") === statusFilter);
+  }
+
+  if (search) {
+    filtered = filtered.filter((n) => {
+      const desc = String(n.description || "").toLowerCase();
+      const ccName = String(n.costCenter?.name || "").toLowerCase();
+      const ccCode = String(n.costCenter?.code || "").toLowerCase();
+      const unit = String(n.unit || "").toLowerCase();
+      return desc.includes(search) || ccName.includes(search) || ccCode.includes(search) || unit.includes(search);
+    });
+  }
+
+  if (countEl) {
+    countEl.textContent = `${filtered.length} item(ns)${filtered.length !== cachedCostNeeds.length ? ` (de ${cachedCostNeeds.length})` : ""}`;
+  }
+
+  let totalGeral = 0;
+  filtered.forEach((n) => {
+    const q = num(n.quantity) || 1;
+    const p = num(n.unitPrice ?? n.originalUnitPrice);
+    const h = num(n.hours) || 1;
+    totalGeral += q * p * h;
+  });
+
+  if (totalEl) {
+    totalEl.textContent = `Total: ${formatCurrency(totalGeral, cur)}`;
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = emptyRow(10, "assignment", cachedCostNeeds.length ? "Nenhum item corresponde aos filtros selecionados." : "Sem linhas de orçamento registadas. Adicione com '+ Novo Item'.");
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((n, idx) => {
+    const q = num(n.quantity) || 1;
+    const p = num(n.unitPrice ?? n.originalUnitPrice);
+    const h = num(n.hours) || 1;
+    const lineTotal = q * p * h;
+    const st = n.status || "PENDING";
+    const stCfg = NEED_STATUS_CONFIG[st] || { label: st, cls: "bg-slate-100 text-slate-700" };
+    const ccLabel = [n.costCenter?.code, n.costCenter?.name].filter(Boolean).join(" · ") || "—";
+    const itemCurrency = n.costCenter?.currency || cur;
+    const isPending = st === "PENDING";
+
+    return `<tr>
+      <td class="text-center font-bold text-slate-500 tabular-nums">${idx + 1}</td>
+      <td>
+        <span class="font-bold text-slate-900">${escapeHtml(n.description || "—")}</span>
+        ${n.notes ? `<div class="text-[10px] text-slate-400 truncate max-w-xs" title="${escapeHtml(n.notes)}">${escapeHtml(n.notes)}</div>` : ""}
+      </td>
+      <td class="text-slate-600 text-xs font-semibold">${escapeHtml(ccLabel)}</td>
+      <td class="text-center text-xs font-bold text-slate-500">${escapeHtml(n.unit || "un")}</td>
+      <td class="text-right tabular-nums text-slate-700 font-semibold">${q.toLocaleString("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+      <td class="text-right tabular-nums text-slate-700 font-semibold">${formatCurrency(p, itemCurrency)}</td>
+      <td class="text-center text-xs tabular-nums text-slate-500">${num(n.hours) > 0 ? num(n.hours).toLocaleString("pt-PT") : "—"}</td>
+      <td class="text-right tabular-nums font-bold text-slate-900">${formatCurrency(lineTotal, itemCurrency)}</td>
+      <td class="text-center">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${stCfg.cls}">${stCfg.label}</span>
+      </td>
+      <td class="text-center">
+        <div class="inline-flex items-center justify-center gap-1">
+          ${isPending ? `
+            <button type="button" onclick="window.setCostNeedStatus('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', 'APPROVED', '${escapeHtml(n.description || "")}')"
+              title="Aprovar no orçamento previsto"
+              class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
+              <span class="material-symbols-outlined text-sm">check_circle</span>
+            </button>
+            <button type="button" onclick="window.setCostNeedStatus('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', 'REJECTED', '${escapeHtml(n.description || "")}')"
+              title="Rejeitar item"
+              class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition flex items-center justify-center">
+              <span class="material-symbols-outlined text-sm">cancel</span>
+            </button>
+          ` : ""}
+          <button type="button" onclick="window.openEditCostNeedModal('${escapeHtml(n.id)}')"
+            title="Editar item"
+            class="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition flex items-center justify-center">
+            <span class="material-symbols-outlined text-sm">edit</span>
+          </button>
+          <button type="button" onclick="window.deleteCostNeed('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', '${escapeHtml(n.description || "")}')"
+            title="Eliminar item"
+            class="w-7 h-7 rounded-lg bg-slate-100 text-rose-600 hover:bg-rose-600 hover:text-white transition flex items-center justify-center">
+            <span class="material-symbols-outlined text-sm">delete</span>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function initCostNeedsListeners() {
+  if (costNeedsListenersBound) return;
+  costNeedsListenersBound = true;
+
+  document.getElementById("plCustoSearch")?.addEventListener("input", renderCostNeedsTable);
+  document.getElementById("plCustoCCFilter")?.addEventListener("change", renderCostNeedsTable);
+  document.getElementById("plCustoStatusFilter")?.addEventListener("change", renderCostNeedsTable);
+  document.getElementById("plCustoNewItemBtn")?.addEventListener("click", () => openNewCostNeedModal());
+}
+
+function openNewCostNeedModal(defaultCCId = "") {
+  const pId = projectId();
+  if (!pId) return;
+
+  if (!cachedCostCenters.length) {
+    toast("Nenhum centro de custo encontrado para esta obra.", { type: "warning" });
+    return;
+  }
+
+  const cur = currency();
+  const ccOptions = cachedCostCenters.map((cc) => {
+    const sel = cc.id === defaultCCId ? "selected" : "";
+    const label = [cc.code, cc.name].filter(Boolean).join(" · ");
+    return `<option value="${escapeHtml(cc.id)}" ${sel}>${escapeHtml(label)}</option>`;
+  }).join("");
+
+  openModal({
+    title: "Nova Linha de Orçamento de Custo",
+    primaryLabel: "Adicionar Linha",
+    contentHtml: `
+      <div class="space-y-4">
+        <p class="text-xs text-slate-500 font-medium">Registe um item de custo previsto no orçamento da obra.</p>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Centro de Custo *
+          <select id="modalNeedCC" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+            ${ccOptions}
+          </select>
+        </label>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição do Item *
+          <input id="modalNeedDesc" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Ex: Cimento Portland 50kg, Aluguer de Grua...">
+        </label>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Unidade
+            <select id="modalNeedUnit" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="un">un</option>
+              <option value="m">m</option>
+              <option value="m2">m²</option>
+              <option value="m3">m³</option>
+              <option value="kg">kg</option>
+              <option value="l">L</option>
+              <option value="vg">vg</option>
+              <option value="h">h</option>
+              <option value="dia">dia</option>
+              <option value="mes">mês</option>
+              <option value="par">par</option>
+              <option value="cx">cx</option>
+            </select>
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Quantidade *
+            <input id="modalNeedQty" type="number" min="0.001" step="any" value="1" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Preço Unit. (${escapeHtml(cur)})
+            <input id="modalNeedPrice" type="number" min="0" step="0.01" placeholder="0.00" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Horas / Fator
+            <input id="modalNeedHours" type="number" min="0" step="0.5" value="1" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Prioridade
+            <select id="modalNeedPriority" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="MEDIA">Média</option>
+              <option value="ALTA">Alta</option>
+              <option value="BAIXA">Baixa</option>
+            </select>
+          </label>
+        </div>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Observações
+          <input id="modalNeedNotes" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Notas opcionais">
+        </label>
+      </div>`,
+    onPrimary: async ({ close, btn }) => {
+      const ccId = document.getElementById("modalNeedCC")?.value;
+      const desc = document.getElementById("modalNeedDesc")?.value?.trim();
+      const unit = document.getElementById("modalNeedUnit")?.value || "un";
+      const qty = parseFloat(document.getElementById("modalNeedQty")?.value) || 1;
+      const priceVal = document.getElementById("modalNeedPrice")?.value;
+      const unitPrice = priceVal !== "" && !isNaN(parseFloat(priceVal)) ? parseFloat(priceVal) : null;
+      const hours = parseFloat(document.getElementById("modalNeedHours")?.value) || 1;
+      const priority = document.getElementById("modalNeedPriority")?.value || "MEDIA";
+      const notes = document.getElementById("modalNeedNotes")?.value?.trim() || null;
+
+      if (!ccId) {
+        toast("Selecione um Centro de Custo.", { type: "warning" });
+        return;
+      }
+      if (!desc) {
+        toast("Preencha a descrição do item.", { type: "warning" });
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs`, {
+          method: "POST",
+          body: {
+            description: desc,
+            quantity: qty,
+            unit,
+            unitPrice: unitPrice != null ? unitPrice : null,
+            hours,
+            priority,
+            notes,
+            status: unitPrice != null && unitPrice > 0 ? "APPROVED" : "PENDING",
+          },
+        });
+        toast("Linha adicionada ao orçamento!", { type: "success" });
+        close();
+        loadOrcamentoCusto();
+      } catch (err) {
+        toast(err.message || "Erro ao adicionar item.", { type: "error" });
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
+function openEditCostNeedModal(needId) {
+  const need = (cachedCostNeeds || []).find((n) => n.id === needId);
+  if (!need) {
+    toast("Item não encontrado.", { type: "error" });
+    return;
+  }
+
+  const cur = need.costCenter?.currency || currency();
+  const currentPrice = need.unitPrice ?? need.originalUnitPrice ?? "";
+
+  openModal({
+    title: "Editar Linha de Orçamento",
+    primaryLabel: "Guardar Alterações",
+    contentHtml: `
+      <div class="space-y-4">
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição do Item *
+          <input id="modalEditDesc" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.description || "")}">
+        </label>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Unidade
+            <input id="modalEditUnit" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.unit || "un")}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Quantidade
+            <input id="modalEditQty" type="number" min="0.001" step="any" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${need.quantity != null ? escapeHtml(String(need.quantity)) : "1"}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Preço Unit. (${escapeHtml(cur)})
+            <input id="modalEditPrice" type="number" min="0" step="0.01" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${currentPrice !== "" ? escapeHtml(String(currentPrice)) : ""}">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Horas / Fator
+            <input id="modalEditHours" type="number" min="0" step="0.5" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${need.hours != null ? escapeHtml(String(need.hours)) : "1"}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Status
+            <select id="modalEditStatus" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="APPROVED" ${need.status === "APPROVED" ? "selected" : ""}>Aprovado</option>
+              <option value="PENDING" ${need.status === "PENDING" ? "selected" : ""}>Pendente</option>
+              <option value="IN_QUOTATION" ${need.status === "IN_QUOTATION" ? "selected" : ""}>Em Cotação</option>
+              <option value="ORDERED" ${need.status === "ORDERED" ? "selected" : ""}>Encomenda</option>
+              <option value="EM_ANALISE" ${need.status === "EM_ANALISE" ? "selected" : ""}>Em Análise</option>
+              <option value="PAID" ${need.status === "PAID" ? "selected" : ""}>Pago</option>
+              <option value="REJECTED" ${need.status === "REJECTED" ? "selected" : ""}>Rejeitado</option>
+            </select>
+          </label>
+        </div>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Observações
+          <input id="modalEditNotes" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.notes || "")}">
+        </label>
+        <div id="modalEditExceptionWrap" class="mt-2">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Justificação de Excepção (se o preço unitário exceder o previsto)
+            <input id="modalEditExceptionReason" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Ex: Aumento do preço de mercado, cotação alternativa..." value="${escapeHtml(need.priceExceptionReason || "")}">
+          </label>
+        </div>
+      </div>`,
+    onPrimary: async ({ close, btn }) => {
+      const desc = document.getElementById("modalEditDesc")?.value?.trim();
+      const unit = document.getElementById("modalEditUnit")?.value?.trim() || "un";
+      const qty = parseFloat(document.getElementById("modalEditQty")?.value) || 1;
+      const priceVal = document.getElementById("modalEditPrice")?.value;
+      const unitPrice = priceVal !== "" && !isNaN(parseFloat(priceVal)) ? parseFloat(priceVal) : null;
+      const hours = parseFloat(document.getElementById("modalEditHours")?.value) || 1;
+      const status = document.getElementById("modalEditStatus")?.value || need.status;
+      const notes = document.getElementById("modalEditNotes")?.value?.trim() || null;
+      const priceExceptionReason = document.getElementById("modalEditExceptionReason")?.value?.trim() || undefined;
+
+      if (!desc) {
+        toast("Preencha a descrição do item.", { type: "warning" });
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/cost-centers/${encodeURIComponent(need.costCenterId)}/needs/${encodeURIComponent(need.id)}`, {
+          method: "PATCH",
+          body: {
+            description: desc,
+            unit,
+            quantity: qty,
+            unitPrice,
+            hours,
+            status,
+            notes,
+            priceExceptionReason,
+          },
+        });
+        toast("Linha atualizada com sucesso!", { type: "success" });
+        close();
+        loadOrcamentoCusto();
+      } catch (err) {
+        toast(err.message || "Erro ao atualizar item.", { type: "error" });
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
+async function deleteCostNeed(needId, ccId, desc) {
+  if (!confirm(`Tem a certeza que deseja eliminar o item "${desc || "selecionado"}"?`)) return;
+  try {
+    await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs/${encodeURIComponent(needId)}`, {
+      method: "DELETE",
+    });
+    toast("Item eliminado do orçamento.", { type: "success" });
+    loadOrcamentoCusto();
+  } catch (err) {
+    toast(err.message || "Erro ao eliminar item.", { type: "error" });
+  }
+}
+
+async function setCostNeedStatus(needId, ccId, status, desc) {
+  if (status === "REJECTED" && !confirm(`Rejeitar o item "${desc || ""}"?`)) return;
+  try {
+    await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs/${encodeURIComponent(needId)}`, {
+      method: "PATCH",
+      body: { status },
+    });
+    toast(status === "APPROVED" ? "Item aprovado no orçamento." : "Item rejeitado.", { type: "success" });
+    loadOrcamentoCusto();
+  } catch (err) {
+    toast(err.message || "Erro ao atualizar status.", { type: "error" });
+  }
+}
+
+window.openNewCostNeedModal = openNewCostNeedModal;
+window.openEditCostNeedModal = openEditCostNeedModal;
+window.deleteCostNeed = deleteCostNeed;
+window.setCostNeedStatus = setCostNeedStatus;
+
 async function loadOrcamentoCusto() {
   const body = document.getElementById("plOrcamentoCustoBody");
   const kpis = document.getElementById("plOrcamentoCustoKpis");
-  if (!body) return;
-  body.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  const itemsBody = document.getElementById("plOrcamentoCustoItems");
+  const id = projectId();
+  if (!body || !id) return;
+
+  body.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  if (itemsBody) {
+    itemsBody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  }
+
   try {
-    const data = await apiRequest(`/cost-centers/project/${encodeURIComponent(projectId())}/summary`);
-    const summary = data.summary || [];
-    const totalsMap = data.totals || {};
+    const [summaryRes, ccRes, needsRes, taskData] = await Promise.all([
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/summary`),
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}`).catch(() => ({ items: [] })),
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/needs?pageSize=1000`).catch(() => ({ items: [] })),
+      apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`).catch(() => ({ tasks: [] })),
+    ]);
+
+    cachedCostCenters = ccRes.items || [];
+    cachedCostNeeds = (needsRes.items || []).slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+    // Popular dropdown de filtro por Centro de Custo
+    const ccFilterSelect = document.getElementById("plCustoCCFilter");
+    if (ccFilterSelect) {
+      const currentVal = ccFilterSelect.value;
+      ccFilterSelect.innerHTML = `<option value="">Todos os CCs</option>` +
+        cachedCostCenters.map((cc) => {
+          const label = [cc.code, cc.name].filter(Boolean).join(" · ");
+          return `<option value="${escapeHtml(cc.id)}" ${cc.id === currentVal ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        }).join("");
+    }
+
+    initCostNeedsListeners();
+
+    // KPIs & Tabela de Resumo por Centro
+    const summary = summaryRes.summary || [];
+    const totalsMap = summaryRes.totals || {};
     const cur = currency();
     const totals = totalsMap[cur] || Object.values(totalsMap)[0] || {};
     const previsto = num(totals.basePrevisto ?? totals.previsto);
     const analise = num(totals.emAnaliseOrcamento ?? totals.realizadoOrcamento ?? totals.realizado);
     const liquidado = num(totals.liquidado);
     const pct = previsto > 0 ? (liquidado / previsto) * 100 : 0;
-    let venda = 0;
-    try {
-      const taskData = await apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`);
-      venda = vendaPrevistaFromTasks(taskData.tasks);
-    } catch {
-      venda = 0;
-    }
+    const venda = vendaPrevistaFromTasks(taskData.tasks);
     const margem = venda - previsto;
 
     if (kpis) {
@@ -547,31 +947,36 @@ async function loadOrcamentoCusto() {
 
     if (!summary.length) {
       body.innerHTML = emptyRow(6, "account_balance", "Sem centros de custo nesta obra.");
-      return;
+    } else {
+      body.innerHTML = summary.map((row) => {
+        const p = num(row.basePrevisto ?? row.previsto);
+        const r = num(row.emAnaliseOrcamento ?? row.realizadoOrcamento ?? row.realizado);
+        const l = num(row.liquidado);
+        const pc = p > 0 ? (l / p) * 100 : 0;
+        const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
+        return `<tr>
+          <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
+          <td>${progressBar(pc)}</td>
+          <td class="text-right">
+            <button type="button" onclick="window.openNewCostNeedModal?.('${escapeHtml(row.id || "")}')"
+              class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">add</span> Novo Item
+            </button>
+          </td>
+        </tr>`;
+      }).join("");
     }
 
-    body.innerHTML = summary.map((row) => {
-      const p = num(row.basePrevisto ?? row.previsto);
-      const r = num(row.emAnaliseOrcamento ?? row.realizadoOrcamento ?? row.realizado);
-      const l = num(row.liquidado);
-      const pc = p > 0 ? (l / p) * 100 : 0;
-      const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
-      return `<tr>
-        <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
-        <td>${progressBar(pc)}</td>
-        <td class="text-right">
-          <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-increment', '${escapeHtml(row.id || "")}')"
-            class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
-            <span class="material-symbols-outlined text-xs">add</span> Incrementar
-          </button>
-        </td>
-      </tr>`;
-    }).join("");
+    // Renderizar tabela nativa de itens de custo
+    renderCostNeedsTable();
   } catch (err) {
     body.innerHTML = emptyRow(6, "error", err.message || "Não foi possível carregar o orçamento de custo.");
+    if (itemsBody) {
+      itemsBody.innerHTML = emptyRow(10, "error", err.message || "Não foi possível carregar as linhas de custo.");
+    }
   }
 }
 
@@ -2355,29 +2760,23 @@ function openPontoModal() {
 }
 
 window.triggerOrcamentoCustoAction = function (action, category = "") {
-  const frame = document.getElementById("plOrcamentoCustoFrame");
-  if (!frame) return;
-  const id = projectId();
-  if (!frame.dataset.loaded && id) {
-    const centro = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades&embed=1`;
-    mountObraFrame("plOrcamentoCustoFrame", centro);
+  if (action === "open-new-need") {
+    openNewCostNeedModal(category);
+    return;
   }
-  frame.scrollIntoView({ behavior: "smooth", block: "center" });
-  const sendMsg = () => {
-    try {
-      frame.contentWindow?.postMessage(
-        {
-          type: "orcamento-custo-action",
-          action,
-          category,
-        },
-        "*"
-      );
-    } catch {
-      // ignore
+  const id = projectId();
+  if (action === "open-scan") {
+    if (id) window.location.href = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades&scan=1`;
+    return;
+  }
+  if (action === "open-increment") {
+    if (category) {
+      openNewCostNeedModal(category);
+    } else if (id) {
+      window.location.href = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades`;
     }
-  };
-  setTimeout(sendMsg, 120);
+    return;
+  }
 };
 
 window.addEventListener("message", (event) => {
