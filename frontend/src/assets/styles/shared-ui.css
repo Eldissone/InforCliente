@@ -615,59 +615,27 @@
   .app-sidebar-footer {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.2rem;
     margin-top: auto;
-    padding-top: 0.65rem;
+    padding-top: 0.5rem;
     border-top: 1px solid rgba(0, 0, 0, 0.06);
     flex-shrink: 0;
   }
 
-  .app-sidebar-user-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    border-radius: 0.85rem;
-    box-sizing: border-box;
-  }
-
-  .app-sidebar-logout-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    height: 2.35rem;
-    padding: 0 0.65rem;
+  button.app-sidebar-link {
     border: 0;
-    border-radius: 0.75rem;
     background: transparent;
-    color: #ef4444;
-    font-size: 0.84rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    font-family: inherit;
+    text-align: left;
   }
 
-  .app-sidebar-logout-btn:hover {
+  button.app-sidebar-link.app-sidebar-logout-btn:hover {
     background: rgba(239, 68, 68, 0.08);
     color: #dc2626;
   }
 
-  .app-sidebar-logout-btn .material-symbols-outlined {
-    font-size: 1.25rem;
-    flex-shrink: 0;
-  }
-
-  .app-sidebar-logout-label {
-    opacity: 0;
-    white-space: nowrap;
-    transform: translateX(-6px);
-    transition: opacity 0.22s ease, transform 0.22s ease;
-  }
-
-  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-logout-label {
-    opacity: 1;
-    transform: translateX(0);
+  button.app-sidebar-link.app-sidebar-logout-btn:hover .app-sidebar-icon-wrap {
+    color: #dc2626;
   }
 
   /* Filter states when searching */

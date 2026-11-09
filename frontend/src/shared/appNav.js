@@ -543,22 +543,26 @@ export function transformDesktopNavToDropdowns() {
   });
   sidebar.appendChild(scrollArea);
 
-  // 4. Footer: Gestão & User Profile Card
+  // 4. Footer: Gestão & Sair (com o mesmo estilo e alinhamento)
   const footer = document.createElement("div");
   footer.className = "app-sidebar-footer";
 
   const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]" }, source, "sidebar");
   footer.appendChild(users);
 
-  const userCard = document.createElement("div");
-  userCard.className = "app-sidebar-user-card";
-  userCard.innerHTML = `
- 
-    <button type="button" data-logout class="app-sidebar-logout-icon" title="Terminar sessão" aria-label="Terminar sessão">
-      <span class="material-symbols-outlined" aria-hidden="true">logout</span> Sair
-    </button>
+  const logoutBtn = document.createElement("button");
+  logoutBtn.type = "button";
+  logoutBtn.setAttribute("data-logout", "");
+  logoutBtn.className = "app-sidebar-link app-sidebar-logout-btn";
+  logoutBtn.title = "Terminar sessão";
+  logoutBtn.setAttribute("aria-label", "Terminar sessão");
+  logoutBtn.innerHTML = `
+    <span class="app-sidebar-icon-wrap" aria-hidden="true">
+      <span class="material-symbols-outlined">logout</span>
+    </span>
+    <span class="app-sidebar-label">Sair</span>
   `;
-  footer.appendChild(userCard);
+  footer.appendChild(logoutBtn);
   sidebar.appendChild(footer);
 
   document.body.appendChild(sidebar);
