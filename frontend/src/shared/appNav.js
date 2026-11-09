@@ -161,13 +161,13 @@ function createMenuLink(definition, source, variant) {
   if (variant === "sidebar") {
     link.innerHTML = `
       <span class="app-sidebar-icon-wrap" aria-hidden="true">
-        <span class="material-symbols-outlined">${definition.icon || "chevron_right"}</span>
+        <span class="material-symbols-outlined">${definition.icon || "article"}</span>
       </span>
       <span class="app-sidebar-label">${definition.label}</span>
       ${badgeHtml}
     `;
   } else {
-    link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span><span>${definition.label}</span>`;
+    link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "article"}</span><span>${definition.label}</span>`;
   }
   return link;
 }
@@ -177,7 +177,7 @@ function buildMenuNodes(entries, source, variant, nested) {
     if (entry.children) {
       const nodes = buildMenuNodes(entry.children, source, variant, true);
       if (variant === "mobile") return createMobileGroup(entry.label, nodes);
-      if (nested) return createSubgroup(entry.label, nodes, { badge: entry.badge });
+      if (nested) return createSubgroup(entry.label, entry.icon || "folder", nodes, { badge: entry.badge });
       return createGroup(entry.label, entry.icon || "folder", nodes, { badge: entry.badge });
     }
     return createMenuLink(entry, source, variant);
@@ -295,12 +295,12 @@ function createGroup(label, icon, links, { open = false, badge = "" } = {}) {
       <span class="app-sidebar-icon-wrap" aria-hidden="true">
         <span class="material-symbols-outlined">${icon}</span>
       </span>
-      <span class="app-sidebar-label">${label}</span>
+      <span class="app-sidebar-label-with-arrow">
+        <span class="app-sidebar-label">${label}</span>
+        <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>
+      </span>
     </span>
-    <span class="app-sidebar-group-right">
-      ${badgeHtml}
-      <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">chevron_right</span>
-    </span>
+    ${badgeHtml ? `<span class="app-sidebar-group-right">${badgeHtml}</span>` : ""}
   `;
   const children = document.createElement("div");
   children.className = "app-sidebar-children";
@@ -309,18 +309,24 @@ function createGroup(label, icon, links, { open = false, badge = "" } = {}) {
   return group;
 }
 
-function createSubgroup(label, nodes, { badge = "" } = {}) {
+function createSubgroup(label, icon, nodes, { badge = "" } = {}) {
   const group = document.createElement("details");
   group.className = "app-sidebar-subgroup";
   const summary = document.createElement("summary");
   summary.title = label;
   const badgeHtml = badge ? `<span class="app-sidebar-badge">${badge}</span>` : "";
+  const iconHtml = icon
+    ? `<span class="app-sidebar-subgroup-icon material-symbols-outlined" aria-hidden="true">${icon}</span>`
+    : "";
   summary.innerHTML = `
-    <span class="app-sidebar-subgroup-label">${label}</span>
-    <span class="app-sidebar-group-right">
-      ${badgeHtml}
-      <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">chevron_right</span>
+    <span class="app-sidebar-subgroup-label-wrap">
+      ${iconHtml}
+      <span class="app-sidebar-label-with-arrow">
+        <span class="app-sidebar-subgroup-label">${label}</span>
+        <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>
+      </span>
     </span>
+    ${badgeHtml ? `<span class="app-sidebar-group-right">${badgeHtml}</span>` : ""}
   `;
   const children = document.createElement("div");
   children.className = "app-sidebar-subgroup-links";
@@ -375,6 +381,56 @@ function wireSidebarInteractions(sidebar) {
       } catch {}
     });
   }
+
+  // Animação suave tipo accordion ao expandir/recolher grupos e subgrupos
+  sidebar.addEventListener("click", (e) => {
+    const summary = e.target.closest("summary");
+    if (!summary) return;
+    const details = summary.parentElement;
+    if (!details || (!details.classList.contains("app-sidebar-group") && !details.classList.contains("app-sidebar-subgroup"))) return;
+
+    const content = details.querySelector(".app-sidebar-children, .app-sidebar-subgroup-links");
+    if (!content) return;
+
+    e.preventDefault();
+
+    if (details.open) {
+      details.classList.add("is-closing");
+      const startHeight = content.offsetHeight;
+      content.style.overflow = "hidden";
+      const anim = content.animate(
+        [
+          { height: `${startHeight}px`, opacity: 1 },
+          { height: "0px", opacity: 0 }
+        ],
+        { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+      );
+      anim.onfinish = () => {
+        details.open = false;
+        details.classList.remove("is-closing");
+        content.style.height = "";
+        content.style.opacity = "";
+        content.style.overflow = "";
+      };
+    } else {
+      details.classList.remove("is-closing");
+      details.open = true;
+      content.style.overflow = "hidden";
+      const targetHeight = content.scrollHeight;
+      const anim = content.animate(
+        [
+          { height: "0px", opacity: 0 },
+          { height: `${targetHeight}px`, opacity: 1 }
+        ],
+        { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+      );
+      anim.onfinish = () => {
+        content.style.height = "";
+        content.style.opacity = "";
+        content.style.overflow = "";
+      };
+    }
+  });
 
   const searchInput = sidebar.querySelector("#sidebarSearchInput");
   if (searchInput) {
@@ -449,12 +505,15 @@ export function transformDesktopNavToDropdowns() {
   const userRole = (user?.role || "Gestor").toUpperCase();
   const initials = getUserInitials(user);
 
-  // 1. Top Header: Brand Squircle + Brand Titles + Pin Button
+  // 1. Top Header: Navigation title/icon + Pin Button
   const header = document.createElement("div");
   header.className = "app-sidebar-header";
   header.innerHTML = `
-    
-    <button type="button" id="btnTogglePinSidebar" class="app-sidebar-pin-btn" title="Fixar / Recolher menu" aria-label="Fixar menu">
+    <div class="app-sidebar-header-left">
+      <span class="material-symbols-outlined app-sidebar-menu-icon" aria-hidden="true">dashboard_customize</span>
+      <span class="app-sidebar-menu-title">Navegação</span>
+    </div>
+    <button type="button" id="btnTogglePinSidebar" class="app-sidebar-pin-btn" title="Fixar / Desafixar menu" aria-label="Fixar menu">
       <span class="material-symbols-outlined" aria-hidden="true">dock_to_left</span>
     </button>
   `;
