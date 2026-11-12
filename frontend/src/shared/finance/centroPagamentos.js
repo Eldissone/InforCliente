@@ -497,9 +497,10 @@ async function decideReinforcement(request, approve) {
 }
 
 function scheduleUrl(n) {
-  const url = new URL("/Projectos/centroCustos", window.location.origin);
-  url.searchParams.set("projectId", n.projectId);
-  url.searchParams.set("tab", "cronograma");
+  const url = new URL("/Projectos/projectView", window.location.origin);
+  url.searchParams.set("id", n.projectId);
+  url.searchParams.set("tab", "plano_financeiro");
+  url.searchParams.set("sub", "cronograma");
   url.searchParams.set("needId", n.id);
   if (n.quoteId) url.searchParams.set("quoteId", n.quoteId);
   return url.pathname + url.search;

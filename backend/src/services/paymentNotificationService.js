@@ -219,11 +219,12 @@ async function notifyPaymentBatchCreated(io, payments, actor = {}) {
 
 function buildNeedFinanceLink(need) {
   const params = new URLSearchParams({
-    projectId: need.projectId,
-    tab: "cronograma",
+    id: need.projectId,
+    tab: "plano_financeiro",
+    sub: "cronograma",
     needId: need.id,
   });
-  return `/Projectos/centroCustos.html?${params}`;
+  return `/Projectos/projectView.html?${params}`;
 }
 
 async function notifyNeedSentToFinance(io, payload, actor = {}) {

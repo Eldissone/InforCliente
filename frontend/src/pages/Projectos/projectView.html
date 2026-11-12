@@ -21,6 +21,7 @@
     <link href="/assets/styles/shell.css" rel="stylesheet" />
     <link href="/assets/styles/pages/registry-form.css" rel="stylesheet" />
     <link href="/assets/styles/pages/project-view.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/budget-modals.css" rel="stylesheet" />
 </head>
 
 <body data-shell="figma" class="bg-surface antialiased text-slate-900 min-h-screen flex flex-col">
@@ -753,6 +754,17 @@
                     <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — crie centros, linhas e aprove o previsto nesta obra.</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <button type="button" data-role-visible="admin,operador" onclick="window.sendAllToCronograma?.()"
+                        title="Enviar ao financeiro todos os itens aprovados no realizado"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        <span class="material-symbols-outlined text-base">schedule</span>
+                        Agendar
+                    </button>
+                    <button type="button" data-role-visible="admin,operador" onclick="window.triggerOrcamentoCustoAction?.('open-excel')"
+                        class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">upload_file</span>
+                        Importar Excel
+                    </button>
                     <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-scan')"
                         class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-emerald-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
                         <span class="material-symbols-outlined text-base">document_scanner</span>
@@ -763,15 +775,16 @@
                         <span class="material-symbols-outlined text-base">add_chart</span>
                         Incrementar Orçamento
                     </button>
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-new-cc')"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        <span class="material-symbols-outlined text-base">account_tree</span>
+                        Novo Centro de Custo
+                    </button>
                     <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-new-need')"
                         class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm">
                         <span class="material-symbols-outlined text-base">add</span>
                         Novo Item
                     </button>
-                    <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
-                    <span class="material-symbols-outlined text-base">open_in_new</span>
-                    Página completa
-                </a>
             </div>
                 </div>
             <div id="plOrcamentoCustoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
@@ -1051,11 +1064,23 @@
                     <h2 class="text-2xl font-bold text-slate-900">Plano Financeiro</h2>
                     <p class="text-sm text-slate-500 font-medium">Custos, faturação, recebimentos e cash flow previstos por período.</p>
                 </div>
-                <a href="./centroCustos.html" id="plFinanceiroCronogramaLink" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
-                    <span class="material-symbols-outlined text-base">calendar_month</span>
-                    Cronograma de pagamentos
-                </a>
+                
             </div>
+            <div id="plFinSubTabs" class="flex flex-row flex-nowrap border-b border-slate-200 overflow-x-auto mb-6">
+                <button type="button" data-fin-sub="visao" class="pl-fin-sub-btn active px-5 py-2.5 text-xs font-bold border-b-2 border-[#212e3e] text-[#212e3e] whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">monitoring</span>Previsão
+                </button>
+                <button type="button" data-fin-sub="cronograma" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">calendar_month</span>Cronograma de Pagamentos
+                </button>
+                <button type="button" data-fin-sub="pendentes" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">pending_actions</span>Pendentes
+                </button>
+                <button type="button" data-fin-sub="historico" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">history</span>Histórico
+                </button>
+            </div>
+            <div id="plFinSub_visao">
             <div id="plFinanceiroKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div class="px-6 py-5 border-b border-slate-50">
@@ -1080,6 +1105,10 @@
                     </table>
                 </div>
             </div>
+            </div>
+            <div id="plFinSub_cronograma" class="hidden"></div>
+            <div id="plFinSub_pendentes" class="hidden"></div>
+            <div id="plFinSub_historico" class="hidden"></div>
         </div>
 
         <!-- Recursos: Equipamentos e Viaturas -->

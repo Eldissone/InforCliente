@@ -854,9 +854,10 @@ function renderPendingFinanceNeedCard(need) {
 }
 
 window.openPendingFinanceNeed = function (needId, projectId, costCenterId, quoteId) {
-  const url = new URL("../Projectos/centroCustos.html", window.location.href);
-  url.searchParams.set("projectId", projectId);
-  url.searchParams.set("tab", "cronograma");
+  const url = new URL("../Projectos/projectView.html", window.location.href);
+  url.searchParams.set("id", projectId);
+  url.searchParams.set("tab", "plano_financeiro");
+  url.searchParams.set("sub", "cronograma");
   url.searchParams.set("needId", needId);
   if (quoteId) url.searchParams.set("quoteId", quoteId);
   window.location.href = url.pathname + url.search;

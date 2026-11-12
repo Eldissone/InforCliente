@@ -295,8 +295,44 @@ function wireObraEstadoButton() {
   });
 }
 
+// Compatibilidade com os links da antiga página centroCustos.html (tab=necessidades|cronograma|pendentes|historico…)
+const LEGACY_TAB_MAP = {
+  dashboard: { tab: "orcamento_custo" },
+  centros: { tab: "orcamento_custo" },
+  necessidades: { tab: "orcamento_custo" },
+  cronograma: { tab: "plano_financeiro", sub: "cronograma" },
+  pendentes: { tab: "plano_financeiro", sub: "pendentes" },
+  historico: { tab: "plano_financeiro", sub: "historico" },
+};
+
+function activateTabFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("tab");
+  if (!raw) return false;
+  const mapped = LEGACY_TAB_MAP[raw] || { tab: raw };
+  const tabId = mapped.tab;
+  const sub = params.get("sub") || mapped.sub || "";
+  const trigger = document.querySelector(`[data-tab-trigger="${tabId}"]`);
+  if (!trigger || trigger.dataset.permDenied === "true" || trigger.classList.contains("hidden")) return false;
+
+  const needId = params.get("needId");
+  if (needId) {
+    window.__pendingOpenCronogramaNeedId = needId;
+    window.__pendingOpenCronogramaQuoteId = params.get("quoteId");
+  }
+  trigger.click();
+  if (tabId === "plano_financeiro" && (sub || needId)) {
+    window.showFinanceiroSub?.(sub || "cronograma");
+  }
+  if (tabId === "orcamento_custo" && params.get("scan") === "1") {
+    window.triggerOrcamentoCustoAction?.("open-scan");
+  }
+  return true;
+}
+
 async function loadProject() {
   const id = getProjectId();
+  try { if (id) localStorage.setItem("InfoCliente.currentProjectId", id); } catch { /* ignore */ }
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}`);
   const p = data.project;
   projectState = p;
@@ -2873,8 +2909,6 @@ function wireNewTransaction() {
             });
             toast("Necessidade adicionada ao Orçamento Geral!", { type: "success" });
             close();
-            // Optional: You could redirect the user to centroCustos.html if desired
-            // window.location.href = `centroCustos.html?id=${id}`;
           } catch (err) {
             setButtonLoading(btn, false);
             toast(err.message || "Erro ao criar necessidade", { type: "error" });
@@ -3222,7 +3256,7 @@ async function init() {
     } else {
       activateFirstVisibleProjectTab();
     }
-  } else {
+  } else if (!activateTabFromUrl()) {
     activateFirstVisibleProjectTab();
   }
   wireFilesUpload();

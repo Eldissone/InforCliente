@@ -362,7 +362,7 @@ function renderGridItem(p, idx = 1) {
 
       <!-- Quick Actions -->
       <div class="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-          <a href="./centroCustos.html?projectId=${p.id}" onclick="event.stopPropagation()" title="Centro de Custos"
+          <a href="./projectView.html?id=${p.id}&tab=orcamento_custo" onclick="event.stopPropagation()" title="Orçamento e Planeamento"
             class="h-9 w-9 bg-white shadow-xl rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:scale-110 transition-all">
             <span class="material-symbols-outlined text-lg">account_balance</span>
           </a>

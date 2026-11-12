@@ -3,6 +3,11 @@ import { formatCurrency, toDateKey } from "../../shared/format.js";
 import { paymentPayableAmount } from "../../shared/supplierFiscal.js";
 import { toast, openModal, escapeHtml, setButtonLoading } from "../../shared/ui.js";
 import { can } from "../../shared/permissions.js";
+import { initImportExcel, openImportModal } from "../../shared/budget/importExcel.js";
+import { initCategoryIncrement } from "../../shared/budget/categoryIncrement.js";
+import { initCronograma, mountCronograma, loadCronograma } from "../../shared/budget/cronograma.js";
+import { initPayments, mountPayments, showPendingPayments, showPaymentHistory } from "../../shared/budget/payments.js";
+import { initCostCenterModal, openCCModal, editCC, deleteCC } from "../../shared/budget/costCenterModal.js";
 
 const PT_MONTHS = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -460,14 +465,10 @@ export function loadPlaneamentoTab(tabId) {
   const id = projectId();
   if (!id) return;
 
-  const centro = `./centroCustos.html?projectId=${encodeURIComponent(id)}`;
-  const custoLink = document.getElementById("plOrcamentoCustoLink");
-  if (custoLink) custoLink.href = `${centro}&tab=necessidades`;
   const cotacaoHref = `./Cotacao/index.html?project=${encodeURIComponent(id)}`;
   const cotacaoLink = document.getElementById("plOrcamentoCotacaoLink");
   if (cotacaoLink) cotacaoLink.href = cotacaoHref;
-  const finLink = document.getElementById("plFinanceiroCronogramaLink");
-  if (finLink) finLink.href = `${centro}&tab=cronograma`;
+  initFinSubTabs();
 
   if (tabId === "orcamento_custo") {
     return loadOrcamentoCusto();
@@ -964,6 +965,14 @@ async function loadOrcamentoCusto() {
             <button type="button" onclick="window.openNewCostNeedModal?.('${escapeHtml(row.id || "")}')"
               class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
               <span class="material-symbols-outlined text-xs">add</span> Novo Item
+            </button>
+            <button type="button" title="Editar centro de custo" onclick="window.editCC?.('${escapeHtml(row.id || "")}')"
+              class="h-7 w-7 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all inline-flex items-center justify-center align-middle">
+              <span class="material-symbols-outlined text-sm">edit</span>
+            </button>
+            <button type="button" title="Eliminar centro de custo" onclick="window.deleteCC?.('${escapeHtml(row.id || "")}', '${escapeHtml(label).replace(/'/g, "&#39;")}')"
+              class="h-7 w-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-all inline-flex items-center justify-center align-middle">
+              <span class="material-symbols-outlined text-sm">delete</span>
             </button>
           </td>
         </tr>`;
@@ -2759,23 +2768,88 @@ function openPontoModal() {
   });
 }
 
+// ── Orçamento de custo: módulos partilhados (Excel, fatura/incremento, centros de custo) ──
+const budgetCtx = {
+  getProject: () => {
+    const id = projectId();
+    return id ? { ...project(), id } : null;
+  },
+  getCostCenters: () => cachedCostCenters,
+  showToast: (msg, type = "info") => toast(msg, { type }),
+  onChanged: async () => {
+    await loadOrcamentoCusto();
+    if (typeof window.refreshProjectBudgetFromCusto === "function") window.refreshProjectBudgetFromCusto();
+  },
+};
+initImportExcel(budgetCtx);
+initCategoryIncrement(budgetCtx);
+initCostCenterModal(budgetCtx);
+
+window.editCC = editCC;
+window.deleteCC = deleteCC;
+
+// ── Plano Financeiro: sub-separadores (cronograma, pendentes, histórico) ──
+const finCtx = {
+  getProject: budgetCtx.getProject,
+  showToast: budgetCtx.showToast,
+  onChanged: async () => {
+    await Promise.all([loadFinanceiro(), loadOrcamentoCusto()]);
+  },
+  reloadCronograma: () => loadCronograma(),
+  showCronograma: () => {
+    openExistingTab("plano_financeiro");
+    showFinSub("cronograma");
+  },
+};
+initCronograma(finCtx);
+initPayments(finCtx);
+
+let finSubWired = false;
+function showFinSub(name) {
+  document.querySelectorAll(".pl-fin-sub-btn").forEach((b) => {
+    const on = b.dataset.finSub === name;
+    b.classList.toggle("active", on);
+    b.classList.toggle("border-[#212e3e]", on);
+    b.classList.toggle("text-[#212e3e]", on);
+    b.classList.toggle("border-transparent", !on);
+    b.classList.toggle("text-slate-400", !on);
+  });
+  ["visao", "cronograma", "pendentes", "historico"].forEach((k) => {
+    document.getElementById(`plFinSub_${k}`)?.classList.toggle("hidden", k !== name);
+  });
+  if (name === "cronograma") {
+    mountCronograma(document.getElementById("plFinSub_cronograma"));
+    loadCronograma();
+  } else if (name === "pendentes" || name === "historico") {
+    mountPayments(document.getElementById("plFinSub_pendentes"), document.getElementById("plFinSub_historico"));
+    if (name === "pendentes") showPendingPayments();
+    else showPaymentHistory();
+  } else {
+    loadFinanceiro();
+  }
+}
+window.showFinanceiroSub = showFinSub;
+
+function initFinSubTabs() {
+  if (finSubWired) return;
+  finSubWired = true;
+  document.querySelectorAll(".pl-fin-sub-btn").forEach((b) =>
+    b.addEventListener("click", () => showFinSub(b.dataset.finSub))
+  );
+}
+
 window.triggerOrcamentoCustoAction = function (action, category = "") {
-  if (action === "open-new-need") {
-    openNewCostNeedModal(category);
-    return;
-  }
-  const id = projectId();
-  if (action === "open-scan") {
-    if (id) window.location.href = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades&scan=1`;
-    return;
-  }
-  if (action === "open-increment") {
-    if (category) {
-      openNewCostNeedModal(category);
-    } else if (id) {
-      window.location.href = `./centroCustos.html?projectId=${encodeURIComponent(id)}&tab=necessidades`;
-    }
-    return;
+  switch (action) {
+    case "open-new-need":
+      return openNewCostNeedModal(category);
+    case "open-excel":
+      return openImportModal();
+    case "open-new-cc":
+      return openCCModal();
+    case "open-scan":
+      return window.openCategoryIncrementModal?.(category, true);
+    case "open-increment":
+      return window.openCategoryIncrementModal?.(category, false);
   }
 };
 

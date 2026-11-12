@@ -327,7 +327,7 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.clientes", label: "Link: Clientes", route: "/Clientes/clienteLista.html" },
       { id: "navlinks.obras", label: "Link: Obras", route: "/Projectos/ProjectGeral.html" },
       { id: "navlinks.logistica", label: "Link: Logística", route: "/Stock/index.html" },
-      { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/centroCustos.html" },
+      { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/ProjectGeral.html" },
       { id: "navlinks.cotacao", label: "Link: Cotação", route: "/Projectos/Cotacao/index.html" },
       { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
       { id: "navlinks.centros_gerais", label: "Link: Centro de Compras", route: "/Financeiro/centroDeCompras.html" },

@@ -79,7 +79,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (backBtn) backBtn.style.display = "none";
     document.getElementById("selectedProjName").textContent = "Pedidos Gerais";
   } else {
-    if (backBtn) backBtn.href = `../centroCustos.html?project=${currentProjectId}`;
+    if (backBtn) backBtn.href = `../projectView.html?id=${currentProjectId}&tab=orcamento_cotacao`;
   }
 
   await loadSuppliers();
