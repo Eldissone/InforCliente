@@ -37,7 +37,6 @@ const APP_MENU = [
     type: "group",
     label: "Obras",
     icon: "construction",
-    badge: "Activas",
     children: [
       { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
       { label: "Planeamento", icon: "event_note", selector: "[data-nav-planeamento]", href: "/Projectos/centroCustos" },

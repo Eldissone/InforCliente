@@ -268,6 +268,36 @@ body[data-registry="obras"] .registry-page>h1 {
   text-decoration: none;
 }
 
+.obra-top-list-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937 !important;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.obra-top-list-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.obra-top-list-btn .material-symbols-outlined {
+  font-size: 20px;
+  color: #475569;
+}
+
 .obra-card {
   padding: 20px;
   border-radius: 20px;
@@ -557,6 +587,11 @@ body[data-registry="obras"] .registry-page>h1 {
   .obra-form-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .obra-top-list-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .obra-form .registry-actions {

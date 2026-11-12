@@ -1925,7 +1925,16 @@ async function renderObras() {
   }
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
-    <header class="obra-form-heading"><div><h1>Criar Obra</h1><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
+    <header class="obra-form-heading">
+      <div>
+        <h1>Criar Obra</h1>
+        <p>Preencha os dados da nova obra para iniciar o processo de criação.</p>
+      </div>
+      <a href="/Projectos/ProjectGeral.html" class="obra-top-list-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Listagem de Obras
+      </a>
+    </header>
     ${obraFormSectionsHtml({ clients, contacts })}
     <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
   </form>`, async (form) => {
@@ -1935,20 +1944,6 @@ async function renderObras() {
     });
   });
   bindObraForm(form);
-  showRegistered({
-    title: "Obras registadas",
-    columns: ["Código", "Nome", "Cliente", "Estado"],
-    empty: "Ainda não há obras registadas.",
-    load: async () => {
-      const items = await loadPaged("/projects", 100);
-      return items.map((item) => [
-        item.code,
-        item.name,
-        item.client?.name,
-        item.estado || item.phaseLabel,
-      ]);
-    },
-  });
 }
 
 async function renderProdutos() {
