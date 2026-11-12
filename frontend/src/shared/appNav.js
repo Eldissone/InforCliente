@@ -48,6 +48,7 @@ const APP_MENU = [
     label: "Compras e Logística",
     icon: "local_shipping",
     children: [
+      { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
       { label: "Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
       { label: "Centro de Compras", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
     ],

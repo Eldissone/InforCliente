@@ -308,10 +308,25 @@ function rfField(label, control, extra = "") {
   return `<label class="rf-field ${extra}"><span>${label}</span>${control}</label>`;
 }
 
-function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar." }) {
+function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar.", topLink = null }) {
+  const headHtml = topLink
+    ? `<header class="rf-catalog-head">
+        <div>
+          <h1 class="rf-title">${title}</h1>
+          <p class="rf-lead">${lead}</p>
+        </div>
+        <div class="rf-catalog-actions">
+          <a href="${topLink.href}" class="rf-top-btn">
+            ${topLink.icon ? `<span class="material-symbols-outlined" aria-hidden="true">${topLink.icon}</span>` : ""}
+            ${topLink.label}
+          </a>
+        </div>
+      </header>`
+    : `<h1 class="rf-title">${title}</h1>
+       <p class="rf-lead">${lead}</p>`;
+
   return `
-    <h1 class="rf-title">${title}</h1>
-    <p class="rf-lead">${lead}</p>
+    ${headHtml}
     <form class="rf-form" novalidate>
       ${cards}
       <div class="rf-actions">
@@ -1950,6 +1965,11 @@ async function renderEquipamentos() {
     title: "Criar Equipamento, Maquinaria ou Viatura",
     lead: "Registo de equipamento, maquinaria, viatura ou ferramenta.",
     submitLabel: "Guardar equipamento",
+    topLink: {
+      href: "/Stock",
+      label: "Gestão Logística e Ativos",
+      icon: "agriculture",
+    },
     cards: rfCard("Identificação", `<div class="rf-grid">
       ${rfField("Nome *", textInput("name", { required: true, placeholder: "Nome do equipamento" }), "span-2")}
       ${rfField("Tipo *", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
@@ -1983,17 +2003,6 @@ async function renderEquipamentos() {
     if (photo && photo.size && created?.id) {
       await apiUpload(`/products/${created.id}/photo`, { file: photo, fieldName: "photo" });
     }
-  });
-  showRegistered({
-    title: "Equipamentos registados",
-    columns: ["Nome", "Tipo", "Matrícula / série", "Unidade"],
-    empty: "Ainda não há equipamentos registados.",
-    load: async () => {
-      const items = await loadItems("/products");
-      return items
-        .filter((item) => item.category === "EQUIPMENT" || item.category === "TOOL")
-        .map((item) => [item.name, equipmentKind(item), item.sku, item.unit]);
-    },
   });
 }
 
@@ -2077,6 +2086,11 @@ async function renderCartoes() {
     title: "Criar Cartão Bancário",
     lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
     submitLabel: "Guardar cartão",
+    topLink: {
+      href: "/Financeiro/tesouraria/atm",
+      label: "Tesouraria & Cartões",
+      icon: "credit_card",
+    },
     cards: `${rfCard("Cartão", `<div class="rf-grid">
       ${rfField("Designação *", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
       ${rfField("Banco", textInput("bank", { placeholder: "Nome do banco" }))}
@@ -2117,22 +2131,6 @@ async function renderCartoes() {
       },
     });
   });
-  showRegistered({
-    title: "Cartões registados",
-    columns: ["Designação", "Banco", "Titular", "Final", "Tipo", "Saldo"],
-    empty: "Ainda não há cartões registados.",
-    load: async () => {
-      const items = await loadItems("/petty-cash/cards");
-      return items.map((item) => [
-        item.label,
-        item.bank,
-        item.holderName,
-        item.lastDigits ? `•••• ${item.lastDigits}` : "",
-        CARD_TYPES[item.type] || item.type,
-        [moneyLabel(item.currentBalance), item.currency || "AOA"].filter(Boolean).join(" "),
-      ]);
-    },
-  });
 }
 
 async function renderMovimentos() {
@@ -2148,6 +2146,11 @@ async function renderMovimentos() {
     title: "Registar Movimento Financeiro",
     lead: "Registe um crédito ou um ajuste num cartão bancário.",
     submitLabel: "Guardar movimento",
+    topLink: {
+      href: "/Financeiro/tesouraria/extratos",
+      label: "Extratos Bancários",
+      icon: "receipt_long",
+    },
     cards: rfCard("Movimento", `<div class="rf-grid">
       ${rfField("Cartão *", cards.length
         ? selectInput("cardId", cards.map((card) => ({
@@ -2178,31 +2181,6 @@ async function renderMovimentos() {
         description,
       },
     });
-  });
-  showRegistered({
-    title: "Movimentos registados",
-    columns: ["Cartão", "Movimento", "Valor", "Descrição", "Data"],
-    empty: "Ainda não há movimentos registados.",
-    load: async () => {
-      const cards = await loadItems("/petty-cash/cards");
-      const groups = await Promise.all(cards.map(async (card) => {
-        const data = await apiRequest(`/petty-cash/cards/${encodeURIComponent(card.id)}?pageSize=100`);
-        return (data?.movements?.items || []).map((movement) => ({
-          ...movement,
-          cardLabel: card.label,
-        }));
-      }));
-      return groups
-        .flat()
-        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .map((item) => [
-          item.cardLabel,
-          MOVEMENT_TYPES[item.type] || item.type,
-          moneyLabel(item.amount),
-          item.description,
-          dateLabel(item.createdAt),
-        ]);
-    },
   });
 }
 

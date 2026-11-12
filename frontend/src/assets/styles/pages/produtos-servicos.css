@@ -49,6 +49,14 @@ body[data-registry="produtos"] {
   color: #fff;
 }
 
+.ps-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 0 1.75rem;
+}
+
 .ps-title {
   margin: 0 0 0.45rem;
   color: #17191d;
@@ -60,10 +68,40 @@ body[data-registry="produtos"] {
 }
 
 .ps-lead {
-  margin: 0 0 1.75rem;
+  margin: 0;
   color: #8d95a3;
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.ps-top-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937 !important;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ps-top-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.ps-top-btn .material-symbols-outlined {
+  font-size: 20px;
+  color: #475569;
 }
 
 .ps-form {
@@ -183,6 +221,17 @@ body[data-registry="produtos"] {
 @media (max-width: 600px) {
   .ps-page {
     padding: 5.75rem 0.85rem 2.5rem;
+  }
+
+  .ps-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .ps-top-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .ps-card {
