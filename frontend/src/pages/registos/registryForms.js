@@ -1839,8 +1839,16 @@ async function renderClientes() {
        <span class="cli-hint">Ainda não há setores. Pode escrever o nome ou criar um setor em Registos.</span>`;
 
   mount("clientes", `
-    <h1 class="cli-title">Criar Cliente</h1>
-    <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+    <header class="cli-header">
+      <div>
+        <h1 class="cli-title">Criar Cliente</h1>
+        <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+      </div>
+      <a href="/Clientes/clienteLista" class="cli-top-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Lista de Clientes
+      </a>
+    </header>
     <form class="cli-form" novalidate>
       <section class="cli-card">
         <h2>Identificação</h2>
@@ -1889,21 +1897,6 @@ async function renderClientes() {
         password,
       },
     });
-  });
-  showRegistered({
-    title: "Clientes registados",
-    columns: ["Código", "Nome", "Setor", "Região", "Estado"],
-    empty: "Ainda não há clientes registados.",
-    load: async () => {
-      const items = await loadPaged("/clients", 100);
-      return items.map((item) => [
-        item.code,
-        item.name,
-        item.industry,
-        item.region,
-        CLIENT_STATUS[item.status] || item.status,
-      ]);
-    },
   });
 }
 
