@@ -702,9 +702,10 @@ function showRegistered({ title, columns, empty, load }) {
   paintExistingList({ title, columns, rows: [], empty: "A carregar...", loading: true });
   Promise.resolve()
     .then(load)
-    .then((rows) => {
+    .then((result) => {
       if (gen !== registryListGen) return;
-      paintExistingList({ title, columns, rows, empty });
+      const rows = Array.isArray(result) ? result : result.rows;
+      paintExistingList({ title, columns, rows, empty, actions: Array.isArray(result) ? null : result.actions });
     })
     .catch((error) => {
       if (gen !== registryListGen) return;
@@ -781,14 +782,85 @@ async function renderContactos() {
       await apiUpload(`/contacts/${res.id}/photo`, fd);
     }
   });
-  showRegistered({
+  const canEdit = can("cadastros", "edit") || can("cadastros", "manage");
+  const canDelete = can("cadastros", "delete") || can("cadastros", "manage");
+  let contactItems = [];
+  const reloadContacts = () => showRegistered({
     title: "Contactos registados",
     columns: ["Nome", "Função", "Telefone", "Email"],
     empty: "Ainda não há contactos registados.",
     load: async () => {
-      const items = await loadPaged("/contacts", 200);
-      return items.map((item) => [item.isUser ? `${item.name} (utilizador)` : item.name, item.role, item.phone, item.email]);
+      contactItems = await loadPaged("/contacts", 200);
+      return {
+        rows: contactItems.map((item) => [item.isUser ? `${item.name} (utilizador)` : item.name, item.role, item.phone, item.email]),
+        // contactos de utilizadores são geridos em Gestão → sem acções
+        actions: contactItems.map((item) => item.isUser ? "" : [
+          canEdit ? `<button type="button" class="reg-row-action" data-contact-edit="${esc(item.id)}" title="Editar" aria-label="Editar"><span class="material-symbols-outlined">edit</span></button>` : "",
+          canDelete ? `<button type="button" class="reg-row-action" data-contact-delete="${esc(item.id)}" title="Eliminar" aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>` : "",
+        ].join("")),
+      };
     },
+  });
+  reloadContacts();
+
+  const root = document.getElementById("registryRoot");
+  root?.addEventListener("click", async (event) => {
+    const editBtn = event.target.closest("[data-contact-edit]");
+    const delBtn = event.target.closest("[data-contact-delete]");
+    if (!editBtn && !delBtn) return;
+    const id = (editBtn || delBtn).getAttribute(editBtn ? "data-contact-edit" : "data-contact-delete");
+    const item = contactItems.find((c) => c.id === id);
+    if (!item || item.isUser) return;
+
+    if (delBtn) {
+      if (!confirm(`Eliminar o contacto "${item.name}"? Deixa de aparecer na lista e nas novas obras.`)) return;
+      try {
+        await apiRequest(`/contacts/${id}`, { method: "DELETE" });
+        toast("Contacto eliminado.", { type: "success" });
+        reloadContacts();
+      } catch (error) {
+        toast(apiMessage(error), { type: "error" });
+      }
+      return;
+    }
+
+    openModal({
+      title: "Editar contacto",
+      primaryLabel: "Guardar",
+      contentHtml: `<form class="rf-grid" onsubmit="return false">
+        ${rfField("Nome *", textInput("nome", { required: true, value: item.name }), "span-2")}
+        ${rfField("Função *", textInput("funcao", { required: true, value: item.role }))}
+        ${rfField("Telefone", textInput("telefone", { value: item.phone || "" }))}
+        ${rfField("Email", textInput("email", { type: "email", value: item.email || "" }), "span-2")}
+        ${rfField("Nova foto", `${textInput("foto", { type: "file", accept: "image/*" })}<span class="rf-hint">Deixe vazio para manter a foto actual.</span>`, "span-2")}
+      </form>`,
+      onPrimary: async ({ btn, close, body }) => {
+        const val = (name) => String(body.querySelector(`[name="${name}"]`)?.value || "").trim();
+        if (val("nome").length < 2 || val("funcao").length < 2) {
+          toast("Indique o nome e a função.", { type: "error" });
+          return;
+        }
+        btn.disabled = true;
+        try {
+          await apiRequest(`/contacts/${id}`, {
+            method: "PATCH",
+            body: { name: val("nome"), role: val("funcao"), phone: val("telefone") || null, email: val("email") || null },
+          });
+          const file = body.querySelector('[name="foto"]')?.files?.[0];
+          if (file) {
+            const fd = new FormData();
+            fd.append("photo", file);
+            await apiUpload(`/contacts/${id}/photo`, fd);
+          }
+          toast("Contacto actualizado.", { type: "success" });
+          close();
+          reloadContacts();
+        } catch (error) {
+          toast(apiMessage(error), { type: "error" });
+          btn.disabled = false;
+        }
+      },
+    });
   });
 }
 

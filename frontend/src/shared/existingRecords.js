@@ -8,16 +8,19 @@ function esc(value) {
   }[char]));
 }
 
-export function existingListHtml({ title, columns, rows, empty, error, loading }) {
-  const head = columns.map((column) => `<th>${esc(column)}</th>`).join("");
+export function existingListHtml({ title, columns, rows, empty, error, loading, actions = null }) {
+  // `actions`: HTML por linha (mesma ordem de `rows`) para uma última coluna de acções.
+  const hasActions = Array.isArray(actions) && actions.some(Boolean);
+  const colCount = columns.length + (hasActions ? 1 : 0);
+  const head = columns.map((column) => `<th>${esc(column)}</th>`).join("") + (hasActions ? `<th class="reg-existing-actions-h"><span class="sr-only">Acções</span></th>` : "");
   const body = error
-    ? `<tr><td class="reg-existing-empty" colspan="${columns.length}">${esc(error)}</td></tr>`
+    ? `<tr><td class="reg-existing-empty" colspan="${colCount}">${esc(error)}</td></tr>`
     : rows.length
-      ? rows.map((cells) => `<tr>${cells.map((cell) => {
+      ? rows.map((cells, i) => `<tr>${cells.map((cell) => {
         const text = String(cell ?? "").trim();
         return `<td>${esc(text || "—")}</td>`;
-      }).join("")}</tr>`).join("")
-      : `<tr><td class="reg-existing-empty" colspan="${columns.length}">${esc(loading ? "A carregar..." : (empty || "Ainda não há registos."))}</td></tr>`;
+      }).join("")}${hasActions ? `<td class="reg-existing-actions">${actions[i] || ""}</td>` : ""}</tr>`).join("")
+      : `<tr><td class="reg-existing-empty" colspan="${colCount}">${esc(loading ? "A carregar..." : (empty || "Ainda não há registos."))}</td></tr>`;
   const count = loading || error
     ? ""
     : `<span>${rows.length} ${rows.length === 1 ? "registo" : "registos"}</span>`;

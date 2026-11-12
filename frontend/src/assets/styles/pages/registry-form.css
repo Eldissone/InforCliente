@@ -170,6 +170,7 @@
   min-width: 11.5rem;
   height: 3rem;
   padding: 0 1rem;
+  margin-bottom: 1rem;
   border: 0;
   border-radius: 10px;
   font-size: 0.82rem;
@@ -842,3 +843,12 @@ body[data-registry]:not([data-registry="obras"]) .registry-ghost {
   color: #94a3b8;
   text-align: center;
 }
+.reg-existing-actions { white-space: nowrap; text-align: right; width: 1%; }
+.reg-row-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border-radius: 0.6rem; border: 0; background: transparent;
+  color: #64748b; cursor: pointer; transition: background .15s, color .15s;
+}
+.reg-row-action:hover { background: #f1f5f9; color: #0f172a; }
+.reg-row-action[data-contact-delete]:hover { background: #fef2f2; color: #dc2626; }
+.reg-row-action .material-symbols-outlined { font-size: 1.15rem; }
