@@ -106,8 +106,52 @@ const optionalProjectIds = z.preprocess((value) => {
 
 // ─── Definições por recurso ──────────────────────────────────────────────────
 
+const USER_CONTACT_PREFIX = "user:";
+const USER_ROLE_LABEL = {
+  admin: "Administrador",
+  operador: "Operador",
+  financeiro: "Financeiro",
+  tecnico: "Técnico",
+  supervisor: "Supervisor",
+  leitura: "Leitura",
+};
+
+/**
+ * Os utilizadores que não são clientes também são contactos: cada um tem uma linha em Contact
+ * (legacyId "user:<id>") para poder ser associado às obras como qualquer outro contacto.
+ */
+async function syncUserContacts() {
+  const users = await prisma.user.findMany({
+    where: { role: { not: "cliente" } },
+    select: { id: true, name: true, email: true, role: true, profilePic: true, profile: { select: { phone: true, jobTitle: true } } },
+  });
+  if (!users.length) return;
+  const existing = await prisma.contact.findMany({
+    where: { legacyId: { startsWith: USER_CONTACT_PREFIX } },
+  });
+  const byLegacy = new Map(existing.map((c) => [c.legacyId, c]));
+  const toCreate = [];
+  for (const u of users) {
+    const legacyId = `${USER_CONTACT_PREFIX}${u.id}`;
+    const name = (u.name || "").trim() || u.email.split("@")[0];
+    const role = (u.profile?.jobTitle || "").trim() || USER_ROLE_LABEL[u.role] || "Utilizador";
+    const phone = u.profile?.phone || null;
+    const found = byLegacy.get(legacyId);
+    if (!found) {
+      toCreate.push({ legacyId, name, role, phone, email: u.email, photoUrl: u.profilePic || null });
+      continue;
+    }
+    const next = { name, role, phone, email: u.email, photoUrl: u.profilePic || found.photoUrl };
+    if (Object.keys(next).some((k) => (found[k] ?? null) !== (next[k] ?? null))) {
+      await prisma.contact.update({ where: { id: found.id }, data: next });
+    }
+  }
+  if (toCreate.length) await prisma.contact.createMany({ data: toCreate, skipDuplicates: true });
+}
+
 const contactDef = {
   resource: "CONTACTS",
+  beforeList: syncUserContacts,
   model: "contact",
   logPrefix: "CONTACT",
   photoDir: "contacts",
@@ -170,6 +214,7 @@ const contactDef = {
       photoUrl: row.photoUrl,
       active: row.active,
       legacyId: row.legacyId,
+      isUser: String(row.legacyId || "").startsWith(USER_CONTACT_PREFIX),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -445,6 +490,7 @@ function createRegistryRouter(def) {
     "/",
     requirePermission(MODULE, "view"),
     asyncHandler(async (req, res) => {
+      if (def.beforeList) await def.beforeList().catch(() => {});
       const { page, pageSize, skip, take } = parsePagination(req.query);
       const q = String(req.query.q || "").trim();
       const where = {

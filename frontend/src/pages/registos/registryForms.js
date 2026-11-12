@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from "/services/api.js";
+import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
@@ -415,7 +415,7 @@ export function obraFormSectionsHtml({ clients = [], contacts = [], values = {} 
   const contactOptions = contacts.map((contact) => ({
     value: contact.id,
     label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
-    photo: contact.photoUrl || contact.foto || "",
+    photo: getAssetUrl(contact.photoUrl) || contact.foto || "",
   }));
   const tipos = Array.isArray(values.tipos) ? values.tipos : [];
   const servicos = Array.isArray(values.servicos) ? values.servicos : [];
@@ -787,7 +787,7 @@ async function renderContactos() {
     empty: "Ainda não há contactos registados.",
     load: async () => {
       const items = await loadPaged("/contacts", 200);
-      return items.map((item) => [item.name, item.role, item.phone, item.email]);
+      return items.map((item) => [item.isUser ? `${item.name} (utilizador)` : item.name, item.role, item.phone, item.email]);
     },
   });
 }
@@ -990,7 +990,7 @@ function renderPessoal() {
     const selectedTipo = mapPessoalTipo(current?.type || current?.tipo || "INTERNO");
     const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
     const foto = current?.photoUrl || current?.foto
-      ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
+      ? `<img src="${esc(getAssetUrl(current.photoUrl) || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
 
     const obraOptions = (selectedId = "", excludeIds = []) => view.obras
