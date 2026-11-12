@@ -359,7 +359,7 @@ function rebuildMobileMenu(nav, source) {
   const fragment = document.createDocumentFragment();
   appendMenu(fragment, source, "mobile");
   fragment.appendChild(createMenuLink(
-    { label: "Gestão", icon: "settings", selector: "[data-nav-users]" },
+    { label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" },
     source,
     "mobile"
   ));
@@ -546,7 +546,7 @@ export function transformDesktopNavToDropdowns() {
   const footer = document.createElement("div");
   footer.className = "app-sidebar-footer";
 
-  const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]" }, source, "sidebar");
+  const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" }, source, "sidebar");
   footer.appendChild(users);
 
   const logoutBtn = document.createElement("button");
