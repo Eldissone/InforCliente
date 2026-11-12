@@ -1692,8 +1692,16 @@ async function renderFornecedores() {
   await initPermissionLayer();
   const canManage = can("fornecedores", "manage") || can("fornecedores", "create");
   const form = mount("fornecedores", `
-    <h1 class="forn-title">Criar Fornecedor</h1>
-    <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+    <header class="forn-header">
+      <div>
+        <h1 class="forn-title">Criar Fornecedor</h1>
+        <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+      </div>
+      <a href="/fornecedores" class="forn-top-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Lista de Fornecedores
+      </a>
+    </header>
     <form class="forn-form" novalidate>
       <section class="forn-card">
         <h2>Identificação fiscal</h2>
@@ -1808,21 +1816,6 @@ async function renderFornecedores() {
       if (agtEl) agtEl.value = "";
       setNifLookupStatus(form.querySelector("[data-nif-status]"), "");
     }
-  });
-  showRegistered({
-    title: "Fornecedores registados",
-    columns: ["Nome", "NIF", "Tipo", "Telefone", "Email"],
-    empty: "Ainda não há fornecedores registados.",
-    load: async () => {
-      const items = await loadItems("/suppliers");
-      return items.map((item) => [
-        item.name,
-        item.nif,
-        SUPPLIER_TYPES[item.type] || item.type,
-        item.phone,
-        item.email,
-      ]);
-    },
   });
 }
 
@@ -1966,9 +1959,9 @@ async function renderEquipamentos() {
     lead: "Registo de equipamento, maquinaria, viatura ou ferramenta.",
     submitLabel: "Guardar equipamento",
     topLink: {
-      href: "/Stock",
-      label: "Gestão Logística e Ativos",
-      icon: "agriculture",
+      href: "/equipamentos",
+      label: "Lista de Equipamentos",
+      icon: "format_list_bulleted",
     },
     cards: rfCard("Identificação", `<div class="rf-grid">
       ${rfField("Nome *", textInput("name", { required: true, placeholder: "Nome do equipamento" }), "span-2")}

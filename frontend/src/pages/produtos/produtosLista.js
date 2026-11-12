@@ -2,6 +2,7 @@ import { apiRequest, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { openModal, toast, escapeHtml } from "../../shared/ui.js";
 import { can, initPermissionLayer } from "../../shared/permissions.js";
+import { wireLogout, wireUsersNav } from "../../shared/session.js";
 
 checkAuth();
 
@@ -411,6 +412,8 @@ function bindEvents() {
 
 async function init() {
   await initPermissionLayer();
+  wireLogout();
+  wireUsersNav();
   bindEvents();
   await loadProducts();
 }

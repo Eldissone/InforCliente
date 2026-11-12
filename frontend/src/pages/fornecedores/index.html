@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html class="light" lang="pt">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Info Gestor - Gestão de Fornecedores</title>
+  <link rel="icon" href="/assets/icon/favicon.ico" type="image/x-icon">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="/assets/styles/tailwind-app.css" rel="stylesheet" />
+  <link href="/assets/styles/shared-ui.css" rel="stylesheet" />
+  <link href="/assets/styles/top-nav.css" rel="stylesheet" />
+  <link href="/assets/styles/shell.css" rel="stylesheet" />
+</head>
+
+<body data-shell="figma" class="bg-surface antialiased text-slate-900 min-h-screen">
+  <!-- Top Navigation Bar -->
+  <div id="appHeader"></div>
+
+  <main class="max-w-[1500px] mx-auto px-4 md:px-8 pt-24 pb-20">
+    <!-- Header Section -->
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+      <div>
+        <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+          <span>Terceiros</span>
+          <span class="material-symbols-outlined text-xs">chevron_right</span>
+          <span class="text-[#0d3fd1]">Fornecedores</span>
+        </nav>
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-3">
+          Gestão de Fornecedores
+        </h1>
+        <p class="text-slate-500 font-medium max-w-2xl text-sm">
+          Controle de parceiros comerciais, prestadores e fornecedores homologados.
+        </p>
+      </div>
+      <a href="/registos/terceiros/fornecedores"
+        class="h-10 bg-slate-900 text-white px-5 rounded-xl font-bold flex items-center gap-2 shadow-xl shadow-slate-900/10 hover:bg-slate-800 transition-all self-start sm:self-auto shrink-0">
+        Novo Fornecedor
+        <span class="material-symbols-outlined text-xl">add_circle</span>
+      </a>
+    </header>
+
+    <!-- Filter Bar -->
+    <div class="mb-8 flex flex-col lg:flex-row gap-4">
+      <div class="flex-1 relative">
+        <input id="suppliersSearch"
+          class="w-full h-10 bg-white border border-slate-200 rounded-2xl pl-12 pr-4 text-sm focus:ring-2 focus:ring-[#2afc8d]/20 transition-all shadow-sm"
+          placeholder="Buscar por nome, NIF, telefone ou email..." type="text" />
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="h-10 min-w-[150px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="suppliersType"
+            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="">Todos os Tipos</option>
+            <option value="MATERIAL">Materiais</option>
+            <option value="SERVICO">Serviços</option>
+            <option value="TRANSPORTADOR">Transportador</option>
+          </select>
+        </div>
+
+        <div class="h-10 min-w-[140px] border border-slate-200 bg-white rounded-2xl px-4 flex items-center shadow-sm">
+          <select id="suppliersSort"
+            class="w-full border-none bg-transparent text-sm font-bold text-slate-600 focus:ring-0">
+            <option value="name_asc">Nome (A-Z)</option>
+            <option value="name_desc">Nome (Z-A)</option>
+            <option value="nif_asc">NIF</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Container -->
+    <section class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+              <th class="px-8 py-5">Fornecedor</th>
+              <th class="px-8 py-5">NIF / Fiscal</th>
+              <th class="px-8 py-5 text-center">Tipo</th>
+              <th class="px-8 py-5">Contactos</th>
+              <th class="px-8 py-5">IBAN</th>
+              <th class="px-8 py-5 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="suppliersTbody" class="divide-y divide-slate-50">
+            <tr>
+              <td colspan="6" class="px-8 py-12 text-center text-slate-400">
+                <span class="material-symbols-outlined text-4xl animate-spin">refresh</span>
+                <p class="text-xs font-bold mt-2">A carregar fornecedores...</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between border-t border-slate-100 bg-slate-50/30 px-8 py-4">
+        <p id="suppliersPagingText" class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          A carregar...
+        </p>
+        <div class="flex items-center gap-3">
+          <button id="suppliersPrev"
+            class="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-900 transition-all disabled:opacity-30 disabled:pointer-events-none">
+            <span class="material-symbols-outlined text-xl">chevron_left</span>
+          </button>
+          <div id="suppliersPages" class="flex items-center gap-2"></div>
+          <button id="suppliersNext"
+            class="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-slate-900 transition-all">
+            <span class="material-symbols-outlined text-xl">chevron_right</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./fornecedoresLista.js"></script>
+</body>
+
+</html>
+

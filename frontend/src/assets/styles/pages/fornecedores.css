@@ -19,6 +19,14 @@ body[data-registry="fornecedores"] {
   text-transform: uppercase;
 }
 
+.forn-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 0 1.75rem;
+}
+
 .forn-title {
   margin: 0 0 0.45rem;
   color: #17191d;
@@ -30,10 +38,40 @@ body[data-registry="fornecedores"] {
 }
 
 .forn-lead {
-  margin: 0 0 1.75rem;
+  margin: 0;
   color: #8d95a3;
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.forn-top-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937 !important;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.forn-top-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.forn-top-btn .material-symbols-outlined {
+  font-size: 20px;
+  color: #475569;
 }
 
 .forn-form {
@@ -275,6 +313,17 @@ body[data-registry="fornecedores"] {
 @media (max-width: 720px) {
   .forn-page {
     padding: 5.75rem 0.85rem 2.5rem;
+  }
+
+  .forn-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .forn-top-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .forn-card {
