@@ -22,88 +22,35 @@
     <link href="/assets/styles/pages/users.css" rel="stylesheet" />
 </head>
 
-<body class="bg-[#F8FAFC] antialiased text-slate-900 min-h-screen">
+<body data-shell="figma" class="bg-[#F8FAFC] antialiased text-slate-900 min-h-screen">
 
-    <!-- Navbar -->
-    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800">
+    <!-- Navbar (a navegação principal fica no menu lateral da Gestão; aqui só o acesso de volta ao painel) -->
+    <nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800" data-shared-header>
         <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
-            <div class="flex items-center gap-10">
-                <span class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <div class="flex items-center gap-4 md:gap-6 min-w-0">
+                <a href="../Dashboard/index.html" class="app-nav-brand text-xl font-bold text-white tracking-tight flex items-center gap-2 shrink-0">
                     <span
-                        class="w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
+                        class="app-nav-mark w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
                     <span id="navBrandText">Gestor</span>
-                </span>
-                <div class="hidden lg:flex items-center gap-6">
-                    <a
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        data-nav-dashboard href="../Dashboard/index.html">Dashboard</a>
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        data-nav-clientes href="../Clientes/clienteLista.html">Clientes</a>
-                    <a class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        data-nav-obras href="../Projectos/ProjectGeral.html">Obras</a>
-                    <a data-nav-logistics
-                        class="text-sm font-semibold text-slate-400 hover:text-white transition-colors"
-                        href="../Stock/index.html">Logística</a>
-                    <a data-nav-cotacao href="../Projectos/Cotacao/index.html"
-                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Cotação</a>
-                    <a data-nav-centros href="../Financeiro/centroDeCompras.html"
-                        class="hidden text-sm font-semibold text-slate-400 hover:text-white transition-colors">Centro de Compras</a>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <a data-nav-users
-                    class="px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] bg-[#2afc8d]/10 border border-[#2afc8d]/20 flex items-center gap-2"
-                    href="../Users/index.html">
-                    <span class="material-symbols-outlined text-lg">manage_accounts</span>Gestão
                 </a>
+                <a data-nav-dashboard href="../Dashboard/index.html"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white/80 bg-white/10 hover:bg-white/20 hover:text-white transition-all whitespace-nowrap"
+                    title="Voltar ao painel principal">
+                    <span class="material-symbols-outlined text-base">arrow_back</span>
+                    <span class="hidden sm:inline">Painel principal</span>
+                </a>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
                 <button data-user-profile
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all">
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all" type="button">
                     <span class="material-symbols-outlined text-sm">person</span>
                     <span data-user-role></span>
                 </button>
-                <button data-logout
-                    class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white transition-all">
-                    Sair
-                </button>
-                <button id="mobileMenuBtn" aria-expanded="false"
-                    class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                    <span class="material-symbols-outlined">menu</span>
+                <button data-logout type="button" title="Sair" aria-label="Sair"
+                    class="w-9 h-9 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all">
+                    <span class="material-symbols-outlined text-xl">logout</span>
                 </button>
             </div>
-        </div>
-        <div id="navMenu" class="hidden lg:hidden flex-col bg-[#212e3e] border-b border-slate-800 px-4 pb-6 gap-1">
-            <a
-                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                data-nav-dashboard href="../Dashboard/index.html">
-                <span class="material-symbols-outlined text-lg">dashboard</span> Dashboard
-            </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                data-nav-clientes href="../Clientes/clienteLista.html">
-                <span class="material-symbols-outlined text-lg">group</span> Clientes
-            </a>
-            <a class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                data-nav-obras href="../Projectos/ProjectGeral.html">
-                <span class="material-symbols-outlined text-lg">construction</span> Obras
-            </a>
-            <a data-nav-logistics
-                class="flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Stock/index.html">
-                <span class="material-symbols-outlined text-lg">inventory_2</span> Logística
-            </a>
-            <a data-nav-cotacao
-                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Projectos/Cotacao/index.html">
-                <span class="material-symbols-outlined text-lg">request_quote</span> Cotação
-            </a>
-            <a data-nav-centros
-                class="hidden flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all"
-                href="../Financeiro/centroDeCompras.html">
-                <span class="material-symbols-outlined text-lg">account_balance</span> Centro de Compras
-            </a>
-            <button data-logout
-                class="flex items-center gap-3 text-left text-sm font-semibold text-red-400 py-3 px-4 rounded-xl hover:bg-red-400/10 transition-all mt-2">
-                <span class="material-symbols-outlined text-lg">logout</span> Sair
-            </button>
         </div>
     </nav>
 
@@ -162,7 +109,7 @@
     </div>
 
     <!-- Layout -->
-    <div class="admin-layout" style="margin-top:4rem">
+    <div class="admin-layout" style="margin-top:5.5rem">
 
         <!-- Desktop Sidebar -->
         <aside class="admin-sidebar">
@@ -349,11 +296,8 @@
                         <div>
                             <h1 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Gerir Utilizadores
                             </h1>
-                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Administração de credenciais. Use
-                                o ícone
-                                <span
-                                    class="material-symbols-outlined text-sm align-middle text-violet-600">shield_person</span>
-                                para permissões individuais por utilizador.
+                            <p class="text-slate-500 font-medium mt-1 hidden sm:block">Contas, perfis e acesso às obras. Marque vários utilizadores para
+                                copiar permissões de um para os outros.
                             </p>
                         </div>
                         <button id="addUserBtn2"
@@ -369,7 +313,7 @@
                             <div class="flex-1 relative">
                                 <span
                                     class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg pointer-events-none">search</span>
-                                <input id="searchInput" type="text" placeholder="Pesquisar por email..."
+                                <input id="searchInput" type="text" placeholder="Pesquisar por nome ou email…"
                                     class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm bg-slate-50 placeholder-slate-400 font-medium" />
                             </div>
                             <select id="roleFilter"
@@ -390,17 +334,26 @@
                         </div>
                     </div>
 
-                    <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div id="usersBulkBar" class="hidden mb-3 flex flex-wrap items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900 text-white shadow-lg">
+                        <span class="text-sm font-bold"><span id="usersBulkCount">0</span> selecionados</span>
+                        <button type="button" id="usersBulkCopy" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2afc8d] text-slate-900 text-xs font-black uppercase tracking-widest hover:opacity-90 transition-opacity">
+                            <span class="material-symbols-outlined text-base">content_copy</span>Copiar permissões de…
+                        </button>
+                        <button type="button" id="usersBulkClear" class="ml-auto px-3 py-2 rounded-xl text-xs font-bold text-white/70 hover:bg-white/10">Limpar seleção</button>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div class="table-responsive">
                             <table class="w-full text-left">
                                 <thead>
                                     <tr
                                         class="text-[9px] font-black uppercase tracking-widest text-slate-400 bg-slate-50/70 border-b border-slate-100">
-                                        <th class="px-7 py-4">Utilizador</th>
-                                        <th class="px-7 py-4">Perfil</th>
-                                        <th class="px-7 py-4 hidden md:table-cell">Entidade Vinculada</th>
-                                        <th class="px-7 py-4 hidden lg:table-cell">Desde</th>
-                                        <th class="px-7 py-4 text-right">Ações</th>
+                                        <th class="pl-6 pr-2 py-4 w-10"><input type="checkbox" id="usersSelectAll" class="h-4 w-4 rounded border-slate-300 accent-[#0d3fd1] cursor-pointer" aria-label="Selecionar todos"></th>
+                                        <th class="px-4 py-4">Utilizador</th>
+                                        <th class="px-4 py-4">Perfil</th>
+                                        <th class="px-4 py-4 hidden md:table-cell">Obras / Entidade</th>
+                                        <th class="px-4 py-4 hidden lg:table-cell">Permissões</th>
+                                        <th class="px-4 py-4 hidden xl:table-cell">Desde</th>
+                                        <th class="px-4 py-4 pr-6 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="usersTbody" class="divide-y divide-slate-50"></tbody>
@@ -420,8 +373,7 @@
                                     executar no sistema.</p>
                                 <p class="text-[11px] font-semibold text-[#0d3fd1] mt-2 flex items-center gap-1.5">
                                     <span class="material-symbols-outlined text-sm">touch_app</span>
-                                    Clique nas células para alterar permissões. Use os cabeçalhos dos módulos para
-                                    expandir ou ocultar blocos.
+                                    Clique numa célula para alterar, ou marque várias (caixas, linha, coluna ou módulo; Shift para intervalo) e defina o valor de uma só vez. Nada é gravado até clicar em «Guardar alterações».
                                 </p>
 
                             </div>
@@ -585,14 +537,11 @@
                     <div class="mt-6 px-1 space-y-4">
                         <div class="flex flex-wrap items-center gap-4">
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Acesso
-                                total (true)</div>
+                                    class="material-symbols-outlined text-emerald-500 text-lg">check_circle</span>Permitido</div>
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Próprios
-                                / leitura (own · view)</div>
+                                    class="material-symbols-outlined text-amber-500 text-lg">check_circle</span>Só os meus / só ver (P · V)</div>
                             <div class="flex items-center gap-2 text-xs text-slate-500 font-medium"><span
-                                    class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Sem acesso
-                                (false)</div>
+                                    class="material-symbols-outlined text-slate-300 text-lg">cancel</span>Negado</div>
                         </div>
                         <div class="flex flex-wrap gap-2">
                             <span
@@ -615,7 +564,22 @@
                             <span class="px-2 py-1 rounded-lg bg-slate-100 text-[9px] font-bold text-slate-600">Acesso
                                 total</span>
                         </div>
-                        <p class="text-[10px] text-slate-400 font-medium">Clique numa célula para alternar: falso → ver → próprio → tudo.</p>
+                        <p class="text-[10px] text-slate-400 font-medium">Clique numa célula para alternar: negado → só ver (V) → só os meus (P) → permitido. Células com anel âmbar têm alterações pendentes.</p>
+                    </div>
+
+                    <!-- Auditoria de permissões -->
+                    <div class="mt-8 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-50">
+                            <div>
+                                <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Alterações de permissões</h2>
+                                <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Quem alterou o quê e quando (perfis e utilizadores).</p>
+                            </div>
+                            <button type="button" id="permAuditRefresh" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50">Atualizar</button>
+                        </div>
+                        <div id="permAuditList" class="divide-y divide-slate-50"></div>
+                        <div class="px-6 py-3 border-t border-slate-50 text-center">
+                            <button type="button" id="permAuditMore" class="hidden text-xs font-bold text-[#0d3fd1] hover:underline">Ver mais</button>
+                        </div>
                     </div>
                 </div>
 
