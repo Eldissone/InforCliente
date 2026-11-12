@@ -571,21 +571,19 @@ function catalogEstruturaActionsHtml(categoryId) {
 
 function catalogRowActionsHtml(g) {
   if (!canManageCostCatalog()) return "";
+  const btn = (attr, icon, title, extra = "") =>
+    `<button type="button" class="cost-row-action${extra}" ${attr} title="${title}" aria-label="${title}">
+      <span class="material-symbols-outlined">${icon}</span>
+    </button>`;
+  const edit = btn(`data-edit-category="${g.tipo2Id}"`, "edit", "Editar categoria");
   const del = canDeleteCostCatalog()
-    ? `<button type="button" class="cost-catalog-actions__item cost-catalog-actions__item--danger" data-delete-category="${g.tipo2Id}">Eliminar categoria</button>`
+    ? btn(`data-delete-category="${g.tipo2Id}"`, "delete", "Eliminar categoria", " cost-row-action--danger")
     : "";
   const subActions = catalogMode() === "tipos"
     ? ""
-    : `<button type="button" class="cost-catalog-actions__item" data-add-child-category="${g.tipo2Id}">Adicionar subcategoria</button>
-        <button type="button" class="cost-catalog-actions__item" data-open-tipo3-drill="${escapeHtml(catalogSheetGroupKey(g))}">Ver subcategorias</button>`;
-  return `<div class="cost-catalog-actions relative inline-block text-left">
-      <button type="button" class="cost-catalog-actions__btn">Acções <span class="material-symbols-outlined text-sm align-middle">expand_more</span></button>
-      <div class="cost-catalog-actions__menu hidden">
-        <button type="button" class="cost-catalog-actions__item" data-edit-category="${g.tipo2Id}">Editar categoria</button>
-        ${subActions}
-        ${del}
-      </div>
-    </div>`;
+    : btn(`data-add-child-category="${g.tipo2Id}"`, "playlist_add", "Adicionar subcategoria") +
+      btn(`data-open-tipo3-drill="${escapeHtml(catalogSheetGroupKey(g))}"`, "list", "Ver subcategorias");
+  return `<div class="cost-catalog-actions cost-row-actions">${edit}${subActions}${del}</div>`;
 }
 
 function applyCatalogManageVisibility() {
@@ -628,7 +626,7 @@ function renderCostCatalogTipos() {
   const canDelete = canDeleteCostCatalog() && catalogDeleteSelectMode;
   const checkHead = catalogSelectAllHeadHtml(displayRows.map((g) => g.tipo2Id));
   const actionsHead = canManageCostCatalog()
-    ? `<th class="px-3 py-2.5 text-right w-28">Acções</th>`
+    ? `<th class="px-4 py-3 text-right w-40">Acções</th>`
     : "";
   const colSpan = (canDelete ? 1 : 0) + 3 + (canManageCostCatalog() ? 1 : 0);
 
@@ -647,37 +645,29 @@ function renderCostCatalogTipos() {
           .filter(Boolean)
           .map((part) => formatCategoryDisplayName(part))
           .join(" › ");
-        const countLabel =
+        const countCell =
           count > 0
-            ? `${count} subcategoria${count === 1 ? "" : "s"}`
-            : "Sem subcategorias";
-        const countBadge =
-          count > 0
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">${count} subcategoria${count === 1 ? "" : "s"}</span>`
-            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold">Directo</span>`;
+            ? `<span class="cost-count-pill cost-count-pill--has" title="${count} subcategoria${count === 1 ? "" : "s"}"><span class="material-symbols-outlined">subdirectory_arrow_right</span>${count}</span>`
+            : `<span class="cost-count-pill" title="Sem subcategorias — seleccionável directamente">Directa</span>`;
         const actions = canManageCostCatalog()
-          ? `<td class="px-3 py-2.5 text-right align-middle">${catalogRowActionsHtml(g)}</td>`
+          ? `<td class="px-4 py-3 text-right align-middle">${catalogRowActionsHtml(g)}</td>`
           : "";
-        return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0" title="${catalogMode() === "tipos" ? "Categoria" : "Clique para ver subcategorias"}">
+        return `<tr class="cost-catalog-table__row cost-catalog-table__row--extrato${selected}" data-domain="${g.domain}" data-group-key="${escapeHtml(gkey)}" data-tipo2-id="${g.tipo2Id}" tabindex="0">
             ${catalogCheckboxCellHtml(g.tipo2Id)}
-            <td class="px-4 py-3 align-middle">
-              <div class="cost-catalog-desc-cell flex items-start gap-3">
-                <span class="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                  <span class="material-symbols-outlined text-lg">category</span>
+            <td class="px-4 py-3.5 align-middle">
+              <div class="flex items-center gap-3.5 min-w-0">
+                <span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[22px]">category</span>
                 </span>
                 <span class="min-w-0">
-                  <span class="inline-flex items-center gap-2">
-                    <span class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Categoria</span>
-                    ${countBadge}
-                  </span>
-                  <span class="block text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(formatCategoryDisplayName(g.tipo2))}</span>
-                  <span class="block text-xs text-slate-500 mt-0.5">${escapeHtml(parentPath || "—")}</span>
+                  <span class="block text-sm font-bold text-slate-900 leading-tight">${escapeHtml(formatCategoryDisplayName(g.tipo2))}</span>
+                  <span class="block text-xs text-slate-400 font-medium mt-0.5 truncate">${escapeHtml(parentPath || "—")}</span>
                 </span>
               </div>
             </td>
-            <td class="px-3 py-3 text-xs font-semibold text-slate-600 align-middle border-l border-slate-100">${escapeHtml(countLabel)}</td>
-            <td class="px-3 py-3 align-middle border-l border-slate-100">
-              <span class="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-bold uppercase">Activo</span>
+            <td class="px-4 py-3.5 align-middle text-center">${countCell}</td>
+            <td class="px-4 py-3.5 align-middle">
+              <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Activo</span>
             </td>
             ${actions}
           </tr>`;
@@ -686,14 +676,14 @@ function renderCostCatalogTipos() {
     : `<tr><td colspan="${colSpan}" class="px-4 py-10 text-center text-sm text-slate-400">Nenhuma categoria com estes filtros ou pesquisa.</td></tr>`;
 
   container.innerHTML = `
-    <div class="cost-catalog-extrato-wrap overflow-x-auto border border-slate-200 rounded-xl bg-white">
+    <div class="cost-catalog-extrato-wrap overflow-x-auto border border-slate-200 rounded-2xl bg-white">
       <table class="cost-catalog-table cost-catalog-table--extrato w-full text-left">
         <thead>
-          <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
+          <tr class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
             ${checkHead}
             <th class="px-4 py-3">Categoria</th>
-            <th class="px-3 py-3 border-l border-slate-200 w-40">Subcategoria</th>
-            <th class="px-3 py-3 border-l border-slate-200 w-24">Estado</th>
+            <th class="px-4 py-3 w-36 text-center">Subcategorias</th>
+            <th class="px-4 py-3 w-28">Estado</th>
             ${actionsHead}
           </tr>
         </thead>

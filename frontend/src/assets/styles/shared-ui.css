@@ -1565,3 +1565,70 @@ body[data-cost-catalog] .overflow-x-auto:has(> table) thead th {
     transition: transform 0.2s ease;
   }
 }
+
+/* ── Tabela de categorias: acções em ícones e pílulas ─────────────────────── */
+.cost-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.cost-row-action {
+  width: 2.125rem;
+  height: 2.125rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgb(100 116 139);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.cost-row-action .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.cost-row-action:hover {
+  background: rgb(241 245 249);
+  border-color: rgb(226 232 240);
+  color: rgb(15 23 42);
+}
+
+.cost-row-action--danger:hover {
+  background: rgb(254 242 242);
+  border-color: rgb(254 202 202);
+  color: rgb(220 38 38);
+}
+
+.cost-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgb(241 245 249);
+  color: rgb(100 116 139);
+}
+
+.cost-count-pill--has {
+  background: rgb(238 242 255);
+  color: rgb(67 56 202);
+}
+
+.cost-count-pill .material-symbols-outlined {
+  font-size: 0.95rem;
+}
+
+.cost-catalog-table--extrato tbody tr {
+  border-bottom: 1px solid rgb(241 245 249);
+}
+
+.cost-catalog-table--extrato tbody tr:last-child {
+  border-bottom: none;
+}
