@@ -1482,6 +1482,10 @@ function bindCatalogCrudEvents() {
     if (editBtn) {
       e.stopPropagation();
       e.preventDefault();
+      if (catalogMode() === "subcustos") {
+        openSubcategoryEditModal(editBtn.dataset.editCategory);
+        return;
+      }
       const row = editBtn.closest("tr[data-group-key]");
       const catalogLine = row?.dataset.groupKey ? getCatalogGroupByKey(row.dataset.groupKey) : null;
       openCostCategoryModal({
@@ -1664,6 +1668,98 @@ async function submitRegistryAdd(event) {
   }
 }
 
+function closeSubcategoryEditModal() {
+  document.getElementById("modalSubcategoryEdit")?.classList.remove("open");
+}
+
+function openSubcategoryEditModal(id) {
+  const item = costCategories.find((c) => sameCostId(c.id, id));
+  if (!item) {
+    showToast("Registo não encontrado. A recarregar…", "error");
+    reloadCostCatalog();
+    return;
+  }
+  let modal = document.getElementById("modalSubcategoryEdit");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "modalSubcategoryEdit";
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-box" style="max-width: 520px;">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-lg font-bold text-slate-900">Editar subcategoria</h2>
+          <button type="button" data-sub-edit-close aria-label="Fechar"
+            class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
+            <span class="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+        <form id="formSubcategoryEdit" class="flex flex-col gap-4">
+          <input type="hidden" name="catId">
+          <label class="block">
+            <span class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Nome *</span>
+            <input name="nome" required minlength="2" maxlength="120"
+              class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400/40">
+          </label>
+          <label class="block">
+            <span class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Categoria *</span>
+            <select name="parent" required
+              class="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400/40"></select>
+          </label>
+          <div class="flex gap-3 justify-end pt-2">
+            <button type="button" data-sub-edit-close
+              class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-all">Cancelar</button>
+            <button type="submit"
+              class="h-10 px-6 rounded-xl bg-[#212e3e] text-white text-sm font-bold hover:bg-slate-800 transition-all">Guardar</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal || e.target.closest("[data-sub-edit-close]")) closeSubcategoryEditModal();
+    });
+    modal.querySelector("form").addEventListener("submit", submitSubcategoryEdit);
+  }
+  const form = modal.querySelector("form");
+  form.catId.value = costIdKey(item.id);
+  form.nome.value = formatCategoryDisplayName(item.name);
+  const categorias = costCategories
+    .filter((c) => c.active !== false && classifyCategorySheetLevel(c) === "TIPO2")
+    .map((c) => ({ id: c.id, label: buildCategoryPath(c.id, costCategories) || formatCategoryDisplayName(c.name) }));
+  form.parent.innerHTML = optionList(categorias, "Seleccionar categoria", item.parentId ?? "");
+  modal.classList.add("open");
+}
+
+async function submitSubcategoryEdit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!canManageCostCatalog()) {
+    showToast("Sem permissão para editar este registo.", "error");
+    return;
+  }
+  const name = formatCategoryDisplayName(form.nome.value);
+  const parentId = Number(form.parent.value);
+  if (!name || name.length < 2) {
+    showToast("Indique o nome.", "error");
+    return;
+  }
+  if (!parentId) {
+    showToast("Seleccione a categoria.", "error");
+    return;
+  }
+  const button = form.querySelector("[type=submit]");
+  if (button) button.disabled = true;
+  try {
+    await apiRequest(`/cost-categories/${form.catId.value}`, { method: "PATCH", body: { name, parentId } });
+    showToast("Subcategoria actualizada.", "success");
+    closeSubcategoryEditModal();
+    await reloadCostCatalog();
+  } catch (err) {
+    showToast(err?.data?.message || err.message || "Não foi possível guardar.", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function renderSubcustosCatalog() {
   let container = document.getElementById("costCatalogSubcustos");
   if (!container) {
@@ -1692,22 +1788,40 @@ function renderSubcustosCatalog() {
         ? "Nenhum resultado"
         : "";
   }
+  const canManage = canManageCostCatalog();
+  const canSelect = canDeleteCostCatalog() && catalogDeleteSelectMode;
+  const visibleIds = rows.map(({ item }) => item.id);
+  const colSpan = 2 + (canSelect ? 1 : 0) + (canManage ? 1 : 0);
+
   const body = rows.length
     ? rows.map(({ item, parent }) => `
-        <tr class="border-t border-slate-100">
+        <tr class="border-t border-slate-100 hover:bg-slate-50/70 transition-colors" data-pick-category="${item.id}">
+          ${catalogCheckboxCellHtml(item.id)}
           <td class="px-4 py-3 text-sm font-bold text-slate-900">${escapeHtml(formatCategoryDisplayName(item.name))}</td>
-          <td class="px-4 py-3 text-xs font-semibold text-slate-500">${escapeHtml(parent ? (buildCategoryPath(parent.id, costCategories) || formatCategoryDisplayName(parent.name)) : "—")}</td>
+          <td class="px-4 py-3 text-xs font-semibold ${parent ? "text-slate-500" : "text-amber-600"}">${
+            parent
+              ? escapeHtml(buildCategoryPath(parent.id, costCategories) || formatCategoryDisplayName(parent.name))
+              : "Sem categoria activa — edite para associar"
+          }</td>
+          ${canManage ? `<td class="px-3 py-3 text-center">${catalogEstruturaActionsHtml(item.id)}</td>` : ""}
         </tr>`).join("")
-    : `<tr><td colspan="2" class="px-4 py-8 text-center text-sm text-slate-400">Nenhuma subcategoria registada.</td></tr>`;
+    : `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-sm text-slate-400">Nenhuma subcategoria registada.</td></tr>`;
   container.innerHTML = `
     <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
       <table class="w-full text-left">
         <thead class="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
-          <tr><th class="px-4 py-3">Subcategoria</th><th class="px-4 py-3">Categoria</th></tr>
+          <tr>
+            ${catalogSelectAllHeadHtml(visibleIds)}
+            <th class="px-4 py-3">Subcategoria</th>
+            <th class="px-4 py-3">Categoria</th>
+            ${canManage ? `<th class="px-3 py-3 text-center w-32">Acções</th>` : ""}
+          </tr>
         </thead>
         <tbody>${body}</tbody>
       </table>
     </div>`;
+  bindCatalogCheckboxEvents(container, visibleIds);
+  updateCatalogBulkDeleteButton();
 }
 
 function lockCostCatalogTab() {
