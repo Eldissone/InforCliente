@@ -1241,6 +1241,65 @@ costCenterRoutes.get(
   })
 );
 
+// GET /cost-centers/project/:projectId/category-options
+// Categorias de custo de obra (Registos) e o Centro de Custo que já as representa nesta obra (se existir).
+// O Centro de Custo de uma obra é a instância da Categoria registada, ligada pelo código.
+costCenterRoutes.get(
+  "/project/:projectId/category-options",
+  requirePermission("obras", "view"),
+  enforceOwnProjectScope("projectId"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const [categories, costCenters] = await Promise.all([
+      prisma.costCategory.findMany({
+        where: { domain: "OBRA", parentId: null, active: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.costCenter.findMany({ where: { projectId }, select: { id: true, code: true } }),
+    ]);
+    const ccByCode = new Map(costCenters.map((cc) => [String(cc.code).toUpperCase(), cc.id]));
+    return res.json({
+      items: categories.map((c) => ({
+        categoryId: c.id,
+        code: c.code,
+        name: c.name,
+        costCenterId: ccByCode.get(String(c.code).toUpperCase()) || null,
+      })),
+    });
+  })
+);
+
+// POST /cost-centers/project/:projectId/from-category — devolve (ou cria) o Centro de Custo da obra para uma Categoria registada
+costCenterRoutes.post(
+  "/project/:projectId/from-category",
+  requireRole(["admin", "operador"]),
+  enforceOwnProjectScope("projectId"),
+  asyncHandler(async (req, res) => {
+    const projectId = String(req.params.projectId);
+    const body = z.object({ categoryId: z.coerce.number().int().positive() }).parse(req.body);
+
+    const category = await prisma.costCategory.findUnique({ where: { id: body.categoryId } });
+    if (!category || category.domain !== "OBRA" || category.active === false) {
+      return res.status(404).json({ error: "COST_CATEGORY_NOT_FOUND" });
+    }
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { currency: true } });
+
+    const costCenter = await prisma.costCenter.upsert({
+      where: { projectId_code: { projectId, code: category.code } },
+      update: {},
+      create: {
+        projectId,
+        code: category.code,
+        name: category.name,
+        currency: project?.currency || "AOA",
+        active: true,
+        requiresQuotation: true,
+      },
+    });
+    return res.json({ id: costCenter.id, code: costCenter.code, name: costCenter.name, currency: costCenter.currency });
+  })
+);
+
 // POST /cost-centers/project/:projectId — Criar Centro de Custo
 costCenterRoutes.post(
   "/project/:projectId",

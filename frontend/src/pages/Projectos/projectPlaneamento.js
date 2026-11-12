@@ -7,7 +7,9 @@ import { initImportExcel, openImportModal } from "../../shared/budget/importExce
 import { initCategoryIncrement } from "../../shared/budget/categoryIncrement.js";
 import { initCronograma, mountCronograma, loadCronograma } from "../../shared/budget/cronograma.js";
 import { initPayments, mountPayments, showPendingPayments, showPaymentHistory } from "../../shared/budget/payments.js";
-import { initCostCenterModal, openCCModal, editCC, deleteCC } from "../../shared/budget/costCenterModal.js";
+import {
+  loadCategoryOptions, optionGroupsHtml, pendingCategories, resolveSelectionToCostCenterId,
+} from "../../shared/budget/categoryOptions.js";
 
 const PT_MONTHS = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -585,7 +587,7 @@ function renderCostNeedsTable() {
     const lineTotal = q * p * h;
     const st = n.status || "PENDING";
     const stCfg = NEED_STATUS_CONFIG[st] || { label: st, cls: "bg-slate-100 text-slate-700" };
-    const ccLabel = [n.costCenter?.code, n.costCenter?.name].filter(Boolean).join(" · ") || "—";
+    const ccLabel = n.costCenter?.name || n.costCenter?.code || "—";
     const itemCurrency = n.costCenter?.currency || cur;
     const isPending = st === "PENDING";
 
@@ -644,21 +646,22 @@ function initCostNeedsListeners() {
   document.getElementById("plCustoNewItemBtn")?.addEventListener("click", () => openNewCostNeedModal());
 }
 
-function openNewCostNeedModal(defaultCCId = "") {
+async function openNewCostNeedModal(defaultCCId = "") {
   const pId = projectId();
   if (!pId) return;
 
-  if (!cachedCostCenters.length) {
-    toast("Nenhum centro de custo encontrado para esta obra.", { type: "warning" });
+  const categoryOptions = await loadCategoryOptions(pId);
+  if (!cachedCostCenters.length && !pendingCategories(categoryOptions, cachedCostCenters).length) {
+    toast("Ainda não há categorias de custo de obra. Crie-as em Registos → Categorias de Custo.", { type: "warning" });
     return;
   }
 
   const cur = currency();
-  const ccOptions = cachedCostCenters.map((cc) => {
-    const sel = cc.id === defaultCCId ? "selected" : "";
-    const label = [cc.code, cc.name].filter(Boolean).join(" · ");
-    return `<option value="${escapeHtml(cc.id)}" ${sel}>${escapeHtml(label)}</option>`;
-  }).join("");
+  const ccOptions = optionGroupsHtml({
+    costCenters: cachedCostCenters,
+    options: categoryOptions,
+    selected: defaultCCId || cachedCostCenters[0]?.id || "",
+  });
 
   openModal({
     title: "Nova Linha de Orçamento de Custo",
@@ -666,7 +669,7 @@ function openNewCostNeedModal(defaultCCId = "") {
     contentHtml: `
       <div class="space-y-4">
         <p class="text-xs text-slate-500 font-medium">Registe um item de custo previsto no orçamento da obra.</p>
-        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Centro de Custo *
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Categoria / Centro de Custo *
           <select id="modalNeedCC" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
             ${ccOptions}
           </select>
@@ -715,7 +718,7 @@ function openNewCostNeedModal(defaultCCId = "") {
         </label>
       </div>`,
     onPrimary: async ({ close, btn }) => {
-      const ccId = document.getElementById("modalNeedCC")?.value;
+      const ccChoice = document.getElementById("modalNeedCC")?.value;
       const desc = document.getElementById("modalNeedDesc")?.value?.trim();
       const unit = document.getElementById("modalNeedUnit")?.value || "un";
       const qty = parseFloat(document.getElementById("modalNeedQty")?.value) || 1;
@@ -725,8 +728,8 @@ function openNewCostNeedModal(defaultCCId = "") {
       const priority = document.getElementById("modalNeedPriority")?.value || "MEDIA";
       const notes = document.getElementById("modalNeedNotes")?.value?.trim() || null;
 
-      if (!ccId) {
-        toast("Selecione um Centro de Custo.", { type: "warning" });
+      if (!ccChoice) {
+        toast("Selecione uma categoria.", { type: "warning" });
         return;
       }
       if (!desc) {
@@ -736,6 +739,7 @@ function openNewCostNeedModal(defaultCCId = "") {
 
       setButtonLoading(btn, true);
       try {
+        const ccId = await resolveSelectionToCostCenterId(pId, ccChoice);
         await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs`, {
           method: "POST",
           body: {
@@ -918,7 +922,7 @@ async function loadOrcamentoCusto() {
       const currentVal = ccFilterSelect.value;
       ccFilterSelect.innerHTML = `<option value="">Todos os CCs</option>` +
         cachedCostCenters.map((cc) => {
-          const label = [cc.code, cc.name].filter(Boolean).join(" · ");
+          const label = cc.name || cc.code || "";
           return `<option value="${escapeHtml(cc.id)}" ${cc.id === currentVal ? "selected" : ""}>${escapeHtml(label)}</option>`;
         }).join("");
     }
@@ -947,14 +951,14 @@ async function loadOrcamentoCusto() {
     }
 
     if (!summary.length) {
-      body.innerHTML = emptyRow(6, "account_balance", "Sem centros de custo nesta obra.");
+      body.innerHTML = emptyRow(6, "account_balance", "Sem custos nesta obra. Use Importar Excel, Ler Fatura ou Novo Item — as categorias vêm de Registos.");
     } else {
       body.innerHTML = summary.map((row) => {
         const p = num(row.basePrevisto ?? row.previsto);
         const r = num(row.emAnaliseOrcamento ?? row.realizadoOrcamento ?? row.realizado);
         const l = num(row.liquidado);
         const pc = p > 0 ? (l / p) * 100 : 0;
-        const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
+        const label = row.name || row.code || "Centro";
         return `<tr>
           <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
           <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
@@ -965,14 +969,6 @@ async function loadOrcamentoCusto() {
             <button type="button" onclick="window.openNewCostNeedModal?.('${escapeHtml(row.id || "")}')"
               class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
               <span class="material-symbols-outlined text-xs">add</span> Novo Item
-            </button>
-            <button type="button" title="Editar centro de custo" onclick="window.editCC?.('${escapeHtml(row.id || "")}')"
-              class="h-7 w-7 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all inline-flex items-center justify-center align-middle">
-              <span class="material-symbols-outlined text-sm">edit</span>
-            </button>
-            <button type="button" title="Eliminar centro de custo" onclick="window.deleteCC?.('${escapeHtml(row.id || "")}', '${escapeHtml(label).replace(/'/g, "&#39;")}')"
-              class="h-7 w-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-all inline-flex items-center justify-center align-middle">
-              <span class="material-symbols-outlined text-sm">delete</span>
             </button>
           </td>
         </tr>`;
@@ -2783,10 +2779,7 @@ const budgetCtx = {
 };
 initImportExcel(budgetCtx);
 initCategoryIncrement(budgetCtx);
-initCostCenterModal(budgetCtx);
 
-window.editCC = editCC;
-window.deleteCC = deleteCC;
 
 // ── Plano Financeiro: sub-separadores (cronograma, pendentes, histórico) ──
 const finCtx = {
@@ -2844,8 +2837,6 @@ window.triggerOrcamentoCustoAction = function (action, category = "") {
       return openNewCostNeedModal(category);
     case "open-excel":
       return openImportModal();
-    case "open-new-cc":
-      return openCCModal();
     case "open-scan":
       return window.openCategoryIncrementModal?.(category, false);
     case "open-increment":

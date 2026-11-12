@@ -1,11 +1,15 @@
 // Ler Fatura (IA) / Incrementar Orçamento por Categoria
 import { apiRequest, apiUpload } from "/services/api.js";
 import { formatCurrency } from "/shared/format.js";
+import {
+  CAT_PREFIX, loadCategoryOptions, optionGroupsHtml, matchSelectionByName, resolveSelectionToCostCenterId,
+} from "/shared/budget/categoryOptions.js";
 
 let _ctx = null;
 const ctx = () => _ctx;
 let currentSuppliers = [];
 let cachedCategoryOverview = [];
+let categoryOptions = [];
 
 /** ctx: { getProject, getCostCenters, showToast(msg,type), onChanged() } */
 export function initCategoryIncrement(context) {
@@ -98,7 +102,10 @@ const MODAL_HTML = `    <div class="modal-overlay" id="modalCategoryIncrement">
                 <!-- 3. Itens -->
                 <section>
                     <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-400">Itens</h3>
+                        <div>
+                            <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-400">Itens</h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Os centros de custo vêm das categorias registadas. Se ainda não existir na obra, é criado ao confirmar. <a href="/registos/categorias-custo" target="_blank" class="text-emerald-600 font-semibold hover:underline">Gerir categorias</a></p>
+                        </div>
                         <button type="button" onclick="addCategoryIncrementRow()"
                             class="h-9 px-3.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition flex items-center gap-1.5">
                             <span class="material-symbols-outlined text-base">add</span> Adicionar item
@@ -109,7 +116,7 @@ const MODAL_HTML = `    <div class="modal-overlay" id="modalCategoryIncrement">
                             <table class="w-full text-left border-collapse min-w-[760px]">
                                 <thead>
                                     <tr class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-200">
-                                        <th class="py-2.5 px-3 w-56">Centro de custo</th>
+                                        <th class="py-2.5 px-3 w-56">Categoria</th>
                                         <th class="py-2.5 px-2">Descrição</th>
                                         <th class="py-2.5 px-2 w-16 text-center">UN</th>
                                         <th class="py-2.5 px-2 w-20 text-center">Qtd.</th>
@@ -165,7 +172,7 @@ async function ensureSuppliers() {
   } catch { /* fornecedor é opcional */ }
 }
 
-const STANDARD_COST_CATEGORIES = [
+const LEGACY_CATEGORY_NAMES = [
   { key: "MATERIAIS_INSUMOS", code: "MAT", name: "Materiais e Insumos", icon: "inventory_2" },
   { key: "SERVICOS_MAO_DE_OBRA", code: "MDO", name: "Serviços e Mão de Obra", icon: "engineering" },
   { key: "EQUIPAMENTO", code: "EQP", name: "Equipamentos e Ferramentas", icon: "construction" },
@@ -176,6 +183,13 @@ const STANDARD_COST_CATEGORIES = [
   { key: "IMPOSTOS", code: "IMP", name: "Impostos e Taxas", icon: "receipt_long" },
   { key: "OUTRAS_DESPESAS", code: "OUT", name: "Outras Despesas", icon: "category" },
 ];
+
+function defaultSelection() {
+  const ccs = ctx().getCostCenters() || [];
+  if (ccs[0]) return ccs[0].id;
+  const first = categoryOptions.find((o) => !o.costCenterId);
+  return first ? `${CAT_PREFIX}${first.categoryId}` : "";
+}
 
 window.openCategoryIncrementModal = async function (preselectCategory = "", autoPromptFile = false) {
   if (!ctx().getProject()?.id) {
@@ -223,6 +237,8 @@ window.openCategoryIncrementModal = async function (preselectCategory = "", auto
   if (supNameRaw) supNameRaw.value = "";
   if (supNifRaw) supNifRaw.value = "";
 
+  categoryOptions = await loadCategoryOptions(ctx().getProject().id);
+
   // Carrega resumo de Centros de Custo atual da obra
   try {
     const data = await apiRequest(`/cost-centers/project/${ctx().getProject().id}/categories-overview`);
@@ -239,12 +255,7 @@ window.openCategoryIncrementModal = async function (preselectCategory = "", auto
     }));
   }
 
-  const defaultCC =
-    preselectCategory ||
-    ctx().getCostCenters()[0]?.id ||
-    cachedCategoryOverview[0]?.costCenterId ||
-    cachedCategoryOverview[0]?.category ||
-    "MATERIAIS_INSUMOS";
+  const defaultCC = preselectCategory || defaultSelection();
 
   const tbody = document.getElementById("incItemsTableBody");
   if (tbody) {
@@ -264,35 +275,15 @@ window.addCategoryIncrementRow = function (item = null, defaultCategory = "") {
   const tbody = document.getElementById("incItemsTableBody");
   if (!tbody) return;
 
-  const selectedVal =
-    item?.costCenterId ||
-    item?.category ||
-    defaultCategory ||
-    ctx().getCostCenters()[0]?.id ||
-    "MATERIAIS_INSUMOS";
-
-  const existingCCOpts = (ctx().getCostCenters() || [])
-    .map((cc) => {
-      const isSel = cc.id === selectedVal || String(cc.code).toUpperCase() === String(selectedVal).toUpperCase();
-      return `<option value="${cc.id}" data-cc-id="${cc.id}" ${isSel ? "selected" : ""}>${cc.code} — ${cc.name}</option>`;
-    })
-    .join("");
-
-  const existingCodes = new Set((ctx().getCostCenters() || []).map((c) => String(c.code || "").toUpperCase()));
-  const newCatOpts = STANDARD_COST_CATEGORIES.filter((sc) => !existingCodes.has(sc.code))
-    .map((sc) => {
-      const isSel = !ctx().getCostCenters().some((c) => c.id === selectedVal) && sc.key === selectedVal;
-      return `<option value="__NEW__:${sc.key}" data-cc-id="" ${isSel ? "selected" : ""}>+ Criar CC: ${sc.code} — ${sc.name}</option>`;
-    })
-    .join("");
-
-  const selectHtml =
-    (existingCCOpts
-      ? `<optgroup label="Centros de Custo da Obra">${existingCCOpts}</optgroup>`
-      : "") +
-    (newCatOpts
-      ? `<optgroup label="Criar Novo Centro de Custo">${newCatOpts}</optgroup>`
-      : "");
+  const ccs = ctx().getCostCenters() || [];
+  let selectedVal = item?.costCenterId || defaultCategory || "";
+  if (!selectedVal && item?.category) {
+    // a IA sugere uma categoria genérica: tenta associá-la às categorias registadas pelo nome
+    const legacy = LEGACY_CATEGORY_NAMES.find((c) => c.key === item.category);
+    selectedVal = matchSelectionByName(legacy?.name || item.category, ccs, categoryOptions);
+  }
+  if (!selectedVal) selectedVal = defaultSelection();
+  const selectHtml = optionGroupsHtml({ costCenters: ccs, options: categoryOptions, selected: selectedVal });
 
   const tr = document.createElement("tr");
   tr.className = "border-b border-slate-100 last:border-b-0 inc-item-row";
@@ -344,7 +335,7 @@ window.recalcCategoryIncrementPreview = function () {
     const sel = tr.querySelector(".inc-row-cat");
     const rawVal = sel?.value || "";
     const ccId = sel?.selectedOptions?.[0]?.dataset?.ccId || "";
-    const key = ccId || rawVal.replace(/^__NEW__:/, "");
+    const key = ccId || rawVal;
     const qty = parseFloat(tr.querySelector(".inc-row-qty")?.value || "0") || 0;
     const price = parseFloat(tr.querySelector(".inc-row-price")?.value || "0") || 0;
     const lineTotal = Math.round((qty * price + Number.EPSILON) * 100) / 100;
@@ -383,13 +374,15 @@ window.recalcCategoryIncrementPreview = function () {
       incVal > 0 &&
       !baseList.some((c) => c.costCenterId === incKey || c.category === incKey)
     ) {
-      const std = STANDARD_COST_CATEGORIES.find((sc) => sc.key === incKey);
-      if (std) {
+      const opt = incKey.startsWith(CAT_PREFIX)
+        ? categoryOptions.find((o) => `${CAT_PREFIX}${o.categoryId}` === incKey)
+        : null;
+      if (opt) {
         baseList.push({
-          category: std.key,
+          category: incKey,
           costCenterId: null,
-          code: std.code,
-          name: `${std.name} (Novo CC)`,
+          code: opt.code,
+          name: `${opt.name} (novo)`,
           currentPrevisto: 0,
         });
       }
@@ -415,7 +408,6 @@ window.recalcCategoryIncrementPreview = function () {
       return `
         <div class="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-3">
           <div class="min-w-0">
-            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">${c.code}</p>
             <p class="text-sm font-bold text-slate-900 truncate" title="${c.name}">${c.name}</p>
           </div>
           <div class="text-right shrink-0">
@@ -537,7 +529,7 @@ window.submitCategoryIncrement = async function () {
     const catSelect = tr.querySelector(".inc-row-cat");
     const rawVal = catSelect?.value || "";
     const costCenterId = catSelect?.selectedOptions?.[0]?.dataset?.ccId || null;
-    const category = costCenterId || rawVal.replace(/^__NEW__:/, "") || "MATERIAIS_INSUMOS";
+    const category = costCenterId || rawVal;
     const description = tr.querySelector(".inc-row-desc")?.value?.trim() || "";
     const unit = tr.querySelector(".inc-row-unit")?.value?.trim() || "un";
     const quantity = parseFloat(tr.querySelector(".inc-row-qty")?.value || "1") || 1;
@@ -557,6 +549,20 @@ window.submitCategoryIncrement = async function () {
 
   if (items.length === 0) {
     ctx().showToast("Adicione pelo menos um item com descrição e preço.", "error");
+    return;
+  }
+
+  // categorias registadas ainda sem centro de custo nesta obra: criar (via rápida) antes de gravar
+  try {
+    const cache = new Map();
+    for (const it of items) {
+      if (String(it.category).startsWith(CAT_PREFIX)) {
+        it.costCenterId = await resolveSelectionToCostCenterId(ctx().getProject().id, it.category, cache);
+        it.category = it.costCenterId;
+      }
+    }
+  } catch (err) {
+    ctx().showToast("Não foi possível criar o centro de custo: " + (err.message || ""), "error");
     return;
   }
 

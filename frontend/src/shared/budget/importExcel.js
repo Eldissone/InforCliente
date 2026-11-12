@@ -1,6 +1,11 @@
 // Importar Orçamento via Excel
 import { apiRequest } from "/services/api.js";
 import { formatCurrency } from "/shared/format.js";
+import {
+  CAT_PREFIX, loadCategoryOptions, optionGroupsHtml, matchSelectionByName, pendingCategories, resolveSelectionToCostCenterId,
+} from "/shared/budget/categoryOptions.js";
+
+let categoryOptions = [];
 
 let _ctx = null;
 const ctx = () => _ctx;
@@ -226,13 +231,14 @@ function resolveCol(headers) {
   return idx;
 }
 
-export function openImportModal() {
+export async function openImportModal() {
   ensureImportModal();
   if (!ctx().getProject()) { ctx().showToast("Seleciona uma Obra primeiro", "error"); return; }
 
   importCurrentStep = 1;
   importParsedGroups = [];
   importMapping = {};
+  categoryOptions = await loadCategoryOptions(ctx().getProject().id);
 
   // Reset file input
   const fi = document.getElementById("importFileInput");
@@ -527,13 +533,18 @@ function renderCCMappingStep() {
   const container = document.getElementById("importCCMappingList");
   if (!container) return;
 
-  const ccOptions = ctx().getCostCenters().map(cc =>
-    `<option value="${cc.id}">${cc.code} — ${cc.name}</option>`).join("");
+  const ccs = ctx().getCostCenters() || [];
+  const hasAnyTarget = ccs.length > 0 || pendingCategories(categoryOptions, ccs).length > 0;
 
-  container.innerHTML = importParsedGroups.map((group, idx) => {
-    // Try auto-match by name similarity
-    const autoMatch = tryAutoMatch(group.sheetGroupName);
-    const selectedId = autoMatch ? autoMatch.id : "CREATE_NEW";
+  const hint = hasAnyTarget ? "" : `
+    <div class="p-3 bg-amber-50 border border-amber-100 rounded-xl mb-4 text-xs font-semibold text-amber-700 flex items-center gap-2">
+      <span class="material-symbols-outlined text-sm">info</span>
+      Ainda não há categorias de custo de obra registadas.
+      <a href="/registos/categorias-custo" target="_blank" class="underline">Criar em Registos</a>
+    </div>`;
+
+  container.innerHTML = hint + importParsedGroups.map((group, idx) => {
+    const autoValue = matchSelectionByName(group.sheetGroupName, ccs, categoryOptions);
 
     return `
       <div class="import-cc-group">
@@ -549,54 +560,22 @@ function renderCCMappingStep() {
             </div>
           </div>
           <div class="flex items-center gap-2 flex-shrink-0">
-            ${autoMatch ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Auto-mapeado</span>` : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Novo CC</span>`}
+            ${autoValue
+              ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Auto-mapeado</span>`
+              : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Escolher categoria</span>`}
             <select data-group-idx="${idx}" id="ccMapSelect_${idx}"
-              class="h-9 px-3 bg-white border ${autoMatch ? "border-emerald-300" : "border-slate-200"} rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 min-w-[200px]">
-              <option value="CREATE_NEW">Criar automaticamente</option>
+              class="h-9 px-3 bg-white border ${autoValue ? "border-emerald-300" : "border-slate-200"} rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 min-w-[220px]">
               <option value="">— Ignorar grupo —</option>
-              <optgroup label="Centros Existentes">
-                ${ccOptions}
-              </optgroup>
+              ${optionGroupsHtml({ costCenters: ccs, options: categoryOptions, selected: autoValue })}
             </select>
           </div>
         </div>
-        <!-- Preview of first 3 items -->
         <div class="px-4 py-2 text-[10px] text-slate-400 font-semibold">
           ${group.items.slice(0, 3).map(it => `<span class="inline-block mr-3">${it.description.substring(0, 40)}</span>`).join("")}
           ${group.items.length > 3 ? `<span class="text-slate-300">+${group.items.length - 3} mais...</span>` : ""}
         </div>
       </div>`;
   }).join("");
-
-  // Set auto-matched values
-  importParsedGroups.forEach((group, idx) => {
-    const autoMatch = tryAutoMatch(group.sheetGroupName);
-    const sel = document.getElementById(`ccMapSelect_${idx}`);
-    if (sel) {
-      sel.value = autoMatch ? autoMatch.id : "CREATE_NEW";
-    }
-  });
-}
-
-function tryAutoMatch(groupName) {
-  const norm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  const gn = norm(groupName);
-
-  // Exact match on name or code
-  let match = ctx().getCostCenters().find(cc => norm(cc.name) === gn || norm(cc.code) === gn);
-  if (match) return match;
-
-  // Partial contains match
-  match = ctx().getCostCenters().find(cc => gn.includes(norm(cc.name)) || norm(cc.name).includes(gn));
-  if (match) return match;
-
-  // Keyword match (e.g. "FERRAMENTAS" matches CC named "Ferramentas de Obra")
-  const keywords = gn.split(/[\s\-_/]+/);
-  match = ctx().getCostCenters().find(cc => {
-    const ccNorm = norm(cc.name);
-    return keywords.some(kw => kw.length > 3 && ccNorm.includes(kw));
-  });
-  return match || null;
 }
 
 function collectCCMapping() {
@@ -659,11 +638,17 @@ function renderPreviewStep() {
   }
 
   mappedGroups.forEach(group => {
-    let ccName = "Novo Centro de Custo";
-    let ccCode = "NOVO";
+    let ccName = "";
+    let ccCode = "";
+    let isNew = false;
     let cur = ctx().getProject()?.currency || "AOA";
-    if (importMapping[group.sheetGroupName] !== "CREATE_NEW") {
-      const cc = ctx().getCostCenters().find(c => c.id === importMapping[group.sheetGroupName]);
+    const mapped = importMapping[group.sheetGroupName];
+    if (String(mapped).startsWith(CAT_PREFIX)) {
+      const opt = categoryOptions.find((o) => `${CAT_PREFIX}${o.categoryId}` === mapped);
+      ccName = opt?.name || "Categoria";
+      isNew = true;
+    } else {
+      const cc = ctx().getCostCenters().find(c => c.id === mapped);
       if (cc) {
         ccName = cc.name;
         ccCode = cc.code;
@@ -678,7 +663,7 @@ function renderPreviewStep() {
           <div class="flex items-center gap-2">
             <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${group.sheetGroupName}</span>
             <span class="material-symbols-outlined text-sm text-emerald-500">arrow_forward</span>
-            <span class="text-xs font-bold ${ccCode === 'NOVO' ? 'text-blue-600' : 'text-slate-900'}">${ccCode === 'NOVO' ? '✨ ' : ''}${ccCode} — ${ccName}</span>
+            <span class="text-xs font-bold ${isNew ? 'text-blue-600' : 'text-slate-900'}">${isNew ? '✨ ' : ''}${ccName}${isNew ? ' (nova na obra)' : ''}</span>
           </div>
           <span class="text-xs font-bold text-slate-600">${group.items.length} itens · ${formatCurrency(groupTotal, cur)}</span>
         </div>
@@ -721,35 +706,17 @@ async function runImport() {
   let done = 0;
   const errors = [];
 
-  // First create missing cost centers
-  progressLabel.textContent = "A criar Centros de Custo...";
-  for (let i = 0; i < importParsedGroups.length; i++) {
-    const group = importParsedGroups[i];
-    if (importMapping[group.sheetGroupName] === "CREATE_NEW") {
-      try {
-        let safeName = (group.sheetGroupName || "").trim();
-        if (safeName.length < 2) safeName = safeName ? `CC ${safeName}` : "CUSTO GERAL";
-        let safeCode = safeName.substring(0, 4).toUpperCase().trim();
-        if (safeCode.length < 1) safeCode = "GER";
-        // Append a short random suffix to guarantee uniqueness (e.g., GER-X2)
-        safeCode = `${safeCode}-${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
-
-        const body = {
-          code: safeCode,
-          name: safeName,
-          currency: ctx().getProject().currency || "AOA",
-          active: true
-        };
-        const newCc = await apiRequest(`/cost-centers/project/${ctx().getProject().id}`, { method: "POST", body });
-        importMapping[group.sheetGroupName] = newCc.id || newCc.ccId || (newCc.items && newCc.items[0]?.id) || newCc;
-        // In case the API returns the object differently, we try a few id paths. Usually just newCc.id.
-        if (typeof newCc === 'object' && newCc.id) {
-          importMapping[group.sheetGroupName] = newCc.id;
-        }
-      } catch (err) {
-        errors.push(`Erro ao criar CC ${group.sheetGroupName}: ${err.message}`);
-        importMapping[group.sheetGroupName] = null; // Prevent importing items for this CC
-      }
+  // Criar (via rápida) os centros de custo das categorias registadas escolhidas
+  progressLabel.textContent = "A preparar centros de custo...";
+  const ccCache = new Map();
+  for (const group of importParsedGroups) {
+    const mapped = importMapping[group.sheetGroupName];
+    if (!String(mapped).startsWith(CAT_PREFIX)) continue;
+    try {
+      importMapping[group.sheetGroupName] = await resolveSelectionToCostCenterId(ctx().getProject().id, mapped, ccCache);
+    } catch (err) {
+      errors.push(`Erro ao criar centro de custo para ${group.sheetGroupName}: ${err.message}`);
+      importMapping[group.sheetGroupName] = null;
     }
   }
 
@@ -757,7 +724,7 @@ async function runImport() {
   const toImport = [];
   for (const group of importParsedGroups) {
     let ccId = importMapping[group.sheetGroupName];
-    if (!ccId || ccId === "CREATE_NEW") continue; // Skip if failed to create or ignored
+    if (!ccId || String(ccId).startsWith(CAT_PREFIX)) continue; // ignorado ou falhou a criação
     // Just to ensure ccId is a string, if api returned an object fallback
     if (typeof ccId === "object" && ccId.id) ccId = ccId.id;
 
