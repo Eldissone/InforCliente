@@ -1508,40 +1508,45 @@ function userDrawerSections(mode, u, clients, projects) {
   const role0 = u?.role || "leitura";
   const selectedIds = (u?.assignedProjects || []).map((p) => p.id);
 
+  const perfil = `
+      ${formField("Perfil de acesso *", `<select id="f_role" class="${F_INPUT} font-semibold">${roleOptionsHtml(role0)}</select><p id="f_role_hint" class="${F_HELP}"></p>`)}
+      <div id="f_cli_wrap" class="hidden">
+        ${formField("Cliente vinculado *", `<select id="f_client" class="${F_INPUT}">${renderClientOptions(clients, u?.clientId || "")}</select>`)}
+      </div>`;
+
+  const contactos = edit ? `
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        ${formField("Telefone", `<input id="f_phone" type="tel" class="${F_INPUT}" value="${esc(u?.profile?.phone || "")}" placeholder="+244 …">`)}
+        ${formField("WhatsApp", `<input id="f_whatsapp" type="tel" class="${F_INPUT}" value="${esc(u?.profile?.whatsapp || "")}" placeholder="+244 …">`)}
+      </div>
+      <div class="pt-2">
+        <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Funções e notificações</p>
+        <div class="space-y-2">
+          ${toggleRow("f_fin_receiver", "Receptor financeiro", "Recebe as notificações de pagamentos.", u?.profile?.isFinancialReceiver)}
+          ${toggleRow("f_approver", "Aprovador", "Pode ser indicado como aprovador de pedidos.", u?.profile?.isApprover)}
+          ${toggleRow("f_proj_resp", "Responsável pela obra", "Aparece como responsável nas obras.", u?.profile?.isProjectResponsible)}
+        </div>
+      </div>` : "";
+
+  const palavraPasse = edit
+    ? `<div class="pt-4 border-t border-slate-100">
+        <label class="${F_LABEL}">Redefinir palavra-passe</label>
+        <div class="flex gap-2">
+          <input id="f_reset_pass" type="password" class="${F_INPUT}" placeholder="Nova palavra-passe (mín. 6 caracteres)" autocomplete="new-password">
+          <button type="button" id="f_reset_btn" class="px-4 h-11 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-slate-700 transition-colors shrink-0">Redefinir</button>
+        </div>
+      </div>`
+    : formField("Palavra-passe *", `<input id="f_pass" type="password" class="${F_INPUT}" placeholder="Mínimo 6 caracteres" autocomplete="new-password">`);
+
+  // Tudo o que identifica e dá acesso ao utilizador fica no primeiro separador (o perfil à vista)
   const dados = `
     <div class="space-y-4">
       ${formField("Nome completo", `<input id="f_name" type="text" class="${F_INPUT}" value="${esc(u?.name || "")}" placeholder="Nome do utilizador">`)}
       ${formField("Email *", `<input id="f_email" type="email" class="${F_INPUT}" value="${esc(u?.email || "")}" placeholder="utilizador@empresa.com" autocomplete="off">`)}
-      ${edit ? `
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          ${formField("Telefone", `<input id="f_phone" type="tel" class="${F_INPUT}" value="${esc(u?.profile?.phone || "")}" placeholder="+244 …">`)}
-          ${formField("WhatsApp", `<input id="f_whatsapp" type="tel" class="${F_INPUT}" value="${esc(u?.profile?.whatsapp || "")}" placeholder="+244 …">`)}
-        </div>
-        <div class="pt-2">
-          <p class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">Funções e notificações</p>
-          <div class="space-y-2">
-            ${toggleRow("f_fin_receiver", "Receptor financeiro", "Recebe as notificações de pagamentos.", u?.profile?.isFinancialReceiver)}
-            ${toggleRow("f_approver", "Aprovador", "Pode ser indicado como aprovador de pedidos.", u?.profile?.isApprover)}
-            ${toggleRow("f_proj_resp", "Responsável pela obra", "Aparece como responsável nas obras.", u?.profile?.isProjectResponsible)}
-          </div>
-        </div>` : ""}
-    </div>`;
-
-  const acesso = `
-    <div class="space-y-4">
-      ${formField("Perfil de acesso", `<select id="f_role" class="${F_INPUT} font-semibold">${roleOptionsHtml(role0)}</select><p id="f_role_hint" class="${F_HELP}"></p>`)}
-      <div id="f_cli_wrap" class="hidden">
-        ${formField("Cliente vinculado *", `<select id="f_client" class="${F_INPUT}">${renderClientOptions(clients, u?.clientId || "")}</select>`)}
-      </div>
-      ${edit
-        ? `<div class="pt-4 border-t border-slate-100">
-            <label class="${F_LABEL}">Redefinir palavra-passe</label>
-            <div class="flex gap-2">
-              <input id="f_reset_pass" type="password" class="${F_INPUT}" placeholder="Nova palavra-passe (mín. 6 caracteres)" autocomplete="new-password">
-              <button type="button" id="f_reset_btn" class="px-4 h-11 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-slate-700 transition-colors shrink-0">Redefinir</button>
-            </div>
-          </div>`
-        : formField("Palavra-passe *", `<input id="f_pass" type="password" class="${F_INPUT}" placeholder="Mínimo 6 caracteres" autocomplete="new-password">`)}
+      ${perfil}
+      ${edit ? "" : palavraPasse}
+      ${contactos}
+      ${edit ? palavraPasse : ""}
     </div>`;
 
   const obras = `
@@ -1572,8 +1577,7 @@ function userDrawerSections(mode, u, clients, projects) {
       </div>`;
 
   return [
-    { id: "dados", label: "Dados", icon: "badge", html: dados },
-    { id: "acesso", label: "Acesso", icon: "key", html: acesso },
+    { id: "dados", label: "Dados e acesso", icon: "badge", html: dados },
     { id: "obras", label: "Obras", icon: "apartment", html: obras, badge: selectedIds.length ? String(selectedIds.length) : "" },
     { id: "permissoes", label: "Permissões", icon: "shield_person", html: permissoes },
   ];
