@@ -1,5 +1,3 @@
-import { planeamentoHref } from "./planeamentoLink.js";
-
 const LOGISTICS_SELECTOR = "[data-nav-logistics], [data-nav-logistica]";
 
 /** Ordem do menu principal. Itens `pending` ainda não têm ecrã próprio. */
@@ -41,7 +39,6 @@ const APP_MENU = [
     icon: "construction",
     children: [
       { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
-      { label: "Planeamento", icon: "event_note", selector: "[data-nav-planeamento]", href: planeamentoHref() },
       { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
     ],
   },
@@ -245,9 +242,7 @@ function isSidebarLinkActive(link) {
 
   const current = window.location.pathname.replace(/\\/g, "/").toLowerCase();
   if (link.matches("[data-nav-obras]")) {
-    const tab = new URLSearchParams(window.location.search).get("tab") || "";
     return current.includes("/projectos/")
-      && !(current.includes("projectview") && /^(orcamento_|plano_|recursos_)/.test(tab))
       && !current.includes("/projectos/centrocustos")
       && !current.includes("/projectos/cotacao")
       && !current.includes("/projectos/tecnicoplanos");
@@ -255,10 +250,6 @@ function isSidebarLinkActive(link) {
   if (link.matches("[data-nav-clientes]")) return current.includes("/clientes/") || current.includes("/clientedetalhe/");
   if (link.matches("[data-nav-centros]")) {
     return current.includes("/financeiro/centrodecompras") || current.includes("/financeiro/financeiro");
-  }
-  if (link.matches("[data-nav-planeamento]")) {
-    const tab = new URLSearchParams(window.location.search).get("tab") || "";
-    return current.includes("projectview") && /^(orcamento_|plano_|recursos_)/.test(tab);
   }
   if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
   if (link.matches("[data-nav-users]")) return current.includes("/users/");

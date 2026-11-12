@@ -13,145 +13,139 @@ export function initCategoryIncrement(context) {
 }
 
 const MODAL_HTML = `    <div class="modal-overlay" id="modalCategoryIncrement">
-        <div class="modal-box" style="max-width: 980px; width: 96%;">
-            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="material-symbols-outlined text-slate-800">document_scanner</span>
-                        <h2 class="text-lg font-bold text-slate-900">Registar / Incrementar Orçamento de Custo por Categoria</h2>
+        <div class="modal-box" style="max-width: 920px; width: 96%; padding: 0; overflow: hidden;">
+            <!-- Cabeçalho -->
+            <div class="flex items-start justify-between gap-4 px-7 pt-6 pb-5">
+                <div class="flex items-start gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-[#212e3e] text-[#2afc8d] flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined">add_chart</span>
                     </div>
-                    <p class="text-xs text-slate-500 mt-0.5">
-                        Carregue uma fatura/proforma/cotação (PDF ou imagem) para leitura automática por IA ou adicione itens diretamente para incrementar o orçamento da obra por categoria.
-                    </p>
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 tracking-tight">Incrementar orçamento de custo</h2>
+                        <p class="text-[13px] text-slate-500 mt-0.5">Leia uma fatura ou cotação com IA, ou adicione os itens manualmente.</p>
+                    </div>
                 </div>
                 <button type="button" onclick="document.getElementById('modalCategoryIncrement').classList.remove('open')"
                     aria-label="Fechar"
-                    class="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-all">
-                    <span class="material-symbols-outlined text-base">close</span>
+                    class="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-xl">close</span>
                 </button>
             </div>
 
-            <div class="flex flex-col gap-4 max-h-[78vh] overflow-y-auto pr-1 custom-scroll">
-                <!-- Bloco 1: Upload e Leitura de Fatura com IA -->
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div class="flex-1">
-                            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-800 mb-1">
-                                1. Leitura Automática de Fatura, Proforma ou Cotação (IA)
-                            </label>
-                            <p class="text-xs text-slate-500">
-                                A IA extrai fornecedor, NIF, impostos, artigos, quantidades, preços unitários e classifica cada item na categoria correta da obra.
-                            </p>
+            <div class="flex flex-col gap-6 px-7 pb-6 max-h-[68vh] overflow-y-auto custom-scroll">
+                <!-- 1. Documento (IA) -->
+                <section>
+                    <input type="file" id="incInvoiceFile" accept=".pdf,image/*" class="hidden">
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 hover:bg-slate-50 hover:border-slate-400 transition-colors px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div class="w-11 h-11 rounded-xl bg-white border border-slate-200 text-emerald-600 flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined">document_scanner</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-bold text-slate-900">Ler documento com IA</p>
+                            <p class="text-xs text-slate-500 mt-0.5">PDF ou imagem. Extrai fornecedor, impostos e itens, e associa cada um ao centro de custo certo.</p>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
-                            <input type="file" id="incInvoiceFile" accept=".pdf,image/*" class="hidden">
+                            <button type="button" id="btnRunInvoiceScanIncrement" onclick="scanInvoiceForCategoryIncrement()"
+                                class="hidden h-10 px-3.5 rounded-xl text-slate-600 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200/70 transition">
+                                <span class="material-symbols-outlined text-base">auto_awesome</span>
+                                Reler
+                            </button>
                             <button type="button" onclick="document.getElementById('incInvoiceFile').click()"
                                 class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
                                 <span class="material-symbols-outlined text-base">upload_file</span>
-                                Selecionar Fatura / Cotação (PDF/Img)
-                            </button>
-                            <button type="button" id="btnRunInvoiceScanIncrement" onclick="scanInvoiceForCategoryIncrement()"
-                                class="h-10 px-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-100 transition hidden">
-                                <span class="material-symbols-outlined text-base">auto_awesome</span>
-                                Reler com IA
+                                Escolher ficheiro
                             </button>
                         </div>
                     </div>
-                    <div id="incInvoiceScanStatus" class="hidden mt-3 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700"></div>
-                </div>
+                    <div id="incInvoiceScanStatus" class="hidden mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700"></div>
+                </section>
 
-                <!-- Bloco 2: Modo de Incremento e Dados do Fornecedor / Fatura -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                    <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Modo de Ação no Orçamento da Obra *</label>
-                        <select id="incModeSelect" onchange="recalcCategoryIncrementPreview()"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none">
-                            <option value="PREVISTO_AND_REALIZADO">Incrementar Orçamento Previsto + Registar Realizado/Cotação (Recomendado)</option>
-                            <option value="PREVISTO_ONLY">Incrementar Apenas Orçamento Previsto da Categoria</option>
-                            <option value="REALIZADO_ONLY">Apenas Registar Cotação / Realizado (Sem alterar teto previsto)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Fornecedor (Extraído ou Selecionado)</label>
-                        <select id="incSupplierSelect"
-                            class="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none">
-                            <option value="">Sem fornecedor / Apenas orçamento</option>
-                        </select>
-                        <input type="hidden" id="incSupplierNameRaw">
-                        <input type="hidden" id="incSupplierNifRaw">
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">IVA %</label>
+                <!-- 2. Detalhes -->
+                <section>
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Detalhes</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">O que fazer no orçamento</label>
+                            <select id="incModeSelect" onchange="recalcCategoryIncrementPreview()"
+                                class="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition">
+                                <option value="PREVISTO_AND_REALIZADO">Previsto + realizado (recomendado)</option>
+                                <option value="PREVISTO_ONLY">Só orçamento previsto</option>
+                                <option value="REALIZADO_ONLY">Só cotação / realizado</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Fornecedor</label>
+                            <select id="incSupplierSelect"
+                                class="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition">
+                                <option value="">Sem fornecedor</option>
+                            </select>
+                            <input type="hidden" id="incSupplierNameRaw">
+                            <input type="hidden" id="incSupplierNifRaw">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">IVA (%)</label>
                             <input type="number" id="incVatPercent" step="0.01" min="0" max="100" placeholder="14"
-                                class="w-full h-10 px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-center">
+                                class="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition">
                         </div>
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Nº Doc.</label>
-                            <input type="text" id="incDocNumber" placeholder="FT / COT"
-                                class="w-full h-10 px-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+                        <div class="sm:col-span-4">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Nº do documento</label>
+                            <input type="text" id="incDocNumber" placeholder="Ex.: FT 2026/123"
+                                class="w-full h-11 px-3.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition">
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <!-- Bloco 3: Impacto em Tempo Real por Categoria da Obra -->
-                <div>
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                            Impacto no Orçamento da Obra por Categoria
-                        </h3>
-                        <span id="incTotalSummaryBadge" class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
-                            Incremento Total: 0,00 AOA
-                        </span>
-                    </div>
-                    <div id="incCategoryCardsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                        <!-- Preenchido via JS -->
-                    </div>
-                </div>
-
-                <!-- Bloco 4: Linhas / Artigos a Incrementar -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                        <span class="text-xs font-bold text-slate-700">Itens a Registar / Incrementar</span>
+                <!-- 3. Itens -->
+                <section>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-400">Itens</h3>
                         <button type="button" onclick="addCategoryIncrementRow()"
-                            class="h-8 px-3 rounded-lg bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 transition flex items-center gap-1">
-                            <span class="material-symbols-outlined text-sm">add</span> Adicionar Item
+                            class="h-9 px-3.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-base">add</span> Adicionar item
                         </button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse min-w-[780px]">
-                            <thead>
-                                <tr class="border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-50/50">
-                                    <th class="py-2 px-3">Categoria / Centro de Custo *</th>
-                                    <th class="py-2 px-2">Descrição do Item / Serviço *</th>
-                                    <th class="py-2 px-2 w-16 text-center">UN</th>
-                                    <th class="py-2 px-2 w-20 text-center">Qtd.</th>
-                                    <th class="py-2 px-2 w-32 text-right">Preço Unit.</th>
-                                    <th class="py-2 px-3 w-32 text-right">Subtotal</th>
-                                    <th class="py-2 px-2 w-10 text-center"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="incItemsTableBody">
-                                <!-- Linhas via JS -->
-                            </tbody>
-                        </table>
+                    <div class="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                        <div class="overflow-x-auto custom-scroll">
+                            <table class="w-full text-left border-collapse min-w-[760px]">
+                                <thead>
+                                    <tr class="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-200">
+                                        <th class="py-2.5 px-3 w-56">Centro de custo</th>
+                                        <th class="py-2.5 px-2">Descrição</th>
+                                        <th class="py-2.5 px-2 w-16 text-center">UN</th>
+                                        <th class="py-2.5 px-2 w-20 text-center">Qtd.</th>
+                                        <th class="py-2.5 px-2 w-32 text-right">Preço unit.</th>
+                                        <th class="py-2.5 px-3 w-32 text-right">Subtotal</th>
+                                        <th class="py-2.5 px-2 w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="incItemsTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                </section>
+
+                <!-- 4. Impacto (só categorias afetadas) -->
+                <section>
+                    <h3 class="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3">Impacto no orçamento</h3>
+                    <div id="incCategoryCardsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5"></div>
+                </section>
             </div>
 
-            <div class="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
-                <p class="text-[11px] text-slate-400">
-                    Se a categoria escolhida ainda não tiver Centro de Custo nesta obra, será criada automaticamente.
-                </p>
-                <div class="flex items-center gap-3">
+            <!-- Rodapé -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-7 py-4 bg-slate-50 border-t border-slate-100">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Incremento total</p>
+                    <p id="incTotalSummaryBadge" class="text-xl font-bold text-slate-900 tabular-nums leading-tight">0,00 Kz</p>
+                </div>
+                <div class="flex items-center gap-2.5">
                     <button type="button" onclick="document.getElementById('modalCategoryIncrement').classList.remove('open')"
-                        class="h-10 px-5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition">
+                        class="h-11 px-5 rounded-xl text-slate-600 text-sm font-bold hover:bg-slate-200/70 transition">
                         Cancelar
                     </button>
                     <button type="button" id="btnSubmitCategoryIncrement" onclick="submitCategoryIncrement()"
-                        class="h-10 px-6 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20">
-                        <span class="material-symbols-outlined text-base">check_circle</span>
-                        Confirmar e Atualizar Orçamento
+                        class="h-11 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-md shadow-emerald-600/20">
+                        <span class="material-symbols-outlined text-lg">check</span>
+                        Atualizar orçamento
                     </button>
                 </div>
             </div>
@@ -198,7 +192,7 @@ window.openCategoryIncrementModal = async function (preselectCategory = "", auto
   const supSel = document.getElementById("incSupplierSelect");
   if (supSel) {
     supSel.innerHTML =
-      `<option value="">Sem fornecedor / Apenas orçamento</option>` +
+      `<option value="">Sem fornecedor</option>` +
       (currentSuppliers || [])
         .map((s) => `<option value="${s.id}">${s.name}${s.nif ? ` (${s.nif})` : ""}</option>`)
         .join("");
@@ -301,31 +295,31 @@ window.addCategoryIncrementRow = function (item = null, defaultCategory = "") {
       : "");
 
   const tr = document.createElement("tr");
-  tr.className = "border-b border-slate-100 inc-item-row";
+  tr.className = "border-b border-slate-100 last:border-b-0 inc-item-row";
   tr.innerHTML = `
     <td class="py-2 px-3">
-      <select class="inc-row-cat w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none" onchange="recalcCategoryIncrementPreview()">
+      <select class="inc-row-cat w-full h-9 px-2 bg-white border border-slate-200 rounded-lg focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition text-xs font-bold text-slate-800 focus:outline-none" onchange="recalcCategoryIncrementPreview()">
         ${selectHtml}
       </select>
     </td>
     <td class="py-2 px-2">
       <input type="text" required placeholder="Ex: Cimento Portland 42.5 / Serviço de Pintura"
         value="${(item?.description || "").replace(/"/g, "&quot;")}"
-        class="inc-row-desc w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none">
+        class="inc-row-desc w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition text-xs font-medium text-slate-800 focus:outline-none">
     </td>
     <td class="py-2 px-2">
       <input type="text" placeholder="un" value="${(item?.unit || "un").replace(/"/g, "&quot;")}"
-        class="inc-row-unit w-full h-9 px-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-center text-slate-700 focus:outline-none">
+        class="inc-row-unit w-full h-9 px-1.5 bg-white border border-slate-200 rounded-lg focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition text-xs font-semibold text-center text-slate-700 focus:outline-none">
     </td>
     <td class="py-2 px-2">
       <input type="number" step="0.01" min="0.01" value="${item?.quantity ?? 1}"
         oninput="recalcCategoryIncrementPreview()"
-        class="inc-row-qty w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center text-slate-800 focus:outline-none">
+        class="inc-row-qty w-full h-9 px-2 bg-white border border-slate-200 rounded-lg focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition text-xs font-bold text-center text-slate-800 focus:outline-none">
     </td>
     <td class="py-2 px-2">
       <input type="number" step="0.01" min="0" placeholder="0,00" value="${item?.unitPrice ?? ""}"
         oninput="recalcCategoryIncrementPreview()"
-        class="inc-row-price w-full h-9 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-right text-slate-900 focus:outline-none">
+        class="inc-row-price w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg focus:border-slate-400 focus:ring-2 focus:ring-slate-200 transition text-xs font-bold text-right text-slate-900 focus:outline-none">
     </td>
     <td class="py-2 px-3 text-right text-xs font-extrabold text-slate-800 tabular-nums inc-row-subtotal">
       0,00 AOA
@@ -366,7 +360,7 @@ window.recalcCategoryIncrementPreview = function () {
 
   const badge = document.getElementById("incTotalSummaryBadge");
   if (badge) {
-    badge.textContent = `Incremento Total: ${formatCurrency(grandTotal, "AOA")}`;
+    badge.textContent = formatCurrency(grandTotal, "AOA");
   }
 
   const grid = document.getElementById("incCategoryCardsGrid");
@@ -402,28 +396,31 @@ window.recalcCategoryIncrementPreview = function () {
     }
   }
 
-  grid.innerHTML = baseList
+  const affected = baseList.filter((c) => {
+    const k = c.costCenterId || c.category;
+    return (incrementsByKey[k] || incrementsByKey[c.category] || 0) > 0;
+  });
+
+  if (!affected.length) {
+    grid.innerHTML = `<p class="col-span-full text-xs text-slate-400 font-medium py-1">Preencha o preço e a quantidade dos itens para ver o impacto por centro de custo.</p>`;
+    return;
+  }
+
+  grid.innerHTML = affected
     .map((c) => {
       const k = c.costCenterId || c.category;
       const current = Number(c.currentPrevisto) || 0;
       const inc = incrementsByKey[k] || incrementsByKey[c.category] || 0;
-      const next = current + inc;
-      const isActive = inc > 0;
       const cur = c.currency || "AOA";
       return `
-        <div class="rounded-xl border ${isActive ? "border-emerald-400 bg-emerald-50/60 shadow-xs" : "border-slate-200 bg-white"} p-2.5 text-xs transition">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-extrabold text-[10px] uppercase px-1.5 py-0.5 rounded ${isActive ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}">${c.code}</span>
-            ${isActive ? `<span class="text-[11px] font-extrabold text-emerald-700">+${formatCurrency(inc, cur)}</span>` : ""}
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3.5 py-3">
+          <div class="min-w-0">
+            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">${c.code}</p>
+            <p class="text-sm font-bold text-slate-900 truncate" title="${c.name}">${c.name}</p>
           </div>
-          <p class="font-bold text-slate-800 truncate mb-1" title="${c.name}">${c.name}</p>
-          <div class="text-[11px] text-slate-500 flex justify-between">
-            <span>Atual:</span>
-            <span class="tabular-nums font-semibold">${formatCurrency(current, cur)}</span>
-          </div>
-          <div class="text-[11px] ${isActive ? "text-emerald-900 font-extrabold" : "text-slate-600 font-semibold"} flex justify-between border-t border-slate-100 pt-1 mt-1">
-            <span>Novo Total:</span>
-            <span class="tabular-nums">${formatCurrency(next, cur)}</span>
+          <div class="text-right shrink-0">
+            <p class="text-sm font-bold text-emerald-700 tabular-nums">+${formatCurrency(inc, cur)}</p>
+            <p class="text-[11px] text-slate-500 tabular-nums">${formatCurrency(current, cur)} → ${formatCurrency(current + inc, cur)}</p>
           </div>
         </div>
       `;
