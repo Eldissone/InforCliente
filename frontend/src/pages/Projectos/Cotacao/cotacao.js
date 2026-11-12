@@ -87,6 +87,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // ── Load Projects ──────────────────────────────────────────────────────────────
+/** Limita o comprimento das opções do seletor (a lista nativa ajusta-se à opção mais longa). */
+function shortOptionLabel(text, max = 56) {
+  const t = String(text || "").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
 async function loadProjects() {
   try {
     const data = await apiRequest("/projects?pageSize=100&sort=updatedAt_desc");
@@ -99,7 +105,7 @@ async function loadProjects() {
         allProjects
           .map(
             (p) =>
-              `<option value="${escapeHtml(p.id)}" ${p.id === currentProjectId ? "selected" : ""}>${escapeHtml(p.name)}</option>`
+              `<option value="${escapeHtml(p.id)}" title="${escapeHtml(p.name)}" ${p.id === currentProjectId ? "selected" : ""}>${escapeHtml(shortOptionLabel(p.name))}</option>`
           )
           .join("");
       
