@@ -2847,7 +2847,7 @@ window.triggerOrcamentoCustoAction = function (action, category = "") {
     case "open-new-cc":
       return openCCModal();
     case "open-scan":
-      return window.openCategoryIncrementModal?.(category, true);
+      return window.openCategoryIncrementModal?.(category, false);
     case "open-increment":
       return window.openCategoryIncrementModal?.(category, false);
   }
