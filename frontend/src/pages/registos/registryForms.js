@@ -951,14 +951,14 @@ function renderPessoal() {
       const body = rows.length
         ? rows.map((item, index) => `<tr>
             <td>${String(start + index + 1).padStart(2, "0")}</td>
-            <td>${esc(item.firstName || item.nome || "")}</td>
+            <td>${esc(item.firstName || item.nome || "")}${item.isUser ? ` <small class="pessoal-user-tag">(utilizador)</small>` : ""}</td>
             <td>${esc(item.lastName || item.apelido || "")}</td>
             <td>${esc(pessoalTipoLabel(item.type || item.tipo || ""))}</td>
             <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
             <td>${esc(item.phone || item.telefone || "")}</td>
             <td>${esc(item.role || item.funcao || "")}</td>
             <td class="pessoal-obras-cell">${esc(pessoalObrasLabel(item))}</td>
-            <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
+            <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">${item.isUser ? "Ver" : "Ver mais"}</button></td>
           </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
     const pageButtons = Array.from({ length: pages }, (_, index) => {
@@ -1179,6 +1179,14 @@ function renderPessoal() {
       </form>`;
 
     paintObrasField();
+
+    // Pessoal que vem de um utilizador: só leitura (gere-se em Gestão de utilizadores).
+    if (current?.isUser) {
+      const form = root.querySelector("#pessoalForm");
+      form?.querySelectorAll("input, select, button").forEach((el) => { el.disabled = true; });
+      form?.querySelector(".pessoal-submit")?.remove();
+      form?.insertAdjacentHTML("afterbegin", `<p class="registry-note">Este funcionário é um utilizador do sistema. Os dados e as obras são geridos em <a href="/Users">Gestão de utilizadores</a>.</p>`);
+    }
 
     root.querySelector("#pessoalBack")?.addEventListener("click", () => {
       view.mode = "list";

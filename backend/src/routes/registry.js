@@ -302,8 +302,66 @@ function normalizePersonnelType(value) {
   return raw.toUpperCase();
 }
 
+/**
+ * Os utilizadores que não são clientes também são pessoal interno: cada um tem uma linha em
+ * Personnel (legacyId "user:<id>"), com as obras que lhe estão atribuídas em Gestão.
+ */
+async function syncUserPersonnel() {
+  const users = await prisma.user.findMany({
+    where: { role: { not: "cliente" } },
+    select: {
+      id: true, name: true, email: true, role: true, profilePic: true,
+      profile: { select: { phone: true, jobTitle: true } },
+      assignedProjects: { select: { id: true } },
+    },
+  });
+  if (!users.length) return;
+  const existing = await prisma.personnel.findMany({
+    where: { legacyId: { startsWith: USER_CONTACT_PREFIX } },
+    include: { projectAssignments: { select: { projectId: true } } },
+  });
+  const byLegacy = new Map(existing.map((p) => [p.legacyId, p]));
+  for (const u of users) {
+    const legacyId = `${USER_CONTACT_PREFIX}${u.id}`;
+    const full = ((u.name || "").trim() || u.email.split("@")[0]).split(/\s+/);
+    const firstName = full[0];
+    const lastName = full.slice(1).join(" ") || null;
+    const role = (u.profile?.jobTitle || "").trim() || USER_ROLE_LABEL[u.role] || "Utilizador";
+    const phone = u.profile?.phone || null;
+    const projectIds = u.assignedProjects.map((p) => p.id);
+    const found = byLegacy.get(legacyId);
+    try {
+      if (!found) {
+        await prisma.personnel.create({
+          data: {
+            legacyId, firstName, lastName, email: u.email, phone, role, type: "INTERNO",
+            photoUrl: u.profilePic || null,
+            projectId: projectIds[0] || null,
+            projectAssignments: assignmentCreate(projectIds),
+          },
+        });
+        continue;
+      }
+      const next = { firstName, lastName, email: u.email, phone, role, photoUrl: u.profilePic || found.photoUrl };
+      const currentIds = found.projectAssignments.map((a) => a.projectId);
+      const sameProjects = currentIds.length === projectIds.length && projectIds.every((id) => currentIds.includes(id));
+      const sameData = Object.keys(next).every((k) => (found[k] ?? null) === (next[k] ?? null));
+      if (sameData && sameProjects) continue;
+      await prisma.personnel.update({
+        where: { id: found.id },
+        data: sameProjects
+          ? next
+          : { ...next, projectId: projectIds[0] || null, projectAssignments: assignmentReplace(projectIds) },
+      });
+    } catch (err) {
+      if (err.code !== "P2002") throw err; // pedidos em paralelo: o outro já criou
+    }
+  }
+}
+
 const personnelDef = {
   resource: "PERSONNEL",
+  beforeList: syncUserPersonnel,
   model: "personnel",
   logPrefix: "PERSONNEL",
   photoDir: "personnel",
@@ -456,6 +514,7 @@ const personnelDef = {
       photoUrl: row.photoUrl,
       active: row.active,
       legacyId: row.legacyId,
+      isUser: String(row.legacyId || "").startsWith(USER_CONTACT_PREFIX),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       ...projects,
