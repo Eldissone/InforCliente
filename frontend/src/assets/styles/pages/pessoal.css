@@ -433,3 +433,8 @@ body[data-registry="pessoal"] {
     width: 100%;
   }
 }
+
+/* Botão Voltar na linha do título, à direita */
+.pessoal-head .pessoal-back { margin: 0 0 0 auto; }
+.pessoal-head .pessoal-back .material-symbols-outlined { color: inherit; font-size: 20px; }
+.pessoal-form-card > .registry-note { grid-column: 1 / -1; margin: 0; }

@@ -899,6 +899,15 @@ function pessoalObrasLabel(item) {
   return item.project?.name || item.obraNome || "";
 }
 
+/** Célula da tabela: com mais de uma obra mostra só "N obras" (lista completa no tooltip). */
+function pessoalObrasCellHtml(item) {
+  const names = (item.projects || []).map((obra) => obra.name || obra.code).filter(Boolean);
+  if (names.length > 1) {
+    return `<span title="${esc(names.join("\n"))}">${names.length} obras</span>`;
+  }
+  return esc(pessoalObrasLabel(item));
+}
+
 function personnelProjectIdsFromItem(item) {
   if (!item) return [];
   if (Array.isArray(item.projectIds) && item.projectIds.length) {
@@ -957,7 +966,7 @@ function renderPessoal() {
             <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
             <td>${esc(item.phone || item.telefone || "")}</td>
             <td>${esc(item.role || item.funcao || "")}</td>
-            <td class="pessoal-obras-cell">${esc(pessoalObrasLabel(item))}</td>
+            <td class="pessoal-obras-cell">${pessoalObrasCellHtml(item)}</td>
             <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">${item.isUser ? "Ver" : "Ver mais"}</button></td>
           </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
@@ -1146,8 +1155,8 @@ function renderPessoal() {
           <h1>${current ? "Editar Funcionário" : "Novo Funcionário"}</h1>
           <p>${current ? "Actualizar ficha do funcionário" : "Registar ficha de novo funcionário"}</p>
         </div>
+        <button type="button" class="pessoal-back" id="pessoalBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
       </header>
-      <button type="button" class="pessoal-back" id="pessoalBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
       <form class="pessoal-form-card" id="pessoalForm" novalidate>
         <h2>${current ? "Editar Funcionário" : "Registar Novo Funcionário"}</h2>
         <label class="pessoal-photo">
