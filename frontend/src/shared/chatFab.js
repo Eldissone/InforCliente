@@ -29,6 +29,16 @@ import {
   enqueuePaymentNotification,
   loadUnreadPaymentNotifications,
 } from "./paymentNotificationBar.js";
+import {
+  alertUser,
+  desktopPermission,
+  getNotifyPrefs,
+  initNotificationSound,
+  onNotifyPrefsChange,
+  previewSound,
+  requestDesktopPermission,
+  setNotifyPrefs,
+} from "./notificationSound.js";
 
 let panelEl = null;
 let fabEl = null;
@@ -153,6 +163,11 @@ function createPanel() {
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        <button type="button" id="globalChatSound" aria-label="Som e alertas" title="Som e alertas"
+          aria-haspopup="true" aria-expanded="false"
+          class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors">
+          <span id="globalChatSoundIcon" class="material-symbols-outlined text-xl">volume_up</span>
+        </button>
         <button type="button" id="globalChatNew" aria-label="Nova conversa"
           class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors">
           <span class="material-symbols-outlined text-xl">edit_square</span>
@@ -201,7 +216,23 @@ function createPanel() {
     </footer>
   `;
 
+  const soundMenu = document.createElement("div");
+  soundMenu.id = "globalChatSoundMenu";
+  soundMenu.setAttribute("hidden", "");
+  soundMenu.setAttribute("style", SOUND_MENU_STYLE.menu);
+  panelEl.appendChild(soundMenu);
+
   document.body.appendChild(panelEl);
+
+  panelEl.querySelector("#globalChatSound")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSoundMenu();
+  });
+  panelEl.addEventListener("click", (e) => {
+    if (!e.target.closest("#globalChatSoundMenu, #globalChatSound")) toggleSoundMenu(false);
+  });
+  syncSoundToggleIcon();
+  onNotifyPrefsChange(syncSoundToggleIcon);
 
   panelEl.querySelector("#globalChatClose")?.addEventListener("click", closeChatPanel);
   panelEl.querySelector("#globalChatBack")?.addEventListener("click", showListView);
@@ -738,7 +769,143 @@ function wireSocketEvents() {
     if (payload?.type === "PAYMENT" || payload?.metadata?.helpTicketId) {
       enqueuePaymentNotification(payload);
     }
+    handleIncomingAlert(payload);
   });
+}
+
+let refreshConversationsTimer = null;
+
+function scheduleConversationsRefresh() {
+  clearTimeout(refreshConversationsTimer);
+  refreshConversationsTimer = setTimeout(loadConversations, 400);
+}
+
+function isChatNotification(payload) {
+  return payload?.type === "NEW_MESSAGE" || payload?.type === "MENTION";
+}
+
+function resolveAlertSound(payload) {
+  if (payload?.type === "MENTION") return "mention";
+  if (payload?.type === "NEW_MESSAGE") {
+    const viewing =
+      isOpen && payload.conversationId === state.activeId && document.visibilityState === "visible";
+    return viewing ? "soft" : "message";
+  }
+  const priority = String(payload?.metadata?.priority || payload?.priority || "").toUpperCase();
+  const title = String(payload?.title || "").toLowerCase();
+  if (priority === "URGENT" || priority === "HIGH" || title.includes("atraso")) return "urgent";
+  return "notification";
+}
+
+function handleIncomingAlert(payload) {
+  if (!payload) return;
+  const chat = isChatNotification(payload);
+  const conversationId = payload.conversationId || payload.metadata?.conversationId;
+
+  // Mensagens de conversas que não estão abertas não chegam por "message:new"
+  // (só quem está na sala da conversa as recebe): atualiza a lista e o badge.
+  if (chat && conversationId !== state.activeId) scheduleConversationsRefresh();
+
+  const conv = chat ? state.conversations.find((c) => c.id === conversationId) : null;
+  const key = payload.id
+    ? `notif:${payload.id}`
+    : payload.messageId
+      ? `msg:${payload.messageId}`
+      : null;
+
+  alertUser({
+    key,
+    sound: resolveAlertSound(payload),
+    title: chat
+      ? payload.type === "MENTION"
+        ? "Foi mencionado numa conversa"
+        : "Nova mensagem"
+      : payload.title || "Nova notificação",
+    body: chat ? conv?.title || "Abra o chat para ler" : payload.body || "",
+    onClick: () => {
+      if (chat && conversationId) {
+        openChatPanel();
+        loadConversations().then(() => openConversation(conversationId));
+      } else if (payload.link && /^\/(?!\/)/.test(payload.link)) {
+        window.location.assign(payload.link);
+      }
+    },
+  });
+}
+
+const SOUND_MENU_STYLE = {
+  menu: "position:absolute;top:60px;right:12px;width:250px;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 18px 40px rgba(15,23,42,.18);padding:12px;z-index:5;font-size:13px;",
+  row: "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;",
+  hint: "font-size:11px;color:#64748b;margin:2px 2px 6px;",
+  btn: "width:100%;margin-top:6px;padding:8px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;font-size:12px;cursor:pointer;",
+};
+
+function desktopStatusLabel() {
+  const perm = desktopPermission();
+  if (perm === "unsupported") return "Este browser não suporta avisos do sistema.";
+  if (perm === "denied") return "Bloqueado no browser. Ative nas definições do site.";
+  return "";
+}
+
+function syncSoundToggleIcon() {
+  const icon = el("globalChatSoundIcon");
+  if (icon) icon.textContent = getNotifyPrefs().soundEnabled ? "volume_up" : "volume_off";
+}
+
+function renderSoundMenu() {
+  const menu = el("globalChatSoundMenu");
+  if (!menu) return;
+  const prefs = getNotifyPrefs();
+  const perm = desktopPermission();
+  const status = desktopStatusLabel();
+  menu.innerHTML = `
+    <p style="font-weight:700;margin:0 2px 6px;">Alertas</p>
+    <label style="${SOUND_MENU_STYLE.row}">
+      <span>Som</span>
+      <input type="checkbox" id="globalChatSoundEnabled" ${prefs.soundEnabled ? "checked" : ""} />
+    </label>
+    <label style="${SOUND_MENU_STYLE.row}">
+      <span>Volume</span>
+      <input type="range" id="globalChatSoundVolume" min="0" max="1" step="0.1" value="${prefs.volume}"
+        style="width:120px;" ${prefs.soundEnabled ? "" : "disabled"} />
+    </label>
+    <label style="${SOUND_MENU_STYLE.row}">
+      <span>Avisos no ambiente de trabalho</span>
+      <input type="checkbox" id="globalChatDesktopEnabled"
+        ${prefs.desktopEnabled && perm === "granted" ? "checked" : ""}
+        ${perm === "unsupported" || perm === "denied" ? "disabled" : ""} />
+    </label>
+    ${status ? `<p style="${SOUND_MENU_STYLE.hint}">${escapeHtml(status)}</p>` : ""}
+    <button type="button" id="globalChatSoundTest" style="${SOUND_MENU_STYLE.btn}">Testar som</button>
+  `;
+
+  menu.querySelector("#globalChatSoundEnabled")?.addEventListener("change", (e) => {
+    setNotifyPrefs({ soundEnabled: e.target.checked });
+    renderSoundMenu();
+  });
+  menu.querySelector("#globalChatSoundVolume")?.addEventListener("change", (e) => {
+    setNotifyPrefs({ volume: Number(e.target.value) });
+    previewSound("message");
+  });
+  menu.querySelector("#globalChatDesktopEnabled")?.addEventListener("change", async (e) => {
+    if (e.target.checked) await requestDesktopPermission();
+    else setNotifyPrefs({ desktopEnabled: false });
+    renderSoundMenu();
+  });
+  menu.querySelector("#globalChatSoundTest")?.addEventListener("click", () => previewSound("message"));
+}
+
+function toggleSoundMenu(force) {
+  const menu = el("globalChatSoundMenu");
+  if (!menu) return;
+  const show = typeof force === "boolean" ? force : menu.hasAttribute("hidden");
+  if (show) {
+    renderSoundMenu();
+    menu.removeAttribute("hidden");
+  } else {
+    menu.setAttribute("hidden", "");
+  }
+  el("globalChatSound")?.setAttribute("aria-expanded", String(show));
 }
 
 export function openChatPanel() {
@@ -781,6 +948,7 @@ export function setChatUnreadCount(count) {
 }
 
 export async function initChatFab() {
+  initNotificationSound();
   createFab();
   createPanel();
   wireSocketEvents();

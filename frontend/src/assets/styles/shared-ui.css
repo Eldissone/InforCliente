@@ -111,7 +111,7 @@
     flex-direction: column;
     box-sizing: border-box;
     width: 3.85rem;
-    border-radius: 9999px;
+    border-radius: 20px;
     padding: 0.85rem 0.45rem;
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(28px) saturate(180%);
