@@ -32,33 +32,33 @@
     <div id="appHeader"></div>
     <main class="flex-1 max-w-[1400px] w-full mx-auto p-4 md:p-8 pt-24 mt-14     flex flex-col">
         <!-- Header Section -->
-        <div id="cotacaoPageHead" class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-            <div>
-                <nav class="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    <a href="../../Projectos/ProjectGeral.html" class="hover:text-slate-600 transition-colors">Obras</a>
-                    <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="text-[#2afc8d]">Cotação & Precificação</span>
-                </nav>
-                <div class="flex items-center gap-4 mt-1 flex-wrap">
+        <div id="cotacaoPageHead" class="mb-8">
+            <nav class="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                <a href="../../Projectos/ProjectGeral.html" class="hover:text-slate-600 transition-colors">Obras</a>
+                <span class="material-symbols-outlined text-xs">chevron_right</span>
+                <span class="text-[#2afc8d]">Cotação & Precificação</span>
+            </nav>
+            <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-4 min-w-0 flex-1">
                     <h1 id="selectedProjName"
-                        class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight">Cotação</h1>
-                    <select id="projectSelector" style="width:100%;max-width:420px;text-overflow:ellipsis"
-                        class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer hidden max-w-[300px]">
+                        class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight leading-tight min-w-0 break-words">Cotação</h1>
+                    <select id="projectSelector" style="text-overflow:ellipsis"
+                        class="h-10 px-4 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/40 shadow-sm cursor-pointer hidden shrink-0 w-auto max-w-[280px]">
                         <option value="">Selecionar Obra...</option>
                     </select>
                 </div>
-            </div>
-            <div class="flex gap-3 flex-wrap items-center">
-                <button id="btnNewExtra" type="button"
-                    class="h-9 px-4 rounded-xl bg-[#2afc8d] text-[#212e3e] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0">
-                    <span class="material-symbols-outlined text-base">add</span>
-                    Pedido de Compra
-                </button>
-                <a href="#" id="btnBackToBudget"
-                    class="h-11 px-5 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold flex items-center gap-2 hover:bg-slate-300 transition-all shadow-sm">
-                    <span class="material-symbols-outlined text-lg">arrow_back</span>
-                    Voltar
-                </a>
+                <div class="flex gap-3 items-center shrink-0">
+                    <button id="btnNewExtra" type="button"
+                        class="h-10 px-4 rounded-xl bg-[#2afc8d] text-[#212e3e] text-xs font-black flex items-center gap-2 hover:opacity-90 transition-all shadow-md shadow-[#2afc8d]/20 shrink-0 whitespace-nowrap">
+                        <span class="material-symbols-outlined text-base">add</span>
+                        Pedido de Compra
+                    </button>
+                    <a href="#" id="btnBackToBudget"
+                        class="h-10 px-5 rounded-xl bg-slate-200 text-slate-700 text-sm font-bold flex items-center gap-2 hover:bg-slate-300 transition-all shadow-sm shrink-0 whitespace-nowrap">
+                        <span class="material-symbols-outlined text-lg">arrow_back</span>
+                        Voltar
+                    </a>
+                </div>
             </div>
         </div>
 
