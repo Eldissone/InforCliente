@@ -1,6 +1,7 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { mountAppHeader } from "../../shared/appHeader.js";
 
 checkAuth({ allowedRoles: ["cliente", "admin", "operador", "user"] });
 import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
@@ -2003,6 +2004,7 @@ function hoistTabs() {
 
 async function init() {
   hoistTabs(); // Fix any tab nesting issues first
+  mountAppHeader();
   initMobileMenu();
   wireLogout();
 

@@ -10,7 +10,7 @@ function renderAppHeader() {
   return `<nav class="app-top-nav fixed top-0 w-full z-50 bg-[#212e3e] border-b border-slate-800 transition-all duration-300" data-shared-header>
     <div class="max-w-[1500px] mx-auto px-4 md:px-8 h-16 flex justify-between items-center">
       <div class="flex items-center gap-10">
-        <a href="/Dashboard" class="app-nav-brand text-xl font-bold text-white tracking-tight flex items-center gap-2">
+        <a href="/Dashboard" data-nav-dashboard class="app-nav-brand text-xl font-bold text-white tracking-tight flex items-center gap-2">
           <span class="app-nav-mark w-14 h-8 bg-[#2afc8d] rounded-lg flex items-center justify-center text-[#212e3e] font-black italic">Info</span>
           <span id="navBrandText">Gestor</span>
         </a>
@@ -28,6 +28,10 @@ function renderAppHeader() {
         <button data-user-profile class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-[#2afc8d] hover:bg-[#2afc8d]/10 transition-all" type="button">
           <span class="material-symbols-outlined text-sm">person</span>
           <span data-user-role></span>
+        </button>
+        <button data-logout class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all" type="button" title="Sair">
+          <span class="material-symbols-outlined text-base">logout</span>
+          <span>Sair</span>
         </button>
         <button id="mobileMenuBtn" aria-expanded="false" class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors" type="button">
           <span class="material-symbols-outlined">menu</span>
