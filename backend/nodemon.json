@@ -1,3 +1,13 @@
 {
-  "ignore": ["var/**", "uploads/**", "node_modules/**"]
+  "watch": ["src"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "var/**",
+    "uploads/**",
+    "uploads*/**",
+    "node_modules/**",
+    "data/**",
+    "scratch/**",
+    "test/**"
+  ]
 }

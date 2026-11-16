@@ -32,6 +32,8 @@ Thumbs.db
 
 # Uploads (imagens e ficheiros gerados pelo utilizador)
 backend/uploads/
+backend/uploads*/
+backend/uploads.previous/
 
 # Configuração local das cópias de segurança (frase-passe e credenciais cifradas)
 backend/var/
