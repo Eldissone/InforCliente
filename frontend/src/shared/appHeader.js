@@ -29,7 +29,7 @@ function renderAppHeader() {
           <span class="material-symbols-outlined text-sm">person</span>
           <span data-user-role></span>
         </button>
-        <button data-logout class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all" type="button" title="Sair">
+        <button data-logout class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all" type="button" title="Sair">
           <span class="material-symbols-outlined text-base">logout</span>
           <span>Sair</span>
         </button>
