@@ -26,6 +26,7 @@ const {
   revertQuoteDeliveryToPending,
 } = require("../services/deliveryFieldBridge");
 const { repairConsumedPlanAllocations } = require("../services/planAllocationConsumption");
+const { withUppercaseProductName } = require("../utils/productName");
 
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
@@ -73,7 +74,7 @@ async function getLatestEvidenceByProduct(productIds, warehouseId = null) {
 function mergeProductImage(item, evidenceMap) {
   if (!item?.product) return item;
   const image = item.product.image || evidenceMap[item.productId] || null;
-  return { ...item, product: { ...item.product, image } };
+  return { ...item, product: withUppercaseProductName({ ...item.product, image }) };
 }
 
 function normalizeOwnerId(value) {
@@ -326,7 +327,11 @@ stockRoutes.get(
       : [];
     const userById = Object.fromEntries(users.map((u) => [u.id, u]));
 
-    let enriched = items.map((m) => ({ ...m, user: userById[m.userId] || null }));
+    let enriched = items.map((m) => ({
+      ...m,
+      product: withUppercaseProductName(m.product),
+      user: userById[m.userId] || null,
+    }));
     enriched = filterStockMovementsForCliente(enriched, req.user?.role);
     return res.json({ items: enriched });
   })

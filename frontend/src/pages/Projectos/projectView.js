@@ -3701,14 +3701,14 @@ function renderStockMovements(items) {
           <div class="text-[10px] font-black uppercase tracking-widest ${typeColor} inline-block px-2 py-0.5 rounded mt-1">${typeLabel}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || 'Material')}</div>
+          <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(m.product?.name || 'Material')}</div>
           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.product?.reference || '-'}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="text-xs font-black text-slate-900">${m.quantity} ${m.product?.unit || 'un'}</div>
+          <div class="text-xs font-black text-slate-900 uppercase">${m.quantity} ${m.product?.unit || 'un'}</div>
         </td>
         <td class="px-10 py-5 text-[10px] font-medium text-slate-500 hidden md:table-cell">
-           <div class="font-bold text-slate-700">${escapeHtml(driverInfo)}</div>
+           <div class="font-bold text-slate-700 uppercase">${escapeHtml(driverInfo)}</div>
            <div class="uppercase text-[9px] font-black text-slate-400">${escapeHtml(vehicleInfo)}</div>
         </td>
         <td class="px-6 md:px-10 py-5 text-right">
@@ -3834,7 +3834,7 @@ function renderStockDuplicateDebits(groups) {
                       <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${userName || "-"}</div>
                     </td>
                     <td class="px-6 py-4">
-                      <div class="text-xs font-bold text-slate-900">${productName}</div>
+                      <div class="text-xs font-bold text-slate-900 uppercase">${productName}</div>
                       <div class="mt-1">${badge}</div>
                     </td>
                     <td class="px-6 py-4 text-center text-xs font-black text-slate-900">${qty}</td>
@@ -4498,7 +4498,7 @@ function renderStockInventory(movements, summary) {
            <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
         </td>
-        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${product.unit || "un"}</td>
+        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell uppercase">${product.unit || "un"}</td>
         <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${consumed}</td>
@@ -4974,8 +4974,8 @@ function splitPlanRequestItems(items = []) {
 function renderPlanRequestChips(items, badgeClass) {
   return items.map(m => `
     <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-      <span class="text-sm font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Desconhecido")}</span>
-      <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
+      <span class="text-sm font-bold text-slate-800 line-clamp-1 uppercase">${escapeHtml(m.product?.name || "Desconhecido")}</span>
+      <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black uppercase">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
     </div>
   `).join("");
 }
