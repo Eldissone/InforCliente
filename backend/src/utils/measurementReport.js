@@ -37,13 +37,17 @@ function getRootTasks(tasks) {
     );
 }
 
-function historyQtyAt(taskId, dateStr, history, fallback = 0) {
+function historyQtyAt(taskId, dateStr, history, fallback = 0, currentQty = null) {
   if (!dateStr || !history?.length) return fallback;
+  const mine = history.filter((h) => h.taskId === taskId);
+  if (!mine.length) return fallback;
   const cutoff = new Date(`${String(dateStr).slice(0, 10)}T23:59:59`);
-  const entries = history
-    .filter((h) => h.taskId === taskId && new Date(h.date) <= cutoff)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  return entries.length ? num(entries[0].accumulatedQty) : 0;
+  const upto = mine.filter((h) => new Date(h.date) <= cutoff);
+  // Sem movimentos depois da data: é o estado actual da tarefa (igual ao Avanço Físico).
+  if (upto.length === mine.length && currentQty !== null) return currentQty;
+  // O acumulado gravado em cada movimento depende da ordem em que foi lançado (lançamentos
+  // com data anterior ficam desfasados); somar as quantidades até à data é sempre correcto.
+  return upto.reduce((sum, h) => sum + num(h.executedQty), 0);
 }
 
 function resolveTaskQtys(t, allTasks, history, currentDate, prevDate) {
@@ -77,9 +81,9 @@ function resolveTaskQtys(t, allTasks, history, currentDate, prevDate) {
   const uv = taskUnitValue(t);
   const exp = num(t.expectedQty);
   const acc = currentDate
-    ? historyQtyAt(t.id, currentDate, history, num(t.executedQty))
+    ? historyQtyAt(t.id, currentDate, history, num(t.executedQty), num(t.executedQty))
     : num(t.executedQty);
-  const prev = prevDate ? historyQtyAt(t.id, prevDate, history, 0) : 0;
+  const prev = prevDate ? historyQtyAt(t.id, prevDate, history, 0, num(t.executedQty)) : 0;
   const period = Math.max(0, acc - prev);
   const open = Math.max(0, exp - acc);
   const totalVal = uv * exp;

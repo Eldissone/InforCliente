@@ -24,13 +24,17 @@ export function getRootTasks(tasks) {
     );
 }
 
-export function wbsHistoryQtyAt(taskId, dateStr, history, fallback = 0) {
+export function wbsHistoryQtyAt(taskId, dateStr, history, fallback = 0, currentQty = null) {
   if (!dateStr || !history?.length) return fallback;
+  const mine = history.filter((h) => h.taskId === taskId);
+  if (!mine.length) return fallback;
   const cutoff = new Date(`${String(dateStr).slice(0, 10)}T23:59:59`);
-  const entries = history
-    .filter((h) => h.taskId === taskId && new Date(h.date) <= cutoff)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  return entries.length ? wbsNum(entries[0].accumulatedQty) : 0;
+  const upto = mine.filter((h) => new Date(h.date) <= cutoff);
+  // Sem movimentos depois da data: é o estado actual da tarefa (igual ao Avanço Físico).
+  if (upto.length === mine.length && currentQty !== null) return currentQty;
+  // O acumulado gravado em cada movimento depende da ordem em que foi lançado (lançamentos
+  // com data anterior ficam desfasados); somar as quantidades até à data é sempre correcto.
+  return upto.reduce((sum, h) => sum + wbsNum(h.executedQty), 0);
 }
 
 export function resolveWbsCode(task, fallback = "") {
@@ -67,9 +71,9 @@ export function resolveTaskQtys(t, allTasks, history, currentDate, prevDate) {
   const uv = wbsTaskUnitValue(t);
   const exp = wbsNum(t.expectedQty);
   const acc = currentDate
-    ? wbsHistoryQtyAt(t.id, currentDate, history, wbsNum(t.executedQty))
+    ? wbsHistoryQtyAt(t.id, currentDate, history, wbsNum(t.executedQty), wbsNum(t.executedQty))
     : wbsNum(t.executedQty);
-  const prev = prevDate ? wbsHistoryQtyAt(t.id, prevDate, history, 0) : 0;
+  const prev = prevDate ? wbsHistoryQtyAt(t.id, prevDate, history, 0, wbsNum(t.executedQty)) : 0;
   const period = Math.max(0, acc - prev);
   const open = Math.max(0, exp - acc);
   const totalVal = uv * exp;
