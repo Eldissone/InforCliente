@@ -30,6 +30,10 @@ model User {
   messageReads             MessageRead[]
   mentionsReceived         Mention[]                 @relation("MentionsReceived")
   notifications            Notification[]
+  notificationPreference   UserNotificationPreference?
+  aiRequests               AiRequestLog[]
+  aiConversations          AiConversation[]
+  aiDigests                AiDigest[]
   permissionAuditLogs      PermissionAuditLog[]
   helpTicketsCreated       HelpTicket[]              @relation("HelpTicketAuthor")
   helpTicketsResolved      HelpTicket[]              @relation("HelpTicketResolver")
@@ -112,6 +116,8 @@ model Message {
   status         MessageStatus       @default(SENT)
   createdAt      DateTime            @default(now())
   editedAt       DateTime?
+  /// Resposta do assistente (@IA). senderId = quem perguntou.
+  aiGenerated    Boolean             @default(false)
   conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User                @relation("MessageSender", fields: [senderId], references: [id])
   reads          MessageRead[]
@@ -149,6 +155,17 @@ enum NotificationType {
   APPROVAL
   SYSTEM
   PAYMENT
+  DAILY_PLAN
+  STOCK
+  DEADLINE
+  AI_INSIGHT
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 model Notification {
@@ -160,10 +177,38 @@ model Notification {
   link      String?
   read      Boolean          @default(false)
   metadata  Json?
+  /// Prioridade define o som/destaque no frontend (URGENT = alarme).
+  priority   NotificationPriority @default(NORMAL)
+  /// Obra a que a notificação diz respeito (filtros e silenciar por obra).
+  projectId  String?
+  /// Notificações com o mesmo groupKey, não lidas e próximas no tempo, são
+  /// fundidas numa só (groupCount conta as ocorrências; createdAt = última).
+  groupKey   String?
+  groupCount Int                  @default(1)
   createdAt DateTime         @default(now())
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([userId, read, createdAt])
+  @@index([userId, groupKey])
+  @@index([projectId])
+}
+
+/// Preferências de alertas por utilizador (som, avisos do sistema, horário
+/// de não incomodar, tipos e obras silenciados). Silenciar não esconde a
+/// notificação do centro de notificações — só tira o som e o aviso.
+model UserNotificationPreference {
+  userId          String   @id
+  soundEnabled    Boolean  @default(true)
+  volume          Float    @default(0.6)
+  desktopEnabled  Boolean  @default(false)
+  dndEnabled      Boolean  @default(false)
+  dndFrom         String   @default("22:00")
+  dndTo           String   @default("07:00")
+  mutedTypes      Json     @default("[]")
+  mutedProjectIds Json     @default("[]")
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model MessageAttachment {
@@ -273,6 +318,7 @@ model Project {
   folders             ProjectFolder[]
   payments            ProjectPayment[]
   photos              ProjectPhoto[]
+  safetyObservations  SafetyObservation[]
   progressHistory     ProjectProgressHistory[]
   progressTasks       ProjectProgressTask[]
   measurementReports  MeasurementReport[]
@@ -296,6 +342,9 @@ model Project {
   projectContacts     ProjectContact[]
   invoices            Invoice[]
   bankMovements       BankMovement[]
+  notifications       Notification[]
+  aiExclusion         AiDataExclusion?
+  aiConversations     AiConversation[]
 
   // ─── Configuração de faturação da obra (Área Financeira) ───
   billingVatCativo          Boolean @default(false) // IVA cativo: recebimento não considera IVA
@@ -431,10 +480,25 @@ model Alert {
   createdAt DateTime      @default(now())
   clientId  String?
   projectId String?
+  /// Alertas da IA (Fase 3.2): CHAIN_DELAY | MATERIAL_SHORTAGE | STALLED_NEED | BUDGET_OVERRUN
+  kind          String?
+  /// Identifica a situação (ex.: "MATERIAL_SHORTAGE:obra:produto") para não repetir o alerta.
+  fingerprint   String?   @unique
+  /// Factos do sistema que deram origem ao alerta.
+  metadata      Json?
+  /// Explicação/sugestão escrita pela IA a partir dos factos (opcional).
+  aiExplanation String?
+  /// Interno: nunca mostrado a utilizadores com perfil cliente.
+  internal      Boolean   @default(false)
+  lastSeenAt    DateTime?
+  resolvedAt    DateTime?
+  /// Gravidade com que o alerta já foi enviado como urgente (evita repetir).
+  notifiedSeverity String?
   client    Client?       @relation(fields: [clientId], references: [id])
   project   Project?      @relation(fields: [projectId], references: [id])
 
   @@index([status, severity, createdAt])
+  @@index([projectId, status])
 }
 
 model ProjectProgressTask {
@@ -651,8 +715,40 @@ model ProjectPhoto {
   description String?
   createdAt   DateTime       @default(now())
   itemId      String?
+  /// Tarefa WBS a que a foto foi associada (sugerida pela IA e confirmada por uma pessoa).
+  progressTaskId String?
+  /// Última análise da IA: { caption, taskId, taskConfidence, risks[], ppe, model }.
+  aiAnalysis     Json?
+  aiAnalyzedAt   DateTime?
   movement    StockMovement? @relation(fields: [movementId], references: [id])
   project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  safetyObservations SafetyObservation[]
+}
+
+/// Histórico de segurança da obra (Fase 3.5). Os riscos vistos pela IA nas fotos
+/// ficam SUGGESTED até uma pessoa os confirmar ou descartar.
+model SafetyObservation {
+  id          String        @id @default(cuid())
+  projectId   String
+  photoId     String?
+  /// AI_PHOTO | MANUAL
+  source      String        @default("AI_PHOTO")
+  /// PPE (EPI) | FALL (queda em altura) | HOUSEKEEPING (arrumação) | MACHINERY | ELECTRICAL | EXCAVATION | OTHER
+  category    String
+  severity    AlertSeverity @default(MEDIUM)
+  description String
+  /// SUGGESTED | CONFIRMED | DISMISSED | RESOLVED
+  status      String        @default("SUGGESTED")
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt  DateTime?
+  reviewNotes String?
+  createdAt   DateTime      @default(now())
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  photo       ProjectPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, createdAt])
+  @@index([photoId])
 }
 
 model RolePermission {
@@ -805,6 +901,7 @@ enum AlertSeverity {
 enum AlertStatus {
   OPEN
   ACK
+  RESOLVED
 }
 
 enum PaymentStatus {
@@ -2185,4 +2282,139 @@ model BankBalance {
   statement BankStatement? @relation(fields: [statementId], references: [id], onDelete: SetNull)
 
   @@index([cardId, balanceDate])
+}
+
+// ─── Inteligência Artificial (Fase 2.0) ─────────────────────────────────────
+
+/// Configuração global da IA (linha única, id = "default"), gerida no
+/// separador "Inteligência Artificial" da Gestão do Sistema (só admin).
+model AiSettings {
+  id                   String    @id @default("default")
+  enabled              Boolean   @default(true)
+  /// Adaptador em src/services/ai/providers ("gemini", "openai_compatible").
+  provider             String    @default("gemini")
+  model                String    @default("gemini-3.8-flash")
+  fallbackModels       Json      @default("[]")
+  baseUrl              String?
+  /// Chave cifrada (AES-256-GCM com o JWT_SECRET). Nunca sai do servidor.
+  apiKeyWrapped        String?
+  /// { assistant, chat_mention, digests, alerts, voice, photos, invoice_scan }
+  features             Json      @default("{}")
+  /// Categoria de dados → "off" | "on" | "anonymize"
+  dataCategories       Json      @default("{}")
+  monthlyBudget        Decimal?  @db.Decimal(12, 2)
+  budgetCurrency       String    @default("USD")
+  /// Preço por 1 milhão de tokens (para estimar o custo de cada pedido).
+  inputPricePerMTok    Decimal?  @db.Decimal(12, 4)
+  outputPricePerMTok   Decimal?  @db.Decimal(12, 4)
+  dailyRequestsPerUser Int       @default(50)
+  /// "AAAA-MM" do último aviso de 80 % do orçamento (para avisar 1x por mês).
+  budgetAlertMonth     String?
+  updatedAt            DateTime  @updatedAt
+  updatedById          String?
+}
+
+/// Obras que nunca são enviadas à IA.
+model AiDataExclusion {
+  projectId   String   @id
+  createdAt   DateTime @default(now())
+  createdById String?
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// Quem recebe cada resumo/alerta da IA (configurado na Gestão).
+model DigestRecipientRule {
+  id         String   @id @default(cuid())
+  /// DAILY_SUMMARY | WEEKLY_SUMMARY | PREDICTIVE_ALERTS | URGENT_ALERTS
+  digestType String
+  /// PROJECT_DIRECTOR | DIRECTION | FINANCE | OPERATORS
+  group      String
+  enabled    Boolean  @default(true)
+  /// ["in_app", "email"]
+  channels   Json     @default("[\"in_app\"]")
+  /// FULL | OPERATIONAL | FINANCIAL
+  content    String   @default("FULL")
+  sendTime   String   @default("07:30")
+  /// Utilizadores escolhidos (DIRECTION / OPERATORS).
+  userIds    Json     @default("[]")
+  /// Obras incluídas; vazio = todas as obras a que o utilizador tem acesso.
+  projectIds Json     @default("[]")
+  /// Último período enviado pelo agendador (ex.: "2026-11-16" ou "2026-W47").
+  lastRunKey String?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([digestType, group])
+}
+
+/// Resumo (diário/semanal) entregue a um utilizador. Os números vêm do sistema;
+/// a IA só escreve os pontos de atenção (aiUsed).
+model AiDigest {
+  id         String   @id @default(cuid())
+  userId     String
+  digestType String
+  /// Período: "2026-11-16" (diário) ou "2026-W47" (semanal).
+  periodKey  String
+  title      String
+  summary    String
+  /// { projects: [...secções por obra], highlights: [...] }
+  content    Json
+  projectIds Json     @default("[]")
+  aiUsed     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, digestType, periodKey])
+  @@index([userId, createdAt])
+}
+
+/// Registo de cada pedido à IA: o que foi enviado, quem pediu, consumo e custo.
+model AiRequestLog {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  userId        String?
+  feature       String
+  provider      String
+  model         String?
+  categories    Json     @default("[]")
+  projectIds    Json     @default("[]")
+  inputTokens   Int?
+  outputTokens  Int?
+  estimatedCost Decimal? @db.Decimal(12, 6)
+  /// OK | ERROR | BLOCKED
+  status        String
+  errorMessage  String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+}
+
+/// Conversa com o assistente da obra (privada de cada utilizador).
+model AiConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  projectId String?
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  /// "user" | "assistant"
+  role           String
+  content        String
+  /// Ferramentas usadas na resposta: [{ name, label, projectId }] (fontes mostradas ao utilizador).
+  sources        Json           @default("[]")
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }

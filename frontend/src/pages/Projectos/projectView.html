@@ -52,6 +52,12 @@
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <span id="obraEstadoChip" class="inline-flex items-center h-8 px-3 rounded-full bg-slate-100 text-xs font-bold text-slate-700">—</span>
                     <button type="button" id="btnAtualizarEstado" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800">Atualizar estado</button>
+                    <button type="button" id="btnAiAssistant" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:inline-flex;align-items:center;gap:6px">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">auto_awesome</span>Assistente IA</button>
+                    <button type="button" id="btnAiProgress" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:none;align-items:center;gap:6px" title="Registar o trabalho feito por texto ou voz">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">mic</span>Registar execução</button>
+                    <button type="button" id="btnAiNeeds" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:none;align-items:center;gap:6px" title="Criar necessidades a partir de texto ou foto da lista">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">add_shopping_cart</span>Necessidade com IA</button>
                 </div>
             </div>
             <!-- <div class="flex items-center gap-3 shrink-0">
@@ -562,6 +568,9 @@
                     <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
                     <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto
                         (WBS).</p>
+                    <button id="btnAiMonthlyReport" type="button" style="display:none"
+                        class="mt-2 h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800 items-center gap-1.5">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">auto_awesome</span>Relatório mensal ao cliente</button>
                 </div>
                 <div class="flex flex-nowrap items-end gap-2 ml-auto shrink-0">
                     <div class="flex items-end gap-1">
@@ -1572,11 +1581,17 @@
                     <h2 class="text-2xl font-bold">Galeria da Obra</h2>
                     <p class="text-sm text-slate-400 font-medium">Fotos de progresso geral visíveis ao cliente.</p>
                 </div>
+                <div class="flex flex-wrap items-center gap-3 justify-end">
+                <button id="btnSafetyHistory" type="button" style="display:none"
+                    class="h-10 px-4 rounded-[24px] bg-white/10 text-white font-bold items-center justify-center gap-2 hover:bg-white/20 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-xl" style="color:#fbbf24">health_and_safety</span><span class="hidden md:inline">Segurança</span>
+                </button>
                 <button id="addPhotoBtn" data-role-visible="admin,operador"
                     class="h-10 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
                     <span class="hidden md:inline">Novo Registo</span> <span
                         class="material-symbols-outlined text-2xl">add_a_photo</span>
                 </button>
+                </div>
             </div>
 
             <div id="adminGalleryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">

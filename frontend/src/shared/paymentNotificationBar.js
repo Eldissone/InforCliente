@@ -61,7 +61,15 @@ function isComprovativoNotification(payload) {
   );
 }
 
-function openNotificationTarget(payload) {
+export function openNotificationTarget(payload) {
+  if (payload?.metadata?.digestId) {
+    import("./digestViewer.js").then(({ openDigest }) => openDigest(payload.metadata.digestId));
+    return;
+  }
+  if (Array.isArray(payload?.metadata?.alertIds)) {
+    import("./alertsViewer.js").then(({ openAlerts }) => openAlerts({ ids: payload.metadata.alertIds }));
+    return;
+  }
   if (payload?.type === "PAYMENT") {
     if (isComprovativoNotification(payload)) {
       openDocumentViewer(payload.metadata.comprovativoUrl, "Comprovativo de pagamento");

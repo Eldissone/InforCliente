@@ -1,0 +1,14 @@
+-- Fase 3.2: alertas preditivos da IA
+ALTER TYPE "AlertStatus" ADD VALUE IF NOT EXISTS 'RESOLVED';
+
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "kind" TEXT;
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "fingerprint" TEXT;
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "metadata" JSONB;
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "aiExplanation" TEXT;
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "internal" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3);
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMP(3);
+ALTER TABLE "Alert" ADD COLUMN IF NOT EXISTS "notifiedSeverity" TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "Alert_fingerprint_key" ON "Alert"("fingerprint");
+CREATE INDEX IF NOT EXISTS "Alert_projectId_status_idx" ON "Alert"("projectId", "status");

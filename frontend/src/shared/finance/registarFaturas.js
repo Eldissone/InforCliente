@@ -782,7 +782,7 @@ async function openInvoiceModal(invoice) {
           <p class="finance-scan-status" id="inv_docNote">${
             aiReady
               ? '<span class="material-symbols-outlined">info</span>Escolha o ficheiro e use «Ler com IA» para preencher os campos. Confira sempre os valores.'
-              : '<span class="material-symbols-outlined">info</span>Leitura automática indisponível (falta GEMINI_API_KEY). Anexe o ficheiro e preencha à mão.'
+              : `<span class="material-symbols-outlined">info</span>${esc(aiUnavailableText())} Anexe o ficheiro e preencha à mão.`
           }</p>
         </div>
 
@@ -1105,7 +1105,7 @@ async function openInvoiceModal(invoice) {
               aiReady ? "ready" : "idle",
               aiReady
                 ? `<span class="material-symbols-outlined">task_alt</span>Ficheiro pronto. Use «Ler com IA» para preencher os campos automaticamente.`
-                : `<span class="material-symbols-outlined">info</span>Leitura automática indisponível (falta GEMINI_API_KEY). O ficheiro é anexado ao guardar.`
+                : `<span class="material-symbols-outlined">info</span>${esc(aiUnavailableText())} O ficheiro é anexado ao guardar.`
             );
           }
         });
@@ -1341,12 +1341,16 @@ async function removeInvoice(invoice) {
 
 /* ─── Entrada ─────────────────────────────────────────────────────────────── */
 
+function aiUnavailableText() {
+  return state.ai?.reason || "Leitura automática indisponível.";
+}
+
 async function loadAiStatus() {
   try {
     const ai = await apiRequest("/finance/ai-status");
-    state.ai = { configured: Boolean(ai?.configured), model: ai?.model || null, loaded: true };
+    state.ai = { configured: Boolean(ai?.configured), model: ai?.model || null, reason: ai?.reason || null, loaded: true };
   } catch {
-    state.ai = { configured: false, model: null, loaded: true };
+    state.ai = { configured: false, model: null, reason: null, loaded: true };
   }
 }
 

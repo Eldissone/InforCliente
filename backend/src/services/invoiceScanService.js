@@ -489,8 +489,20 @@ function buildThinkingConfigForModel(modelName) {
   return undefined;
 }
 
-async function callGemini({ mimeType, base64Data, projects, costCenters = [] }) {
-  const baseUrl = config.ai.geminiBaseUrl.replace(/\/$/, "");
+/** Configuração por omissão (só .env) — a usada antes da Gestão do Sistema. */
+function envAiConfig() {
+  return {
+    available: Boolean(config.ai.geminiApiKey),
+    reason: "Leitura automática de faturas indisponível: falta configurar GEMINI_API_KEY no .env do servidor.",
+    apiKey: config.ai.geminiApiKey,
+    model: config.ai.geminiModel,
+    baseUrl: config.ai.geminiBaseUrl,
+    fallbackModels: [],
+  };
+}
+
+async function callGemini({ mimeType, base64Data, projects, costCenters = [], ai = envAiConfig() }) {
+  const baseUrl = String(ai.baseUrl || config.ai.geminiBaseUrl).replace(/\/$/, "");
 
   const projectList = (projects || [])
     .slice(0, 80)
@@ -512,7 +524,7 @@ async function callGemini({ mimeType, base64Data, projects, costCenters = [] }) 
     );
   }
 
-  const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
+  const models = [...new Set([ai.model, ...(ai.fallbackModels || []), ...GEMINI_FALLBACK_MODELS].filter(Boolean))];
   let lastResult = null;
   let lastError = null;
 
@@ -544,7 +556,7 @@ async function callGemini({ mimeType, base64Data, projects, costCenters = [] }) 
     const timeout = setTimeout(() => controller.abort(), GEMINI_PER_MODEL_TIMEOUT_MS);
     try {
       const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
-      const response = await fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
+      const response = await fetch(`${url}?key=${encodeURIComponent(ai.apiKey)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -592,16 +604,36 @@ function buildHttpError(status, message, code) {
 /**
  * Lê um documento (PDF/imagem) e devolve os campos normalizados da fatura.
  *
- * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array }} input
+ * `aiConfig` vem de `resolveInvoiceAiConfig()` (Gestão do Sistema → IA). Sem ele
+ * usa só o .env, como antes. Com `aiConfig`, o pedido fica registado no consumo.
+ *
+ * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array,
+ *           aiConfig?: object, userId?: string, io?: object }} input
  */
-async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [] }) {
-  if (!isConfigured()) {
-    throw buildHttpError(
-      503,
-      "Leitura automática de faturas indisponível: falta configurar GEMINI_API_KEY no .env do servidor.",
-      "INVOICE_AI_NOT_CONFIGURED"
-    );
+async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [], aiConfig, userId, io }) {
+  const ai = aiConfig || envAiConfig();
+  // Obras excluídas na Gestão do Sistema não vão na lista enviada à IA.
+  if (Array.isArray(ai.excludedProjectIds) && ai.excludedProjectIds.length) {
+    const excluded = new Set(ai.excludedProjectIds);
+    projects = projects.filter((p) => !excluded.has(p.id));
   }
+  if (!ai.available) {
+    throw buildHttpError(503, ai.reason || "Leitura automática de faturas indisponível.", "INVOICE_AI_NOT_CONFIGURED");
+  }
+  const track = (status, extra = {}) => {
+    if (!aiConfig) return;
+    const { logRequest } = require("./ai/usageService");
+    logRequest({
+      userId,
+      feature: "invoice_scan",
+      provider: "gemini",
+      categories: ["documents"],
+      projectIds: [],
+      status,
+      io,
+      ...extra,
+    });
+  };
   if (!buffer || !buffer.length) {
     throw buildHttpError(400, "Nenhum ficheiro recebido para leitura.", "NO_FILE_UPLOADED");
   }
@@ -624,18 +656,20 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], 
 
   let response;
   let payloadText;
-  let model = config.ai.geminiModel;
+  let model = ai.model;
   try {
     const result = await callGemini({
       mimeType: resolvedMime,
       base64Data: buffer.toString("base64"),
       projects,
       costCenters,
+      ai,
     });
     response = result.response;
     payloadText = result.payloadText;
     model = result.model;
   } catch (error) {
+    track("ERROR", { model, errorMessage: error?.message });
     if (error?.name === "AbortError") {
       throw buildHttpError(
         504,
@@ -660,24 +694,25 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], 
 
   if (!response.ok) {
     const apiMessage = payload?.error?.message || "";
+    track("ERROR", { model, errorMessage: `HTTP ${response.status} ${apiMessage}`.trim() });
     if (response.status === 400 && /API key not valid/i.test(apiMessage)) {
       throw buildHttpError(
         503,
-        "A chave GEMINI_API_KEY configurada não é válida. Atualize-a no .env do servidor.",
+        "A chave do Gemini configurada não é válida. Atualize-a na Gestão do Sistema → Inteligência Artificial (ou GEMINI_API_KEY no .env).",
         "AI_INVALID_KEY"
       );
     }
     if (response.status === 403) {
       throw buildHttpError(
         503,
-        "A chave GEMINI_API_KEY não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
+        "A chave do Gemini não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
         "AI_FORBIDDEN"
       );
     }
     if (response.status === 404) {
       throw buildHttpError(
         503,
-        `O modelo de IA configurado (${config.ai.geminiModel}) não está disponível. Ajuste GEMINI_MODEL no .env.`,
+        `O modelo de IA configurado (${ai.model}) não está disponível. Ajuste o modelo na Gestão do Sistema → Inteligência Artificial.`,
         "AI_MODEL_NOT_FOUND"
       );
     }
@@ -707,6 +742,14 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], 
 
   const candidate = payload?.candidates?.[0];
   const finishReason = candidate?.finishReason;
+  const usage = payload?.usageMetadata || {};
+  track("OK", {
+    model,
+    usage: {
+      inputTokens: usage.promptTokenCount ?? null,
+      outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0) || null,
+    },
+  });
   const text = (candidate?.content?.parts || []).map((p) => p.text || "").filter(Boolean).join("");
   let parsed = null;
   try {

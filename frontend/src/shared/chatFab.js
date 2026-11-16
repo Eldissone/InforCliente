@@ -28,17 +28,16 @@ import { escapeHtml } from "./ui.js";
 import {
   enqueuePaymentNotification,
   loadUnreadPaymentNotifications,
+  openNotificationTarget,
 } from "./paymentNotificationBar.js";
 import {
   alertUser,
-  desktopPermission,
   getNotifyPrefs,
   initNotificationSound,
   onNotifyPrefsChange,
-  previewSound,
-  requestDesktopPermission,
-  setNotifyPrefs,
+  syncNotifyPrefsFromServer,
 } from "./notificationSound.js";
+import { renderAlertSettings } from "./notificationSettings.js";
 
 let panelEl = null;
 let fabEl = null;
@@ -92,8 +91,12 @@ function getCurrentUserId() {
 function isMineMessage(m) {
   const me = getCurrentUserId();
   if (!me || !m) return false;
+  // Respostas do @IA ficam com senderId de quem perguntou, mas não são "minhas".
+  if (m.aiGenerated) return false;
   return m.sender?.id === me || m.senderId === me;
 }
+
+const AI_AVATAR = `<span class="w-8 h-8 rounded-xl" style="display:flex;align-items:center;justify-content:center;background:#0f172a;color:#2afc8d" aria-label="Assistente IA"><span class="material-symbols-outlined" style="font-size:18px">auto_awesome</span></span>`;
 
 function receiptLabel(status) {
   if (status === "READ") return "Lida";
@@ -219,7 +222,7 @@ function createPanel() {
   const soundMenu = document.createElement("div");
   soundMenu.id = "globalChatSoundMenu";
   soundMenu.setAttribute("hidden", "");
-  soundMenu.setAttribute("style", SOUND_MENU_STYLE.menu);
+  soundMenu.setAttribute("style", SOUND_MENU_STYLE);
   panelEl.appendChild(soundMenu);
 
   document.body.appendChild(panelEl);
@@ -364,6 +367,7 @@ async function openConversation(conversationId) {
   state.messages = data.items || [];
   renderMessages();
   await markConversationRead(conversationId);
+  window.dispatchEvent(new CustomEvent("inforcliente:notifications-changed"));
   await markMessagesRead(conversationId);
   conv.unreadCount = 0;
   setChatUnreadCount(totalUnread());
@@ -444,21 +448,23 @@ function renderMessages() {
     .map((m, i) => {
       const mine = isMineMessage(m);
       const prev = state.messages[i - 1];
+      const ai = Boolean(m.aiGenerated);
       const sameAsPrev =
         prev &&
         isMineMessage(prev) === mine &&
+        Boolean(prev.aiGenerated) === ai &&
         (prev.sender?.id || prev.senderId) === (m.sender?.id || m.senderId);
-      const showIncomingMeta = !mine && !sameAsPrev && !isDirect;
+      const showIncomingMeta = !mine && !sameAsPrev && (!isDirect || ai);
       const showAvatar = !mine && !sameAsPrev;
       const statusLine = mine
         ? `${formatTime(m.createdAt)} · ${receiptLabel(m.status)}`
         : formatTime(m.createdAt);
       return `
         <div class="flex ${mine ? "justify-end" : "justify-start"} gap-2 ${sameAsPrev ? "mt-0.5" : "mt-3"}">
-          ${mine ? "" : showAvatar ? `<div class="shrink-0 self-end">${userAvatar(m.sender, "w-8 h-8")}</div>` : `<div class="w-8 shrink-0" aria-hidden="true"></div>`}
+          ${mine ? "" : showAvatar ? `<div class="shrink-0 self-end">${ai ? AI_AVATAR : userAvatar(m.sender, "w-8 h-8")}</div>` : `<div class="w-8 shrink-0" aria-hidden="true"></div>`}
           <div class="max-w-[75%] ${mine ? "items-end" : ""}">
-            ${showIncomingMeta ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
-            <div class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
+            ${showIncomingMeta ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${ai ? `Assistente IA · pedido por ${escapeHtml(m.sender?.name || m.sender?.email || "")}` : escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
+            <div ${ai ? 'style="background:#f5f3ff;border:1px solid #ddd6fe;white-space:pre-line"' : ""} class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
               ${m.body ? renderMentionBody(m.body) : ""}
               ${renderAttachments(m.attachments, mine)}
             </div>
@@ -807,45 +813,31 @@ function handleIncomingAlert(payload) {
   if (chat && conversationId !== state.activeId) scheduleConversationsRefresh();
 
   const conv = chat ? state.conversations.find((c) => c.id === conversationId) : null;
+  // Notificações agrupadas mantêm o id: o groupCount distingue cada ocorrência.
   const key = payload.id
-    ? `notif:${payload.id}`
+    ? `notif:${payload.id}:${payload.groupCount || 1}`
     : payload.messageId
       ? `msg:${payload.messageId}`
       : null;
 
   alertUser({
     key,
+    type: payload.type,
+    projectId: payload.projectId || payload.metadata?.projectId || null,
     sound: resolveAlertSound(payload),
     title: chat
-      ? payload.type === "MENTION"
-        ? "Foi mencionado numa conversa"
-        : "Nova mensagem"
+      ? payload.title || (payload.type === "MENTION" ? "Foi mencionado numa conversa" : "Nova mensagem")
       : payload.title || "Nova notificação",
-    body: chat ? conv?.title || "Abra o chat para ler" : payload.body || "",
+    body: payload.body || (chat ? conv?.title || "Abra o chat para ler" : ""),
     onClick: () => {
-      if (chat && conversationId) {
-        openChatPanel();
-        loadConversations().then(() => openConversation(conversationId));
-      } else if (payload.link && /^\/(?!\/)/.test(payload.link)) {
-        window.location.assign(payload.link);
-      }
+      if (chat && conversationId) openConversationById(conversationId);
+      else openNotificationTarget(payload);
     },
   });
 }
 
-const SOUND_MENU_STYLE = {
-  menu: "position:absolute;top:60px;right:12px;width:250px;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 18px 40px rgba(15,23,42,.18);padding:12px;z-index:5;font-size:13px;",
-  row: "display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 2px;",
-  hint: "font-size:11px;color:#64748b;margin:2px 2px 6px;",
-  btn: "width:100%;margin-top:6px;padding:8px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;font-size:12px;cursor:pointer;",
-};
-
-function desktopStatusLabel() {
-  const perm = desktopPermission();
-  if (perm === "unsupported") return "Este browser não suporta avisos do sistema.";
-  if (perm === "denied") return "Bloqueado no browser. Ative nas definições do site.";
-  return "";
-}
+const SOUND_MENU_STYLE =
+  "position:absolute;top:60px;right:12px;width:260px;max-height:calc(100% - 72px);overflow-y:auto;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 18px 40px rgba(15,23,42,.18);padding:12px;z-index:5;font-size:13px;";
 
 function syncSoundToggleIcon() {
   const icon = el("globalChatSoundIcon");
@@ -855,44 +847,16 @@ function syncSoundToggleIcon() {
 function renderSoundMenu() {
   const menu = el("globalChatSoundMenu");
   if (!menu) return;
-  const prefs = getNotifyPrefs();
-  const perm = desktopPermission();
-  const status = desktopStatusLabel();
-  menu.innerHTML = `
-    <p style="font-weight:700;margin:0 2px 6px;">Alertas</p>
-    <label style="${SOUND_MENU_STYLE.row}">
-      <span>Som</span>
-      <input type="checkbox" id="globalChatSoundEnabled" ${prefs.soundEnabled ? "checked" : ""} />
-    </label>
-    <label style="${SOUND_MENU_STYLE.row}">
-      <span>Volume</span>
-      <input type="range" id="globalChatSoundVolume" min="0" max="1" step="0.1" value="${prefs.volume}"
-        style="width:120px;" ${prefs.soundEnabled ? "" : "disabled"} />
-    </label>
-    <label style="${SOUND_MENU_STYLE.row}">
-      <span>Avisos no ambiente de trabalho</span>
-      <input type="checkbox" id="globalChatDesktopEnabled"
-        ${prefs.desktopEnabled && perm === "granted" ? "checked" : ""}
-        ${perm === "unsupported" || perm === "denied" ? "disabled" : ""} />
-    </label>
-    ${status ? `<p style="${SOUND_MENU_STYLE.hint}">${escapeHtml(status)}</p>` : ""}
-    <button type="button" id="globalChatSoundTest" style="${SOUND_MENU_STYLE.btn}">Testar som</button>
-  `;
-
-  menu.querySelector("#globalChatSoundEnabled")?.addEventListener("change", (e) => {
-    setNotifyPrefs({ soundEnabled: e.target.checked });
-    renderSoundMenu();
+  menu.innerHTML = `<p style="font-weight:700;margin:0 2px 6px;">Alertas</p><div data-alert-settings></div>`;
+  renderAlertSettings(menu.querySelector("[data-alert-settings]"), {
+    compact: true,
+    onMore: () => {
+      toggleSoundMenu(false);
+      import("./notificationCenter.js")
+        .then(({ openNotificationCenter }) => openNotificationCenter({ view: "settings" }))
+        .catch(() => {});
+    },
   });
-  menu.querySelector("#globalChatSoundVolume")?.addEventListener("change", (e) => {
-    setNotifyPrefs({ volume: Number(e.target.value) });
-    previewSound("message");
-  });
-  menu.querySelector("#globalChatDesktopEnabled")?.addEventListener("change", async (e) => {
-    if (e.target.checked) await requestDesktopPermission();
-    else setNotifyPrefs({ desktopEnabled: false });
-    renderSoundMenu();
-  });
-  menu.querySelector("#globalChatSoundTest")?.addEventListener("click", () => previewSound("message"));
 }
 
 function toggleSoundMenu(force) {
@@ -906,6 +870,13 @@ function toggleSoundMenu(force) {
     menu.setAttribute("hidden", "");
   }
   el("globalChatSound")?.setAttribute("aria-expanded", String(show));
+}
+
+/** Abre o painel do chat diretamente numa conversa (usado pelo sino e avisos). */
+export async function openConversationById(conversationId) {
+  openChatPanel();
+  if (!state.conversations.some((c) => c.id === conversationId)) await loadConversations();
+  await openConversation(conversationId);
 }
 
 export function openChatPanel() {
@@ -949,6 +920,7 @@ export function setChatUnreadCount(count) {
 
 export async function initChatFab() {
   initNotificationSound();
+  syncNotifyPrefsFromServer().then(syncSoundToggleIcon);
   createFab();
   createPanel();
   wireSocketEvents();

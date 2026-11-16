@@ -1451,6 +1451,11 @@ function renderSavedMeasurementReports() {
             ${formatDateBR(r.reportDate)} · Período: ${measFmtMoney(val, projectState?.currency === "USD" ? "USD" : "Kz")}
           </div>
         </button>
+        ${measurementState.aiDocs ? `<button type="button" data-ai-report-text="${r.id}"
+          class="shrink-0 w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200 transition-all"
+          title="Texto descritivo do auto (IA)">
+          <span class="material-symbols-outlined text-lg" style="color:#7c3aed">auto_awesome</span>
+        </button>` : ""}
         <button type="button" data-delete-report="${r.id}" data-report-number="${escapeHtml(r.reportNumber)}"
           data-report-status="${escapeHtml(r.status || "DRAFT")}" data-role-visible="admin,operador"
           class="shrink-0 w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-all"
@@ -1466,6 +1471,16 @@ function renderSavedMeasurementReports() {
     btn.addEventListener("click", async () => {
       const reportId = btn.getAttribute("data-load-report");
       await loadMeasurementReportById(reportId);
+    });
+  });
+
+  container.querySelectorAll("[data-ai-report-text]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const report = (measurementState.savedReports || []).find((r) => r.id === btn.dataset.aiReportText);
+      if (!report) return;
+      const { openMeasurementText } = await import("../../shared/documentDraft.js");
+      openMeasurementText({ projectId: getProjectId(), report });
     });
   });
 
@@ -3381,6 +3396,101 @@ function wirePreview() {
 }
 
 init().catch((err) => toast(err.message || "Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
+
+// Assistente da obra (IA) — painel lateral só de leitura.
+document.getElementById("btnAiAssistant")?.addEventListener("click", async () => {
+  const { openAssistant } = await import("../../shared/aiAssistant.js");
+  const title = document.getElementById("projectTitle")?.textContent?.trim() || "";
+  openAssistant({ projectId: getProjectId(), projectLabel: title });
+});
+
+// Registo de execução por texto ou voz (IA) — a IA propõe, o técnico confirma.
+(async () => {
+  const btn = document.getElementById("btnAiProgress");
+  const projectId = getProjectId();
+  if (!btn || !projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/progress/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return; // portal do cliente ou sem sessão
+  }
+  // Só aparece a quem o pode usar; o administrador vê-o sempre (para saber porque está desligado).
+  if (!status.enabled && !status.canConfigure) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openProgressCapture } = await import("../../shared/progressCapture.js");
+    openProgressCapture({
+      projectId,
+      onSaved: () => {
+        try { loadProgressTasks(); } catch { /* separador ainda não carregado */ }
+      },
+    });
+  });
+})();
+
+// Fotos da obra com IA e histórico de segurança (só equipa interna).
+(async () => {
+  const projectId = getProjectId();
+  if (!projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/photos/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return; // portal do cliente
+  }
+  galleryState.aiStatus = status;
+  if (galleryState.items?.length) renderAdminGallery();
+  const btn = document.getElementById("btnSafetyHistory");
+  if (btn && status.canView) {
+    btn.style.display = "inline-flex";
+    btn.addEventListener("click", async () => {
+      const { openSafetyHistory } = await import("../../shared/photoAnalysis.js");
+      openSafetyHistory({ projectId });
+    });
+  }
+})();
+
+// Rascunhos de documentos (IA): texto do auto e relatório mensal ao cliente.
+(async () => {
+  const projectId = getProjectId();
+  if (!projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/documents/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return;
+  }
+  if (!status.enabled && !status.canConfigure) return;
+  measurementState.aiDocs = true;
+  if (measurementState.savedReports?.length) renderSavedMeasurementReports();
+  const btn = document.getElementById("btnAiMonthlyReport");
+  if (!btn) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openMonthlyReport } = await import("../../shared/documentDraft.js");
+    openMonthlyReport({ projectId, projectLabel: document.getElementById("projectTitle")?.textContent?.trim() || "" });
+  });
+})();
+
+// Necessidades assistidas (IA): texto ou foto da lista → rever → criar.
+(async () => {
+  const btn = document.getElementById("btnAiNeeds");
+  const projectId = getProjectId();
+  if (!btn || !projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/needs/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return;
+  }
+  if (!status.enabled && !status.canConfigure) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openNeedsAssist } = await import("../../shared/needsAssist.js");
+    openNeedsAssist({ projectId, needsLink: `/Projectos/projectView?id=${encodeURIComponent(projectId)}&tab=necessidades` });
+  });
+})();
 async function loadStock() {
   const id = getProjectId();
   renderLoadingRow(el("stockMovementsTbody"), 7);
@@ -5113,6 +5223,9 @@ function renderAdminGallery() {
                <button data-preview-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all border border-white/20">
                   <span class="material-symbols-outlined text-2xl">visibility</span>
                </button>
+               ${galleryState.aiStatus?.canReview ? `<button data-ai-photo="${p.id}" title="Análise da IA" class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all border border-white/20">
+                  <span class="material-symbols-outlined text-2xl" style="color:#2afc8d">auto_awesome</span>
+               </button>` : ""}
                <button data-role-visible="admin,supervisor,tecnico" data-delete-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-red-500/80 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-600 transition-all border border-white/20">
                   <span class="material-symbols-outlined text-2xl">delete</span>
                </button>
@@ -5122,12 +5235,30 @@ function renderAdminGallery() {
             <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem Descrição')}</p>
             <div class="flex items-center justify-between pt-3 border-t border-slate-50">
               <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
-              <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span>
+              <span class="flex items-center gap-1">${p.aiAnalysis?.risks?.length ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[8px] font-black uppercase" title="Riscos de segurança indicados pela IA">${p.aiAnalysis.risks.length} risco(s)</span>` : p.aiAnalyzedAt ? '<span class="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 text-[8px] font-black uppercase">IA</span>' : ""}
+              <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span></span>
             </div>
           </div>
         </div>
       `;
   }).join("");
+
+  grid.querySelectorAll("[data-ai-photo]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const photo = (galleryState.items || []).find((x) => x.id === btn.dataset.aiPhoto);
+      if (!photo) return;
+      const { openPhotoAnalysis } = await import("../../shared/photoAnalysis.js");
+      openPhotoAnalysis({
+        projectId: id,
+        photo,
+        onChanged: (updated) => {
+          Object.assign(photo, updated);
+          renderAdminGallery();
+        },
+      });
+    });
+  });
 
   grid.querySelectorAll("[data-delete-photo]").forEach((btn) => {
     btn.addEventListener("click", async () => {

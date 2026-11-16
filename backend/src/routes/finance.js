@@ -9,10 +9,10 @@ const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase, deleteStoredFile } = require("../utils/storage");
 const {
-  isConfigured: isInvoiceAiConfigured,
   readInvoiceDocument,
   MAX_INLINE_BYTES,
 } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
 const {
   buildProjectFinancials,
   buildCostLedger,
@@ -1255,8 +1255,8 @@ financeRoutes.get(
   "/ai-status",
   view,
   asyncHandler(async (_req, res) => {
-    const configured = isInvoiceAiConfigured();
-    return res.json({ configured, model: configured ? config.ai.geminiModel : null });
+    const ai = await resolveInvoiceAiConfig();
+    return res.json({ configured: ai.available, model: ai.available ? ai.model : null, reason: ai.available ? null : ai.reason });
   })
 );
 
@@ -1286,6 +1286,9 @@ financeRoutes.post(
       buffer: req.file.buffer,
       mimeType: req.file.mimetype,
       fileName: req.file.originalname,
+      aiConfig: await resolveInvoiceAiConfig(),
+      userId: req.user?.sub,
+      io: req.app.get("io"),
       projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name, clientName: p.client?.name })),
     });
 

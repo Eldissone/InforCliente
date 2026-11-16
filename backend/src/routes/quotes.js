@@ -44,6 +44,7 @@ const {
 const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
 const { normalizeDateOnly } = require("../utils/dateOnly");
 const { readInvoiceDocument } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
 const {
   resolveOrCreateSupplierFromInvoice,
   matchInvoiceItemsToNeeds,
@@ -1545,6 +1546,9 @@ quoteRoutes.post(
       buffer: req.file.buffer,
       mimeType: req.file.mimetype,
       fileName: req.file.originalname,
+      aiConfig: await resolveInvoiceAiConfig(),
+      userId: req.user?.sub,
+      io: req.app.get("io"),
       projects,
     });
 

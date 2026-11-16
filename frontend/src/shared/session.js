@@ -161,6 +161,10 @@ export function wireUsersNav() {
     .then(({ initChatFab }) => initChatFab())
     .catch(() => { });
 
+  import("./notificationCenter.js")
+    .then(({ initNotificationCenter }) => initNotificationCenter())
+    .catch(() => { });
+
   if (role !== "cliente") {
     import("./helpFab.js")
       .then(({ initHelpFab }) => initHelpFab())

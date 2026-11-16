@@ -72,6 +72,7 @@ const {
   INVOICE_CATEGORY_META,
   inferCostCategoryFromText,
 } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
 const {
   resolveOrCreateSupplierFromInvoice,
   inferCategoryKeyFromCostCenter,
@@ -2746,6 +2747,9 @@ costCenterRoutes.post(
       buffer: req.file.buffer,
       mimeType: req.file.mimetype,
       fileName: req.file.originalname,
+      aiConfig: await resolveInvoiceAiConfig(),
+      userId: req.user?.sub,
+      io: req.app.get("io"),
       projects,
       costCenters,
     });

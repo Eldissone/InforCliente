@@ -20,6 +20,7 @@ const { supplierRoutes } = require("./routes/suppliers");
 const { quoteRoutes } = require("./routes/quotes");
 const { conversationRoutes } = require("./routes/conversations");
 const { notificationRoutes } = require("./routes/notifications");
+const { aiRoutes } = require("./routes/ai");
 const { pettyCashRoutes } = require("./routes/pettyCash");
 const { extraRequestRoutes } = require("./routes/extraRequests");
 const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
@@ -120,6 +121,7 @@ app.use("/suppliers", supplierRoutes);
 app.use("/quotes", quoteRoutes);
 app.use("/conversations", conversationRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/ai", aiRoutes);
 app.use("/petty-cash", pettyCashRoutes);
 app.use("/extra-requests", extraRequestRoutes);
 app.use("/general-cost-centers", generalCostCenterRoutes);
@@ -194,6 +196,8 @@ server.listen(config.port, async () => {
   scanPayments();
   setInterval(scanPayments, 6 * 60 * 60 * 1000);
   startBackupScheduler();
+  require("./services/ai/digests/service").startDigestScheduler(io);
+  require("./services/ai/alerts/service").startAlertScheduler(io);
 });
 
 

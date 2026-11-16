@@ -1875,6 +1875,10 @@ projectRoutes.get(
         }
       }
     });
+    // A análise da IA (riscos de segurança incluídos) é interna: não vai para o portal do cliente.
+    if (String(req.user?.role || "").toLowerCase() === "cliente") {
+      return res.json({ items: photos.map(({ aiAnalysis, aiAnalyzedAt, ...p }) => p) });
+    }
     return res.json({ items: photos });
   })
 );
@@ -1967,7 +1971,7 @@ projectRoutes.delete(
   })
 );
 
-module.exports = { projectRoutes };
+module.exports = { projectRoutes, recalculateTaskRollup, loadProjectPhotoAsset };
 
 // -----------------------------------------------------------------------------
 // PROGRESS TASKS HELPERS

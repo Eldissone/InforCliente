@@ -7,14 +7,30 @@
  *   o AudioContext é "desbloqueado" no primeiro clique/tecla.
  * - Com vários separadores abertos, só um toca o som e mostra o aviso
  *   (o separador visível tem prioridade), coordenado por BroadcastChannel.
- * - Preferências guardadas localmente por browser (a Fase 1.2 do plano
- *   passa-as para o perfil do utilizador no servidor).
+ * - Preferências guardadas no servidor (GET/PUT /notifications/preferences),
+ *   com cópia local para arrancar logo e funcionar sem rede.
+ * - Silenciar (por tipo ou por obra) e "não incomodar" tiram o som e o aviso;
+ *   a notificação continua no centro de notificações. URGENT ignora o
+ *   "não incomodar", mas não um silenciar explícito.
  */
+
+import { apiRequest } from "../services/api.js";
 
 const PREFS_KEY = "inforcliente:notify-prefs";
 const THROTTLE_MS = 2000;
 const HIDDEN_TAB_DELAY_MS = 250;
-const DEFAULT_PREFS = { soundEnabled: true, volume: 0.6, desktopEnabled: false };
+const DEFAULT_PREFS = {
+  soundEnabled: true,
+  volume: 0.6,
+  desktopEnabled: false,
+  dndEnabled: false,
+  dndFrom: "22:00",
+  dndTo: "07:00",
+  mutedTypes: [],
+  mutedProjectIds: [],
+};
+const SERVER_KEYS = Object.keys(DEFAULT_PREFS);
+const SAVE_DEBOUNCE_MS = 600;
 
 let audioCtx = null;
 let lastPlayedAt = 0;
@@ -22,6 +38,7 @@ let hiddenCount = 0;
 let baseTitle = null;
 const handledKeys = new Set();
 const tabId = Math.random().toString(36).slice(2);
+const listeners = new Set();
 const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("inforcliente-notify") : null;
 
 channel?.addEventListener("message", (event) => {
@@ -29,8 +46,6 @@ channel?.addEventListener("message", (event) => {
   if (data.type === "handled" && data.key && data.tabId !== tabId) rememberKey(data.key);
   if (data.type === "prefs") listeners.forEach((fn) => safeCall(fn, getNotifyPrefs()));
 });
-
-const listeners = new Set();
 
 function safeCall(fn, arg) {
   try {
@@ -56,17 +71,83 @@ export function getNotifyPrefs() {
   }
 }
 
-export function setNotifyPrefs(patch) {
-  const next = { ...getNotifyPrefs(), ...patch };
-  next.volume = Math.min(1, Math.max(0, Number(next.volume) || 0));
+function storeLocal(prefs) {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch {
     /* modo privado / armazenamento bloqueado: fica só nesta sessão */
   }
-  listeners.forEach((fn) => safeCall(fn, next));
+  listeners.forEach((fn) => safeCall(fn, prefs));
   channel?.postMessage({ type: "prefs" });
+}
+
+let pendingPatch = {};
+let saveTimer = null;
+
+function scheduleServerSave(patch) {
+  Object.assign(pendingPatch, patch);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const body = pendingPatch;
+    pendingPatch = {};
+    try {
+      await apiRequest("/notifications/preferences", { method: "PUT", body });
+    } catch (err) {
+      console.warn("[notify] não foi possível guardar as preferências", err.message);
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+export function setNotifyPrefs(patch) {
+  const next = { ...getNotifyPrefs(), ...patch };
+  next.volume = Math.min(1, Math.max(0, Number(next.volume) || 0));
+  storeLocal(next);
+  const serverPatch = {};
+  for (const key of SERVER_KEYS) if (key in patch) serverPatch[key] = next[key];
+  if (Object.keys(serverPatch).length) scheduleServerSave(serverPatch);
   return next;
+}
+
+/** Lê as preferências do servidor (a fonte de verdade) e atualiza a cópia local. */
+export async function syncNotifyPrefsFromServer() {
+  try {
+    const { preferences } = await apiRequest("/notifications/preferences");
+    if (preferences) storeLocal({ ...getNotifyPrefs(), ...preferences });
+  } catch (err) {
+    console.warn("[notify] preferências do servidor indisponíveis", err.message);
+  }
+  return getNotifyPrefs();
+}
+
+export function isTypeMuted(type, prefs = getNotifyPrefs()) {
+  return Boolean(type) && prefs.mutedTypes.includes(type);
+}
+
+export function isProjectMuted(projectId, prefs = getNotifyPrefs()) {
+  return Boolean(projectId) && prefs.mutedProjectIds.includes(projectId);
+}
+
+export function toggleProjectMuted(projectId) {
+  const prefs = getNotifyPrefs();
+  const muted = new Set(prefs.mutedProjectIds);
+  if (muted.has(projectId)) muted.delete(projectId);
+  else muted.add(projectId);
+  return setNotifyPrefs({ mutedProjectIds: [...muted] });
+}
+
+function minutesOf(hhmm) {
+  const [h, m] = String(hhmm || "").split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+}
+
+/** true se agora estiver dentro do horário de "não incomodar" (aceita passar a meia-noite). */
+export function isInDoNotDisturb(prefs = getNotifyPrefs(), now = new Date()) {
+  if (!prefs.dndEnabled) return false;
+  const from = minutesOf(prefs.dndFrom);
+  const to = minutesOf(prefs.dndTo);
+  if (from === null || to === null || from === to) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  return from < to ? cur >= from && cur < to : cur >= from || cur < to;
 }
 
 export function onNotifyPrefsChange(fn) {
@@ -87,11 +168,43 @@ function getAudioContext() {
 function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+  hideBlockedHint();
+}
+
+// ── Aviso "som bloqueado" ───────────────────────────────────────────────────
+// O browser só deixa tocar som depois de um clique/tecla EM CADA PÁGINA
+// carregada. Como a aplicação muda de página a cada menu, uma mensagem que
+// chegue antes do primeiro clique fica sem som — mostramos um aviso discreto.
+
+let blockedHintEl = null;
+
+function showBlockedHint() {
+  if (blockedHintEl || typeof document === "undefined" || !document.body) return;
+  blockedHintEl = document.createElement("button");
+  blockedHintEl.type = "button";
+  blockedHintEl.id = "notifySoundBlockedHint";
+  blockedHintEl.setAttribute("role", "status");
+  blockedHintEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">volume_off</span>
+    <span>Chegou uma notificação, mas o browser bloqueou o som. Clique aqui para o ativar.</span>`;
+  blockedHintEl.setAttribute(
+    "style",
+    "position:fixed;right:32px;bottom:96px;max-width:min(340px,calc(100vw - 32px));display:flex;align-items:center;gap:8px;padding:10px 14px;border:0;border-radius:14px;background:#0f172a;color:#fff;font-size:12px;font-weight:600;text-align:left;box-shadow:0 18px 40px rgba(15,23,42,.25);z-index:130;cursor:pointer;"
+  );
+  blockedHintEl.addEventListener("click", () => previewSound("message"));
+  document.body.appendChild(blockedHintEl);
+}
+
+function hideBlockedHint() {
+  blockedHintEl?.remove();
+  blockedHintEl = null;
 }
 
 /** Sequências de tons por tipo: [frequência Hz, início s, duração s, forma]. */
 const SOUNDS = {
-  soft: [[1200, 0, 0.08, "sine"]],
+  soft: [
+    [1047, 0, 0.09, "sine"],
+    [1319, 0.09, 0.12, "sine"],
+  ],
   message: [
     [880, 0, 0.11, "sine"],
     [1320, 0.11, 0.16, "sine"],
@@ -117,7 +230,7 @@ function playTones(kind, volume) {
   const ctx = getAudioContext();
   if (!ctx || ctx.state !== "running") return false;
   const tones = SOUNDS[kind] || SOUNDS.notification;
-  const peak = (kind === "urgent" ? 0.12 : kind === "soft" ? 0.15 : 0.25) * volume;
+  const peak = (kind === "urgent" ? 0.12 : kind === "soft" ? 0.18 : 0.25) * volume;
   const now = ctx.currentTime + 0.01;
 
   for (const [freq, start, dur, type] of tones) {
@@ -208,30 +321,58 @@ function resetTitleCounter() {
  * @param {string} [opts.title] - título do aviso do sistema
  * @param {string} [opts.body]
  * @param {Function} [opts.onClick] - ação ao clicar no aviso do sistema
+ * @param {string} [opts.type] - tipo da notificação (para silenciar por tipo)
+ * @param {string} [opts.projectId] - obra (para silenciar por obra)
  */
-export function alertUser({ key, sound = "notification", title, body, onClick } = {}) {
+export function alertUser({ key, sound = "notification", title, body, onClick, type, projectId } = {}) {
   if (key && handledKeys.has(key)) return;
+  const current = getNotifyPrefs();
+  if (isTypeMuted(type, current) || isProjectMuted(projectId, current)) {
+    console.info("[notify] sem som: tipo ou obra silenciados", { type, projectId });
+    return;
+  }
+  if (sound !== "urgent" && isInDoNotDisturb(current)) {
+    console.info("[notify] sem som: horário de não incomodar");
+    return;
+  }
 
   const run = () => {
     if (key && handledKeys.has(key)) return;
-    if (key) {
-      rememberKey(key);
-      channel?.postMessage({ type: "handled", key, tabId });
-    }
 
     const prefs = getNotifyPrefs();
     const hidden = document.visibilityState !== "visible";
     const now = Date.now();
+    let played = false;
+    let blocked = false;
 
-    if (prefs.soundEnabled && now - lastPlayedAt >= THROTTLE_MS) {
-      if (playTones(sound, prefs.volume)) lastPlayedAt = now;
+    if (!prefs.soundEnabled) {
+      console.info("[notify] sem som: som desligado nas preferências");
+    } else if (now - lastPlayedAt < THROTTLE_MS) {
+      played = true; // outro som acabou de tocar (rajada): conta como tratado
+    } else if (playTones(sound, prefs.volume)) {
+      lastPlayedAt = now;
+      played = true;
+    } else {
+      blocked = true;
+      console.info("[notify] som bloqueado pelo browser: falta um clique nesta página");
     }
+
+    // Só "fica com" o alerta (e avisa os outros separadores) se tocou ou se o
+    // som está desligado. Se o browser bloqueou o som aqui, outro separador
+    // da aplicação onde já se clicou ainda o pode tocar.
+    if (key && !blocked) {
+      rememberKey(key);
+      channel?.postMessage({ type: "handled", key, tabId });
+    }
+    if (blocked && !hidden) showBlockedHint();
 
     if (hidden && sound !== "soft") {
       bumpTitleCounter();
-      if (prefs.desktopEnabled) showDesktopNotification({ title, body, tag: key, onClick });
+      // `tag` = mesma chave: o sistema não repete o aviso se vários separadores o mostrarem.
+      if (prefs.desktopEnabled && desktopPermission() === "granted") showDesktopNotification({ title, body, tag: key, onClick });
       if (sound === "urgent" || sound === "mention") navigator.vibrate?.([120, 60, 120]);
     }
+    return played;
   };
 
   // O separador visível alerta logo; os escondidos esperam para ver se
