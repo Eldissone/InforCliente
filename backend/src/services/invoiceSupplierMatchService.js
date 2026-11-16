@@ -185,10 +185,14 @@ function matchInvoiceItemsToNeeds(invoiceItems = [], needs = [], headerFields = 
     }
 
     let matchedItem = null;
+    let matchedIndex = null;
+    let estimated = false;
     if (bestIdx !== -1 && bestScore >= 0.25) {
       usedItemIndices.add(bestIdx);
       matchedItem = items[bestIdx];
+      matchedIndex = bestIdx;
     } else if (needList.length === 1 && items.length > 1) {
+      estimated = true;
       const needQty = Number(need.quantity) > 0 ? Number(need.quantity) : 1;
       const totalGross =
         headerFields.grossAmount ??
@@ -204,6 +208,8 @@ function matchInvoiceItemsToNeeds(invoiceItems = [], needs = [], headerFields = 
     } else if (i < items.length && !usedItemIndices.has(i)) {
       usedItemIndices.add(i);
       matchedItem = items[i];
+      matchedIndex = i;
+      estimated = true; // associação por posição, sem semelhança de texto
     }
 
     const needQty = Number(need.quantity) > 0 ? Number(need.quantity) : 1;
@@ -220,10 +226,12 @@ function matchInvoiceItemsToNeeds(invoiceItems = [], needs = [], headerFields = 
         suggestedQuantity = itemQty > 0 ? itemQty : needQty;
       } else {
         suggestedUnitPrice = Math.round(((itemTotal / needQty) + Number.EPSILON) * 100) / 100;
+        estimated = true;
       }
     } else if (needList.length === 1 && (headerFields.grossAmount || headerFields.netAmount)) {
       const base = Number(headerFields.grossAmount ?? headerFields.netAmount) || 0;
       suggestedUnitPrice = Math.round(((base / needQty) + Number.EPSILON) * 100) / 100;
+      estimated = true;
     }
 
     mappings.push({
@@ -232,6 +240,8 @@ function matchInvoiceItemsToNeeds(invoiceItems = [], needs = [], headerFields = 
       needQuantity: needQty,
       matchedInvoiceDescription: matchedItem?.description || null,
       similarity: Math.round(bestScore * 100),
+      matchedItemIndex: matchedIndex,
+      estimated,
       quotedPrice: suggestedUnitPrice,
       quantity: suggestedQuantity,
       total:
@@ -335,6 +345,7 @@ function matchItemToProjectCostCenter(item = {}, costCenters = [], fallbackCateg
 module.exports = {
   resolveOrCreateSupplierFromInvoice,
   matchInvoiceItemsToNeeds,
+  computeDescriptionSimilarity,
   inferCategoryKeyFromCostCenter,
   matchCostCenterForCategory,
   matchItemToProjectCostCenter,
