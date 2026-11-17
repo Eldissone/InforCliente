@@ -943,7 +943,7 @@ financeRoutes.get(
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         receipts: {
-          select: { id: true, amount: true, receivedDate: true, method: true, notes: true, bankMovementId: true, createdBy: true },
+          select: { id: true, amount: true, receivedDate: true, method: true, notes: true, bankMovementId: true, createdBy: true, proofPath: true, proofName: true },
           orderBy: { receivedDate: "desc" },
         },
         creditNotes: { select: { id: true, docNumber: true, docDate: true, grossAmount: true, netAmount: true, notes: true }, orderBy: { docDate: "asc" } },
@@ -1013,6 +1013,13 @@ financeRoutes.post(
         scanSource: z.string().nullable().optional(),
         scanModel: z.string().nullable().optional(),
         scanRaw: z.unknown().nullable().optional(),
+        // Centro de Recebimentos (R1)
+        invoiceType: z.enum(["AUTO", "FINAL", "MARCO", "ADI", "RET", "DRET", "REV", "SERV", "OUT"]).nullable().optional(),
+        description: z.string().nullable().optional(),
+        currency: z.enum(["AOA", "USD", "EUR"]).optional(),
+        foreignAmount: z.number().nullable().optional(),
+        exchangeRate: z.number().nullable().optional(),
+        calcMode: z.enum(["MBT"]).nullable().optional(),
         notes: z.string().nullable().optional(),
       })
       .parse(req.body);
@@ -1047,7 +1054,7 @@ financeRoutes.post(
       });
     }
 
-    const kind = body.kind || "FATURA";
+    const kind = body.kind || (body.invoiceType === "ADI" ? "ADIANTAMENTO" : "FATURA");
     if (kind === "ADIANTAMENTO" && (body.measurementId || toNumber(body.advanceDeductionAmount) > 0)) {
       return res.status(400).json({
         error: "ADVANCE_INVALID",
@@ -1111,6 +1118,11 @@ financeRoutes.post(
         receivedAmount: 0,
         receivedDate: null,
         notes: body.notes || null,
+        invoiceType: body.invoiceType || null,
+        description: body.description || null,
+        currency: body.currency || "AOA",
+        foreignAmount: body.foreignAmount ?? null,
+        exchangeRate: body.exchangeRate ?? null,
         scanSource: body.scanSource || null,
         scanModel: body.scanModel || null,
         scanRaw: body.scanRaw ?? undefined,
@@ -1181,6 +1193,13 @@ financeRoutes.patch(
           .refine((v) => CATIVO_LEVELS.includes(v), "A cativação do IVA é 0%, 50% ou 100%.")
           .nullable()
           .optional(),
+        // Centro de Recebimentos (R1)
+        invoiceType: z.enum(["AUTO", "FINAL", "MARCO", "ADI", "RET", "DRET", "REV", "SERV", "OUT"]).nullable().optional(),
+        description: z.string().nullable().optional(),
+        currency: z.enum(["AOA", "USD", "EUR"]).optional(),
+        foreignAmount: z.number().nullable().optional(),
+        exchangeRate: z.number().nullable().optional(),
+        calcMode: z.enum(["MBT"]).nullable().optional(),
         notes: z.string().nullable().optional(),
       })
       .parse(req.body);
@@ -1242,6 +1261,11 @@ financeRoutes.patch(
           ...(body.docNumber !== undefined ? { docNumber: body.docNumber } : {}),
           ...(body.dueDate !== undefined ? { dueDate: parseOptionalDate(body.dueDate) } : {}),
           ...(body.notes !== undefined ? { notes: body.notes } : {}),
+          ...(body.invoiceType !== undefined ? { invoiceType: body.invoiceType } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+          ...(body.currency !== undefined ? { currency: body.currency } : {}),
+          ...(body.foreignAmount !== undefined ? { foreignAmount: body.foreignAmount } : {}),
+          ...(body.exchangeRate !== undefined ? { exchangeRate: body.exchangeRate } : {}),
         },
         include: {
           project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
@@ -1288,6 +1312,7 @@ financeRoutes.patch(
               ? 100
               : 0
             : existing.vatCativoPercent ?? (existing.flagVatCativo ? 100 : 0)),
+        calcMode: body.calcMode || null,
       },
       project || {}
     );
@@ -1343,6 +1368,11 @@ financeRoutes.patch(
         ...(body.docDate ? { docDate: parseOptionalDate(body.docDate) } : {}),
         ...(body.dueDate !== undefined ? { dueDate: parseOptionalDate(body.dueDate) } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.invoiceType !== undefined ? { invoiceType: body.invoiceType } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.currency !== undefined ? { currency: body.currency } : {}),
+        ...(body.foreignAmount !== undefined ? { foreignAmount: body.foreignAmount } : {}),
+        ...(body.exchangeRate !== undefined ? { exchangeRate: body.exchangeRate } : {}),
         grossAmount: amounts.grossAmount,
         workValue: amounts.advanceDeductionAmount > 0 ? amounts.workValue : null,
         advanceDeductionAmount: amounts.advanceDeductionAmount > 0 ? amounts.advanceDeductionAmount : null,
@@ -2765,6 +2795,7 @@ async function buildPayables(ledgerArg) {
 /** Contas a receber: faturas com valor líquido em falta, pelo vencimento efetivo (sem data: documento + prazo padrão). */
 async function buildReceivables() {
   const rows = await prisma.invoice.findMany({
+    where: { cancelledAt: null },
     include: {
       project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
       client: { select: { id: true, name: true, code: true } },
@@ -3707,9 +3738,14 @@ financeRoutes.post(
               movementDate: z.string(),
               description: z.string().nullable().optional(),
               isMerchandise: z.boolean().optional(),
+              effectiveDate: z.string().nullable().optional(),
+              typeCode: z.string().nullable().optional(),
+              ccCode: z.string().nullable().optional(),
+              note: z.string().nullable().optional(),
             })
           )
           .optional(),
+        openingAsBalance: z.boolean().optional(),
       })
       .parse(req.body);
 
@@ -3739,11 +3775,31 @@ financeRoutes.post(
             movementDate: new Date(m.movementDate),
             description: m.description || null,
             isMerchandise: Boolean(m.isMerchandise),
+            effectiveDate: parseOptionalDate(m.effectiveDate),
+            typeCode: m.typeCode ? m.typeCode.trim().toUpperCase() : null,
+            ccCode: m.ccCode ? m.ccCode.trim().toUpperCase() : null,
+            note: m.note || null,
           })),
         },
       },
       include: { movements: true },
     });
+
+    // «Usar o saldo antes do 1.º movimento como saldo inicial da conta».
+    if (statement.cardId && body.openingAsBalance && body.openingBalance !== null && body.openingBalance !== undefined && statement.movements.length) {
+      const first = statement.movements.reduce((min, m) => (m.movementDate < min ? m.movementDate : min), statement.movements[0].movementDate);
+      await prisma.bankBalance.create({
+        data: {
+          cardId: statement.cardId,
+          balance: round2(body.openingBalance),
+          balanceDate: new Date(first.getTime() - 86400000),
+          source: "EXTRATO",
+          statementId: statement.id,
+          notes: "Saldo inicial (antes do 1.º movimento do extrato)",
+          createdBy: statement.createdBy,
+        },
+      });
+    }
 
     // O saldo final do extrato passa a ser o saldo da conta nessa data.
     if (statement.cardId && body.closingBalance !== null && body.closingBalance !== undefined) {
@@ -4379,4 +4435,28 @@ financeRoutes.get(
   })
 );
 
-module.exports = { financeRoutes };
+/** Anula uma fatura emitida (ex.: corrigida por nota de crédito). Só sem recebimentos. */
+financeRoutes.post(
+  "/invoices/:id/cancel",
+  edit,
+  asyncHandler(async (req, res) => {
+    const { reason } = z.object({ reason: z.string().trim().min(1) }).parse(req.body);
+    const invoice = await prisma.invoice.findUnique({ where: { id: req.params.id } });
+    if (!invoice) return res.status(404).json({ error: "INVOICE_NOT_FOUND" });
+    if (toNumber(invoice.receivedAmount) > 0.005) {
+      return res.status(409).json({ error: "HAS_RECEIPTS", message: "A fatura já tem recebimentos: desfaça-os primeiro na Conciliação Bancária." });
+    }
+    const updated = await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { cancelledAt: new Date(), cancelledBy: req.user?.name || req.user?.email || null, cancelReason: reason },
+      include: {
+        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        client: { select: { id: true, name: true, code: true } },
+        measurement: { select: { id: true, reportNumber: true, reportDate: true } },
+      },
+    });
+    return res.json({ invoice: mapInvoice(updated) });
+  })
+);
+
+module.exports = { financeRoutes, buildAllPayables, syncInvoiceReceived, mapInvoice };

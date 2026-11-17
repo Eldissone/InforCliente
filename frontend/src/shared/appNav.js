@@ -55,39 +55,39 @@ const APP_MENU = [
     label: "Financeiro",
     icon: "account_balance",
     children: [
-      { label: "Overview Financeiro", icon: "insights", href: "/Financeiro/overview", perm: "financeiro:view" },
       {
-        label: "Faturação",
-        icon: "request_quote",
+        label: "Contas a Pagar",
+        icon: "north_east",
         children: [
-          { label: "Registar Faturas", icon: "post_add", href: "/Financeiro/faturacao/registar", perm: "financeiro:view" },
-          { label: "Faturação Prevista", icon: "event_upcoming", href: "/Financeiro/faturacao/prevista", perm: "financeiro:view" },
-          { label: "Resumo Faturas vs Previsão", icon: "compare_arrows", href: "/Financeiro/faturacao/resumo", perm: "financeiro:view" },
+          { code: "P1", label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/contas-pagar/centro-pagamentos", perm: "financeiro:view" },
+          { code: "P2", label: "Calendário de Pagamentos", icon: "event", href: "/Financeiro/contas-pagar/calendario-pagamentos", perm: "financeiro:view", pending: true },
+          { code: "P3", label: "Despesas sem Comprovativo", icon: "receipt", href: "/Financeiro/contas-pagar/despesas-sem-comprovativo", perm: "financeiro:view", pending: true },
         ],
       },
       {
-        label: "Custos",
-        icon: "payments",
+        label: "Contas a Receber",
+        icon: "south_west",
         children: [
-          { label: "Overview Custos", icon: "monitoring", href: "/Financeiro/custos/overview", perm: "financeiro:view" },
-          { label: "Registar Custos", icon: "receipt_long", href: "/Financeiro/custos/registar", perm: "financeiro:view" },
-          { label: "Custos Realizados", icon: "task_alt", href: "/Financeiro/custos/realizados", perm: "financeiro:view" },
+          { code: "R1", label: "Centro de Recebimentos", icon: "account_balance", href: "/Financeiro/contas-receber/centro-recebimentos", perm: "financeiro:view" },
+          { code: "R2", label: "Calendário de Recebimentos", icon: "event", href: "/Financeiro/contas-receber/calendario-recebimentos", perm: "financeiro:view", pending: true },
+          { code: "R3", label: "Autos de Medição", icon: "straighten", href: "/Financeiro/contas-receber/autos-medicao", perm: "financeiro:view", pending: true },
+          { code: "R4", label: "Conta Corrente de Clientes", icon: "account_box", href: "/Financeiro/contas-receber/conta-corrente-clientes", perm: "financeiro:view", pending: true },
         ],
       },
-      { label: "Contas a Receber / Pagar", icon: "swap_horiz", href: "/Financeiro/contas", perm: "financeiro:view" },
       {
         label: "Tesouraria",
         icon: "account_balance_wallet",
         children: [
-          { label: "Extratos Bancários", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos", perm: "financeiro:view" },
-          { label: "Recebimentos do Cliente", icon: "south_west", href: "/Financeiro/tesouraria/recebimentos", perm: "financeiro:view" },
-          { label: "Transferências Internas", icon: "swap_horiz", href: "/Financeiro/tesouraria/transferencias", perm: "financeiro:view" },
-          { label: "Levantamentos ATM", icon: "local_atm", href: "/Financeiro/tesouraria/atm", perm: "financeiro:view" },
-          { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
+          { code: "T1", label: "Contas e Saldos", icon: "account_balance", href: "/Financeiro/tesouraria/contas-saldos", perm: "financeiro:view", pending: true },
+          { code: "T2", label: "Conciliação Bancária", icon: "rule", href: "/Financeiro/tesouraria/conciliacao-bancaria", perm: "financeiro:view" },
+          { code: "T3", label: "Extratos Bancários", icon: "receipt_long", href: "/Financeiro/tesouraria/extratos-bancarios", perm: "financeiro:view", pending: true },
+          { code: "T4", label: "Previsão de Tesouraria", icon: "trending_up", href: "/Financeiro/tesouraria/previsao-tesouraria", perm: "financeiro:view", pending: true },
+          { code: "T8", label: "Mapa de Fluxo de Caixa", icon: "swap_vert", href: "/Financeiro/tesouraria/fluxo-caixa", perm: "financeiro:view", pending: true },
+          { code: "T5", label: "Contas e Cartões", icon: "credit_card", href: "/Financeiro/tesouraria/contas-cartoes", perm: "financeiro:view", pending: true },
+          { code: "T6", label: "Alocação de Cartões", icon: "assignment_ind", href: "/Financeiro/tesouraria/alocacao-cartoes", perm: "financeiro:view", pending: true },
+          { code: "T7", label: "Fundo de Maneio", icon: "savings", href: "/Financeiro/tesouraria/fundo-maneio", perm: "financeiro:view", pending: true },
         ],
       },
-      { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
-      { label: "Controlo Financeiro", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
     ],
   },
 ];
@@ -130,7 +130,8 @@ function createMenuLink(definition, source, variant) {
     link.title = "Módulo em preparação";
     link.addEventListener("click", (event) => event.preventDefault());
   }
-  link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span><span>${definition.label}</span>`;
+  const code = definition.code ? `<span class="app-sidebar-code">${definition.code}</span>` : "";
+  link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span>${code}<span>${definition.label}</span>`;
   return link;
 }
 

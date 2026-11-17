@@ -229,6 +229,20 @@
     cursor: default;
   }
 
+  /* Código da folha (P1, R1, T1…) antes do nome, como no programa de orçamentação */
+  .app-sidebar-link .app-sidebar-code {
+    flex: 0 0 auto;
+    min-width: 1.6rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background: #eef1f4;
+    color: #5d6b7c;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+
   .app-sidebar-link.hidden,
   .app-sidebar-group.hidden,
   .app-sidebar-subgroup.hidden {

@@ -29,6 +29,8 @@ const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { helpTicketRoutes } = require("./routes/helpTickets");
 const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
 const { financeRoutes } = require("./routes/finance");
+const { paymentRequestRoutes } = require("./routes/paymentRequests");
+const { reconciliationRoutes } = require("./routes/bankReconciliation");
 const { backupRoutes } = require("./routes/backups");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
@@ -132,6 +134,8 @@ app.use("/contacts", contactRoutes);
 app.use("/sectors", sectorRoutes);
 app.use("/personnel", personnelRoutes);
 // Área Financeira (faturação, custos, tesouraria, overview)
+app.use("/finance/payment-requests", paymentRequestRoutes);
+app.use("/finance/reconciliation", reconciliationRoutes);
 app.use("/finance", financeRoutes);
 
 // Backups

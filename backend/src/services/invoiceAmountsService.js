@@ -54,9 +54,12 @@ function computeInvoiceAmounts(raw, config = {}) {
 
   const vatAmount = round2((gross * vatPercent) / 100);
   const vatCativoAmount = round2((vatAmount * vatCativoPercent) / 100);
-  const withholdingAmount = round2((gross * withholdingPercent) / 100);
-  const carInsuranceAmount = round2((gross * carPercent) / 100);
   const guaranteeAmount = round2((gross * guaranteePercent) / 100);
+  // Regras do Centro de Recebimentos (calcMode «MBT»): a retenção incide sobre
+  // o ilíquido menos a garantia e o seguro de construção leva IVA.
+  const mbt = raw.calcMode === "MBT";
+  const withholdingAmount = round2(((mbt ? gross - guaranteeAmount : gross) * withholdingPercent) / 100);
+  const carInsuranceAmount = round2(((gross * carPercent) / 100) * (mbt ? 1 + vatPercent / 100 : 1));
   const netAmount = round2(
     gross + vatAmount - vatCativoAmount - withholdingAmount - carInsuranceAmount - guaranteeAmount
   );
