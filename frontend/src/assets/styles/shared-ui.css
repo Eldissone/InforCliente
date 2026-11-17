@@ -405,6 +405,7 @@
   .app-sidebar-label-with-arrow,
   .app-sidebar-subgroup-label-wrap,
   .app-sidebar-badge,
+  .app-sidebar-code,
   .app-sidebar-group-right {
     opacity: 0;
     white-space: nowrap;
@@ -419,6 +420,7 @@
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-label-with-arrow,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-subgroup-label-wrap,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-badge,
+  .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-code,
   .app-primary-sidebar:is(:hover, :focus-within, .is-pinned) .app-sidebar-group-right {
     opacity: 1;
     transform: translateX(0);
@@ -519,7 +521,11 @@
     box-shadow: none !important;
   }
 
-<<<<<<< HEAD
+  .app-sidebar-children .app-sidebar-link .app-sidebar-icon-wrap .material-symbols-outlined {
+    font-size: 1rem;
+    color: #94a3b8;
+  }
+
   /* Código da folha (P1, R1, T1…) antes do nome, como no programa de orçamentação */
   .app-sidebar-link .app-sidebar-code {
     flex: 0 0 auto;
@@ -538,11 +544,6 @@
   .app-sidebar-group.hidden,
   .app-sidebar-subgroup.hidden {
     display: none !important;
-=======
-  .app-sidebar-children .app-sidebar-link .app-sidebar-icon-wrap .material-symbols-outlined {
-    font-size: 1rem;
-    color: #94a3b8;
->>>>>>> origin/dev
   }
 
   .app-sidebar-children .app-sidebar-link:hover {

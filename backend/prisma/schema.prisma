@@ -272,7 +272,6 @@ model ClientTag {
 }
 
 model Project {
-<<<<<<< HEAD
   id                   String                   @id @default(cuid())
   code                 String                   @unique
   name                 String
@@ -319,6 +318,7 @@ model Project {
   folders              ProjectFolder[]
   payments             ProjectPayment[]
   photos               ProjectPhoto[]
+  safetyObservations   SafetyObservation[]
   progressHistory      ProjectProgressHistory[]
   progressTasks        ProjectProgressTask[]
   measurementReports   MeasurementReport[]
@@ -344,81 +344,9 @@ model Project {
   guaranteeReleases    GuaranteeRelease[]
   bankMovements        BankMovement[]
   paymentRequests      PaymentRequest[]
-=======
-  id                  String                   @id @default(cuid())
-  code                String                   @unique
-  name                String
-  location            String?
-  region              String?
-  status              ProjectStatus            @default(ACTIVE)
-  active              Boolean                  @default(true)
-  startDate           DateTime?
-  dueDate             DateTime?
-  launchDate          DateTime?
-  actualEndDate       DateTime?
-  budgetTotal         Decimal                  @db.Decimal(16, 2)
-  budgetAllocated     Decimal                  @db.Decimal(16, 2)
-  budgetConsumed      Decimal                  @db.Decimal(16, 2)
-  budgetCommitted     Decimal                  @db.Decimal(16, 2)
-  budgetAvailable     Decimal                  @db.Decimal(16, 2)
-  budgetVersion       Int                      @default(1)
-  physicalProgressPct Float                    @default(0)
-  currency            String?                  @default("AOA")
-  phaseLabel          String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  clientId            String?
-  contact             String?
-  projectType         String?
-  empreiteiro         String?
-  subempreiteiro      String?
-  directorObra        String?
-  directorPhoto       String?
-  directorPhone       String?
-  directorEmail       String?
-  technicians         Json?                    @default("[]")
-  referencia          String?
-  lastAccidentDate    DateTime?
-  activeStaffCount    Int?                     @default(0)
-  safetyHistory       Json?
-  maoDeObraIndireta   Json?
-  maoDeObraDireta     Json?
-  equipamentos        Json?
-  alerts              Alert[]
-  client              Client?                  @relation(fields: [clientId], references: [id])
-  budgetLines         ProjectBudgetLine[]
-  files               ProjectFile[]
-  folders             ProjectFolder[]
-  payments            ProjectPayment[]
-  photos              ProjectPhoto[]
-  safetyObservations  SafetyObservation[]
-  progressHistory     ProjectProgressHistory[]
-  progressTasks       ProjectProgressTask[]
-  measurementReports  MeasurementReport[]
-  transactions        ProjectTransaction[]
-  stockMovements      StockMovement[]
-  warehouses          Warehouse[]
-  assignedUsers       User[]                   @relation("AssignedUsers")
-  dailyPlans          DailyPlan[]
-  materialPlans       ProjectMaterialPlan[]
-  costCenters         CostCenter[]
-  workNeeds           WorkNeed[]
-  costPayments        CostPayment[]
-  pettyCashFunds      PettyCashFund[]
-  extraRequests       ExtraRequest[]
-  freightAllocations  FreightAllocation[]
-  purchaseOrders      PurchaseOrder[]
-  quoteSupplierOrders QuoteSupplierOrder[]
-  personnel           Personnel[]
-  personnelAssignments PersonnelProject[]
-  pauses              ProjectPause[]
-  projectContacts     ProjectContact[]
-  invoices            Invoice[]
-  bankMovements       BankMovement[]
-  notifications       Notification[]
-  aiExclusion         AiDataExclusion?
-  aiConversations     AiConversation[]
->>>>>>> origin/dev
+  notifications        Notification[]
+  aiExclusion          AiDataExclusion?
+  aiConversations      AiConversation[]
 
   // ─── Configuração de faturação da obra (Área Financeira) ───
   billingVatCativo          Boolean  @default(false) // IVA cativo: recebimento não considera IVA
@@ -2428,7 +2356,6 @@ model BankBalance {
   @@index([cardId, balanceDate])
 }
 
-<<<<<<< HEAD
 // =============================================
 // CENTRO DE PAGAMENTOS (P1) — Requisições de Pagamento
 // =============================================
@@ -2648,7 +2575,8 @@ model BankMovementSubtype {
 
   @@unique([typeCode, name])
   @@index([typeCode])
-=======
+}
+
 // ─── Inteligência Artificial (Fase 2.0) ─────────────────────────────────────
 
 /// Configuração global da IA (linha única, id = "default"), gerida no
@@ -2782,5 +2710,4 @@ model AiMessage {
   conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
->>>>>>> origin/dev
 }

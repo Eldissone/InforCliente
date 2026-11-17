@@ -155,11 +155,7 @@ function createMenuLink(definition, source, variant) {
     link.title = "Módulo em preparação";
     link.addEventListener("click", (event) => event.preventDefault());
   }
-<<<<<<< HEAD
-  const code = definition.code ? `<span class="app-sidebar-code">${definition.code}</span>` : "";
-  link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span>${code}<span>${definition.label}</span>`;
-=======
-
+  const codeHtml = definition.code ? `<span class="app-sidebar-code">${definition.code}</span>` : "";
   const badgeHtml = definition.badge ? `<span class="app-sidebar-badge">${definition.badge}</span>` : "";
 
   if (variant === "sidebar") {
@@ -167,13 +163,13 @@ function createMenuLink(definition, source, variant) {
       <span class="app-sidebar-icon-wrap" aria-hidden="true">
         <span class="material-symbols-outlined">${definition.icon || "article"}</span>
       </span>
+      ${codeHtml}
       <span class="app-sidebar-label">${definition.label}</span>
       ${badgeHtml}
     `;
   } else {
-    link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "article"}</span><span>${definition.label}</span>`;
+    link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "article"}</span>${codeHtml}<span>${definition.label}</span>`;
   }
->>>>>>> origin/dev
   return link;
 }
 
