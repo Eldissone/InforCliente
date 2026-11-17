@@ -16,7 +16,6 @@ function renderPageHeader({ kicker, title, subtitle }) {
   slot.innerHTML = `
     <header class="finance-page-header">
       <div>
-        <p class="finance-kicker">${escapeFinanceHtml(kicker || "Financeiro")}</p>
         <h1 class="finance-title">${escapeFinanceHtml(title || "Financeiro")}</h1>
         ${subtitle ? `<p class="finance-subtitle">${escapeFinanceHtml(subtitle)}</p>` : ""}
       </div>
