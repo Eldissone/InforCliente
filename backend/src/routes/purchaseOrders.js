@@ -97,7 +97,7 @@ async function generateOrderNumber() {
 const PURCHASE_ORDER_INCLUDE = {
   items: { orderBy: { order: "asc" } },
   supplier: { select: { id: true, name: true, nif: true, iban: true } },
-  project: { select: { id: true, name: true, code: true } },
+  project: { select: { id: true, name: true, code: true, referencia: true } },
   costCenter: { select: { id: true, name: true, code: true, currency: true } },
   requisition: {
     include: {

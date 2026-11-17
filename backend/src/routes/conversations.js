@@ -7,6 +7,8 @@ const path = require("path");
 const crypto = require("crypto");
 const { prisma } = require("../db");
 const { uploadToSupabase } = require("../utils/storage");
+const { notifyChatMessage } = require("../services/chatNotificationService");
+const { handleAiMention } = require("../services/ai/assistant/chatMention");
 const {
   findOrCreateDirectConversation,
   listConversationsForUser,
@@ -16,6 +18,7 @@ const {
   emitMessagesRead,
   assertClientChatPolicy,
   assertConversationAccess,
+  parseMentionIds,
   serializeUser,
   USER_PUBLIC_SELECT,
 } = require("../services/chatService");
@@ -118,6 +121,26 @@ conversationRoutes.post(
       mentionIds: body.mentionIds,
     });
 
+    // Mesmo comportamento do envio por socket: tempo real + notificações.
+    const io = req.app.get("io");
+    io?.to(`conversation:${conversationId}`).emit("message:new", message);
+    const participants = await prisma.conversationParticipant.findMany({
+      where: { conversationId },
+      select: { userId: true },
+    });
+    await notifyChatMessage({
+      io,
+      conversationId,
+      message,
+      senderId: req.user.sub,
+      senderName: req.user.name || (req.user.email ? req.user.email.split("@")[0] : null),
+      recipientIds: participants.map((p) => p.userId),
+      mentionIds: parseMentionIds(body.body, body.mentionIds),
+    });
+    handleAiMention({ io, conversationId, askerId: req.user.sub, message }).catch((err) =>
+      console.error("[ai] @IA:", err.message)
+    );
+
     return res.status(201).json({ message });
   })
 );
@@ -132,6 +155,16 @@ conversationRoutes.patch(
       conversationId,
       messageIds: result.messageIds || [],
       userId: req.user.sub,
+    });
+    // Ler a conversa também dá como lidas as notificações dela (sino).
+    await prisma.notification.updateMany({
+      where: {
+        userId: req.user.sub,
+        read: false,
+        type: { in: ["NEW_MESSAGE", "MENTION"] },
+        metadata: { path: ["conversationId"], equals: conversationId },
+      },
+      data: { read: true },
     });
     return res.json(result);
   })

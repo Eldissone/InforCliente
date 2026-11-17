@@ -28,7 +28,16 @@ import { escapeHtml } from "./ui.js";
 import {
   enqueuePaymentNotification,
   loadUnreadPaymentNotifications,
+  openNotificationTarget,
 } from "./paymentNotificationBar.js";
+import {
+  alertUser,
+  getNotifyPrefs,
+  initNotificationSound,
+  onNotifyPrefsChange,
+  syncNotifyPrefsFromServer,
+} from "./notificationSound.js";
+import { renderAlertSettings } from "./notificationSettings.js";
 
 let panelEl = null;
 let fabEl = null;
@@ -82,8 +91,12 @@ function getCurrentUserId() {
 function isMineMessage(m) {
   const me = getCurrentUserId();
   if (!me || !m) return false;
+  // Respostas do @IA ficam com senderId de quem perguntou, mas não são "minhas".
+  if (m.aiGenerated) return false;
   return m.sender?.id === me || m.senderId === me;
 }
+
+const AI_AVATAR = `<span class="w-8 h-8 rounded-xl" style="display:flex;align-items:center;justify-content:center;background:#0f172a;color:#2afc8d" aria-label="Assistente IA"><span class="material-symbols-outlined" style="font-size:18px">auto_awesome</span></span>`;
 
 function receiptLabel(status) {
   if (status === "READ") return "Lida";
@@ -153,6 +166,11 @@ function createPanel() {
         </div>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        <button type="button" id="globalChatSound" aria-label="Som e alertas" title="Som e alertas"
+          aria-haspopup="true" aria-expanded="false"
+          class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors">
+          <span id="globalChatSoundIcon" class="material-symbols-outlined text-xl">volume_up</span>
+        </button>
         <button type="button" id="globalChatNew" aria-label="Nova conversa"
           class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-colors">
           <span class="material-symbols-outlined text-xl">edit_square</span>
@@ -201,7 +219,23 @@ function createPanel() {
     </footer>
   `;
 
+  const soundMenu = document.createElement("div");
+  soundMenu.id = "globalChatSoundMenu";
+  soundMenu.setAttribute("hidden", "");
+  soundMenu.setAttribute("style", SOUND_MENU_STYLE);
+  panelEl.appendChild(soundMenu);
+
   document.body.appendChild(panelEl);
+
+  panelEl.querySelector("#globalChatSound")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSoundMenu();
+  });
+  panelEl.addEventListener("click", (e) => {
+    if (!e.target.closest("#globalChatSoundMenu, #globalChatSound")) toggleSoundMenu(false);
+  });
+  syncSoundToggleIcon();
+  onNotifyPrefsChange(syncSoundToggleIcon);
 
   panelEl.querySelector("#globalChatClose")?.addEventListener("click", closeChatPanel);
   panelEl.querySelector("#globalChatBack")?.addEventListener("click", showListView);
@@ -333,6 +367,7 @@ async function openConversation(conversationId) {
   state.messages = data.items || [];
   renderMessages();
   await markConversationRead(conversationId);
+  window.dispatchEvent(new CustomEvent("inforcliente:notifications-changed"));
   await markMessagesRead(conversationId);
   conv.unreadCount = 0;
   setChatUnreadCount(totalUnread());
@@ -413,21 +448,23 @@ function renderMessages() {
     .map((m, i) => {
       const mine = isMineMessage(m);
       const prev = state.messages[i - 1];
+      const ai = Boolean(m.aiGenerated);
       const sameAsPrev =
         prev &&
         isMineMessage(prev) === mine &&
+        Boolean(prev.aiGenerated) === ai &&
         (prev.sender?.id || prev.senderId) === (m.sender?.id || m.senderId);
-      const showIncomingMeta = !mine && !sameAsPrev && !isDirect;
+      const showIncomingMeta = !mine && !sameAsPrev && (!isDirect || ai);
       const showAvatar = !mine && !sameAsPrev;
       const statusLine = mine
         ? `${formatTime(m.createdAt)} · ${receiptLabel(m.status)}`
         : formatTime(m.createdAt);
       return `
         <div class="flex ${mine ? "justify-end" : "justify-start"} gap-2 ${sameAsPrev ? "mt-0.5" : "mt-3"}">
-          ${mine ? "" : showAvatar ? `<div class="shrink-0 self-end">${userAvatar(m.sender, "w-8 h-8")}</div>` : `<div class="w-8 shrink-0" aria-hidden="true"></div>`}
+          ${mine ? "" : showAvatar ? `<div class="shrink-0 self-end">${ai ? AI_AVATAR : userAvatar(m.sender, "w-8 h-8")}</div>` : `<div class="w-8 shrink-0" aria-hidden="true"></div>`}
           <div class="max-w-[75%] ${mine ? "items-end" : ""}">
-            ${showIncomingMeta ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
-            <div class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
+            ${showIncomingMeta ? `<p class="text-[10px] font-bold text-slate-400 mb-1 ml-1">${ai ? `Assistente IA · pedido por ${escapeHtml(m.sender?.name || m.sender?.email || "")}` : escapeHtml(m.sender?.name || m.sender?.email || "")}</p>` : ""}
+            <div ${ai ? 'style="background:#f5f3ff;border:1px solid #ddd6fe;white-space:pre-line"' : ""} class="${mine ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-800"} rounded-2xl ${mine ? "rounded-br-md" : "rounded-bl-md"} px-4 py-2.5 text-sm leading-relaxed">
               ${m.body ? renderMentionBody(m.body) : ""}
               ${renderAttachments(m.attachments, mine)}
             </div>
@@ -738,7 +775,108 @@ function wireSocketEvents() {
     if (payload?.type === "PAYMENT" || payload?.metadata?.helpTicketId) {
       enqueuePaymentNotification(payload);
     }
+    handleIncomingAlert(payload);
   });
+}
+
+let refreshConversationsTimer = null;
+
+function scheduleConversationsRefresh() {
+  clearTimeout(refreshConversationsTimer);
+  refreshConversationsTimer = setTimeout(loadConversations, 400);
+}
+
+function isChatNotification(payload) {
+  return payload?.type === "NEW_MESSAGE" || payload?.type === "MENTION";
+}
+
+function resolveAlertSound(payload) {
+  if (payload?.type === "MENTION") return "mention";
+  if (payload?.type === "NEW_MESSAGE") {
+    const viewing =
+      isOpen && payload.conversationId === state.activeId && document.visibilityState === "visible";
+    return viewing ? "soft" : "message";
+  }
+  const priority = String(payload?.metadata?.priority || payload?.priority || "").toUpperCase();
+  const title = String(payload?.title || "").toLowerCase();
+  if (priority === "URGENT" || priority === "HIGH" || title.includes("atraso")) return "urgent";
+  return "notification";
+}
+
+function handleIncomingAlert(payload) {
+  if (!payload) return;
+  const chat = isChatNotification(payload);
+  const conversationId = payload.conversationId || payload.metadata?.conversationId;
+
+  // Mensagens de conversas que não estão abertas não chegam por "message:new"
+  // (só quem está na sala da conversa as recebe): atualiza a lista e o badge.
+  if (chat && conversationId !== state.activeId) scheduleConversationsRefresh();
+
+  const conv = chat ? state.conversations.find((c) => c.id === conversationId) : null;
+  // Notificações agrupadas mantêm o id: o groupCount distingue cada ocorrência.
+  const key = payload.id
+    ? `notif:${payload.id}:${payload.groupCount || 1}`
+    : payload.messageId
+      ? `msg:${payload.messageId}`
+      : null;
+
+  alertUser({
+    key,
+    type: payload.type,
+    projectId: payload.projectId || payload.metadata?.projectId || null,
+    sound: resolveAlertSound(payload),
+    title: chat
+      ? payload.title || (payload.type === "MENTION" ? "Foi mencionado numa conversa" : "Nova mensagem")
+      : payload.title || "Nova notificação",
+    body: payload.body || (chat ? conv?.title || "Abra o chat para ler" : ""),
+    onClick: () => {
+      if (chat && conversationId) openConversationById(conversationId);
+      else openNotificationTarget(payload);
+    },
+  });
+}
+
+const SOUND_MENU_STYLE =
+  "position:absolute;top:60px;right:12px;width:260px;max-height:calc(100% - 72px);overflow-y:auto;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 18px 40px rgba(15,23,42,.18);padding:12px;z-index:5;font-size:13px;";
+
+function syncSoundToggleIcon() {
+  const icon = el("globalChatSoundIcon");
+  if (icon) icon.textContent = getNotifyPrefs().soundEnabled ? "volume_up" : "volume_off";
+}
+
+function renderSoundMenu() {
+  const menu = el("globalChatSoundMenu");
+  if (!menu) return;
+  menu.innerHTML = `<p style="font-weight:700;margin:0 2px 6px;">Alertas</p><div data-alert-settings></div>`;
+  renderAlertSettings(menu.querySelector("[data-alert-settings]"), {
+    compact: true,
+    onMore: () => {
+      toggleSoundMenu(false);
+      import("./notificationCenter.js")
+        .then(({ openNotificationCenter }) => openNotificationCenter({ view: "settings" }))
+        .catch(() => {});
+    },
+  });
+}
+
+function toggleSoundMenu(force) {
+  const menu = el("globalChatSoundMenu");
+  if (!menu) return;
+  const show = typeof force === "boolean" ? force : menu.hasAttribute("hidden");
+  if (show) {
+    renderSoundMenu();
+    menu.removeAttribute("hidden");
+  } else {
+    menu.setAttribute("hidden", "");
+  }
+  el("globalChatSound")?.setAttribute("aria-expanded", String(show));
+}
+
+/** Abre o painel do chat diretamente numa conversa (usado pelo sino e avisos). */
+export async function openConversationById(conversationId) {
+  openChatPanel();
+  if (!state.conversations.some((c) => c.id === conversationId)) await loadConversations();
+  await openConversation(conversationId);
 }
 
 export function openChatPanel() {
@@ -781,6 +919,8 @@ export function setChatUnreadCount(count) {
 }
 
 export async function initChatFab() {
+  initNotificationSound();
+  syncNotifyPrefsFromServer().then(syncSoundToggleIcon);
   createFab();
   createPanel();
   wireSocketEvents();

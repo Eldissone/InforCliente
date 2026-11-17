@@ -295,8 +295,44 @@ function wireObraEstadoButton() {
   });
 }
 
+// Compatibilidade com os links da antiga página centroCustos.html (tab=necessidades|cronograma|pendentes|historico…)
+const LEGACY_TAB_MAP = {
+  dashboard: { tab: "orcamento_custo" },
+  centros: { tab: "orcamento_custo" },
+  necessidades: { tab: "orcamento_custo" },
+  cronograma: { tab: "plano_financeiro", sub: "cronograma" },
+  pendentes: { tab: "plano_financeiro", sub: "pendentes" },
+  historico: { tab: "plano_financeiro", sub: "historico" },
+};
+
+function activateTabFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("tab");
+  if (!raw) return false;
+  const mapped = LEGACY_TAB_MAP[raw] || { tab: raw };
+  const tabId = mapped.tab;
+  const sub = params.get("sub") || mapped.sub || "";
+  const trigger = document.querySelector(`[data-tab-trigger="${tabId}"]`);
+  if (!trigger || trigger.dataset.permDenied === "true" || trigger.classList.contains("hidden")) return false;
+
+  const needId = params.get("needId");
+  if (needId) {
+    window.__pendingOpenCronogramaNeedId = needId;
+    window.__pendingOpenCronogramaQuoteId = params.get("quoteId");
+  }
+  trigger.click();
+  if (tabId === "plano_financeiro" && (sub || needId)) {
+    window.showFinanceiroSub?.(sub || "cronograma");
+  }
+  if (tabId === "orcamento_custo" && params.get("scan") === "1") {
+    window.triggerOrcamentoCustoAction?.("open-scan");
+  }
+  return true;
+}
+
 async function loadProject() {
   const id = getProjectId();
+  try { if (id) localStorage.setItem("InfoCliente.currentProjectId", id); } catch { /* ignore */ }
   const data = await apiRequest(`/projects/${encodeURIComponent(id)}`);
   const p = data.project;
   projectState = p;
@@ -636,6 +672,10 @@ async function loadBudgetExecution() {
   const linesRes = await apiRequest(`/projects/${encodeURIComponent(id)}/budget/lines`);
   const lines = linesRes.items || [];
   await renderOperationStatus(lines);
+  window.refreshProjectBudgetFromCusto = async () => {
+    await loadProject();
+    await loadBudgetExecution();
+  };
 }
 
 async function renderOperationStatus(lines) {
@@ -666,6 +706,21 @@ async function renderOperationStatus(lines) {
       cats[group].total += Number(l.total || 0);
     }
   });
+
+  // Integrar também o orçamento de custo por categoria (cbsSummary dos Centros de Custo / WorkNeed)
+  const cbs = projectState?.cbsSummary || {};
+  const cbsToGroup = {
+    MATERIAIS_INSUMOS: "MATERIALS",
+    SERVICOS_MAO_DE_OBRA: "LABOR",
+    GASTOS_PESSOAL: "PESSOAL",
+    DESPESAS_OPERACIONAIS: "OPERACIONAL",
+  };
+  for (const [cbsKey, grp] of Object.entries(cbsToGroup)) {
+    const bVal = Number(cbs[cbsKey]?.budgeted || 0);
+    const rVal = Number(cbs[cbsKey]?.realized || 0);
+    if (bVal > cats[grp].total) cats[grp].total = bVal;
+    if (rVal > cats[grp].consumed) cats[grp].consumed = rVal;
+  }
 
   // Somar todos os custos lançados por categoria
   (txData.items || []).forEach(t => {
@@ -1000,6 +1055,7 @@ function wireTabs() {
       if (
         tabId === "orcamento_custo" ||
         tabId === "orcamento_vendas" ||
+        tabId === "orcamento_cotacao" ||
         tabId === "plano_gantt" ||
         tabId === "plano_financeiro" ||
         tabId === "recursos_equipamentos" ||
@@ -1395,6 +1451,11 @@ function renderSavedMeasurementReports() {
             ${formatDateBR(r.reportDate)} · Período: ${measFmtMoney(val, projectState?.currency === "USD" ? "USD" : "Kz")}
           </div>
         </button>
+        ${measurementState.aiDocs ? `<button type="button" data-ai-report-text="${r.id}"
+          class="shrink-0 w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200 transition-all"
+          title="Texto descritivo do auto (IA)">
+          <span class="material-symbols-outlined text-lg" style="color:#7c3aed">auto_awesome</span>
+        </button>` : ""}
         <button type="button" data-delete-report="${r.id}" data-report-number="${escapeHtml(r.reportNumber)}"
           data-report-status="${escapeHtml(r.status || "DRAFT")}" data-role-visible="admin,operador"
           class="shrink-0 w-9 h-9 rounded-lg bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition-all"
@@ -1410,6 +1471,16 @@ function renderSavedMeasurementReports() {
     btn.addEventListener("click", async () => {
       const reportId = btn.getAttribute("data-load-report");
       await loadMeasurementReportById(reportId);
+    });
+  });
+
+  container.querySelectorAll("[data-ai-report-text]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const report = (measurementState.savedReports || []).find((r) => r.id === btn.dataset.aiReportText);
+      if (!report) return;
+      const { openMeasurementText } = await import("../../shared/documentDraft.js");
+      openMeasurementText({ projectId: getProjectId(), report });
     });
   });
 
@@ -1867,6 +1938,9 @@ async function loadProgressTasks() {
     }
   } catch (err) {
     toast("Erro ao carregar o relatório de avanço", { type: "error" });
+  }
+  if (!el("tab_orcamento_vendas")?.classList.contains("hidden")) {
+    loadPlaneamentoTab("orcamento_vendas");
   }
 }
 
@@ -2850,8 +2924,6 @@ function wireNewTransaction() {
             });
             toast("Necessidade adicionada ao Orçamento Geral!", { type: "success" });
             close();
-            // Optional: You could redirect the user to centroCustos.html if desired
-            // window.location.href = `centroCustos.html?id=${id}`;
           } catch (err) {
             setButtonLoading(btn, false);
             toast(err.message || "Erro ao criar necessidade", { type: "error" });
@@ -3199,7 +3271,7 @@ async function init() {
     } else {
       activateFirstVisibleProjectTab();
     }
-  } else {
+  } else if (!activateTabFromUrl()) {
     activateFirstVisibleProjectTab();
   }
   wireFilesUpload();
@@ -3272,7 +3344,7 @@ function openPreview(fileId) {
     body.innerHTML = `
       <div class="text-center">
         <span class="material-symbols-outlined text-7xl text-on-surface-variant/20 mb-6">description</span>
-        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo nÃ£o suporta prÃ©-visualizaÃ§Ã£o direta.</p>
+        <p class="text-on-surface-variant font-bold mb-4 text-sm">Este arquivo não suporta pré-visualização direta.</p>
         <a href="${fileUrl}" download="${file.originalName}" class="inline-flex items-center gap-2 bg-primary text-white px-8 py-3 rounded-xl font-bold hover:brightness-110 transition-all">
           <span class="material-symbols-outlined">download</span> Download do Arquivo
         </a>
@@ -3324,6 +3396,101 @@ function wirePreview() {
 }
 
 init().catch((err) => toast(err.message || "Falha ao carregar projeto. Verifique login/API.", { type: "error" }));
+
+// Assistente da obra (IA) — painel lateral só de leitura.
+document.getElementById("btnAiAssistant")?.addEventListener("click", async () => {
+  const { openAssistant } = await import("../../shared/aiAssistant.js");
+  const title = document.getElementById("projectTitle")?.textContent?.trim() || "";
+  openAssistant({ projectId: getProjectId(), projectLabel: title });
+});
+
+// Registo de execução por texto ou voz (IA) — a IA propõe, o técnico confirma.
+(async () => {
+  const btn = document.getElementById("btnAiProgress");
+  const projectId = getProjectId();
+  if (!btn || !projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/progress/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return; // portal do cliente ou sem sessão
+  }
+  // Só aparece a quem o pode usar; o administrador vê-o sempre (para saber porque está desligado).
+  if (!status.enabled && !status.canConfigure) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openProgressCapture } = await import("../../shared/progressCapture.js");
+    openProgressCapture({
+      projectId,
+      onSaved: () => {
+        try { loadProgressTasks(); } catch { /* separador ainda não carregado */ }
+      },
+    });
+  });
+})();
+
+// Fotos da obra com IA e histórico de segurança (só equipa interna).
+(async () => {
+  const projectId = getProjectId();
+  if (!projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/photos/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return; // portal do cliente
+  }
+  galleryState.aiStatus = status;
+  if (galleryState.items?.length) renderAdminGallery();
+  const btn = document.getElementById("btnSafetyHistory");
+  if (btn && status.canView) {
+    btn.style.display = "inline-flex";
+    btn.addEventListener("click", async () => {
+      const { openSafetyHistory } = await import("../../shared/photoAnalysis.js");
+      openSafetyHistory({ projectId });
+    });
+  }
+})();
+
+// Rascunhos de documentos (IA): texto do auto e relatório mensal ao cliente.
+(async () => {
+  const projectId = getProjectId();
+  if (!projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/documents/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return;
+  }
+  if (!status.enabled && !status.canConfigure) return;
+  measurementState.aiDocs = true;
+  if (measurementState.savedReports?.length) renderSavedMeasurementReports();
+  const btn = document.getElementById("btnAiMonthlyReport");
+  if (!btn) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openMonthlyReport } = await import("../../shared/documentDraft.js");
+    openMonthlyReport({ projectId, projectLabel: document.getElementById("projectTitle")?.textContent?.trim() || "" });
+  });
+})();
+
+// Necessidades assistidas (IA): texto ou foto da lista → rever → criar.
+(async () => {
+  const btn = document.getElementById("btnAiNeeds");
+  const projectId = getProjectId();
+  if (!btn || !projectId) return;
+  let status;
+  try {
+    status = await apiRequest(`/ai/needs/status?projectId=${encodeURIComponent(projectId)}`);
+  } catch {
+    return;
+  }
+  if (!status.enabled && !status.canConfigure) return;
+  btn.style.display = "inline-flex";
+  btn.addEventListener("click", async () => {
+    const { openNeedsAssist } = await import("../../shared/needsAssist.js");
+    openNeedsAssist({ projectId, needsLink: `/Projectos/projectView?id=${encodeURIComponent(projectId)}&tab=necessidades` });
+  });
+})();
 async function loadStock() {
   const id = getProjectId();
   renderLoadingRow(el("stockMovementsTbody"), 7);
@@ -3534,19 +3701,22 @@ function renderStockMovements(items) {
           <div class="text-[10px] font-black uppercase tracking-widest ${typeColor} inline-block px-2 py-0.5 rounded mt-1">${typeLabel}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || 'Material')}</div>
+          <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(m.product?.name || 'Material')}</div>
           <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${m.product?.reference || '-'}</div>
         </td>
         <td class="px-3 md:px-10 py-5">
-          <div class="text-xs font-black text-slate-900">${m.quantity} ${m.product?.unit || 'un'}</div>
+          <div class="text-xs font-black text-slate-900 uppercase">${m.quantity} ${m.product?.unit || 'un'}</div>
         </td>
         <td class="px-10 py-5 text-[10px] font-medium text-slate-500 hidden md:table-cell">
-           <div class="font-bold text-slate-700">${escapeHtml(driverInfo)}</div>
+           <div class="font-bold text-slate-700 uppercase">${escapeHtml(driverInfo)}</div>
            <div class="uppercase text-[9px] font-black text-slate-400">${escapeHtml(vehicleInfo)}</div>
         </td>
         <td class="px-6 md:px-10 py-5 text-right">
            <button type="button" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all" title="Ver detalhe">
              <span class="material-symbols-outlined text-sm">visibility</span>
+           </button>
+           <button type="button" data-delete-stock-move="${m.id}" class="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 inline-flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all" title="Eliminar movimento e reverter stock">
+             <span class="material-symbols-outlined text-sm">delete</span>
            </button>
         </td>
       </tr>
@@ -3664,7 +3834,7 @@ function renderStockDuplicateDebits(groups) {
                       <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${userName || "-"}</div>
                     </td>
                     <td class="px-6 py-4">
-                      <div class="text-xs font-bold text-slate-900">${productName}</div>
+                      <div class="text-xs font-bold text-slate-900 uppercase">${productName}</div>
                       <div class="mt-1">${badge}</div>
                     </td>
                     <td class="px-6 py-4 text-center text-xs font-black text-slate-900">${qty}</td>
@@ -3874,7 +4044,14 @@ async function openStockMovementDetailModal(moveId) {
         warehouseName: m.warehouse?.name,
       },
       entryHistory: entries,
-    }),
+    }) + `
+      <div class="pt-6 border-t border-slate-100 flex justify-end">
+        <button type="button" data-delete-stock-move="${m.id}" class="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-600 hover:text-white text-xs font-bold transition-all flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">delete</span>
+          Eliminar este Movimento
+        </button>
+      </div>
+    `,
     primaryLabel: "Fechar",
     onPrimary: async ({ close }) => close(),
   });
@@ -4321,7 +4498,7 @@ function renderStockInventory(movements, summary) {
            <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(product.name || "Desconhecido")}</div>
            <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">${product.sku || ""} | ${product.category || ""}</div>
         </td>
-        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell">${product.unit || "un"}</td>
+        <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-500 hidden sm:table-cell uppercase">${product.unit || "un"}</td>
         <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/30 hidden md:table-cell">${planned}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn}</td>
         <td class="px-10 py-5 text-center text-xs font-bold text-red-500 hidden md:table-cell">${consumed}</td>
@@ -4797,8 +4974,8 @@ function splitPlanRequestItems(items = []) {
 function renderPlanRequestChips(items, badgeClass) {
   return items.map(m => `
     <div class="bg-white rounded-xl p-3 shadow-sm border border-slate-100 flex items-center justify-between">
-      <span class="text-sm font-bold text-slate-800 line-clamp-1">${escapeHtml(m.product?.name || "Desconhecido")}</span>
-      <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
+      <span class="text-sm font-bold text-slate-800 line-clamp-1 uppercase">${escapeHtml(m.product?.name || "Desconhecido")}</span>
+      <span class="${badgeClass} px-2 py-1 rounded-lg text-xs font-black uppercase">${m.requestedQty} ${escapeHtml(m.product?.unit || "")}</span>
     </div>
   `).join("");
 }
@@ -5046,6 +5223,9 @@ function renderAdminGallery() {
                <button data-preview-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all border border-white/20">
                   <span class="material-symbols-outlined text-2xl">visibility</span>
                </button>
+               ${galleryState.aiStatus?.canReview ? `<button data-ai-photo="${p.id}" title="Análise da IA" class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-white/40 transition-all border border-white/20">
+                  <span class="material-symbols-outlined text-2xl" style="color:#2afc8d">auto_awesome</span>
+               </button>` : ""}
                <button data-role-visible="admin,supervisor,tecnico" data-delete-photo="${p.id}" class="w-12 h-12 rounded-2xl bg-red-500/80 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-600 transition-all border border-white/20">
                   <span class="material-symbols-outlined text-2xl">delete</span>
                </button>
@@ -5055,12 +5235,30 @@ function renderAdminGallery() {
             <p class="text-xs font-bold text-slate-900 line-clamp-2 mb-3 h-8" title="${escapeHtml(p.description || '')}">${escapeHtml(p.description || 'Sem Descrição')}</p>
             <div class="flex items-center justify-between pt-3 border-t border-slate-50">
               <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">${formatDateBR(p.createdAt)}</span>
-              <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span>
+              <span class="flex items-center gap-1">${p.aiAnalysis?.risks?.length ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[8px] font-black uppercase" title="Riscos de segurança indicados pela IA">${p.aiAnalysis.risks.length} risco(s)</span>` : p.aiAnalyzedAt ? '<span class="px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 text-[8px] font-black uppercase">IA</span>' : ""}
+              <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase">Geral</span></span>
             </div>
           </div>
         </div>
       `;
   }).join("");
+
+  grid.querySelectorAll("[data-ai-photo]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const photo = (galleryState.items || []).find((x) => x.id === btn.dataset.aiPhoto);
+      if (!photo) return;
+      const { openPhotoAnalysis } = await import("../../shared/photoAnalysis.js");
+      openPhotoAnalysis({
+        projectId: id,
+        photo,
+        onChanged: (updated) => {
+          Object.assign(photo, updated);
+          renderAdminGallery();
+        },
+      });
+    });
+  });
 
   grid.querySelectorAll("[data-delete-photo]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -5539,7 +5737,9 @@ function renderDailyPlanCard(p, column) {
   if (p.status === "DRAFT" || p.status === "PENDING_MATERIAL" || p.status === "IN_PROGRESS" || p.status === "COMPLETED") {
     actions.push(`<button type="button" data-role-visible="${p.status === "COMPLETED" ? "admin" : "admin,operador"}" class="dp-act-icon" title="Editar plano" onclick="event.stopPropagation(); window.openEditPlanModal('${p.id}')"><span class="material-symbols-outlined">edit</span></button>`);
   }
-  if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION" && p.status !== "COMPLETED") {
+  if (p.status === "COMPLETED") {
+    actions.push(`<button type="button" data-role-visible="admin" class="dp-act-icon dp-act-danger" title="Apagar plano concluído" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
+  } else if (p.status !== "IN_PROGRESS" && p.status !== "PENDING_VALIDATION") {
     actions.push(`<button type="button" data-role-visible="admin,operador" class="dp-act-icon dp-act-danger" title="Apagar plano" onclick="event.stopPropagation(); window.deletePlan('${p.id}')"><span class="material-symbols-outlined">delete</span></button>`);
   }
   actions.push(`<button type="button" class="dp-act-icon" title="Ver detalhes" onclick="event.stopPropagation(); window.viewPlanDetails('${p.id}')"><span class="material-symbols-outlined">visibility</span></button>`);
@@ -5847,7 +6047,11 @@ async function providePlanMaterials(planId) {
 window.providePlanMaterials = providePlanMaterials;
 
 async function deletePlan(planId) {
-  if (!confirm("Tem a certeza que deseja apagar este plano?")) return;
+  const plan = (window.dailyPlansState || []).find((p) => p.id === planId);
+  const message = plan?.status === "COMPLETED"
+    ? "Apagar este plano concluído? As quantidades executadas saem do avanço físico e os materiais consumidos regressam ao estaleiro."
+    : "Tem a certeza que deseja apagar este plano?";
+  if (!confirm(message)) return;
   try {
     await apiRequest(`/daily-plans/${encodeURIComponent(planId)}`, { method: "DELETE" });
     toast("Plano apagado com sucesso!", { type: "success" });

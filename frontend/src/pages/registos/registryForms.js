@@ -1,4 +1,5 @@
-import { apiRequest, apiUpload } from "/services/api.js";
+import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
+import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
@@ -307,10 +308,25 @@ function rfField(label, control, extra = "") {
   return `<label class="rf-field ${extra}"><span>${label}</span>${control}</label>`;
 }
 
-function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar." }) {
+function rfFicha({ title, lead, cards, submitLabel = "Guardar", canSave = true, denied = "Sem permissão para guardar.", topLink = null }) {
+  const headHtml = topLink
+    ? `<header class="rf-catalog-head">
+        <div>
+          <h1 class="rf-title">${title}</h1>
+          <p class="rf-lead">${lead}</p>
+        </div>
+        <div class="rf-catalog-actions">
+          <a href="${topLink.href}" class="rf-top-btn">
+            ${topLink.icon ? `<span class="material-symbols-outlined" aria-hidden="true">${topLink.icon}</span>` : ""}
+            ${topLink.label}
+          </a>
+        </div>
+      </header>`
+    : `<h1 class="rf-title">${title}</h1>
+       <p class="rf-lead">${lead}</p>`;
+
   return `
-    <h1 class="rf-title">${title}</h1>
-    <p class="rf-lead">${lead}</p>
+    ${headHtml}
     <form class="rf-form" novalidate>
       ${cards}
       <div class="rf-actions">
@@ -399,7 +415,7 @@ export function obraFormSectionsHtml({ clients = [], contacts = [], values = {} 
   const contactOptions = contacts.map((contact) => ({
     value: contact.id,
     label: `${esc(contact.name || contact.nome)} — ${esc(contact.role || contact.funcao || "Sem função")}`,
-    photo: contact.photoUrl || contact.foto || "",
+    photo: getAssetUrl(contact.photoUrl) || contact.foto || "",
   }));
   const tipos = Array.isArray(values.tipos) ? values.tipos : [];
   const servicos = Array.isArray(values.servicos) ? values.servicos : [];
@@ -626,9 +642,81 @@ async function handleMigration(mig, root) {
   return true;
 }
 
+const SUPPLIER_TYPES = { MATERIAL: "Material", SERVICO: "Serviço", TRANSPORTADOR: "Transportador" };
+const CLIENT_STATUS = { ACTIVE: "Activo", AT_RISK: "Em risco", INACTIVE: "Inactivo" };
+const CARD_TYPES = { PREPAGO: "Pré-pago", DEBITO: "Débito", CREDITO: "Crédito" };
+const MOVEMENT_TYPES = { CREDITO: "Crédito", AJUSTE: "Ajuste", DEBITO: "Débito" };
+const EQUIPMENT_KINDS = ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"];
+
+let registryListGen = 0;
+
+function moneyLabel(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return "";
+  return amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function dateLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toLocaleDateString("pt-PT");
+}
+
+function equipmentKind(item) {
+  const head = String(item?.description || "").split(" · ")[0];
+  if (EQUIPMENT_KINDS.includes(head)) return head;
+  return item?.category === "TOOL" ? "Ferramenta" : "Equipamento";
+}
+
+async function loadItems(path) {
+  const data = await apiRequest(path);
+  return data?.items || [];
+}
+
+async function loadPaged(path, pageSize) {
+  const items = [];
+  let page = 1;
+  let total = Infinity;
+  while (items.length < total && page <= 30) {
+    const joiner = path.includes("?") ? "&" : "?";
+    const data = await apiRequest(`${path}${joiner}page=${page}&pageSize=${pageSize}`);
+    const batch = data?.items || [];
+    total = Number.isFinite(Number(data?.total)) ? Number(data.total) : items.length + batch.length;
+    items.push(...batch);
+    if (!batch.length || items.length >= total) break;
+    page += 1;
+  }
+  return items;
+}
+
+function paintExistingList(spec) {
+  const root = document.getElementById("registryRoot");
+  if (!root) return;
+  root.querySelector("[data-existing-list]")?.remove();
+  root.insertAdjacentHTML("beforeend", existingListHtml(spec));
+}
+
+function showRegistered({ title, columns, empty, load }) {
+  const gen = registryListGen;
+  paintExistingList({ title, columns, rows: [], empty: "A carregar...", loading: true });
+  Promise.resolve()
+    .then(load)
+    .then((result) => {
+      if (gen !== registryListGen) return;
+      const rows = Array.isArray(result) ? result : result.rows;
+      paintExistingList({ title, columns, rows, empty, actions: Array.isArray(result) ? null : result.actions });
+    })
+    .catch((error) => {
+      if (gen !== registryListGen) return;
+      paintExistingList({ title, columns, rows: [], empty, error: apiMessage(error) });
+    });
+}
+
 function mount(kind, html, onSubmit) {
   const root = document.getElementById("registryRoot");
   if (!root) return;
+  registryListGen += 1;
   root.innerHTML = html;
 
   const mig = checkMigration(kind);
@@ -694,6 +782,86 @@ async function renderContactos() {
       await apiUpload(`/contacts/${res.id}/photo`, fd);
     }
   });
+  const canEdit = can("cadastros", "edit") || can("cadastros", "manage");
+  const canDelete = can("cadastros", "delete") || can("cadastros", "manage");
+  let contactItems = [];
+  const reloadContacts = () => showRegistered({
+    title: "Contactos registados",
+    columns: ["Nome", "Função", "Telefone", "Email"],
+    empty: "Ainda não há contactos registados.",
+    load: async () => {
+      contactItems = await loadPaged("/contacts", 200);
+      return {
+        rows: contactItems.map((item) => [item.isUser ? `${item.name} (utilizador)` : item.name, item.role, item.phone, item.email]),
+        // contactos de utilizadores são geridos em Gestão → sem acções
+        actions: contactItems.map((item) => item.isUser ? "" : [
+          canEdit ? `<button type="button" class="reg-row-action" data-contact-edit="${esc(item.id)}" title="Editar" aria-label="Editar"><span class="material-symbols-outlined">edit</span></button>` : "",
+          canDelete ? `<button type="button" class="reg-row-action" data-contact-delete="${esc(item.id)}" title="Eliminar" aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>` : "",
+        ].join("")),
+      };
+    },
+  });
+  reloadContacts();
+
+  const root = document.getElementById("registryRoot");
+  root?.addEventListener("click", async (event) => {
+    const editBtn = event.target.closest("[data-contact-edit]");
+    const delBtn = event.target.closest("[data-contact-delete]");
+    if (!editBtn && !delBtn) return;
+    const id = (editBtn || delBtn).getAttribute(editBtn ? "data-contact-edit" : "data-contact-delete");
+    const item = contactItems.find((c) => c.id === id);
+    if (!item || item.isUser) return;
+
+    if (delBtn) {
+      if (!confirm(`Eliminar o contacto "${item.name}"? Deixa de aparecer na lista e nas novas obras.`)) return;
+      try {
+        await apiRequest(`/contacts/${id}`, { method: "DELETE" });
+        toast("Contacto eliminado.", { type: "success" });
+        reloadContacts();
+      } catch (error) {
+        toast(apiMessage(error), { type: "error" });
+      }
+      return;
+    }
+
+    openModal({
+      title: "Editar contacto",
+      primaryLabel: "Guardar",
+      contentHtml: `<form class="rf-grid" onsubmit="return false">
+        ${rfField("Nome *", textInput("nome", { required: true, value: item.name }), "span-2")}
+        ${rfField("Função *", textInput("funcao", { required: true, value: item.role }))}
+        ${rfField("Telefone", textInput("telefone", { value: item.phone || "" }))}
+        ${rfField("Email", textInput("email", { type: "email", value: item.email || "" }), "span-2")}
+        ${rfField("Nova foto", `${textInput("foto", { type: "file", accept: "image/*" })}<span class="rf-hint">Deixe vazio para manter a foto actual.</span>`, "span-2")}
+      </form>`,
+      onPrimary: async ({ btn, close, body }) => {
+        const val = (name) => String(body.querySelector(`[name="${name}"]`)?.value || "").trim();
+        if (val("nome").length < 2 || val("funcao").length < 2) {
+          toast("Indique o nome e a função.", { type: "error" });
+          return;
+        }
+        btn.disabled = true;
+        try {
+          await apiRequest(`/contacts/${id}`, {
+            method: "PATCH",
+            body: { name: val("nome"), role: val("funcao"), phone: val("telefone") || null, email: val("email") || null },
+          });
+          const file = body.querySelector('[name="foto"]')?.files?.[0];
+          if (file) {
+            const fd = new FormData();
+            fd.append("photo", file);
+            await apiUpload(`/contacts/${id}/photo`, fd);
+          }
+          toast("Contacto actualizado.", { type: "success" });
+          close();
+          reloadContacts();
+        } catch (error) {
+          toast(apiMessage(error), { type: "error" });
+          btn.disabled = false;
+        }
+      },
+    });
+  });
 }
 
 const PESSOAL_PAGE_SIZE = 12;
@@ -729,6 +897,15 @@ function pessoalObrasLabel(item) {
     .filter(Boolean);
   if (names.length) return names.join(", ");
   return item.project?.name || item.obraNome || "";
+}
+
+/** Célula da tabela: com mais de uma obra mostra só "N obras" (lista completa no tooltip). */
+function pessoalObrasCellHtml(item) {
+  const names = (item.projects || []).map((obra) => obra.name || obra.code).filter(Boolean);
+  if (names.length > 1) {
+    return `<span title="${esc(names.join("\n"))}">${names.length} obras</span>`;
+  }
+  return esc(pessoalObrasLabel(item));
 }
 
 function personnelProjectIdsFromItem(item) {
@@ -783,14 +960,14 @@ function renderPessoal() {
       const body = rows.length
         ? rows.map((item, index) => `<tr>
             <td>${String(start + index + 1).padStart(2, "0")}</td>
-            <td>${esc(item.firstName || item.nome || "")}</td>
+            <td>${esc(item.firstName || item.nome || "")}${item.isUser ? ` <small class="pessoal-user-tag">(utilizador)</small>` : ""}</td>
             <td>${esc(item.lastName || item.apelido || "")}</td>
             <td>${esc(pessoalTipoLabel(item.type || item.tipo || ""))}</td>
             <td>${esc(item.employeeCode || item.idFuncionario || "")}</td>
             <td>${esc(item.phone || item.telefone || "")}</td>
             <td>${esc(item.role || item.funcao || "")}</td>
-            <td class="pessoal-obras-cell">${esc(pessoalObrasLabel(item))}</td>
-            <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">Ver mais</button></td>
+            <td class="pessoal-obras-cell">${pessoalObrasCellHtml(item)}</td>
+            <td><button type="button" class="pessoal-more" data-open="${esc(item.id)}">${item.isUser ? "Ver" : "Ver mais"}</button></td>
           </tr>`).join("")
       : `<tr><td class="pessoal-empty" colspan="9">Ainda não há funcionários registados.</td></tr>`;
     const pageButtons = Array.from({ length: pages }, (_, index) => {
@@ -894,7 +1071,7 @@ function renderPessoal() {
     const selectedTipo = mapPessoalTipo(current?.type || current?.tipo || "INTERNO");
     const funcoes = FUNCOES.map((funcao) => `<option value="${esc(funcao)}" ${current?.role === funcao || current?.funcao === funcao ? "selected" : ""}></option>`).join("");
     const foto = current?.photoUrl || current?.foto
-      ? `<img src="${esc(current.photoUrl || current.foto)}" alt="">`
+      ? `<img src="${esc(getAssetUrl(current.photoUrl) || current.foto)}" alt="">`
       : `<span class="material-symbols-outlined" aria-hidden="true">photo_camera</span>`;
 
     const obraOptions = (selectedId = "", excludeIds = []) => view.obras
@@ -978,8 +1155,8 @@ function renderPessoal() {
           <h1>${current ? "Editar Funcionário" : "Novo Funcionário"}</h1>
           <p>${current ? "Actualizar ficha do funcionário" : "Registar ficha de novo funcionário"}</p>
         </div>
+        <button type="button" class="pessoal-back" id="pessoalBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
       </header>
-      <button type="button" class="pessoal-back" id="pessoalBack"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span> Voltar</button>
       <form class="pessoal-form-card" id="pessoalForm" novalidate>
         <h2>${current ? "Editar Funcionário" : "Registar Novo Funcionário"}</h2>
         <label class="pessoal-photo">
@@ -1011,6 +1188,14 @@ function renderPessoal() {
       </form>`;
 
     paintObrasField();
+
+    // Pessoal que vem de um utilizador: só leitura (gere-se em Gestão de utilizadores).
+    if (current?.isUser) {
+      const form = root.querySelector("#pessoalForm");
+      form?.querySelectorAll("input, select, button").forEach((el) => { el.disabled = true; });
+      form?.querySelector(".pessoal-submit")?.remove();
+      form?.insertAdjacentHTML("afterbegin", `<p class="registry-note">Este funcionário é um utilizador do sistema. Os dados e as obras são geridos em <a href="/Users">Gestão de utilizadores</a>.</p>`);
+    }
 
     root.querySelector("#pessoalBack")?.addEventListener("click", () => {
       view.mode = "list";
@@ -1491,6 +1676,15 @@ async function renderSetores() {
       body: { name: nome }
     });
   });
+  showRegistered({
+    title: "Setores registados",
+    columns: ["Nome"],
+    empty: "Ainda não há setores registados.",
+    load: async () => {
+      const items = await loadPaged("/sectors", 200);
+      return items.map((item) => [item.name]);
+    },
+  });
 }
 
 function fornField(label, control, extra = "") {
@@ -1587,8 +1781,16 @@ async function renderFornecedores() {
   await initPermissionLayer();
   const canManage = can("fornecedores", "manage") || can("fornecedores", "create");
   const form = mount("fornecedores", `
-    <h1 class="forn-title">Criar Fornecedor</h1>
-    <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+    <header class="forn-header">
+      <div>
+        <h1 class="forn-title">Criar Fornecedor</h1>
+        <p class="forn-lead">Consulte o NIF no Portal da AGT para preencher automaticamente os dados fiscais.</p>
+      </div>
+      <a href="/fornecedores" class="forn-top-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Lista de Fornecedores
+      </a>
+    </header>
     <form class="forn-form" novalidate>
       <section class="forn-card">
         <h2>Identificação fiscal</h2>
@@ -1734,8 +1936,16 @@ async function renderClientes() {
        <span class="cli-hint">Ainda não há setores. Pode escrever o nome ou criar um setor em Registos.</span>`;
 
   mount("clientes", `
-    <h1 class="cli-title">Criar Cliente</h1>
-    <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+    <header class="cli-header">
+      <div>
+        <h1 class="cli-title">Criar Cliente</h1>
+        <p class="cli-lead">Preencha a identificação e defina o email e a palavra-passe de acesso ao portal.</p>
+      </div>
+      <a href="/Clientes/clienteLista" class="cli-top-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Lista de Clientes
+      </a>
+    </header>
     <form class="cli-form" novalidate>
       <section class="cli-card">
         <h2>Identificação</h2>
@@ -1805,7 +2015,16 @@ async function renderObras() {
   }
 
   const form = mount("obras", `<form class="registry-form obra-form" novalidate>
-    <header class="obra-form-heading"><div><h1>Criar Obra</h1><p>Preencha os dados da nova obra para iniciar o processo de criação.</p></div><a href="/Projectos/ProjectGeral.html">‹ &nbsp; Voltar</a></header>
+    <header class="obra-form-heading">
+      <div>
+        <h1>Criar Obra</h1>
+        <p>Preencha os dados da nova obra para iniciar o processo de criação.</p>
+      </div>
+      <a href="/Projectos/ProjectGeral.html" class="obra-top-list-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Listagem de Obras
+      </a>
+    </header>
     ${obraFormSectionsHtml({ clients, contacts })}
     <div class="registry-actions"><a class="registry-ghost" href="/Projectos/ProjectGeral.html">Cancelar</a><button class="registry-submit" type="submit">Guardar Obra</button></div>
   </form>`, async (form) => {
@@ -1828,6 +2047,11 @@ async function renderEquipamentos() {
     title: "Criar Equipamento, Maquinaria ou Viatura",
     lead: "Registo de equipamento, maquinaria, viatura ou ferramenta.",
     submitLabel: "Guardar equipamento",
+    topLink: {
+      href: "/equipamentos",
+      label: "Lista de Equipamentos",
+      icon: "format_list_bulleted",
+    },
     cards: rfCard("Identificação", `<div class="rf-grid">
       ${rfField("Nome *", textInput("name", { required: true, placeholder: "Nome do equipamento" }), "span-2")}
       ${rfField("Tipo *", selectInput("kind", ["Equipamento", "Maquinaria", "Viatura", "Ferramenta"]))}
@@ -1944,6 +2168,11 @@ async function renderCartoes() {
     title: "Criar Cartão Bancário",
     lead: "O cartão fica disponível para várias obras. Não fica preso a uma obra só.",
     submitLabel: "Guardar cartão",
+    topLink: {
+      href: "/Financeiro/tesouraria/atm",
+      label: "Tesouraria & Cartões",
+      icon: "credit_card",
+    },
     cards: `${rfCard("Cartão", `<div class="rf-grid">
       ${rfField("Designação *", textInput("label", { required: true, placeholder: "Cartão operacional" }), "span-2")}
       ${rfField("Banco", textInput("bank", { placeholder: "Nome do banco" }))}
@@ -1999,6 +2228,11 @@ async function renderMovimentos() {
     title: "Registar Movimento Financeiro",
     lead: "Registe um crédito ou um ajuste num cartão bancário.",
     submitLabel: "Guardar movimento",
+    topLink: {
+      href: "/Financeiro/tesouraria/extratos",
+      label: "Extratos Bancários",
+      icon: "receipt_long",
+    },
     cards: rfCard("Movimento", `<div class="rf-grid">
       ${rfField("Cartão *", cards.length
         ? selectInput("cardId", cards.map((card) => ({

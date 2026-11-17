@@ -20,6 +20,7 @@ const { supplierRoutes } = require("./routes/suppliers");
 const { quoteRoutes } = require("./routes/quotes");
 const { conversationRoutes } = require("./routes/conversations");
 const { notificationRoutes } = require("./routes/notifications");
+const { aiRoutes } = require("./routes/ai");
 const { pettyCashRoutes } = require("./routes/pettyCash");
 const { extraRequestRoutes } = require("./routes/extraRequests");
 const { generalCostCenterRoutes } = require("./routes/generalCostCenters");
@@ -122,6 +123,7 @@ app.use("/suppliers", supplierRoutes);
 app.use("/quotes", quoteRoutes);
 app.use("/conversations", conversationRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/ai", aiRoutes);
 app.use("/petty-cash", pettyCashRoutes);
 app.use("/extra-requests", extraRequestRoutes);
 app.use("/general-cost-centers", generalCostCenterRoutes);
@@ -154,20 +156,30 @@ app.use((err, _req, res, _next) => {
     });
   }
 
-  const status = typeof err?.status === "number" ? err.status : 500;
+  const status =
+    typeof err?.status === "number"
+      ? err.status
+      : err?.code && err.code !== "INTERNAL_SERVER_ERROR"
+        ? 400
+        : 500;
+
   const message =
     status === 503 || err?.code === "AI_TIMEOUT"
       ? err.message || "Serviço indisponível"
       : status >= 500
         ? "INTERNAL_SERVER_ERROR"
-        : err.message;
+        : (err.message || err.code || "Bad Request");
 
   if (status >= 500) {
-
     console.error(err);
   }
 
-  return res.status(status).json({ error: message });
+  return res.status(status).json({
+    error: message,
+    code: err?.code,
+    previstoUnitPrice: err?.previstoUnitPrice,
+    requestedUnitPrice: err?.requestedUnitPrice,
+  });
 });
 
 const server = http.createServer(app);
@@ -188,6 +200,8 @@ server.listen(config.port, async () => {
   scanPayments();
   setInterval(scanPayments, 6 * 60 * 60 * 1000);
   startBackupScheduler();
+  require("./services/ai/digests/service").startDigestScheduler(io);
+  require("./services/ai/alerts/service").startAlertScheduler(io);
 });
 
 

@@ -7,7 +7,7 @@ const { CHANNELS, DELIVERY_STATUS } = require("../channels");
  * disponível. É o único canal que hoje entrega de facto — os restantes
  * (email/whatsapp) ficam preparados mas inativos até haver credenciais.
  */
-async function send({ io, user, type, title, body, link, metadata }) {
+async function send({ io, user, type, title, body, link, metadata, priority, projectId, groupKey, groupTitle }) {
   const notification = await createNotification({
     userId: user.id,
     type,
@@ -15,6 +15,10 @@ async function send({ io, user, type, title, body, link, metadata }) {
     body,
     link,
     metadata,
+    priority,
+    projectId,
+    groupKey,
+    groupTitle,
   });
 
   if (io) {
@@ -25,6 +29,12 @@ async function send({ io, user, type, title, body, link, metadata }) {
       body: notification.body,
       link: notification.link,
       metadata: notification.metadata || null,
+      priority: notification.priority,
+      projectId: notification.projectId || null,
+      groupCount: notification.groupCount,
+      // Campos de topo usados pelo chat no frontend (abrir conversa ao clicar).
+      conversationId: notification.metadata?.conversationId || null,
+      messageId: notification.metadata?.messageId || null,
       createdAt: notification.createdAt,
     });
   }

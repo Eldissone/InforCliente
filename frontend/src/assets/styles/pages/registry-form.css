@@ -170,6 +170,7 @@
   min-width: 11.5rem;
   height: 3rem;
   padding: 0 1rem;
+  margin-bottom: 1rem;
   border: 0;
   border-radius: 10px;
   font-size: 0.82rem;
@@ -266,6 +267,36 @@ body[data-registry="obras"] .registry-page>h1 {
   font-size: 14px;
   line-height: 24px;
   text-decoration: none;
+}
+
+.obra-top-list-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937 !important;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.obra-top-list-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.obra-top-list-btn .material-symbols-outlined {
+  font-size: 20px;
+  color: #475569;
 }
 
 .obra-card {
@@ -559,6 +590,11 @@ body[data-registry="obras"] .registry-page>h1 {
     flex-direction: column;
   }
 
+  .obra-top-list-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   .obra-form .registry-actions {
     flex-direction: column-reverse;
     align-items: stretch;
@@ -741,4 +777,103 @@ body[data-registry]:not([data-registry="obras"]) .registry-ghost {
 .registry-inline-actions {
   display: flex;
   justify-content: flex-start;
+}
+
+.reg-existing {
+  margin-top: 1.75rem;
+  padding: 1.15rem 1.15rem 0.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.reg-existing-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.reg-existing-head h2 {
+  margin: 0;
+  color: #212e3e;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.reg-existing-head span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reg-existing-wrap {
+  overflow-x: auto;
+}
+
+.reg-existing table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.reg-existing th {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.reg-existing td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: top;
+}
+
+.reg-existing-empty {
+  padding: 1.15rem 0.75rem !important;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.reg-existing-actions {
+  white-space: nowrap;
+  text-align: right;
+  width: 1%;
+}
+
+.reg-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.6rem;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.reg-row-action:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.reg-row-action[data-contact-delete]:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.reg-row-action .material-symbols-outlined {
+  font-size: 1.15rem;
 }

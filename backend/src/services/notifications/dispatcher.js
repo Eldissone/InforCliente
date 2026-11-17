@@ -33,6 +33,10 @@ const PROVIDERS = {
  * @param {object} [params.metadata]
  * @param {string[]} [params.channels] - canais desejados (default: apenas in_app)
  * @param {Array<{url:string,filename?:string}>} [params.attachments] - ex.: comprovativo em PDF
+ * @param {"LOW"|"NORMAL"|"HIGH"|"URGENT"} [params.priority] - define o som/destaque (default NORMAL)
+ * @param {string} [params.projectId] - obra (default: metadata.projectId)
+ * @param {string} [params.groupKey] - agrupa notificações repetidas não lidas (ver notificationService)
+ * @param {string} [params.groupTitle] - título quando agrupada; `{count}` = nº de ocorrências
  */
 async function dispatchNotification({
   io,
@@ -44,6 +48,10 @@ async function dispatchNotification({
   metadata,
   channels = [CHANNELS.IN_APP],
   attachments,
+  priority,
+  projectId,
+  groupKey,
+  groupTitle,
 } = {}) {
   if (!user?.id) return [];
 
@@ -56,7 +64,20 @@ async function dispatchNotification({
     }
 
     try {
-      const result = await provider.send({ io, user, type, title, body, link, metadata, attachments });
+      const result = await provider.send({
+        io,
+        user,
+        type,
+        title,
+        body,
+        link,
+        metadata,
+        attachments,
+        priority,
+        projectId,
+        groupKey,
+        groupTitle,
+      });
       results.push(result);
     } catch (error) {
       console.error(`[notifications] provider "${channel}" falhou:`, error);

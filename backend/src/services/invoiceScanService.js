@@ -1,11 +1,12 @@
 const { config } = require("../config");
 
 /**
- * Leitura automática de faturas (Área Financeira) com o Google Gemini.
+ * Leitura automática de faturas, proformas e cotações com o Google Gemini.
  *
- * O financeiro carrega o PDF/imagem da fatura física e a IA devolve os campos
- * já estruturados (nº do documento, datas, valores, IVA, retenção, fornecedor
- * e a obra provável). Nada é gravado aqui — o serviço apenas lê o documento.
+ * Carrega o PDF/imagem do documento e a IA devolve os campos estruturados
+ * (nº do documento, datas, valores, IVA, retenção, descontos, fornecedor,
+ * obra provável, centro de custo / categoria sugerida e linhas/itens detalhados).
+ * Nada é gravado aqui — o serviço apenas lê o documento.
  *
  * Requer `GEMINI_API_KEY` no .env. Sem chave, `isConfigured()` é falso e as
  * rotas respondem com um erro explícito em vez de rebentar a área financeira.
@@ -38,6 +39,8 @@ const RESPONSE_SCHEMA = {
     docDate: { type: "string" },
     dueDate: { type: "string" },
     grossAmount: { type: ["number", "null"] },
+    discountAmount: { type: ["number", "null"] },
+    discountPercent: { type: ["number", "null"] },
     vatAmount: { type: ["number", "null"] },
     vatPercent: { type: ["number", "null"] },
     withholdingAmount: { type: ["number", "null"] },
@@ -50,12 +53,31 @@ const RESPONSE_SCHEMA = {
     currency: { type: "string" },
     supplierName: { type: "string" },
     supplierNif: { type: "string" },
+    supplierPhone: { type: "string" },
+    supplierEmail: { type: "string" },
+    supplierIban: { type: "string" },
     clientName: { type: "string" },
     clientNif: { type: "string" },
     projectHint: { type: "string" },
+    suggestedCategory: { type: "string" },
     description: { type: "string" },
     notes: { type: "string" },
     confidence: { type: ["number", "null"] },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          description: { type: "string" },
+          unit: { type: "string" },
+          quantity: { type: ["number", "null"] },
+          unitPrice: { type: ["number", "null"] },
+          total: { type: ["number", "null"] },
+          costCenterHint: { type: "string" },
+        },
+        required: ["description", "unit", "quantity", "unitPrice", "total", "costCenterHint"],
+      },
+    },
   },
   required: [
     "documentType",
@@ -75,17 +97,16 @@ const RESPONSE_SCHEMA = {
     "currency",
     "supplierName",
     "supplierNif",
-    "clientName",
-    "clientNif",
     "projectHint",
     "description",
     "notes",
     "confidence",
+    "items",
   ],
 };
 
-const INSTRUCTION = `És um assistente de contabilidade de uma empresa de construção civil em Angola.
-Recebes o PDF ou a fotografia de uma fatura/documento e tens de devolver APENAS um JSON com os dados lidos.
+const INSTRUCTION = `És um assistente de contabilidade e orçamentação de construção civil em Angola.
+Recebes o PDF ou imagem de uma fatura, proforma ou cotação e devolves APENAS um JSON com os dados lidos.
 
 Regras:
 - Valores sempre em número (1234.56), nunca em texto, sem símbolos de moeda e sem separador de milhares.
@@ -166,7 +187,6 @@ function parseNumberValue(raw) {
   if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
   let text = String(raw).trim();
   if (!text) return null;
-  // "1.234,56" (pt) vs "1,234.56" (en)
   const hasComma = text.includes(",");
   const hasDot = text.includes(".");
   if (hasComma && hasDot) {
@@ -208,7 +228,6 @@ function translateInvoiceNote(value) {
   return text;
 }
 
-/** Confiança 0–1 vem como fração ou percentagem, conforme o modelo. */
 function normalizeConfidence(value) {
   const n = parseNumberValue(value);
   if (n === null) return null;
@@ -232,7 +251,6 @@ function extractJsonBlock(text) {
   }
 }
 
-/** Sugere a obra a partir do texto lido (código exato → nome → conteúdo). */
 function matchProject(projects, hint) {
   const text = String(hint || "").trim().toLowerCase();
   if (!text || !projects?.length) return null;
@@ -259,50 +277,158 @@ function matchProject(projects, hint) {
   return reversed[0] || null;
 }
 
-async function callGemini({ mimeType, base64Data, projects }) {
-  const baseUrl = config.ai.geminiBaseUrl.replace(/\/$/, "");
+function normalizeInvoiceItems(rawItems, fallbackContext = {}) {
+  const list = Array.isArray(rawItems) ? rawItems : [];
+  const defaultCategory = inferCostCategoryFromText(
+    fallbackContext.suggestedCategory || fallbackContext.description || "",
+    "MATERIAIS_INSUMOS"
+  );
+  const normalized = [];
+
+  for (const raw of list) {
+    if (!raw || typeof raw !== "object") continue;
+    const description = cleanText(raw.description, 300);
+    const qtyRaw = parseNumberValue(raw.quantity);
+    const quantity = qtyRaw && qtyRaw > 0 ? round2(qtyRaw) : 1;
+    let unitPrice = round2(parseNumberValue(raw.unitPrice));
+    let total = round2(parseNumberValue(raw.total));
+    const discountPercent = clampPercent(raw.discountPercent) ?? fallbackContext.discountPercent ?? 0;
+    const vatPercent = clampPercent(raw.vatPercent) ?? fallbackContext.vatPercent ?? null;
+
+    if (unitPrice === null && total !== null && quantity > 0) {
+      unitPrice = round2(total / quantity);
+    }
+    if (total === null && unitPrice !== null) {
+      const discFactor = discountPercent ? Math.max(0, 1 - discountPercent / 100) : 1;
+      total = round2(quantity * unitPrice * discFactor);
+    }
+    if (!description && total === null && unitPrice === null) continue;
+
+    const hintStr = cleanText(raw.costCenterHint, 80) || "";
+    const categoryKey = inferCostCategoryFromText(
+      raw.category || (CategoryKeySet.has(hintStr.toUpperCase()) ? hintStr : description),
+      defaultCategory
+    );
+    const catMeta = INVOICE_CATEGORY_META[categoryKey] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+    normalized.push({
+      description: description || "Artigo / Serviço de Fatura",
+      unit: cleanText(raw.unit, 20) || "un",
+      quantity,
+      unitPrice: unitPrice ?? 0,
+      discountPercent,
+      vatPercent,
+      total: total ?? round2(quantity * (unitPrice ?? 0)) ?? 0,
+      category: catMeta.key,
+      categoryCode: catMeta.code,
+      categoryName: catMeta.name,
+      cbsCategory: catMeta.cbsCategory,
+      costCenterHint: hintStr || null,
+    });
+  }
+
+  if (!normalized.length) {
+    const baseTotal = fallbackContext.grossAmount ?? fallbackContext.netAmount ?? null;
+    if (baseTotal !== null && baseTotal > 0) {
+      const catMeta =
+        INVOICE_CATEGORY_META[defaultCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+      normalized.push({
+        description:
+          fallbackContext.description ||
+          (fallbackContext.supplierName
+            ? `Fornecimento / Serviço — ${fallbackContext.supplierName}`
+            : "Item de Fatura / Cotação"),
+        unit: "vg",
+        quantity: 1,
+        unitPrice: baseTotal,
+        discountPercent: fallbackContext.discountPercent ?? 0,
+        vatPercent: fallbackContext.vatPercent ?? null,
+        total: baseTotal,
+        category: catMeta.key,
+        categoryCode: catMeta.code,
+        categoryName: catMeta.name,
+        cbsCategory: catMeta.cbsCategory,
+        costCenterHint: null,
+      });
+    }
+  }
+
+  return normalized;
+}
+
+function buildThinkingConfigForModel(modelName) {
+  const m = String(modelName || "").toLowerCase();
+  if (m.includes("gemini-3")) {
+    return { thinkingLevel: "MINIMAL" };
+  }
+  if (m.includes("gemini-2.5")) {
+    return { thinkingBudget: 0 };
+  }
+  return undefined;
+}
+
+/** Configuração por omissão (só .env) — a usada antes da Gestão do Sistema. */
+function envAiConfig() {
+  return {
+    available: Boolean(config.ai.geminiApiKey),
+    reason: "Leitura automática de faturas indisponível: falta configurar GEMINI_API_KEY no .env do servidor.",
+    apiKey: config.ai.geminiApiKey,
+    model: config.ai.geminiModel,
+    baseUrl: config.ai.geminiBaseUrl,
+    fallbackModels: [],
+  };
+}
+
+async function callGemini({ mimeType, base64Data, projects, costCenters = [], ai = envAiConfig() }) {
+  const baseUrl = String(ai.baseUrl || config.ai.geminiBaseUrl).replace(/\/$/, "");
 
   const projectList = (projects || [])
-    .slice(0, 200)
+    .slice(0, 80)
     .map((p) => `- ${p.code || "—"} | ${p.name}`)
     .join("\n");
-  const clientList = (projects || [])
-    .filter((p) => p.clientName)
-    .map((p) => `- ${p.clientName}`)
-    .slice(0, 200)
+  const ccList = (costCenters || [])
+    .map((cc) => `- ${cc.code} | ${cc.name}`)
     .join("\n");
 
   const promptParts = [INSTRUCTION];
+  if (ccList) {
+    promptParts.push(
+      `Centros de Custo (Categorias) desta obra (indica o código mais adequado em "costCenterHint" de cada item):\n${ccList}`
+    );
+  }
   if (projectList) {
     promptParts.push(
       `Obras existentes no sistema (usa a mais provável em "projectHint"):\n${projectList}`
     );
   }
-  if (clientList) {
-    promptParts.push(`Clientes existentes no sistema:\n${clientList}`);
-  }
 
-  const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: promptParts.join("\n\n") },
-          { inline_data: { mime_type: mimeType, data: base64Data } },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0,
-      responseFormat: {
-        text: {
-          // REST field is a protobuf enum, not an IANA MIME string.
-          mimeType: "APPLICATION_JSON",
-          schema: RESPONSE_SCHEMA,
+  const models = [...new Set([ai.model, ...(ai.fallbackModels || []), ...GEMINI_FALLBACK_MODELS].filter(Boolean))];
+  let lastResult = null;
+  let lastError = null;
+
+  for (const [index, model] of models.entries()) {
+    const thinkingConfig = buildThinkingConfigForModel(model);
+    const body = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: promptParts.join("\n\n") },
+            { inline_data: { mime_type: mimeType, data: base64Data } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+        responseFormat: {
+          text: {
+            mimeType: "APPLICATION_JSON",
+            schema: RESPONSE_SCHEMA,
+          },
         },
       },
-    },
-  };
+    };
 
   const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
   const deadline = Date.now() + GEMINI_TIMEOUT_MS;
@@ -317,7 +443,7 @@ async function callGemini({ mimeType, base64Data, projects }) {
     const timer = setTimeout(() => controller.abort(), last ? remaining : Math.min(GEMINI_MODEL_TIMEOUT_MS, remaining));
     try {
       const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
-      const response = await fetch(`${url}?key=${encodeURIComponent(config.ai.geminiApiKey)}`, {
+      const response = await fetch(`${url}?key=${encodeURIComponent(ai.apiKey)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -356,16 +482,36 @@ function buildHttpError(status, message, code) {
 /**
  * Lê um documento (PDF/imagem) e devolve os campos normalizados da fatura.
  *
- * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array }} input
+ * `aiConfig` vem de `resolveInvoiceAiConfig()` (Gestão do Sistema → IA). Sem ele
+ * usa só o .env, como antes. Com `aiConfig`, o pedido fica registado no consumo.
+ *
+ * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array,
+ *           aiConfig?: object, userId?: string, io?: object }} input
  */
-async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }) {
-  if (!isConfigured()) {
-    throw buildHttpError(
-      503,
-      "Leitura automática de faturas indisponível: falta configurar GEMINI_API_KEY no .env do servidor.",
-      "INVOICE_AI_NOT_CONFIGURED"
-    );
+async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [], aiConfig, userId, io }) {
+  const ai = aiConfig || envAiConfig();
+  // Obras excluídas na Gestão do Sistema não vão na lista enviada à IA.
+  if (Array.isArray(ai.excludedProjectIds) && ai.excludedProjectIds.length) {
+    const excluded = new Set(ai.excludedProjectIds);
+    projects = projects.filter((p) => !excluded.has(p.id));
   }
+  if (!ai.available) {
+    throw buildHttpError(503, ai.reason || "Leitura automática de faturas indisponível.", "INVOICE_AI_NOT_CONFIGURED");
+  }
+  const track = (status, extra = {}) => {
+    if (!aiConfig) return;
+    const { logRequest } = require("./ai/usageService");
+    logRequest({
+      userId,
+      feature: "invoice_scan",
+      provider: "gemini",
+      categories: ["documents"],
+      projectIds: [],
+      status,
+      io,
+      ...extra,
+    });
+  };
   if (!buffer || !buffer.length) {
     throw buildHttpError(400, "Nenhum ficheiro recebido para leitura.", "NO_FILE_UPLOADED");
   }
@@ -388,21 +534,24 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
 
   let response;
   let payloadText;
-  let model = config.ai.geminiModel;
+  let model = ai.model;
   try {
     const result = await callGemini({
       mimeType: resolvedMime,
       base64Data: buffer.toString("base64"),
       projects,
+      costCenters,
+      ai,
     });
     response = result.response;
     payloadText = result.payloadText;
     model = result.model;
   } catch (error) {
+    track("ERROR", { model, errorMessage: error?.message });
     if (error?.name === "AbortError") {
       throw buildHttpError(
         504,
-        "A leitura da fatura excedeu 60 segundos. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
+        "A leitura da fatura excedeu o tempo limite. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
         "AI_TIMEOUT"
       );
     }
@@ -423,24 +572,25 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
 
   if (!response.ok) {
     const apiMessage = payload?.error?.message || "";
+    track("ERROR", { model, errorMessage: `HTTP ${response.status} ${apiMessage}`.trim() });
     if (response.status === 400 && /API key not valid/i.test(apiMessage)) {
       throw buildHttpError(
         503,
-        "A chave GEMINI_API_KEY configurada não é válida. Atualize-a no .env do servidor.",
+        "A chave do Gemini configurada não é válida. Atualize-a na Gestão do Sistema → Inteligência Artificial (ou GEMINI_API_KEY no .env).",
         "AI_INVALID_KEY"
       );
     }
     if (response.status === 403) {
       throw buildHttpError(
         503,
-        "A chave GEMINI_API_KEY não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
+        "A chave do Gemini não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
         "AI_FORBIDDEN"
       );
     }
     if (response.status === 404) {
       throw buildHttpError(
         503,
-        `O modelo de IA configurado (${config.ai.geminiModel}) não está disponível. Ajuste GEMINI_MODEL no .env.`,
+        `O modelo de IA configurado (${ai.model}) não está disponível. Ajuste o modelo na Gestão do Sistema → Inteligência Artificial.`,
         "AI_MODEL_NOT_FOUND"
       );
     }
@@ -470,13 +620,19 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
 
   const candidate = payload?.candidates?.[0];
   const finishReason = candidate?.finishReason;
-  const text = (candidate?.content?.parts || []).map((p) => p.text || "").join("");
+  const usage = payload?.usageMetadata || {};
+  track("OK", {
+    model,
+    usage: {
+      inputTokens: usage.promptTokenCount ?? null,
+      outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0) || null,
+    },
+  });
+  const text = (candidate?.content?.parts || []).map((p) => p.text || "").filter(Boolean).join("");
   let parsed = null;
   try {
-    // JSON mode returns the JSON object directly as text (without Markdown fences).
     parsed = text ? JSON.parse(text) : null;
   } catch {
-    // Keep compatibility with older Gemini models that may still wrap JSON.
     parsed = extractJsonBlock(text);
   }
   if (!parsed) {
@@ -495,6 +651,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   }
 
   const grossAmount = round2(parseNumberValue(parsed.grossAmount));
+  const discountAmount = round2(parseNumberValue(parsed.discountAmount));
+  const discountPercent = clampPercent(parsed.discountPercent);
   const vatAmount = round2(parseNumberValue(parsed.vatAmount));
   const vatPercent = clampPercent(parsed.vatPercent);
   const withholdingAmount = round2(parseNumberValue(parsed.withholdingAmount));
@@ -509,6 +667,24 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
   const dueDate = parseDateValue(parsed.dueDate);
 
   const suggestedProject = matchProject(projects, parsed.projectHint);
+  const description = cleanText(parsed.description, 400);
+  const supplierName = cleanText(parsed.supplierName, 120);
+  const suggestedCategory = inferCostCategoryFromText(
+    parsed.suggestedCategory || description || "",
+    "MATERIAIS_INSUMOS"
+  );
+  const categoryMeta =
+    INVOICE_CATEGORY_META[suggestedCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+  const items = normalizeInvoiceItems(parsed.items, {
+    grossAmount,
+    netAmount,
+    vatPercent,
+    discountPercent,
+    description,
+    supplierName,
+    suggestedCategory,
+  });
 
   return {
     documentType: cleanText(parsed.documentType, 40) || "OUTRO",
@@ -516,6 +692,8 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     docDate: dateToKey(docDate),
     dueDate: dateToKey(dueDate),
     grossAmount,
+    discountAmount,
+    discountPercent,
     vatAmount,
     vatPercent,
     withholdingAmount,
@@ -526,16 +704,23 @@ async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [] }
     guaranteeAmount,
     netAmount,
     currency: cleanText(parsed.currency, 8) || "AOA",
-    supplierName: cleanText(parsed.supplierName, 120),
+    supplierName,
     supplierNif: cleanText(parsed.supplierNif, 30),
+    supplierPhone: cleanText(parsed.supplierPhone, 40),
+    supplierEmail: cleanText(parsed.supplierEmail, 120),
+    supplierIban: cleanText(parsed.supplierIban, 50),
     clientName: cleanText(parsed.clientName, 120),
     clientNif: cleanText(parsed.clientNif, 30),
     projectHint: cleanText(parsed.projectHint, 120),
     suggestedProjectId: suggestedProject?.id || null,
     suggestedProjectLabel: suggestedProject ? `${suggestedProject.code || ""} — ${suggestedProject.name}`.trim() : null,
-    description: cleanText(parsed.description, 400),
+    suggestedCategory: categoryMeta.key,
+    suggestedCategoryCode: categoryMeta.code,
+    suggestedCategoryName: categoryMeta.name,
+    description,
     notes: cleanText(translateInvoiceNote(parsed.notes), 800),
     confidence: normalizeConfidence(parsed.confidence),
+    items,
     model,
     raw: parsed,
   };
@@ -548,6 +733,9 @@ module.exports = {
   parseDateValue,
   parseNumberValue,
   matchProject,
+  inferCostCategoryFromText,
+  INVOICE_CATEGORY_META,
+  CATEGORY_ENUM,
   SUPPORTED_MIME_TYPES,
   MAX_INLINE_BYTES,
 };

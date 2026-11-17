@@ -1,6 +1,7 @@
 import { apiRequest, apiUpload, getAssetUrl } from "/services/api.js";
 import { guardPageAccess, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
+import { applyEmbedMode, isEmbeddedView } from "/shared/embedMode.js";
 import { openQuotePricingModal, submitQuoteForm } from "/shared/quotePricingModal.js";
 import {
   computeQuoteLineFiscalBreakdown,
@@ -18,6 +19,8 @@ import {
   setNifLookupStatus,
 } from "/shared/supplierNifLookup.js";
 import { escapeHtml } from "/shared/ui.js";
+
+applyEmbedMode();
 
 let currentProjectId = null;
 let currentNeeds = [];
@@ -56,6 +59,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get("embed") === "1") document.body.classList.add("is-embed");
   const scope = urlParams.get("scope");
   currentProjectId =
     scope === "geral"
@@ -69,11 +73,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   initEvents();
 
   const backBtn = document.getElementById("btnBackToBudget");
-  if (isGeralScope()) {
+  if (document.body.classList.contains("is-embed")) {
+    if (backBtn) backBtn.style.display = "none";
+  } else if (isGeralScope()) {
     if (backBtn) backBtn.style.display = "none";
     document.getElementById("selectedProjName").textContent = "Pedidos Gerais";
   } else {
-    if (backBtn) backBtn.href = `../centroCustos.html?project=${currentProjectId}`;
+    if (backBtn) backBtn.href = `../projectView.html?id=${currentProjectId}&tab=orcamento_cotacao`;
   }
 
   await loadSuppliers();
@@ -81,6 +87,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // ── Load Projects ──────────────────────────────────────────────────────────────
+/** Limita o comprimento das opções do seletor (a lista nativa ajusta-se à opção mais longa). */
+function shortOptionLabel(text, max = 56) {
+  const t = String(text || "").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
 async function loadProjects() {
   try {
     const data = await apiRequest("/projects?pageSize=100&sort=updatedAt_desc");
@@ -93,22 +105,23 @@ async function loadProjects() {
         allProjects
           .map(
             (p) =>
-              `<option value="${escapeHtml(p.id)}" ${p.id === currentProjectId ? "selected" : ""}>${escapeHtml(p.name)}</option>`
+              `<option value="${escapeHtml(p.id)}" title="${escapeHtml(p.name)}" ${p.id === currentProjectId ? "selected" : ""}>${escapeHtml(shortOptionLabel(p.name))}</option>`
           )
           .join("");
       
-      selector.classList.remove("hidden");
-      
-      selector.addEventListener("change", (e) => {
-        const id = e.target.value;
-        if (id === GERAL_SCOPE || !id) {
-          localStorage.removeItem("InfoCliente.currentProjectId");
-          window.location.href = `?scope=geral`;
-          return;
-        }
-        localStorage.setItem("InfoCliente.currentProjectId", id);
-        window.location.href = `?project=${id}`;
-      });
+      if (!document.body.classList.contains("is-embed")) {
+        selector.classList.remove("hidden");
+        selector.addEventListener("change", (e) => {
+          const id = e.target.value;
+          if (id === GERAL_SCOPE || !id) {
+            localStorage.removeItem("InfoCliente.currentProjectId");
+            window.location.href = `?scope=geral`;
+            return;
+          }
+          localStorage.setItem("InfoCliente.currentProjectId", id);
+          window.location.href = `?project=${id}`;
+        });
+      }
       
       if (currentProjectId) {
         const p = allProjects.find(x => x.id === currentProjectId);
@@ -679,6 +692,7 @@ function openBatchQuoteModal() {
   document.getElementById("batchQuoteItemsBody")?.querySelectorAll("[data-qty], [data-price], [data-vat], [data-wh], [data-disc]").forEach((el) => {
     el.addEventListener("input", refreshBatchFiscalTotals);
   });
+  wireBatchQuoteInvoiceScanner(needs);
   document.getElementById("modalBatchQuote")?.classList.add("open");
   refreshBatchFiscalTotals();
 }
@@ -1665,3 +1679,142 @@ window.closeProformaViewer = function() {
     document.getElementById('sideViewerIframe').src = '';
   }, 300);
 };
+
+function wireBatchQuoteInvoiceScanner(needs = []) {
+  const proformaInput = document.getElementById("batchQuoteProforma");
+  if (!proformaInput) return;
+
+  let container = document.getElementById("batchQuoteAiScanBox");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "batchQuoteAiScanBox";
+    container.className = "mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs";
+    container.innerHTML = `
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 font-bold text-slate-800">
+          <i class="fas fa-magic text-emerald-600"></i>
+          <span>Preenchimento Automático por Leitura de Fatura / Proforma (IA)</span>
+        </div>
+        <button type="button" id="btnBatchQuoteAiScan" class="inline-flex items-center gap-1.5 rounded-lg bg-[#212e3e] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs hover:bg-slate-800 transition">
+          <i class="fas fa-bolt"></i> Ler Fatura e Preencher Lote
+        </button>
+      </div>
+      <div id="batchQuoteAiBanner" class="hidden mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900"></div>
+    `;
+    proformaInput.parentElement?.appendChild(container);
+  }
+
+  const banner = document.getElementById("batchQuoteAiBanner");
+  if (banner) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+  }
+
+  const runBatchScan = async (file) => {
+    if (!file) {
+      showToast("Selecione primeiro o PDF ou imagem da fatura/proforma.", "warning");
+      proformaInput.click();
+      return;
+    }
+
+    const btn = document.getElementById("btnBatchQuoteAiScan");
+    const prevHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> A ler fatura...`;
+    }
+    if (banner) {
+      banner.classList.remove("hidden");
+      banner.className = "mt-2 rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-700";
+      banner.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> A associar linhas da fatura aos ${needs.length} itens selecionados...`;
+    }
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("needIds", JSON.stringify(needs.map((n) => n.id)));
+      fd.append("autoCreateSupplier", "true");
+
+      const res = await apiUpload("/quotes/scan-document", fd, "POST");
+      const supplier = res?.supplier || null;
+      const fields = res?.fields || {};
+      const mappings = res?.needMappings || [];
+
+      if (supplier) {
+        if (!currentSuppliers.some((s) => s.id === supplier.id)) {
+          currentSuppliers.push(supplier);
+        }
+        const sel = document.getElementById("batchQuoteSupplier");
+        if (sel) {
+          let opt = sel.querySelector(`option[value="${supplier.id}"]`);
+          if (!opt) {
+            opt = document.createElement("option");
+            opt.value = supplier.id;
+            opt.textContent = supplier.name;
+            sel.appendChild(opt);
+          }
+          sel.value = supplier.id;
+        }
+      }
+
+      const mapByNeed = new Map(mappings.map((m) => [m.needId, m]));
+      let filledCount = 0;
+
+      document.querySelectorAll("#batchQuoteItemsBody tr").forEach((tr) => {
+        const needId = tr.dataset.needId;
+        const m = mapByNeed.get(needId);
+        if (!m) return;
+
+        const priceInput = tr.querySelector("[data-price]");
+        const qtyInput = tr.querySelector("[data-qty]");
+        const vatInput = tr.querySelector("[data-vat]");
+        const whInput = tr.querySelector("[data-wh]");
+        const discInput = tr.querySelector("[data-disc]");
+
+        if (priceInput && m.quotedPrice != null && Number(m.quotedPrice) > 0) {
+          priceInput.value = Number(m.quotedPrice);
+          filledCount += 1;
+        }
+        if (qtyInput && m.quantity != null && Number(m.quantity) > 0) {
+          qtyInput.value = Number(m.quantity);
+        }
+        if (vatInput && m.vatPercent != null) vatInput.value = m.vatPercent;
+        if (whInput && m.withholdingPercent != null) whInput.value = m.withholdingPercent;
+        if (discInput && m.discountPercent != null) discInput.value = m.discountPercent;
+      });
+
+      const notesEl = document.getElementById("batchQuoteNotes");
+      if (notesEl && !notesEl.value && fields.docNumber) {
+        notesEl.value = `Doc: ${fields.docNumber}`;
+      }
+
+      refreshBatchFiscalTotals();
+
+      if (banner) {
+        banner.className = "mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900";
+        banner.innerHTML = `
+          <div><i class="fas fa-check-circle mr-1"></i> <strong>${filledCount} de ${needs.length} itens</strong> preenchidos automaticamente.</div>
+          <div>Fornecedor: <strong>${escapeHtml(supplier?.name || fields.supplierName || "—")}</strong>${fields.docNumber ? ` · Doc: ${escapeHtml(fields.docNumber)}` : ""}</div>
+        `;
+      }
+      showToast("Lote preenchido automaticamente a partir da fatura!", "success");
+    } catch (err) {
+      if (banner) {
+        banner.className = "mt-2 rounded border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800";
+        banner.innerHTML = `<i class="fas fa-exclamation-triangle mr-1"></i> ${escapeHtml(err.message || "Falha na leitura da fatura.")}`;
+      }
+      showToast(err.message || "Erro ao ler fatura", "error");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = prevHtml || `<i class="fas fa-bolt"></i> Ler Fatura e Preencher Lote`;
+      }
+    }
+  };
+
+  const btnScan = document.getElementById("btnBatchQuoteAiScan");
+  if (btnScan) btnScan.onclick = () => runBatchScan(proformaInput.files?.[0]);
+  proformaInput.onchange = () => {
+    if (proformaInput.files?.[0]) runBatchScan(proformaInput.files[0]);
+  };
+}

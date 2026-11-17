@@ -51,6 +51,7 @@ function serializeMessage(message) {
     status: message.status,
     createdAt: message.createdAt,
     editedAt: message.editedAt,
+    aiGenerated: Boolean(message.aiGenerated),
     sender: serializeUser(message.sender),
     mentions: (message.mentions || []).map((m) => ({
       id: m.id,

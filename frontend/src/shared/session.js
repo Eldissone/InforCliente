@@ -7,7 +7,10 @@ import {
   syncNavDropdownGroups,
   transformDesktopNavToDropdowns,
 } from "./appNav.js";
+import { applyEmbedMode, isEmbeddedView } from "./embedMode.js";
 import { mountAppHeader } from "./appHeader.js";
+
+applyEmbedMode();
 
 export function wireLogout() {
   markTopNavActive();
@@ -137,21 +140,29 @@ export function wireUsersNav() {
 
   applyRoleVisibility(role);
 
-  transformDesktopNavToDropdowns();
-  initAppNavDropdowns();
+  if (!isEmbeddedView()) {
+    transformDesktopNavToDropdowns();
+    initAppNavDropdowns();
+  }
 
   import("./permissions.js")
     .then(({ initPermissionLayer }) => initPermissionLayer())
     .catch(() => { });
 
-  // Apply nav link visibility based on permissions
-  wireNavLinks(role);
-
-  wireUserProfile();
+  if (!isEmbeddedView()) {
+    wireNavLinks(role);
+    wireUserProfile();
+  }
   processUrlMessages();
+
+  if (isEmbeddedView()) return;
 
   import("./chatFab.js")
     .then(({ initChatFab }) => initChatFab())
+    .catch(() => { });
+
+  import("./notificationCenter.js")
+    .then(({ initNotificationCenter }) => initNotificationCenter())
     .catch(() => { });
 
   if (role !== "cliente") {

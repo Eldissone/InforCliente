@@ -1,4 +1,5 @@
 import { apiRequest, apiUpload } from "/services/api.js";
+import { existingListHtml } from "/shared/existingRecords.js";
 import { checkAuth } from "/services/auth.js";
 import { can, initPermissionLayer } from "/shared/permissions.js";
 import { wireLogout, wireUsersNav } from "/shared/session.js";
@@ -191,7 +192,13 @@ async function loadLookups(kind) {
 
   const products = productsRes.status === "fulfilled" ? (productsRes.value?.items || []) : [];
 
-  return { categoryOptions, subcategoryOptions, supplierOptions, products };
+  return {
+    categoryOptions,
+    subcategoryOptions,
+    supplierOptions,
+    products,
+    productsError: productsRes.status === "rejected",
+  };
 }
 
 function filterSubs(allSubs, parentId) {
@@ -253,8 +260,16 @@ export async function renderProdutosForm() {
       <a href="${kindHref("produto")}" class="${isService ? "" : "is-active"}">Produto</a>
       <a href="${kindHref("servico")}" class="${isService ? "is-active" : ""}">Serviço</a>
     </nav>
-    <h1 class="ps-title">${isService ? "Criar Serviço" : "Criar Produto"}</h1>
-    <p class="ps-lead">Dados demonstrativos / campos por preencher · moeda não especificada no overview.</p>
+    <header class="ps-header">
+      <div>
+        <h1 class="ps-title">${isService ? "Criar Serviço" : "Criar Produto"}</h1>
+        <p class="ps-lead">Dados demonstrativos / campos por preencher · moeda não especificada no overview.</p>
+      </div>
+      <a href="/produtos" class="ps-top-btn">
+        <span class="material-symbols-outlined" aria-hidden="true">format_list_bulleted</span>
+        Lista de Produtos e Serviços
+      </a>
+    </header>
     <form class="ps-form" id="psForm" novalidate>
       <section class="ps-card">
         <h2>${isService ? "Identificação do serviço" : "Identificação do produto"}</h2>

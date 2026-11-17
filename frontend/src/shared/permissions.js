@@ -274,7 +274,7 @@ export async function guardPageAccess(module, action = "view") {
     { key: "navlinks:nav_clientes", path: "/Clientes/clienteLista.html" },
     { key: "navlinks:nav_obras", path: "/Projectos/ProjectGeral.html" },
     { key: "navlinks:nav_logistica", path: "/Stock/index.html" },
-    { key: "navlinks:nav_planeamento", path: "/Projectos/centroCustos.html" },
+    { key: "navlinks:nav_planeamento", path: "/Projectos/ProjectGeral.html" },
     { key: "navlinks:nav_financeiro", path: "/Financeiro/centroDeCompras.html" },
     { key: "navlinks:nav_cotacao", path: "/Projectos/Cotacao/index.html" },
     { key: "navlinks:nav_centros_gerais", path: "/Financeiro/centroDeCompras.html" },

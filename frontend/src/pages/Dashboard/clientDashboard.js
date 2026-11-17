@@ -1,6 +1,7 @@
 import { apiRequest, getApiBaseUrl, getAssetUrl } from "../../services/api.js";
 import { checkAuth } from "../../services/auth.js";
 import { wireLogout, wireUsersNav } from "../../shared/session.js";
+import { mountAppHeader } from "../../shared/appHeader.js";
 
 checkAuth({ allowedRoles: ["cliente", "admin", "operador", "user"] });
 import { formatCurrencyKZ, formatCurrency, formatDateBR, getExchangeRate } from "../../shared/format.js";
@@ -611,14 +612,14 @@ function renderStockMovements(items) {
                 <div class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1">${m.user?.name || 'Sistema'}</div>
             </td>
             <td class="px-6 md:px-10 py-5">
-                <div class="text-xs font-bold text-slate-900">${escapeHtml(m.product?.name || "—")}</div>
+                <div class="text-xs font-bold text-slate-900 uppercase">${escapeHtml(m.product?.name || "—")}</div>
                 <div class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase inline-block mt-1 ${tc}">${typeLabel[m.type] || m.type}</div>
             </td>
             <td class="px-6 md:px-10 py-5">
-                <div class="text-xs font-black text-slate-900">${qty.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400">${escapeHtml(m.product?.unit || "")}</span></div>
+                <div class="text-xs font-black text-slate-900 uppercase">${qty.toLocaleString("pt-AO")} <span class="text-[9px] text-slate-400 uppercase">${escapeHtml(m.product?.unit || "")}</span></div>
             </td>
             <td class="px-10 py-5 hidden md:table-cell">
-                <div class="text-[10px] font-bold text-slate-700">${escapeHtml(driver)}</div>
+                <div class="text-[10px] font-bold text-slate-700 uppercase">${escapeHtml(driver)}</div>
                 <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${escapeHtml(vehicle)}</div>
             </td>
             <td class="px-6 md:px-10 py-5 text-right">
@@ -668,11 +669,11 @@ function renderStockInventory(summary, movements) {
           <tr class="hover:bg-slate-50 transition-colors cursor-pointer hover:bg-slate-50/80" data-view-inventory="${item.productId}::${item.warehouseId || ""}" title="Clique para ver detalhes da entrada">
             <td class="px-4 py-5 text-center">${renderProductImageThumb(product)}</td>
             <td class="px-6 md:px-10 py-5 font-bold text-slate-900">
-                <div class="text-sm">${escapeHtml(product.name || "Desconhecido")}</div>
+                <div class="text-sm uppercase">${escapeHtml(product.name || "Desconhecido")}</div>
                 <div class="text-[9px] text-slate-400 font-black uppercase tracking-widest">${product.sku || ""}</div>
             </td>
             <td class="px-6 md:px-10 py-5 text-center"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-widest">${escapeHtml(warehouseName)}</span></td>
-            <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell">${escapeHtml(product.unit || "un")}</td>
+            <td class="px-10 py-5 text-center text-[10px] font-bold text-slate-400 hidden sm:table-cell uppercase">${escapeHtml(product.unit || "un")}</td>
             <td class="px-10 py-5 text-center text-xs font-black text-blue-600 bg-blue-50/20 hidden md:table-cell">${planned}</td>
             <td class="px-10 py-5 text-center text-xs font-bold text-emerald-600 hidden md:table-cell">${totalIn.toLocaleString("pt-AO")}</td>
             <td class="px-6 md:px-10 py-5 text-right font-black ${colorClass}">${saldo.toLocaleString("pt-AO")}</td>
@@ -2003,6 +2004,7 @@ function hoistTabs() {
 
 async function init() {
   hoistTabs(); // Fix any tab nesting issues first
+  mountAppHeader();
   initMobileMenu();
   wireLogout();
 

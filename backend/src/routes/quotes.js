@@ -43,6 +43,15 @@ const {
 } = require("../services/deliveryFieldBridge");
 const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
 const { normalizeDateOnly } = require("../utils/dateOnly");
+const { readInvoiceDocument } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
+const {
+  resolveOrCreateSupplierFromInvoice,
+  matchInvoiceItemsToNeeds,
+  computeDescriptionSimilarity,
+} = require("../services/invoiceSupplierMatchService");
+
+const round2Money = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
 const multer = require("multer");
 const path = require("path");
 
@@ -1495,6 +1504,184 @@ quoteRoutes.post(
     });
 
     res.json({ purchaseOrderUrl, documentId: documentId || null });
+  })
+);
+
+// Leitura inteligente de Fatura / Proforma / Cotação para autopreenchimento de cotação e precificação
+quoteRoutes.post(
+  "/scan-document",
+  fileUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "Nenhum ficheiro carregado para leitura." });
+    }
+
+    const rawNeedIds = req.body?.needIds || req.body?.needId || "";
+    let needIds = [];
+    if (Array.isArray(rawNeedIds)) {
+      needIds = rawNeedIds.map(String).filter(Boolean);
+    } else if (typeof rawNeedIds === "string" && rawNeedIds.trim()) {
+      const trimmed = rawNeedIds.trim();
+      if (trimmed.startsWith("[")) {
+        try {
+          needIds = JSON.parse(trimmed).map(String).filter(Boolean);
+        } catch {
+          needIds = [];
+        }
+      } else {
+        needIds = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+
+    // Por defeito NÃO cria fornecedores: o utilizador confirma na UI
+    // (POST /quotes/scan-document/create-supplier).
+    const autoCreateSupplier =
+      String(req.body?.autoCreateSupplier) === "true" ||
+      String(req.body?.autoCreateSupplier) === "1";
+
+    const projects = await prisma.project.findMany({
+      where: { id: "__none__" },
+      select: { id: true, code: true, name: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const fields = await readInvoiceDocument({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      aiConfig: await resolveInvoiceAiConfig(),
+      userId: req.user?.sub,
+      io: req.app.get("io"),
+      projects,
+    });
+
+    const { supplier, created: supplierCreated } =
+      await resolveOrCreateSupplierFromInvoice(fields, {
+        autoCreate: autoCreateSupplier,
+      });
+
+    let needMappings = [];
+    if (needIds.length > 0) {
+      const needs = await prisma.workNeed.findMany({
+        where: { id: { in: needIds } },
+        select: {
+          id: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          originalUnitPrice: true,
+          costCenterId: true,
+          projectId: true,
+        },
+      });
+      // Preserva a ordem pedida pelo cliente
+      const byId = new Map(needs.map((n) => [n.id, n]));
+      const orderedNeeds = needIds.map((id) => byId.get(id)).filter(Boolean);
+      needMappings = matchInvoiceItemsToNeeds(fields.items, orderedNeeds, fields);
+    }
+
+    const warnings = [];
+    const hasBase = fields.grossAmount !== null && fields.netAmount !== null;
+    if (hasBase) {
+      const expectedNet = round2Money(
+        (fields.grossAmount || 0) +
+          (fields.vatAmount || 0) -
+          (fields.withholdingAmount || 0) -
+          (fields.carInsuranceAmount || 0) -
+          (fields.guaranteeAmount || 0)
+      );
+      if (Math.abs(expectedNet - fields.netAmount) > 0.05) {
+        warnings.push("Os valores lidos não fecham (ilíquido + IVA ≠ total). Confirme os valores.");
+      }
+    }
+    if (fields.confidence != null && fields.confidence < 60) {
+      warnings.push(`Confiança baixa na leitura (${fields.confidence}%). Confira todos os campos.`);
+    }
+    if (!supplier && !fields.supplierName) {
+      warnings.push("Fornecedor não identificado no documento.");
+    }
+
+    // Item único (Precificar Item): devolve também as linhas por ordem de semelhança.
+    let match = null;
+    let candidates = [];
+    if (needIds.length === 1 && needMappings[0]) {
+      match = needMappings[0];
+      if (match.estimated) {
+        warnings.push("Preço unitário estimado a partir dos totais do documento. Confirme antes de guardar.");
+      }
+      const need = (
+        await prisma.workNeed.findUnique({ where: { id: needIds[0] }, select: { description: true } })
+      ) || {};
+      candidates = (fields.items || [])
+        .map((it, index) => ({
+          index,
+          description: it.description,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          total: it.total,
+          vatPercent: it.vatPercent ?? fields.vatPercent ?? null,
+          discountPercent: it.discountPercent ?? fields.discountPercent ?? null,
+          similarity: Math.round(computeDescriptionSimilarity(need.description, it.description) * 100),
+        }))
+        .sort((a, b) => b.similarity - a.similarity);
+    }
+
+    return res.json({
+      ok: true,
+      fields,
+      items: fields.items || [],
+      supplier: supplier || null,
+      supplierCreated,
+      supplierSuggestion: !supplier && fields.supplierName
+        ? {
+            name: fields.supplierName,
+            nif: fields.supplierNif || null,
+            phone: fields.supplierPhone || null,
+            email: fields.supplierEmail || null,
+            iban: fields.supplierIban || null,
+          }
+        : null,
+      needMappings,
+      match,
+      candidates,
+      warnings,
+    });
+  })
+);
+
+// Cria o fornecedor lido da fatura, só depois de o utilizador confirmar.
+quoteRoutes.post(
+  "/scan-document/create-supplier",
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const name = String(body.name || "").trim();
+    if (name.length < 2) {
+      return res.status(400).json({ error: "Nome do fornecedor em falta." });
+    }
+    const { supplier, created } = await resolveOrCreateSupplierFromInvoice(
+      {
+        supplierName: name,
+        supplierNif: body.nif,
+        supplierPhone: body.phone,
+        supplierEmail: body.email,
+        supplierIban: body.iban,
+        vatPercent: body.vatPercent,
+        withholdingPercent: body.withholdingPercent,
+        discountPercent: body.discountPercent,
+      },
+      { autoCreate: true }
+    );
+    return res.status(created ? 201 : 200).json({ supplier, created });
+  })
+);
+
+// Indica se a leitura de faturas com IA está disponível (mostra/esconde o botão).
+quoteRoutes.get(
+  "/ai-status",
+  asyncHandler(async (_req, res) => {
+    const ai = await resolveInvoiceAiConfig();
+    return res.json({ configured: Boolean(ai.available), reason: ai.available ? null : ai.reason });
   })
 );
 

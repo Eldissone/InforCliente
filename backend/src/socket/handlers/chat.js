@@ -7,7 +7,8 @@ const {
   assertConversationAccess,
   parseMentionIds,
 } = require("../../services/chatService");
-const { notifyNewMessage, notifyMentions } = require("../../services/notificationService");
+const { notifyChatMessage } = require("../../services/chatNotificationService");
+const { handleAiMention } = require("../../services/ai/assistant/chatMention");
 
 function registerChatHandlers(io, socket) {
   const userId = socket.user.id;
@@ -50,32 +51,22 @@ function registerChatHandlers(io, socket) {
 
       const computedSenderName = userName || socket.user.name || (socket.user.email ? socket.user.email.split('@')[0] : "Utilizador");
 
-      await notifyNewMessage({
-        recipientIds,
-        senderName: computedSenderName,
+      await notifyChatMessage({
+        io,
         conversationId,
-        messageId: message.id,
+        message,
+        senderId: userId,
+        senderName: computedSenderName,
+        recipientIds,
+        mentionIds: parsedMentions,
       });
 
-      if (parsedMentions.length) {
-        await notifyMentions({
-          mentionIds: parsedMentions,
-          senderName: computedSenderName,
-          conversationId,
-          messageId: message.id,
-          bodyPreview: body,
-        });
-      }
-
-      for (const recipientId of [...new Set([...recipientIds, ...parsedMentions])]) {
-        io.to(`user:${recipientId}`).emit("notification:new", {
-          type: parsedMentions.includes(recipientId) ? "MENTION" : "NEW_MESSAGE",
-          conversationId,
-          messageId: message.id,
-        });
-      }
-
       if (typeof ack === "function") ack({ ok: true, message });
+
+      // @IA: o assistente responde na conversa, em segundo plano.
+      handleAiMention({ io, conversationId, askerId: userId, message }).catch((err) =>
+        console.error("[ai] @IA:", err.message)
+      );
     } catch (err) {
       if (typeof ack === "function") ack({ ok: false, error: err.message });
     }

@@ -1110,6 +1110,7 @@ export async function loadPresentedPrices({
         await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
         window.onQuoteApproved?.();
+    resetAiScanBanner();
 
       });
 
@@ -1142,6 +1143,7 @@ export async function loadPresentedPrices({
             await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
             window.onQuoteApproved?.();
+    resetAiScanBanner();
 
           } catch (err) {
 
@@ -1172,6 +1174,7 @@ export async function loadPresentedPrices({
         await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
 
         window.onQuoteApproved?.();
+    resetAiScanBanner();
 
       });
 
@@ -1606,6 +1609,7 @@ export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast
     if (keepModalOpen) {
       await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
       window.onQuoteApproved?.();
+    resetAiScanBanner();
     } else {
       document.getElementById("modalQuote")?.classList.remove("open");
       await onApproved?.();
@@ -1682,6 +1686,8 @@ export async function openQuotePricingModal({
   const proformaInput = document.getElementById("quoteProforma");
 
   if (proformaInput) proformaInput.value = "";
+
+  wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast });
 
   document.getElementById("quoteProductRow").style.display = "none";
 
@@ -1859,6 +1865,8 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
 
     if (proformaInput) proformaInput.value = "";
 
+  wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast });
+
     setQuoteNewPanelVisible(false);
 
 
@@ -1878,6 +1886,7 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
     });
 
     window.onQuoteApproved?.();
+    resetAiScanBanner();
 
   } catch (err) {
 
@@ -1888,3 +1897,178 @@ export async function submitQuoteForm(e, { apiRequest, apiUpload, showToast, sup
 }
 
 
+
+function escHtml(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtMoney(v, currency = "AOA") {
+  return `${Number(v).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} ${currency}`;
+}
+
+function resetAiScanBanner() {
+  const banner = document.getElementById("quoteAiScanBanner");
+  if (!banner) return;
+  banner.innerHTML = "";
+  banner.className = "hidden mt-2";
+}
+
+function setFieldValue(id, value) {
+  const el = document.getElementById(id);
+  if (!el || value == null || value === "") return;
+  el.value = value;
+  el.classList.add("ring-2", "ring-emerald-300"); // marca: preenchido pela IA
+  el.addEventListener("input", () => el.classList.remove("ring-2", "ring-emerald-300"), { once: true });
+}
+
+function ensureSupplierOption(supplier, suppliers) {
+  const sel = document.getElementById("quoteSupplier");
+  if (!supplier || !sel) return;
+  if (Array.isArray(suppliers) && !suppliers.some((s) => s.id === supplier.id)) suppliers.push(supplier);
+  if (!sel.querySelector(`option[value="${supplier.id}"]`)) {
+    const opt = document.createElement("option");
+    opt.value = supplier.id;
+    opt.textContent = supplier.name;
+    sel.appendChild(opt);
+  }
+  sel.value = supplier.id;
+  sel.dispatchEvent(new Event("change")); // carrega o catálogo do fornecedor
+}
+
+function wireQuoteInvoiceScanner({ need, suppliers, apiRequest, showToast }) {
+  const proformaInput = document.getElementById("quoteProforma");
+  const box = document.getElementById("quoteAiScan");
+  const btn = document.getElementById("btnQuoteAiScan");
+  const banner = document.getElementById("quoteAiScanBanner");
+  if (!proformaInput || !box || !btn || !banner) return;
+
+  resetAiScanBanner();
+
+  // Só mostra o bloco se a IA estiver configurada.
+  box.classList.add("hidden");
+  apiRequest("/quotes/ai-status")
+    .then((s) => {
+      if (s?.configured) box.classList.remove("hidden");
+    })
+    .catch(() => {});
+
+  const currencyOf = (r) => {
+    const c = String(r?.fields?.currency || "").toUpperCase();
+    return ["AOA", "USD", "EUR"].includes(c) ? c : "AOA";
+  };
+
+  const applyLine = (res, line) => {
+    const f = res.fields || {};
+    const currency = currencyOf(res);
+    setFieldValue("quoteCurrency", currency);
+    if (line.unitPrice != null && Number(line.unitPrice) > 0) setFieldValue("quotePrice", Number(line.unitPrice));
+    const qtyEl = document.getElementById("quoteQuantity");
+    if (qtyEl && (!qtyEl.value || Number(qtyEl.value) <= 0) && line.quantity) setFieldValue("quoteQuantity", line.quantity);
+    setFieldValue("quoteVatPercent", line.vatPercent ?? f.vatPercent ?? res.supplier?.vatPercent);
+    setFieldValue("quoteWithholdingPercent", f.withholdingPercent ?? res.supplier?.withholdingPercent);
+    setFieldValue("quoteDiscountPercent", line.discountPercent ?? f.discountPercent ?? res.supplier?.discountPercent);
+  };
+
+  const render = (res) => {
+    const f = res.fields || {};
+    const currency = currencyOf(res);
+    const match = res.match || null;
+    const candidates = res.candidates || [];
+    const warnings = res.warnings || [];
+
+    const supplierHtml = res.supplier
+      ? `<strong>${escHtml(res.supplier.name)}</strong>`
+      : res.supplierSuggestion
+        ? `${escHtml(res.supplierSuggestion.name)}${res.supplierSuggestion.nif ? ` · NIF ${escHtml(res.supplierSuggestion.nif)}` : ""}
+           <button type="button" id="btnQuoteAiCreateSupplier" class="ml-1 underline font-bold text-emerald-800">Criar fornecedor</button>`
+        : "Não identificado";
+
+    const lineSelect =
+      candidates.length > 1
+        ? `<label class="block mt-1">Linha da fatura:
+             <select id="quoteAiLineSelect" class="mt-0.5 w-full h-8 px-2 border border-slate-300 rounded text-[11px] bg-white">
+               ${candidates
+                 .map(
+                   (c) =>
+                     `<option value="${c.index}" ${match?.matchedItemIndex === c.index ? "selected" : ""}>${escHtml(c.description)} — ${c.unitPrice != null ? fmtMoney(c.unitPrice, currency) : "s/ preço"} (${c.similarity}%)</option>`
+                 )
+                 .join("")}
+             </select></label>`
+        : "";
+
+    banner.className = "mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-900";
+    banner.innerHTML = `
+      <div class="font-semibold text-emerald-800 mb-0.5">Dados lidos da fatura (confirme antes de guardar)</div>
+      <div>Fornecedor: ${supplierHtml}${res.supplier && f.supplierNif ? ` · NIF ${escHtml(f.supplierNif)}` : ""}</div>
+      <div>${match?.quotedPrice != null ? `Preço unit.: <strong>${fmtMoney(match.quotedPrice, currency)}</strong>${match.estimated ? " <em>(estimado)</em>" : ""}` : "Preço unitário não identificado"}${f.vatPercent != null ? ` · IVA ${f.vatPercent}%` : ""}${f.docNumber ? ` · Doc ${escHtml(f.docNumber)}` : ""}</div>
+      ${lineSelect}
+      ${warnings.map((w) => `<div class="mt-1 text-amber-800">⚠ ${escHtml(w)}</div>`).join("")}`;
+
+    banner.querySelector("#quoteAiLineSelect")?.addEventListener("change", (e) => {
+      const line = candidates.find((c) => String(c.index) === e.target.value);
+      if (line) applyLine(res, line);
+    });
+
+    banner.querySelector("#btnQuoteAiCreateSupplier")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const s = res.supplierSuggestion;
+      try {
+        const out = await apiRequest("/quotes/scan-document/create-supplier", {
+          method: "POST",
+          body: { ...s, vatPercent: f.vatPercent, withholdingPercent: f.withholdingPercent, discountPercent: f.discountPercent },
+        });
+        ensureSupplierOption(out.supplier, suppliers);
+        res.supplier = out.supplier;
+        res.supplierSuggestion = null;
+        showToast?.("Fornecedor criado e seleccionado.", "success");
+        render(res);
+      } catch (err) {
+        showToast?.("Erro ao criar fornecedor: " + err.message, "error");
+      }
+    });
+  };
+
+  const runScan = async (file) => {
+    if (!file) {
+      showToast?.("Seleccione primeiro o ficheiro PDF ou imagem.", "error");
+      proformaInput.click();
+      return;
+    }
+    const prevHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span> A ler...`;
+    banner.className = "mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-700";
+    banner.textContent = "A extrair fornecedor, preço e impostos do documento...";
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (need?.id) fd.append("needId", need.id);
+
+      const res = await apiUpload("/quotes/scan-document", fd, "POST");
+      if (res.supplier) ensureSupplierOption(res.supplier, suppliers);
+
+      const fallback = {
+        unitPrice: res.match?.quotedPrice,
+        quantity: res.match?.quantity,
+        vatPercent: res.match?.vatPercent,
+        discountPercent: res.match?.discountPercent,
+      };
+      applyLine(res, fallback);
+      render(res);
+      showToast?.("Fatura lida. Confirme os valores e clique em Adicionar Preço.", "success");
+    } catch (err) {
+      banner.className = "mt-2 rounded border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-800";
+      banner.textContent = err.message || "Não foi possível ler a fatura.";
+      showToast?.("Erro na leitura da fatura: " + (err.message || "tente novamente"), "error");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = prevHtml;
+    }
+  };
+
+  btn.onclick = () => runScan(proformaInput.files?.[0]);
+  proformaInput.onchange = () => {
+    if (proformaInput.files?.[0]) runScan(proformaInput.files[0]);
+  };
+}

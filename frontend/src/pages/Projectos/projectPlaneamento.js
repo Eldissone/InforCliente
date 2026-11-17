@@ -3,33 +3,35 @@ import { formatCurrency, toDateKey } from "../../shared/format.js";
 import { paymentPayableAmount } from "../../shared/supplierFiscal.js";
 import { toast, openModal, escapeHtml, setButtonLoading } from "../../shared/ui.js";
 import { can } from "../../shared/permissions.js";
+import { initImportExcel, openImportModal } from "../../shared/budget/importExcel.js";
+import { initCategoryIncrement } from "../../shared/budget/categoryIncrement.js";
+import { initCronograma, mountCronograma, loadCronograma } from "../../shared/budget/cronograma.js";
+import { initPayments, mountPayments, showPendingPayments, showPaymentHistory } from "../../shared/budget/payments.js";
+import {
+  loadCategoryOptions, optionGroupsHtml, pendingCategories, resolveSelectionToCostCenterId,
+} from "../../shared/budget/categoryOptions.js";
 
 const PT_MONTHS = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 const PT_MONTHS_SHORT = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
-const GANTT_INK = "#212e3e";
-const GANTT_STATUS_COLORS = {
-  DRAFT: "#f43f5e",
-  PENDING_MATERIAL: "#f43f5e",
-  IN_PROGRESS: "#d97706",
-  PENDING_VALIDATION: "#d97706",
-  COMPLETED: "#059669",
-  PENDING_RETURN: "#059669",
-};
 const GANTT_SCALES = ["day", "week", "month", "quarter", "year"];
 const GANTT_SCALE_KEY = "InfoCliente.gantt.scale";
 const GANTT_SCALE_PX = { day: 32, week: 52, month: 72, quarter: 100, year: 148 };
 const GANTT_SCALE_MAX = { day: 800, week: 160, month: 60, quarter: 24, year: 12 };
-const GANTT_BAR_MIN_PX = 100;
+const GANTT_BAR_MIN_PX = 8;
+const GANTT_LABEL_PX = 280;
 const GANTT_DEP_TYPES = ["FS", "SS", "FF", "SF"];
-const PT_MONTHS_TINY = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const PT_MONTHS_TINY = ["Jan.", "Fev.", "Mar.", "Abr.", "Mai.", "Jun.", "Jul.", "Ago.", "Set.", "Out.", "Nov.", "Dez."];
+const ganttFilter = { person: "", state: "" };
+const expandedActivities = new Set();
 const PONTO_KEY = "InfoCliente.registo.folhaPonto";
 const BAREM_KEY = "InfoCliente.registo.barem";
 const PLAN_TABS = new Set([
   "orcamento_custo",
   "orcamento_vendas",
+  "orcamento_cotacao",
   "plano_gantt",
   "plano_financeiro",
   "recursos_equipamentos",
@@ -141,7 +143,7 @@ function getGanttScale() {
   } catch {
     /* ignore */
   }
-  return "week";
+  return "month";
 }
 
 function setGanttScale(scale) {
@@ -160,6 +162,17 @@ function syncGanttScaleButtons() {
     btn.classList.toggle("is-active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   });
+  const select = document.getElementById("plGanttScaleSelect");
+  if (select && select.value !== scale) select.value = scale;
+  const scaleMap = {
+    day: "Gantt diário",
+    week: "Gantt semanal",
+    month: "Gantt mensal",
+    quarter: "Gantt trimestral",
+    year: "Gantt anual",
+  };
+  const valSpan = document.getElementById("plGanttScaleVal");
+  if (valSpan) valSpan.textContent = scaleMap[scale] || "Gantt mensal";
 }
 
 function buildGanttUnits(scale, rangeStart, rangeEnd) {
@@ -340,39 +353,100 @@ export function initProjectPlaneamento(options = {}) {
   wired = true;
 
   document.addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-toggle-act]");
+    if (toggle) {
+      event.preventDefault();
+      event.stopPropagation();
+      const actId = String(toggle.getAttribute("data-toggle-act"));
+      if (expandedActivities.has(actId)) {
+        expandedActivities.delete(actId);
+      } else {
+        expandedActivities.add(actId);
+      }
+      if (cache.gantt) renderGantt(cache.gantt);
+      return;
+    }
+
+    const toggleAll = event.target.closest("#plGanttToggleAll");
+    if (toggleAll) {
+      event.preventDefault();
+      event.stopPropagation();
+      const allActs = cache.gantt?.activities || [];
+      const expandable = allActs.filter((a) => a.hasChildren);
+      const allExpanded = expandable.length > 0 && expandable.every((a) => expandedActivities.has(String(a.id)));
+      if (allExpanded) {
+        expandedActivities.clear();
+      } else {
+        expandable.forEach((a) => expandedActivities.add(String(a.id)));
+      }
+      if (cache.gantt) renderGantt(cache.gantt);
+      return;
+    }
+
     const btn = event.target.closest("[data-pl-open-tab]");
-    if (!btn) return;
-    event.preventDefault();
-    openExistingTab(btn.getAttribute("data-pl-open-tab"));
+    if (btn) {
+      event.preventDefault();
+      openExistingTab(btn.getAttribute("data-pl-open-tab"));
+      return;
+    }
   });
 
   document.getElementById("plGanttRefresh")?.addEventListener("click", () => {
     cache.gantt = null;
     loadGantt();
   });
-  document.getElementById("plGanttScale")?.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-gantt-scale]");
-    if (!btn) return;
-    const scale = btn.getAttribute("data-gantt-scale");
+  document.getElementById("plGanttScaleSelect")?.addEventListener("change", (event) => {
+    const scale = event.target.value;
     if (!GANTT_SCALES.includes(scale) || scale === getGanttScale()) return;
     setGanttScale(scale);
     syncGanttScaleButtons();
     if (cache.gantt) renderGantt(cache.gantt);
   });
+  document.getElementById("plGanttPerson")?.addEventListener("change", (event) => {
+    ganttFilter.person = event.target.value || "";
+    const personSpan = document.getElementById("plGanttPersonVal");
+    if (personSpan) personSpan.textContent = ganttFilter.person || "Todos";
+    if (cache.gantt) renderGantt(cache.gantt);
+  });
+  document.getElementById("plGanttState")?.addEventListener("change", (event) => {
+    ganttFilter.state = event.target.value || "";
+    const stateMap = {
+      "": "Todos",
+      todo: "Por iniciar",
+      doing: "Em curso",
+      late: "Em atraso",
+      done: "Concluídas",
+    };
+    const stateSpan = document.getElementById("plGanttStateVal");
+    if (stateSpan) stateSpan.textContent = stateMap[ganttFilter.state] || "Todos";
+    if (cache.gantt) renderGantt(cache.gantt);
+  });
+  document.getElementById("plGanttExport")?.addEventListener("click", () => exportGanttCsv());
   document.getElementById("plGanttRoot")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-toggle-act]")) return;
     const hit = event.target.closest("[data-gantt-id]");
     if (!hit || !cache.gantt?.fromPlans) return;
     event.preventDefault();
     openGanttDepsModal(String(hit.getAttribute("data-gantt-id")));
   });
+  let resizeTimer = null;
   window.addEventListener("resize", () => {
-    const root = document.getElementById("plGanttRoot");
-    if (root && cache.gantt?.activities) paintGanttLinks(root, cache.gantt.activities);
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const root = document.getElementById("plGanttRoot");
+      if (root && root.offsetParent && cache.gantt) renderGantt(cache.gantt);
+    }, 150);
   });
   syncGanttScaleButtons();
   document.getElementById("plBaremCreateBtn")?.addEventListener("click", () => openBaremModal());
   document.getElementById("plPessoalCreateBtn")?.addEventListener("click", () => openPessoalModal());
   document.getElementById("plPontoCreateBtn")?.addEventListener("click", () => openPontoModal());
+  document.getElementById("plOrcamentoVendasAdd")?.addEventListener("click", () => {
+    document.getElementById("addProgressTaskBtn")?.click();
+  });
+  document.getElementById("plOrcamentoVendasExcel")?.addEventListener("click", () => {
+    document.getElementById("importExcelBtn")?.click();
+  });
 
   ["plPessoalNome", "plPessoalDe", "plPessoalAte", "plPessoalTipo", "plPessoalCusto"].forEach((id) => {
     document.getElementById(id)?.addEventListener("input", () => renderPessoalCustos());
@@ -380,19 +454,32 @@ export function initProjectPlaneamento(options = {}) {
   });
 }
 
+function mountObraFrame(id, url) {
+  const frame = document.getElementById(id);
+  if (!frame || !url) return;
+  if (frame.dataset.loaded === url) return;
+  frame.dataset.loaded = url;
+  frame.src = url;
+}
+
 export function loadPlaneamentoTab(tabId) {
   if (!PLAN_TABS.has(tabId)) return;
   const id = projectId();
   if (!id) return;
 
-  const centro = `./centroCustos.html?projectId=${encodeURIComponent(id)}`;
-  const custoLink = document.getElementById("plOrcamentoCustoLink");
-  if (custoLink) custoLink.href = `${centro}&tab=necessidades`;
-  const finLink = document.getElementById("plFinanceiroCronogramaLink");
-  if (finLink) finLink.href = `${centro}&tab=cronograma`;
+  const cotacaoHref = `./Cotacao/index.html?project=${encodeURIComponent(id)}`;
+  const cotacaoLink = document.getElementById("plOrcamentoCotacaoLink");
+  if (cotacaoLink) cotacaoLink.href = cotacaoHref;
+  initFinSubTabs();
 
-  if (tabId === "orcamento_custo") return loadOrcamentoCusto();
+  if (tabId === "orcamento_custo") {
+    return loadOrcamentoCusto();
+  }
   if (tabId === "orcamento_vendas") return loadOrcamentoVendas();
+  if (tabId === "orcamento_cotacao") {
+    mountObraFrame("plOrcamentoCotacaoFrame", `${cotacaoHref}&embed=1`);
+    return;
+  }
   if (tabId === "plano_gantt") return loadGantt();
   if (tabId === "plano_financeiro") return loadFinanceiro();
   if (tabId === "recursos_equipamentos") return loadEquipamentos();
@@ -400,52 +487,501 @@ export function loadPlaneamentoTab(tabId) {
   if (tabId === "recursos_pessoal") return loadPessoal();
 }
 
+function vendaPrevistaFromTasks(tasks) {
+  return (tasks || [])
+    .filter((t) => !t.parentId)
+    .reduce((sum, t) => sum + taskUnitValue(t) * num(t.expectedQty), 0);
+}
+
+function flattenSalesTasks(tasks) {
+  const byParent = new Map();
+  (tasks || []).forEach((t) => {
+    const key = t.parentId || "";
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(t);
+  });
+  const rows = [];
+  const walk = (parentId, depth) => {
+    (byParent.get(parentId) || []).forEach((t) => {
+      rows.push({ task: t, depth });
+      walk(t.id, depth + 1);
+    });
+  };
+  walk("", 0);
+  (tasks || []).forEach((t) => {
+    if (!rows.some((row) => row.task.id === t.id)) rows.push({ task: t, depth: 0 });
+  });
+  return rows;
+}
+
+let cachedCostCenters = [];
+let cachedCostNeeds = [];
+let costNeedsListenersBound = false;
+
+const NEED_STATUS_CONFIG = {
+  APPROVED: { label: "Aprovado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  PENDING: { label: "Pendente", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+  IN_QUOTATION: { label: "Em Cotação", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
+  ORDERED: { label: "Encomenda", cls: "bg-indigo-50 text-indigo-700 border border-indigo-200" },
+  EM_ANALISE: { label: "Em Análise", cls: "bg-purple-50 text-purple-700 border border-purple-200" },
+  PAID: { label: "Pago", cls: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
+  REJECTED: { label: "Rejeitado", cls: "bg-rose-50 text-rose-700 border border-rose-200" },
+};
+
+function renderCostNeedsTable() {
+  const tbody = document.getElementById("plOrcamentoCustoItems");
+  const countEl = document.getElementById("plCustoItemsCount");
+  const totalEl = document.getElementById("plCustoItemsTotal");
+  if (!tbody) return;
+
+  const search = (document.getElementById("plCustoSearch")?.value || "").trim().toLowerCase();
+  const ccFilter = document.getElementById("plCustoCCFilter")?.value || "";
+  const statusFilter = document.getElementById("plCustoStatusFilter")?.value || "";
+  const cur = currency();
+
+  let filtered = (cachedCostNeeds || []).slice();
+
+  if (ccFilter) {
+    filtered = filtered.filter((n) => n.costCenterId === ccFilter);
+  }
+
+  if (statusFilter) {
+    filtered = filtered.filter((n) => (n.status || "PENDING") === statusFilter);
+  }
+
+  if (search) {
+    filtered = filtered.filter((n) => {
+      const desc = String(n.description || "").toLowerCase();
+      const ccName = String(n.costCenter?.name || "").toLowerCase();
+      const ccCode = String(n.costCenter?.code || "").toLowerCase();
+      const unit = String(n.unit || "").toLowerCase();
+      return desc.includes(search) || ccName.includes(search) || ccCode.includes(search) || unit.includes(search);
+    });
+  }
+
+  if (countEl) {
+    countEl.textContent = `${filtered.length} item(ns)${filtered.length !== cachedCostNeeds.length ? ` (de ${cachedCostNeeds.length})` : ""}`;
+  }
+
+  let totalGeral = 0;
+  filtered.forEach((n) => {
+    const q = num(n.quantity) || 1;
+    const p = num(n.unitPrice ?? n.originalUnitPrice);
+    const h = num(n.hours) || 1;
+    totalGeral += q * p * h;
+  });
+
+  if (totalEl) {
+    totalEl.textContent = `Total: ${formatCurrency(totalGeral, cur)}`;
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = emptyRow(10, "assignment", cachedCostNeeds.length ? "Nenhum item corresponde aos filtros selecionados." : "Sem linhas de orçamento registadas. Adicione com '+ Novo Item'.");
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((n, idx) => {
+    const q = num(n.quantity) || 1;
+    const p = num(n.unitPrice ?? n.originalUnitPrice);
+    const h = num(n.hours) || 1;
+    const lineTotal = q * p * h;
+    const st = n.status || "PENDING";
+    const stCfg = NEED_STATUS_CONFIG[st] || { label: st, cls: "bg-slate-100 text-slate-700" };
+    const ccLabel = n.costCenter?.name || n.costCenter?.code || "—";
+    const itemCurrency = n.costCenter?.currency || cur;
+    const isPending = st === "PENDING";
+
+    return `<tr>
+      <td class="text-center font-bold text-slate-500 tabular-nums">${idx + 1}</td>
+      <td>
+        <span class="font-bold text-slate-900">${escapeHtml(n.description || "—")}</span>
+        ${n.notes ? `<div class="text-[10px] text-slate-400 truncate max-w-xs" title="${escapeHtml(n.notes)}">${escapeHtml(n.notes)}</div>` : ""}
+      </td>
+      <td class="text-slate-600 text-xs font-semibold">${escapeHtml(ccLabel)}</td>
+      <td class="text-center text-xs font-bold text-slate-500">${escapeHtml(n.unit || "un")}</td>
+      <td class="text-right tabular-nums text-slate-700 font-semibold">${q.toLocaleString("pt-PT", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+      <td class="text-right tabular-nums text-slate-700 font-semibold">${formatCurrency(p, itemCurrency)}</td>
+      <td class="text-center text-xs tabular-nums text-slate-500">${num(n.hours) > 0 ? num(n.hours).toLocaleString("pt-PT") : "—"}</td>
+      <td class="text-right tabular-nums font-bold text-slate-900">${formatCurrency(lineTotal, itemCurrency)}</td>
+      <td class="text-center">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${stCfg.cls}">${stCfg.label}</span>
+      </td>
+      <td class="text-center">
+        <div class="inline-flex items-center justify-center gap-1">
+          ${isPending ? `
+            <button type="button" onclick="window.setCostNeedStatus('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', 'APPROVED', '${escapeHtml(n.description || "")}')"
+              title="Aprovar no orçamento previsto"
+              class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition flex items-center justify-center">
+              <span class="material-symbols-outlined text-sm">check_circle</span>
+            </button>
+            <button type="button" onclick="window.setCostNeedStatus('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', 'REJECTED', '${escapeHtml(n.description || "")}')"
+              title="Rejeitar item"
+              class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition flex items-center justify-center">
+              <span class="material-symbols-outlined text-sm">cancel</span>
+            </button>
+          ` : ""}
+          <button type="button" onclick="window.openEditCostNeedModal('${escapeHtml(n.id)}')"
+            title="Editar item"
+            class="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition flex items-center justify-center">
+            <span class="material-symbols-outlined text-sm">edit</span>
+          </button>
+          <button type="button" onclick="window.deleteCostNeed('${escapeHtml(n.id)}', '${escapeHtml(n.costCenterId)}', '${escapeHtml(n.description || "")}')"
+            title="Eliminar item"
+            class="w-7 h-7 rounded-lg bg-slate-100 text-rose-600 hover:bg-rose-600 hover:text-white transition flex items-center justify-center">
+            <span class="material-symbols-outlined text-sm">delete</span>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function initCostNeedsListeners() {
+  if (costNeedsListenersBound) return;
+  costNeedsListenersBound = true;
+
+  document.getElementById("plCustoSearch")?.addEventListener("input", renderCostNeedsTable);
+  document.getElementById("plCustoCCFilter")?.addEventListener("change", renderCostNeedsTable);
+  document.getElementById("plCustoStatusFilter")?.addEventListener("change", renderCostNeedsTable);
+  document.getElementById("plCustoNewItemBtn")?.addEventListener("click", () => openNewCostNeedModal());
+}
+
+async function openNewCostNeedModal(defaultCCId = "") {
+  const pId = projectId();
+  if (!pId) return;
+
+  const categoryOptions = await loadCategoryOptions(pId);
+  if (!cachedCostCenters.length && !pendingCategories(categoryOptions, cachedCostCenters).length) {
+    toast("Ainda não há categorias de custo de obra. Crie-as em Registos → Categorias de Custo.", { type: "warning" });
+    return;
+  }
+
+  const cur = currency();
+  const ccOptions = optionGroupsHtml({
+    costCenters: cachedCostCenters,
+    options: categoryOptions,
+    selected: defaultCCId || cachedCostCenters[0]?.id || "",
+  });
+
+  openModal({
+    title: "Nova Linha de Orçamento de Custo",
+    primaryLabel: "Adicionar Linha",
+    contentHtml: `
+      <div class="space-y-4">
+        <p class="text-xs text-slate-500 font-medium">Registe um item de custo previsto no orçamento da obra.</p>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Categoria / Centro de Custo *
+          <select id="modalNeedCC" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+            ${ccOptions}
+          </select>
+        </label>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição do Item *
+          <input id="modalNeedDesc" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Ex: Cimento Portland 50kg, Aluguer de Grua...">
+        </label>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Unidade
+            <select id="modalNeedUnit" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="un">un</option>
+              <option value="m">m</option>
+              <option value="m2">m²</option>
+              <option value="m3">m³</option>
+              <option value="kg">kg</option>
+              <option value="l">L</option>
+              <option value="vg">vg</option>
+              <option value="h">h</option>
+              <option value="dia">dia</option>
+              <option value="mes">mês</option>
+              <option value="par">par</option>
+              <option value="cx">cx</option>
+            </select>
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Quantidade *
+            <input id="modalNeedQty" type="number" min="0.001" step="any" value="1" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Preço Unit. (${escapeHtml(cur)})
+            <input id="modalNeedPrice" type="number" min="0" step="0.01" placeholder="0.00" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Horas / Fator
+            <input id="modalNeedHours" type="number" min="0" step="0.5" value="1" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Prioridade
+            <select id="modalNeedPriority" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="MEDIA">Média</option>
+              <option value="ALTA">Alta</option>
+              <option value="BAIXA">Baixa</option>
+            </select>
+          </label>
+        </div>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Observações
+          <input id="modalNeedNotes" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Notas opcionais">
+        </label>
+      </div>`,
+    onPrimary: async ({ close, btn }) => {
+      const ccChoice = document.getElementById("modalNeedCC")?.value;
+      const desc = document.getElementById("modalNeedDesc")?.value?.trim();
+      const unit = document.getElementById("modalNeedUnit")?.value || "un";
+      const qty = parseFloat(document.getElementById("modalNeedQty")?.value) || 1;
+      const priceVal = document.getElementById("modalNeedPrice")?.value;
+      const unitPrice = priceVal !== "" && !isNaN(parseFloat(priceVal)) ? parseFloat(priceVal) : null;
+      const hours = parseFloat(document.getElementById("modalNeedHours")?.value) || 1;
+      const priority = document.getElementById("modalNeedPriority")?.value || "MEDIA";
+      const notes = document.getElementById("modalNeedNotes")?.value?.trim() || null;
+
+      if (!ccChoice) {
+        toast("Selecione uma categoria.", { type: "warning" });
+        return;
+      }
+      if (!desc) {
+        toast("Preencha a descrição do item.", { type: "warning" });
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      try {
+        const ccId = await resolveSelectionToCostCenterId(pId, ccChoice);
+        await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs`, {
+          method: "POST",
+          body: {
+            description: desc,
+            quantity: qty,
+            unit,
+            unitPrice: unitPrice != null ? unitPrice : null,
+            hours,
+            priority,
+            notes,
+            status: unitPrice != null && unitPrice > 0 ? "APPROVED" : "PENDING",
+          },
+        });
+        toast("Linha adicionada ao orçamento!", { type: "success" });
+        close();
+        loadOrcamentoCusto();
+      } catch (err) {
+        toast(err.message || "Erro ao adicionar item.", { type: "error" });
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
+function openEditCostNeedModal(needId) {
+  const need = (cachedCostNeeds || []).find((n) => n.id === needId);
+  if (!need) {
+    toast("Item não encontrado.", { type: "error" });
+    return;
+  }
+
+  const cur = need.costCenter?.currency || currency();
+  const currentPrice = need.unitPrice ?? need.originalUnitPrice ?? "";
+
+  openModal({
+    title: "Editar Linha de Orçamento",
+    primaryLabel: "Guardar Alterações",
+    contentHtml: `
+      <div class="space-y-4">
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Descrição do Item *
+          <input id="modalEditDesc" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.description || "")}">
+        </label>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Unidade
+            <input id="modalEditUnit" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.unit || "un")}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Quantidade
+            <input id="modalEditQty" type="number" min="0.001" step="any" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${need.quantity != null ? escapeHtml(String(need.quantity)) : "1"}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Preço Unit. (${escapeHtml(cur)})
+            <input id="modalEditPrice" type="number" min="0" step="0.01" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${currentPrice !== "" ? escapeHtml(String(currentPrice)) : ""}">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Horas / Fator
+            <input id="modalEditHours" type="number" min="0" step="0.5" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${need.hours != null ? escapeHtml(String(need.hours)) : "1"}">
+          </label>
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Status
+            <select id="modalEditStatus" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold">
+              <option value="APPROVED" ${need.status === "APPROVED" ? "selected" : ""}>Aprovado</option>
+              <option value="PENDING" ${need.status === "PENDING" ? "selected" : ""}>Pendente</option>
+              <option value="IN_QUOTATION" ${need.status === "IN_QUOTATION" ? "selected" : ""}>Em Cotação</option>
+              <option value="ORDERED" ${need.status === "ORDERED" ? "selected" : ""}>Encomenda</option>
+              <option value="EM_ANALISE" ${need.status === "EM_ANALISE" ? "selected" : ""}>Em Análise</option>
+              <option value="PAID" ${need.status === "PAID" ? "selected" : ""}>Pago</option>
+              <option value="REJECTED" ${need.status === "REJECTED" ? "selected" : ""}>Rejeitado</option>
+            </select>
+          </label>
+        </div>
+        <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">Observações
+          <input id="modalEditNotes" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" value="${escapeHtml(need.notes || "")}">
+        </label>
+        <div id="modalEditExceptionWrap" class="mt-2">
+          <label class="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+            Justificação de Excepção (se o preço unitário exceder o previsto)
+            <input id="modalEditExceptionReason" type="text" class="mt-1 w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold" placeholder="Ex: Aumento do preço de mercado, cotação alternativa..." value="${escapeHtml(need.priceExceptionReason || "")}">
+          </label>
+        </div>
+      </div>`,
+    onPrimary: async ({ close, btn }) => {
+      const desc = document.getElementById("modalEditDesc")?.value?.trim();
+      const unit = document.getElementById("modalEditUnit")?.value?.trim() || "un";
+      const qty = parseFloat(document.getElementById("modalEditQty")?.value) || 1;
+      const priceVal = document.getElementById("modalEditPrice")?.value;
+      const unitPrice = priceVal !== "" && !isNaN(parseFloat(priceVal)) ? parseFloat(priceVal) : null;
+      const hours = parseFloat(document.getElementById("modalEditHours")?.value) || 1;
+      const status = document.getElementById("modalEditStatus")?.value || need.status;
+      const notes = document.getElementById("modalEditNotes")?.value?.trim() || null;
+      const priceExceptionReason = document.getElementById("modalEditExceptionReason")?.value?.trim() || undefined;
+
+      if (!desc) {
+        toast("Preencha a descrição do item.", { type: "warning" });
+        return;
+      }
+
+      setButtonLoading(btn, true);
+      try {
+        await apiRequest(`/cost-centers/${encodeURIComponent(need.costCenterId)}/needs/${encodeURIComponent(need.id)}`, {
+          method: "PATCH",
+          body: {
+            description: desc,
+            unit,
+            quantity: qty,
+            unitPrice,
+            hours,
+            status,
+            notes,
+            priceExceptionReason,
+          },
+        });
+        toast("Linha atualizada com sucesso!", { type: "success" });
+        close();
+        loadOrcamentoCusto();
+      } catch (err) {
+        toast(err.message || "Erro ao atualizar item.", { type: "error" });
+        setButtonLoading(btn, false);
+      }
+    },
+  });
+}
+
+async function deleteCostNeed(needId, ccId, desc) {
+  if (!confirm(`Tem a certeza que deseja eliminar o item "${desc || "selecionado"}"?`)) return;
+  try {
+    await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs/${encodeURIComponent(needId)}`, {
+      method: "DELETE",
+    });
+    toast("Item eliminado do orçamento.", { type: "success" });
+    loadOrcamentoCusto();
+  } catch (err) {
+    toast(err.message || "Erro ao eliminar item.", { type: "error" });
+  }
+}
+
+async function setCostNeedStatus(needId, ccId, status, desc) {
+  if (status === "REJECTED" && !confirm(`Rejeitar o item "${desc || ""}"?`)) return;
+  try {
+    await apiRequest(`/cost-centers/${encodeURIComponent(ccId)}/needs/${encodeURIComponent(needId)}`, {
+      method: "PATCH",
+      body: { status },
+    });
+    toast(status === "APPROVED" ? "Item aprovado no orçamento." : "Item rejeitado.", { type: "success" });
+    loadOrcamentoCusto();
+  } catch (err) {
+    toast(err.message || "Erro ao atualizar status.", { type: "error" });
+  }
+}
+
+window.openNewCostNeedModal = openNewCostNeedModal;
+window.openEditCostNeedModal = openEditCostNeedModal;
+window.deleteCostNeed = deleteCostNeed;
+window.setCostNeedStatus = setCostNeedStatus;
+
 async function loadOrcamentoCusto() {
   const body = document.getElementById("plOrcamentoCustoBody");
   const kpis = document.getElementById("plOrcamentoCustoKpis");
-  if (!body) return;
-  body.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  const itemsBody = document.getElementById("plOrcamentoCustoItems");
+  const id = projectId();
+  if (!body || !id) return;
+
+  body.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  if (itemsBody) {
+    itemsBody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
+  }
+
   try {
-    const data = await apiRequest(`/cost-centers/project/${encodeURIComponent(projectId())}/summary`);
-    const summary = data.summary || [];
-    const totalsMap = data.totals || {};
+    const [summaryRes, ccRes, needsRes, taskData] = await Promise.all([
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/summary`),
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}`).catch(() => ({ items: [] })),
+      apiRequest(`/cost-centers/project/${encodeURIComponent(id)}/needs?pageSize=1000`).catch(() => ({ items: [] })),
+      apiRequest(`/projects/${encodeURIComponent(id)}/progress-tasks`).catch(() => ({ tasks: [] })),
+    ]);
+
+    cachedCostCenters = ccRes.items || [];
+    cachedCostNeeds = (needsRes.items || []).slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+    // Popular dropdown de filtro por Centro de Custo
+    const ccFilterSelect = document.getElementById("plCustoCCFilter");
+    if (ccFilterSelect) {
+      const currentVal = ccFilterSelect.value;
+      ccFilterSelect.innerHTML = `<option value="">Todos os CCs</option>` +
+        cachedCostCenters.map((cc) => {
+          const label = cc.name || cc.code || "";
+          return `<option value="${escapeHtml(cc.id)}" ${cc.id === currentVal ? "selected" : ""}>${escapeHtml(label)}</option>`;
+        }).join("");
+    }
+
+    initCostNeedsListeners();
+
+    // KPIs & Tabela de Resumo por Centro
+    const summary = summaryRes.summary || [];
+    const totalsMap = summaryRes.totals || {};
     const cur = currency();
     const totals = totalsMap[cur] || Object.values(totalsMap)[0] || {};
     const previsto = num(totals.basePrevisto ?? totals.previsto);
     const analise = num(totals.emAnaliseOrcamento ?? totals.realizadoOrcamento ?? totals.realizado);
     const liquidado = num(totals.liquidado);
     const pct = previsto > 0 ? (liquidado / previsto) * 100 : 0;
+    const venda = vendaPrevistaFromTasks(taskData.tasks);
+    const margem = venda - previsto;
 
     if (kpis) {
       kpis.innerHTML = [
-        kpiCard("Previsto", formatCurrency(previsto, cur), "Baseline aprovado"),
-        kpiCard("Em análise", formatCurrency(analise, cur), "Propostas em revisão"),
-        kpiCard("Liquidado", formatCurrency(liquidado, cur), "Pagamentos confirmados"),
-        kpiCard("% Liquidado", `${pct.toFixed(0)}%`, "Sobre o previsto"),
+        kpiCard("Quanto deveria custar", formatCurrency(previsto, cur), "Orçamento de custo previsto"),
+        kpiCard("Quanto prevemos faturar", formatCurrency(venda, cur), "Tabela de quantidades"),
+        kpiCard("Margem prevista", formatCurrency(margem, cur), venda ? `${previsto > 0 ? ((margem / venda) * 100).toFixed(0) : "—"}% sobre a venda` : "Registe a venda"),
+        kpiCard("Liquidado", formatCurrency(liquidado, cur), `${pct.toFixed(0)}% do custo previsto`),
       ].join("");
     }
 
     if (!summary.length) {
-      body.innerHTML = emptyRow(5, "account_balance", "Sem centros de custo nesta obra.");
-      return;
+      body.innerHTML = emptyRow(6, "account_balance", "Sem custos nesta obra. Use Importar Excel, Ler Fatura ou Novo Item — as categorias vêm de Registos.");
+    } else {
+      body.innerHTML = summary.map((row) => {
+        const p = num(row.basePrevisto ?? row.previsto);
+        const r = num(row.emAnaliseOrcamento ?? row.realizadoOrcamento ?? row.realizado);
+        const l = num(row.liquidado);
+        const pc = p > 0 ? (l / p) * 100 : 0;
+        const label = row.name || row.code || "Centro";
+        return `<tr>
+          <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
+          <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
+          <td>${progressBar(pc)}</td>
+          <td class="text-right">
+            <button type="button" onclick="window.openNewCostNeedModal?.('${escapeHtml(row.id || "")}')"
+              class="h-7 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#212e3e] hover:text-white text-[11px] font-bold transition-all inline-flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">add</span> Novo Item
+            </button>
+          </td>
+        </tr>`;
+      }).join("");
     }
 
-    body.innerHTML = summary.map((row) => {
-      const p = num(row.basePrevisto ?? row.previsto);
-      const r = num(row.emAnaliseOrcamento ?? row.realizadoOrcamento ?? row.realizado);
-      const l = num(row.liquidado);
-      const pc = p > 0 ? (l / p) * 100 : 0;
-      const label = [row.code, row.name].filter(Boolean).join(" · ") || "Centro";
-      return `<tr>
-        <td class="font-bold text-slate-900">${escapeHtml(label)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(p, row.currency || cur)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(r, row.currency || cur)}</td>
-        <td class="text-right tabular-nums">${formatCurrency(l, row.currency || cur)}</td>
-        <td>${progressBar(pc)}</td>
-      </tr>`;
-    }).join("");
+    // Renderizar tabela nativa de itens de custo
+    renderCostNeedsTable();
   } catch (err) {
-    body.innerHTML = emptyRow(5, "error", err.message || "Não foi possível carregar o orçamento de custo.");
+    body.innerHTML = emptyRow(6, "error", err.message || "Não foi possível carregar o orçamento de custo.");
+    if (itemsBody) {
+      itemsBody.innerHTML = emptyRow(10, "error", err.message || "Não foi possível carregar as linhas de custo.");
+    }
   }
 }
 
@@ -455,10 +991,8 @@ async function loadOrcamentoVendas() {
   if (!body) return;
   body.innerHTML = `<tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>`;
   try {
-    const [taskData, payData] = await Promise.all([
-      apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`),
-      apiRequest(`/projects/${encodeURIComponent(projectId())}/payments`).catch(() => ({ items: [], totals: {} })),
-    ]);
+    const taskData = await apiRequest(`/projects/${encodeURIComponent(projectId())}/progress-tasks`);
+    window.projectProgressTasksCache = taskData.tasks || [];
     const tasks = (taskData.tasks || []).filter((t) => !t.parentId);
     const cur = currency();
     const groups = new Map();
@@ -475,18 +1009,51 @@ async function loadOrcamentoVendas() {
       previsto += exp;
       medido += exe;
     });
-    const global = num(project()?.budgetTotal) || previsto;
-    const recebido = num(payData.totalPago ?? payData.totals?.pago);
+    let custoPrevisto = 0;
+    try {
+      const costData = await apiRequest(`/cost-centers/project/${encodeURIComponent(projectId())}/summary`);
+      const totalsMap = costData.totals || {};
+      const totals = totalsMap[cur] || Object.values(totalsMap)[0] || {};
+      custoPrevisto = num(totals.basePrevisto ?? totals.previsto);
+    } catch {
+      custoPrevisto = 0;
+    }
+    const margem = previsto - custoPrevisto;
     if (kpis) {
       kpis.innerHTML = [
-        kpiCard("Contrato / global", formatCurrency(global, cur), "Orçamento da obra"),
-        kpiCard("Faturação prevista", formatCurrency(previsto, cur), "Tabela de quantidades"),
+        kpiCard("Quanto prevemos faturar", formatCurrency(previsto, cur), "Tabela de quantidades"),
+        kpiCard("Quanto deveria custar", formatCurrency(custoPrevisto, cur), "Orçamento de custo"),
+        kpiCard("Margem prevista", formatCurrency(margem, cur), previsto ? `${((margem / previsto) * 100).toFixed(0)}% sobre a venda` : "Registe a venda"),
         kpiCard("Já medido", formatCurrency(medido, cur), "Quantidade executada"),
-        kpiCard("Recebido", formatCurrency(recebido, cur), "Pagamentos do cliente"),
       ].join("");
     }
+    const itemsBody = document.getElementById("plOrcamentoVendasItems");
+    const itemRows = flattenSalesTasks(taskData.tasks || []);
+    if (itemsBody) {
+      itemsBody.innerHTML = itemRows.length
+        ? itemRows.map(({ task: t, depth }) => {
+          const uv = taskUnitValue(t);
+          const exp = num(t.expectedQty);
+          const uvM = num(t.unitValueMaterial);
+          const uvS = num(t.unitValueService);
+          const wbs = t.wbsCode || t.itemCode || "";
+          const pad = depth ? ` style="padding-left:${0.75 + depth * 1.1}rem"` : "";
+          return `<tr>
+            <td class="font-mono text-xs text-slate-500">${escapeHtml(wbs)}</td>
+            <td${pad}><span class="font-bold text-slate-900">${escapeHtml(t.description || "—")}</span>${t.itemGroup ? `<div class="text-[10px] text-slate-400 uppercase">${escapeHtml(t.itemGroup)}</div>` : ""}</td>
+            <td class="text-right tabular-nums">${exp.toLocaleString("pt-PT")}</td>
+            <td class="text-center text-xs font-bold text-slate-500">${escapeHtml(t.unit || "un")}</td>
+            <td class="text-right tabular-nums">${formatCurrency(uv, t.currency || cur)}</td>
+            <td class="text-right tabular-nums font-bold">${formatCurrency(uv * exp, t.currency || cur)}</td>
+            <td class="text-center">
+              <button type="button" data-edit-task="${escapeHtml(t.id)}" data-task-desc="${escapeHtml(t.description || "")}" data-task-wbs="${escapeHtml(wbs)}" data-task-exe="${num(t.executedQty)}" data-task-exp="${exp}" data-task-unit="${escapeHtml(t.unit || "un")}" data-task-us="${uvS}" data-task-um="${uvM}" data-task-unit-value="${uv}" data-task-total-value="${t.totalValue || ""}" data-task-currency="${escapeHtml(t.currency || cur)}" title="Editar item" class="material-symbols-outlined text-slate-400 hover:text-[#0d3fd1] transition-colors p-1 rounded-md hover:bg-[#0d3fd1]/10">edit</button>
+            </td>
+          </tr>`;
+        }).join("")
+        : emptyRow(7, "add_task", "Ainda não há itens de venda. Use Novo item ou Excel.");
+    }
     if (!groups.size) {
-      body.innerHTML = emptyRow(5, "request_quote", "Sem itens de avanço físico para estimar vendas.");
+      body.innerHTML = emptyRow(5, "request_quote", "Sem itens de venda. Crie a tabela de quantidades nesta aba.");
       return;
     }
     const rows = [...groups.values()].map((g) => {
@@ -611,7 +1178,7 @@ function ganttBarLayout(activity, scale, units, unitPx) {
   const leftRaw = dateToPx(range.start, units, unitPx);
   let rightRaw = dateToPx(range.end, units, unitPx);
   if (rightRaw <= leftRaw) rightRaw = leftRaw + unitPx;
-  const pad = 4;
+  const pad = 2;
   return {
     left: leftRaw + pad,
     width: Math.max(GANTT_BAR_MIN_PX, rightRaw - leftRaw - pad * 2),
@@ -628,49 +1195,159 @@ function ganttPeopleFromLines(lines) {
 }
 
 function collectGanttFromDailyPlans(plans, tasksById) {
-  const sorted = [...plans].sort((a, b) => {
+  const sortedPlans = [...plans].sort((a, b) => {
     const da = parseLocalDate(a.date)?.getTime() || 0;
     const db = parseLocalDate(b.date)?.getTime() || 0;
     if (da !== db) return da - db;
     return String(a.id || "").localeCompare(String(b.id || ""));
   });
 
-  const byId = new Map(sorted.map((plan) => [String(plan.id), plan]));
-  return sorted.map((plan) => {
+  const byId = new Map(sortedPlans.map((plan) => [String(plan.id), plan]));
+  const groupsMap = new Map();
+
+  sortedPlans.forEach((plan) => {
     const date = parseLocalDate(plan.date);
     const end = planDisplayEnd(plan, date);
-    const first = (plan.tasks || [])[0];
-    const firstTask = progressTaskOfLine(first, tasksById);
-    const predecessors = explicitPredecessors(plan);
-    const names = predecessors.map((dep) => {
-      const pred = byId.get(String(dep.predecessorId));
-      return pred ? dailyPlanLabel(pred, tasksById) : "";
-    }).filter(Boolean);
-    let plannedQty = 0;
-    let executedQty = 0;
-    (plan.tasks || []).forEach((line) => {
-      plannedQty += num(line.plannedQty);
-      executedQty += num(line.executedQty);
-    });
-    const pct = plannedQty > 0 ? Math.min(100, (executedQty / plannedQty) * 100) : 0;
-    const wbsName = dailyPlanWbsName(plan, tasksById);
-    return {
-      id: plan.id,
-      name: dailyPlanLabel(plan, tasksById),
-      wbsName,
-      start: date,
-      end,
-      pct,
-      execPct: pct,
-      status: plan.status || "DRAFT",
-      predecessors,
-      predecessorId: predecessors[0]?.predecessorId || null,
-      dependency: names.join(", "),
-      people: ganttPeopleFromLines(plan.tasks),
-      wbs: firstTask?.wbsCode || "",
-      group: firstTask?.itemGroup || "",
-    };
+    const firstLine = (plan.tasks || [])[0];
+    const task = progressTaskOfLine(firstLine, tasksById);
+    const label = dailyPlanLabel(plan, tasksById);
+
+    // Chave de agrupamento: se tiver tarefa WBS vinculada, usa a tarefa.
+    // Caso contrário, normaliza o nome da atividade (descrição).
+    const groupKey = task?.id
+      ? `task_${task.id}`
+      : `name_${label.toLowerCase().trim()}`;
+
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, {
+        key: groupKey,
+        taskId: task?.id || null,
+        task: task || null,
+        name: task?.description || label,
+        wbsName: dailyPlanWbsName(plan, tasksById) || task?.description || label,
+        wbs: task?.wbsCode || "",
+        group: task?.itemGroup || "",
+        plans: [],
+      });
+    }
+
+    const grp = groupsMap.get(groupKey);
+    grp.plans.push({ plan, date, end, task });
   });
+
+  const activities = [];
+  groupsMap.forEach((grp) => {
+    const childActivities = grp.plans.map(({ plan, date, end }) => {
+      let plannedQty = 0;
+      let executedQty = 0;
+      (plan.tasks || []).forEach((line) => {
+        plannedQty += num(line.plannedQty);
+        executedQty += num(line.executedQty);
+      });
+      const pct = plannedQty > 0 ? Math.min(100, (executedQty / plannedQty) * 100) : 0;
+      const predecessors = explicitPredecessors(plan);
+      const names = predecessors.map((dep) => {
+        const pred = byId.get(String(dep.predecessorId));
+        return pred ? dailyPlanLabel(pred, tasksById) : "";
+      }).filter(Boolean);
+      const people = ganttPeopleFromLines(plan.tasks);
+      const dateLabel = date ? formatShortDate(date) : "";
+      const planResumo = dailyPlanResumo(plan);
+      const childName = planResumo && planResumo !== grp.name
+        ? `${dateLabel ? `${dateLabel} · ` : ""}${planResumo}`
+        : (dateLabel ? `Plano ${dateLabel}` : "Plano diário");
+
+      return {
+        id: String(plan.id),
+        name: childName,
+        wbsName: grp.wbsName,
+        start: date,
+        end,
+        pct,
+        execPct: pct,
+        status: plan.status || "DRAFT",
+        predecessors,
+        predecessorId: predecessors[0]?.predecessorId || null,
+        dependency: names.join(", "),
+        people,
+        wbs: grp.wbs,
+        group: grp.group,
+        isChild: true,
+        parentId: grp.key,
+      };
+    });
+
+    // Datas consolidadas da atividade: da primeira data até a última data
+    const validStarts = childActivities.filter((c) => c.start).map((c) => c.start.getTime());
+    const validEnds = childActivities.filter((c) => c.end || c.start).map((c) => (c.end || c.start).getTime());
+    const minStart = validStarts.length ? new Date(Math.min(...validStarts)) : null;
+    const maxEnd = validEnds.length ? new Date(Math.max(...validEnds)) : minStart;
+
+    // Progresso consolidado:
+    let overallPct = 0;
+    if (grp.task && num(grp.task.expectedQty) > 0) {
+      overallPct = executedPct(grp.task);
+    } else {
+      let totalPlanned = 0;
+      let totalExecuted = 0;
+      grp.plans.forEach(({ plan }) => {
+        (plan.tasks || []).forEach((line) => {
+          totalPlanned += num(line.plannedQty);
+          totalExecuted += num(line.executedQty);
+        });
+      });
+      overallPct = totalPlanned > 0
+        ? Math.min(100, (totalExecuted / totalPlanned) * 100)
+        : (childActivities.length ? childActivities.reduce((s, c) => s + c.pct, 0) / childActivities.length : 0);
+    }
+
+    const allPeople = [...new Set(childActivities.flatMap((c) => c.people))];
+    const allPredecessors = childActivities.flatMap((c) => c.predecessors || []);
+    const seenPreds = new Set();
+    const uniquePredecessors = [];
+    allPredecessors.forEach((p) => {
+      if (p.predecessorId && !seenPreds.has(p.predecessorId)) {
+        seenPreds.add(p.predecessorId);
+        uniquePredecessors.push(p);
+      }
+    });
+
+    const allDone = childActivities.length > 0 && childActivities.every((c) => c.pct >= 99.5);
+    const anyProgress = childActivities.some((c) => c.pct > 0);
+    const status = allDone ? "COMPLETED" : (anyProgress ? "IN_PROGRESS" : "DRAFT");
+
+    activities.push({
+      id: grp.key,
+      rawId: grp.taskId || grp.key,
+      name: grp.name,
+      wbsName: grp.wbsName,
+      start: minStart,
+      end: maxEnd,
+      pct: overallPct,
+      execPct: overallPct,
+      status,
+      predecessors: uniquePredecessors,
+      predecessorId: uniquePredecessors[0]?.predecessorId || null,
+      dependency: childActivities.map((c) => c.dependency).filter(Boolean).join(", "),
+      people: allPeople,
+      wbs: grp.wbs,
+      group: grp.group,
+      isGroup: true,
+      hasChildren: childActivities.length > 1,
+      childrenCount: childActivities.length,
+      children: childActivities,
+    });
+  });
+
+  // Ordenar cronologicamente pela data de início
+  activities.sort((a, b) => {
+    const da = a.start ? a.start.getTime() : 0;
+    const db = b.start ? b.start.getTime() : 0;
+    if (da !== db) return da - db;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  return activities;
 }
 
 function collectGanttFromWbs(tasks, plans) {
@@ -771,43 +1448,233 @@ function ganttActivityTooltip(a) {
   ].filter(Boolean).join(" · ");
 }
 
-function safeGanttHex(value, fallback) {
-  const raw = String(value || "").trim();
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw) ? raw : fallback;
+function ganttExecPct(a) {
+  return Math.max(0, Math.min(100, num(a?.execPct ?? a?.pct)));
 }
 
-function ganttHexLuminance(hex) {
-  const raw = String(hex || "").replace("#", "");
-  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
-  const n = Number.parseInt(full, 16);
-  if (!Number.isFinite(n)) return 0;
-  return (((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114) / 255;
+/** % do tempo planeado já decorrido à data de referência (avanço planeado). */
+function ganttPlannedPctAt(a, ref) {
+  if (!a?.start) return 0;
+  const s = startOfDay(a.start).getTime();
+  const e = endOfDay(a.end || a.start).getTime();
+  const t = ref.getTime();
+  if (t <= s) return 0;
+  if (t >= e) return 100;
+  return ((t - s) / Math.max(1, e - s)) * 100;
 }
 
-function loadGanttBoardConfig() {
-  try {
-    const raw = localStorage.getItem(`InfoCliente.dailyPlanBoard.${projectId()}`);
-    if (!raw) return { customColumns: [], placements: {} };
-    const parsed = JSON.parse(raw);
-    return {
-      customColumns: Array.isArray(parsed.customColumns) ? parsed.customColumns : [],
-      placements: parsed.placements && typeof parsed.placements === "object" ? parsed.placements : {},
-    };
-  } catch {
-    return { customColumns: [], placements: {} };
+function ganttActivityState(a, ref) {
+  if (ganttExecPct(a) >= 99.5) return "done";
+  if (!a?.start) return "todo";
+  if (endOfDay(a.end || a.start) < ref) return "late";
+  if (startOfDay(a.start) <= ref) return "doing";
+  return "todo";
+}
+
+function ganttDurationWeight(a) {
+  if (!a?.start) return 1;
+  const days = (endOfDay(a.end || a.start) - startOfDay(a.start)) / 86400000;
+  return Math.max(1, Math.round(days));
+}
+
+function formatShortDate(value) {
+  const d = value instanceof Date ? value : parseLocalDate(value);
+  if (!d) return "—";
+  const base = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return d.getFullYear() === new Date().getFullYear() ? base : `${base}/${String(d.getFullYear()).slice(-2)}`;
+}
+
+function filterGanttActivities(activities, ref) {
+  return (activities || []).filter((a) => {
+    if (ganttFilter.person && !(a.people || []).includes(ganttFilter.person)) return false;
+    if (ganttFilter.state && ganttActivityState(a, ref) !== ganttFilter.state) return false;
+    return true;
+  });
+}
+
+function syncGanttPersonOptions(activities) {
+  const select = document.getElementById("plGanttPerson");
+  if (!select) return;
+  const people = [...new Set((activities || []).flatMap((a) => a.people || []))].sort((a, b) => a.localeCompare(b, "pt"));
+  if (ganttFilter.person && !people.includes(ganttFilter.person)) ganttFilter.person = "";
+  select.innerHTML = `<option value="">Todos</option>${people.map((p) =>
+    `<option value="${escapeHtml(p)}"${p === ganttFilter.person ? " selected" : ""}>${escapeHtml(p)}</option>`
+  ).join("")}`;
+  const personSpan = document.getElementById("plGanttPersonVal");
+  if (personSpan) personSpan.textContent = ganttFilter.person || "Todos";
+
+  const stateSel = document.getElementById("plGanttState");
+  if (stateSel) stateSel.value = ganttFilter.state;
+  const stateMap = {
+    "": "Todos",
+    todo: "Por iniciar",
+    doing: "Em curso",
+    late: "Em atraso",
+    done: "Concluídas",
+  };
+  const stateSpan = document.getElementById("plGanttStateVal");
+  if (stateSpan) stateSpan.textContent = stateMap[ganttFilter.state] || "Todos";
+}
+
+function ganttKpiCard(label, value, hint, tone = "") {
+  return `<div class="ex-plan-kpi">
+    <p class="ex-plan-kpi-label">${escapeHtml(label)}</p>
+    <p class="ex-plan-kpi-value">${value}</p>
+    <p class="ex-plan-kpi-hint${tone ? ` is-${tone}` : ""}">${escapeHtml(hint)}</p>
+  </div>`;
+}
+
+function renderGanttKpis(activities, ref) {
+  const box = document.getElementById("plGanttKpis");
+  if (!box) return;
+  let wSum = 0;
+  let planned = 0;
+  let executed = 0;
+  let done = 0;
+  let late = 0;
+  let lastEnd = null;
+  activities.forEach((a) => {
+    const w = ganttDurationWeight(a);
+    wSum += w;
+    planned += ganttPlannedPctAt(a, ref) * w;
+    executed += ganttExecPct(a) * w;
+    const st = ganttActivityState(a, ref);
+    if (st === "done") done += 1;
+    if (st === "late") late += 1;
+    const end = a.end || a.start;
+    if (end && (!lastEnd || end > lastEnd)) lastEnd = end;
+  });
+  const plannedPctAll = wSum ? planned / wSum : 0;
+  const execPctAll = wSum ? executed / wSum : 0;
+  const dev = execPctAll - plannedPctAll;
+  const devLabel = `Desvio físico: ${dev >= 0 ? "+" : "−"}${Math.abs(dev).toFixed(0)} p.p.`;
+  const refLabel = `${String(ref.getDate()).padStart(2, "0")} ${PT_MONTHS_SHORT[ref.getMonth()]} ${ref.getFullYear()}`;
+  let endValue = "—";
+  let endHint = "Sem datas planeadas";
+  if (lastEnd) {
+    endValue = `${lastEnd.getDate()} ${PT_MONTHS_SHORT[lastEnd.getMonth()]}`;
+    const days = Math.ceil((endOfDay(lastEnd) - ref) / 86400000);
+    endHint = `${lastEnd.getFullYear()} · ${days > 0 ? `faltam ${days} dia${days === 1 ? "" : "s"}` : "prazo atingido"}`;
   }
+  box.innerHTML = [
+    ganttKpiCard("Avanço planeado", `${plannedPctAll.toFixed(0)}%`, `Posição a ${refLabel}`),
+    ganttKpiCard("Avanço executado", `${execPctAll.toFixed(0)}%`, devLabel, dev < -0.5 ? "warn" : "ok"),
+    ganttKpiCard("Atividades", String(activities.length), `${done} concluída${done === 1 ? "" : "s"} · ${late} em atraso`, late ? "warn" : ""),
+    ganttKpiCard("Conclusão previsional", endValue, endHint),
+  ].join("");
 }
 
-function ganttBarAppearance(activity, board) {
-  const customId = board?.placements?.[String(activity.id)];
-  const custom = customId
-    ? (board.customColumns || []).find((col) => col.id === customId)
-    : null;
-  const fallback = GANTT_STATUS_COLORS[activity.status] || GANTT_STATUS_COLORS.DRAFT;
-  const color = safeGanttHex(custom?.color, fallback);
-  const darkText = ganttHexLuminance(color) > 0.62;
-  const text = darkText ? GANTT_INK : "#fff";
-  return { color, text, outlineText: darkText ? GANTT_INK : color, darkText };
+function renderGanttTable(activities, ref) {
+  const body = document.getElementById("plGanttTable");
+  if (!body) return;
+  if (!activities.length) {
+    body.innerHTML = `<tr><td colspan="7" class="ex-plan-table-empty">Sem atividades para mostrar.</td></tr>`;
+    return;
+  }
+  const rows = [];
+  activities.forEach((a) => {
+    const st = ganttActivityState(a, ref);
+    const isExpanded = expandedActivities.has(String(a.id));
+    const toggleBtn = a.hasChildren
+      ? `<button type="button" class="ex-table-toggle" data-toggle-act="${escapeHtml(String(a.id))}" title="${isExpanded ? 'Recolher detalhamento' : `Expandir detalhamento (${a.childrenCount} planos)`}"><span class="material-symbols-outlined">${isExpanded ? 'expand_more' : 'chevron_right'}</span></button>`
+      : `<span class="ex-table-toggle-spacer"></span>`;
+    const badge = a.hasChildren
+      ? `<span class="ex-table-badge">${a.childrenCount} planos</span>`
+      : "";
+
+    rows.push(`<tr class="ex-table-row-parent">
+      <td class="ex-plan-table-name" title="${escapeHtml(a.wbsName || a.name)}">
+        <div class="flex items-center gap-1.5 min-w-0">
+          ${toggleBtn}
+          <span class="ex-plan-dot is-${st}"></span>
+          <span class="font-bold text-slate-900 truncate">${escapeHtml(a.name)}</span>
+          ${badge}
+        </div>
+      </td>
+      <td title="${escapeHtml(formatPtLongDate(a.start))}">${formatShortDate(a.start)}</td>
+      <td title="${escapeHtml(formatPtLongDate(a.end || a.start))}">${formatShortDate(a.end || a.start)}</td>
+      <td>${escapeHtml(a.dependency || "—")}</td>
+      <td>${escapeHtml((a.people || []).join(", ") || "—")}</td>
+      <td>${ganttPlannedPctAt(a, ref).toFixed(0)}%</td>
+      <td class="${st === "late" ? "is-late" : ""}">${ganttExecPct(a).toFixed(0)}%</td>
+    </tr>`);
+
+    if (a.hasChildren && isExpanded) {
+      (a.children || []).forEach((c) => {
+        const cSt = ganttActivityState(c, ref);
+        rows.push(`<tr class="ex-table-row-child">
+          <td class="ex-plan-table-name ex-table-child-indent" title="${escapeHtml(c.name)}">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="ex-table-tree-branch">└</span>
+              <span class="ex-plan-dot is-${cSt}"></span>
+              <span class="text-slate-600 truncate">${escapeHtml(c.name)}</span>
+            </div>
+          </td>
+          <td title="${escapeHtml(formatPtLongDate(c.start))}">${formatShortDate(c.start)}</td>
+          <td title="${escapeHtml(formatPtLongDate(c.end || c.start))}">${formatShortDate(c.end || c.start)}</td>
+          <td>${escapeHtml(c.dependency || "—")}</td>
+          <td>${escapeHtml((c.people || []).join(", ") || "—")}</td>
+          <td>${ganttPlannedPctAt(c, ref).toFixed(0)}%</td>
+          <td class="${cSt === "late" ? "is-late" : ""}">${ganttExecPct(c).toFixed(0)}%</td>
+        </tr>`);
+      });
+    }
+  });
+
+  body.innerHTML = rows.join("");
+}
+
+function exportGanttCsv() {
+  const ref = new Date();
+  const list = filterGanttActivities(cache.gantt?.activities || [], ref);
+  if (!list.length) {
+    toast("Sem atividades para exportar.", { type: "error" });
+    return;
+  }
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const iso = (d) => (d ? toDateKey(d) : "");
+  const rows = [
+    ["Atividade", "Tipo", "WBS", "Início", "Fim", "Predecessora", "Responsável", "Planeada (%)", "Executada (%)"],
+  ];
+  list.forEach((a) => {
+    rows.push([
+      a.name,
+      a.hasChildren ? `Consolidada (${a.childrenCount} planos)` : "Atividade",
+      a.wbs || "",
+      iso(a.start),
+      iso(a.end || a.start),
+      a.dependency || "",
+      (a.people || []).join(", "),
+      ganttPlannedPctAt(a, ref).toFixed(0),
+      ganttExecPct(a).toFixed(0),
+    ]);
+    if (expandedActivities.has(String(a.id))) {
+      (a.children || []).forEach((c) => {
+        rows.push([
+          `  └ ${c.name}`,
+          "Plano diário",
+          c.wbs || "",
+          iso(c.start),
+          iso(c.end || c.start),
+          c.dependency || "",
+          (c.people || []).join(", "),
+          ganttPlannedPctAt(c, ref).toFixed(0),
+          ganttExecPct(c).toFixed(0),
+        ]);
+      });
+    }
+  });
+  const csv = `\ufeff${rows.map((r) => r.map(cell).join(";")).join("\r\n")}`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const name = String(project()?.name || "obra").replace(/[^\w\-]+/g, "_");
+  link.href = url;
+  link.download = `plano-execucao-${name}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function ganttBarBox(el, inner) {
@@ -909,7 +1776,13 @@ function refreshGanttFromCache() {
 }
 
 function ganttActivityById(id) {
-  return (cache.gantt?.activities || []).find((a) => String(a.id) === String(id)) || null;
+  for (const a of (cache.gantt?.activities || [])) {
+    if (String(a.id) === String(id) || String(a.rawId) === String(id)) return a;
+    for (const c of (a.children || [])) {
+      if (String(c.id) === String(id)) return c;
+    }
+  }
+  return null;
 }
 
 function predOptionsHtml(successorId, selectedId) {
@@ -1105,102 +1978,149 @@ function renderGantt(model) {
   const meta = document.getElementById("plGanttMeta");
   if (!root) return;
   syncGanttScaleButtons();
-  const { activities, rangeStart, rangeEnd, hint, fromPlans } = model;
+  const { rangeStart, rangeEnd, hint, fromPlans } = model;
+  const allActivities = model.activities || [];
   const scale = getGanttScale();
+  const ref = new Date();
+  syncGanttPersonOptions(allActivities);
+  const activities = filterGanttActivities(allActivities, ref);
+  renderGanttKpis(activities, ref);
+  renderGanttTable(activities, ref);
   if (meta) {
-    meta.classList.remove("hidden");
-    // meta.innerHTML = [
-    //   `<span>${activities.length} atividade${activities.length === 1 ? "" : "s"}</span>`,
-    //   `<span>${fromPlans
-    //     ? "Cada linha é um plano diário · Atividade = descrição/resumo · datas e % do plano"
-    //     : "Datas a partir dos planos diários · % planeada = qtd. planeada / prevista"}</span>`,
-    // ].join("");
+    const totalPlans = allActivities.reduce((s, a) => s + (a.childrenCount || 1), 0);
+    const hasAnyChildren = allActivities.some((a) => a.hasChildren);
+    const allExpanded = hasAnyChildren && allActivities.filter((a) => a.hasChildren).every((a) => expandedActivities.has(String(a.id)));
+    const toggleLabel = allExpanded ? "Recolher tudo" : "Expandir tudo";
+    const toggleBtn = hasAnyChildren
+      ? `<button type="button" id="plGanttToggleAll" class="ex-meta-toggle-btn">${toggleLabel}</button>`
+      : "";
+
+    meta.innerHTML = `<span>${activities.length} atividade${activities.length === 1 ? "" : "s"} consolidada${activities.length === 1 ? "" : "s"} (${totalPlans} planos diários)</span> · <span>clique na barra para dependências ou em ▶ para detalhar</span>${toggleBtn}`;
   }
-  if (!activities.length) {
+  if (!allActivities.length) {
     root.innerHTML = `<div class="pl-empty"><span class="material-symbols-outlined">view_timeline</span><p class="text-sm font-semibold">Sem atividades no avanço físico.</p><p class="text-xs mt-1">Importe a tabela de quantidades ou crie itens em Operação → Avanço Físico.</p></div>`;
     return;
   }
-
-  const { units, unitPx } = buildGanttUnits(scale, rangeStart, rangeEnd);
-  if (!units.length) {
-    const rows = activities.map((a) => `<tr>
-      <td class="ex-gantt-sticky ex-gantt-col-act"><span class="ex-gantt-act" title="${escapeHtml(ganttActivityTooltip(a) || a.name)}">${escapeHtml(a.name)}</span></td>
-      <td class="ex-gantt-sticky ex-gantt-col-start"><span class="ex-gantt-date">${formatPtLongDate(a.start)}</span></td>
-      <td class="ex-gantt-sticky ex-gantt-col-end"><span class="ex-gantt-date">${formatPtLongDate(a.end || a.start)}</span></td>
-      <td class="ex-gantt-sticky ex-gantt-col-pct"><span class="ex-gantt-pct ${a.pct >= 100 ? "is-done" : ""}">${Math.round(a.pct)}</span></td>
-    </tr>`).join("");
-    root.innerHTML = `${hint ? `<p class="px-6 py-3 text-xs font-semibold text-slate-500 border-b border-slate-100">${escapeHtml(hint)}</p>` : ""}
-      <div class="ex-gantt-scroll"><table class="ex-gantt-table w-full"><thead><tr>
-        <th class="ex-gantt-sticky ex-gantt-col-act">Atividade</th>
-        <th class="ex-gantt-sticky ex-gantt-col-start">Início</th>
-        <th class="ex-gantt-sticky ex-gantt-col-end">Fim</th>
-        <th class="ex-gantt-sticky ex-gantt-col-pct">%</th>
-      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  if (!activities.length) {
+    root.innerHTML = `<div class="pl-empty"><span class="material-symbols-outlined">filter_alt_off</span><p class="text-sm font-semibold">Nenhuma atividade corresponde aos filtros.</p></div>`;
     return;
   }
 
+  const built = buildGanttUnits(scale, rangeStart, rangeEnd);
+  const { units } = built;
+  if (!units.length) {
+    root.innerHTML = `<div class="pl-empty"><span class="material-symbols-outlined">event_busy</span><p class="text-sm font-semibold">${escapeHtml(hint || "As barras aparecem quando as atividades tiverem datas.")}</p><p class="text-xs mt-1">As atividades estão listadas na tabela abaixo.</p></div>`;
+    return;
+  }
+  // Estica a grelha para ocupar toda a largura disponível (sem espaço vazio à direita).
+  const labelPx = window.innerWidth <= 900 ? 200 : GANTT_LABEL_PX;
+  const available = Math.max(0, (root.clientWidth || 0) - labelPx - 2);
+  const unitPx = units.length * built.unitPx < available
+    ? Math.floor((available / units.length) * 100) / 100
+    : built.unitPx;
+
   const groups = ganttGroupUnits(units, scale);
-  const groupRow = groups.map((g) => `<th class="ex-gantt-month" colspan="${g.span}">${escapeHtml(g.label)}</th>`).join("");
+  const showGroups = scale === "day" || scale === "week" || groups.length > 1;
+  const groupRow = showGroups
+    ? groups.map((g) => `<th class="ex-gantt-month" colspan="${g.span}">${escapeHtml(g.label)}</th>`).join("")
+    : "";
   const unitRow = units.map((u) => `<th class="ex-gantt-unit" style="width:${unitPx}px;min-width:${unitPx}px">${escapeHtml(u.label)}</th>`).join("");
   const trackWidth = units.length * unitPx;
-  const now = new Date();
-  const todayInRange = now >= units[0].start && now <= units[units.length - 1].end;
-  const todayLeft = todayInRange ? dateToPx(now, units, unitPx) : -1;
+  const todayInRange = ref >= units[0].start && ref <= units[units.length - 1].end;
+  const todayLeft = todayInRange ? dateToPx(ref, units, unitPx) : -1;
   const todayMark = todayLeft >= 0
     ? `<div class="ex-gantt-hoje" style="--hoje-left:${todayLeft.toFixed(1)}px"><span class="ex-gantt-hoje-flag">Hoje</span></div>`
     : "";
 
-  const board = loadGanttBoardConfig();
-  const body = activities.map((a, idx) => {
+  const bodyRows = [];
+  activities.forEach((a, idx) => {
+    const pct = ganttExecPct(a);
+    const state = ganttActivityState(a, ref);
+    const id = escapeHtml(String(a.id || idx));
+    const isExpanded = expandedActivities.has(String(a.id));
     let bar = "";
     const layout = a.start ? ganttBarLayout(a, scale, units, unitPx) : null;
     if (layout) {
-      const pct = Math.max(0, Math.min(100, num(a.execPct ?? a.pct)));
-      const done = pct >= 99.5;
-      const none = pct <= 0.5;
-      const { color, text, outlineText, darkText } = ganttBarAppearance(a, board);
       const title = [
         a.name,
         ganttActivityTooltip(a),
-        `%: ${Math.round(a.pct)}`,
+        `Planeado: ${ganttPlannedPctAt(a, ref).toFixed(0)}% · Executado: ${pct.toFixed(0)}%`,
         fromPlans ? "Clique para editar dependências" : "",
       ].filter(Boolean).join(" · ");
-      const fill = !done && !none
-        ? `<div class="ex-gantt-bar-fill" style="width:${pct}%"></div>`
-        : "";
-      const barClass = `${done ? "" : (none ? " is-outline" : " is-split")}${darkText ? " is-dark-text" : ""}`;
-      bar = `<div class="ex-gantt-bar${barClass}" data-gantt-id="${escapeHtml(String(a.id || idx))}" role="button" tabindex="0" style="left:${layout.left}px;width:${layout.width}px;--gantt-bar-color:${color};--gantt-bar-text:${text};--gantt-bar-outline-text:${outlineText}" title="${escapeHtml(title)}">${fill}<span>${escapeHtml(a.name)}</span></div>`;
+      bar = `<div class="ex-gantt-bar is-${state}" data-gantt-id="${id}" role="button" tabindex="0" style="left:${layout.left.toFixed(1)}px;width:${layout.width.toFixed(1)}px" title="${escapeHtml(title)}"><div class="ex-gantt-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`;
     }
-    const pctClass = a.pct >= 100 ? "is-done" : "";
-    const endLabel = formatPtLongDate(a.end || a.start);
     const depBtn = fromPlans
-      ? `<button type="button" class="ex-gantt-dep-btn" data-gantt-id="${escapeHtml(String(a.id || idx))}" title="Editar dependências"><span class="material-symbols-outlined">account_tree</span></button>`
+      ? `<button type="button" class="ex-gantt-dep-btn" data-gantt-id="${id}" title="Editar dependências"><span class="material-symbols-outlined">account_tree</span></button>`
       : "";
-    return `<tr>
-      <td class="ex-gantt-sticky ex-gantt-col-act"><div class="ex-gantt-act-wrap"><span class="ex-gantt-act" title="${escapeHtml(ganttActivityTooltip(a) || a.name)}">${escapeHtml(a.name)}</span>${depBtn}</div></td>
-      <td class="ex-gantt-sticky ex-gantt-col-start"><span class="ex-gantt-date">${formatPtLongDate(a.start)}</span></td>
-      <td class="ex-gantt-sticky ex-gantt-col-end"><span class="ex-gantt-date">${endLabel}</span></td>
-      <td class="ex-gantt-sticky ex-gantt-col-pct"><span class="ex-gantt-pct ${pctClass}">${Math.round(a.pct)}</span></td>
+    const toggleBtn = a.hasChildren
+      ? `<button type="button" class="ex-gantt-toggle" data-toggle-act="${id}" title="${isExpanded ? 'Recolher detalhamento' : `Expandir detalhamento (${a.childrenCount} planos)`}"><span class="material-symbols-outlined">${isExpanded ? 'expand_more' : 'chevron_right'}</span></button>`
+      : `<span class="ex-gantt-toggle-spacer"></span>`;
+    const badge = a.hasChildren
+      ? `<span class="ex-gantt-badge">${a.childrenCount} planos</span>`
+      : "";
+
+    bodyRows.push(`<tr class="ex-gantt-row-parent">
+      <td class="ex-gantt-sticky ex-gantt-col-act">
+        <div class="ex-gantt-act-wrap">
+          ${toggleBtn}
+          <span class="ex-gantt-act" title="${escapeHtml(ganttActivityTooltip(a) || a.name)}">${escapeHtml(a.name)}</span>
+          ${badge}
+          <span class="ex-gantt-act-pct is-${state}">· ${pct.toFixed(0)}%</span>
+          ${depBtn}
+        </div>
+      </td>
       <td colspan="${units.length}" class="!p-0">
         <div class="ex-gantt-track" style="width:${trackWidth}px;background-size:${unitPx}px 100%">${bar}</div>
       </td>
-    </tr>`;
-  }).join("");
+    </tr>`);
+
+    if (a.hasChildren && isExpanded) {
+      (a.children || []).forEach((c, cIdx) => {
+        const cPct = ganttExecPct(c);
+        const cState = ganttActivityState(c, ref);
+        const cId = escapeHtml(String(c.id || `${a.id}_${cIdx}`));
+        let cBar = "";
+        const cLayout = c.start ? ganttBarLayout(c, scale, units, unitPx) : null;
+        if (cLayout) {
+          const cTitle = [
+            c.name,
+            ganttActivityTooltip(c),
+            `Executado: ${cPct.toFixed(0)}%`,
+            fromPlans ? "Clique para editar dependências" : "",
+          ].filter(Boolean).join(" · ");
+          cBar = `<div class="ex-gantt-bar is-child is-${cState}" data-gantt-id="${cId}" role="button" tabindex="0" style="left:${cLayout.left.toFixed(1)}px;width:${cLayout.width.toFixed(1)}px" title="${escapeHtml(cTitle)}"><div class="ex-gantt-bar-fill" style="width:${cPct.toFixed(1)}%"></div></div>`;
+        }
+        const cDepBtn = fromPlans
+          ? `<button type="button" class="ex-gantt-dep-btn" data-gantt-id="${cId}" title="Editar dependências"><span class="material-symbols-outlined">account_tree</span></button>`
+          : "";
+        bodyRows.push(`<tr class="ex-gantt-row-child">
+          <td class="ex-gantt-sticky ex-gantt-col-act">
+            <div class="ex-gantt-act-wrap ex-gantt-child-indent">
+              <span class="ex-gantt-tree-branch">└</span>
+              <span class="ex-gantt-act is-child" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+              <span class="ex-gantt-act-pct is-${cState}">· ${cPct.toFixed(0)}%</span>
+              ${cDepBtn}
+            </div>
+          </td>
+          <td colspan="${units.length}" class="!p-0">
+            <div class="ex-gantt-track" style="width:${trackWidth}px;background-size:${unitPx}px 100%">${cBar}</div>
+          </td>
+        </tr>`);
+      });
+    }
+  });
+
+  const body = bodyRows.join("");
 
   root.dataset.ganttScale = scale;
   root.innerHTML = `${hint ? `<p class="px-6 py-3 text-xs font-semibold text-slate-500 border-b border-slate-100">${escapeHtml(hint)}</p>` : ""}
     <div class="ex-gantt-scroll">
       <div class="ex-gantt-inner">
-        <table class="ex-gantt-table">
+        <table class="ex-gantt-table${showGroups ? " has-groups" : ""}">
           <thead>
-            <tr>
-              <th class="ex-gantt-sticky ex-gantt-col-act" rowspan="2">Atividade</th>
-              <th class="ex-gantt-sticky ex-gantt-col-start" rowspan="2">Início</th>
-              <th class="ex-gantt-sticky ex-gantt-col-end" rowspan="2">Fim</th>
-              <th class="ex-gantt-sticky ex-gantt-col-pct" rowspan="2">%</th>
-              ${groupRow}
-            </tr>
-            <tr>${unitRow}</tr>
+            ${showGroups
+              ? `<tr><th class="ex-gantt-sticky ex-gantt-col-act" rowspan="2">Atividade / progresso</th>${groupRow}</tr><tr>${unitRow}</tr>`
+              : `<tr><th class="ex-gantt-sticky ex-gantt-col-act">Atividade / progresso</th>${unitRow}</tr>`}
           </thead>
           <tbody>${body}</tbody>
         </table>
@@ -1843,3 +2763,92 @@ function openPontoModal() {
     },
   });
 }
+
+// ── Orçamento de custo: módulos partilhados (Excel, fatura/incremento, centros de custo) ──
+const budgetCtx = {
+  getProject: () => {
+    const id = projectId();
+    return id ? { ...project(), id } : null;
+  },
+  getCostCenters: () => cachedCostCenters,
+  showToast: (msg, type = "info") => toast(msg, { type }),
+  onChanged: async () => {
+    await loadOrcamentoCusto();
+    if (typeof window.refreshProjectBudgetFromCusto === "function") window.refreshProjectBudgetFromCusto();
+  },
+};
+initImportExcel(budgetCtx);
+initCategoryIncrement(budgetCtx);
+
+
+// ── Plano Financeiro: sub-separadores (cronograma, pendentes, histórico) ──
+const finCtx = {
+  getProject: budgetCtx.getProject,
+  showToast: budgetCtx.showToast,
+  onChanged: async () => {
+    await Promise.all([loadFinanceiro(), loadOrcamentoCusto()]);
+  },
+  reloadCronograma: () => loadCronograma(),
+  showCronograma: () => {
+    openExistingTab("plano_financeiro");
+    showFinSub("cronograma");
+  },
+};
+initCronograma(finCtx);
+initPayments(finCtx);
+
+let finSubWired = false;
+function showFinSub(name) {
+  document.querySelectorAll(".pl-fin-sub-btn").forEach((b) => {
+    const on = b.dataset.finSub === name;
+    b.classList.toggle("active", on);
+    b.classList.toggle("border-[#212e3e]", on);
+    b.classList.toggle("text-[#212e3e]", on);
+    b.classList.toggle("border-transparent", !on);
+    b.classList.toggle("text-slate-400", !on);
+  });
+  ["visao", "cronograma", "pendentes", "historico"].forEach((k) => {
+    document.getElementById(`plFinSub_${k}`)?.classList.toggle("hidden", k !== name);
+  });
+  if (name === "cronograma") {
+    mountCronograma(document.getElementById("plFinSub_cronograma"));
+    loadCronograma();
+  } else if (name === "pendentes" || name === "historico") {
+    mountPayments(document.getElementById("plFinSub_pendentes"), document.getElementById("plFinSub_historico"));
+    if (name === "pendentes") showPendingPayments();
+    else showPaymentHistory();
+  } else {
+    loadFinanceiro();
+  }
+}
+window.showFinanceiroSub = showFinSub;
+
+function initFinSubTabs() {
+  if (finSubWired) return;
+  finSubWired = true;
+  document.querySelectorAll(".pl-fin-sub-btn").forEach((b) =>
+    b.addEventListener("click", () => showFinSub(b.dataset.finSub))
+  );
+}
+
+window.triggerOrcamentoCustoAction = function (action, category = "") {
+  switch (action) {
+    case "open-new-need":
+      return openNewCostNeedModal(category);
+    case "open-excel":
+      return openImportModal();
+    case "open-scan":
+      return window.openCategoryIncrementModal?.(category, false);
+    case "open-increment":
+      return window.openCategoryIncrementModal?.(category, false);
+  }
+};
+
+window.addEventListener("message", (event) => {
+  const data = event?.data;
+  if (!data || data.type !== "orcamento-custo-updated") return;
+  loadOrcamentoCusto();
+  if (typeof window.refreshProjectBudgetFromCusto === "function") {
+    window.refreshProjectBudgetFromCusto();
+  }
+});

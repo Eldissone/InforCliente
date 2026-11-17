@@ -149,7 +149,7 @@ export function buildStockMovementDetailHtml(m, options = {}) {
       <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
         ${productImgHtml}
         <div class="flex-1 min-w-0">
-          <h4 class="text-lg font-bold text-slate-900 leading-tight">${escapeHtml(product.name || "Material")}</h4>
+          <h4 class="text-lg font-bold text-slate-900 leading-tight uppercase">${escapeHtml(product.name || "Material")}</h4>
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(product.sku || product.reference || "—")} · ${escapeHtml(product.category || "—")}</p>
           <span class="inline-block mt-2 px-2 py-0.5 rounded-lg text-[9px] font-black uppercase ${isEntry ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}">${typeLabel}</span>
         </div>
@@ -159,7 +159,7 @@ export function buildStockMovementDetailHtml(m, options = {}) {
         <div class="space-y-3">
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Dados da operação</p>
           <div class="bg-white border border-slate-100 rounded-2xl divide-y divide-slate-50">
-            <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Quantidade</span><span class="text-xs font-black text-emerald-600">${Number(m.quantity || 0)} ${escapeHtml(product.unit || "un")}</span></div>
+            <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Quantidade</span><span class="text-xs font-black text-emerald-600 uppercase">${Number(m.quantity || 0)} ${escapeHtml(product.unit || "un")}</span></div>
             <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Data</span><span class="text-xs font-black text-slate-900">${formatDateBR(m.createdAt)}</span></div>
             <div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Registado por</span><span class="text-xs font-bold text-slate-700">${escapeHtml(registeredBy)}</span></div>
             ${m.warehouse?.name ? `<div class="flex justify-between px-4 py-3"><span class="text-[10px] font-bold text-slate-500">Armazém</span><span class="text-xs font-bold text-slate-700">${escapeHtml(m.warehouse.name)}</span></div>` : ""}
@@ -183,7 +183,7 @@ export function buildStockMovementDetailHtml(m, options = {}) {
               <span class="material-symbols-outlined text-blue-500 text-xl mt-0.5">person</span>
               <div>
                 <span class="text-[9px] font-black text-slate-400 block uppercase">Motorista</span>
-                <span class="text-sm font-bold text-slate-900">${escapeHtml(driverInfo)}</span>
+                <span class="text-sm font-bold text-slate-900 uppercase">${escapeHtml(driverInfo)}</span>
               </div>
             </div>
             <div class="flex items-start gap-3">
@@ -264,7 +264,7 @@ export function buildStockInventoryOnlyHtml(item, totals, options = {}) {
       <div class="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
         ${productImgHtml}
         <div>
-          <h4 class="text-lg font-bold text-slate-900">${escapeHtml(product.name || "Material")}</h4>
+          <h4 class="text-lg font-bold text-slate-900 uppercase">${escapeHtml(product.name || "Material")}</h4>
           <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">${escapeHtml(product.sku || "—")}</p>
         </div>
       </div>

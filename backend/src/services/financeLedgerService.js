@@ -557,6 +557,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
     select: {
       id: true,
       code: true,
+      referencia: true,
       name: true,
       currency: true,
       budgetTotal: true,
@@ -668,6 +669,7 @@ async function buildProjectFinancials({ projectIds, includeInactive = true } = {
       project: {
         id: project.id,
         code: project.code,
+        referencia: project.referencia || null,
         name: project.name,
         currency,
         active: project.active,
@@ -844,6 +846,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
     select: {
       id: true,
       code: true,
+      referencia: true,
       name: true,
       currency: true,
       client: { select: { id: true, code: true, name: true } },

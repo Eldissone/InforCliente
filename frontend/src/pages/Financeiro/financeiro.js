@@ -283,7 +283,8 @@ function extraRequestReference(extra) {
     return orderRef ? `${orderRef} · ${base}` : base;
   }
   if (extra.project) {
-    const obra = `${extra.project.name}${extra.project.code ? ` (${extra.project.code})` : ""}`;
+    const obraRef = String(extra.project.referencia || "").trim();
+    const obra = `${extra.project.name}${obraRef ? ` (${obraRef})` : ""}`;
     const withCost = cost !== "—" ? `${obra} · ${cost}` : obra;
     return orderRef ? `${orderRef} · ${withCost}` : withCost;
   }
@@ -853,9 +854,10 @@ function renderPendingFinanceNeedCard(need) {
 }
 
 window.openPendingFinanceNeed = function (needId, projectId, costCenterId, quoteId) {
-  const url = new URL("../Projectos/centroCustos.html", window.location.href);
-  url.searchParams.set("projectId", projectId);
-  url.searchParams.set("tab", "cronograma");
+  const url = new URL("../Projectos/projectView.html", window.location.href);
+  url.searchParams.set("id", projectId);
+  url.searchParams.set("tab", "plano_financeiro");
+  url.searchParams.set("sub", "cronograma");
   url.searchParams.set("needId", needId);
   if (quoteId) url.searchParams.set("quoteId", quoteId);
   window.location.href = url.pathname + url.search;
@@ -1542,7 +1544,7 @@ async function loadProjects() {
       sel.innerHTML =
         `<option value="">Todas as Obras</option>` +
         `<option value="${FIN_GENERAL_CENTERS}">Centro de Compras</option>` +
-        allProjects.map((p) => `<option value="${p.id}">${p.name}${p.code ? ` (${p.code})` : ""}</option>`).join("");
+        allProjects.map((p) => `<option value="${p.id}">${p.name}${p.referencia ? ` (${p.referencia})` : ""}</option>`).join("");
     }
     updateDashboardDate();
   } catch (err) {
@@ -1679,6 +1681,7 @@ function filterDashboardExtras(items) {
         e.requestedBy,
         e.supplierName,
         e.project?.name,
+        e.project?.referencia,
         e.project?.code,
         e.generalCostCenter?.name,
         e.generalCostCenter?.code,

@@ -21,6 +21,7 @@
     <link href="/assets/styles/shell.css" rel="stylesheet" />
     <link href="/assets/styles/pages/registry-form.css" rel="stylesheet" />
     <link href="/assets/styles/pages/project-view.css" rel="stylesheet" />
+    <link href="/assets/styles/pages/budget-modals.css" rel="stylesheet" />
 </head>
 
 <body data-shell="figma" class="bg-surface antialiased text-slate-900 min-h-screen flex flex-col">
@@ -51,6 +52,12 @@
                 <div class="mt-4 flex flex-wrap items-center gap-3">
                     <span id="obraEstadoChip" class="inline-flex items-center h-8 px-3 rounded-full bg-slate-100 text-xs font-bold text-slate-700">—</span>
                     <button type="button" id="btnAtualizarEstado" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800">Atualizar estado</button>
+                    <button type="button" id="btnAiAssistant" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:inline-flex;align-items:center;gap:6px">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">auto_awesome</span>Assistente IA</button>
+                    <button type="button" id="btnAiProgress" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:none;align-items:center;gap:6px" title="Registar o trabalho feito por texto ou voz">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">mic</span>Registar execução</button>
+                    <button type="button" id="btnAiNeeds" class="h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800" style="display:none;align-items:center;gap:6px" title="Criar necessidades a partir de texto ou foto da lista">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">add_shopping_cart</span>Necessidade com IA</button>
                 </div>
             </div>
             <!-- <div class="flex items-center gap-3 shrink-0">
@@ -93,9 +100,11 @@
                 </button>
                 <div class="pv-tab-menu" role="menu">
                     <button type="button" data-tab-trigger="orcamento_custo" data-perm="obras:tab_planning_budget_cost"
-                        class="pv-tab-item" role="menuitem">Orçamento Previsional de Custo</button>
+                        class="pv-tab-item" role="menuitem">Orçamento de Custo</button>
                     <button type="button" data-tab-trigger="orcamento_vendas" data-perm="obras:tab_planning_budget_sales"
-                        class="pv-tab-item" role="menuitem">Orçamento Previsional de Vendas</button>
+                        class="pv-tab-item" role="menuitem">Orçamento de Vendas</button>
+                    <button type="button" data-tab-trigger="orcamento_cotacao" data-perm="obras:view"
+                        class="pv-tab-item" role="menuitem">Cotação</button>
                 </div>
             </div>
 
@@ -108,7 +117,7 @@
                 </button>
                 <div class="pv-tab-menu" role="menu">
                     <button type="button" data-tab-trigger="plano_gantt" data-perm="obras:tab_planning_gantt"
-                        class="pv-tab-item" role="menuitem">Plano de Execução (Gantt)</button>
+                        class="pv-tab-item" role="menuitem">Plano de Execução</button>
                     <button type="button" data-tab-trigger="plano_financeiro" data-perm="obras:tab_planning_finance"
                         class="pv-tab-item" role="menuitem">Plano Financeiro</button>
                 </div>
@@ -178,13 +187,13 @@
                         <div>
                             <div class="flex justify-between items-center mb-6 md:mb-8">
                                 <span
-                                    class="bg-[#2afc8d]/10 text-[#2afc8d] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#2afc8d]/20">Orçamento
-                                    Global</span>
+                                    class="bg-[#2afc8d]/10 text-[#2afc8d] px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#2afc8d]/20">Valor
+                                    Contratual</span>
                                 <span class="material-symbols-outlined text-slate-500">account_balance</span>
                             </div>
                             <div class="flex flex-col mb-4 mt-10">
                                 <span id="budgetTotal"
-                                    class="text-2xl md:text-4xl font-bold tracking-tighter leading-none">---</span>
+                                    class="text-2xl md:text-2xl font-bold tracking-tighter leading-none">---</span>
                                 <span id="budgetTotalSecondary" class="text-sm font-bold text-slate-400 mt-2">---</span>
                             </div>
                             <div id="budgetDelta" class="text-xs font-bold text-[#2afc8d] mb-8">---</div>
@@ -192,7 +201,7 @@
                         <div class="space-y-4">
                             <div
                                 class="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                <span>Consumo Total</span>
+                                <span>Progresso Orçamental</span>
                                 <span id="budgetConsumedText" class="text-white">---</span>
                             </div>
                             <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -559,6 +568,9 @@
                     <h2 class="text-2xl font-bold text-slate-900">Autos de Medição</h2>
                     <p class="text-sm text-slate-500 font-medium">Gestão de Autos pela Estrutura Analítica de Projeto
                         (WBS).</p>
+                    <button id="btnAiMonthlyReport" type="button" style="display:none"
+                        class="mt-2 h-8 px-3 rounded-full bg-[#212e3e] text-white text-xs font-bold hover:bg-slate-800 items-center gap-1.5">
+                        <span class="material-symbols-outlined" style="font-size:16px;color:#2afc8d">auto_awesome</span>Relatório mensal ao cliente</button>
                 </div>
                 <div class="flex flex-nowrap items-end gap-2 ml-auto shrink-0">
                     <div class="flex items-end gap-1">
@@ -748,36 +760,116 @@
             <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Custo</h2>
-                    <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — baseline dos centros de custo.</p>
+                    <p class="text-sm text-slate-500 font-medium">Quanto a obra deveria custar — crie centros, linhas e aprove o previsto nesta obra.</p>
                 </div>
-                <a id="plOrcamentoCustoLink" href="./centroCustos.html" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all">
-                    <span class="material-symbols-outlined text-base">open_in_new</span>
-                    Abrir Orçamento Geral
-                </a>
+                <div class="flex items-center gap-2 flex-wrap justify-end">
+                    <button type="button" data-role-visible="admin,operador" onclick="window.sendAllToCronograma?.()"
+                        title="Enviar ao financeiro todos os itens aprovados no realizado"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        <span class="material-symbols-outlined text-base">schedule</span>
+                        Agendar
+                    </button>
+                    <button type="button" data-role-visible="admin,operador" onclick="window.triggerOrcamentoCustoAction?.('open-excel')"
+                        class="h-10 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">upload_file</span>
+                        Importar Excel
+                    </button>
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-scan')"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-emerald-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all">
+                        <span class="material-symbols-outlined text-base">document_scanner</span>
+                        Ler Fatura / Cotação
+                    </button>
+                    <button type="button" onclick="window.triggerOrcamentoCustoAction?.('open-new-need')"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-base">add</span>
+                        Novo Item
+                    </button>
             </div>
+                </div>
             <div id="plOrcamentoCustoKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div class="px-6 py-5 border-b border-slate-50 flex items-center justify-between gap-3">
                     <div>
-                        <h3 class="font-bold text-slate-900">Custos previstos por centro</h3>
-                        <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Valores do orçamento aprovado (previsto) e execução</p>
+                        <h3 class="font-bold text-slate-900">Custos previstos por categoria</h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Valores do orçamento aprovado (previsto) e execução. As categorias são geridas em Registos.</p>
+                    </div>
+                    <a href="/registos/categorias-custo" target="_blank" class="h-9 px-3.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-200 transition-all shrink-0">
+                        <span class="material-symbols-outlined text-base">account_tree</span>
+                        Gerir categorias
+                    </a>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Categoria</th>
+                                <th class="text-right">Previsto</th>
+                                <th class="text-right">Em análise</th>
+                                <th class="text-right">Liquidado</th>
+                                <th class="text-left" style="min-width:140px">% Liquidado</th>
+                                <th class="text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoCustoBody">
+                            <tr><td colspan="6" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="mt-8 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h3 class="font-bold text-slate-900">Linhas do Orçamento de Custo</h3>
+                        <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Itens previstos por centro de custo, quantidades, preços e estado de aprovação</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">search</span>
+                            <input id="plCustoSearch" type="text" placeholder="Filtrar itens..." class="h-9 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-400">
+                        </div>
+                        <select id="plCustoCCFilter" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                            <option value="">Todos os CCs</option>
+                        </select>
+                        <select id="plCustoStatusFilter" class="h-9 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                            <option value="">Todos Status</option>
+                            <option value="APPROVED">Aprovado</option>
+                            <option value="PENDING">Pendente</option>
+                            <option value="IN_QUOTATION">Em Cotação</option>
+                            <option value="ORDERED">Encomenda</option>
+                            <option value="EM_ANALISE">Em Análise</option>
+                            <option value="PAID">Pago</option>
+                            <option value="REJECTED">Rejeitado</option>
+                        </select>
+                        <button type="button" id="plCustoNewItemBtn" class="h-9 px-3.5 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-1.5 hover:bg-slate-800 transition-all shadow-xs">
+                            <span class="material-symbols-outlined text-base">add</span>
+                            Novo Item
+                        </button>
                     </div>
                 </div>
                 <div class="overflow-x-auto custom-scroll">
                     <table class="w-full pl-table">
                         <thead>
                             <tr>
-                                <th class="text-left">Centro de Custo</th>
-                                <th class="text-right">Previsto</th>
-                                <th class="text-right">Em análise</th>
-                                <th class="text-right">Liquidado</th>
-                                <th class="text-left" style="min-width:140px">% Liquidado</th>
+                                <th class="text-center w-12">Nº</th>
+                                <th class="text-left">Descrição</th>
+                                <th class="text-left">Categoria</th>
+                                <th class="text-center">UN</th>
+                                <th class="text-right">Qtde</th>
+                                <th class="text-right">P. Unit.</th>
+                                <th class="text-center">Hrs</th>
+                                <th class="text-right">Total Obra</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center" style="min-width: 110px;">Ações</th>
                             </tr>
                         </thead>
-                        <tbody id="plOrcamentoCustoBody">
-                            <tr><td colspan="5" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        <tbody id="plOrcamentoCustoItems">
+                            <tr><td colspan="10" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
                         </tbody>
                     </table>
+                </div>
+                <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+                    <span id="plCustoItemsCount">0 itens</span>
+                    <span id="plCustoItemsTotal">Total: 0,00 Kz</span>
                 </div>
             </div>
         </div>
@@ -787,12 +879,24 @@
             <div class="flex flex-row justify-between items-center gap-4 mb-8 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
                 <div>
                     <h2 class="text-2xl font-bold text-slate-900">Orçamento Previsional de Vendas</h2>
-                    <p class="text-sm text-slate-500 font-medium">Quanto prevemos faturar nesta obra, com base na tabela de quantidades.</p>
+                    <p class="text-sm text-slate-500 font-medium">Quanto prevemos faturar — registe a tabela de quantidades e os preços de venda desta obra.</p>
                 </div>
-                <button type="button" data-pl-open-tab="relatorio" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
-                    <span class="material-symbols-outlined text-base">straighten</span>
-                    Ver Avanço Físico
-                </button>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    <button type="button" data-pl-open-tab="relatorio" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                        <span class="material-symbols-outlined text-base">straighten</span>
+                        Avanço Físico
+                    </button>
+                    <button type="button" id="plOrcamentoVendasExcel" data-role-visible="admin,operador"
+                        class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-emerald-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-50">
+                        <span class="material-symbols-outlined text-base">file_upload</span>
+                        Excel
+                    </button>
+                    <button type="button" id="plOrcamentoVendasAdd" data-role-visible="admin,operador"
+                        class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
+                        <span class="material-symbols-outlined text-base">add_task</span>
+                        Novo item
+                    </button>
+                </div>
             </div>
             <div id="plOrcamentoVendasKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -817,35 +921,142 @@
                     </table>
                 </div>
             </div>
+            <div class="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-5 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-900">Tabela de quantidades desta obra</h3>
+                    <p class="text-[11px] text-slate-400 mt-0.5 font-medium">Itens de venda — edite quantidades e preços sem sair do orçamento</p>
+                </div>
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full pl-table">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Item</th>
+                                <th class="text-left">Descrição</th>
+                                <th class="text-right">Qtd</th>
+                                <th class="text-center">UN</th>
+                                <th class="text-right">P. Unit.</th>
+                                <th class="text-right">Previsto</th>
+                                <th class="text-center">Acção</th>
+                            </tr>
+                        </thead>
+                        <tbody id="plOrcamentoVendasItems">
+                            <tr><td colspan="7" class="text-center py-10 text-xs text-slate-400 font-bold uppercase">A carregar...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orçamento: Cotação -->
+        <div id="tab_orcamento_cotacao" class="tab-content hidden">
+            <div class="flex flex-row justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900">Cotação desta obra</h2>
+                    <p class="text-sm text-slate-500 font-medium">Precifique necessidades, escolha fornecedor e aprove propostas sem sair da obra.</p>
+                </div>
+                <a id="plOrcamentoCotacaoLink" href="./Cotacao/index.html" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    Página completa
+                </a>
+            </div>
+            <iframe id="plOrcamentoCotacaoFrame" class="pv-embed-frame" title="Cotação da obra" loading="lazy"></iframe>
         </div>
 
         <!-- Planeamento: Plano de Execução (Gantt) -->
         <div id="tab_plano_gantt" class="tab-content hidden">
-            <div class="flex flex-row flex-wrap justify-between items-center gap-4 mb-6 bg-white p-6 md:p-8 rounded-2xl border border-slate-100 shadow-sm">
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900">Plano de Execução</h2>
-                    <p class="text-sm text-slate-500 font-medium">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
-                </div>
-                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    <div id="plGanttScale" class="ex-gantt-scale" role="tablist" aria-label="Escala do Gantt">
-                        <button type="button" data-gantt-scale="day" role="tab" aria-pressed="false">Dia</button>
-                        <button type="button" data-gantt-scale="week" role="tab" aria-pressed="true" class="is-active">Semana</button>
-                        <button type="button" data-gantt-scale="month" role="tab" aria-pressed="false">Mês</button>
-                        <button type="button" data-gantt-scale="quarter" role="tab" aria-pressed="false">Trimestre</button>
-                        <button type="button" data-gantt-scale="year" role="tab" aria-pressed="false">Ano</button>
+            <div class="ex-plan">
+                <header class="ex-plan-head">
+                    <div>
+                        <h2 class="ex-plan-title">Plano de Execução</h2>
+                        <p class="ex-plan-sub">Cronograma Gantt das atividades da obra, ligado aos planos diários.</p>
                     </div>
-                    <button type="button" id="plGanttRefresh" class="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200" title="Atualizar">
-                        <span class="material-symbols-outlined text-lg">refresh</span>
-                    </button>
-                    <button type="button" data-pl-open-tab="planos_diarios" class="h-10 px-4 rounded-xl bg-[#212e3e] text-white text-xs font-bold flex items-center gap-2 hover:bg-slate-800">
-                        <span class="material-symbols-outlined text-base">event_note</span>
-                        Planos Diários
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="plGanttRefresh" class="ex-plan-icon-btn" title="Atualizar">
+                            <span class="material-symbols-outlined">refresh</span>
+                        </button>
+                        <button type="button" id="plGanttAddActivity" data-pl-open-tab="planos_diarios" class="ex-plan-primary">
+                            <span class="material-symbols-outlined">add</span>
+                            Adicionar atividade
+                        </button>
+                    </div>
+                </header>
+
+                <div class="ex-plan-toolbar">
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Vista:</span>
+                        <span class="ex-plan-select-value" id="plGanttScaleVal">Gantt mensal</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttScaleSelect" class="ex-plan-select-native" aria-label="Escala do Gantt">
+                            <option value="day">Gantt diário</option>
+                            <option value="week">Gantt semanal</option>
+                            <option value="month" selected>Gantt mensal</option>
+                            <option value="quarter">Gantt trimestral</option>
+                            <option value="year">Gantt anual</option>
+                        </select>
+                    </div>
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Responsável:</span>
+                        <span class="ex-plan-select-value" id="plGanttPersonVal">Todos</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttPerson" class="ex-plan-select-native" aria-label="Filtrar por responsável">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div class="ex-plan-select">
+                        <span class="ex-plan-select-label">Estado:</span>
+                        <span class="ex-plan-select-value" id="plGanttStateVal">Todos</span>
+                        <span class="material-symbols-outlined ex-plan-select-arrow">expand_more</span>
+                        <select id="plGanttState" class="ex-plan-select-native" aria-label="Filtrar por estado">
+                            <option value="">Todos</option>
+                            <option value="todo">Por iniciar</option>
+                            <option value="doing">Em curso</option>
+                            <option value="late">Em atraso</option>
+                            <option value="done">Concluídas</option>
+                        </select>
+                    </div>
+                    <button type="button" id="plGanttExport" class="ex-plan-btn">Exportar</button>
                 </div>
-            </div>
-            <div id="plGanttMeta" class="hidden mb-4 flex flex-wrap gap-4 text-[11px] font-bold text-slate-500"></div>
-            <div id="plGanttRoot" class="ex-gantt-wrap">
-                <div class="py-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400">A carregar Gantt...</div>
+
+                <div id="plGanttKpis" class="ex-plan-kpis"></div>
+
+                <section class="ex-plan-card">
+                    <div class="ex-plan-card-head">
+                        <h3>Cronograma de execução</h3>
+                        <p id="plGanttMeta">Planeamento das atividades em obra</p>
+                    </div>
+                    <div id="plGanttRoot" class="ex-gantt-wrap">
+                        <div class="py-16 text-center text-xs font-bold uppercase tracking-widest text-slate-400">A carregar Gantt...</div>
+                    </div>
+                    <p class="ex-plan-legend">
+                        <span class="material-symbols-outlined">info</span>
+                        <span><i class="lg-plan"></i>Barra clara: duração planeada</span>
+                        <span><i class="lg-exec"></i>Esmeralda: executado</span>
+                        <span><i class="lg-today"></i>Linha âmbar: hoje</span>
+                        <span>Dependências detalhadas na tabela abaixo.</span>
+                    </p>
+                </section>
+
+                <section class="ex-plan-card">
+                    <div class="ex-plan-card-head">
+                        <h3>Datas, dependências e responsáveis</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="ex-plan-table">
+                            <thead>
+                                <tr>
+                                    <th>Atividade</th>
+                                    <th>Início</th>
+                                    <th>Fim</th>
+                                    <th>Predecessora</th>
+                                    <th>Responsável</th>
+                                    <th>Planeada</th>
+                                    <th>Executada</th>
+                                </tr>
+                            </thead>
+                            <tbody id="plGanttTable"></tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -856,11 +1067,23 @@
                     <h2 class="text-2xl font-bold text-slate-900">Plano Financeiro</h2>
                     <p class="text-sm text-slate-500 font-medium">Custos, faturação, recebimentos e cash flow previstos por período.</p>
                 </div>
-                <a href="./centroCustos.html" id="plFinanceiroCronogramaLink" class="h-10 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-2 hover:bg-slate-200">
-                    <span class="material-symbols-outlined text-base">calendar_month</span>
-                    Cronograma de pagamentos
-                </a>
+                
             </div>
+            <div id="plFinSubTabs" class="flex flex-row flex-nowrap border-b border-slate-200 overflow-x-auto mb-6">
+                <button type="button" data-fin-sub="visao" class="pl-fin-sub-btn active px-5 py-2.5 text-xs font-bold border-b-2 border-[#212e3e] text-[#212e3e] whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">monitoring</span>Previsão
+                </button>
+                <button type="button" data-fin-sub="cronograma" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">calendar_month</span>Cronograma de Pagamentos
+                </button>
+                <button type="button" data-fin-sub="pendentes" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">pending_actions</span>Pendentes
+                </button>
+                <button type="button" data-fin-sub="historico" class="pl-fin-sub-btn px-5 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-base align-middle mr-1">history</span>Histórico
+                </button>
+            </div>
+            <div id="plFinSub_visao">
             <div id="plFinanceiroKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
             <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div class="px-6 py-5 border-b border-slate-50">
@@ -885,6 +1108,10 @@
                     </table>
                 </div>
             </div>
+            </div>
+            <div id="plFinSub_cronograma" class="hidden"></div>
+            <div id="plFinSub_pendentes" class="hidden"></div>
+            <div id="plFinSub_historico" class="hidden"></div>
         </div>
 
         <!-- Recursos: Equipamentos e Viaturas -->
@@ -1087,7 +1314,7 @@
                         <span class="material-symbols-outlined text-2xl">create_new_folder</span>
                     </button>
                     <button id="uploadFileBtn" data-role-visible="admin,operador,supervisor"
-                        class="h-10 bg-blue-600 text-white px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
+                        class="h-10 bg-[#2afc8d] text-[#212e3e] px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20 hover:scale-105 active:scale-95 transition-all shrink-0">
                         <span class="hidden md:inline">Anexar</span> <span
                             class="material-symbols-outlined text-2xl">cloud_upload</span>
                     </button>
@@ -1354,11 +1581,17 @@
                     <h2 class="text-2xl font-bold">Galeria da Obra</h2>
                     <p class="text-sm text-slate-400 font-medium">Fotos de progresso geral visíveis ao cliente.</p>
                 </div>
+                <div class="flex flex-wrap items-center gap-3 justify-end">
+                <button id="btnSafetyHistory" type="button" style="display:none"
+                    class="h-10 px-4 rounded-[24px] bg-white/10 text-white font-bold items-center justify-center gap-2 hover:bg-white/20 transition-all shrink-0">
+                    <span class="material-symbols-outlined text-xl" style="color:#fbbf24">health_and_safety</span><span class="hidden md:inline">Segurança</span>
+                </button>
                 <button id="addPhotoBtn" data-role-visible="admin,operador"
                     class="h-10 bg-[#2afc8d] text-slate-900 px-4 md:px-8 rounded-[24px] font-bold flex items-center justify-center gap-3 shadow-2xl shadow-[#2afc8d]/20 hover:scale-105 active:scale-95 transition-all shrink-0">
                     <span class="hidden md:inline">Novo Registo</span> <span
                         class="material-symbols-outlined text-2xl">add_a_photo</span>
                 </button>
+                </div>
             </div>
 
             <div id="adminGalleryGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-10">

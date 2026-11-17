@@ -250,7 +250,7 @@ function renderRow(p, idx = 1) {
   const numStr = String(idx).padStart(2, '0');
 
   return `
-    <tr data-view-project="${p.id}" class="hover:bg-slate-200 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
+    <tr data-view-project="${p.id}" class="hover:bg-slate-100 transition-all duration-200 group border-b border-slate-50 last:border-0 cursor-pointer">
       <td class="px-8 py-5">
         <div class="flex items-center gap-4">
           <div class="relative min-w-[40px] h-[40px] rounded-xl bg-slate-900 flex items-center justify-center shadow-lg shadow-black/5 group-hover:bg-[#2afc8d] group-hover:text-slate-900 transition-colors duration-300">
@@ -259,22 +259,22 @@ function renderRow(p, idx = 1) {
               ${numStr}
             </span>
           </div>
-          <div>
-            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight">${escapeHtml(p.name)}</h4>
-            <span class="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">${escapeHtml(displayReferencia(p))}</span>
+          <div class="min-w-0 max-w-[220px]">
+            <h4 class="font-bold text-slate-900 text-xs uppercase tracking-tight truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</h4>
+            <span class="mt-1 inline-block max-w-full truncate text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded" title="${escapeHtml(displayReferencia(p))}">${escapeHtml(displayReferencia(p))}</span>
           </div>
         </div>
       </td>
       <td class="px-8 py-5">
-        <span class="text-xs font-bold text-slate-700">${escapeHtml(p.client?.name || "-")}</span>
+        <span class="block max-w-[160px] truncate text-xs font-bold text-slate-700" title="${escapeHtml(p.client?.name || "-")}">${escapeHtml(p.client?.name || "-")}</span>
       </td>
-      <td class="px-8 py-5">
+      <td class="px-8 py-5 min-w-[200px]">
         <span class="text-[11px] text-slate-400 font-medium">${escapeHtml(p.contact || "-")}</span>
       </td>
       <td class="px-8 py-5">
         <div class="max-w-[150px] truncate text-[11px] text-slate-500 font-medium" title="${escapeHtml(p.location)}">${escapeHtml(p.location || "-")}</div>
       </td>
-      <td class="px-8 py-5 text-right font-black text-xs text-slate-900">
+      <td class="px-8 py-5 text-right min-w-[200px] font-black text-xs text-slate-900">
         ${formatCurrency(p.budgetTotal || 0, p.currency)}
       </td>
       <td class="px-8 py-5 min-w-[140px]">
@@ -285,13 +285,9 @@ function renderRow(p, idx = 1) {
           <span class="text-[10px] font-black text-slate-900">${progress}%</span>
         </div>
       </td>
-      <td class="px-8 py-5 text-center">${renderStatusPill(p)}</td>
+      <td class="px-8 py-5 min-w-[200px] text-center">${renderStatusPill(p)}</td>
       <td class="px-8 py-5 text-right">
         <div class="flex items-center justify-end gap-1">
-          <a href="./centroCustos.html?projectId=${p.id}" title="Planeamento" onclick="event.stopPropagation()"
-            class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#2afc8d]/10 text-slate-400 hover:text-[#059669] transition-all">
-            <span class="material-symbols-outlined text-lg">account_balance</span>
-          </a>
           <button data-edit-project="${p.id}" class="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-900 transition-all">
             <span class="material-symbols-outlined text-lg">edit</span>
           </button>
@@ -325,7 +321,7 @@ function renderGridItem(p, idx = 1) {
       </div>
       
       <div class="mb-8">
-        <h3 class="text-lg font-bold text-slate-900 tracking-tight leading-tight group-hover:text-[#0d3fd1] transition-colors line-clamp-2">${p.name}</h3>
+        <h3 class="text-lg font-bold text-slate-900 tracking-tight leading-tight group-hover:text-[#0d3fd1] transition-colors truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</h3>
       </div>
 
       <div class="space-y-5 mb-auto">
@@ -335,7 +331,7 @@ function renderGridItem(p, idx = 1) {
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Cliente Responsável</p>
-            <p class="text-sm font-bold text-slate-700 truncate">${p.client?.name || "-"}</p>
+            <p class="text-sm font-bold text-slate-700 truncate" title="${escapeHtml(p.client?.name || "-")}">${escapeHtml(p.client?.name || "-")}</p>
           </div>
         </div>
         <div class="flex items-center gap-4">
@@ -366,7 +362,7 @@ function renderGridItem(p, idx = 1) {
 
       <!-- Quick Actions -->
       <div class="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
-          <a href="./centroCustos.html?projectId=${p.id}" onclick="event.stopPropagation()" title="Centro de Custos"
+          <a href="./projectView.html?id=${p.id}&tab=orcamento_custo" onclick="event.stopPropagation()" title="Orçamento e Planeamento"
             class="h-9 w-9 bg-white shadow-xl rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:scale-110 transition-all">
             <span class="material-symbols-outlined text-lg">account_balance</span>
           </a>

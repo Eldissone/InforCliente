@@ -266,6 +266,7 @@ userRoutes.get(
         clientId: true,
         profilePic: true,
         createdAt: true,
+        _count: { select: { permissions: true } },
         client: { select: { id: true, name: true, code: true, profilePic: true } },
         assignedProjects: { select: { id: true, name: true, code: true } },
         profile: {
@@ -366,6 +367,8 @@ userRoutes.patch(
         isFinancialReceiver: z.boolean().optional(),
         isApprover: z.boolean().optional(),
         isProjectResponsible: z.boolean().optional(),
+        // ao mudar de perfil: manter (por omissão) ou limpar as permissões individuais
+        permissionOverrides: z.enum(["keep", "clear"]).optional(),
       })
       .parse(req.body);
 
@@ -455,7 +458,7 @@ userRoutes.patch(
       });
     }
 
-    if (roleChanged) {
+    if (roleChanged && body.permissionOverrides === "clear") {
       await prisma.userPermission.deleteMany({ where: { userId: id } });
     }
 

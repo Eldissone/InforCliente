@@ -160,7 +160,7 @@ function showToast(msg, type = "info") {
 
 function populateProjectSelects() {
   const opts = allProjects
-    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.code ? ` (${escapeHtml(p.code)})` : ""}</option>`)
+    .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.referencia ? ` (${escapeHtml(p.referencia)})` : ""}</option>`)
     .join("");
   const extraProjectEl = document.getElementById("extraProjectId");
   if (extraProjectEl) extraProjectEl.innerHTML = `<option value="">Selecionar obra...</option>${opts}`;
@@ -193,7 +193,7 @@ function extraReferenceLabel(it) {
     return costLabel !== "—" ? costLabel : "Geral";
   }
   const obra = it.project
-    ? `${it.project.name}${it.project.code ? ` (${it.project.code})` : ""}`
+    ? `${it.project.name}${it.project.referencia ? ` (${it.project.referencia})` : ""}`
     : "";
   const cc = it.costCenter
     ? `${it.costCenter.code ? `${it.costCenter.code} — ` : ""}${it.costCenter.name}`

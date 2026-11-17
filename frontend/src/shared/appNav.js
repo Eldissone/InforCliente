@@ -2,21 +2,23 @@ const LOGISTICS_SELECTOR = "[data-nav-logistics], [data-nav-logistica]";
 
 /** Ordem do menu principal. Itens `pending` ainda não têm ecrã próprio. */
 const APP_MENU = [
-  { type: "link", label: "Dashboard", icon: "home", selector: "[data-nav-dashboard]" },
+  { type: "link", label: "Dashboard", icon: "home", selector: "[data-nav-dashboard]", href: "/Dashboard" },
   {
     type: "group",
     label: "Registos",
     icon: "folder_open",
+    badge: "13",
     children: [
       { label: "Contactos", icon: "contacts", href: "/registos/contactos" },
       { label: "Obras", icon: "apartment", href: "/registos/obras" },
       {
         label: "Terceiros",
         icon: "groups",
+        badge: "3",
         children: [
           { label: "Setores", icon: "account_tree", href: "/registos/terceiros/setores" },
-          { label: "Fornecedores", icon: "local_shipping", href: "/registos/terceiros/fornecedores" },
-          { label: "Clientes", icon: "business", selector: "[data-nav-clientes]", href: "/registos/terceiros/clientes" },
+          { label: "Fornecedores", icon: "local_shipping", href: "/fornecedores" },
+          { label: "Clientes", icon: "business", selector: "[data-nav-clientes]", href: "/Clientes/clienteLista" },
         ],
       },
       { label: "Produtos e Serviços", icon: "inventory_2", href: "/registos/produtos" },
@@ -36,9 +38,8 @@ const APP_MENU = [
     label: "Obras",
     icon: "construction",
     children: [
-      { label: "Listagem", icon: "list", selector: "[data-nav-obras]" },
-      { label: "Planeamento", icon: "event_note", selector: "[data-nav-planeamento]" },
-      { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]" },
+      { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
+      { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
     ],
   },
   {
@@ -46,8 +47,10 @@ const APP_MENU = [
     label: "Compras e Logística",
     icon: "local_shipping",
     children: [
-      { label: "Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR },
-      { label: "Centro de Compras", icon: "shopping_cart", selector: "[data-nav-centros]" },
+      { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
+      { label: "Equipamentos e Frotas", icon: "agriculture", href: "/equipamentos" },
+      { label: "Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
+      { label: "Centro de Compras", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
     ],
   },
   {
@@ -92,6 +95,23 @@ const APP_MENU = [
   },
 ];
 
+function getUserInitials(user) {
+  if (user?.name) {
+    const parts = user.name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    if (parts[0]?.length >= 2) {
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+    return parts[0]?.toUpperCase() || "IG";
+  }
+  if (user?.email) {
+    return user.email.slice(0, 2).toUpperCase();
+  }
+  return "MC";
+}
+
 function getTopNav() {
   return document.querySelector("body > nav.app-top-nav, body > nav.fixed, body > nav[class*='fixed']");
 }
@@ -119,9 +139,14 @@ function createMenuLink(definition, source, variant) {
     const attr = definition.selector.match(/data-nav-[\w-]+/)?.[0];
     if (attr) link.setAttribute(attr, "");
   }
-  if (variant === "sidebar") link.className = "app-sidebar-link";
-  else if (!origin) link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
-  else link.className = "";
+  if (variant === "sidebar") {
+    link.className = "app-sidebar-link";
+    link.title = definition.label;
+  } else if (!origin) {
+    link.className = "flex items-center gap-3 text-sm font-semibold text-slate-400 py-3 px-4 rounded-xl hover:bg-slate-800 transition-all";
+  } else {
+    link.className = "";
+  }
   if (definition.perm) link.setAttribute("data-nav-perm", definition.perm);
   if (wasHidden) link.classList.add("hidden");
   if (definition.pending) {
@@ -130,8 +155,25 @@ function createMenuLink(definition, source, variant) {
     link.title = "Módulo em preparação";
     link.addEventListener("click", (event) => event.preventDefault());
   }
+<<<<<<< HEAD
   const code = definition.code ? `<span class="app-sidebar-code">${definition.code}</span>` : "";
   link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "chevron_right"}</span>${code}<span>${definition.label}</span>`;
+=======
+
+  const badgeHtml = definition.badge ? `<span class="app-sidebar-badge">${definition.badge}</span>` : "";
+
+  if (variant === "sidebar") {
+    link.innerHTML = `
+      <span class="app-sidebar-icon-wrap" aria-hidden="true">
+        <span class="material-symbols-outlined">${definition.icon || "article"}</span>
+      </span>
+      <span class="app-sidebar-label">${definition.label}</span>
+      ${badgeHtml}
+    `;
+  } else {
+    link.innerHTML = `<span class="material-symbols-outlined" aria-hidden="true">${definition.icon || "article"}</span><span>${definition.label}</span>`;
+  }
+>>>>>>> origin/dev
   return link;
 }
 
@@ -140,8 +182,8 @@ function buildMenuNodes(entries, source, variant, nested) {
     if (entry.children) {
       const nodes = buildMenuNodes(entry.children, source, variant, true);
       if (variant === "mobile") return createMobileGroup(entry.label, nodes);
-      if (nested) return createSubgroup(entry.label, nodes);
-      return createGroup(entry.label, entry.icon || "folder", nodes);
+      if (nested) return createSubgroup(entry.label, entry.icon || "folder", nodes, { badge: entry.badge });
+      return createGroup(entry.label, entry.icon || "folder", nodes, { badge: entry.badge });
     }
     return createMenuLink(entry, source, variant);
   });
@@ -214,7 +256,6 @@ function isSidebarLinkActive(link) {
   if (link.matches("[data-nav-centros]")) {
     return current.includes("/financeiro/centrodecompras") || current.includes("/financeiro/financeiro");
   }
-  if (link.matches("[data-nav-planeamento]")) return current.includes("centrocustos");
   if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
   if (link.matches("[data-nav-users]")) return current.includes("/users/");
   if (link.matches("[data-nav-dashboard]")) return /\/dashboard(\/index)?\/?$/.test(current);
@@ -246,12 +287,25 @@ function syncGroupVisibility(sidebar = document.getElementById("appPrimarySideba
   });
 }
 
-function createGroup(label, icon, links, { open = false } = {}) {
+function createGroup(label, icon, links, { open = false, badge = "" } = {}) {
   const group = document.createElement("details");
   group.className = "app-sidebar-group";
   group.open = open;
   const summary = document.createElement("summary");
-  summary.innerHTML = `<span class="app-sidebar-group-label"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span><span>${label}</span></span><span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>`;
+  summary.title = label;
+  const badgeHtml = badge ? `<span class="app-sidebar-badge">${badge}</span>` : "";
+  summary.innerHTML = `
+    <span class="app-sidebar-group-label">
+      <span class="app-sidebar-icon-wrap" aria-hidden="true">
+        <span class="material-symbols-outlined">${icon}</span>
+      </span>
+      <span class="app-sidebar-label-with-arrow">
+        <span class="app-sidebar-label">${label}</span>
+        <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>
+      </span>
+    </span>
+    ${badgeHtml ? `<span class="app-sidebar-group-right">${badgeHtml}</span>` : ""}
+  `;
   const children = document.createElement("div");
   children.className = "app-sidebar-children";
   links.filter(Boolean).forEach((link) => children.appendChild(link));
@@ -259,11 +313,25 @@ function createGroup(label, icon, links, { open = false } = {}) {
   return group;
 }
 
-function createSubgroup(label, nodes) {
+function createSubgroup(label, icon, nodes, { badge = "" } = {}) {
   const group = document.createElement("details");
   group.className = "app-sidebar-subgroup";
   const summary = document.createElement("summary");
-  summary.innerHTML = `<span>${label}</span><span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>`;
+  summary.title = label;
+  const badgeHtml = badge ? `<span class="app-sidebar-badge">${badge}</span>` : "";
+  const iconHtml = icon
+    ? `<span class="app-sidebar-subgroup-icon material-symbols-outlined" aria-hidden="true">${icon}</span>`
+    : "";
+  summary.innerHTML = `
+    <span class="app-sidebar-subgroup-label-wrap">
+      ${iconHtml}
+      <span class="app-sidebar-label-with-arrow">
+        <span class="app-sidebar-subgroup-label">${label}</span>
+        <span class="material-symbols-outlined app-sidebar-chevron" aria-hidden="true">expand_more</span>
+      </span>
+    </span>
+    ${badgeHtml ? `<span class="app-sidebar-group-right">${badgeHtml}</span>` : ""}
+  `;
   const children = document.createElement("div");
   children.className = "app-sidebar-subgroup-links";
   nodes.filter(Boolean).forEach((node) => children.appendChild(node));
@@ -296,7 +364,7 @@ function rebuildMobileMenu(nav, source) {
   const fragment = document.createDocumentFragment();
   appendMenu(fragment, source, "mobile");
   fragment.appendChild(createMenuLink(
-    { label: "Gestão", icon: "settings", selector: "[data-nav-users]" },
+    { label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" },
     source,
     "mobile"
   ));
@@ -304,16 +372,122 @@ function rebuildMobileMenu(nav, source) {
   else menu.appendChild(fragment);
 }
 
+function wireSidebarInteractions(sidebar) {
+  const pinBtn = sidebar.querySelector("#btnTogglePinSidebar");
+  if (pinBtn) {
+    pinBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isPinned = sidebar.classList.toggle("is-pinned");
+      document.body.classList.toggle("app-sidebar-pinned", isPinned);
+      try {
+        localStorage.setItem("app_sidebar_pinned", isPinned ? "true" : "false");
+      } catch {}
+    });
+  }
+
+  // Animação suave tipo accordion ao expandir/recolher grupos e subgrupos
+  sidebar.addEventListener("click", (e) => {
+    const summary = e.target.closest("summary");
+    if (!summary) return;
+    const details = summary.parentElement;
+    if (!details || (!details.classList.contains("app-sidebar-group") && !details.classList.contains("app-sidebar-subgroup"))) return;
+
+    const content = details.querySelector(".app-sidebar-children, .app-sidebar-subgroup-links");
+    if (!content) return;
+
+    e.preventDefault();
+
+    if (details.open) {
+      details.classList.add("is-closing");
+      const startHeight = content.offsetHeight;
+      content.style.overflow = "hidden";
+      const anim = content.animate(
+        [
+          { height: `${startHeight}px`, opacity: 1 },
+          { height: "0px", opacity: 0 }
+        ],
+        { duration: 180, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+      );
+      anim.onfinish = () => {
+        details.open = false;
+        details.classList.remove("is-closing");
+        content.style.height = "";
+        content.style.opacity = "";
+        content.style.overflow = "";
+      };
+    } else {
+      details.classList.remove("is-closing");
+      details.open = true;
+      content.style.overflow = "hidden";
+      const targetHeight = content.scrollHeight;
+      const anim = content.animate(
+        [
+          { height: "0px", opacity: 0 },
+          { height: `${targetHeight}px`, opacity: 1 }
+        ],
+        { duration: 220, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
+      );
+      anim.onfinish = () => {
+        content.style.height = "";
+        content.style.opacity = "";
+        content.style.overflow = "";
+      };
+    }
+  });
+
+  const searchInput = sidebar.querySelector("#sidebarSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim().toLowerCase();
+      const links = sidebar.querySelectorAll(".app-sidebar-scroll .app-sidebar-link");
+      const groups = sidebar.querySelectorAll(".app-sidebar-group, .app-sidebar-subgroup");
+
+      if (!q) {
+        links.forEach((l) => l.classList.remove("is-search-hidden", "is-search-match"));
+        groups.forEach((g) => {
+          g.classList.remove("is-search-hidden");
+          if (!g.classList.contains("has-active-link")) g.open = false;
+        });
+        return;
+      }
+
+      links.forEach((link) => {
+        const text = (link.textContent || "").toLowerCase();
+        const match = text.includes(q);
+        link.classList.toggle("is-search-hidden", !match);
+        link.classList.toggle("is-search-match", match);
+      });
+
+      groups.forEach((group) => {
+        const hasMatch = Boolean(group.querySelector(".app-sidebar-link.is-search-match"));
+        group.classList.toggle("is-search-hidden", !hasMatch);
+        if (hasMatch) group.open = true;
+      });
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  });
+}
+
 /** Builds the shared desktop sidebar and the mobile menu from APP_MENU. */
 export function transformDesktopNavToDropdowns() {
+  if (document.documentElement.classList.contains("is-embed") || document.body?.classList.contains("is-embed")) return;
   const source = getDesktopNavLinksContainer();
   const nav = getTopNav();
   if (document.body.dataset.appSidebar === "off" || document.body.dataset.appNav === "off" || !nav) return;
 
   rebuildMobileMenu(nav, source);
 
-  // Screens that already have a task-specific desktop sidebar (admin, project
-  // selector) keep their dedicated working area intact.
+  // Screens that already have a task-specific desktop sidebar (admin, project selector)
   if (!source || document.getElementById("appPrimarySidebar") || document.querySelector(".admin-sidebar, #sidebar")) {
     setActiveState();
     syncGroupVisibility();
@@ -325,36 +499,88 @@ export function transformDesktopNavToDropdowns() {
   sidebar.className = "app-primary-sidebar";
   sidebar.setAttribute("aria-label", "Menu principal");
 
-  if (document.body.dataset.shell === "figma") {
-    sidebar.classList.add("is-figma-shell");
-    const brandLabel = document.getElementById("navBrandText")?.textContent?.trim() || "Gestor";
-    const brand = document.createElement("a");
-    brand.className = "app-sidebar-brand";
-    brand.href = "/Dashboard";
-    brand.innerHTML = `<span class="app-sidebar-mark">Info</span><span class="app-sidebar-brand-text">${brandLabel}</span>`;
-    sidebar.appendChild(brand);
-  }
+  // Retrieve user session info for the profile card (inspired by ideia.mp4)
+  let user = null;
+  try {
+    const rawUser = localStorage.getItem("gestor_user") || localStorage.getItem("user");
+    if (rawUser) user = JSON.parse(rawUser);
+  } catch {}
+  const userName = user?.name || user?.email?.split("@")[0] || "Administrador";
+  const userRole = (user?.role || "Gestor").toUpperCase();
+  const initials = getUserInitials(user);
+
+  // 1. Top Header: Navigation title/icon + Pin Button
+  const header = document.createElement("div");
+  header.className = "app-sidebar-header";
+  header.innerHTML = `
+    <div class="app-sidebar-header-left">
+      <span class="material-symbols-outlined app-sidebar-menu-icon" aria-hidden="true">dashboard_customize</span>
+      <span class="app-sidebar-menu-title">Navegação</span>
+    </div>
+    <button type="button" id="btnTogglePinSidebar" class="app-sidebar-pin-btn" title="Fixar / Desafixar menu" aria-label="Fixar menu">
+      <span class="material-symbols-outlined" aria-hidden="true">dock_to_left</span>
+    </button>
+  `;
+  sidebar.appendChild(header);
+
+  // 2. Search Bar (inspired by ideia.mp4)
+  const searchBox = document.createElement("div");
+  searchBox.className = "app-sidebar-search";
+  searchBox.innerHTML = `
+    <span class="material-symbols-outlined app-sidebar-search-icon" aria-hidden="true">search</span>
+    <input type="text" id="sidebarSearchInput" class="app-sidebar-search-input" placeholder="Buscar no menu..." autocomplete="off" spellcheck="false" />
+    
+  `;
+  sidebar.appendChild(searchBox);
+
+  // 3. Scroll Area for links & groups
+  const scrollArea = document.createElement("div");
+  scrollArea.className = "app-sidebar-scroll";
 
   const primary = document.createElement("div");
   primary.className = "app-sidebar-links";
-  sidebar.appendChild(primary);
+  scrollArea.appendChild(primary);
+
   buildMenuNodes(APP_MENU, source, "sidebar", false).forEach((node) => {
     if (node.classList.contains("app-sidebar-link")) primary.appendChild(node);
-    else sidebar.appendChild(node);
+    else scrollArea.appendChild(node);
   });
+  sidebar.appendChild(scrollArea);
 
-  const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]" }, source, "sidebar");
+  // 4. Footer: Gestão & Sair (com o mesmo estilo e alinhamento)
   const footer = document.createElement("div");
   footer.className = "app-sidebar-footer";
+
+  const users = createMenuLink({ label: "Gestão", icon: "settings", selector: "[data-nav-users]", href: "/Users" }, source, "sidebar");
   footer.appendChild(users);
-  footer.insertAdjacentHTML("beforeend", `<button type="button" data-logout class="app-sidebar-logout"><span class="material-symbols-outlined" aria-hidden="true">logout</span><span>Terminar sessão</span></button>`);
+
+  const logoutBtn = document.createElement("button");
+  logoutBtn.type = "button";
+  logoutBtn.setAttribute("data-logout", "");
+  logoutBtn.className = "app-sidebar-link app-sidebar-logout-btn";
+  logoutBtn.title = "Terminar sessão";
+  logoutBtn.setAttribute("aria-label", "Terminar sessão");
+  logoutBtn.innerHTML = `
+    <span class="app-sidebar-icon-wrap" aria-hidden="true">
+      <span class="material-symbols-outlined">logout</span>
+    </span>
+    <span class="app-sidebar-label">Sair</span>
+  `;
+  footer.appendChild(logoutBtn);
   sidebar.appendChild(footer);
 
   document.body.appendChild(sidebar);
   document.body.classList.add("app-sidebar-layout", "app-sidebar-collapsed");
+
+  if (localStorage.getItem("app_sidebar_pinned") === "true") {
+    sidebar.classList.add("is-pinned");
+    document.body.classList.add("app-sidebar-pinned");
+  }
+
   source.classList.add("app-nav-desktop-source");
   setActiveState(sidebar);
   syncGroupVisibility(sidebar);
+  wireSidebarInteractions(sidebar);
 }
 
 export function markActiveDropdownTriggers() {
@@ -378,5 +604,11 @@ export function initAppNavDropdowns() {
     document.querySelectorAll(".app-sidebar-group[open], .app-sidebar-subgroup[open], .app-nav-mobile-group[open]").forEach((group) => {
       if (!group.classList.contains("has-active-link")) group.open = false;
     });
+    const searchInput = document.getElementById("sidebarSearchInput");
+    if (searchInput && document.activeElement === searchInput) {
+      searchInput.value = "";
+      searchInput.dispatchEvent(new Event("input"));
+      searchInput.blur();
+    }
   });
 }

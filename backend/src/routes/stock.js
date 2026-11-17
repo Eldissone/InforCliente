@@ -23,8 +23,10 @@ const {
   getQuoteDeliveryGuard,
   markQuoteReceived,
   setMovementSourceQuote,
+  revertQuoteDeliveryToPending,
 } = require("../services/deliveryFieldBridge");
 const { repairConsumedPlanAllocations } = require("../services/planAllocationConsumption");
+const { withUppercaseProductName } = require("../utils/productName");
 
 const stockRoutes = express.Router();
 stockRoutes.use(authRequired);
@@ -72,7 +74,7 @@ async function getLatestEvidenceByProduct(productIds, warehouseId = null) {
 function mergeProductImage(item, evidenceMap) {
   if (!item?.product) return item;
   const image = item.product.image || evidenceMap[item.productId] || null;
-  return { ...item, product: { ...item.product, image } };
+  return { ...item, product: withUppercaseProductName({ ...item.product, image }) };
 }
 
 function normalizeOwnerId(value) {
@@ -325,7 +327,11 @@ stockRoutes.get(
       : [];
     const userById = Object.fromEntries(users.map((u) => [u.id, u]));
 
-    let enriched = items.map((m) => ({ ...m, user: userById[m.userId] || null }));
+    let enriched = items.map((m) => ({
+      ...m,
+      product: withUppercaseProductName(m.product),
+      user: userById[m.userId] || null,
+    }));
     enriched = filterStockMovementsForCliente(enriched, req.user?.role);
     return res.json({ items: enriched });
   })
@@ -358,6 +364,29 @@ stockRoutes.get(
     const enriched = await enrichStockItemsWithOwners(withImages);
 
     return res.json({ items: enriched });
+  })
+);
+
+// GET - Listar proprietários disponíveis para stock (Empresa e Clientes)
+stockRoutes.get(
+  "/owners",
+  requireStockViewOrClientePortal(),
+  asyncHandler(async (req, res) => {
+    if (isClienteRole(req)) {
+      const clientId = req.user?.clientId;
+      if (!clientId) return res.json({ items: [] });
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true, code: true },
+      });
+      return res.json({ items: client ? [client] : [] });
+    }
+
+    const clients = await prisma.client.findMany({
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+    });
+    return res.json({ items: clients });
   })
 );
 
@@ -1079,11 +1108,12 @@ async function deleteMovementAndRevertStock(tx, req, movementId) {
     },
   });
   if (stock) {
+    const nextQty = Math.max(0, Number(stock.quantity) + delta);
     await tx.warehouseStock.update({
       where: { id: stock.id },
-      data: { quantity: { increment: delta } },
+      data: { quantity: nextQty },
     });
-  } else {
+  } else if (delta > 0) {
     await tx.warehouseStock.create({
       data: {
         productId: oldMovement.productId,
@@ -1093,6 +1123,39 @@ async function deleteMovementAndRevertStock(tx, req, movementId) {
       },
     });
   }
+
+  // Se for ferramenta/equipamento e for ENTRADA, remover itens disponíveis criados
+  if (oldMovement.type === "ENTRY" && isToolProduct(oldMovement.product)) {
+    const qtyToDelete = Math.floor(Number(oldMovement.quantity));
+    if (qtyToDelete > 0) {
+      const availableItems = await tx.item.findMany({
+        where: {
+          productId: oldMovement.productId,
+          warehouseId: oldMovement.warehouseId,
+          status: "AVAILABLE",
+        },
+        take: qtyToDelete,
+        select: { id: true },
+        orderBy: { createdAt: "desc" },
+      });
+      if (availableItems.length > 0) {
+        await tx.item.deleteMany({
+          where: { id: { in: availableItems.map((i) => i.id) } },
+        });
+      }
+    }
+  }
+
+  // Se tiver cotação vinculada, reverter estado de entrega para PENDENTE
+  if (oldMovement.sourceQuoteId) {
+    await revertQuoteDeliveryToPending(oldMovement.sourceQuoteId, tx);
+  }
+
+  // Desassociar fotos para evitar violação de Foreign Key constraint
+  await tx.projectPhoto.updateMany({
+    where: { movementId },
+    data: { movementId: null },
+  });
 
   await tx.stockMovement.delete({ where: { id: movementId } });
 
@@ -1440,10 +1503,10 @@ stockRoutes.post(
 );
 
 stockRoutes.delete(
-  "/:projectId/movements/:id",
+  ["/:projectId/movements/:id", "/movements/:id"],
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
-    const projectId = String(req.params.projectId);
+    const projectId = req.params.projectId ? String(req.params.projectId) : null;
     const movementId = String(req.params.id);
 
     if (isClienteRole(req)) return res.status(403).json({ error: "FORBIDDEN" });
@@ -1452,7 +1515,10 @@ stockRoutes.delete(
       where: { id: movementId },
       include: { product: true },
     });
-    if (!movement || movement.projectId !== projectId) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (!movement) return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    if (projectId && movement.projectId && movement.projectId !== projectId) {
+      return res.status(404).json({ error: "MOVEMENT_NOT_FOUND" });
+    }
 
     await assertWarehouseAccessible(req, movement.warehouseId);
 
@@ -1461,13 +1527,18 @@ stockRoutes.delete(
         where: { id: movementId },
         include: { product: true },
       });
-      if (!fresh || fresh.projectId !== projectId) return null;
-      const processed = await isMovementProcessed(tx, fresh);
-      if (processed) {
-        const err = new Error("MOVEMENT_ALREADY_PROCESSED");
-        err.code = "MOVEMENT_ALREADY_PROCESSED";
-        throw err;
+      if (!fresh) return null;
+      if (projectId && fresh.projectId && fresh.projectId !== projectId) return null;
+
+      if (fresh.type !== "ENTRY" && fresh.type !== "TRANSFER_IN") {
+        const processed = await isMovementProcessed(tx, fresh);
+        if (processed) {
+          const err = new Error("MOVEMENT_ALREADY_PROCESSED");
+          err.code = "MOVEMENT_ALREADY_PROCESSED";
+          throw err;
+        }
       }
+
       await deleteMovementAndRevertStock(tx, req, movementId);
       return { ok: true };
     });
@@ -1483,15 +1554,19 @@ stockRoutes.patch(
   requirePermission("stock", "manage"),
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { quantity, notes, unit } = z.object({
+    const { quantity, notes, unit, ownerId } = z.object({
       quantity: z.number(),
       notes: z.string().optional().nullable(),
       unit: z.enum(["UN", "KG", "M", "L", "CX", "PAR", "MT2", "MT3"]).optional(),
+      ownerId: z.preprocess(
+        (v) => (v == null || String(v).trim() === "" || String(v) === "null" ? null : String(v).trim()),
+        z.string().nullable().optional()
+      ),
     }).parse(req.body);
 
     const oldStock = await prisma.warehouseStock.findUnique({
       where: { id },
-      include: { product: true },
+      include: { product: true, warehouse: true },
     });
 
     if (!oldStock) return res.status(404).json({ error: "STOCK_NOT_FOUND" });
@@ -1501,6 +1576,8 @@ stockRoutes.patch(
     }
 
     const unitChanged = Boolean(unit && unit !== oldStock.product.unit);
+    const targetOwnerId = ownerId !== undefined ? ownerId : oldStock.ownerId;
+    const ownerChanged = targetOwnerId !== oldStock.ownerId;
 
     const updated = await prisma.$transaction(async (tx) => {
       if (unitChanged) {
@@ -1510,14 +1587,64 @@ stockRoutes.patch(
         });
       }
 
-      // 1. Atualizar o saldo
-      const stock = await tx.warehouseStock.update({
-        where: { id },
-        data: { quantity },
-      });
+      // 1. Obter nomes dos proprietários para histórico
+      let oldOwnerName = oldStock.warehouse?.name || "Empresa";
+      let newOwnerName = oldStock.warehouse?.name || "Empresa";
+      const clientIds = [oldStock.ownerId, targetOwnerId].filter(Boolean);
+      if (clientIds.length > 0) {
+        const clientRecords = await tx.client.findMany({
+          where: { id: { in: clientIds } },
+          select: { id: true, name: true },
+        });
+        const clientMap = Object.fromEntries(clientRecords.map((c) => [c.id, c.name]));
+        if (oldStock.ownerId) oldOwnerName = clientMap[oldStock.ownerId] || oldStock.ownerId;
+        if (targetOwnerId) newOwnerName = clientMap[targetOwnerId] || targetOwnerId;
+      }
+
+      let stock;
+      if (ownerChanged) {
+        // Verificar se já existe registo de saldo para este armazém, produto e novo proprietário
+        const existingTargetStock = await tx.warehouseStock.findFirst({
+          where: {
+            warehouseId: oldStock.warehouseId,
+            productId: oldStock.productId,
+            ownerId: targetOwnerId,
+            id: { not: oldStock.id },
+          },
+        });
+
+        if (existingTargetStock) {
+          // Unificar com o saldo existente do novo proprietário
+          stock = await tx.warehouseStock.update({
+            where: { id: existingTargetStock.id },
+            data: { quantity: { increment: quantity } },
+          });
+          await tx.warehouseStock.delete({
+            where: { id: oldStock.id },
+          });
+        } else {
+          // Atualizar o registo atual com a nova propriedade e quantidade
+          stock = await tx.warehouseStock.update({
+            where: { id: oldStock.id },
+            data: {
+              quantity,
+              ownerId: targetOwnerId,
+            },
+          });
+        }
+      } else {
+        // Propriedade inalterada: atualiza apenas a quantidade
+        stock = await tx.warehouseStock.update({
+          where: { id },
+          data: { quantity },
+        });
+      }
 
       // 2. Registar como um movimento de AJUSTE para histórico
       const unitNote = unitChanged ? ` Unidade: ${oldStock.product.unit} → ${unit}.` : "";
+      const ownerNote = ownerChanged
+        ? ` Propriedade alterada de "${oldOwnerName}" para "${newOwnerName}".`
+        : "";
       await tx.stockMovement.create({
         data: {
           productId: oldStock.productId,
@@ -1525,8 +1652,8 @@ stockRoutes.patch(
           userId: req.user.sub,
           type: "ADJUSTMENT",
           quantity: Math.abs(quantity - Number(oldStock.quantity)),
-          ownerId: oldStock.ownerId,
-          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}.${unitNote}`,
+          ownerId: targetOwnerId,
+          notes: `Ajuste manual de CRUD: ${notes || "Sem observações"}. De ${oldStock.quantity} para ${quantity}.${ownerNote}${unitNote}`,
         },
       });
 
@@ -1549,6 +1676,20 @@ stockRoutes.delete(
     await assertWarehouseAccessible(req, oldStock.warehouseId);
     if (isClienteRole(req)) {
       return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    const activeMovementsCount = await prisma.stockMovement.count({
+      where: {
+        productId: oldStock.productId,
+        warehouseId: oldStock.warehouseId,
+      },
+    });
+
+    if (activeMovementsCount > 0) {
+      return res.status(400).json({
+        error: "HAS_ACTIVE_MOVEMENTS",
+        message: "Este produto possui movimentações no histórico deste armazém. Para anular uma entrada errada, elimine o movimento correspondente na aba Movimentações. Para retificar o saldo atual, utilize o botão de Editar Saldo.",
+      });
     }
 
     await prisma.warehouseStock.delete({ where: { id } });

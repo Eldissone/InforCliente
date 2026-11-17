@@ -472,6 +472,8 @@ dashboardRoutes.get(
     const userRole = (req.user?.role || "").toLowerCase();
     let where = { status: "OPEN" };
     if (userRole === "cliente") {
+      // Alertas internos (ex.: alertas preditivos da IA) nunca vão para o portal do cliente.
+      where.internal = false;
       where.OR = [
         ...(scopedClientId ? [{ clientId: scopedClientId }] : []),
         ...(scopedClientId ? [{ project: { is: { clientId: scopedClientId } } }] : []),

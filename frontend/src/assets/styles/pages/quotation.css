@@ -146,3 +146,25 @@ body {
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
         }
+
+        html.is-embed body,
+        body.is-embed {
+            background: #fff;
+        }
+
+        html.is-embed nav.app-top-nav,
+        html.is-embed #appHeader,
+        html.is-embed #cotacaoPageHead,
+        body.is-embed #appHeader,
+        body.is-embed #cotacaoPageHead,
+        body.is-embed #projectSelector,
+        body.is-embed #btnBackToBudget {
+            display: none !important;
+        }
+
+        html.is-embed body > main,
+        body.is-embed > main {
+            padding-top: 0.5rem !important;
+            margin-top: 0 !important;
+            max-width: none;
+        }

@@ -9,10 +9,10 @@ const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { uploadToSupabase, deleteStoredFile } = require("../utils/storage");
 const {
-  isConfigured: isInvoiceAiConfigured,
   readInvoiceDocument,
   MAX_INLINE_BYTES,
 } = require("../services/invoiceScanService");
+const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
 const {
   buildProjectFinancials,
   buildCostLedger,
@@ -282,7 +282,7 @@ async function syncInvoiceReceived(tx, invoiceId) {
       status: invoiceStoredStatus({ ...invoice, receivedAmount: received }),
     },
     include: {
-      project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+      project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
       client: { select: { id: true, name: true, code: true } },
       measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       receipts: { orderBy: { receivedDate: "desc" } },
@@ -739,6 +739,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -751,6 +752,7 @@ financeRoutes.get(
       items: projects.map((p) => ({
         id: p.id,
         code: p.code,
+        referencia: p.referencia || null,
         name: p.name,
         currency: p.currency,
         budgetTotal: toNumber(p.budgetTotal),
@@ -849,6 +851,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -939,7 +942,7 @@ financeRoutes.get(
     const rows = await prisma.invoice.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         receipts: {
@@ -1129,7 +1132,7 @@ financeRoutes.post(
         createdBy: req.user?.name || req.user?.email || null,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -1159,7 +1162,7 @@ financeRoutes.get(
     const invoice = await prisma.invoice.findUnique({
       where: { id: req.params.id },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         receipts: { orderBy: { receivedDate: "desc" } },
@@ -1268,7 +1271,7 @@ financeRoutes.patch(
           ...(body.exchangeRate !== undefined ? { exchangeRate: body.exchangeRate } : {}),
         },
         include: {
-          project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+          project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
           client: { select: { id: true, name: true, code: true } },
           measurement: { select: { id: true, reportNumber: true, reportDate: true } },
         },
@@ -1392,7 +1395,7 @@ financeRoutes.patch(
         flagGuarantee: amounts.flagGuarantee,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -1903,8 +1906,8 @@ financeRoutes.get(
   "/ai-status",
   view,
   asyncHandler(async (_req, res) => {
-    const configured = isInvoiceAiConfigured();
-    return res.json({ configured, model: configured ? config.ai.geminiModel : null });
+    const ai = await resolveInvoiceAiConfig();
+    return res.json({ configured: ai.available, model: ai.available ? ai.model : null, reason: ai.available ? null : ai.reason });
   })
 );
 
@@ -1934,6 +1937,9 @@ financeRoutes.post(
       buffer: req.file.buffer,
       mimeType: req.file.mimetype,
       fileName: req.file.originalname,
+      aiConfig: await resolveInvoiceAiConfig(),
+      userId: req.user?.sub,
+      io: req.app.get("io"),
       projects: projects.map((p) => ({ id: p.id, code: p.code, name: p.name, clientName: p.client?.name })),
     });
 
@@ -2017,7 +2023,7 @@ financeRoutes.post(
         documentUploadedBy: actor,
       },
       include: {
-        project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+        project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
         client: { select: { id: true, name: true, code: true } },
         measurement: { select: { id: true, reportNumber: true, reportDate: true } },
       },
@@ -2104,6 +2110,7 @@ financeRoutes.get(
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
         client: entry.project.client,
@@ -2207,6 +2214,7 @@ financeRoutes.get(
       select: {
         id: true,
         code: true,
+        referencia: true,
         name: true,
         currency: true,
         budgetTotal: true,
@@ -2797,7 +2805,7 @@ async function buildReceivables() {
   const rows = await prisma.invoice.findMany({
     where: { cancelledAt: null },
     include: {
-      project: { select: { id: true, code: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
+      project: { select: { id: true, code: true, referencia: true, name: true, currency: true, client: { select: { id: true, name: true, code: true } } } },
       client: { select: { id: true, name: true, code: true } },
       measurement: { select: { id: true, reportNumber: true } },
     },
@@ -2940,7 +2948,7 @@ financeRoutes.get(
               id: true,
               docNumber: true,
               docDate: true,
-              project: { select: { id: true, code: true, name: true } },
+              project: { select: { id: true, code: true, referencia: true, name: true } },
               client: { select: { id: true, name: true } },
             },
           },
@@ -3830,7 +3838,7 @@ financeRoutes.get(
         card: { select: { id: true, label: true, lastDigits: true, bank: true } },
         movements: {
           include: {
-            project: { select: { id: true, code: true, name: true } },
+            project: { select: { id: true, code: true, referencia: true, name: true } },
             supplier: { select: { id: true, name: true, nif: true } },
           },
           orderBy: { movementDate: "asc" },
@@ -3865,7 +3873,7 @@ financeRoutes.get(
     const items = await prisma.bankMovement.findMany({
       where,
       include: {
-        project: { select: { id: true, code: true, name: true } },
+        project: { select: { id: true, code: true, referencia: true, name: true } },
         supplier: { select: { id: true, name: true, nif: true } },
         card: { select: { id: true, label: true, lastDigits: true, bank: true } },
         statement: { select: { id: true, name: true } },
@@ -4223,6 +4231,7 @@ financeRoutes.get(
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
         active: entry.project.active,
@@ -4339,6 +4348,7 @@ financeRoutes.get(
       project: {
         id: entry.project.id,
         code: entry.project.code,
+        referencia: entry.project.referencia || null,
         name: entry.project.name,
         currency: entry.currency,
         client: entry.project.client,

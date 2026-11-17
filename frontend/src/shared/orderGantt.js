@@ -135,7 +135,7 @@ function groupByProject(days) {
       if (!map.has(key)) {
         map.set(key, {
           name: o.need?.project?.name || "Sem obra",
-          code: o.need?.project?.code || "",
+          code: String(o.need?.project?.referencia || "").trim(),
           orders: [],
         });
       }

@@ -20,7 +20,13 @@ const {
 
 const DEFAULT_PERMISSIONS = buildDefaultPermissions();
 
+const { invalidateLiveUserCache } = require("../services/sessionUser");
+const { computeRoleBulk, computeUserBulk, computeCopyPlan } = require("../services/permissionPlans");
+
 const permissionsRoutes = express.Router();
+
+const ROLE_ENUM = z.enum(["admin", "operador", "financeiro", "tecnico", "supervisor", "leitura", "cliente"]);
+const BULK_MAX = 1500;
 
 async function logPermissionChange({
   actorUserId,
@@ -61,7 +67,6 @@ permissionsRoutes.get(
   asyncHandler(async (req, res) => {
     await ensureDefaults();
     const userId = req.user.sub;
-    await repairMistakenDeniesForUser(userId);
     const data = await getEffectivePermissionsForUser(userId);
     if (!data) return res.status(404).json({ error: "USER_NOT_FOUND" });
 
@@ -156,6 +161,237 @@ permissionsRoutes.get(
         groups: buildDisplayCatalog(),
       },
     });
+  })
+);
+
+// ─── Alterações em lote (uma transacção + uma entrada de auditoria agrupada) ─────
+const roleBulkSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        module: z.string().min(1),
+        action: z.string().min(1),
+        allowed: z.enum(["true", "false", "own", "view"]),
+      })
+    )
+    .min(1)
+    .max(BULK_MAX),
+  reason: z.string().max(300).optional(),
+});
+
+const userBulkSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        module: z.string().min(1),
+        action: z.string().min(1),
+        allowed: z.enum(["true", "false", "own", "view", "inherit"]),
+      })
+    )
+    .min(1)
+    .max(BULK_MAX),
+  reason: z.string().max(300).optional(),
+});
+
+// PUT /permissions/roles/:role/bulk — matriz por perfil, vários itens de uma vez
+permissionsRoutes.put(
+  "/roles/:role/bulk",
+  asyncHandler(async (req, res) => {
+    const { role } = z.object({ role: ROLE_ENUM }).parse(req.params);
+    const body = roleBulkSchema.parse(req.body);
+    const existingRows = await prisma.rolePermission.findMany({ where: { role } });
+    const existing = new Map(existingRows.map((r) => [`${r.module}:${r.action}`, r.allowed]));
+    const { changes, rejected, unchanged } = computeRoleBulk({ role, items: body.items, existing });
+
+    if (changes.length) {
+      await prisma.$transaction(
+        changes.map((c) =>
+          prisma.rolePermission.upsert({
+            where: { role_module_action: { role, module: c.module, action: c.action } },
+            create: { role, module: c.module, action: c.action, allowed: c.after },
+            update: { allowed: c.after },
+          })
+        )
+      );
+      await logPermissionChange({
+        actorUserId: req.user.sub,
+        targetType: "role",
+        targetId: role,
+        role,
+        module: "*",
+        action: "bulk",
+        beforeValue: String(changes.length),
+        afterValue: String(changes.length),
+        reason: body.reason || null,
+        context: { changes },
+      });
+    }
+    return res.json({ ok: true, role, applied: changes.length, unchanged, rejected });
+  })
+);
+
+// PUT /permissions/users/:userId/bulk — exceções individuais, vários itens de uma vez ("inherit" remove a exceção)
+permissionsRoutes.put(
+  "/users/:userId/bulk",
+  asyncHandler(async (req, res) => {
+    const { userId } = z.object({ userId: z.string().min(1) }).parse(req.params);
+    const body = userBulkSchema.parse(req.body);
+    const data = await getEffectivePermissionsForUser(userId);
+    if (!data) return res.status(404).json({ error: "USER_NOT_FOUND" });
+
+    const overrides = new Map(data.overrides.map((o) => [`${o.module}:${o.action}`, o.allowed]));
+    const { changes, unchanged } = computeUserBulk({ items: body.items, overrides });
+
+    if (changes.length) {
+      await prisma.$transaction(
+        changes.map((c) =>
+          c.after === "inherit"
+            ? prisma.userPermission.deleteMany({ where: { userId, module: c.module, action: c.action } })
+            : prisma.userPermission.upsert({
+                where: { userId_module_action: { userId, module: c.module, action: c.action } },
+                create: { userId, module: c.module, action: c.action, allowed: c.after },
+                update: { allowed: c.after },
+              })
+        )
+      );
+      await logPermissionChange({
+        actorUserId: req.user.sub,
+        targetType: "user",
+        targetId: userId,
+        module: "*",
+        action: "bulk",
+        beforeValue: String(changes.length),
+        afterValue: String(changes.length),
+        reason: body.reason || null,
+        context: { changes },
+      });
+      invalidateLiveUserCache(userId);
+    }
+    return res.json({ ok: true, userId, applied: changes.length, unchanged });
+  })
+);
+
+// ─── Copiar permissões entre utilizadores ────────────────────────────────────────
+// mode:
+//   overrides          → copia as personalizações do origem (strategy: merge junta | replace substitui as do destino)
+//   effective          → iguala as permissões efectivas do destino às do origem (grava como personalização só o que difere do perfil do destino)
+//   role_and_overrides → o destino passa a ter o perfil do origem e as mesmas personalizações
+const copySchema = z.object({
+  mode: z.enum(["overrides", "effective", "role_and_overrides"]).default("overrides"),
+  strategy: z.enum(["merge", "replace"]).default("merge"),
+  dryRun: z.boolean().default(false),
+  copyProjects: z.boolean().default(false),
+});
+
+function copyError(status, code) {
+  return Object.assign(new Error(code), { status });
+}
+
+async function buildCopyPlan({ sourceId, targetId, mode, strategy }) {
+  if (sourceId === targetId) throw copyError(400, "SAME_USER");
+  const [source, target] = await Promise.all([
+    getEffectivePermissionsForUser(sourceId),
+    getEffectivePermissionsForUser(targetId),
+  ]);
+  return computeCopyPlan({ source, target, mode, strategy });
+}
+
+async function applyCopyPlan(plan, { actorUserId, copyProjects }) {
+  const targetId = plan.target.user.id;
+  const ops = [];
+  if (plan.roleChange) {
+    ops.push(prisma.user.update({ where: { id: targetId }, data: { role: plan.roleChange.to } }));
+  }
+  plan.changes.forEach((c) => {
+    ops.push(
+      c.after === "inherit"
+        ? prisma.userPermission.deleteMany({ where: { userId: targetId, module: c.module, action: c.action } })
+        : prisma.userPermission.upsert({
+            where: { userId_module_action: { userId: targetId, module: c.module, action: c.action } },
+            create: { userId: targetId, module: c.module, action: c.action, allowed: c.after },
+            update: { allowed: c.after },
+          })
+    );
+  });
+  if (copyProjects) {
+    const src = await prisma.user.findUnique({
+      where: { id: plan.source.user.id },
+      select: { assignedProjects: { select: { id: true } } },
+    });
+    ops.push(
+      prisma.user.update({
+        where: { id: targetId },
+        data: { assignedProjects: { set: (src?.assignedProjects || []).map((p) => ({ id: p.id })) } },
+      })
+    );
+  }
+  if (ops.length) await prisma.$transaction(ops);
+
+  await logPermissionChange({
+    actorUserId,
+    targetType: "user",
+    targetId,
+    module: "*",
+    action: "copy",
+    beforeValue: String(plan.changes.length),
+    afterValue: String(plan.changes.length),
+    reason: `Copiado de ${plan.source.user.name || plan.source.user.email} (${plan.mode}${plan.mode === "overrides" ? `/${plan.strategy}` : ""})`,
+    context: {
+      sourceUserId: plan.source.user.id,
+      mode: plan.mode,
+      strategy: plan.strategy,
+      roleChange: plan.roleChange,
+      copyProjects: Boolean(copyProjects),
+      changes: plan.changes,
+    },
+  });
+  invalidateLiveUserCache(targetId);
+}
+
+function summarizePlan(plan) {
+  return {
+    targetId: plan.target.user.id,
+    targetName: plan.target.user.name || plan.target.user.email,
+    changes: plan.changes,
+    roleChange: plan.roleChange,
+  };
+}
+
+// POST /permissions/users/:targetId/copy-from/:sourceId
+permissionsRoutes.post(
+  "/users/:targetId/copy-from/:sourceId",
+  asyncHandler(async (req, res) => {
+    const { targetId, sourceId } = z.object({ targetId: z.string().min(1), sourceId: z.string().min(1) }).parse(req.params);
+    const body = copySchema.parse(req.body || {});
+    let plan;
+    try {
+      plan = await buildCopyPlan({ sourceId, targetId, mode: body.mode, strategy: body.strategy });
+    } catch (e) {
+      return res.status(e.status || 400).json({ error: e.message });
+    }
+    if (!body.dryRun) await applyCopyPlan(plan, { actorUserId: req.user.sub, copyProjects: body.copyProjects });
+    return res.json({ ok: true, dryRun: body.dryRun, mode: body.mode, applied: body.dryRun ? 0 : plan.changes.length, ...summarizePlan(plan) });
+  })
+);
+
+// POST /permissions/copy — aplica as permissões de um utilizador a vários
+permissionsRoutes.post(
+  "/copy",
+  asyncHandler(async (req, res) => {
+    const body = copySchema
+      .extend({ sourceId: z.string().min(1), targetIds: z.array(z.string().min(1)).min(1).max(50) })
+      .parse(req.body || {});
+    const results = [];
+    for (const targetId of [...new Set(body.targetIds)]) {
+      try {
+        const plan = await buildCopyPlan({ sourceId: body.sourceId, targetId, mode: body.mode, strategy: body.strategy });
+        if (!body.dryRun) await applyCopyPlan(plan, { actorUserId: req.user.sub, copyProjects: body.copyProjects });
+        results.push({ ok: true, ...summarizePlan(plan), changes: plan.changes.length });
+      } catch (e) {
+        results.push({ ok: false, targetId, error: e.message });
+      }
+    }
+    return res.json({ ok: true, dryRun: body.dryRun, results });
   })
 );
 
@@ -338,10 +574,27 @@ permissionsRoutes.post(
 
 permissionsRoutes.post(
   "/reset",
-  asyncHandler(async (_req, res) => {
-    await prisma.rolePermission.deleteMany({});
-    await prisma.rolePermission.createMany({ data: DEFAULT_PERMISSIONS, skipDuplicates: true });
-    return res.json({ ok: true, count: DEFAULT_PERMISSIONS.length });
+  asyncHandler(async (req, res) => {
+    const body = z.object({ role: ROLE_ENUM.optional() }).parse(req.body || {});
+    const where = body.role ? { role: body.role } : {};
+    const data = body.role ? DEFAULT_PERMISSIONS.filter((p) => p.role === body.role) : DEFAULT_PERMISSIONS;
+    const removed = await prisma.rolePermission.count({ where });
+    await prisma.$transaction([
+      prisma.rolePermission.deleteMany({ where }),
+      prisma.rolePermission.createMany({ data, skipDuplicates: true }),
+    ]);
+    await logPermissionChange({
+      actorUserId: req.user.sub,
+      targetType: "role",
+      targetId: body.role || "*",
+      role: body.role || null,
+      module: "*",
+      action: "reset",
+      beforeValue: String(removed),
+      afterValue: String(data.length),
+      reason: body.role ? `Reposição do perfil ${body.role}` : "Reposição de todos os perfis",
+    });
+    return res.json({ ok: true, count: data.length, role: body.role || null });
   })
 );
 
@@ -349,12 +602,39 @@ permissionsRoutes.post(
 permissionsRoutes.get(
   "/audit",
   asyncHandler(async (req, res) => {
-    const logs = await prisma.permissionAuditLog.findMany({
-      include: { actorUser: { select: { id: true, name: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+    const q = z
+      .object({
+        targetType: z.enum(["role", "user"]).optional(),
+        targetId: z.string().optional(),
+        take: z.coerce.number().int().min(1).max(200).default(50),
+        skip: z.coerce.number().int().min(0).default(0),
+      })
+      .parse(req.query);
+    const where = {
+      ...(q.targetType ? { targetType: q.targetType } : {}),
+      ...(q.targetId ? { targetId: q.targetId } : {}),
+    };
+    const [logs, total] = await Promise.all([
+      prisma.permissionAuditLog.findMany({
+        where,
+        include: { actorUser: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+        take: q.take,
+        skip: q.skip,
+      }),
+      prisma.permissionAuditLog.count({ where }),
+    ]);
+
+    // resolve o nome do utilizador-alvo para mostrar na lista
+    const userIds = [...new Set(logs.filter((l) => l.targetType === "user" && l.targetId).map((l) => l.targetId))];
+    const targets = userIds.length
+      ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } })
+      : [];
+    const targetById = new Map(targets.map((u) => [u.id, u]));
+    return res.json({
+      total,
+      items: logs.map((l) => ({ ...l, targetUser: l.targetType === "user" ? targetById.get(l.targetId) || null : null })),
     });
-    return res.json({ items: logs });
   })
 );
 
