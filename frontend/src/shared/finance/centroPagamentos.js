@@ -56,7 +56,7 @@ const COMMITMENT_LINK = {
 };
 
 const LINKS = [
-  { label: "Centro de Compras", href: "/Financeiro/centrodecompras", icon: "shopping_cart" },
+  { label: "Compras e Pedidos", href: "/Financeiro/centrodecompras", icon: "shopping_cart" },
   { label: "Novo pedido", href: "/Financeiro/novoPedido", icon: "playlist_add" },
 ];
 

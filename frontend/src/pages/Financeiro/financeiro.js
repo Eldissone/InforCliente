@@ -1543,7 +1543,7 @@ async function loadProjects() {
     if (sel) {
       sel.innerHTML =
         `<option value="">Todas as Obras</option>` +
-        `<option value="${FIN_GENERAL_CENTERS}">Centro de Compras</option>` +
+        `<option value="${FIN_GENERAL_CENTERS}">Compras e Pedidos</option>` +
         allProjects.map((p) => `<option value="${p.id}">${p.name}${p.referencia ? ` (${p.referencia})` : ""}</option>`).join("");
     }
     updateDashboardDate();

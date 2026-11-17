@@ -67,7 +67,7 @@ const ACTION_LABELS = {
   // Navlinks
   nav_cotacao: "Link nav: Cotação",
   nav_financeiro: "Link nav: Financeiro",
-  nav_centros_gerais: "Link nav: Centro de Compras",
+  nav_centros_gerais: "Link nav: Compras e Pedidos",
 };
 
 /**
@@ -231,7 +231,7 @@ const PERMISSION_GROUPS = [
       { id: "financeiro.tesourariaPagamentos", label: "Pagamentos a Fornecedor", route: "/Financeiro/tesouraria/pagamentos" },
       { id: "financeiro.centroPagamentos", label: "Centro de Pagamentos", route: "/Financeiro/centro-pagamentos" },
       { id: "financeiro.controlo", label: "Controlo Financeiro", route: "/Financeiro/controlo" },
-      { id: "financeiro.centrosGerais", label: "Centro de Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
+      { id: "financeiro.centrosGerais", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" },
       { id: "financeiro.obras", label: "Financeiro por obra", route: "/Projectos/projectView.html" },
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
@@ -297,7 +297,7 @@ const PERMISSION_GROUPS = [
     id: "pedidosExtras",
     label: "Pedidos Extras",
     icon: "request_quote",
-    pages: [{ id: "pedidosExtras.main", label: "Centro de Compras e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" }],
+    pages: [{ id: "pedidosExtras.main", label: "Compras e Pedidos e Pedidos Extra", route: "/Financeiro/centroDeCompras.html" }],
     actions: ["view", "create", "edit", "approve", "pay", "delete", "reject", "cancel", "full_access"],
   },
   {
@@ -330,7 +330,7 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/ProjectGeral.html" },
       { id: "navlinks.cotacao", label: "Link: Cotação", route: "/Projectos/Cotacao/index.html" },
       { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
-      { id: "navlinks.centros_gerais", label: "Link: Centro de Compras", route: "/Financeiro/centroDeCompras.html" },
+      { id: "navlinks.centros_gerais", label: "Link: Compras e Pedidos", route: "/Financeiro/centroDeCompras.html" },
       { id: "navlinks.users", label: "Link: Gestão", route: "/Users/index.html" },
     ],
     actions: ["nav_dashboard", "nav_clientes", "nav_obras", "nav_logistica", "nav_planeamento", "nav_cotacao", "nav_financeiro", "nav_centros_gerais", "nav_users"],

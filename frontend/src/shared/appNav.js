@@ -25,7 +25,7 @@ const APP_MENU = [
       { label: "Equipamentos, Maquinarias e Viaturas", icon: "agriculture", href: "/registos/equipamentos" },
       { label: "Pessoal", icon: "badge", href: "/registos/pessoal" },
       { label: "Folha de Ponto", icon: "schedule", href: "/registos/folha-ponto" },
-      { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
+     
       { label: "Tipo de Custo (Produto ou Serviço)", icon: "category", href: "/registos/tipo-custo" },
       { label: "Categorias de Custo", icon: "account_tree", href: "/registos/categorias-custo" },
       { label: "Subcategorias de Custo", icon: "subdirectory_arrow_right", href: "/registos/subcategorias-custo" },
@@ -44,13 +44,13 @@ const APP_MENU = [
   },
   {
     type: "group",
-    label: "Compras e Logística",
+    label: "Logística",
     icon: "local_shipping",
     children: [
       { label: "Produtos e Serviços", icon: "category", href: "/produtos" },
       { label: "Equipamentos e Frotas", icon: "agriculture", href: "/equipamentos" },
-      { label: "Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
-      { label: "Centro de Compras", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
+       { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
+      { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
     ],
   },
   {
@@ -89,6 +89,7 @@ const APP_MENU = [
           { label: "Pagamentos a Fornecedor", icon: "north_east", href: "/Financeiro/tesouraria/pagamentos", perm: "financeiro:view" },
         ],
       },
+      { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
       { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
       { label: "Controlo Financeiro", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
     ],
