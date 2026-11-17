@@ -147,6 +147,7 @@ function upsert(item) {
 
 const cardOf = (id) => S.meta.cards.find((c) => c.id === id);
 const cardName = (id) => cardOf(id)?.label || "—";
+const cardIdentity = (card) => [card.label, card.bank, card.lastDigits ? `•••• ${card.lastDigits}` : ""].filter(Boolean).join(" · ");
 const typeOf = (code) => S.meta.types.find((t) => t.code === code);
 const typeLabel = (code) => typeOf(code)?.label || code;
 const typeShort = (code) => String(typeLabel(code)).split(" (")[0];
@@ -404,7 +405,8 @@ function typeCell(m) {
 function accountCell(m) {
   const locked = (m.reconciled && m.reconcileKind !== "AUTO") || !canEdit();
   const cards = S.meta.cards.filter((c) => c.active !== false || c.id === m.cardId);
-  return `<select class="fo-acc-select" data-card-sel ${locked ? "disabled" : ""} title="${locked && canEdit() ? "Desfaça a conciliação para trocar a conta" : "Trocar a conta / cartão deste movimento"}">${cards.map((c) => `<option value="${esc(c.id)}" ${c.id === m.cardId ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select>`;
+  const selected = cardOf(m.cardId);
+  return `<select class="fo-acc-select" data-card-sel ${locked ? "disabled" : ""} title="${esc(locked && canEdit() ? "Desfaça a conciliação para trocar a conta" : `Conta do movimento: ${cardIdentity(selected)}`)}">${cards.map((c) => `<option value="${esc(c.id)}" ${c.id === m.cardId ? "selected" : ""}>${esc(cardIdentity(c))}</option>`).join("")}</select>`;
 }
 
 const undoBtn = (m, title = "Desfazer a conciliação") => (canEdit() ? `<button type="button" class="fo-undo" data-undo title="${title}">↺</button>` : "");
@@ -467,7 +469,7 @@ function ccCell(m) {
     const others = S.meta.cards.filter((c) => c.id !== m.cardId && (c.active !== false || c.id === m.transferCardId));
     const out = m.direction === "SAIDA";
     const dis = (m.reconciled && m.transferPairId) || !canEdit() ? "disabled" : "";
-    return `<div class="fo-trfs" title="Transferência interna: ${out ? "saiu desta conta para outra conta da empresa" : "entrou nesta conta vinda de outra conta da empresa"}"><span>${out ? "Para →" : "De ←"}</span><select class="fo-acc-select ${m.transferCardId ? "" : "is-blank"}" data-trf-dest ${dis}><option value="">— conta —</option>${others.map((c) => `<option value="${esc(c.id)}" ${m.transferCardId === c.id ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></div>`;
+    return `<div class="fo-trfs" title="Transferência interna: ${out ? "saiu desta conta para outra conta da empresa" : "entrou nesta conta vinda de outra conta da empresa"}"><span>${out ? "Para →" : "De ←"}</span><select class="fo-acc-select ${m.transferCardId ? "" : "is-blank"}" data-trf-dest ${dis}><option value="">— conta —</option>${others.map((c) => `<option value="${esc(c.id)}" ${m.transferCardId === c.id ? "selected" : ""}>${esc(cardIdentity(c))}</option>`).join("")}</select></div>`;
   }
   if (m.paymentRequest) {
     const pr = m.paymentRequest;
