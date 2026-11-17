@@ -430,312 +430,312 @@ async function callGemini({ mimeType, base64Data, projects, costCenters = [], ai
       },
     };
 
-  const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
-  const deadline = Date.now() + GEMINI_TIMEOUT_MS;
-  let result;
-  for (const [index, model] of models.entries()) {
-    const last = index === models.length - 1;
-    const remaining = deadline - Date.now();
-    if (remaining <= 1000) break;
-    // Cada modelo tem o seu próprio limite: um modelo que fica pendurado (sem
-    // responder) não pode gastar o tempo todo e impedir os de reserva.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), last ? remaining : Math.min(GEMINI_MODEL_TIMEOUT_MS, remaining));
-    try {
-      const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
-      const response = await fetch(`${url}?key=${encodeURIComponent(ai.apiKey)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: controller.signal,
+    const models = [...new Set([config.ai.geminiModel, ...GEMINI_FALLBACK_MODELS])];
+    const deadline = Date.now() + GEMINI_TIMEOUT_MS;
+    let result;
+    for (const [index, model] of models.entries()) {
+      const last = index === models.length - 1;
+      const remaining = deadline - Date.now();
+      if (remaining <= 1000) break;
+      // Cada modelo tem o seu próprio limite: um modelo que fica pendurado (sem
+      // responder) não pode gastar o tempo todo e impedir os de reserva.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), last ? remaining : Math.min(GEMINI_MODEL_TIMEOUT_MS, remaining));
+      try {
+        const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
+        const response = await fetch(`${url}?key=${encodeURIComponent(ai.apiKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        const payloadText = await response.text();
+        result = { response, payloadText, model };
+      } catch (error) {
+        // Sem resposta a tempo: passa ao modelo seguinte (no último, o erro sobe).
+        if (error?.name !== "AbortError" || last) throw error;
+        continue;
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // 503 usually means temporary model capacity pressure. Try the next
+      // supported Flash model while preserving the same structured JSON schema.
+      if (result.response.status !== 503 || last) break;
+      await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
+    }
+    if (!result) {
+      const err = new Error("Sem resposta dos modelos de IA dentro do tempo limite.");
+      err.name = "AbortError";
+      throw err;
+    }
+    return result;
+  }
+
+  function buildHttpError(status, message, code) {
+    const err = new Error(message);
+    err.status = status;
+    err.code = code;
+    return err;
+  }
+
+  /**
+   * Lê um documento (PDF/imagem) e devolve os campos normalizados da fatura.
+   *
+   * `aiConfig` vem de `resolveInvoiceAiConfig()` (Gestão do Sistema → IA). Sem ele
+   * usa só o .env, como antes. Com `aiConfig`, o pedido fica registado no consumo.
+   *
+   * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array,
+   *           aiConfig?: object, userId?: string, io?: object }} input
+   */
+  async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [], aiConfig, userId, io }) {
+    const ai = aiConfig || envAiConfig();
+    // Obras excluídas na Gestão do Sistema não vão na lista enviada à IA.
+    if (Array.isArray(ai.excludedProjectIds) && ai.excludedProjectIds.length) {
+      const excluded = new Set(ai.excludedProjectIds);
+      projects = projects.filter((p) => !excluded.has(p.id));
+    }
+    if (!ai.available) {
+      throw buildHttpError(503, ai.reason || "Leitura automática de faturas indisponível.", "INVOICE_AI_NOT_CONFIGURED");
+    }
+    const track = (status, extra = {}) => {
+      if (!aiConfig) return;
+      const { logRequest } = require("./ai/usageService");
+      logRequest({
+        userId,
+        feature: "invoice_scan",
+        provider: "gemini",
+        categories: ["documents"],
+        projectIds: [],
+        status,
+        io,
+        ...extra,
       });
-      const payloadText = await response.text();
-      result = { response, payloadText, model };
+    };
+    if (!buffer || !buffer.length) {
+      throw buildHttpError(400, "Nenhum ficheiro recebido para leitura.", "NO_FILE_UPLOADED");
+    }
+    if (buffer.length > MAX_INLINE_BYTES) {
+      throw buildHttpError(
+        413,
+        `Ficheiro demasiado grande para leitura com IA (máx. ${Math.round(MAX_INLINE_BYTES / 1024 / 1024)}MB).`,
+        "FILE_TOO_LARGE"
+      );
+    }
+
+    const resolvedMime = normalizeMimeType(mimeType, fileName);
+    if (!resolvedMime) {
+      throw buildHttpError(
+        415,
+        "Formato não suportado. Carregue a fatura em PDF, JPG, PNG ou WEBP.",
+        "UNSUPPORTED_FILE_TYPE"
+      );
+    }
+
+    let response;
+    let payloadText;
+    let model = ai.model;
+    try {
+      const result = await callGemini({
+        mimeType: resolvedMime,
+        base64Data: buffer.toString("base64"),
+        projects,
+        costCenters,
+        ai,
+      });
+      response = result.response;
+      payloadText = result.payloadText;
+      model = result.model;
     } catch (error) {
-      // Sem resposta a tempo: passa ao modelo seguinte (no último, o erro sobe).
-      if (error?.name !== "AbortError" || last) throw error;
-      continue;
-    } finally {
-      clearTimeout(timer);
+      track("ERROR", { model, errorMessage: error?.message });
+      if (error?.name === "AbortError") {
+        throw buildHttpError(
+          504,
+          "A leitura da fatura excedeu o tempo limite. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
+          "AI_TIMEOUT"
+        );
+      }
+      console.error("Gemini invoice scan failed:", error);
+      throw buildHttpError(
+        503,
+        "Não foi possível contactar o serviço de leitura de faturas. Verifique a ligação à internet e tente novamente.",
+        "AI_UNAVAILABLE"
+      );
     }
 
-    // 503 usually means temporary model capacity pressure. Try the next
-    // supported Flash model while preserving the same structured JSON schema.
-    if (result.response.status !== 503 || last) break;
-    await new Promise((resolve) => setTimeout(resolve, 800 * (index + 1)));
-  }
-  if (!result) {
-    const err = new Error("Sem resposta dos modelos de IA dentro do tempo limite.");
-    err.name = "AbortError";
-    throw err;
-  }
-  return result;
-}
+    let payload;
+    try {
+      payload = payloadText ? JSON.parse(payloadText) : null;
+    } catch {
+      payload = null;
+    }
 
-function buildHttpError(status, message, code) {
-  const err = new Error(message);
-  err.status = status;
-  err.code = code;
-  return err;
-}
+    if (!response.ok) {
+      const apiMessage = payload?.error?.message || "";
+      track("ERROR", { model, errorMessage: `HTTP ${response.status} ${apiMessage}`.trim() });
+      if (response.status === 400 && /API key not valid/i.test(apiMessage)) {
+        throw buildHttpError(
+          503,
+          "A chave do Gemini configurada não é válida. Atualize-a na Gestão do Sistema → Inteligência Artificial (ou GEMINI_API_KEY no .env).",
+          "AI_INVALID_KEY"
+        );
+      }
+      if (response.status === 403) {
+        throw buildHttpError(
+          503,
+          "A chave do Gemini não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
+          "AI_FORBIDDEN"
+        );
+      }
+      if (response.status === 404) {
+        throw buildHttpError(
+          503,
+          `O modelo de IA configurado (${ai.model}) não está disponível. Ajuste o modelo na Gestão do Sistema → Inteligência Artificial.`,
+          "AI_MODEL_NOT_FOUND"
+        );
+      }
+      if (response.status === 429) {
+        throw buildHttpError(
+          429,
+          "O serviço de leitura de faturas está ocupado. Aguarde alguns segundos e tente novamente.",
+          "AI_RATE_LIMITED"
+        );
+      }
+      console.error("Gemini invoice scan HTTP", response.status, apiMessage || payloadText.slice(0, 400));
+      if (response.status === 503) {
+        throw buildHttpError(
+          503,
+          "Os modelos Gemini estão temporariamente sobrecarregados. Foram tentados modelos alternativos; aguarde um pouco e tente novamente.",
+          "AI_TEMPORARILY_BUSY"
+        );
+      }
+      throw buildHttpError(
+        502,
+        response.status === 400
+          ? `O Gemini rejeitou a configuração da leitura (HTTP 400): ${apiMessage || "pedido inválido"}`
+          : `Falha na leitura da fatura (HTTP ${response.status}). Tente novamente.`,
+        "AI_REQUEST_FAILED"
+      );
+    }
 
-/**
- * Lê um documento (PDF/imagem) e devolve os campos normalizados da fatura.
- *
- * `aiConfig` vem de `resolveInvoiceAiConfig()` (Gestão do Sistema → IA). Sem ele
- * usa só o .env, como antes. Com `aiConfig`, o pedido fica registado no consumo.
- *
- * @param {{ buffer: Buffer, mimeType: string, fileName?: string, projects?: Array, costCenters?: Array,
- *           aiConfig?: object, userId?: string, io?: object }} input
- */
-async function readInvoiceDocument({ buffer, mimeType, fileName, projects = [], costCenters = [], aiConfig, userId, io }) {
-  const ai = aiConfig || envAiConfig();
-  // Obras excluídas na Gestão do Sistema não vão na lista enviada à IA.
-  if (Array.isArray(ai.excludedProjectIds) && ai.excludedProjectIds.length) {
-    const excluded = new Set(ai.excludedProjectIds);
-    projects = projects.filter((p) => !excluded.has(p.id));
-  }
-  if (!ai.available) {
-    throw buildHttpError(503, ai.reason || "Leitura automática de faturas indisponível.", "INVOICE_AI_NOT_CONFIGURED");
-  }
-  const track = (status, extra = {}) => {
-    if (!aiConfig) return;
-    const { logRequest } = require("./ai/usageService");
-    logRequest({
-      userId,
-      feature: "invoice_scan",
-      provider: "gemini",
-      categories: ["documents"],
-      projectIds: [],
-      status,
-      io,
-      ...extra,
+    const candidate = payload?.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    const usage = payload?.usageMetadata || {};
+    track("OK", {
+      model,
+      usage: {
+        inputTokens: usage.promptTokenCount ?? null,
+        outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0) || null,
+      },
     });
-  };
-  if (!buffer || !buffer.length) {
-    throw buildHttpError(400, "Nenhum ficheiro recebido para leitura.", "NO_FILE_UPLOADED");
-  }
-  if (buffer.length > MAX_INLINE_BYTES) {
-    throw buildHttpError(
-      413,
-      `Ficheiro demasiado grande para leitura com IA (máx. ${Math.round(MAX_INLINE_BYTES / 1024 / 1024)}MB).`,
-      "FILE_TOO_LARGE"
-    );
-  }
-
-  const resolvedMime = normalizeMimeType(mimeType, fileName);
-  if (!resolvedMime) {
-    throw buildHttpError(
-      415,
-      "Formato não suportado. Carregue a fatura em PDF, JPG, PNG ou WEBP.",
-      "UNSUPPORTED_FILE_TYPE"
-    );
-  }
-
-  let response;
-  let payloadText;
-  let model = ai.model;
-  try {
-    const result = await callGemini({
-      mimeType: resolvedMime,
-      base64Data: buffer.toString("base64"),
-      projects,
-      costCenters,
-      ai,
-    });
-    response = result.response;
-    payloadText = result.payloadText;
-    model = result.model;
-  } catch (error) {
-    track("ERROR", { model, errorMessage: error?.message });
-    if (error?.name === "AbortError") {
-      throw buildHttpError(
-        504,
-        "A leitura da fatura excedeu o tempo limite. Tente novamente com uma imagem mais pequena ou uma digitalização mais leve.",
-        "AI_TIMEOUT"
-      );
+    const text = (candidate?.content?.parts || []).map((p) => p.text || "").filter(Boolean).join("");
+    let parsed = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = extractJsonBlock(text);
     }
-    console.error("Gemini invoice scan failed:", error);
-    throw buildHttpError(
-      503,
-      "Não foi possível contactar o serviço de leitura de faturas. Verifique a ligação à internet e tente novamente.",
-      "AI_UNAVAILABLE"
-    );
-  }
-
-  let payload;
-  try {
-    payload = payloadText ? JSON.parse(payloadText) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const apiMessage = payload?.error?.message || "";
-    track("ERROR", { model, errorMessage: `HTTP ${response.status} ${apiMessage}`.trim() });
-    if (response.status === 400 && /API key not valid/i.test(apiMessage)) {
-      throw buildHttpError(
-        503,
-        "A chave do Gemini configurada não é válida. Atualize-a na Gestão do Sistema → Inteligência Artificial (ou GEMINI_API_KEY no .env).",
-        "AI_INVALID_KEY"
-      );
-    }
-    if (response.status === 403) {
-      throw buildHttpError(
-        503,
-        "A chave do Gemini não tem permissão para este modelo. Confirme o acesso no Google AI Studio.",
-        "AI_FORBIDDEN"
-      );
-    }
-    if (response.status === 404) {
-      throw buildHttpError(
-        503,
-        `O modelo de IA configurado (${ai.model}) não está disponível. Ajuste o modelo na Gestão do Sistema → Inteligência Artificial.`,
-        "AI_MODEL_NOT_FOUND"
-      );
-    }
-    if (response.status === 429) {
-      throw buildHttpError(
-        429,
-        "O serviço de leitura de faturas está ocupado. Aguarde alguns segundos e tente novamente.",
-        "AI_RATE_LIMITED"
-      );
-    }
-    console.error("Gemini invoice scan HTTP", response.status, apiMessage || payloadText.slice(0, 400));
-    if (response.status === 503) {
-      throw buildHttpError(
-        503,
-        "Os modelos Gemini estão temporariamente sobrecarregados. Foram tentados modelos alternativos; aguarde um pouco e tente novamente.",
-        "AI_TEMPORARILY_BUSY"
-      );
-    }
-    throw buildHttpError(
-      502,
-      response.status === 400
-        ? `O Gemini rejeitou a configuração da leitura (HTTP 400): ${apiMessage || "pedido inválido"}`
-        : `Falha na leitura da fatura (HTTP ${response.status}). Tente novamente.`,
-      "AI_REQUEST_FAILED"
-    );
-  }
-
-  const candidate = payload?.candidates?.[0];
-  const finishReason = candidate?.finishReason;
-  const usage = payload?.usageMetadata || {};
-  track("OK", {
-    model,
-    usage: {
-      inputTokens: usage.promptTokenCount ?? null,
-      outputTokens: (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0) || null,
-    },
-  });
-  const text = (candidate?.content?.parts || []).map((p) => p.text || "").filter(Boolean).join("");
-  let parsed = null;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = extractJsonBlock(text);
-  }
-  if (!parsed) {
-    if (finishReason === "SAFETY" || finishReason === "PROHIBITED_CONTENT") {
+    if (!parsed) {
+      if (finishReason === "SAFETY" || finishReason === "PROHIBITED_CONTENT") {
+        throw buildHttpError(
+          422,
+          "O documento foi bloqueado pelo filtro de segurança da IA. Introduza os dados manualmente.",
+          "AI_BLOCKED"
+        );
+      }
       throw buildHttpError(
         422,
-        "O documento foi bloqueado pelo filtro de segurança da IA. Introduza os dados manualmente.",
-        "AI_BLOCKED"
+        "A IA não conseguiu ler os dados da fatura. Tente uma digitalização de melhor qualidade ou introduza os valores manualmente.",
+        "AI_UNREADABLE"
       );
     }
-    throw buildHttpError(
-      422,
-      "A IA não conseguiu ler os dados da fatura. Tente uma digitalização de melhor qualidade ou introduza os valores manualmente.",
-      "AI_UNREADABLE"
+
+    const grossAmount = round2(parseNumberValue(parsed.grossAmount));
+    const discountAmount = round2(parseNumberValue(parsed.discountAmount));
+    const discountPercent = clampPercent(parsed.discountPercent);
+    const vatAmount = round2(parseNumberValue(parsed.vatAmount));
+    const vatPercent = clampPercent(parsed.vatPercent);
+    const withholdingAmount = round2(parseNumberValue(parsed.withholdingAmount));
+    const withholdingPercent = clampPercent(parsed.withholdingPercent);
+    const vatCativoAmount = round2(parseNumberValue(parsed.vatCativoAmount));
+    const vatCativoPercent = clampPercent(parsed.vatCativoPercent);
+    const carInsuranceAmount = round2(parseNumberValue(parsed.carInsuranceAmount));
+    const guaranteeAmount = round2(parseNumberValue(parsed.guaranteeAmount));
+    const netAmount = round2(parseNumberValue(parsed.netAmount));
+
+    const docDate = parseDateValue(parsed.docDate);
+    const dueDate = parseDateValue(parsed.dueDate);
+
+    const suggestedProject = matchProject(projects, parsed.projectHint);
+    const description = cleanText(parsed.description, 400);
+    const supplierName = cleanText(parsed.supplierName, 120);
+    const suggestedCategory = inferCostCategoryFromText(
+      parsed.suggestedCategory || description || "",
+      "MATERIAIS_INSUMOS"
     );
+    const categoryMeta =
+      INVOICE_CATEGORY_META[suggestedCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
+
+    const items = normalizeInvoiceItems(parsed.items, {
+      grossAmount,
+      netAmount,
+      vatPercent,
+      discountPercent,
+      description,
+      supplierName,
+      suggestedCategory,
+    });
+
+    return {
+      documentType: cleanText(parsed.documentType, 40) || "OUTRO",
+      docNumber: cleanText(parsed.docNumber, 60),
+      docDate: dateToKey(docDate),
+      dueDate: dateToKey(dueDate),
+      grossAmount,
+      discountAmount,
+      discountPercent,
+      vatAmount,
+      vatPercent,
+      withholdingAmount,
+      withholdingPercent,
+      vatCativoAmount,
+      vatCativoPercent,
+      carInsuranceAmount,
+      guaranteeAmount,
+      netAmount,
+      currency: cleanText(parsed.currency, 8) || "AOA",
+      supplierName,
+      supplierNif: cleanText(parsed.supplierNif, 30),
+      supplierPhone: cleanText(parsed.supplierPhone, 40),
+      supplierEmail: cleanText(parsed.supplierEmail, 120),
+      supplierIban: cleanText(parsed.supplierIban, 50),
+      clientName: cleanText(parsed.clientName, 120),
+      clientNif: cleanText(parsed.clientNif, 30),
+      projectHint: cleanText(parsed.projectHint, 120),
+      suggestedProjectId: suggestedProject?.id || null,
+      suggestedProjectLabel: suggestedProject ? `${suggestedProject.code || ""} — ${suggestedProject.name}`.trim() : null,
+      suggestedCategory: categoryMeta.key,
+      suggestedCategoryCode: categoryMeta.code,
+      suggestedCategoryName: categoryMeta.name,
+      description,
+      notes: cleanText(translateInvoiceNote(parsed.notes), 800),
+      confidence: normalizeConfidence(parsed.confidence),
+      items,
+      model,
+      raw: parsed,
+    };
   }
 
-  const grossAmount = round2(parseNumberValue(parsed.grossAmount));
-  const discountAmount = round2(parseNumberValue(parsed.discountAmount));
-  const discountPercent = clampPercent(parsed.discountPercent);
-  const vatAmount = round2(parseNumberValue(parsed.vatAmount));
-  const vatPercent = clampPercent(parsed.vatPercent);
-  const withholdingAmount = round2(parseNumberValue(parsed.withholdingAmount));
-  const withholdingPercent = clampPercent(parsed.withholdingPercent);
-  const vatCativoAmount = round2(parseNumberValue(parsed.vatCativoAmount));
-  const vatCativoPercent = clampPercent(parsed.vatCativoPercent);
-  const carInsuranceAmount = round2(parseNumberValue(parsed.carInsuranceAmount));
-  const guaranteeAmount = round2(parseNumberValue(parsed.guaranteeAmount));
-  const netAmount = round2(parseNumberValue(parsed.netAmount));
-
-  const docDate = parseDateValue(parsed.docDate);
-  const dueDate = parseDateValue(parsed.dueDate);
-
-  const suggestedProject = matchProject(projects, parsed.projectHint);
-  const description = cleanText(parsed.description, 400);
-  const supplierName = cleanText(parsed.supplierName, 120);
-  const suggestedCategory = inferCostCategoryFromText(
-    parsed.suggestedCategory || description || "",
-    "MATERIAIS_INSUMOS"
-  );
-  const categoryMeta =
-    INVOICE_CATEGORY_META[suggestedCategory] || INVOICE_CATEGORY_META.MATERIAIS_INSUMOS;
-
-  const items = normalizeInvoiceItems(parsed.items, {
-    grossAmount,
-    netAmount,
-    vatPercent,
-    discountPercent,
-    description,
-    supplierName,
-    suggestedCategory,
-  });
-
-  return {
-    documentType: cleanText(parsed.documentType, 40) || "OUTRO",
-    docNumber: cleanText(parsed.docNumber, 60),
-    docDate: dateToKey(docDate),
-    dueDate: dateToKey(dueDate),
-    grossAmount,
-    discountAmount,
-    discountPercent,
-    vatAmount,
-    vatPercent,
-    withholdingAmount,
-    withholdingPercent,
-    vatCativoAmount,
-    vatCativoPercent,
-    carInsuranceAmount,
-    guaranteeAmount,
-    netAmount,
-    currency: cleanText(parsed.currency, 8) || "AOA",
-    supplierName,
-    supplierNif: cleanText(parsed.supplierNif, 30),
-    supplierPhone: cleanText(parsed.supplierPhone, 40),
-    supplierEmail: cleanText(parsed.supplierEmail, 120),
-    supplierIban: cleanText(parsed.supplierIban, 50),
-    clientName: cleanText(parsed.clientName, 120),
-    clientNif: cleanText(parsed.clientNif, 30),
-    projectHint: cleanText(parsed.projectHint, 120),
-    suggestedProjectId: suggestedProject?.id || null,
-    suggestedProjectLabel: suggestedProject ? `${suggestedProject.code || ""} — ${suggestedProject.name}`.trim() : null,
-    suggestedCategory: categoryMeta.key,
-    suggestedCategoryCode: categoryMeta.code,
-    suggestedCategoryName: categoryMeta.name,
-    description,
-    notes: cleanText(translateInvoiceNote(parsed.notes), 800),
-    confidence: normalizeConfidence(parsed.confidence),
-    items,
-    model,
-    raw: parsed,
+  module.exports = {
+    isConfigured,
+    readInvoiceDocument,
+    normalizeMimeType,
+    parseDateValue,
+    parseNumberValue,
+    matchProject,
+    inferCostCategoryFromText,
+    INVOICE_CATEGORY_META,
+    CATEGORY_ENUM,
+    SUPPORTED_MIME_TYPES,
+    MAX_INLINE_BYTES,
   };
-}
-
-module.exports = {
-  isConfigured,
-  readInvoiceDocument,
-  normalizeMimeType,
-  parseDateValue,
-  parseNumberValue,
-  matchProject,
-  inferCostCategoryFromText,
-  INVOICE_CATEGORY_META,
-  CATEGORY_ENUM,
-  SUPPORTED_MIME_TYPES,
-  MAX_INLINE_BYTES,
-};
