@@ -91,12 +91,7 @@ const APP_MENU = [
           { code: "T7", label: "Fundo de Maneio", icon: "savings", href: "/Financeiro/tesouraria/fundo-maneio", perm: "financeiro:view", pending: true },
         ],
       },
-<<<<<<< HEAD
-=======
       { label: "Compras e Pedidos", icon: "shopping_cart", selector: "[data-nav-centros]", href: "/Financeiro/centroDeCompras" },
-      { label: "Centro de Pagamentos", icon: "account_balance", href: "/Financeiro/centro-pagamentos", perm: "financeiro:view" },
-      { label: "Controlo Financeiro", icon: "query_stats", href: "/Financeiro/controlo", perm: "financeiro:view" },
->>>>>>> origin/dev
     ],
   },
 ];
