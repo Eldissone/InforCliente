@@ -2844,11 +2844,21 @@ window.triggerOrcamentoCustoAction = function (action, category = "") {
   }
 };
 
-window.addEventListener("message", (event) => {
-  const data = event?.data;
+function onOrcamentoCustoUpdated(data) {
   if (!data || data.type !== "orcamento-custo-updated") return;
   loadOrcamentoCusto();
   if (typeof window.refreshProjectBudgetFromCusto === "function") {
     window.refreshProjectBudgetFromCusto();
   }
+}
+
+window.addEventListener("message", (event) => onOrcamentoCustoUpdated(event?.data));
+
+// Cotação corre noutro separador: window.postMessage não chega lá, por isso
+// usa-se BroadcastChannel (e recarrega ao voltar ao separador, como reserva).
+try {
+  new BroadcastChannel("orcamento-custo").onmessage = (e) => onOrcamentoCustoUpdated(e.data);
+} catch {}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") loadOrcamentoCusto();
 });

@@ -9,11 +9,6 @@ import {
 } from "/shared/supplierFiscal.js";
 import { initExtraRequestModal, wireExtraRequestButton } from "/shared/extraRequestModal.js";
 import {
-  generatePurchaseOrderPdf,
-  downloadPurchaseOrderPdf,
-  uploadBundlePurchaseOrderPdf,
-} from "/shared/quotePurchaseOrder.js";
-import {
   bindNifLookup,
   normalizeNif,
   setNifLookupStatus,
@@ -214,13 +209,8 @@ function initEvents() {
   document.getElementById("btnCloseBatchQuote")?.addEventListener("click", () => {
     document.getElementById("modalBatchQuote")?.classList.remove("open");
   });
-  document.getElementById("btnSaveBatchQuote")?.addEventListener("click", () => submitBatchQuote(false));
-  document.getElementById("btnSaveAndOrderBatch")?.addEventListener("click", () => submitBatchQuote(true));
+  document.getElementById("btnSaveBatchQuote")?.addEventListener("click", submitBatchQuote);
   document.getElementById("batchQuoteSupplier")?.addEventListener("change", refreshBatchFiscalTotals);
-  document.getElementById("btnViewSupplierOrders")?.addEventListener("click", openSupplierOrdersModal);
-  document.getElementById("btnCloseSupplierOrders")?.addEventListener("click", () => {
-    document.getElementById("modalSupplierOrders")?.classList.remove("open");
-  });
   document.getElementById("btnCloseBundleProforma")?.addEventListener("click", () => {
     document.getElementById("modalBundleProforma")?.classList.remove("open");
     pendingBundleProforma = null;
@@ -753,7 +743,7 @@ function refreshBatchFiscalTotals() {
   `;
 }
 
-async function submitBatchQuote(placeOrder) {
+async function submitBatchQuote() {
   const supplierId = document.getElementById("batchQuoteSupplier")?.value;
   if (!supplierId) {
     showToast("Seleccione o fornecedor", "error");
@@ -785,7 +775,7 @@ async function submitBatchQuote(placeOrder) {
       supplierId,
       projectId: isGeralScope() ? null : currentProjectId,
       notes: document.getElementById("batchQuoteNotes")?.value?.trim() || null,
-      placeOrder,
+      placeOrder: false,
       items,
     })
   );
@@ -793,100 +783,15 @@ async function submitBatchQuote(placeOrder) {
   if (file) fd.append("proforma", file);
 
   try {
-    const order = await apiUpload("/quotes/bundle", fd, "POST");
+    await apiUpload("/quotes/bundle", fd, "POST");
     document.getElementById("modalBatchQuote")?.classList.remove("open");
-    if (placeOrder && order?.orderNumber != null) {
-      const supplier = currentSuppliers.find((s) => s.id === supplierId) || order.supplier;
-      const quotes = (order.quotes || []).map((q) => ({ quote: q, need: q.need }));
-      const { doc, orderNo, documentId, issuedAt, issuedBy } = await generatePurchaseOrderPdf({
-        quote: order.quotes?.[0],
-        need: order.quotes?.[0]?.need,
-        supplier,
-        project: order.project,
-        quotes,
-      });
-      downloadPurchaseOrderPdf(doc, orderNo);
-      try {
-        await uploadBundlePurchaseOrderPdf(order.id, doc, orderNo, { documentId, issuedAt, issuedBy });
-      } catch (err) {
-        console.warn("Upload da encomenda falhou:", err);
-      }
-      showToast(`Encomenda ${orderNo} gerada com ${items.length} itens`, "success");
-    } else {
-      showToast(`Cotação conjunta guardada (${items.length} itens)`, "success");
-    }
+    showToast(`Cotação conjunta guardada (${items.length} itens)`, "success");
     await loadNeeds();
   } catch (err) {
     showToast(err?.data?.message || err.message || "Erro ao guardar o lote", "error");
   }
 }
 
-async function openSupplierOrdersModal() {
-  const list = document.getElementById("supplierOrdersList");
-  if (!list) return;
-  list.innerHTML = `<p class="text-sm text-slate-400">A carregar...</p>`;
-  document.getElementById("modalSupplierOrders")?.classList.add("open");
-  try {
-    const qs = isGeralScope()
-      ? "/quotes/supplier-orders?geral=1"
-      : `/quotes/supplier-orders?projectId=${encodeURIComponent(currentProjectId)}`;
-    const data = await apiRequest(qs);
-    const items = data.items || [];
-    if (!items.length) {
-      list.innerHTML = `<p class="text-sm text-slate-400">Ainda não há encomendas agrupadas neste âmbito.</p>`;
-      return;
-    }
-    list.innerHTML = items
-      .map((o) => {
-        const ref = o.orderNumber != null ? `EF${String(o.orderNumber).padStart(3, "0")}` : "Rascunho";
-        const lines = (o.quotes || [])
-          .map((q) => `<li>${escapeHtml(q.need?.description || "Item")} · ${q.quantity || "—"} × ${Number(q.quotedPrice || 0).toLocaleString("pt-PT")}</li>`)
-          .join("");
-        const pdf = o.purchaseOrderUrl
-          ? `<a href="${o.purchaseOrderUrl}" target="_blank" class="text-xs font-bold text-indigo-600 underline">PDF encomenda</a>`
-          : "";
-        const proformaUrl = o.proformaUrl || (o.quotes || []).find((q) => q.proformaUrl)?.proformaUrl;
-        const proformaAction = proformaUrl
-          ? `<button type="button" class="text-xs font-bold text-emerald-700 underline" data-view-order-proforma="${getAssetUrl(proformaUrl)}">Ver proforma</button>`
-          : `<button type="button" class="h-8 px-3 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-bold" data-order-proforma="${o.id}">Proforma</button>`;
-        return `<div class="rounded-xl border border-slate-200 p-4">
-          <div class="flex justify-between gap-3 items-start">
-            <div>
-              <p class="text-sm font-black text-slate-900">${escapeHtml(ref)} · ${escapeHtml(o.supplier?.name || "Fornecedor")}</p>
-              <p class="text-[11px] text-slate-500 mt-0.5">${o.status === "ORDERED" ? "Encomendado" : "Cotação conjunta"} · ${new Date(o.createdAt).toLocaleDateString("pt-PT")} · ${(o.quotes || []).length} item(ns)</p>
-            </div>
-            <div class="flex flex-col items-end gap-2">${pdf}${proformaAction}</div>
-          </div>
-          <ul class="mt-2 text-xs text-slate-700 list-disc pl-4 space-y-0.5">${lines}</ul>
-        </div>`;
-      })
-      .join("");
-    list.querySelectorAll("[data-view-order-proforma]").forEach((btn) => {
-      btn.addEventListener("click", () => window.openProformaViewer(btn.dataset.viewOrderProforma));
-    });
-    list.querySelectorAll("[data-order-proforma]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const order = items.find((o) => o.id === btn.dataset.orderProforma);
-        if (!order) return;
-        document.getElementById("modalSupplierOrders")?.classList.remove("open");
-        openBundleProformaModal({
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          supplierName: order.supplier?.name || "Fornecedor",
-          quoteId: order.quotes?.[0]?.id || null,
-          proformaUrl: order.proformaUrl || null,
-          items: (order.quotes || []).map((q) => ({
-            description: q.need?.description || "Item",
-            quantity: q.quantity,
-            unit: q.need?.unit,
-          })),
-        });
-      });
-    });
-  } catch (err) {
-    list.innerHTML = `<p class="text-sm text-red-500">${escapeHtml(err.message)}</p>`;
-  }
-}
 
 // ==========================================
 // FORNECEDORES
@@ -1610,7 +1515,15 @@ function updateQuoteSupplierSelect() {
 async function openQuoteModal(needId) {
   const need = currentNeeds.find((n) => n.id === needId);
   if (!need) return;
-  window.onQuoteApproved = async () => { await loadNeeds(); };
+  window.onQuoteApproved = async () => {
+    await loadNeeds();
+    // Avisa o Orçamento de Custo (outro separador) para recarregar os preços.
+    try {
+      const ch = new BroadcastChannel("orcamento-custo");
+      ch.postMessage({ type: "orcamento-custo-updated", projectId: currentProjectId });
+      ch.close();
+    } catch {}
+  };
   window.showQuoteToast = showToast;
   await openQuotePricingModal({
     need,

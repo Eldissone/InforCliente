@@ -557,6 +557,7 @@ projectRoutes.get(
       prisma.costCenter.findMany({ where: { projectId: id } }),
       prisma.workNeed.findMany({
         where: { projectId: id, status: { not: "REJECTED" } },
+        include: { _count: { select: { quotes: true } } },
       }),
       prisma.costPayment.findMany({
         where: { projectId: id, status: { not: "CANCELADO" } },

@@ -383,29 +383,3 @@ export async function generatePurchaseOrderPdf({ quote, need, supplier, project,
   const fileOrderNo = orderNo.replace("/", "-");
   return { doc, orderNo: fileOrderNo, documentId, issuedAt: issuedAt.toISOString(), issuedBy: issuer?.name || issuer?.email || null };
 }
-
-export async function uploadPurchaseOrderPdf(quoteId, doc, orderNo, meta = {}) {
-  const blob = doc.output("blob");
-  const form = new FormData();
-  form.append("file", blob, `${orderNo}.pdf`);
-  if (meta.documentId) form.append("documentId", meta.documentId);
-  if (meta.issuedBy) form.append("issuedBy", meta.issuedBy);
-  if (meta.issuedAt) form.append("issuedAt", meta.issuedAt);
-  const res = await apiUpload(`/quotes/${quoteId}/purchase-order`, form, "POST");
-  return res?.purchaseOrderUrl || null;
-}
-
-export async function uploadBundlePurchaseOrderPdf(orderId, doc, orderNo, meta = {}) {
-  const blob = doc.output("blob");
-  const form = new FormData();
-  form.append("file", blob, `${orderNo}.pdf`);
-  if (meta.documentId) form.append("documentId", meta.documentId);
-  if (meta.issuedBy) form.append("issuedBy", meta.issuedBy);
-  if (meta.issuedAt) form.append("issuedAt", meta.issuedAt);
-  const res = await apiUpload(`/quotes/supplier-orders/${orderId}/purchase-order`, form, "POST");
-  return res?.purchaseOrderUrl || null;
-}
-
-export function downloadPurchaseOrderPdf(doc, orderNo) {
-  doc.save(`${orderNo}.pdf`);
-}

@@ -337,7 +337,7 @@ async function ask(question) {
  * Abre o painel. Mudar de obra começa uma conversa nova.
  * @param {{projectId?: string, projectLabel?: string}} [opts]
  */
-export function openAssistant({ projectId = null, projectLabel = "" } = {}) {
+export function openAssistant({ projectId = null, projectLabel = "", question = "" } = {}) {
   ensurePanel();
   if (projectId !== state.projectId) {
     state.conversationId = null;
@@ -352,9 +352,17 @@ export function openAssistant({ projectId = null, projectLabel = "" } = {}) {
   // Reavalia sempre que estava desligado (o administrador pode tê-lo ligado entretanto).
   if (!state.status?.enabled) {
     state.status = null;
-    loadStatus();
-  }
+    const loading = loadStatus();
+    if (question) loading.then(() => askOrPrefill(question));
+  } else if (question) askOrPrefill(question);
   focusInput();
+}
+
+/** Pergunta vinda da paleta de comandos: envia se o assistente estiver ligado, senão deixa escrita. */
+function askOrPrefill(question) {
+  if (state.status?.enabled) return ask(question);
+  const input = panelEl?.querySelector("[data-aia-input]");
+  if (input) input.value = question;
 }
 
 export function closeAssistant() {

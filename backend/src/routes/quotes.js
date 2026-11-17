@@ -16,8 +16,6 @@ const {
 const { ensureQuotationNeedsForProject, ensureQuotationNeedsForGeral, isPedidoSourcedNeed, QUOTE_NEED_INCLUDE } = require("../services/quotationNeedService");
 const {
   createOrUpdateBundle,
-  placeSupplierOrder,
-  attachSingleQuoteToOrder,
   applyProformaUrlToOrder,
   serializeSupplierOrder,
   ORDER_INCLUDE,
@@ -34,13 +32,9 @@ const {
   computeQuoteAllocation,
   validateQuoteQuantity,
   syncNeedFromSelectedQuotes,
-  syncNeedOrderStatus,
 } = require("../services/quoteAllocationService");
 const { syncPurchaseRequisitionFromNeed } = require("../services/purchaseQuoteBridge");
-const {
-  fetchDeliveryFieldsByQuoteIds,
-  setQuoteDeliveryPending,
-} = require("../services/deliveryFieldBridge");
+const { fetchDeliveryFieldsByQuoteIds } = require("../services/deliveryFieldBridge");
 const { syncNeedReceptionToOrderedQuotes } = require("../services/receptionPlanService");
 const { normalizeDateOnly } = require("../utils/dateOnly");
 const { readInvoiceDocument } = require("../services/invoiceScanService");
@@ -162,6 +156,32 @@ const QUOTE_NEED_FOR_PROFORMA = {
   project: { select: { id: true, name: true, code: true, location: true, region: true } },
 };
 
+/** Avisa os aprovadores de que há análises à espera, uma notificação por obra. */
+function notifyNeedsInAnalysis(req, entries) {
+  const byProject = new Map();
+  for (const e of entries) {
+    const key = e.need.project?.id || e.need.projectId || "";
+    if (!byProject.has(key)) byProject.set(key, []);
+    byProject.get(key).push(e);
+  }
+  for (const [projectId, list] of byProject) {
+    const project = list[0].need.project;
+    const supplier = list[0].quote?.supplier?.name || "";
+    const total = list.reduce((s, e) => s + Number(e.quote?.totalValue || 0), 0);
+    const names = list.slice(0, 3).map((e) => e.need.description).join(", ") + (list.length > 3 ? ` e mais ${list.length - 3}` : "");
+    const params = new URLSearchParams({ tab: "plano_financeiro", sub: "cronograma", needId: list[0].need.id });
+    if (projectId) params.set("id", projectId);
+    fireApprovalRequested(req, {
+      kind: "NEED_ANALYSIS",
+      ids: list.map((e) => e.need.id),
+      projectId: projectId || null,
+      title: `${list.length > 1 ? `${list.length} análises` : "Análise"} para aprovar · ${project?.name || "Obra"}`,
+      body: [names, supplier, approvalMoney(total, list[0].quote?.currency || "AOA")].filter(Boolean).join(" · "),
+      link: projectId ? `/Projectos/projectView.html?${params}` : null,
+    });
+  }
+}
+
 async function applyProformaToQuoteGroup({ quote, proformaUrl, req }) {
   let quoteIds = [quote.id];
   let orderId = quote.supplierOrderId || null;
@@ -225,6 +245,16 @@ async function applyProformaToQuoteGroup({ quote, proformaUrl, req }) {
     needsById.set(groupQuote.needId, updatedNeed);
   }
 
+  const seenNeeds = new Set();
+  const newlyInAnalysis = [];
+  for (const q of groupQuotes) {
+    if (seenNeeds.has(q.needId)) continue;
+    seenNeeds.add(q.needId);
+    const after = needsById.get(q.needId);
+    if (q.need?.status !== "EM_ANALISE" && after?.status === "EM_ANALISE") newlyInAnalysis.push({ need: after, quote: q });
+  }
+  if (newlyInAnalysis.length) notifyNeedsInAnalysis(req, newlyInAnalysis);
+
   return {
     quotes: groupQuotes,
     needs: [...needsById.values()],
@@ -238,6 +268,7 @@ const fileUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
+const { fireApprovalRequested, money: approvalMoney } = require("../services/approvals/notify");
 const quoteRoutes = express.Router();
 quoteRoutes.use(authRequired);
 quoteRoutes.use(requireRole(["admin", "operador"]));
@@ -270,32 +301,6 @@ quoteRoutes.get(
       orderBy: { createdAt: "desc" },
     });
     res.json({ items });
-  })
-);
-
-quoteRoutes.get(
-  "/supplier-orders",
-  asyncHandler(async (req, res) => {
-    const projectId = req.query.projectId ? String(req.query.projectId) : null;
-    const geral = String(req.query.geral || "") === "1";
-    const items = await prisma.quoteSupplierOrder.findMany({
-      where: geral ? { projectId: null } : projectId ? { projectId } : {},
-      include: ORDER_INCLUDE,
-      orderBy: { createdAt: "desc" },
-    });
-    res.json({ items: items.map(serializeSupplierOrder) });
-  })
-);
-
-quoteRoutes.get(
-  "/supplier-orders/:id",
-  asyncHandler(async (req, res) => {
-    const order = await prisma.quoteSupplierOrder.findUnique({
-      where: { id: String(req.params.id) },
-      include: ORDER_INCLUDE,
-    });
-    if (!order) return res.status(404).json({ error: "ORDER_NOT_FOUND" });
-    res.json(serializeSupplierOrder(order));
   })
 );
 
@@ -340,8 +345,8 @@ quoteRoutes.post(
       proformaUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
     }
 
-    const placeOrder =
-      body.placeOrder === true || body.placeOrder === "true" || body.placeOrder === "1";
+    // Encomendas ao fornecedor foram descontinuadas: a cotação conjunta nunca gera EF.
+    const placeOrder = false;
 
     let order;
     try {
@@ -371,58 +376,6 @@ quoteRoutes.post(
     });
 
     res.status(201).json(serializeSupplierOrder(order));
-  })
-);
-
-quoteRoutes.patch(
-  "/supplier-orders/:id/place-order",
-  asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
-    const body = z
-      .object({
-        expectedReceiptDate: z.string().datetime().optional(),
-      })
-      .parse(req.body || {});
-    const order = await placeSupplierOrder(prisma, id, body);
-    await logQuoteAction(req, {
-      action: "quote_bundle_place_order",
-      details: { supplierOrderId: id, orderNumber: order.orderNumber },
-    });
-    res.json(serializeSupplierOrder(order));
-  })
-);
-
-quoteRoutes.post(
-  "/supplier-orders/:id/purchase-order",
-  fileUpload.single("file"),
-  asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
-    const order = await prisma.quoteSupplierOrder.findUnique({
-      where: { id },
-      include: { quotes: true },
-    });
-    if (!order) return res.status(404).json({ error: "ORDER_NOT_FOUND" });
-    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
-    const extension = path.extname(req.file.originalname).toLowerCase() || ".pdf";
-    const storagePath = `quotes/bundle/${id}/purchase-order-${Date.now()}${extension}`;
-    const purchaseOrderUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
-    const { documentId, issuedBy, issuedAt } = req.body || {};
-    await prisma.quoteSupplierOrder.update({
-      where: { id },
-      data: {
-        purchaseOrderUrl,
-        poDocumentId: documentId || null,
-        poIssuedBy: issuedBy || null,
-        poIssuedAt: issuedAt ? new Date(issuedAt) : null,
-      },
-    });
-    if (order.quotes.length) {
-      await prisma.needQuote.updateMany({
-        where: { id: { in: order.quotes.map((q) => q.id) } },
-        data: { purchaseOrderUrl },
-      });
-    }
-    res.json({ purchaseOrderUrl, documentId: documentId || null });
   })
 );
 
@@ -865,7 +818,7 @@ quoteRoutes.delete(
 );
 
 // Seleccionar cotação vencedora — apenas marca o fornecedor escolhido.
-// NÃO gera encomenda nem altera o estado do item (ver /:id/place-order).
+// NÃO gera encomenda nem altera o estado do item .
 quoteRoutes.patch(
   "/:id/select",
   asyncHandler(async (req, res) => {
@@ -1029,120 +982,6 @@ quoteRoutes.patch(
         quotedPrice: String(updatedQuote.quotedPrice),
         quantity: updatedQuote.quantity != null ? String(updatedQuote.quantity) : null,
         totalValue: updatedQuote.totalValue != null ? String(updatedQuote.totalValue) : null,
-      },
-    });
-  })
-);
-
-// Encomendar ao fornecedor seleccionado — só aqui o item passa a ORDERED
-// e é atribuído o número sequencial de encomenda (EF001, EF002, ...).
-quoteRoutes.patch(
-  "/:id/place-order",
-  asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
-    const body = z
-      .object({
-        expectedReceiptDate: z.string().datetime().optional(),
-        leadDays: z.coerce.number().int().min(1).max(365).optional(),
-      })
-      .parse(req.body || {});
-
-    const quote = await prisma.needQuote.findUnique({
-      where: { id },
-      include: {
-        supplier: { include: { bankAccounts: true } },
-        supplierProduct: true,
-        need: {
-          include: {
-            costCenter: { select: { name: true, code: true, currency: true } },
-            project: { select: { id: true, name: true, code: true, location: true, region: true } },
-          },
-        },
-      },
-    });
-    if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
-    if (!quote.selected) return res.status(400).json({ error: "QUOTE_NOT_SELECTED" });
-    if (quote.orderNumber != null) {
-      return res.status(400).json({ error: "QUOTE_ALREADY_ORDERED" });
-    }
-    if (["PAID", "APPROVED"].includes(quote.need.status)) {
-      return res.status(400).json({ error: "NEED_WORKFLOW_LOCKED" });
-    }
-    if (!["IN_QUOTATION", "EM_ANALISE", "ORDERED", "PENDING"].includes(quote.need.status)) {
-      return res.status(400).json({ error: "NEED_ALREADY_ORDERED" });
-    }
-
-    let orderNumber = quote.orderNumber;
-    if (!orderNumber) {
-      const seqResult = await prisma.$queryRawUnsafe(
-        `SELECT nextval('"NeedQuote_orderNumber_seq"') AS val`
-      );
-      orderNumber = Number(seqResult[0].val);
-    }
-
-    let expectedReceiptDate = quote.expectedReceiptDate;
-    if (body.expectedReceiptDate) {
-      expectedReceiptDate = normalizeDateOnly(body.expectedReceiptDate);
-    } else if (!expectedReceiptDate && quote.need?.siteReceptionPlannedAt) {
-      expectedReceiptDate = normalizeDateOnly(quote.need.siteReceptionPlannedAt);
-    } else if (!expectedReceiptDate) {
-      const leadDays = body.leadDays ?? 15;
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() + leadDays);
-      expectedReceiptDate = normalizeDateOnly(d);
-    }
-
-    const updatedQuote = await prisma.needQuote.update({
-      where: { id },
-      data: {
-        orderNumber,
-        expectedReceiptDate,
-      },
-      include: {
-        supplier: { include: { bankAccounts: true } },
-        supplierProduct: true,
-        need: {
-          include: {
-            costCenter: { select: { name: true, code: true, currency: true } },
-            project: { select: { id: true, name: true, code: true, location: true, region: true } },
-          },
-        },
-      },
-    });
-
-    await setQuoteDeliveryPending(id);
-
-    await syncNeedOrderStatus(prisma, quote.needId);
-
-    await attachSingleQuoteToOrder(prisma, updatedQuote);
-
-    const updatedNeed = await prisma.workNeed.findUnique({
-      where: { id: quote.needId },
-      include: {
-        costCenter: { select: { name: true, code: true, currency: true } },
-        project: { select: { id: true, name: true, code: true, location: true, region: true } },
-      },
-    });
-
-    await logQuoteAction(req, {
-      action: "quote_place_order",
-      needId: quote.needId,
-      quoteId: id,
-      details: { orderNumber, supplierId: updatedQuote.supplierId },
-    });
-
-    res.json({
-      ok: true,
-      quote: {
-        ...updatedQuote,
-        quotedPrice: String(updatedQuote.quotedPrice),
-        quantity: updatedQuote.quantity != null ? String(updatedQuote.quantity) : null,
-        totalValue: updatedQuote.totalValue != null ? String(updatedQuote.totalValue) : null,
-      },
-      need: {
-        ...updatedNeed,
-        quantity: updatedNeed.quantity != null ? String(updatedNeed.quantity) : null,
-        unitPrice: updatedNeed.unitPrice != null ? String(updatedNeed.unitPrice) : null,
       },
     });
   })
@@ -1467,43 +1306,6 @@ quoteRoutes.patch(
     });
 
     res.json({ ok: true, need: serializeNeed(updatedNeed) });
-  })
-);
-
-// Upload PDF de encomenda gerado após seleção
-quoteRoutes.post(
-  "/:id/purchase-order",
-  fileUpload.single("file"),
-  asyncHandler(async (req, res) => {
-    const id = String(req.params.id);
-    const quote = await prisma.needQuote.findUnique({ where: { id } });
-    if (!quote) return res.status(404).json({ error: "Cotação não encontrada" });
-    if (!req.file) return res.status(400).json({ error: "FILE_REQUIRED" });
-
-    const extension = path.extname(req.file.originalname).toLowerCase() || ".pdf";
-    const storagePath = `quotes/${quote.needId}/purchase-order-${Date.now()}${extension}`;
-    const purchaseOrderUrl = await uploadToSupabase(storagePath, req.file.buffer, req.file.mimetype);
-
-    const { documentId, issuedBy, issuedAt } = req.body || {};
-
-    await prisma.needQuote.update({
-      where: { id },
-      data: {
-        purchaseOrderUrl,
-        poDocumentId: documentId || null,
-        poIssuedBy: issuedBy || null,
-        poIssuedAt: issuedAt ? new Date(issuedAt) : null,
-      },
-    });
-
-    await logQuoteAction(req, {
-      action: "quote_purchase_order_pdf",
-      needId: quote.needId,
-      quoteId: id,
-      details: { purchaseOrderUrl, documentId: documentId || null, issuedBy: issuedBy || null },
-    });
-
-    res.json({ purchaseOrderUrl, documentId: documentId || null });
   })
 );
 

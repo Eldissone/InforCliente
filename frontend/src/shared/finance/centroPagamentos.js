@@ -456,7 +456,7 @@ async function decideReinforcement(request, approve) {
       onPrimary: async ({ btn, close }) => {
         setButtonLoading(btn, true);
         try {
-          await apiRequest(`/petty-cash/reinforcement-requests/${encodeURIComponent(request.id)}/approve`, { method: "POST" });
+          await apiRequest(`/petty-cash/reinforcement-requests/${encodeURIComponent(request.id)}/approve`, { method: "PATCH" });
           toast("Reforço aprovado e creditado no fundo.", { type: "success" });
           close();
           await load();
@@ -483,7 +483,7 @@ async function decideReinforcement(request, approve) {
       if (!reason) return toast("Indique o motivo da rejeição.", { type: "error" });
       setButtonLoading(btn, true);
       try {
-        await apiRequest(`/petty-cash/reinforcement-requests/${encodeURIComponent(request.id)}/reject`, { method: "POST", body: { reason } });
+        await apiRequest(`/petty-cash/reinforcement-requests/${encodeURIComponent(request.id)}/reject`, { method: "PATCH", body: { reason } });
         toast("Reforço rejeitado.", { type: "success" });
         close();
         await load();

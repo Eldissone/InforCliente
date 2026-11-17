@@ -2,17 +2,7 @@ import { apiUpload, getAssetUrl } from "../services/api.js";
 import { dateInputToUtcNoonIso, toDateKey } from "./format.js";
 import { renderQuotePriceTotalsHtml } from "./supplierFiscal.js";
 
-import {
-
-  downloadPurchaseOrderPdf,
-
-  fetchCatalogSuggestions,
-
-  generatePurchaseOrderPdf,
-
-  uploadPurchaseOrderPdf,
-
-} from "./quotePurchaseOrder.js";
+import { fetchCatalogSuggestions } from "./quotePurchaseOrder.js";
 
 
 
@@ -142,34 +132,10 @@ function wireQuoteSiteReception({ need, apiRequest, showToast }) {
   }
 }
 
-function canPlaceOrderOnQuote(need, quote) {
-  if (!quote?.selected || quote.orderNumber != null) return false;
-  if (["PAID", "APPROVED"].includes(need?.status)) return false;
-  return ["IN_QUOTATION", "EM_ANALISE", "ORDERED", "PENDING"].includes(need?.status);
-}
-
 function formatOrderRef(orderNumber) {
   const n = Number(orderNumber);
   if (!Number.isFinite(n)) return "—";
   return `EF${String(n).padStart(3, "0")}`;
-}
-
-function renderBundleOrderNotice(quote) {
-  document.getElementById("quoteBundleNotice")?.remove();
-  const lines = quote?.supplierOrder?.quotes || [];
-  if (lines.length < 2) return;
-  const host = document.getElementById("quoteItemDesc");
-  if (!host) return;
-  const el = document.createElement("div");
-  el.id = "quoteBundleNotice";
-  el.className = "mt-3 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-indigo-900";
-  const ref = quote.supplierOrder?.orderNumber != null ? formatOrderRef(quote.supplierOrder.orderNumber) : "pedido conjunto";
-  el.innerHTML =
-    `Pedido <strong>${ref}</strong> · ${quote.supplier?.name || "Fornecedor"} — ${lines.length} itens. A proforma carregada aplica-se a todos:` +
-    `<ul class="mt-1 list-disc pl-4 font-medium space-y-0.5">${lines
-      .map((line) => `<li>${line.need?.description || "Item"}</li>`)
-      .join("")}</ul>`;
-  host.after(el);
 }
 
 function quoteHasProforma(quote) {
@@ -237,16 +203,10 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
       ? allocation.remaining
       : required || 1;
 
-  const canOrder = canPlaceOrderOnQuote(need, quote);
   const canEditQty = quote.selected && !isLocked;
 
   if (quote.selected) {
     const proformaAction = buildQuoteProformaStatus(quote);
-    const orderBtn = canOrder
-      ? `<button type="button" data-place-order="${quote.id}" title="Gerar encomenda só para este fornecedor"
-          class="h-8 px-2 rounded-lg bg-[#212e3e] text-white text-[10px] font-bold hover:bg-[#2afc8d] hover:text-[#212e3e] transition-all whitespace-nowrap flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">local_shipping</span>Encomendar</button>`
-      : "";
     const removeBtn = canEditQty
       ? `<button type="button" data-deselect-quote="${quote.id}" title="Remover alocação"
           class="h-8 px-2 rounded-lg bg-red-50 text-red-600 text-[10px] font-bold hover:bg-red-100 whitespace-nowrap">Remover</button>`
@@ -256,7 +216,7 @@ function buildQuoteAllocActions({ quote, need, allocation, isLocked }) {
         <div class="flex items-center gap-1.5">${proformaAction}</div>
         ${canEditQty ? `<input type="number" step="0.01" min="0.01" data-update-quote-qty="${quote.id}" value="${suggested}"
           class="w-20 h-8 px-2 border border-slate-200 rounded-lg text-xs font-semibold text-center" title="Quantidade alocada">` : `<span class="text-xs font-bold text-slate-600">${suggested} un</span>`}
-        <div class="flex items-center gap-1.5 flex-wrap justify-end">${orderBtn}${removeBtn}</div>
+        <div class="flex items-center gap-1.5 flex-wrap justify-end">${removeBtn}</div>
       </div>`;
   }
 
@@ -501,7 +461,7 @@ function renderReadyToOrderBanner(selectedQuote) {
 
           <strong>${selectedQuote.supplier?.name || "—"}</strong> — ${payableLabel}.
 
-          Pode trocar de fornecedor, carregar proforma ou encomendar na linha do fornecedor abaixo.
+          Pode trocar de fornecedor ou carregar a proforma na linha do fornecedor abaixo.
 
         </p>
 
@@ -778,7 +738,6 @@ export async function loadPresentedPrices({
     const selectedQuote = selectedQuotes[0] || null;
     window.__quoteModalSelectedQuote = selectedQuote;
     window.__quoteModalSelectedQuotes = selectedQuotes;
-    renderBundleOrderNotice(selectedQuote || quotes.find((q) => (q.supplierOrder?.quotes || []).length > 1));
 
     if (isInAnalysis && selectedQuote) {
 
@@ -1031,38 +990,6 @@ export async function loadPresentedPrices({
 
 
     list.innerHTML = `<div class="flex flex-col divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white">${entries.map((e) => e.html).join("")}</div>`;
-
-
-
-    list.querySelectorAll("[data-place-order]").forEach((btn) => {
-
-      btn.addEventListener("click", async (e) => {
-
-        e.stopPropagation();
-
-        const pendingCount = quotes.filter((q) => q.selected && !q.orderNumber).length;
-
-        await placeOrderWithPdf(btn.dataset.placeOrder, needId, {
-
-          apiRequest,
-
-          showToast: window.showQuoteToast,
-
-          onApproved: window.onQuoteApproved,
-
-          need,
-
-          suppliers,
-
-          openProformaViewer,
-
-          keepModalOpen: pendingCount > 1,
-
-        });
-
-      });
-
-    });
 
 
 
@@ -1499,9 +1426,8 @@ export async function selectSuggestionWithOrder({
 
 
 
-// Marca apenas o fornecedor vencedor da cotação. Não gera PDF nem avança
-// o estado do item — isso só acontece em placeOrderWithPdf(), quando o
-// utilizador confirma explicitamente a encomenda.
+// Aloca quantidade ao fornecedor. Quando a quantidade fica toda alocada o
+// servidor passa o item a «Em análise» (preço realizado) — sem encomenda.
 export async function selectQuoteWithOrder(quoteId, needId, { apiRequest, showToast, onApproved, openProformaViewer, need, suppliers = [], skipConfirm = false, quantity }) {
 
   if (!quoteId) return;
@@ -1536,95 +1462,6 @@ export async function selectQuoteWithOrder(quoteId, needId, { apiRequest, showTo
 
 
 
-// Confirma a encomenda ao fornecedor já seleccionado: atribui o número de
-// encomenda, gera o PDF, faz upload e só então o item passa a "Encomenda".
-export async function placeOrderWithPdf(quoteId, needId, { apiRequest, showToast, onApproved, need, suppliers = [], openProformaViewer, keepModalOpen = false }) {
-
-  if (!quoteId) return;
-
-  const confirmMsg = keepModalOpen
-    ? "Confirmar encomenda a este fornecedor? Será gerado o PDF. Pode encomendar os restantes fornecedores a seguir."
-    : "Confirmar encomenda a este fornecedor? Será gerado o PDF e o item passará a 'Encomenda' quando todos estiverem encomendados.";
-
-  if (!confirm(confirmMsg)) return;
-
-
-
-  try {
-
-    const siteDate = getSiteReceptionDateStr();
-    const orderBody = siteDate
-      ? { expectedReceiptDate: dateInputToUtcNoonIso(siteDate) }
-      : {};
-
-    const result = await apiRequest(`/quotes/${quoteId}/place-order`, { method: "PATCH", body: orderBody });
-
-    const quote = result.quote;
-
-    const needData = result.need || need;
-
-    const supplier = quote.supplier;
-
-    const project = needData.project || quote.need?.project;
-
-
-
-    const { doc, orderNo, documentId, issuedAt, issuedBy } = await generatePurchaseOrderPdf({
-
-      quote,
-
-      need: needData,
-
-      supplier,
-
-      project,
-
-    });
-
-
-
-    downloadPurchaseOrderPdf(doc, orderNo);
-
-
-
-    try {
-
-      await uploadPurchaseOrderPdf(quoteId, doc, orderNo, { documentId, issuedAt, issuedBy });
-
-    } catch (uploadErr) {
-
-      console.warn("Upload da encomenda falhou:", uploadErr);
-
-    }
-
-
-
-    showToast?.(
-      keepModalOpen
-        ? "Encomenda gerada. Encomende os restantes fornecedores ou carregue as proformas."
-        : "Encomenda gerada — carregue a proforma para aprovar no orçamento.",
-      "success"
-    );
-
-    if (keepModalOpen) {
-      await loadPresentedPrices({ needId, need, suppliers, apiRequest, openProformaViewer });
-      window.onQuoteApproved?.();
-    resetAiScanBanner();
-    } else {
-      document.getElementById("modalQuote")?.classList.remove("open");
-      await onApproved?.();
-    }
-
-  } catch (err) {
-
-    showToast?.("Erro: " + err.message, "error");
-
-  }
-
-}
-
-
-
 export async function openQuotePricingModal({
   need,
   suppliers,
@@ -1646,7 +1483,6 @@ export async function openQuotePricingModal({
   document.getElementById("quoteNeedId").value = need.id;
 
   document.getElementById("quoteItemDesc").textContent = `${need.description} (${need.quantity || "0"} ${need.unit || ""})`;
-  document.getElementById("quoteBundleNotice")?.remove();
 
 
 

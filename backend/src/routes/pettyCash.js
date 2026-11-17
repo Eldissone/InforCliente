@@ -486,6 +486,7 @@ pettyCashRoutes.post(
   })
 );
 
+const { fireApprovalRequested, money: approvalMoney } = require("../services/approvals/notify");
 const REINFORCEMENT_INCLUDE = {
   fund: {
     select: {
@@ -612,6 +613,15 @@ pettyCashRoutes.post(
       action: "reinforcement_request_create",
       requestId: created.id,
       details: { fundId, cardId: body.cardId, amount: String(body.amount) },
+    });
+
+    fireApprovalRequested(req, {
+      kind: "REINFORCEMENT",
+      ids: [created.id],
+      projectId: created.fund?.projectId || null,
+      title: `Reforço de fundo para aprovar · ${created.fund?.name || "Fundo"}`,
+      body: [created.requestedBy, created.reason, approvalMoney(created.amount, created.fund?.currency)].filter(Boolean).join(" · "),
+      link: "/Financeiro/financeiro.html",
     });
 
     return res.status(201).json(mapReinforcement(created));

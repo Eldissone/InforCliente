@@ -161,6 +161,7 @@ const EXTRA_MODAL_HTML = `
             <tbody id="extraItemsBody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
+        <div id="extraPrefillBar" class="hidden mt-3"></div>
         ${pedidoTotalsPanelMarkup("extra")}
       </div>
       <div class="flex flex-col gap-1">
@@ -1186,7 +1187,147 @@ function applyExtraFiscalToForm(item = {}) {
   toggleExtraFiscalFlags();
 }
 
+// ─── Pré-preenchimento pelo histórico (Fase 4) ────────────────────────────────
+// Ao escrever um item, mostra o que foi usado da última vez para o mesmo
+// produto (fornecedor, categoria, centro de custo, unidade, preço). Só aplica
+// com um clique e só preenche campos vazios.
+
+const prefillState = { seq: 0, dismissed: new Set(), current: null };
+
+function prefillBar() {
+  let bar = document.getElementById("extraPrefillBar");
+  if (!bar) {
+    const wrap = document.getElementById("extraItemsTable")?.parentElement;
+    if (!wrap) return null;
+    wrap.insertAdjacentHTML("afterend", '<div id="extraPrefillBar" class="hidden mt-3"></div>');
+    bar = document.getElementById("extraPrefillBar");
+    bar.addEventListener("click", onPrefillBarClick);
+  }
+  return bar;
+}
+
+function onPrefillBarClick(e) {
+  if (e.target.closest("[data-prefill-apply]")) applyPrefill();
+  else if (e.target.closest("[data-prefill-dismiss]")) {
+    if (prefillState.current) prefillState.dismissed.add(prefillState.current.desc.toLowerCase());
+    hidePrefillBar();
+  }
+}
+
+function hidePrefillBar() {
+  prefillState.current = null;
+  const bar = prefillBar();
+  if (bar) {
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+  }
+}
+
+function fmtPrefillMoney(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+}
+
+async function requestPrefill(row) {
+  const desc = row?.querySelector(".cc-item-desc")?.value?.trim() || "";
+  const isEditing = Boolean(document.getElementById("extraEditId")?.value);
+  if (isEditing || desc.length < 3 || prefillState.dismissed.has(desc.toLowerCase())) return;
+  const seq = ++prefillState.seq;
+  const projectId = document.getElementById("extraType")?.value === "OBRA" ? document.getElementById("extraProjectId")?.value || "" : "";
+  const params = new URLSearchParams({ description: desc });
+  if (projectId) params.set("projectId", projectId);
+  let data;
+  try {
+    data = await apiRequest(`/prefill/purchase?${params}`);
+  } catch {
+    return;
+  }
+  if (seq !== prefillState.seq || !data?.suggestion) return;
+  prefillState.current = { row, desc, s: data.suggestion };
+  renderPrefillBar();
+}
+
+function renderPrefillBar() {
+  const bar = prefillBar();
+  const cur = prefillState.current;
+  if (!bar || !cur) return;
+  const { s } = cur;
+  const bits = [];
+  if (s.supplier?.name) bits.push(`Fornecedor: <strong>${escapeHtml(s.supplier.name)}</strong>${s.supplier.nif ? ` (NIF ${escapeHtml(s.supplier.nif)})` : ""}`);
+  if (s.costCategoryName) bits.push(`Categoria: <strong>${escapeHtml(s.costCategoryName)}</strong>`);
+  if (s.costCenterId) {
+    const opt = document.querySelector(`#extraCostCenterId option[value="${CSS.escape(s.costCenterId)}"]`);
+    if (opt) bits.push(`Centro de custo: <strong>${escapeHtml(opt.textContent.trim())}</strong>`);
+  }
+  if (s.unitPrice != null) bits.push(`Preço: <strong>${fmtPrefillMoney(s.unitPrice)}</strong>${s.unit ? ` / ${escapeHtml(s.unit)}` : ""}${s.vatPercent ? ` · IVA ${s.vatPercent}%` : ""}`);
+  else if (s.unit) bits.push(`Unidade: <strong>${escapeHtml(s.unit)}</strong>`);
+  if (!bits.length) return hidePrefillBar();
+  const when = s.basedOn?.date ? new Date(s.basedOn.date).toLocaleDateString("pt-PT") : "";
+  const from = s.basedOn?.kind === "NEED_QUOTE" ? "cotação escolhida" : "pedido";
+  const supplierHidden = extraRequiresQuote() && s.supplier?.name;
+  bar.innerHTML = `<div class="p-3 rounded-xl border border-violet-200 bg-violet-50 text-xs text-slate-700">
+    <p class="font-bold text-violet-800 mb-1 flex items-center gap-1"><span class="material-symbols-outlined text-sm">history</span>
+      Da última vez para «${escapeHtml(s.matchedDescription)}» (${from}${when ? ` de ${when}` : ""}${s.basedOn?.project ? ` · ${escapeHtml(s.basedOn.project)}` : ""}):</p>
+    <p class="leading-relaxed">${bits.join(" · ")}</p>
+    ${supplierHidden ? '<p class="text-[11px] text-slate-500 mt-1">O pedido requer cotação: o fornecedor fica para a requisição e não é preenchido.</p>' : ""}
+    <div class="flex gap-2 mt-2">
+      <button type="button" data-prefill-apply class="h-7 px-3 rounded-lg bg-violet-600 text-white font-bold hover:bg-violet-700">Usar estes dados</button>
+      <button type="button" data-prefill-dismiss class="h-7 px-3 rounded-lg border border-violet-200 text-violet-700 font-bold hover:bg-violet-100">Ignorar</button>
+    </div>
+    <p class="text-[11px] text-slate-500 mt-1">Só preenche os campos que ainda estão vazios.</p></div>`;
+  bar.classList.remove("hidden");
+}
+
+function setIfEmpty(el, value) {
+  if (!el || value == null || value === "" || String(el.value || "").trim() !== "") return false;
+  el.value = String(value);
+  return true;
+}
+
+async function applyPrefill() {
+  const cur = prefillState.current;
+  if (!cur) return;
+  const { row, s } = cur;
+  const filled = [];
+  if (row?.isConnected) {
+    if (setIfEmpty(row.querySelector(".cc-item-unit"), s.unit)) filled.push("unidade");
+    if (setIfEmpty(row.querySelector(".cc-item-price"), s.unitPrice)) filled.push("preço");
+    if (setIfEmpty(row.querySelector(".cc-item-vat"), s.vatPercent || null)) filled.push("IVA");
+  }
+  if (s.costCategoryId && !document.getElementById("extraCostCategoryId")?.value) {
+    refreshExtraCostCascade({ initialCategoryId: String(s.costCategoryId) });
+    filled.push("categoria");
+  }
+  const cc = document.getElementById("extraCostCenterId");
+  if (s.costCenterId && cc && !cc.value && cc.querySelector(`option[value="${CSS.escape(s.costCenterId)}"]`)) {
+    cc.value = s.costCenterId;
+    cc.dispatchEvent(new Event("change", { bubbles: true }));
+    filled.push("centro de custo");
+  }
+  const sup = getExtraSupplierFormData();
+  if (s.supplier?.name && !extraRequiresQuote() && !sup.supplierId && !sup.supplierName && !sup.supplierNif) {
+    const known = s.supplier.id && allSuppliers.find((x) => x.id === s.supplier.id);
+    if (known) {
+      document.getElementById("extraSupplierId").value = known.id;
+      applySupplierToForm(known);
+    } else {
+      document.getElementById("extraSupplierName").value = s.supplier.name || "";
+      document.getElementById("extraSupplierNif").value = s.supplier.nif || "";
+      document.getElementById("extraSupplierIban").value = s.supplier.iban || "";
+      supplierManualOverride = true;
+    }
+    syncExtraProformaAvailability();
+    filled.push("fornecedor");
+  }
+  refreshExtraPedidoTotals();
+  prefillState.dismissed.add(cur.desc.toLowerCase());
+  hidePrefillBar();
+  modalOptions.showToast(filled.length ? `Preenchido: ${filled.join(", ")}. Confirme antes de guardar.` : "Os campos já estavam preenchidos.", filled.length ? "success" : "info");
+}
+
 function resetExtraFormState() {
+  hidePrefillBar();
+  prefillState.dismissed.clear();
   document.getElementById("extraEditId").value = "";
   document.getElementById("modalExtraTitle").textContent = "Novo Pedido de Compra";
   document.getElementById("extraSubmitBtn").textContent = "Salvar Pedido";
@@ -1829,6 +1970,10 @@ function bindModalEvents() {
   document.getElementById("btnExtraAddItem")?.addEventListener("click", addExtraItemRow);
   document.getElementById("extraItemsTable")?.addEventListener("input", refreshExtraPedidoTotals);
   document.getElementById("extraItemsTable")?.addEventListener("change", refreshExtraPedidoTotals);
+  document.getElementById("extraItemsTable")?.addEventListener("change", (e) => {
+    if (e.target.closest?.(".cc-item-desc")) requestPrefill(e.target.closest(".extra-item-row"));
+  });
+  document.getElementById("extraPrefillBar")?.addEventListener("click", onPrefillBarClick);
   document.getElementById("extraDesiredDate")?.addEventListener("change", () => {
     const due = document.getElementById("extraPaymentDueDate");
     if (due) due.value = document.getElementById("extraDesiredDate")?.value || "";
