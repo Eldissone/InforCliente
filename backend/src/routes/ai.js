@@ -1073,4 +1073,64 @@ aiRoutes.post(
   })
 );
 
+// ─── Paleta de comandos (Fase 4) ───────────────────────────────────────────
+const commandAi = require("../services/ai/command/service");
+
+async function commandAiAvailable() {
+  const settings = await getSettings();
+  const { apiKey } = resolveApiKey(settings);
+  return Boolean(settings.enabled && settings.features.command && (apiKey || settings.provider === "openai_compatible"));
+}
+
+/** Obras a que o utilizador tem acesso que correspondem ao texto. */
+aiRoutes.get(
+  "/command/projects",
+  notCliente,
+  asyncHandler(async (req, res) => {
+    const q = z.string().trim().max(120).parse(String(req.query.q || ""));
+    if (q.length < 2) return res.json({ projects: [] });
+    const access = await userAccess(req.user.sub);
+    return res.json({ projects: await commandAi.findProjects(q, access.projectIds) });
+  })
+);
+
+aiRoutes.get(
+  "/command/status",
+  notCliente,
+  asyncHandler(async (req, res) => res.json({ ai: await commandAiAvailable() }))
+);
+
+/**
+ * Interpreta uma frase. Devolve a intenção e as obras candidatas; o browser
+ * executa (abre ecrãs e formulários). Nada é gravado.
+ */
+aiRoutes.post(
+  "/command",
+  notCliente,
+  asyncHandler(async (req, res) => {
+    const { text } = z.object({ text: z.string().trim().min(2).max(500) }).strict().parse(req.body || {});
+    const ai = await commandAiAvailable();
+    let intent = commandAi.parseLocal(text);
+    let source = "local";
+    let aiError = null;
+    if (!intent) {
+      if (ai) {
+        try {
+          ({ intent } = await commandAi.interpretWithAi({ text, userId: req.user.sub, io: req.app.get("io") }));
+          source = "ai";
+        } catch (error) {
+          aiError = error.message || "A IA não respondeu.";
+        }
+      }
+      if (!intent) intent = { action: "ask", question: text };
+    }
+    let projects = [];
+    if (intent.project) {
+      const access = await userAccess(req.user.sub);
+      projects = await commandAi.findProjects(intent.project, access.projectIds);
+    }
+    return res.json({ intent, projects, source, ai, aiError });
+  })
+);
+
 module.exports = { aiRoutes, settingsSchema };

@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Info Gestor — Centro de Compras</title>
+    <title>Info Gestor — Compras e Pedidos</title>
     <meta name="description" content="Centro de compras e pedidos de compra.">
     <meta name="theme-color" content="#ffffff">
     <link rel="icon" href="../../assets/icon/favicon.ico" type="image/x-icon">
@@ -32,12 +32,12 @@
         <header class="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-8">
             <div>
                 <nav class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
-                    <span>Compras e Logística</span>
+                    <span>Financeiro</span>
                     <span class="material-symbols-outlined text-xs">chevron_right</span>
-                    <span class="text-[#0d3fd1]">Centro de Compras</span>
+                    <span class="text-[#0d3fd1]">Compras e Pedidos</span>
                 </nav>
-                <h1 id="pageTitleCompras" class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-2">Centro de Compras</h1>
-                <p class="text-slate-500 font-medium text-sm">Pedidos, requisições e plano de pagamentos.</p>
+                <h1 id="pageTitleCompras" class="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight leading-none mb-2">Compras e Pedidos</h1>
+                <p class="text-slate-500 font-medium text-sm">Pedidos de compra.</p>
             </div>
         </header>
 
@@ -45,139 +45,8 @@
         <div id="centrosPanelCompras" class="hidden" aria-labelledby="pageTitleCompras">
 
             <div class="cc-layout">
-                <!-- ── Sidebar de navegação ── -->
-                <aside class="cc-sidebar" id="ccSidebar" role="navigation" aria-label="Navegação Centro de Compras">
-                    <div class="cc-sidebar-header">
-                        <span class="cc-sidebar-label">Compras</span>
-                        <button type="button" id="btnToggleCCSidebar" class="cc-sidebar-toggle"
-                            title="Ocultar/expandir menu" aria-expanded="true" aria-controls="ccSidebar">
-                            <span class="material-symbols-outlined" style="font-size:16px">menu_open</span>
-                        </button>
-                    </div>
-                    <div role="tablist" id="ccSubTabs" class="flex flex-col gap-0.5 mt-1">
-                        <button type="button" class="cc-sub-tab active" data-cc-tab="dashboard" id="ccTabDashboard"
-                            role="tab" aria-selected="true">
-                            <span class="material-symbols-outlined cc-tab-icon">dashboard</span>
-                            <span class="cc-tab-label">Dashboard</span>
-                        </button>
-                        <button type="button" class="cc-sub-tab" data-cc-tab="pedidos" id="ccTabPedidos" role="tab"
-                            aria-selected="false">
-                            <span class="material-symbols-outlined cc-tab-icon">receipt_long</span>
-                            <span class="cc-tab-label">Pedidos de Compra</span>
-                        </button>
-                        <button type="button" class="cc-sub-tab" data-cc-tab="requisicoes" id="ccTabRequisicoes"
-                            role="tab" aria-selected="false">
-                            <span class="material-symbols-outlined cc-tab-icon">assignment</span>
-                            <span class="cc-tab-label">Requisições</span>
-                        </button>
-                        <button type="button" class="cc-sub-tab" data-cc-tab="planoPagamentos" id="ccTabPlanoPagamentos"
-                            role="tab" aria-selected="false">
-                            <span class="material-symbols-outlined cc-tab-icon">calendar_month</span>
-                            <span class="cc-tab-label">Plano de Pagamentos</span>
-                        </button>
-                    </div>
-                </aside>
-
                 <!-- ── Área de conteúdo principal ── -->
                 <div class="cc-main">
-
-                    <!-- ── CC: Dashboard ── -->
-                    <div id="ccPanelDashboard" role="tabpanel" class="cc-panel active">
-                        <div class="cc-kpi-grid mb-6" id="ccKpiGrid">
-                            <div class="cc-kpi-card cc-kpi-card--amber">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Pedidos Pendentes</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">shopping_bag</span>
-                                </div>
-                                <p id="ccKpiPedidos" class="cc-kpi-value">—</p>
-                                <p class="cc-kpi-sub">aguardam cotação/aprovação</p>
-                                <span id="ccKpiBadgeUrgent"
-                                    class="hidden cc-kpi-badge cc-kpi-badge--urgent">Urgente</span>
-                            </div>
-                            <div class="cc-kpi-card">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Requisições em Análise</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">assignment</span>
-                                </div>
-                                <p id="ccKpiReq" class="cc-kpi-value">—</p>
-                                <p class="cc-kpi-sub">com cotação anexada</p>
-                            </div>
-                            <div class="cc-kpi-card cc-kpi-card--alert">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Aprovações Pendentes</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">how_to_reg</span>
-                                </div>
-                                <p id="ccKpiAprov" class="cc-kpi-value">—</p>
-                                <p class="cc-kpi-sub">aguardam decisão</p>
-                            </div>
-                            <div class="cc-kpi-card">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Pagamentos Pendentes</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">payments</span>
-                                </div>
-                                <p id="ccKpiPag" class="cc-kpi-value">—</p>
-                                <p class="cc-kpi-sub">em plano de pagamento</p>
-                            </div>
-                            <div class="cc-kpi-card">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Compras em Andamento</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">local_shipping</span>
-                                </div>
-                                <p id="ccKpiAndamento" class="cc-kpi-value">—</p>
-                                <p class="cc-kpi-sub">processos activos</p>
-                            </div>
-                            <div class="cc-kpi-card cc-kpi-card--featured">
-                                <div class="cc-kpi-top">
-                                    <p class="cc-kpi-label">Valor Comprometido</p><span
-                                        class="material-symbols-outlined cc-kpi-icon">account_balance_wallet</span>
-                                </div>
-                                <p id="ccKpiValor" class="cc-kpi-value cc-kpi-value--lg">—</p>
-                                <p class="cc-kpi-sub">aprovados + em pagamento (c/ impostos)</p>
-                            </div>
-                        </div>
-
-                        <!-- Processos Recentes -->
-                        <div class="section-panel">
-                            <div class="section-panel__toggle" style="cursor:default;pointer-events:none;">
-                                <span class="flex items-center gap-3">
-                                    <span
-                                        class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                                        <span class="material-symbols-outlined text-xl">list_alt</span>
-                                    </span>
-                                    <span>
-                                        <span class="block text-sm font-bold text-slate-900">Processos Recentes</span>
-                                        <span class="block text-[11px] text-slate-400">Últimos 10 processos do Centro de
-                                            Compras</span>
-                                    </span>
-                                </span>
-                                <button type="button" id="btnCCVerTodos"
-                                    class="h-8 px-4 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-all pointer-events-auto">Ver
-                                    Todos</button>
-                            </div>
-                            <div class="section-panel__body overflow-x-auto">
-                                <table class="w-full text-left">
-                                    <thead>
-                                        <tr
-                                            class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                            <th class="px-4 py-3">Nº Req.</th>
-                                            <th class="px-4 py-3">Descrição</th>
-                                            <th class="px-4 py-3">Solicitante</th>
-                                            <th class="px-4 py-3 text-right">Valor c/ impostos</th>
-                                            <th class="px-4 py-3">Estado</th>
-                                            <th class="px-4 py-3">Data</th>
-                                            <th class="px-4 py-3 text-center">Acção</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="ccRecentTable">
-                                        <tr>
-                                            <td colspan="7" class="text-center py-10 text-slate-400 text-xs">A
-                                                carregar...</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- ── CC: Pedidos ── -->
                     <div id="ccPanelPedidos" role="tabpanel" class="cc-panel hidden">
@@ -261,68 +130,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- ── CC: Requisições ── -->
-                    <div id="ccPanelRequisicoes" role="tabpanel" class="cc-panel hidden">
-                        <div class="section-panel">
-                            <div class="flex items-center gap-2 pr-3">
-                                <div class="section-panel__toggle flex-1" style="cursor:default;pointer-events:none;">
-                                    <span class="flex items-center gap-3">
-                                        <span
-                                            class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                                            <span class="material-symbols-outlined text-xl">assignment</span>
-                                        </span>
-                                        <span>
-                                            <span class="block text-sm font-bold text-slate-900">Requisições</span>
-                                            <span id="ccReqMeta" class="block text-[11px] text-slate-400">A
-                                                carregar...</span>
-                                        </span>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="section-panel__body">
-                                <div class="flex flex-wrap items-center gap-2 mb-4">
-                                    <div class="relative">
-                                        <span
-                                            class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none">search</span>
-                                        <input type="search" id="ccReqSearch" placeholder="Pesquisar requisição..."
-                                            class="h-9 pl-9 pr-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#2afc8d]/30 w-48">
-                                    </div>
-                                    <select id="ccReqFilterStatus"
-                                        class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
-                                        <option value="PENDENTE_REQUISICAO">Pend. Requisição</option>
-                                        <option value="PENDENTE_APROVACAO">Pend. Aprovação</option>
-                                        <option value="NAO_APROVADO">Não Aprovado</option>
-                                        <option value="">Todos</option>
-                                    </select>
-                                </div>
-                                <div class="overflow-x-auto -mx-1">
-                                    <table class="w-full text-left">
-                                        <thead>
-                                            <tr
-                                                class="bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                                <th class="px-4 py-3">Nº Req.</th>
-                                                <th class="px-4 py-3">Descrição</th>
-                                                <th class="px-4 py-3">Solicitante</th>
-                                                <th class="px-4 py-3">Fornecedor</th>
-                                                <th class="px-4 py-3 text-right">Valor Cotado</th>
-                                                <th class="px-4 py-3">Estado</th>
-                                                <th class="px-4 py-3">Data</th>
-                                                <th class="px-4 py-3 text-center">Acção</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="ccReqTableBody">
-                                            <tr>
-                                                <td colspan="8" class="text-center py-12 text-slate-400 text-xs">A
-                                                    carregar...</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
 
                     <!-- ── CC: Plano de Pagamentos ── -->
                     <div id="ccPanelPlanoPagamentos" role="tabpanel" class="cc-panel hidden">

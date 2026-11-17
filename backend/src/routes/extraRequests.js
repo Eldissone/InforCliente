@@ -24,6 +24,7 @@ const fileUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+const { fireApprovalRequested, money: approvalMoney } = require("../services/approvals/notify");
 const extraRequestRoutes = express.Router();
 extraRequestRoutes.use(authRequired);
 
@@ -841,6 +842,20 @@ extraRequestRoutes.post(
       extraRequestId: created.id,
       details: { type: created.type, amount: String(created.amount), paymentSource: created.paymentSource },
     });
+
+    if (created.status === "PENDENTE") {
+      const params = new URLSearchParams({ extraRequestId: created.id });
+      if (created.projectId) params.set("projectId", created.projectId);
+      fireApprovalRequested(req, {
+        kind: "EXTRA_REQUEST",
+        ids: [created.id],
+        projectId: created.projectId || null,
+        title: `Pedido extra para aprovar · ${created.project?.name || (created.type === "GERAL" ? "Geral" : "Obra")}`,
+        body: [created.requestedBy, created.description, approvalMoney(created.amount, created.currency)].filter(Boolean).join(" · "),
+        link: `/Financeiro/centroDeCompras.html?${params}`,
+        urgent: created.priority === "URGENTE",
+      });
+    }
 
     return res.status(201).json(mapExtra(created));
   })

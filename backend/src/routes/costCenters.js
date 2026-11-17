@@ -1398,7 +1398,7 @@ costCenterRoutes.get(
         take: pageSize,
         include: {
           costCenter: { select: { code: true, name: true, currency: true } },
-          _count: { select: { payments: true } },
+          _count: { select: { payments: true, quotes: true } },
         },
       }),
     ]);
@@ -2615,6 +2615,7 @@ async function buildProjectCategoryBudgetMap(projectId) {
     }),
     prisma.workNeed.findMany({
       where: { projectId, status: { not: "REJECTED" } },
+      include: { _count: { select: { quotes: true } } },
     }),
   ]);
 

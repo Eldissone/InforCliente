@@ -517,6 +517,7 @@ function flattenSalesTasks(tasks) {
 let cachedCostCenters = [];
 let cachedCostNeeds = [];
 let costNeedsListenersBound = false;
+const collapsedCostGroups = new Set();
 
 const NEED_STATUS_CONFIG = {
   APPROVED: { label: "Aprovado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
@@ -580,7 +581,31 @@ function renderCostNeedsTable() {
     return;
   }
 
-  tbody.innerHTML = filtered.map((n, idx) => {
+  // Agrupar por categoria (centro de custo), ordenado por código/nome.
+  const groups = new Map();
+  filtered.forEach((n, idx) => {
+    const key = n.costCenterId || "__none__";
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        name: n.costCenter?.name || n.costCenter?.code || "Sem categoria",
+        code: String(n.costCenter?.code || ""),
+        currency: n.costCenter?.currency || cur,
+        rows: [],
+        total: 0,
+      });
+    }
+    const g = groups.get(key);
+    const total = (num(n.quantity) || 1) * num(n.unitPrice ?? n.originalUnitPrice) * (num(n.hours) || 1);
+    g.rows.push({ n, idx });
+    g.total += total;
+  });
+  const orderedGroups = [...groups.values()].sort(
+    (a, b) => a.code.localeCompare(b.code, "pt", { numeric: true }) || a.name.localeCompare(b.name, "pt"),
+  );
+  const searching = Boolean(search);
+
+  const renderRow = ({ n, idx }) => {
     const q = num(n.quantity) || 1;
     const p = num(n.unitPrice ?? n.originalUnitPrice);
     const h = num(n.hours) || 1;
@@ -633,12 +658,48 @@ function renderCostNeedsTable() {
         </div>
       </td>
     </tr>`;
+  };
+
+  tbody.innerHTML = orderedGroups.map((g) => {
+    const collapsed = !searching && collapsedCostGroups.has(g.key);
+    const header = `<tr class="pl-cost-group-row bg-slate-50 cursor-pointer select-none hover:bg-slate-100" data-cost-group="${escapeHtml(g.key)}">
+      <td colspan="10" class="py-2.5 px-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-base text-slate-500 transition-transform ${collapsed ? "" : "rotate-90"}">chevron_right</span>
+            <span class="font-extrabold text-xs uppercase tracking-wide text-slate-800">${escapeHtml(g.name)}</span>
+            <span class="text-[10px] font-bold text-slate-400">${g.rows.length} item(ns)</span>
+          </div>
+          <span class="text-xs font-bold tabular-nums text-slate-700">${formatCurrency(g.total, g.currency)}</span>
+        </div>
+      </td>
+    </tr>`;
+    return header + (collapsed ? "" : g.rows.map(renderRow).join(""));
   }).join("");
+}
+
+function setAllCostGroupsCollapsed(collapsed) {
+  collapsedCostGroups.clear();
+  if (collapsed) {
+    (cachedCostNeeds || []).forEach((n) => collapsedCostGroups.add(n.costCenterId || "__none__"));
+  }
+  renderCostNeedsTable();
 }
 
 function initCostNeedsListeners() {
   if (costNeedsListenersBound) return;
   costNeedsListenersBound = true;
+
+  document.getElementById("plOrcamentoCustoItems")?.addEventListener("click", (ev) => {
+    const row = ev.target.closest?.("tr[data-cost-group]");
+    if (!row) return;
+    const key = row.getAttribute("data-cost-group");
+    if (collapsedCostGroups.has(key)) collapsedCostGroups.delete(key);
+    else collapsedCostGroups.add(key);
+    renderCostNeedsTable();
+  });
+  document.getElementById("plCustoExpandAll")?.addEventListener("click", () => setAllCostGroupsCollapsed(false));
+  document.getElementById("plCustoCollapseAll")?.addEventListener("click", () => setAllCostGroupsCollapsed(true));
 
   document.getElementById("plCustoSearch")?.addEventListener("input", renderCostNeedsTable);
   document.getElementById("plCustoCCFilter")?.addEventListener("change", renderCostNeedsTable);
@@ -2844,11 +2905,21 @@ window.triggerOrcamentoCustoAction = function (action, category = "") {
   }
 };
 
-window.addEventListener("message", (event) => {
-  const data = event?.data;
+function onOrcamentoCustoUpdated(data) {
   if (!data || data.type !== "orcamento-custo-updated") return;
   loadOrcamentoCusto();
   if (typeof window.refreshProjectBudgetFromCusto === "function") {
     window.refreshProjectBudgetFromCusto();
   }
+}
+
+window.addEventListener("message", (event) => onOrcamentoCustoUpdated(event?.data));
+
+// Cotação corre noutro separador: window.postMessage não chega lá, por isso
+// usa-se BroadcastChannel (e recarrega ao voltar ao separador, como reserva).
+try {
+  new BroadcastChannel("orcamento-custo").onmessage = (e) => onOrcamentoCustoUpdated(e.data);
+} catch {}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") loadOrcamentoCusto();
 });

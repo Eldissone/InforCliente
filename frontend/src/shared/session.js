@@ -165,6 +165,10 @@ export function wireUsersNav() {
     .then(({ initNotificationCenter }) => initNotificationCenter())
     .catch(() => { });
 
+  import("./commandPalette.js")
+    .then(({ initCommandPalette }) => initCommandPalette())
+    .catch(() => { });
+
   if (role !== "cliente") {
     import("./helpFab.js")
       .then(({ initHelpFab }) => initHelpFab())

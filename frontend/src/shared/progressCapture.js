@@ -225,7 +225,7 @@ async function confirmEntries(state, button) {
 }
 
 /** Abre o registo de execução da obra. */
-export async function openProgressCapture({ projectId, onSaved } = {}) {
+export async function openProgressCapture({ projectId, onSaved, text = "" } = {}) {
   injectStyles();
   const overlay = document.createElement("div");
   overlay.className = "pc-overlay";
@@ -233,7 +233,7 @@ export async function openProgressCapture({ projectId, onSaved } = {}) {
     <div class="pc-head"><div><h2 id="pcTitle">Registar execução</h2><p>Escreva ou grave o trabalho feito. A IA propõe; o técnico confirma.</p></div>
     <button type="button" class="pc-close" aria-label="Fechar"><span class="material-symbols-outlined">close</span></button></div>
     <div class="pc-body"><p class="pc-empty">A carregar…</p></div><div class="pc-foot"></div></div>`;
-  const state = { overlay, projectId, onSaved, body: overlay.querySelector(".pc-body"), foot: overlay.querySelector(".pc-foot") };
+  const state = { overlay, projectId, onSaved, text, body: overlay.querySelector(".pc-body"), foot: overlay.querySelector(".pc-foot") };
   state.onKey = (e) => e.key === "Escape" && close(state);
   document.addEventListener("keydown", state.onKey);
   document.body.appendChild(overlay);

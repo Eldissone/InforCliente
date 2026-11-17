@@ -52,6 +52,8 @@ async function computeProjectBudgetSummary(projectId) {
         hours: true,
         scheduled: true,
         priceExceptionReason: true,
+        // Sem a contagem, itens APPROVED ficam como «não iniciados» e o realizado sai a 0.
+        _count: { select: { quotes: true } },
       },
     }),
     prisma.costPayment.findMany({

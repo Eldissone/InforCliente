@@ -14,6 +14,7 @@ const FEATURES = [
   { key: "needs_assist", label: "Necessidades assistidas (texto ou foto)", default: false },
   { key: "documents_draft", label: "Rascunhos de documentos (autos e relatório mensal)", default: false },
   { key: "photos", label: "Análise de fotos", default: false },
+  { key: "command", label: "Paleta de comandos (Ctrl+K) em linguagem natural", default: false },
 ];
 
 /**

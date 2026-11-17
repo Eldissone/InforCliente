@@ -660,7 +660,7 @@ body {
 .cc-main {
     flex: 1;
     min-width: 0;
-    padding-left: 1.25rem;
+    padding-left: 0;
 }
 
 .cc-kpi-grid {

@@ -38,7 +38,7 @@ function switchCentrosMainTab(tab) {
   document.getElementById("centrosPanelCompras")?.classList.toggle("hidden", tab !== "compras");
 
   if (tab === "compras") {
-    loadCCDashboard();
+    switchCCSubTab("pedidos");
   }
 
   try {
@@ -443,9 +443,7 @@ async function loadInitialData() {
     showToast,
     onSuccess: () => {
       loadExtras();
-      loadCCDashboard();
       loadCCPedidos();
-      loadCCRequisicoes();
       if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
     },
     getEditItem: (id) => extrasCache.find((e) => e.id === id),
@@ -531,9 +529,7 @@ function switchCCSubTab(tab) {
   const panelId = `ccPanel${tab.charAt(0).toUpperCase()}${tab.slice(1)}`;
   document.getElementById(panelId)?.classList.remove("hidden");
 
-  if (tab === "dashboard") loadCCDashboard();
   if (tab === "pedidos") loadCCPedidos();
-  if (tab === "requisicoes") loadCCRequisicoes();
   if (tab === "planoPagamentos") {
     if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
     else loadCCPagamentos();
@@ -550,9 +546,6 @@ function initCentroCompras() {
   });
   bindCCReqSupplierNifLookup();
   document.getElementById("ccPedidosTableBody")?.addEventListener("click", onCCListActionClick);
-  document.getElementById("ccReqTableBody")?.addEventListener("click", onCCListActionClick);
-
-  document.getElementById("btnCCVerTodos")?.addEventListener("click", () => switchCCSubTab("requisicoes"));
 
   document.getElementById("btnCloseReqDrawer")?.addEventListener("click", () => {
     document.getElementById("drawerRequisicao")?.classList.remove("open");
@@ -590,14 +583,8 @@ function initCentroCompras() {
     clearTimeout(pedidosSearchTimer);
     pedidosSearchTimer = setTimeout(() => { ccCache.pedidosPage = 1; loadCCPedidos(); }, 300);
   });
-  let reqSearchTimer = null;
-  bindFilter("ccReqFilterStatus", () => loadCCRequisicoes());
-  document.getElementById("ccReqSearch")?.addEventListener("input", () => {
-    clearTimeout(reqSearchTimer);
-    reqSearchTimer = setTimeout(() => loadCCRequisicoes(), 300);
-  });
 
-  loadCCDashboard();
+  switchCCSubTab("pedidos");
 }
 
 // ======================== API CALLS ========================
@@ -809,8 +796,6 @@ async function onCCListActionClick(e) {
       else await apiRequest(`/purchase-orders/${id}`, { method: "DELETE" });
       showToast(isExtra ? "Pedido extra eliminado" : "Pedido cancelado", "success");
       loadCCPedidos();
-      loadCCRequisicoes();
-      loadCCDashboard();
     } catch (err) {
       showToast(ccApiError(err), "error");
     }
@@ -886,76 +871,6 @@ async function fetchCCExtraPedidos() {
 window.openCCExtraPedido = function openCCExtraPedido(id) {
   window.location.href = novoPedidoHref({ extraId: id });
 };
-
-async function loadCCDashboard() {
-  try {
-    const [data, extraPedidos] = await Promise.all([
-      apiRequest("/purchase-orders/dashboard"),
-      fetchCCExtraPedidos(),
-    ]);
-    const stats = data.kpis || {};
-    const recents = data.recentes || [];
-
-    const extraPendentes = extraPedidos.filter((e) => e.extraStatus === "PENDENTE");
-    const extraReq = extraPendentes.filter((e) => e.status === "PENDENTE_REQUISICAO");
-    const extraAprov = extraPendentes.filter((e) => e.status === "PENDENTE_APROVACAO");
-    const extraPag = extraPedidos.filter((e) => e.extraStatus === "APROVADO");
-    const extraUrgentes = extraPendentes.filter((e) => e.priority === "URGENTE").length;
-
-    const setText = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-    setText("ccKpiPedidos", (stats.pedidosPendentes || 0) + extraPendentes.length);
-    setText("ccKpiReq", (stats.requisicoesPendentes || 0) + extraReq.length);
-    setText("ccKpiAprov", (stats.aprovacoesPendentes || 0) + extraAprov.length);
-    setText("ccKpiPag", (stats.pagamentosPendentes || 0) + extraPag.length);
-    setText("ccKpiAndamento", (stats.emAndamento || 0) + extraPendentes.length + extraPag.length);
-    const extraComprometido = extraPag.reduce((sum, e) => sum + ccOrderTotalWithTax(e), 0);
-    setText("ccKpiValor", formatCurrency((Number(stats.valorComprometido) || 0) + extraComprometido));
-
-    const badge = document.getElementById("ccKpiBadgeUrgent");
-    if (badge) {
-      const urgentes = (stats.pedidosUrgentes || 0) + extraUrgentes;
-      if (urgentes > 0) {
-        badge.textContent = `${urgentes} Urgente(s)`;
-        badge.classList.remove("hidden");
-      } else {
-        badge.classList.add("hidden");
-      }
-    }
-
-    const tbody = document.getElementById("ccRecentTable");
-    if (!tbody) return;
-
-    const mergedRecents = [...recents, ...extraPedidos]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 10);
-
-    if (!mergedRecents.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-400 text-xs">Sem processos recentes.</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = mergedRecents.map((r) => `
-            <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-                <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
-                <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">${escapeHtml(r.description || "—")}</td>
-                <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
-                <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderTotalWithTax(r))}</td>
-                <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
-                <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
-                <td class="px-4 py-3 text-center">
-                    ${ccOpenDetailsBtn(r, "Detalhes", "text-indigo-600 hover:text-indigo-800 text-xs font-bold underline")}
-                </td>
-            </tr>
-        `).join("");
-  } catch (err) {
-    console.error(err);
-    showToast("Erro ao carregar Dashboard de Compras: " + ccApiError(err), "error");
-  }
-}
-window.loadCCDashboard = loadCCDashboard;
 
 async function loadCCPedidos() {
   try {
@@ -1044,67 +959,6 @@ function renderCCPedidos(data) {
             <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
             <td class="px-4 py-3 text-center">
                 ${ccPedidoActionsHtml(r)}
-            </td>
-        </tr>
-    `).join("");
-}
-
-async function loadCCRequisicoes() {
-  try {
-    const params = new URLSearchParams({ pageSize: "50" });
-    const status = document.getElementById("ccReqFilterStatus")?.value || "";
-    const search = document.getElementById("ccReqSearch")?.value?.trim().toLowerCase() || "";
-    if (status) params.set("status", status);
-    if (search) params.set("search", search);
-
-    const [res, extraPedidos] = await Promise.all([
-      apiRequest(`/purchase-orders?${params.toString()}`),
-      fetchCCExtraPedidos(),
-    ]);
-    let data = res.items || [];
-    if (!status) {
-      data = data.filter((r) =>
-        ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO"].includes(r.status)
-      );
-    }
-    const extrasFiltered = extraPedidos.filter((e) => {
-      if (!extraMatchesCCFilters(e, { status, search })) return false;
-      if (status) return true;
-      return ["PENDENTE_REQUISICAO", "PENDENTE_APROVACAO", "NAO_APROVADO"].includes(e.status);
-    });
-    data = [...data, ...extrasFiltered]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    ccCache.requisicoes = data;
-    const meta = document.getElementById("ccReqMeta");
-    if (meta) {
-      meta.textContent = data.length
-        ? `${data.length} requisição${data.length === 1 ? "" : "ões"}`
-        : "Nenhuma requisição encontrada";
-    }
-    renderCCRequisicoes(data);
-  } catch (err) {
-    showToast("Erro ao carregar Requisições: " + ccApiError(err), "error");
-  }
-}
-
-function renderCCRequisicoes(data) {
-  const tbody = document.getElementById("ccReqTableBody");
-  if (!tbody) return;
-  if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-12 text-slate-400 text-xs">Nenhuma requisição encontrada.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = data.map((r) => `
-        <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-            <td class="px-4 py-3 text-xs font-bold text-indigo-600">${escapeHtml(ccOrderNumber(r))}</td>
-            <td class="px-4 py-3 text-xs text-slate-600 truncate max-w-[150px]">${escapeHtml(r.description || "—")}</td>
-            <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
-            <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccSupplierName(r))}</td>
-            <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderValue(r))}</td>
-            <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
-            <td class="px-4 py-3 text-xs text-slate-500">${formatDateBR(r.createdAt)}</td>
-            <td class="px-4 py-3 text-center">
-                ${ccPedidoActionsHtml(r, { requisition: true })}
             </td>
         </tr>
     `).join("");
@@ -1412,8 +1266,6 @@ async function submitCCQuote(e) {
     showToast("Cotação guardada", "success");
     if (fileInput) fileInput.value = "";
     await openCCReqDrawer(id);
-    loadCCRequisicoes();
-    loadCCDashboard();
   } catch (err) {
     showToast(ccApiError(err), "error");
   }
@@ -1434,8 +1286,6 @@ async function submitCCForApproval() {
     await apiRequest(`/purchase-orders/${id}/submit-for-approval`, { method: "POST" });
     showToast("Submetido para aprovação", "success");
     await openCCReqDrawer(id);
-    loadCCDashboard();
-    loadCCRequisicoes();
     loadCCPedidos();
   } catch (err) {
     showToast(ccApiError(err), "error");
@@ -1482,8 +1332,6 @@ async function submitCCAprovacao() {
     closeCCModal("modalAprovacao");
     showToast(decision === "APROVADO" ? "Pedido aprovado — disponível no plano de pagamentos" : "Requisição rejeitada", "success");
     await openCCReqDrawer(id);
-    loadCCDashboard();
-    loadCCRequisicoes();
     loadCCPedidos();
   } catch (err) {
     showToast(ccApiError(err), "error");
@@ -1650,7 +1498,6 @@ async function submitCCPlano(e) {
     showToast("Plano de pagamento criado", "success");
     await openCCReqDrawer(id);
     loadCCPagamentos();
-    loadCCDashboard();
     loadCCPedidos();
   } catch (err) {
     showToast(ccApiError(err), "error");

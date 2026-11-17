@@ -94,6 +94,19 @@ async function generateOrderNumber() {
   return `${prefix}-${String(count + 1).padStart(4, "0")}`;
 }
 
+const { fireApprovalRequested, money: approvalMoney } = require("../services/approvals/notify");
+function notifyOrderForApproval(req, order) {
+  fireApprovalRequested(req, {
+    kind: "PURCHASE_ORDER",
+    ids: [order.id],
+    projectId: order.projectId || null,
+    title: `Requisição para aprovar · ${order.number}`,
+    body: [order.requestedByName, order.description, approvalMoney(order.totalValue, order.currency)].filter(Boolean).join(" · "),
+    link: "/Financeiro/centroDeCompras.html?tab=compras",
+    urgent: order.priority === "URGENTE",
+  });
+}
+
 const PURCHASE_ORDER_INCLUDE = {
   items: { orderBy: { order: "asc" } },
   supplier: { select: { id: true, name: true, nif: true, iban: true } },
@@ -487,6 +500,7 @@ purchaseRouter.post(
     });
 
     await logAction(req, { action: "CREATE_PURCHASE_ORDER", purchaseOrderId: order.id });
+    if (order.status === "PENDENTE_APROVACAO") notifyOrderForApproval(req, order);
     if (order.requiresQuote) {
       const { ensureQuotationNeedsFromPedido } = require("../services/quotationNeedService");
       await ensureQuotationNeedsFromPedido(prisma, {
@@ -596,6 +610,7 @@ purchaseRouter.patch(
       });
     });
 
+    if (order.status !== "PENDENTE_APROVACAO" && updated.status === "PENDENTE_APROVACAO") notifyOrderForApproval(req, updated);
     return res.json(mapOrder(updated));
   })
 );
@@ -840,6 +855,7 @@ purchaseRouter.post(
       },
     });
 
+    notifyOrderForApproval(req, order);
     return res.json({ ok: true, status: "PENDENTE_APROVACAO" });
   })
 );

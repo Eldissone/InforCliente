@@ -205,7 +205,7 @@ async function confirmItems(state, button) {
 }
 
 /** Abre a criação assistida de necessidades da obra. */
-export async function openNeedsAssist({ projectId, onSaved, needsLink = null } = {}) {
+export async function openNeedsAssist({ projectId, onSaved, needsLink = null, text = "" } = {}) {
   injectStyles();
   const overlay = document.createElement("div");
   overlay.className = "na-overlay";
@@ -213,7 +213,7 @@ export async function openNeedsAssist({ projectId, onSaved, needsLink = null } =
     <div class="na-head"><div><h2 id="naTitle">Nova necessidade com IA</h2><p>Escreva o pedido ou fotografe a lista. Reveja antes de criar.</p></div>
     <button type="button" class="na-close" aria-label="Fechar"><span class="material-symbols-outlined">close</span></button></div>
     <div class="na-body"><p class="na-hint">A carregar…</p></div><div class="na-foot"></div></div>`;
-  const state = { overlay, projectId, onSaved, needsLink, body: overlay.querySelector(".na-body"), foot: overlay.querySelector(".na-foot") };
+  const state = { overlay, projectId, onSaved, needsLink, text, body: overlay.querySelector(".na-body"), foot: overlay.querySelector(".na-foot") };
   state.onKey = (e) => e.key === "Escape" && close(state);
   document.addEventListener("keydown", state.onKey);
   document.body.appendChild(overlay);
