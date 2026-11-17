@@ -651,8 +651,8 @@ export function bindFileZones(root, store, onChange) {
 // ─── blocos de página ────────────────────────────────────────────────────────
 
 export function kpiCard({ key, label, value, sub, tone = "neutral", active = false, iconName }) {
-  return `<button type="button" class="fo-kpi fo-kpi--${tone} ${active ? "is-active" : ""}" data-kpi="${esc(key)}">
-    <span class="fo-kpi-top">${iconName ? icon(iconName) : ""}<span class="fo-kpi-label">${esc(label)}</span></span>
+  return `<button type="button" class="fo-kpi fo-kpi--${tone} ${active ? "is-active" : ""}" data-kpi="${esc(key)}" title="Filtrar por ${esc(label)}">
+    <span class="fo-kpi-top"><span class="fo-kpi-label">${esc(label)}</span>${iconName ? icon(iconName) : ""}</span>
     <b class="fo-kpi-value">${value}</b>
     <span class="fo-kpi-sub">${sub || ""}</span>
   </button>`;

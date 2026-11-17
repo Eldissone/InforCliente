@@ -12,6 +12,8 @@ import {
   num,
   round2,
   money,
+  compact,
+  initials,
   parseMoney,
   fmtDate,
   monthLabel,
@@ -64,13 +66,14 @@ export async function render() {
   renderHeaderActions();
   root.innerHTML = `<div class="fo-root">
     <div data-banner></div>
+    <div class="fo-overview" data-overview></div>
     <div class="fo-toolbar fo-conc-toolbar" data-toolbar></div>
     <div data-selbar></div>
     <div class="fo-card fo-table-card">
+      <div class="fo-table-head" data-head></div>
       <div class="fo-table-scroll"><table class="fo-table fo-conc-table" data-table></table></div>
-      <div class="fo-legend" data-foot></div>
+      <div class="fo-legend fo-flow" data-foot></div>
     </div>
-    <p class="fo-help fo-conc-legend" data-legend></p>
     <div data-manual></div>
   </div>`;
   renderAll();
@@ -85,6 +88,7 @@ function renderHeaderActions() {
   const slot = document.getElementById("financePageActions");
   if (!slot) return;
   slot.innerHTML = `<div class="fo-actions">
+    <span class="fo-hero-badge" data-hero-badge><span class="fo-hero-dot"></span><span>A preparar resumo…</span></span>
     ${canEdit() ? `<button type="button" class="fo-btn fo-btn--primary" data-import>${icon("upload")}Importar Extrato</button>` : ""}
     <button type="button" class="fo-btn fo-btn--ghost" data-rules>${icon("rule")}Regras de Classificação</button>
     <button type="button" class="fo-btn fo-btn--ghost" data-types>${icon("category")}Tipos e Subtipos</button>
@@ -178,6 +182,114 @@ function filtered() {
     }
     return true;
   });
+}
+
+// ─── resumo ──────────────────────────────────────────────────────────────────
+
+function summarize() {
+  const scope = S.items.filter(inScope);
+  const open = scope.filter(isOpen);
+  const amt = (m) => Math.abs(num(m.amount));
+  const sum = (arr, fn) => arr.reduce((acc, x) => acc + fn(x), 0);
+  const noProof = open.filter((m) => m.proofMissing);
+  const rest = open.filter((m) => !m.proofMissing);
+  const trf = rest.filter((m) => m.typeCode === "TRF INT");
+  const blank = rest.filter((m) => !m.typeCode);
+  const other = rest.filter((m) => m.typeCode && m.typeCode !== "TRF INT");
+  const inSum = sum(scope.filter((m) => m.direction === "ENTRADA"), amt);
+  const outSum = sum(scope.filter((m) => m.direction === "SAIDA"), amt);
+  const card = S.f.card ? cardOf(S.f.card) : null;
+  const activeCards = S.meta.cards.filter((c) => c.active !== false);
+  const balance = card ? num(card.balance) : sum(activeCards, (c) => num(c.balance));
+  return { scope, open, noProof, trf, blank, other, inSum, outSum, card, activeCards, balance, sum, amt };
+}
+
+/** Faixa de resumo + badge do cabeçalho. */
+function renderSummary() {
+  if (S.loading) {
+    renderOverview(null);
+    renderHeroBadge(null);
+    return;
+  }
+  const m = summarize();
+  renderOverview(m);
+  renderHeroBadge(m);
+}
+
+function renderHeroBadge(m) {
+  const badge = document.querySelector("#financePageActions [data-hero-badge]");
+  if (!badge) return;
+  if (!m) {
+    badge.innerHTML = S.error ? `<span class="fo-hero-dot is-alert"></span><span>Resumo indisponível</span>` : `<span class="fo-hero-dot"></span><span>A preparar resumo…</span>`;
+    return;
+  }
+  if (!m.open.length) {
+    badge.innerHTML = `<span class="fo-hero-dot is-ok"></span><span>Tudo conciliado${m.scope.length ? ` · ${m.scope.length} mov.` : ""}</span>`;
+    return;
+  }
+  const pending = m.sum(m.open, m.amt);
+  badge.innerHTML = `<span class="fo-hero-dot ${m.noProof.length ? "is-alert" : "is-ok"}</span><span><b>${m.open.length}</b> por conciliar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${compact(pending)}</b></span>${m.blank.length ? `<span class="fo-hero-warn">${m.blank.length} sem tipo</span>` : ""}`;
+}
+
+/** Faixa de resumo: o que falta conciliar + conta em foco. */
+function renderOverview(m) {
+  const el = root.querySelector("[data-overview]");
+  if (!el) return;
+  if (S.error) {
+    el.innerHTML = "";
+    return;
+  }
+  if (!m) {
+    el.innerHTML = `<div class="fo-overview-main is-loading"><span class="fo-skel" style="width:180px"></span><span class="fo-skel" style="width:70%;height:10px;margin-top:1.1rem"></span><span class="fo-skel" style="width:100%;height:38px;margin-top:1.1rem"></span></div><div class="fo-overview-next is-loading"><span class="fo-skel" style="width:120px"></span><span class="fo-skel" style="width:80%;height:34px;margin-top:.9rem"></span><span class="fo-skel" style="width:60%;height:14px;margin-top:.9rem"></span></div>`;
+    return;
+  }
+  const noProofV = m.sum(m.noProof, m.amt);
+  const blankV = m.sum(m.blank, m.amt);
+  const trfV = m.sum(m.trf, m.amt);
+  const otherV = m.sum(m.other, m.amt);
+  const total = noProofV + blankV + trfV + otherV;
+  const pct = (v) => (total > 0 ? Math.max((v / total) * 100, v > 0 ? 1.5 : 0).toFixed(2) : 0);
+  const seg = (cls, v, label) => (v > 0 ? `<span class="fo-seg ${cls}" style="width:${pct(v)}%" title="${esc(label)}: ${money(v)} AOA"></span>` : "");
+  const legend = `<ul class="fo-overview-legend fo-overview-legend--4">
+      <li><i class="fo-ol-dot is-late"></i><span>Falta comprovativo</span><b class="fo-num">${compact(noProofV)}</b><small>${m.noProof.length} mov.</small></li>
+      <li><i class="fo-ol-dot is-soon"></i><span>Sem tipo</span><b class="fo-num">${compact(blankV)}</b><small>${m.blank.length} mov.</small></li>
+      <li><i class="fo-ol-dot is-trf"></i><span>Transferências</span><b class="fo-num">${compact(trfV)}</b><small>${m.trf.length} mov.</small></li>
+      <li><i class="fo-ol-dot is-later"></i><span>Outros</span><b class="fo-num">${compact(otherV)}</b><small>${m.other.length} mov.</small></li>
+    </ul>`;
+  const c = m.card;
+  const accName = c ? c.label : `${m.activeCards.length} conta${m.activeCards.length === 1 ? "" : "s"} ativa${m.activeCards.length === 1 ? "" : "s"}`;
+  const period = S.f.month ? monthLabel(S.f.month) : "Todos os meses";
+  const cardHtml = `<div class="fo-overview-next">
+      <div class="fo-next-head">
+        <p class="fo-overview-kicker">${c ? "Conta em foco" : "Todas as contas"}</p>
+        <span class="fo-next-when ${m.open.length ? (m.noProof.length ? "is-late" : "is-soon") : ""}">${m.open.length ? `${m.open.length} por conciliar` : "tudo conciliado"}</span>
+      </div>
+      <div class="fo-next-body">
+        <span class="fo-next-mark">${c ? esc(initials(c.bank || c.label).slice(0, 2)) : icon("account_balance")}</span>
+        <div class="fo-next-info">
+          <b title="${esc(accName)}">${esc(accName)}</b>
+          <small>${esc(period)} · ${m.scope.length} movimento${m.scope.length === 1 ? "" : "s"}</small>
+        </div>
+      </div>
+      <div class="fo-next-foot">
+        <div class="fo-next-amount"><small>Saldo${c ? " da conta" : " consolidado"}</small><b class="fo-num">${money(m.balance)} <small>${esc(c?.currency || "AOA")}</small></b></div>
+        <button type="button" class="fo-btn fo-btn--soft fo-btn--sm" data-acc-open data-fo-keep-pop>${icon("swap_horiz")}${c ? "Trocar conta" : "Escolher conta"}</button>
+      </div>
+    </div>`;
+  el.innerHTML = `<div class="fo-overview-main">
+      <div class="fo-overview-head">
+        <div>
+          <p class="fo-overview-kicker">Composição</p>
+          <h3 class="fo-overview-title">O que falta conciliar</h3>
+        </div>
+        <span class="fo-overview-total">${money(total)} <small>AOA</small></span>
+      </div>
+      ${
+        total > 0
+          ? `<div class="fo-overview-bar" role="img" aria-label="Valor por conciliar: ${esc(compact(noProofV))} com comprovativo em falta, ${esc(compact(blankV))} sem tipo, ${esc(compact(trfV))} em transferências, ${esc(compact(otherV))} outros">${seg("is-late", noProofV, "Falta comprovativo")}${seg("is-soon", blankV, "Sem tipo")}${seg("is-trf", trfV, "Transferências")}${seg("is-later", otherV, "Outros")}</div>${legend}`
+          : `<div class="fo-overview-empty">${icon("check_circle")}<span>Nada por conciliar ${S.f.card ? "nesta conta" : "no período"}${m.scope.length ? ` — ${m.scope.length} movimento${m.scope.length === 1 ? "" : "s"} tratado${m.scope.length === 1 ? "" : "s"}` : ""}.</span></div>`
+      }
+    </div>${cardHtml}`;
 }
 
 // ─── blocos ──────────────────────────────────────────────────────────────────
@@ -371,7 +483,7 @@ function rowHtml(m, showAcc) {
   const out = m.direction === "SAIDA";
   const sel = S.selected.has(m.id);
   const done = m.reconciled && !m.proofMissing;
-  return `<tr class="${sel ? "is-selected" : ""} ${done ? "is-done" : ""}" data-id="${esc(m.id)}">
+  return `<tr class="${sel ? "is-selected" : ""} ${done ? "is-done" : ""} ${!done && !m.typeCode ? "is-untyped" : ""}" data-id="${esc(m.id)}">
     <td class="w-0"><input type="checkbox" class="fo-cb" data-sel ${sel ? "checked" : ""} ${m.reconciled ? "disabled" : ""}></td>
     <td>${typeCell(m)}</td>
     <td class="fo-num nowrap">${fmtDate(m.movementDate)}</td>
@@ -389,21 +501,29 @@ function rowHtml(m, showAcc) {
 function renderTable() {
   const tbl = root.querySelector("[data-table]");
   const foot = root.querySelector("[data-foot]");
+  const head = root.querySelector("[data-head]");
   const showAcc = true;
   const list = S.loading || S.error ? [] : filtered();
   const selectable = list.filter((m) => !m.reconciled);
   const allSel = selectable.length && selectable.every((m) => S.selected.has(m.id));
   const thead = `<thead><tr><th class="w-0" title="Selecione vários movimentos para os conciliar com o mesmo pedido"><input type="checkbox" class="fo-cb" data-sel-all ${allSel ? "checked" : ""}></th><th>Tipo</th><th>Data Mov.</th><th title="Dia em que o dinheiro saiu ou entrou de facto na conta">Data Efetiva</th>${showAcc ? "<th>Conta</th>" : ""}<th>Descrição</th><th class="ta-r">Valor</th><th title="Nota interna sobre o movimento">Nota</th><th>Conc.</th><th class="w-0"></th><th>Centro de Custo</th></tr></thead>`;
+  foot.innerHTML = movementLegend();
   if (S.loading) {
+    head.innerHTML = `<span class="fo-head-info"><span>A carregar movimentos…</span></span>`;
     tbl.innerHTML = `${thead}<tbody>${skeletonRows(11, 8)}</tbody>`;
-    foot.innerHTML = "";
     return;
   }
   if (S.error) {
+    head.innerHTML = "";
     tbl.innerHTML = `<tbody><tr><td>${emptyState({ iconName: "cloud_off", title: "Não foi possível carregar", text: esc(S.error), action: `<button type="button" class="fo-btn fo-btn--ghost" data-retry>${icon("refresh")}Tentar de novo</button>` })}</td></tr></tbody>`;
-    foot.innerHTML = "";
     return;
   }
+  const inSum = list.filter((m) => m.direction === "ENTRADA").reduce((a, m) => a + m.amount, 0);
+  const outSum = list.filter((m) => m.direction === "SAIDA").reduce((a, m) => a + m.amount, 0);
+  const openN = list.filter(isOpen).length;
+  head.innerHTML = `<span class="fo-head-info"><span class="fo-head-count">${list.length}</span><span>${list.length === 1 ? "movimento" : "movimentos"}</span>${
+    openN ? `<span class="fo-head-filter">${openN} por conciliar</span>` : list.length ? `<span class="fo-head-filter is-ok">${icon("check")}tudo conciliado</span>` : ""
+  }</span><span class="fo-head-total"><span>Entradas</span><b class="fo-num fo-green">${money(inSum)}</b><span>Saídas</span><b class="fo-num fo-red">${money(outSum)}</b><span>Saldo</span><b class="fo-num">${money(inSum - outSum)}</b></span>`;
   if (!list.length) {
     const none = !S.items.length;
     tbl.innerHTML = `<tbody><tr><td>${emptyState({
@@ -415,15 +535,17 @@ function renderTable() {
   } else {
     tbl.innerHTML = `${thead}<tbody>${list.map((m) => rowHtml(m, showAcc)).join("")}</tbody>`;
   }
-  const inSum = list.filter((m) => m.direction === "ENTRADA").reduce((a, m) => a + m.amount, 0);
-  const outSum = list.filter((m) => m.direction === "SAIDA").reduce((a, m) => a + m.amount, 0);
-  const open = list.filter(isOpen).length;
-  foot.innerHTML = `<span><b>${list.length}</b> movimento(s)${open ? ` · <b class="fo-amber">${open}</b> por conciliar` : list.length ? ' · <b class="fo-green">tudo conciliado ✓</b>' : ""}</span>
-    <span class="fo-conc-sums">Entradas <b class="fo-green fo-num">${money(inSum)}</b> · Saídas <b class="fo-red fo-num">${money(outSum)}</b> · Total <b class="fo-num">${money(inSum - outSum)}</b></span>`;
 }
 
-function renderLegend() {
-  root.querySelector("[data-legend]").innerHTML = `<b>⇄</b> conciliar · <b>✓</b> conciliado (<b>↺</b> desfaz) · Valores a <b class="fo-red">vermelho</b> = saídas · a verde = entradas · <b>⇄ Conciliar</b> = ligar o movimento ao pedido do Centro de Pagamentos ou à fatura do Centro de Recebimentos; os encargos bancários (ENC — comissões, IVA, juros, despesas) conciliam-se sozinhos e entram no mapa mensal · <b>↔</b> transferência entre contas da empresa já casada com a outra conta · <b>CP!</b> falta o comprovativo · os movimentos do extrato não se apagam (só a importação inteira, em Tesouraria › Extratos Bancários).`;
+function movementLegend() {
+  return `<span class="fo-flow-label">${icon("route")}Fluxo</span>
+    <span class="fo-flow-step is-warn">Por conciliar</span>${icon("chevron_right", "fo-flow-arrow")}
+    <span class="fo-flow-step is-good">Conciliado</span>
+    <span class="fo-flow-step is-info">Transferência</span>
+    <span class="fo-flow-step is-nav">Auto · encargos</span>
+    <span class="fo-flow-step is-bad">Falta comprovativo</span>
+    <span class="fo-flow-note">↺ desfaz · clique no tipo para reclassificar</span>
+    <span class="fo-flow-hint">Vermelho = saídas · verde = entradas — os movimentos não se apagam (só a importação inteira, em Tesouraria › Extratos Bancários).</span>`;
 }
 
 function renderManual() {
@@ -448,10 +570,10 @@ function renderManual() {
 
 function renderAll() {
   renderBanner();
+  renderSummary();
   renderToolbar();
   renderSelBar();
   renderTable();
-  renderLegend();
   renderManual();
 }
 

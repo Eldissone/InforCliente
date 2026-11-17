@@ -14,6 +14,7 @@ import {
   addDays,
   fmtDate,
   monthLabel,
+  daysBetween,
   norm,
   initials,
   icon,
@@ -77,12 +78,21 @@ export async function render() {
   renderHeaderActions();
   root.innerHTML = `<div class="fo-root">
     <div class="fo-kpis" data-kpis></div>
+    <div class="fo-overview" data-overview></div>
     <div class="fo-toolbar" data-toolbar></div>
     <div class="fo-card fo-table-card">
       <div class="fo-table-head" data-head></div>
       <div class="fo-table-scroll"><table class="fo-table" data-table></table></div>
-      <div class="fo-legend">${icon("route")}<span><b>Estado:</b> Em cotação <span class="fo-arrow">→</span> Por aprovar <span class="fo-arrow">→</span> Em aberto <span class="fo-arrow">→</span> Em trânsito <span class="fo-arrow">→</span> Pago <span class="fo-faint">(ou Atrasado, se passar a data de vencimento)</span></span>
-        <span style="margin-left:auto" class="fo-faint">PP proforma · CP comprovativo · FT fatura — clique numa linha para ver o detalhe</span></div>
+      <div class="fo-legend fo-flow">
+        <span class="fo-flow-label">${icon("route")}Fluxo</span>
+        <span class="fo-flow-step is-violet">Em cotação</span>${icon("chevron_right", "fo-flow-arrow")}
+        <span class="fo-flow-step is-warn">Por aprovar</span>${icon("chevron_right", "fo-flow-arrow")}
+        <span class="fo-flow-step is-nav">Em aberto</span>${icon("chevron_right", "fo-flow-arrow")}
+        <span class="fo-flow-step is-info">Em trânsito</span>${icon("chevron_right", "fo-flow-arrow")}
+        <span class="fo-flow-step is-good">Pago</span>
+        <span class="fo-flow-note">ou <b>Atrasado</b> depois do vencimento</span>
+        <span class="fo-flow-hint">PP proforma · CP comprovativo · FT fatura — clique numa linha para ver o detalhe</span>
+      </div>
     </div>
   </div>`;
   renderAll();
@@ -105,6 +115,7 @@ function renderHeaderActions() {
   const slot = document.getElementById("financePageActions");
   if (!slot) return;
   slot.innerHTML = `<div class="fo-actions">
+    <span class="fo-hero-badge" data-hero-badge><span class="fo-hero-dot"></span><span>A preparar resumo…</span></span>
     <button type="button" class="fo-btn fo-btn--ghost" data-export>${icon("download")}Exportar Excel</button>
     ${can("financeiro", "edit") ? `<button type="button" class="fo-btn fo-btn--primary" data-new>${icon("add")}Nova Requisição de Pagamento<span class="fo-kbd">N</span></button>` : ""}
   </div>`;
@@ -211,20 +222,33 @@ function filtered() {
 
 // ─── indicadores ─────────────────────────────────────────────────────────────
 
-function renderKpis() {
-  const el = root.querySelector("[data-kpis]");
-  if (S.loading) {
-    el.innerHTML = Array.from({ length: 5 }, () => `<div class="fo-kpi" style="cursor:default"><span class="fo-skel" style="width:60%"></span><span class="fo-skel" style="width:80%;height:22px;margin-top:.4rem"></span><span class="fo-skel" style="width:40%"></span></div>`).join("");
-    return;
-  }
+function summarize() {
   const base = baseFiltered();
   const t = S.today;
-  const sum = (arr, fn) => arr.reduce((a, x) => a + fn(x), 0);
+  const sum = (arr, fn) => arr.reduce((acc, x) => acc + fn(x), 0);
   const open = base.filter(isOpen);
   const late = base.filter((p) => p.status === "Atrasado");
   const week = open.filter((p) => p.status !== "Atrasado" && p.nextDue && p.nextDue >= t && p.nextDue <= addDays(t, 7));
+  const weekIds = new Set(week.map((p) => p.id));
+  const lateIds = new Set(late.map((p) => p.id));
+  const later = open.filter((p) => !weekIds.has(p.id) && !lateIds.has(p.id));
   const credit = open.filter((p) => p.condition !== "PRONTO");
   const paid = base.filter((p) => p.status === "Pago");
+  const next = open.slice().sort((a, b) => String(a.nextDue || "9999-12-31").localeCompare(String(b.nextDue || "9999-12-31")))[0] || null;
+  return { base, t, open, late, week, later, credit, paid, next, sum };
+}
+
+/** Indicadores, resumo do topo e composição do que está por pagar. */
+function renderSummary() {
+  const el = root.querySelector("[data-kpis]");
+  if (S.loading) {
+    el.innerHTML = Array.from({ length: 5 }, () => `<div class="fo-kpi" style="cursor:default"><span class="fo-skel" style="width:60%"></span><span class="fo-skel" style="width:80%;height:22px;margin-top:.4rem"></span><span class="fo-skel" style="width:40%"></span></div>`).join("");
+    renderOverview(null);
+    renderHeroBadge(null);
+    return;
+  }
+  const m = summarize();
+  const { open, late, week, credit, paid, sum } = m;
   const n = (arr) => `${arr.length} pagamento${arr.length === 1 ? "" : "s"}`;
   const k = S.f.kpi;
   el.innerHTML = [
@@ -234,6 +258,91 @@ function renderKpis() {
     kpiCard({ key: "credit", label: "A crédito", iconName: "credit_score", tone: "info", value: compact(sum(credit, (p) => p.openAmount)), sub: n(credit), active: k === "credit" }),
     kpiCard({ key: "paid", label: "Pago", iconName: "task_alt", tone: "good", value: compact(sum(paid, (p) => p.paidAmount)), sub: n(paid), active: k === "paid" }),
   ].join("");
+  renderOverview(m);
+  renderHeroBadge(m);
+}
+
+/** Pequeno resumo vivo no cabeçalho da página. */
+function renderHeroBadge(m) {
+  const badge = document.querySelector("#financePageActions [data-hero-badge]");
+  if (!badge) return;
+  if (!m) {
+    badge.innerHTML = S.error
+      ? `<span class="fo-hero-dot is-alert"></span><span>Resumo indisponível</span>`
+      : `<span class="fo-hero-dot"></span><span>A preparar resumo…</span>`;
+    return;
+  }
+  const total = m.sum(m.open, (p) => p.openAmount);
+  if (!m.open.length) {
+    badge.innerHTML = `<span class="fo-hero-dot is-ok"></span><span>Nada por pagar</span>`;
+    return;
+  }
+  badge.innerHTML = `<span class="fo-hero-dot ${m.late.length ? "is-alert" : "is-ok"}"></span><span><b>${m.open.length}</b> por pagar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${compact(total)}</b> AOA</span>${m.late.length ? `<span class="fo-hero-late">${m.late.length} em atraso</span>` : ""}`;
+}
+
+/** Faixa de resumo: composição do que está por pagar + próximo vencimento. */
+function renderOverview(m) {
+  const el = root.querySelector("[data-overview]");
+  if (!el) return;
+  if (S.error) {
+    el.innerHTML = "";
+    return;
+  }
+  if (!m) {
+    el.innerHTML = `<div class="fo-overview-main is-loading"><span class="fo-skel" style="width:180px"></span><span class="fo-skel" style="width:70%;height:10px;margin-top:1.1rem"></span><span class="fo-skel" style="width:100%;height:38px;margin-top:1.1rem"></span></div><div class="fo-overview-next is-loading"><span class="fo-skel" style="width:120px"></span><span class="fo-skel" style="width:80%;height:34px;margin-top:.9rem"></span><span class="fo-skel" style="width:60%;height:14px;margin-top:.9rem"></span></div>`;
+    return;
+  }
+  const lateV = m.sum(m.late, (p) => p.openAmount);
+  const weekV = m.sum(m.week, (p) => p.openAmount);
+  const laterV = m.sum(m.later, (p) => p.openAmount);
+  const total = lateV + weekV + laterV;
+  const pct = (v) => (total > 0 ? Math.max((v / total) * 100, v > 0 ? 1.5 : 0).toFixed(2) : 0);
+  const seg = (cls, v) => (v > 0 ? `<span class="fo-seg ${cls}" style="width:${pct(v)}%" title="${esc(cls === "is-late" ? "Em atraso" : cls === "is-soon" ? "Vence em 7 dias" : "Mais tarde")}: ${money(v)} AOA"></span>` : "");
+  const legend = `<ul class="fo-overview-legend">
+      <li><i class="fo-ol-dot is-late"></i><span>Em atraso</span><b class="fo-num">${compact(lateV)}</b><small>${m.late.length} ped.</small></li>
+      <li><i class="fo-ol-dot is-soon"></i><span>Vence em 7 dias</span><b class="fo-num">${compact(weekV)}</b><small>${m.week.length} ped.</small></li>
+      <li><i class="fo-ol-dot is-later"></i><span>Mais tarde</span><b class="fo-num">${compact(laterV)}</b><small>${m.later.length} ped.</small></li>
+    </ul>`;
+  const nxt = m.next;
+  let nextHtml;
+  if (!nxt) {
+    nextHtml = `<div class="fo-overview-next is-empty">
+      <span class="fo-next-empty-icon">${icon("task_alt")}</span>
+      <b>Tudo em dia</b>
+      <span>Não há pagamentos pendentes${m.paid.length ? ` — ${m.paid.length} já pago${m.paid.length === 1 ? "" : "s"}` : ""}.</span>
+    </div>`;
+  } else {
+    const diff = nxt.nextDue ? daysBetween(nxt.nextDue, S.today) : null;
+    const whenTxt = diff === null ? "sem data" : diff < 0 ? `${Math.abs(diff)} d de atraso` : diff === 0 ? "vence hoje" : diff === 1 ? "vence amanhã" : `vence em ${diff} dias`;
+    const whenTone = diff !== null && diff < 0 ? "is-late" : diff !== null && diff <= 3 ? "is-soon" : "";
+    nextHtml = `<div class="fo-overview-next">
+      <div class="fo-next-head">
+        <p class="fo-overview-kicker">${diff !== null && diff < 0 ? "Mais atrasado" : "Próximo vencimento"}</p>
+        <span class="fo-next-when ${whenTone}">${esc(whenTxt)}</span>
+      </div>
+      <div class="fo-next-body">
+        <span class="fo-next-mark">${esc(nxt.supplierName ? initials(nxt.supplierName).slice(0, 2) : "—")}</span>
+        <div class="fo-next-info">
+          <b title="${esc(nxt.supplierName || "")}">${esc(nxt.supplierName || "Sem terceiro")}</b>
+          <small>${esc(nxt.number)} · ${esc(nxt.typeLabel || nxt.typeCode)} · ${esc(fmtDate(nxt.nextDue))}</small>
+        </div>
+      </div>
+      <div class="fo-next-foot">
+        <div class="fo-next-amount"><small>Em aberto</small><b class="fo-num">${money(nxt.openAmount)}</b></div>
+        <button type="button" class="fo-btn fo-btn--soft fo-btn--sm" data-next-open="${esc(nxt.id)}">${icon("arrow_forward")}Ver pedido</button>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = `<div class="fo-overview-main">
+      <div class="fo-overview-head">
+        <div>
+          <p class="fo-overview-kicker">Composição</p>
+          <h3 class="fo-overview-title">O que está por pagar</h3>
+        </div>
+        <span class="fo-overview-total">${money(total)} <small>AOA</small></span>
+      </div>
+      ${total > 0 ? `<div class="fo-overview-bar" role="img" aria-label="Composição do valor por pagar: ${esc(compact(lateV))} em atraso, ${esc(compact(weekV))} a vencer em 7 dias, ${esc(compact(laterV))} mais tarde">${seg("is-late", lateV)}${seg("is-soon", weekV)}${seg("is-later", laterV)}</div>${legend}` : `<div class="fo-overview-empty">${icon("check_circle")}<span>Sem valores em aberto${m.paid.length ? ` — ${m.paid.length} pagamento${m.paid.length === 1 ? "" : "s"} concluído${m.paid.length === 1 ? "" : "s"}` : ""}.</span></div>`}
+    </div>${nextHtml}`;
 }
 
 // ─── barra de filtros ────────────────────────────────────────────────────────
@@ -286,6 +395,7 @@ function renderToolbar() {
       </select>
     </div>
     <div class="fo-toolbar-row">
+      <span class="fo-tool-label">Período</span>
       <select class="fo-select" data-ref title="Data de referência do período">
         <option value="due" ${f.ref === "due" ? "selected" : ""}>Por vencimento</option>
         <option value="request" ${f.ref === "request" ? "selected" : ""}>Por data do pedido</option>
@@ -298,7 +408,7 @@ function renderToolbar() {
       </select>
       ${f.month === "range" ? `<input type="date" class="fo-select" data-from value="${esc(f.from)}" style="padding-right:.6rem"><span class="fo-faint">até</span><input type="date" class="fo-select" data-to value="${esc(f.to)}" style="padding-right:.6rem">` : ""}
       <span class="fo-toolbar-sep fo-hide-md"></span>
-      <span class="fo-faint" style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase">Pendências</span>
+      <span class="fo-tool-label">Pendências</span>
       <label class="fo-check ${f.noInvoice ? "is-on" : ""}"><input type="checkbox" data-noinv ${f.noInvoice ? "checked" : ""}>Pagos sem fatura <b>${pendN.inv}</b></label>
       <label class="fo-check ${f.noProof ? "is-on" : ""}"><input type="checkbox" data-noproof ${f.noProof ? "checked" : ""}>Pagos sem comprovativo <b>${pendN.proof}</b></label>
       ${anyFilter ? `<button type="button" class="fo-clear" data-clear>${icon("filter_alt_off")}limpar filtros</button>` : ""}
@@ -337,12 +447,12 @@ function rowHtml(pr) {
   const cur = pr.currency !== "AOA" ? ` <small class="fo-faint">${esc(pr.currency)}</small>` : "";
   const partial = pr.paidAmount > 0 && pr.openAmount > 0;
   const issued = `Abrir a requisição · emitida a ${fmtDate(pr.requestDate)} por ${pr.requestedBy || "—"}`;
-  let html = `<tr class="is-row ${pr.status === "Rejeitado" ? "is-dim" : ""}" data-id="${esc(pr.id)}">
+  let html = `<tr class="is-row ${late ? "is-late" : ""} ${pr.status === "Rejeitado" ? "is-dim" : ""}" data-id="${esc(pr.id)}">
     <td><button type="button" class="fo-link fo-ref" data-open title="${esc(issued)}">${esc(pr.number)}</button>${pr.sourceRef ? `<span class="fo-cell-sub" title="Vem de outro ecrã do InfoCliente">${icon("link")} ${esc(pr.sourceMeta?.sourceLabel || pr.sourceType)}</span>` : ""}</td>
     <td class="fo-num ${late ? "fo-red" : ""}" style="font-weight:${late ? 800 : 500}">${fmtDate(pr.nextDue)}${late && pr.daysLate > 0 ? `<span class="fo-cell-sub fo-red">${pr.daysLate} d de atraso</span>` : ""}</td>
     <td><span class="fo-tag ${pr.typeCode === "PF" ? "fo-tag--navy" : "fo-tag--violet"}" title="${esc(pr.kindLabel)} · ${esc(pr.typeLabel)}">${esc(pr.typeCode)}</span></td>
     <td><span class="fo-tag" title="${esc(pr.costCenterCode || "")}">${esc(ccTxt)}</span>${pr.splits?.length > 1 ? `<span class="fo-cell-sub">+${pr.splits.length - 1} CC</span>` : ""}</td>
-    <td><span class="fo-cell-main" title="${esc(pr.supplierName || "")}">${esc(pr.supplierName || "—")}</span><span class="fo-cell-sub" title="${esc(desc || "")}">${esc(desc || "")}</span></td>
+    <td><div class="fo-supplier"><span class="fo-supplier-mark">${esc(pr.supplierName ? initials(pr.supplierName).slice(0, 2) : "—")}</span><span class="fo-supplier-text"><span class="fo-cell-main" title="${esc(pr.supplierName || "")}">${esc(pr.supplierName || "—")}</span><span class="fo-cell-sub" title="${esc(desc || "")}">${esc(desc || "")}</span></span></div></td>
     <td class="ta-c"><button type="button" class="fo-doc ${pr.supplierIban || pr.fundCardId ? "is-ok" : ""}" data-dest title="Dados para pagamento" data-fo-keep-pop>${icon(pr.mode === "FM" ? "credit_card" : "account_balance")}</button></td>
     <td>${
       multi
@@ -387,7 +497,7 @@ function renderTable() {
   }
   const list = filtered();
   const total = list.reduce((a, p) => a + (isOpen(p) ? p.openAmount : p.totalAmount), 0);
-  head.innerHTML = `<span><b>${list.length}</b> pedido${list.length === 1 ? "" : "s"} na lista${S.f.kpi ? ` · filtro <b>${esc({ open: "Por pagar", late: "Em atraso", week: "Vence em 7 dias", credit: "A crédito", paid: "Pago" }[S.f.kpi])}</b> <button type="button" class="fo-link fo-link--muted" data-kpi-off>(tirar)</button>` : ""}</span><span>Valor <b class="fo-num">${money(total)}</b> AOA ${list.some((p) => p.currency !== "AOA") ? '<span class="fo-faint">(inclui outras moedas)</span>' : ""}</span>`;
+  head.innerHTML = `<span class="fo-head-info"><span class="fo-head-count">${list.length}</span><span>${list.length === 1 ? "pedido" : "pedidos"} na lista</span>${S.f.kpi ? `<span class="fo-head-filter">${esc({ open: "Por pagar", late: "Em atraso", week: "Vence em 7 dias", credit: "A crédito", paid: "Pago" }[S.f.kpi])}<button type="button" class="fo-link fo-link--muted" data-kpi-off title="Tirar o filtro">${icon("close")}</button></span>` : ""}</span><span class="fo-head-total"><span>Valor</span><b class="fo-num">${money(total)}</b><small>AOA</small>${list.some((p) => p.currency !== "AOA") ? '<span class="fo-faint">+ divisas</span>' : ""}</span>`;
   if (!list.length) {
     const none = !S.items.length;
     tbl.innerHTML = `<tbody><tr><td>${emptyState({
@@ -402,7 +512,7 @@ function renderTable() {
 }
 
 function renderAll() {
-  renderKpis();
+  renderSummary();
   renderToolbar();
   renderTable();
 }
@@ -416,7 +526,7 @@ function upsert(item, removedId) {
     if (i >= 0) S.items[i] = item;
     else S.items.unshift(item);
   }
-  renderKpis();
+  renderSummary();
   renderToolbar();
   renderTable();
 }
@@ -473,7 +583,7 @@ function bindEvents() {
     const kpi = t.closest("[data-kpi]");
     if (kpi) {
       S.f.kpi = S.f.kpi === kpi.dataset.kpi ? "" : kpi.dataset.kpi;
-      renderKpis();
+      renderSummary();
       renderToolbar();
       renderTable();
       return;
@@ -507,7 +617,7 @@ function bindEvents() {
         onChange: (v) => {
           S.f[key] = v;
           saveFilters();
-          renderKpis();
+          renderSummary();
           renderTable();
           const btn = root.querySelector(`[data-mf="${key}"]`);
           if (btn) {
@@ -517,6 +627,12 @@ function bindEvents() {
           }
         },
       });
+      return;
+    }
+    const nextBtn = t.closest("[data-next-open]");
+    if (nextBtn) {
+      const nextPr = S.items.find((i) => i.id === nextBtn.dataset.nextOpen);
+      if (nextPr) openDetail(nextPr);
       return;
     }
     const th = t.closest("[data-sort]");
@@ -557,7 +673,7 @@ function bindEvents() {
       clearTimeout(qTimer);
       qTimer = setTimeout(() => {
         S.f.q = e.target.value;
-        renderKpis();
+        renderSummary();
         renderTable();
       }, 120);
     }
@@ -566,7 +682,7 @@ function bindEvents() {
     if (e.target.matches("[data-q]") && e.key === "Escape" && e.target.value) {
       e.target.value = "";
       S.f.q = "";
-      renderKpis();
+      renderSummary();
       renderTable();
     }
   });
