@@ -10,11 +10,9 @@ const FEATURES = [
   { key: "chat_mention", label: "@IA no chat", default: false },
   { key: "digests", label: "Resumos diários e semanais", default: false },
   { key: "alerts", label: "Alertas preditivos", default: false },
-  { key: "voice", label: "Registo de execução por texto ou voz", default: false },
   { key: "needs_assist", label: "Necessidades assistidas (texto ou foto)", default: false },
   { key: "documents_draft", label: "Rascunhos de documentos (autos e relatório mensal)", default: false },
   { key: "photos", label: "Análise de fotos", default: false },
-  { key: "command", label: "Paleta de comandos (Ctrl+K) em linguagem natural", default: false },
 ];
 
 /**

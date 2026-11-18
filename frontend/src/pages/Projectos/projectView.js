@@ -3404,31 +3404,6 @@ document.getElementById("btnAiAssistant")?.addEventListener("click", async () =>
   openAssistant({ projectId: getProjectId(), projectLabel: title });
 });
 
-// Registo de execução por texto ou voz (IA) — a IA propõe, o técnico confirma.
-(async () => {
-  const btn = document.getElementById("btnAiProgress");
-  const projectId = getProjectId();
-  if (!btn || !projectId) return;
-  let status;
-  try {
-    status = await apiRequest(`/ai/progress/status?projectId=${encodeURIComponent(projectId)}`);
-  } catch {
-    return; // portal do cliente ou sem sessão
-  }
-  // Só aparece a quem o pode usar; o administrador vê-o sempre (para saber porque está desligado).
-  if (!status.enabled && !status.canConfigure) return;
-  btn.style.display = "inline-flex";
-  btn.addEventListener("click", async () => {
-    const { openProgressCapture } = await import("../../shared/progressCapture.js");
-    openProgressCapture({
-      projectId,
-      onSaved: () => {
-        try { loadProgressTasks(); } catch { /* separador ainda não carregado */ }
-      },
-    });
-  });
-})();
-
 // Fotos da obra com IA e histórico de segurança (só equipa interna).
 (async () => {
   const projectId = getProjectId();
