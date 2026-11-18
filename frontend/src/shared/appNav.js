@@ -156,7 +156,8 @@ function createMenuLink(definition, source, variant) {
     link.title = "Módulo em preparação";
     link.addEventListener("click", (event) => event.preventDefault());
   }
-  const codeHtml = definition.code ? `<span class="app-sidebar-code">${definition.code}</span>` : "";
+  // Os códigos (P1, R1, T2…) ficam só nos dados; o menu mostra apenas o nome.
+  const codeHtml = "";
   const badgeHtml = definition.badge ? `<span class="app-sidebar-badge">${definition.badge}</span>` : "";
 
   if (variant === "sidebar") {

@@ -37,7 +37,7 @@ export function money(value, digits = 2) {
   const v = num(value);
   const neg = v < 0;
   const [int, dec] = Math.abs(v).toFixed(digits).split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return `${neg ? "−" : ""}${grouped}${digits ? `,${dec}` : ""}`;
 }
 

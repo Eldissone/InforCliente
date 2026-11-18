@@ -115,7 +115,7 @@ function renderHeaderActions() {
   const slot = document.getElementById("financePageActions");
   if (!slot) return;
   slot.innerHTML = `<div class="fo-actions">
-    <span class="fo-hero-badge" data-hero-badge><span class="fo-hero-dot"></span><span>A preparar resumo…</span></span>
+    <span class="fo-hero-badge" data-hero-badge><span>A preparar resumo…</span></span>
     <button type="button" class="fo-btn fo-btn--ghost" data-export>${icon("download")}Exportar Excel</button>
     ${can("financeiro", "edit") ? `<button type="button" class="fo-btn fo-btn--primary" data-new>${icon("add")}Nova Requisição de Pagamento<span class="fo-kbd">N</span></button>` : ""}
   </div>`;
@@ -268,16 +268,16 @@ function renderHeroBadge(m) {
   if (!badge) return;
   if (!m) {
     badge.innerHTML = S.error
-      ? `<span class="fo-hero-dot is-alert"></span><span>Resumo indisponível</span>`
-      : `<span class="fo-hero-dot"></span><span>A preparar resumo…</span>`;
+      ? `<span>Resumo indisponível</span>`
+      : `<span>A preparar resumo…</span>`;
     return;
   }
   const total = m.sum(m.open, (p) => p.openAmount);
   if (!m.open.length) {
-    badge.innerHTML = `<span class="fo-hero-dot is-ok"></span><span>Nada por pagar</span>`;
+    badge.innerHTML = `<span>Nada por pagar</span>`;
     return;
   }
-  badge.innerHTML = `<span class="fo-hero-dot ${m.late.length ? "is-alert" : "is-ok"}"></span><span><b>${m.open.length}</b> por pagar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${compact(total)}</b> AOA</span>${m.late.length ? `<span class="fo-hero-late">${m.late.length} em atraso</span>` : ""}`;
+  badge.innerHTML = `<span><b>${m.open.length}</b> por pagar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${money(total)}</b> AOA</span>${m.late.length ? `<span class="fo-hero-late">${m.late.length} em atraso</span>` : ""}`;
 }
 
 /** Faixa de resumo: composição do que está por pagar + próximo vencimento. */
@@ -297,7 +297,7 @@ function renderOverview(m) {
   const laterV = m.sum(m.later, (p) => p.openAmount);
   const total = lateV + weekV + laterV;
   const pct = (v) => (total > 0 ? Math.max((v / total) * 100, v > 0 ? 1.5 : 0).toFixed(2) : 0);
-  const seg = (cls, v) => (v > 0 ? `<span class="fo-seg ${cls}" style="width:${pct(v)}%" title="${esc(cls === "is-late" ? "Em atraso" : cls === "is-soon" ? "Vence em 7 dias" : "Mais tarde")}: ${money(v)} AOA"></span>` : "");
+  const seg = (cls, v) => (v > 0 ? `<span class="fo-bar-seg ${cls}" style="width:${pct(v)}%" title="${esc(cls === "is-late" ? "Em atraso" : cls === "is-soon" ? "Vence em 7 dias" : "Mais tarde")}: ${money(v)} AOA"></span>` : "");
   const legend = `<ul class="fo-overview-legend">
       <li><i class="fo-ol-dot is-late"></i><span>Em atraso</span><b class="fo-num">${compact(lateV)}</b><small>${m.late.length} ped.</small></li>
       <li><i class="fo-ol-dot is-soon"></i><span>Vence em 7 dias</span><b class="fo-num">${compact(weekV)}</b><small>${m.week.length} ped.</small></li>

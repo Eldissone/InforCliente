@@ -122,7 +122,7 @@ function renderHeaderActions() {
   if (!slot) return;
   const edit = can("financeiro", "edit");
   slot.innerHTML = `<div class="fo-actions">
-    <span class="fo-hero-badge" data-hero-badge><span class="fo-hero-dot"></span><span>A preparar resumo…</span></span>
+    <span class="fo-hero-badge" data-hero-badge><span>A preparar resumo…</span></span>
     <button type="button" class="fo-btn fo-btn--ghost" data-export>${icon("download")}Exportar Excel</button>
     ${edit ? `<button type="button" class="fo-btn fo-btn--ghost" data-import>${icon("document_scanner")}Importar Faturas (PDF)</button>` : ""}
     ${edit ? `<button type="button" class="fo-btn fo-btn--primary" data-new>${icon("add")}Registar Fatura<span class="fo-kbd">N</span></button>` : ""}
@@ -305,16 +305,16 @@ function renderHeroBadge(m) {
   if (!badge) return;
   if (!m) {
     badge.innerHTML = S.error
-      ? `<span class="fo-hero-dot is-alert"></span><span>Resumo indisponível</span>`
-      : `<span class="fo-hero-dot"></span><span>A preparar resumo…</span>`;
+      ? `<span>Resumo indisponível</span>`
+      : `<span>A preparar resumo…</span>`;
     return;
   }
   const total = m.sum(m.open, (i) => i.missingAmount);
   if (!m.open.length) {
-    badge.innerHTML = `<span class="fo-hero-dot is-ok"></span><span>Nada por receber</span>`;
+    badge.innerHTML = `<span>Nada por receber</span>`;
     return;
   }
-  badge.innerHTML = `<span class="fo-hero-dot ${m.late.length ? "is-alert" : "is-ok"}"></span><span><b>${m.open.length}</b> por receber</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${compact(total)}</b></span>${m.late.length ? `<span class="fo-hero-late">${m.late.length} em atraso</span>` : ""}`;
+  badge.innerHTML = `<span><b>${m.open.length}</b> por receber</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${money(total)}</b> AOA</span>${m.late.length ? `<span class="fo-hero-late">${m.late.length} em atraso</span>` : ""}`;
 }
 
 /** Faixa de resumo: composição do que está por receber + próxima receção. */
@@ -334,7 +334,7 @@ function renderOverview(m) {
   const laterV = m.sum(m.later, (i) => i.missingAmount);
   const total = lateV + weekV + laterV;
   const pct = (v) => (total > 0 ? Math.max((v / total) * 100, v > 0 ? 1.5 : 0).toFixed(2) : 0);
-  const seg = (cls, v) => (v > 0 ? `<span class="fo-seg ${cls}" style="width:${pct(v)}%" title="${esc(cls === "is-late" ? "Em atraso" : cls === "is-soon" ? "Recebe em 7 dias" : "Mais tarde")}: ${money(v)} AOA"></span>` : "");
+  const seg = (cls, v) => (v > 0 ? `<span class="fo-bar-seg ${cls}" style="width:${pct(v)}%" title="${esc(cls === "is-late" ? "Em atraso" : cls === "is-soon" ? "Recebe em 7 dias" : "Mais tarde")}: ${money(v)} AOA"></span>` : "");
   const legend = `<ul class="fo-overview-legend">
       <li><i class="fo-ol-dot is-late"></i><span>Em atraso</span><b class="fo-num">${compact(lateV)}</b><small>${m.late.length} fat.</small></li>
       <li><i class="fo-ol-dot is-soon"></i><span>Recebe em 7 dias</span><b class="fo-num">${compact(weekV)}</b><small>${m.week.length} fat.</small></li>

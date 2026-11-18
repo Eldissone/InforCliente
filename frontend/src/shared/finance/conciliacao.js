@@ -88,7 +88,7 @@ function renderHeaderActions() {
   const slot = document.getElementById("financePageActions");
   if (!slot) return;
   slot.innerHTML = `<div class="fo-actions">
-    <span class="fo-hero-badge" data-hero-badge><span class="fo-hero-dot"></span><span>A preparar resumo…</span></span>
+    <span class="fo-hero-badge" data-hero-badge><span>A preparar resumo…</span></span>
     ${canEdit() ? `<button type="button" class="fo-btn fo-btn--primary" data-import>${icon("upload")}Importar Extrato</button>` : ""}
     <button type="button" class="fo-btn fo-btn--ghost" data-rules>${icon("rule")}Regras de Classificação</button>
     <button type="button" class="fo-btn fo-btn--ghost" data-types>${icon("category")}Tipos e Subtipos</button>
@@ -221,15 +221,15 @@ function renderHeroBadge(m) {
   const badge = document.querySelector("#financePageActions [data-hero-badge]");
   if (!badge) return;
   if (!m) {
-    badge.innerHTML = S.error ? `<span class="fo-hero-dot is-alert"></span><span>Resumo indisponível</span>` : `<span class="fo-hero-dot"></span><span>A preparar resumo…</span>`;
+    badge.innerHTML = S.error ? `<span>Resumo indisponível</span>` : `<span>A preparar resumo…</span>`;
     return;
   }
   if (!m.open.length) {
-    badge.innerHTML = `<span class="fo-hero-dot is-ok"></span><span>Tudo conciliado${m.scope.length ? ` · ${m.scope.length} mov.` : ""}</span>`;
+    badge.innerHTML = `<span>Tudo conciliado${m.scope.length ? ` · ${m.scope.length} mov.` : ""}</span>`;
     return;
   }
   const pending = m.sum(m.open, m.amt);
-  badge.innerHTML = `<span class="fo-hero-dot ${m.noProof.length ? "is-alert" : "is-ok"}</span><span><b>${m.open.length}</b> por conciliar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${compact(pending)}</b></span>${m.blank.length ? `<span class="fo-hero-warn">${m.blank.length} sem tipo</span>` : ""}`;
+  badge.innerHTML = `<span><b>${m.open.length}</b> por conciliar</span><span class="fo-hero-sep"></span><span class="fo-num"><b>${money(pending)}</b> AOA</span>${m.blank.length ? `<span class="fo-hero-warn">${m.blank.length} sem tipo</span>` : ""}`;
 }
 
 /** Faixa de resumo: o que falta conciliar + conta em foco. */
@@ -250,7 +250,7 @@ function renderOverview(m) {
   const otherV = m.sum(m.other, m.amt);
   const total = noProofV + blankV + trfV + otherV;
   const pct = (v) => (total > 0 ? Math.max((v / total) * 100, v > 0 ? 1.5 : 0).toFixed(2) : 0);
-  const seg = (cls, v, label) => (v > 0 ? `<span class="fo-seg ${cls}" style="width:${pct(v)}%" title="${esc(label)}: ${money(v)} AOA"></span>` : "");
+  const seg = (cls, v, label) => (v > 0 ? `<span class="fo-bar-seg ${cls}" style="width:${pct(v)}%" title="${esc(label)}: ${money(v)} AOA"></span>` : "");
   const legend = `<ul class="fo-overview-legend fo-overview-legend--4">
       <li><i class="fo-ol-dot is-late"></i><span>Falta comprovativo</span><b class="fo-num">${compact(noProofV)}</b><small>${m.noProof.length} mov.</small></li>
       <li><i class="fo-ol-dot is-soon"></i><span>Sem tipo</span><b class="fo-num">${compact(blankV)}</b><small>${m.blank.length} mov.</small></li>
