@@ -182,7 +182,7 @@ export function wireUsersNav() {
  * ocultos até confirmação da permissão no servidor.
  */
 async function wireNavLinks(role) {
-  const allNavSelectors = "[data-nav-dashboard], [data-nav-clientes], [data-nav-obras], [data-nav-logistica], [data-nav-logistics], [data-nav-planeamento], [data-nav-cotacao], [data-nav-financeiro], [data-nav-centros], [data-nav-users]";
+  const allNavSelectors = "[data-nav-dashboard], [data-nav-clientes], [data-nav-obras], [data-nav-logistica], [data-nav-logistics], [data-nav-planeamento], [data-nav-cotacao], [data-nav-comercial], [data-nav-financeiro], [data-nav-centros], [data-nav-users]";
 
   if (document.body.dataset.appNav === "off") {
     document.querySelectorAll(allNavSelectors).forEach((el) => {
@@ -224,6 +224,7 @@ async function wireNavLinks(role) {
       { sel: "[data-nav-logistica], [data-nav-logistics]", key: "navlinks:nav_logistica" },
       { sel: "[data-nav-planeamento]", key: "navlinks:nav_planeamento" },
       { sel: "[data-nav-cotacao]", key: "navlinks:nav_cotacao" },
+      { sel: "[data-nav-comercial]", key: "navlinks:nav_comercial" },
       { sel: "[data-nav-financeiro]", key: "navlinks:nav_financeiro" },
       { sel: "[data-nav-centros]", key: "navlinks:nav_centros_gerais" },
       { sel: "[data-nav-users]", key: "navlinks:nav_users" }

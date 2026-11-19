@@ -92,7 +92,10 @@ export function checkAuth({ allowedRoles = [] } = {}) {
 
   if (!user || !token) {
     console.warn("checkAuth: Sessão ausente. Redirecionando para login.", { hasUser: !!user, hasToken: !!token });
-    const here = window.location.pathname.split("/").slice(-2).join("/");
+    // Caminho completo: `slice(-2)` perdia os segmentos iniciais e quebrava
+    // rotas aninhadas (ex.: /comercial/base/baremes, /Financeiro/faturacao/registar).
+    // getSafeNextPath() valida a origem e recusa destinos em /auth/.
+    const here = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     window.location.href = `/auth/login?next=${encodeURIComponent(here)}`;
     return null;
   }

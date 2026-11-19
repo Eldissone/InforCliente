@@ -56,9 +56,14 @@ export function openPayModal(item, { onSaved } = {}) {
   const isOrder = item.source === "PEDIDO_COMPRA";
   const needsProof = isCost || (isExtra && item.detail === "SOLICITACAO_TRANSFERENCIA");
 
+  const withheld = num(item.withholdingAmount);
   const sourceNote = isExtra
     ? `Pedido extra pago por <strong>${esc(EXTRA_SOURCE_LABEL[item.detail] || "—")}</strong>${
         item.detail === "FUNDO_MANEIO" ? " — o valor é debitado do fundo de maneio do centro de custo." : "."
+      }${
+        withheld > 0
+          ? ` O documento é de ${esc(money(item.amount, cur))}; ficam retidos ${esc(money(withheld, cur))} de retenção na fonte, a entregar ao Estado.`
+          : ""
       }`
     : isTx
       ? "Lançamento do centro de custo: confirma o valor final realizado."

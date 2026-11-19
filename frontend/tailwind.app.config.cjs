@@ -7,6 +7,7 @@ module.exports = {
     "./src/pages/auth/**/*.{html,js}",
     "./src/pages/Stock/**/*.{html,js}",
     "./src/pages/Financeiro/**/*.{html,js}",
+    "./src/pages/comercial/**/*.{html,js}",
     "./src/shared/**/*.{html,js}"
   ],
   theme: {

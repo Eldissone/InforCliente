@@ -35,11 +35,38 @@ const APP_MENU = [
   },
   {
     type: "group",
+    label: "Comercial",
+    icon: "request_quote",
+    children: [
+      {
+        label: "Orçamentos",
+        icon: "calculate",
+        selector: "[data-nav-comercial]",
+        href: "/comercial/orcamentos",
+        perm: "comercial:tab_orcamentos",
+      },
+      { label: "Folha de Despacho", icon: "fact_check", href: "/comercial/despacho", perm: "comercial:tab_despacho" },
+      { label: "Propostas", icon: "forward_to_inbox", href: "/comercial/propostas", perm: "comercial:tab_propostas" },
+      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
+      {
+        label: "Base",
+        icon: "dataset",
+        children: [
+          { label: "Baremes", icon: "price_change", href: "/comercial/base/baremes", perm: "comercial:tab_baremes" },
+          { label: "Parâmetros", icon: "tune", href: "/comercial/base/parametros", perm: "comercial:tab_parametros" },
+          { label: "Funcionários", icon: "engineering", href: "/comercial/base/funcionarios", perm: "comercial:tab_funcionarios" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "group",
     label: "Obras",
     icon: "construction",
     children: [
       { label: "Listagem", icon: "list", selector: "[data-nav-obras]", href: "/Projectos/ProjectGeral" },
       { label: "Cotação", icon: "request_quote", selector: "[data-nav-cotacao]", href: "/Projectos/Cotacao" },
+      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
     ],
   },
   {
@@ -51,6 +78,7 @@ const APP_MENU = [
       { label: "Equipamentos e Frotas", icon: "agriculture", href: "/equipamentos" },
        { label: "Armazéns", icon: "warehouse", href: "/registos/armazens" },
       { label: "Pedidos de Logística", icon: "inventory_2", selector: LOGISTICS_SELECTOR, href: "/Stock" },
+      { label: "Requisições de Material", icon: "assignment_add", href: "/requisicoes", perm: "obras:view" },
     ],
   },
   {
@@ -253,6 +281,7 @@ function isSidebarLinkActive(link) {
     return current.includes("/financeiro/centrodecompras") || current.includes("/financeiro/financeiro");
   }
   if (link.matches("[data-nav-cotacao]")) return current.includes("/cotacao");
+  if (link.matches("[data-nav-comercial]")) return current.includes("/comercial/orcamento");
   if (link.matches("[data-nav-users]")) return current.includes("/users/");
   if (link.matches("[data-nav-dashboard]")) return /\/dashboard(\/index)?\/?$/.test(current);
   return false;

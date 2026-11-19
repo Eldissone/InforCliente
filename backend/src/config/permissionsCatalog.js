@@ -64,10 +64,19 @@ const ACTION_LABELS = {
   tab_portal_contactos: "Aba: Contactos (portal)",
   tab_portal_stock_inventory: "Sub-aba: Inventário (portal)",
   tab_portal_stock_history: "Sub-aba: Diário (portal)",
+  // Comercial / Orçamentação
+  tab_orcamentos: "Orçamentos (lista e documento)",
+  tab_despacho: "Folha de despacho",
+  tab_propostas: "Propostas ao cliente",
+  tab_baremes: "Base: Baremes",
+  tab_parametros: "Base: Parâmetros",
+  tab_funcionarios: "Base: Funcionários",
+  adjudicar: "Adjudicar (criar obra a partir do orçamento)",
   // Navlinks
   nav_cotacao: "Link nav: Cotação",
   nav_financeiro: "Link nav: Financeiro",
   nav_centros_gerais: "Link nav: Compras e Pedidos",
+  nav_comercial: "Link nav: Comercial",
 };
 
 /**
@@ -171,6 +180,7 @@ const PERMISSION_GROUPS = [
       { id: "obras.view", label: "Vista da obra", route: "/Projectos/projectView.html" },
       { id: "obras.tecnico", label: "Planos (técnico)", route: "/Projectos/tecnicoPlanos.html" },
       { id: "obras.planos", label: "Planos diários / tarefas", route: "/Projectos/projectView.html" },
+      { id: "obras.requisicoes", label: "Requisições de material", route: "/requisicoes" },
     ],
     actions: ["view", "read", "create", "edit", "delete", "approve", "export", "download_gallery", "manage", "financeiro", "full_access"],
   },
@@ -236,6 +246,36 @@ const PERMISSION_GROUPS = [
       { id: "financeiro.relatorios", label: "Resumos financeiros", route: "/Projectos/projectView.html" },
     ],
     actions: ["view", "edit", "export", "approve", "confirm_invoice", "certify_expense", "full_access"],
+  },
+  {
+    id: "comercial",
+    label: "Comercial / Orçamentação",
+    icon: "request_quote",
+    pages: [
+      { id: "comercial.orcamentos", label: "Orçamentos (lista)", route: "/comercial/orcamentos" },
+      { id: "comercial.orcamento", label: "Orçamento (documento)", route: "/comercial/orcamento" },
+      { id: "comercial.despacho", label: "Folha de despacho", route: "/comercial/despacho" },
+      { id: "comercial.propostas", label: "Propostas", route: "/comercial/propostas" },
+      { id: "comercial.baremes", label: "Base: Baremes", route: "/comercial/base/baremes" },
+      { id: "comercial.parametros", label: "Base: Parâmetros", route: "/comercial/base/parametros" },
+      { id: "comercial.funcionarios", label: "Base: Funcionários", route: "/comercial/base/funcionarios" },
+    ],
+    actions: [
+      "view",
+      "create",
+      "edit",
+      "delete",
+      "approve",
+      "adjudicar",
+      "export",
+      "tab_orcamentos",
+      "tab_despacho",
+      "tab_propostas",
+      "tab_baremes",
+      "tab_parametros",
+      "tab_funcionarios",
+      "full_access",
+    ],
   },
   {
     id: "relatorios",
@@ -329,11 +369,12 @@ const PERMISSION_GROUPS = [
       { id: "navlinks.logistica", label: "Link: Logística", route: "/Stock/index.html" },
       { id: "navlinks.planeamento", label: "Link: Planeamento", route: "/Projectos/ProjectGeral.html" },
       { id: "navlinks.cotacao", label: "Link: Cotação", route: "/Projectos/Cotacao/index.html" },
+      { id: "navlinks.comercial", label: "Link: Comercial", route: "/comercial/orcamentos" },
       { id: "navlinks.financeiro", label: "Link: Financeiro", route: "/Financeiro/financeiro.html" },
       { id: "navlinks.centros_gerais", label: "Link: Compras e Pedidos", route: "/Financeiro/centroDeCompras.html" },
       { id: "navlinks.users", label: "Link: Gestão", route: "/Users/index.html" },
     ],
-    actions: ["nav_dashboard", "nav_clientes", "nav_obras", "nav_logistica", "nav_planeamento", "nav_cotacao", "nav_financeiro", "nav_centros_gerais", "nav_users"],
+    actions: ["nav_dashboard", "nav_clientes", "nav_obras", "nav_logistica", "nav_planeamento", "nav_cotacao", "nav_comercial", "nav_financeiro", "nav_centros_gerais", "nav_users"],
   },
 ];
 
@@ -364,6 +405,14 @@ const PAGE_ROUTE_GUARDS = [
   { route: "/Financeiro/centro-pagamentos", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
   { route: "/Financeiro/controlo", module: "financeiro", action: "view", roles: ["admin", "operador", "financeiro", "supervisor"] },
   { route: "/Financeiro/centroDeCompras.html", module: "pedidosExtras", action: "view", roles: ["admin", "operador", "financeiro", "supervisor", "tecnico"] },
+  { route: "/requisicoes", module: "obras", action: "view" },
+  { route: "/comercial/orcamentos", module: "comercial", action: "tab_orcamentos", roles: ["admin", "operador", "supervisor", "financeiro", "leitura"] },
+  { route: "/comercial/orcamento", module: "comercial", action: "tab_orcamentos", roles: ["admin", "operador", "supervisor", "financeiro", "leitura"] },
+  { route: "/comercial/despacho", module: "comercial", action: "tab_despacho", roles: ["admin", "operador", "supervisor", "financeiro"] },
+  { route: "/comercial/propostas", module: "comercial", action: "tab_propostas", roles: ["admin", "operador", "supervisor"] },
+  { route: "/comercial/base/baremes", module: "comercial", action: "tab_baremes", roles: ["admin", "operador", "supervisor", "financeiro", "leitura"] },
+  { route: "/comercial/base/parametros", module: "comercial", action: "tab_parametros", roles: ["admin", "operador", "supervisor"] },
+  { route: "/comercial/base/funcionarios", module: "comercial", action: "tab_funcionarios", roles: ["admin", "operador", "supervisor"] },
   { route: "/Users/index.html", module: "sistema", action: "view", roles: ["admin"] },
   { route: "/registos/contactos", module: "cadastros", action: "view" },
   { route: "/registos/terceiros/setores", module: "cadastros", action: "view" },
@@ -406,6 +455,13 @@ function defaultAllowedFor(role, module, action) {
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "true", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
       financeiro: { view: "view", edit: "false", export: "true", approve: "false", confirm_invoice: "false", certify_expense: "false", full_access: "false" },
+      comercial: {
+        view: "true", create: "false", edit: "false", delete: "false",
+        approve: "true", adjudicar: "false", export: "true",
+        tab_orcamentos: "true", tab_despacho: "true", tab_propostas: "view",
+        tab_baremes: "view", tab_parametros: "view", tab_funcionarios: "view",
+        full_access: "false",
+      },
       relatorios: { view: "true", export: "true", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
@@ -414,7 +470,7 @@ function defaultAllowedFor(role, module, action) {
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "true", reject: "true", cancel: "true", pay: "false", delete: "true", full_access: "false" },
       cadastros: { view: "true", create: "true", edit: "true", delete: "true", manage: "true", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "true", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -438,6 +494,13 @@ function defaultAllowedFor(role, module, action) {
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "true", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "true" },
       financeiro: { view: "true", edit: "true", export: "true", approve: "false", confirm_invoice: "false", certify_expense: "true", full_access: "false" },
+      comercial: {
+        view: "true", create: "true", edit: "true", delete: "false",
+        approve: "false", adjudicar: "false", export: "true",
+        tab_orcamentos: "true", tab_despacho: "true", tab_propostas: "true",
+        tab_baremes: "true", tab_parametros: "true", tab_funcionarios: "true",
+        full_access: "false",
+      },
       relatorios: { view: "true", export: "true", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
@@ -446,7 +509,7 @@ function defaultAllowedFor(role, module, action) {
       fundoManeio: { view: "true", create: "true", edit: "true", manage: "true", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "true", pay: "true", delete: "false", full_access: "false" },
       cadastros: { view: "true", create: "true", edit: "true", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "true", nav_obras: "true", nav_logistica: "true", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -473,6 +536,13 @@ function defaultAllowedFor(role, module, action) {
         view: "true", edit: "true", export: "true", approve: "true",
         confirm_invoice: "true", certify_expense: "true", full_access: "false",
       },
+      comercial: {
+        view: "view", create: "false", edit: "false", delete: "false",
+        approve: "false", adjudicar: "false", export: "true",
+        tab_orcamentos: "view", tab_despacho: "view", tab_propostas: "false",
+        tab_baremes: "view", tab_parametros: "false", tab_funcionarios: "false",
+        full_access: "false",
+      },
       relatorios: { view: "true", export: "true", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
@@ -481,7 +551,7 @@ function defaultAllowedFor(role, module, action) {
       fundoManeio: { view: "view", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "false", edit: "false", approve: "false", reject: "false", cancel: "false", pay: "true", delete: "false", full_access: "false" },
       cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "false", nav_cotacao: "false", nav_comercial: "true", nav_financeiro: "true", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -505,6 +575,13 @@ function defaultAllowedFor(role, module, action) {
       materiais: { view: "true", create: "false", edit: "false", delete: "false", export: "false", manage: "false", full_access: "false" },
       ferramentas: { view: "true", create: "false", edit: "false", delete: "false", manage: "false", export: "false" },
       financeiro: { view: "false", edit: "false", export: "false", approve: "false", confirm_invoice: "false", certify_expense: "false", full_access: "false" },
+      comercial: {
+        view: "false", create: "false", edit: "false", delete: "false",
+        approve: "false", adjudicar: "false", export: "false",
+        tab_orcamentos: "false", tab_despacho: "false", tab_propostas: "false",
+        tab_baremes: "false", tab_parametros: "false", tab_funcionarios: "false",
+        full_access: "false",
+      },
       relatorios: { view: "view", export: "false", full_access: "false" },
       sistema: { view: "false", create: "false", edit: "false", delete: "false", export: "false", full_access: "false" },
       permissoes: { view: "false", edit: "false", manage_permissions: "false", full_access: "false" },
@@ -513,7 +590,7 @@ function defaultAllowedFor(role, module, action) {
       fundoManeio: { view: "false", create: "false", edit: "false", manage: "false", full_access: "false" },
       pedidosExtras: { view: "true", create: "true", edit: "own", approve: "false", reject: "false", cancel: "false", pay: "false", delete: "false", full_access: "false" },
       cadastros: { view: "view", create: "false", edit: "false", delete: "false", manage: "false", full_access: "false" },
-      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
+      navlinks: { nav_dashboard: "true", nav_clientes: "false", nav_obras: "true", nav_logistica: "false", nav_planeamento: "true", nav_cotacao: "false", nav_comercial: "false", nav_financeiro: "false", nav_centros_gerais: "true", nav_users: "false" },
     };
     return map[module]?.[action] ?? "false";
   }
@@ -523,11 +600,16 @@ function defaultAllowedFor(role, module, action) {
     if (module === "portal") return "false";
     if (module === "sistema" || module === "permissoes" || module === "configuracoes") return "false";
     if (module === "navlinks") {
-      if (["nav_dashboard", "nav_obras"].includes(action)) return "true";
+      if (["nav_dashboard", "nav_obras", "nav_comercial"].includes(action)) return "true";
       return "false";
     }
     if (module === "chat") {
       if (action === "view") return "true";
+      return "false";
+    }
+    if (module === "comercial") {
+      // Consulta do orçamento e dos baremes; nada de propostas, parâmetros ou pessoal.
+      if (["view", "export", "tab_orcamentos", "tab_baremes"].includes(action)) return "view";
       return "false";
     }
     if (action === "full_access" || action === "manage_permissions") return "false";

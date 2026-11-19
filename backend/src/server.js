@@ -32,6 +32,11 @@ const { purchaseOrderRoutes } = require("./routes/purchaseOrders");
 const { helpTicketRoutes } = require("./routes/helpTickets");
 const { contactRoutes, sectorRoutes, personnelRoutes } = require("./routes/registry");
 const { financeRoutes } = require("./routes/finance");
+const { baremRoutes } = require("./routes/baremes");
+const { companySettingsRoutes } = require("./routes/companySettings");
+const { budgetRoutes } = require("./routes/budgets");
+const { proposalRoutes } = require("./routes/proposals");
+const { requisitionRoutes } = require("./routes/requisitions");
 const { backupRoutes } = require("./routes/backups");
 const { uploadsRoutes } = require("./routes/uploads");
 const { initialize } = require("./utils/startup");
@@ -137,6 +142,12 @@ app.use("/help-tickets", helpTicketRoutes);
 app.use("/contacts", contactRoutes);
 app.use("/sectors", sectorRoutes);
 app.use("/personnel", personnelRoutes);
+// Comercial / Orçamentação (Base: baremes e parâmetros)
+app.use("/baremes", baremRoutes);
+app.use("/company-settings", companySettingsRoutes);
+app.use("/budgets", budgetRoutes);
+app.use("/proposals", proposalRoutes);
+app.use("/requisitions", requisitionRoutes);
 // Área Financeira (faturação, custos, tesouraria, overview)
 app.use("/finance", financeRoutes);
 

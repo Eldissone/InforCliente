@@ -1,6 +1,11 @@
 const express = require("express");
 const { z } = require("zod");
 const { prisma } = require("../db");
+const {
+  buildExtraFiscalAmountsFromBase,
+  decorateExtraFiscal,
+  extraPayableAmount,
+} = require("../services/extraRequestFiscal");
 const { authRequired, requirePermissionOrLegacyRole, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
 const { applyFundMovement, InsufficientBalanceError } = require("../services/pettyCashService");
@@ -154,7 +159,7 @@ async function assertExtraRequestAuthorized(item, req, options = {}) {
 }
 
 function mapExtra(item) {
-  return {
+  return decorateExtraFiscal({
     ...item,
     amount: String(item.amount),
     quantity: item.quantity != null ? String(item.quantity) : null,
@@ -169,13 +174,19 @@ function mapExtra(item) {
             ? item.desiredDate.toISOString().slice(0, 10)
             : String(item.desiredDate).slice(0, 10))
         : null,
+    baseAmount: item.baseAmount != null ? String(item.baseAmount) : null,
+    grossAmount: item.grossAmount != null ? String(item.grossAmount) : null,
+    vatAmount: item.vatAmount != null ? String(item.vatAmount) : null,
+    withholdingAmount: item.withholdingAmount != null ? String(item.withholdingAmount) : null,
+    discountAmount: item.discountAmount != null ? String(item.discountAmount) : null,
+    netAmount: item.netAmount != null ? String(item.netAmount) : null,
     items: (item.items || []).map((i) => ({
       ...i,
       quantity: String(i.quantity),
       unitPrice: i.unitPrice != null ? String(i.unitPrice) : null,
       totalPrice: i.totalPrice != null ? String(i.totalPrice) : null,
     })),
-  };
+  });
 }
 
 function resolveFiscalPercentFields(body, { requireGrossFlags = false } = {}) {
@@ -781,7 +792,8 @@ extraRequestRoutes.post(
 
     const u = req.user || {};
     const normalizedItems = normalizeItemsInput(body.items);
-    const finalAmount = computeAmountFromItems(body.items, body.amount);
+    // A soma das linhas é a base: os preços unitários são sem impostos.
+    const finalBase = computeAmountFromItems(body.items, body.amount);
     const finalRequestedBy =
       trimOrNull(body.requestedBy) || u.name || u.email || u.sub || null;
     const finalDesiredDate = parseDesiredDate(body.desiredDate);
@@ -796,8 +808,11 @@ extraRequestRoutes.post(
       costDetailDescription: trimOrNull(body.costDetailDescription),
       description: body.description,
       quantity: quantityParsed,
-      amount: finalAmount,
       ...fiscalFields,
+      // A soma das linhas é a BASE (os preços unitários são sem impostos). O
+      // valor do documento (`amount`) e o que o beneficiário recebe (`netAmount`)
+      // derivam dela — antes as percentagens eram guardadas e nunca aplicadas.
+      ...buildExtraFiscalAmountsFromBase({ ...fiscalFields, baseAmount: finalBase }),
       currency: body.currency || "AOA",
       paymentSource: body.paymentSource,
       fundId: body.fundId || null,
@@ -998,18 +1013,36 @@ extraRequestRoutes.patch(
           : { desiredDate: parseDesiredDate(body.desiredDate) }
         : undefined;
 
-    const amountFallback =
-      body.amount !== undefined ? String(body.amount) : String(existing.amount);
-    const finalAmount =
+    // Sem linhas no corpo, parte-se da base que o pedido já tinha (não do
+    // `amount`, que é o valor do documento e já traz o IVA lá dentro).
+    const baseFallback =
+      body.amount !== undefined
+        ? String(body.amount)
+        : String(existing.baseAmount != null ? existing.baseAmount : existing.amount);
+    const finalBase =
       body.items !== undefined
-        ? computeAmountFromItems(body.items, amountFallback)
-        : amountFallback;
+        ? computeAmountFromItems(body.items, baseFallback)
+        : baseFallback;
+
+    // A decomposição recalcula-se com a fiscalidade que fica em vigor: a que vem
+    // no corpo, se vier, senão a que o pedido já tinha.
+    const effectiveFiscal = Object.keys(fiscalPatch).length
+      ? fiscalPatch
+      : {
+          fiscalInputMode: existing.fiscalInputMode,
+          fiscalApplyVat: existing.fiscalApplyVat,
+          fiscalApplyWithholding: existing.fiscalApplyWithholding,
+          fiscalApplyDiscount: existing.fiscalApplyDiscount,
+          fiscalVatPercent: existing.fiscalVatPercent,
+          fiscalWithholdingPercent: existing.fiscalWithholdingPercent,
+          fiscalDiscountPercent: existing.fiscalDiscountPercent,
+        };
 
     const baseData = {
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...quantityPatch,
-      amount: finalAmount,
       ...fiscalPatch,
+      ...buildExtraFiscalAmountsFromBase({ ...effectiveFiscal, baseAmount: finalBase }),
       ...(body.paymentSource !== undefined ? { paymentSource: body.paymentSource } : {}),
       ...(body.fundId !== undefined ? { fundId: body.fundId || null } : {}),
       ...(body.cardId !== undefined ? { cardId: body.cardId || null } : {}),
@@ -1229,10 +1262,12 @@ extraRequestRoutes.post(
     }
 
     const u = req.user || {};
+    // Sem valor indicado, paga-se o líquido: o bruto incluía a retenção, que
+    // tem de ficar retida e ser entregue ao Estado.
     const paidAmount =
       req.body?.paidAmount != null && req.body.paidAmount !== ""
         ? String(req.body.paidAmount)
-        : String(existing.amount);
+        : String(extraPayableAmount(existing));
 
     try {
       if (existing.paymentSource === "SOLICITACAO_TRANSFERENCIA" && !req.file) {

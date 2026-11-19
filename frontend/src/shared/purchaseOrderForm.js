@@ -519,9 +519,12 @@ export function refreshTotals() {
     const vat = parseFloat(row.querySelector(".cc-item-vat")?.value || "0") || 0;
     const ret = parseFloat(row.querySelector(".cc-item-wh")?.value || "0") || 0;
     const liquido = qty * price * (1 - disc / 100);
-    retention += (liquido * ret) / 100;
+    const retLinha = (liquido * ret) / 100;
+    retention += retLinha;
     const cell = row.querySelector(".cc-item-line-total");
-    if (cell) cell.textContent = formatPedidoTotalNumber(liquido * (1 + vat / 100));
+    // O total da linha é o que o fornecedor recebe: base + IVA − retenção.
+    // A retenção fica retida e é entregue ao Estado, por isso não se paga.
+    if (cell) cell.textContent = formatPedidoTotalNumber(liquido * (1 + vat / 100) - retLinha);
   });
   const retEl = document.getElementById("ccPedidoTotal_retencao");
   if (retEl) retEl.textContent = formatPedidoTotalNumber(retention);
@@ -544,10 +547,13 @@ export function fillItemRows(items) {
     set(".cc-item-qty", it.quantity != null ? it.quantity : 1);
     set(".cc-item-unit", it.unit || "");
     set(".cc-item-price", it.unitPrice);
-    const tax = parseItemTax(it.notes);
-    if (tax.vat) set(".cc-item-vat", tax.vat);
-    if (tax.retention) set(".cc-item-wh", tax.retention);
-    if (tax.discount) set(".cc-item-disc", tax.discount);
+    // A fiscalidade vem dos campos; o texto das notas e so para os pedidos
+    // antigos, criados quando as percentagens eram escritas la dentro.
+    const legacy = parseItemTax(it.notes);
+    const rate = (field, fallback) => (it[field] != null ? it[field] : fallback || null);
+    set(".cc-item-vat", rate("vatPercent", legacy.vat));
+    set(".cc-item-wh", rate("withholdingPercent", legacy.retention));
+    set(".cc-item-disc", rate("discountPercent", legacy.discount));
   });
   refreshTotals();
 }
@@ -861,16 +867,20 @@ function collectItems() {
     const vat = parseFloat(tr.querySelector(".cc-item-vat")?.value || "");
     const wh = parseFloat(tr.querySelector(".cc-item-wh")?.value || "");
     const disc = parseFloat(tr.querySelector(".cc-item-disc")?.value || "");
-    const taxBits = [];
-    if (Number.isFinite(vat) && vat > 0) taxBits.push(`IVA ${vat}%`);
-    if (Number.isFinite(wh) && wh > 0) taxBits.push(`Ret. ${wh}%`);
-    if (Number.isFinite(disc) && disc > 0) taxBits.push(`Desc. ${disc}%`);
+    const pct = (v) => (Number.isFinite(v) && v >= 0 ? v : null);
+    // A fiscalidade vai em campos próprios. Antes era escrita no texto das notas
+    // ("IVA 14% · Ret. 6,5%") e lida de volta por expressão regular no servidor,
+    // onde a retenção se perdia; o campo `notes` fica para notas de facto.
     return {
       name,
       quantity,
       unit,
       unitPrice: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : null,
-      notes: taxBits.length ? taxBits.join(" · ") : null,
+      vatPercent: pct(vat),
+      withholdingPercent: pct(wh),
+      discountPercent: pct(disc),
+      // O formulario nao tem campo de notas por linha; fica livre para notas de facto.
+      notes: null,
     };
   }).filter((it) => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
 }

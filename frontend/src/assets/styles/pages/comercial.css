@@ -1,0 +1,742 @@
+/* ==========================================================================
+   Módulo Comercial / Orçamentação
+   Fase 0: convenções de visualização partilhadas por todos os ecrãs do módulo.
+
+   Convenção de células (copiada do protótipo MBT):
+     .cell-manual  amarelo   → o valor escreve-se à mão
+     .cell-list    azul      → o valor escolhe-se de uma lista
+     .cell-auto    cinzento  → o valor é calculado (não se mexe)
+   ========================================================================== */
+
+:root {
+  --cm-manual-bg: #fffbe6;
+  --cm-manual-line: #eadb9c;
+  --cm-manual-fg: #6b5400;
+  --cm-list-bg: #eaf2fd;
+  --cm-list-line: #b7cdef;
+  --cm-list-fg: #0d3fd1;
+  --cm-auto-bg: #f1f3f6;
+  --cm-auto-line: #d9dfe7;
+  --cm-auto-fg: #515151;
+
+  --cm-good-bg: #ecfff2;
+  --cm-good-fg: #0b7a33;
+  --cm-warn-bg: #fff4e8;
+  --cm-warn-fg: #8a5600;
+  --cm-bad-bg: #fdecec;
+  --cm-bad-fg: #a3271b;
+  --cm-neutral-bg: #eceff3;
+  --cm-neutral-fg: #515151;
+
+  --cm-line: #e2e8f0;
+  --cm-ink: #0f1c2c;
+  --cm-muted: #5d6b7c;
+}
+
+/* ─── Página ─────────────────────────────────────────────────────────────── */
+.cm-page {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5rem;
+}
+
+@media (min-width: 768px) {
+  .cm-page {
+    padding: 2rem 2rem 5rem;
+  }
+}
+
+.cm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.cm-head-num {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cm-muted);
+}
+
+.cm-title {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--cm-ink);
+  margin: 0.125rem 0 0;
+}
+
+.cm-lead {
+  margin: 0.5rem 0 0;
+  max-width: 78ch;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--cm-muted);
+}
+
+.cm-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ─── Painel / secção ────────────────────────────────────────────────────── */
+.cm-panel {
+  background: #fff;
+  border: 1px solid var(--cm-line);
+  border-radius: 14px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.cm-panel-title {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cm-ink);
+  margin: 0 0 0.25rem;
+}
+
+.cm-panel-sub {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--cm-muted);
+}
+
+/* ─── Barra de fluxo: 1 Pede › 2 Aprova › 3 Compra › … ──────────────────── */
+.cm-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+  font-size: 0.75rem;
+}
+
+.cm-flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--cm-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--cm-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cm-flow-step b {
+  color: var(--cm-ink);
+}
+
+.cm-flow-step.is-current {
+  border-color: var(--cm-list-fg);
+  background: var(--cm-list-bg);
+  color: var(--cm-list-fg);
+}
+
+.cm-flow-step.is-done {
+  border-color: transparent;
+  background: var(--cm-good-bg);
+  color: var(--cm-good-fg);
+}
+
+.cm-flow-sep {
+  color: #a3b0c0;
+}
+
+/* ─── Chips de estado (filtro + KPI no mesmo clique) ─────────────────────── */
+.cm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.cm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--cm-line);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cm-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.cm-chip:hover {
+  border-color: var(--cm-list-fg);
+}
+
+.cm-chip b {
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--cm-ink);
+}
+
+.cm-chip.is-on {
+  border-color: var(--cm-ink);
+  background: var(--cm-ink);
+  color: #fff;
+}
+
+.cm-chip.is-on b {
+  color: #fff;
+}
+
+/* ─── Pílulas de estado ─────────────────────────────────────────────────── */
+.cm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: var(--cm-neutral-bg);
+  color: var(--cm-neutral-fg);
+  white-space: nowrap;
+}
+
+.cm-pill.is-good { background: var(--cm-good-bg); color: var(--cm-good-fg); }
+.cm-pill.is-warn { background: var(--cm-warn-bg); color: var(--cm-warn-fg); }
+.cm-pill.is-bad  { background: var(--cm-bad-bg);  color: var(--cm-bad-fg); }
+
+/* ─── Tabelas de orçamentação ───────────────────────────────────────────── */
+.cm-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--cm-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+table.cm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+table.cm-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f6f8fb;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cm-muted);
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--cm-line);
+  white-space: nowrap;
+}
+
+table.cm-table td {
+  padding: 0.4375rem 0.75rem;
+  border-bottom: 1px solid #f0f3f7;
+  color: var(--cm-ink);
+  vertical-align: middle;
+}
+
+table.cm-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+table.cm-table tbody tr:hover td {
+  background: #fafbfd;
+}
+
+table.cm-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.cm-table tr.cm-total td {
+  background: #f6f8fb;
+  font-weight: 700;
+  border-top: 2px solid var(--cm-line);
+}
+
+/* ─── Células por origem do valor ───────────────────────────────────────── */
+.cell-manual,
+.cell-list,
+.cell-auto {
+  display: block;
+  width: 100%;
+  min-width: 4.5rem;
+  padding: 0.3125rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.cell-manual {
+  background: var(--cm-manual-bg);
+  border-color: var(--cm-manual-line);
+  color: var(--cm-ink);
+}
+
+.cell-list {
+  background: var(--cm-list-bg);
+  border-color: var(--cm-list-line);
+  color: var(--cm-ink);
+}
+
+.cell-auto {
+  background: var(--cm-auto-bg);
+  border-color: var(--cm-auto-line);
+  color: var(--cm-auto-fg);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-manual:focus-visible,
+.cell-list:focus-visible {
+  outline: 2px solid var(--cm-list-fg);
+  outline-offset: 1px;
+}
+
+input.cell-manual[type="number"],
+input.cell-manual[type="date"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Valor calculado dentro de uma célula normal (sem caixa) */
+.cm-calc {
+  color: var(--cm-auto-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Legenda da convenção de cores — repetir no topo de cada folha */
+.cm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--cm-muted);
+}
+
+.cm-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.cm-legend i {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 4px;
+  border: 1px solid;
+  display: inline-block;
+}
+
+.cm-legend i.manual { background: var(--cm-manual-bg); border-color: var(--cm-manual-line); }
+.cm-legend i.list   { background: var(--cm-list-bg);   border-color: var(--cm-list-line); }
+.cm-legend i.auto   { background: var(--cm-auto-bg);   border-color: var(--cm-auto-line); }
+
+/* ─── Checklist «antes de avançar» ──────────────────────────────────────── */
+.cm-check {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.cm-check li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.cm-check li::before {
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.cm-check li.ok { color: var(--cm-good-fg); }
+.cm-check li.ok::before { content: "\2713"; }
+.cm-check li.required { color: var(--cm-bad-fg); }
+.cm-check li.required::before { content: "\2717"; }
+.cm-check li.advised { color: var(--cm-warn-fg); }
+.cm-check li.advised::before { content: "!"; }
+
+/* ─── Nota / aviso ─────────────────────────────────────────────────────── */
+.cm-note {
+  border-radius: 10px;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background: var(--cm-list-bg);
+  color: #123a86;
+  border: 1px solid var(--cm-list-line);
+  margin-bottom: 1rem;
+}
+
+.cm-note.is-warn {
+  background: var(--cm-warn-bg);
+  color: var(--cm-warn-fg);
+  border-color: #f0d6ae;
+}
+
+.cm-note.is-bad {
+  background: var(--cm-bad-bg);
+  color: var(--cm-bad-fg);
+  border-color: #f0bdb7;
+}
+
+/* ─── Placeholder das fases ainda não implementadas ─────────────────────── */
+.cm-soon {
+  border: 1px dashed #c6d0dc;
+  border-radius: 14px;
+  background: #fafbfd;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--cm-muted);
+}
+
+.cm-soon .material-symbols-outlined {
+  font-size: 2.25rem;
+  color: #a9b6c6;
+}
+
+.cm-soon h3 {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--cm-ink);
+  margin: 0.5rem 0 0.25rem;
+}
+
+.cm-soon p {
+  margin: 0 auto;
+  max-width: 62ch;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.cm-soon ul {
+  margin: 0.875rem auto 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  max-width: 62ch;
+  text-align: left;
+  font-size: 0.8125rem;
+}
+
+.cm-soon ul li {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cm-soon ul li::before {
+  content: "\2022";
+  color: #a9b6c6;
+}
+
+/* ==========================================================================
+   Fase 2 — orçamento: cabeçalho fixo, navegação lateral e assistente
+   ========================================================================== */
+
+/* ─── Cabeçalho do orçamento (custo, preço e margem sempre à vista) ───────── */
+.cm-budget-head {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid var(--cm-line);
+}
+
+@media (min-width: 768px) {
+  .cm-budget-head { padding: 0.875rem 2rem; }
+}
+
+.cm-bh-left { flex: 1 1 18rem; min-width: 0; }
+.cm-bh-left .cm-title { margin: 0.125rem 0; }
+
+.cm-bh-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+
+.cm-bh-kpis > div {
+  display: grid;
+  gap: 0.0625rem;
+  min-width: 7rem;
+}
+
+.cm-bh-kpis span {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cm-muted);
+}
+
+.cm-bh-kpis b {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--cm-ink);
+  justify-self: start;
+}
+
+.cm-bh-kpis small { font-size: 0.6875rem; color: var(--cm-muted); }
+
+.cm-bh-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ─── Navegação lateral das folhas ───────────────────────────────────────── */
+.cm-budget-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .cm-budget-layout {
+    grid-template-columns: 17rem minmax(0, 1fr);
+    padding: 1.25rem 2rem 4rem;
+  }
+}
+
+.cm-sidenav {
+  display: grid;
+  gap: 0.875rem;
+  align-content: start;
+}
+
+@media (min-width: 1024px) {
+  .cm-sidenav {
+    position: sticky;
+    top: 6.5rem;
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+  }
+}
+
+.cm-sidenav-group { display: grid; gap: 0.125rem; }
+
+.cm-sidenav-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cm-muted);
+  padding: 0 0.5rem 0.25rem;
+}
+
+.cm-sidenav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4375rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--cm-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cm-sidenav-link:hover { background: #f1f5fa; }
+
+.cm-sidenav-link.is-on {
+  background: var(--cm-ink);
+  color: #fff;
+  border-color: var(--cm-ink);
+}
+
+.cm-sidenav-tag {
+  flex: none;
+  min-width: 1.75rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--cm-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cm-sidenav-link.is-on .cm-sidenav-tag { color: #9fb4cf; }
+
+.cm-sidenav-label { flex: 1; min-width: 0; }
+
+.cm-sidenav-total {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--cm-muted);
+}
+
+.cm-sidenav-link.is-on .cm-sidenav-total { color: #cfe0f5; }
+
+.cm-budget-body { min-width: 0; }
+
+/* ─── Assistente de novo orçamento ───────────────────────────────────────── */
+.cm-wizard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(15, 28, 44, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.cm-wizard {
+  width: min(880px, 100%);
+  margin: 2rem 0;
+  max-height: none;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.cm-wizard-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.cm-wizard-grid > [style*="span 2"] { grid-column: span 2; }
+
+@media (max-width: 640px) {
+  .cm-wizard-grid > * { grid-column: auto !important; }
+}
+
+/* Números automáticos mostrados antes de criar */
+.cm-codechain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 1px solid var(--cm-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.cm-codechain > span {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.875rem;
+  border-right: 1px solid var(--cm-line);
+  font-size: 0.8125rem;
+}
+
+.cm-codechain > span:last-child { border-right: 0; }
+
+.cm-codechain small {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cm-muted);
+}
+
+.cm-codechain b {
+  font-family: "Outfit", "Inter", sans-serif;
+  font-size: 0.9375rem;
+  color: var(--cm-ink);
+}
+
+/* ─── Estados de validação e valores negativos ───────────────────────────── */
+.cm-invalid {
+  border-color: var(--cm-bad-fg) !important;
+  background: var(--cm-bad-bg) !important;
+}
+
+.cm-neg { color: var(--cm-bad-fg); }
+
+/* Numa folha larga, a primeira coluna acompanha o scroll horizontal */
+table.cm-table tbody td:first-child,
+table.cm-table thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+table.cm-table thead th:first-child { z-index: 2; background: #f6f8fb; }
+table.cm-table tbody tr:hover td:first-child { background: #fafbfd; }
+table.cm-table tr.cm-total td:first-child { background: #f6f8fb; }
+
+/* ─── Barras do dashboard do orçamento (Fase 3) ──────────────────────────── */
+.cm-bar {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr) minmax(5.5rem, auto);
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+}
+
+.cm-bar-label {
+  color: var(--cm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-bar-track {
+  height: 0.6875rem;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.cm-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2b6fd6, #4e95f0);
+}
+
+.cm-bar-fill.is-neg { background: linear-gradient(90deg, #c0392b, #e06055); }
+
+.cm-bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.cm-bar-value small {
+  font-weight: 500;
+  color: var(--cm-muted);
+}
+
+@media (max-width: 560px) {
+  .cm-bar { grid-template-columns: 1fr auto; }
+  .cm-bar-track { grid-column: 1 / -1; order: 3; }
+}

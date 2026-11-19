@@ -1,4 +1,8 @@
 const { prisma } = require("../db");
+const {
+  extraPayableAmount,
+  extraWithheldAmount,
+} = require("./extraRequestFiscal");
 const { computeProjectBudgetSummary } = require("./projectBudgetSummaryService");
 
 /**
@@ -171,6 +175,15 @@ async function loadCostInputs(whereProject) {
         supplierName: true,
         description: true,
         amount: true,
+        netAmount: true,
+        withholdingAmount: true,
+        fiscalInputMode: true,
+        fiscalApplyVat: true,
+        fiscalApplyWithholding: true,
+        fiscalApplyDiscount: true,
+        fiscalVatPercent: true,
+        fiscalWithholdingPercent: true,
+        fiscalDiscountPercent: true,
         currency: true,
         status: true,
         paymentSource: true,
@@ -410,7 +423,9 @@ function aggregateCosts(projectId, inputs) {
   inputs.extraRequests
     .filter((e) => e.projectId === projectId)
     .forEach((e) => {
-      const amount = toNumber(e.amount);
+      // Líquido, igual aos pagamentos (que entram pelo `cashDueOf`): a retenção
+      // não vai para o beneficiário, e o agregado não pode ter duas convenções.
+      const amount = extraPayableAmount(e);
       if (e.status === "PAGO") {
         bucket.realized += amount;
         bucket.extraRequests += amount;
@@ -957,15 +972,18 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       date: e.paidAt || e.paymentDueDate,
       description: e.description,
       category: null,
+      // O que sai do caixa é o líquido do pedido: o bruto inclui a retenção, que
+      // fica retida e é entregue ao Estado (igual ao `cashDueOf` dos pagamentos).
       budgetedAmount: round2(e.amount),
-      paidAmount: paid ? round2(e.amount) : 0,
-      netAmount: paid ? round2(e.amount) : 0,
+      paidAmount: paid ? extraPayableAmount(e) : 0,
+      netAmount: paid ? extraPayableAmount(e) : 0,
+      withholdingAmount: extraWithheldAmount(e),
       amount: round2(e.amount),
       confirmationStatus: paid ? "CONFIRMADO" : "POR_CONFIRMAR",
       status: e.status,
       kind: paid ? "REALIZADO" : "COMPROMETIDO",
-      remaining: paid ? 0 : round2(e.amount),
-      payable: paid ? 0 : round2(e.amount),
+      remaining: paid ? 0 : extraPayableAmount(e),
+      payable: paid ? 0 : extraPayableAmount(e),
       dueDate: e.paymentDueDate || null,
       // Pedido ainda por aprovar é compromisso; aprovado já é conta a pagar.
       payStage: paid ? null : e.status === "APROVADO" ? "A_PAGAR" : "COMPROMISSO",

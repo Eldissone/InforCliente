@@ -44,6 +44,26 @@ const optionalEmail = z.preprocess(emptyToNull, z.string().email().max(200).null
 
 const legacyIdSchema = optionalText(120);
 
+/** Data opcional em ISO (YYYY-MM-DD ou completa); vazio → null. */
+const optionalDate = z.preprocess(emptyToNull, z.string().nullable().optional()).transform((v) => {
+  if (v === null || v === undefined) return v;
+  const d = new Date(String(v).length <= 10 ? `${v}T00:00:00Z` : v);
+  if (Number.isNaN(d.getTime())) throw new Error("DATA_INVALIDA");
+  return d;
+});
+
+/** Campos da ficha de funcionário (Comercial › Base › Funcionários). */
+const PERSONNEL_FICHA_FIELDS = {
+  department: optionalText(120),
+  contractType: optionalText(60),
+  admissionDate: optionalDate,
+  idNumber: optionalText(60),
+  taxNumber: optionalText(60),
+  emergencyContact: optionalText(120),
+  emergencyPhone: optionalText(60),
+  notes: optionalText(2000),
+};
+
 const photoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_PHOTO_BYTES },
@@ -380,6 +400,7 @@ const personnelDef = {
     employeeCode: optionalText(60),
     category: optionalText(120),
     legacyId: legacyIdSchema,
+    ...PERSONNEL_FICHA_FIELDS,
   }),
   patchSchema: z.object({
     firstName: z.string().trim().min(2).max(120).optional(),
@@ -393,6 +414,7 @@ const personnelDef = {
     employeeCode: optionalText(60),
     category: optionalText(120),
     active: z.boolean().optional(),
+    ...PERSONNEL_FICHA_FIELDS,
   }),
   searchWhere(q) {
     return {
@@ -404,6 +426,7 @@ const personnelDef = {
         { role: { contains: q, mode: "insensitive" } },
         { employeeCode: { contains: q, mode: "insensitive" } },
         { category: { contains: q, mode: "insensitive" } },
+        { department: { contains: q, mode: "insensitive" } },
         { project: { name: { contains: q, mode: "insensitive" } } },
         { projectAssignments: { some: { project: { name: { contains: q, mode: "insensitive" } } } } },
       ],
@@ -413,6 +436,7 @@ const personnelDef = {
     const where = {};
     const type = String(query.type || "").toUpperCase();
     if (PERSONNEL_TYPES.includes(type)) where.type = type;
+    if (query.department) where.department = String(query.department);
     if (query.projectId) {
       const projectId = String(query.projectId);
       where.AND = [
@@ -513,6 +537,14 @@ const personnelDef = {
       category: row.category,
       photoUrl: row.photoUrl,
       active: row.active,
+      department: row.department,
+      contractType: row.contractType,
+      admissionDate: row.admissionDate,
+      idNumber: row.idNumber,
+      taxNumber: row.taxNumber,
+      emergencyContact: row.emergencyContact,
+      emergencyPhone: row.emergencyPhone,
+      notes: row.notes,
       legacyId: row.legacyId,
       isUser: String(row.legacyId || "").startsWith(USER_CONTACT_PREFIX),
       createdAt: row.createdAt,

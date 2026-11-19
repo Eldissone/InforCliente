@@ -3,6 +3,10 @@ const path = require("path");
 const multer = require("multer");
 const { z } = require("zod");
 const { prisma } = require("../db");
+const {
+  extraPayableAmount,
+  extraWithheldAmount,
+} = require("../services/extraRequestFiscal");
 const { config } = require("../config");
 const { consultarNifAgt, normalizeNif } = require("../services/agtNifLookup");
 const { authRequired, requirePermission } = require("../middlewares/auth");
@@ -2313,6 +2317,8 @@ async function loadGeneralExtraPayables() {
       id: true,
       description: true,
       amount: true,
+      netAmount: true,
+      withholdingAmount: true,
       currency: true,
       status: true,
       paymentSource: true,
@@ -2343,7 +2349,9 @@ async function loadGeneralExtraPayables() {
     daysLate: daysPastDue(e.paymentDueDate),
     amount: round2(e.amount),
     paidAmount: 0,
-    payable: round2(e.amount),
+    // Líquido: o bruto inclui a retenção, que não se paga ao beneficiário.
+    payable: extraPayableAmount(e),
+    withholdingAmount: extraWithheldAmount(e),
     status: e.status,
     currency: e.currency || "AOA",
   }));

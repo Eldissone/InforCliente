@@ -25,6 +25,8 @@ const fileUpload = multer({
   },
 });
 
+const PT = require("../services/purchase/purchaseTotals");
+
 const purchaseRouter = express.Router();
 purchaseRouter.use(authRequired);
 purchaseRouter.use((req, res, next) => {
@@ -46,6 +48,7 @@ const requirePurchaseView = requirePermissionOrLegacyRole("pedidosExtras", "view
 const requirePurchaseCreate = requirePermissionOrLegacyRole("pedidosExtras", "create", WRITER_ROLES);
 const requirePurchaseEdit = requirePermissionOrLegacyRole("pedidosExtras", "edit", WRITER_ROLES);
 const requirePurchaseCancel = requirePermissionOrLegacyRole("pedidosExtras", "cancel", WRITER_ROLES);
+const requirePurchaseDelete = requirePermissionOrLegacyRole("pedidosExtras", "delete", ["admin"]);
 const requirePurchaseApprove = requirePermissionOrLegacyRole("pedidosExtras", "approve", APPROVER_ROLES);
 const requirePurchasePay = requirePermissionOrLegacyRole("pedidosExtras", "pay", FINANCE_ROLES);
 
@@ -146,25 +149,14 @@ const PURCHASE_ORDER_INCLUDE = {
   },
 };
 
-function parseItemTaxNotes(notes) {
-  const text = String(notes || "");
-  const pick = (re) => {
-    const m = text.match(re);
-    return m ? Number(String(m[1]).replace(",", ".")) : 0;
-  };
-  return {
-    vat: pick(/IVA\s+(\d+(?:[.,]\d+)?)\s*%/i),
-    withholding: pick(/Ret\.?\s+(\d+(?:[.,]\d+)?)\s*%/i),
-    discount: pick(/Desc\.?\s+(\d+(?:[.,]\d+)?)\s*%/i),
-  };
-}
-
-function itemBaseAmount(item) {
-  const qty = Number(item?.quantity) || 0;
-  const price = Number(item?.unitPrice) || 0;
-  if (qty && price) return qty * price;
-  return Number(item?.totalPrice) || 0;
-}
+/**
+ * A fiscalidade das linhas vive em `services/purchase/purchaseTotals.js`.
+ * Estava aqui, lida por expressão regular do texto das notas, e a retenção na
+ * fonte era extraída e descartada — o que fazia o sistema mandar pagar ao
+ * fornecedor o valor que devia ficar retido. Agora há uma só fórmula.
+ */
+const parseItemTaxNotes = PT.parseRatesFromNotes;
+const itemBaseAmount = PT.itemGross;
 
 async function savePurchaseDoc(orderId, requisitionId, file, kind, user) {
   const ext = (file.originalname || "pdf").split(".").pop() || "pdf";
@@ -186,21 +178,14 @@ async function savePurchaseDoc(orderId, requisitionId, file, kind, user) {
   });
 }
 
+/** O que o fornecedor recebe nesta linha: base + IVA − retenção. */
 function itemGrossAmount(item) {
-  const base = itemBaseAmount(item);
-  const { vat, discount } = parseItemTaxNotes(item?.notes);
-  const liquido = base - (base * discount) / 100;
-  return liquido + (liquido * vat) / 100;
+  return PT.lineTotals(item).total;
 }
 
+/** O que o fornecedor recebe no pedido todo. */
 function orderTotalWithTax(order) {
-  const items = order?.items || [];
-  const fromItems = items.reduce((sum, item) => sum + itemGrossAmount(item), 0);
-  if (fromItems > 0) return fromItems;
-  const quoted = Number(order?.requisition?.quotedValue);
-  if (Number.isFinite(quoted) && quoted > 0) return quoted;
-  const total = Number(order?.totalValue);
-  return Number.isFinite(total) && total > 0 ? total : 0;
+  return PT.orderTotals(order).total;
 }
 
 function mapOrder(o) {
@@ -212,10 +197,22 @@ function mapOrder(o) {
     totalWithTax: String(itemGrossAmount(i)),
   }));
   const { workNeeds, ...rest } = o;
+  const extra = PT.decorateOrder(o);
   return {
     ...rest,
     totalValue: o.totalValue != null ? String(o.totalValue) : null,
-    totalWithTax: String(orderTotalWithTax(o)),
+    totalWithTax: String(extra.totals.total),
+    /** Totais decompostos: base, IVA, retenção e o que o fornecedor recebe. */
+    fiscal: extra.totals,
+    paidAmount: extra.paid,
+    outstanding: extra.outstanding,
+    /** Estado derivado (ver purchaseTotals.derivedStatus). */
+    derivedStatus: extra.status,
+    derivedStatusLabel: extra.statusLabel,
+    derivedStatusSeverity: extra.statusSeverity,
+    documents: extra.documents,
+    beneficiary: extra.beneficiary,
+    shortDescription: extra.shortDescription,
     items,
     requisition: o.requisition
       ? {
@@ -409,6 +406,17 @@ const createOrderSchema = z.object({
   supplierName: z.string().optional().nullable(),
   currency: z.string().default("AOA"),
   notes: z.string().optional().nullable(),
+
+  // ─── Pedido de pagamento (Fase 5) ───
+  requestType: z.enum(["SEDE", "OBRA", "FROTA", "IMPOSTOS", "PESSOAL", "EMPRESTIMO"]).optional(),
+  paymentMode: z.enum(["FORN", "FM"]).optional(),
+  pettyCashFundId: z.string().optional().nullable(),
+  /** Dados próprios dos tipos sem itens (impostos, pessoal, empréstimo) */
+  typeData: z.record(z.any()).optional(),
+  paymentTerm: z.enum(["PRONTO", "CREDITO", "PARCIAL"]).optional(),
+  creditDays: z.number().int().nonnegative().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+
   items: z
     .array(
       z.object({
@@ -417,9 +425,14 @@ const createOrderSchema = z.object({
         unit: z.string().optional().nullable(),
         unitPrice: z.number().optional().nullable(),
         notes: z.string().optional().nullable(),
+        /** A fiscalidade passa a vir em campos, não escrita no texto das notas */
+        vatPercent: z.number().min(0).max(100).optional().nullable(),
+        withholdingPercent: z.number().min(0).max(100).optional().nullable(),
+        discountPercent: z.number().min(0).max(100).optional().nullable(),
+        docException: z.enum(["DSC", "AF"]).optional().nullable(),
       })
     )
-    .min(1, "Pelo menos um item é obrigatório"),
+    .default([]),
 });
 
 purchaseRouter.post(
@@ -444,6 +457,28 @@ purchaseRouter.post(
     }
     const number = await generateOrderNumber();
 
+    const requestType = data.requestType || (data.projectId ? "OBRA" : "SEDE");
+    const typeHasItems = PT.hasItems(requestType);
+
+    if (typeHasItems && !data.items.length) {
+      return res.status(400).json({
+        error: "SEM_ITENS",
+        message: "Este tipo de pedido descreve-se por itens: acrescente pelo menos um.",
+      });
+    }
+    if (!typeHasItems && !Object.keys(data.typeData || {}).length) {
+      return res.status(400).json({
+        error: "SEM_DADOS_DO_TIPO",
+        message: "Preencha os dados próprios deste tipo de pedido.",
+      });
+    }
+    if (data.paymentMode === "FM" && !data.pettyCashFundId) {
+      return res.status(400).json({
+        error: "SEM_FUNDO",
+        message: "Pagando por fundo de maneio, escolha o fundo.",
+      });
+    }
+
     // Calcula valor total se preços fornecidos
     let totalValue = null;
     const itemsWithTotals = data.items.map((item, idx) => {
@@ -458,9 +493,29 @@ purchaseRouter.post(
         unitPrice: item.unitPrice || null,
         totalPrice: tp,
         notes: item.notes || null,
+        vatPercent: item.vatPercent ?? null,
+        withholdingPercent: item.withholdingPercent ?? null,
+        discountPercent: item.discountPercent ?? null,
+        docException: item.docException || null,
         order: idx,
       };
     });
+
+    // O valor do pedido é o que o fornecedor recebe: base + IVA − retenção
+    const fiscalTotal = PT.orderTotals({
+      requestType,
+      typeData: data.typeData || {},
+      items: itemsWithTotals,
+      totalValue,
+    }).total;
+    if (fiscalTotal > 0) totalValue = fiscalTotal;
+
+    const dueFromTerm =
+      data.dueDate
+        ? new Date(data.dueDate)
+        : data.paymentTerm === "CREDITO" && data.creditDays
+          ? new Date(Date.now() + Number(data.creditDays) * 86400000)
+          : null;
 
     // Status inicial: sem cotação → vai directo para aprovação
     const initialStatus = data.requiresQuote ? "PENDENTE_REQUISICAO" : "PENDENTE_APROVACAO";
@@ -485,6 +540,13 @@ purchaseRouter.post(
         currency: data.currency,
         totalValue: totalValue,
         notes: data.notes || null,
+        requestType,
+        paymentMode: data.paymentMode || "FORN",
+        pettyCashFundId: data.pettyCashFundId || null,
+        typeData: data.typeData || {},
+        paymentTerm: data.paymentTerm || "PRONTO",
+        creditDays: data.creditDays ?? null,
+        dueDate: dueFromTerm,
         items: { create: itemsWithTotals },
         history: {
           create: {
@@ -1205,6 +1267,345 @@ purchaseRouter.patch(
     }
 
     return res.json({ ...updated, amount: String(updated.amount) });
+  })
+);
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// PEDIDO DE PAGAMENTO — Fase 5
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /purchase-orders/payment-meta — tipos, condições e fundos ───────────
+purchaseRouter.get(
+  "/payment/meta",
+  requirePurchaseView,
+  asyncHandler(async (_req, res) => {
+    const funds = await prisma.pettyCashFund.findMany({
+      select: { id: true, name: true, projectId: true },
+      orderBy: { name: "asc" },
+      take: 200,
+    });
+    res.json({
+      requestTypes: PT.REQUEST_TYPES.map(([k, label, hasItems]) => ({ k, label, hasItems })),
+      paymentTerms: PT.PAYMENT_TERMS,
+      paymentModes: [
+        { k: "FORN", label: "Transferência ao fornecedor" },
+        { k: "FM", label: "Fundo de maneio" },
+      ],
+      docExceptions: [
+        { k: "DSC", label: "Despesa sem comprovativo", help: "Não há documento fiscal para esta linha." },
+        { k: "AF", label: "Autofaturação", help: "A empresa emite o documento mais tarde." },
+      ],
+      funds,
+    });
+  })
+);
+
+// ─── GET /purchase-orders/payment/aging — mapa de vencimentos ────────────────
+/**
+ * O que a empresa deve, por beneficiário e por antiguidade. Só entram os pedidos
+ * aprovados: os que estão por aprovar vão à parte, para não dar a ideia de que já
+ * são dívida.
+ */
+purchaseRouter.get(
+  "/payment/aging",
+  requirePurchaseView,
+  asyncHandler(async (_req, res) => {
+    const orders = await prisma.purchaseOrder.findMany({
+      where: { deletedAt: null, status: { in: ["APROVADO", "EM_PAGAMENTO", "PENDENTE_APROVACAO"] } },
+      include: PURCHASE_ORDER_INCLUDE,
+      take: 1000,
+    });
+
+    const today = new Date();
+    // Os escalões e as chaves são os de `frontend/src/shared/finance/aging.js`
+    // (AGING_COLUMNS), para o ecrã reaproveitar o que já tem em vez de haver
+    // dois vocabulários de antiguidade.
+    const BUCKETS = [
+      ["a_vencer", "A vencer", (late) => late <= 0],
+      ["d0_30", "0–30 dias", (late) => late > 0 && late <= 30],
+      ["d31_60", "31–60 dias", (late) => late > 30 && late <= 60],
+      ["d61_90", "61–90 dias", (late) => late > 60 && late <= 90],
+      ["d90_mais", "+90 dias", (late) => late > 90],
+    ];
+    const emptyAging = () => ({ a_vencer: 0, d0_30: 0, d31_60: 0, d61_90: 0, d90_mais: 0 });
+
+    const byBeneficiary = new Map();
+    let pendingApproval = { count: 0, value: 0 };
+    let noDueDate = { count: 0, value: 0 };
+
+    for (const o of orders) {
+      const x = PT.decorateOrder(o, today);
+      const outstanding = x.outstanding;
+      if (outstanding <= 0.5) continue;
+
+      if (o.status === "PENDENTE_APROVACAO") {
+        pendingApproval = { count: pendingApproval.count + 1, value: pendingApproval.value + outstanding };
+        continue;
+      }
+
+      const name = x.beneficiary || "—";
+      const row = byBeneficiary.get(name) || { beneficiary: name, total: 0, orders: 0, ...emptyAging() };
+      row.orders += 1;
+      row.total += outstanding;
+
+      if (!x.dueDate) {
+        noDueDate = { count: noDueDate.count + 1, value: noDueDate.value + outstanding };
+      } else {
+        // Dias de atraso: positivo quando já venceu, como em aging.js
+        const late = Math.floor((today - new Date(x.dueDate)) / 86400000);
+        const bucket = BUCKETS.find(([, , test]) => test(late));
+        if (bucket) row[bucket[0]] += outstanding;
+      }
+      byBeneficiary.set(name, row);
+    }
+
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const KEYS = BUCKETS.map(([k]) => k);
+    const rows = [...byBeneficiary.values()]
+      .map((r) => {
+        const out = { ...r, total: round2(r.total) };
+        for (const k of KEYS) out[k] = round2(r[k]);
+        return out;
+      })
+      .sort((a, b) => b.total - a.total);
+
+    res.json({
+      buckets: BUCKETS.map(([k, label]) => ({ k, label })),
+      rows,
+      totals: {
+        total: round2(rows.reduce((s, r) => s + r.total, 0)),
+        ...Object.fromEntries(KEYS.map((k) => [k, round2(rows.reduce((s, r) => s + r[k], 0))])),
+      },
+      excluded: {
+        pendingApproval: { ...pendingApproval, value: round2(pendingApproval.value) },
+        noDueDate: { ...noDueDate, value: round2(noDueDate.value) },
+      },
+    });
+  })
+);
+
+// ─── POST /purchase-orders/:id/hold — pôr em pausa / retomar ─────────────────
+/**
+ * Em pausa é diferente de rejeitado: o pedido fica retido sem se perder a
+ * aprovação nem o histórico, como no protótipo.
+ */
+purchaseRouter.post(
+  "/:id/hold",
+  requirePurchaseApprove,
+  asyncHandler(async (req, res) => {
+    const schema = z.object({ onHold: z.boolean(), reason: z.string().trim().max(500).optional().nullable() });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const { onHold, reason } = parsed.data;
+
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    if (order.deletedAt) return res.status(409).json({ error: "ELIMINADO" });
+    if (onHold && !reason) {
+      return res.status(400).json({ error: "FALTA_MOTIVO", message: "Escreva porque é que o pedido fica em pausa." });
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: {
+        onHold,
+        holdReason: onHold ? reason : null,
+        history: {
+          create: {
+            action: onHold ? "EM_PAUSA" : "RETOMADO",
+            fromStatus: order.status,
+            toStatus: order.status,
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: reason || null,
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
+  })
+);
+
+// ─── POST /purchase-orders/:id/payment-plan/split — prestações iguais ────────
+purchaseRouter.post(
+  "/:id/payment-plan/split",
+  requirePurchasePay,
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      count: z.number().int().min(2).max(24),
+      firstDate: z.string().optional().nullable(),
+      stepDays: z.number().int().min(1).max(365).optional(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    if (order.deletedAt) return res.status(409).json({ error: "ELIMINADO" });
+
+    const paid = PT.paidAmount(order);
+    if (paid > 0) {
+      return res.status(409).json({
+        error: "JA_TEM_PAGAMENTOS",
+        message: "Já houve pagamentos: refaça o plano à mão para não perder o que foi pago.",
+      });
+    }
+
+    const total = PT.orderTotals(order).total;
+    if (!(total > 0)) return res.status(400).json({ error: "SEM_VALOR" });
+
+    const parts = PT.splitInstallments(total, parsed.data.count, parsed.data.firstDate, parsed.data.stepDays || 30);
+
+    await prisma.$transaction(async (tx) => {
+      if (order.paymentPlan) {
+        await tx.purchasePaymentInstallment.deleteMany({ where: { paymentPlanId: order.paymentPlan.id } });
+        await tx.purchasePaymentPlan.update({
+          where: { id: order.paymentPlan.id },
+          data: {
+            totalValue: total,
+            status: "PENDENTE",
+            installments: {
+              create: parts.map((p) => ({
+                number: p.number,
+                amount: p.amount,
+                currency: order.currency || "AOA",
+                dueDate: new Date(`${p.dueDate}T00:00:00Z`),
+              })),
+            },
+          },
+        });
+      } else {
+        await tx.purchasePaymentPlan.create({
+          data: {
+            purchaseOrderId: order.id,
+            totalValue: total,
+            currency: order.currency || "AOA",
+            status: "PENDENTE",
+            notes: `Dividido em ${parts.length} prestações iguais`,
+            installments: {
+              create: parts.map((p) => ({
+                number: p.number,
+                amount: p.amount,
+                currency: order.currency || "AOA",
+                dueDate: new Date(`${p.dueDate}T00:00:00Z`),
+              })),
+            },
+          },
+        });
+      }
+      await tx.purchaseOrder.update({
+        where: { id: order.id },
+        data: { paymentTerm: "PARCIAL", dueDate: new Date(`${parts[0].dueDate}T00:00:00Z`) },
+      });
+    });
+
+    const fresh = await prisma.purchaseOrder.findUnique({ where: { id: order.id }, include: PURCHASE_ORDER_INCLUDE });
+    res.status(201).json(mapOrder(fresh));
+  })
+);
+
+// ─── PATCH /purchase-orders/:id/items/:itemId/fiscal — fiscalidade da linha ──
+purchaseRouter.patch(
+  "/:id/items/:itemId/fiscal",
+  requirePurchaseEdit,
+  asyncHandler(async (req, res) => {
+    const schema = z.object({
+      vatPercent: z.number().min(0).max(100).optional().nullable(),
+      withholdingPercent: z.number().min(0).max(100).optional().nullable(),
+      discountPercent: z.number().min(0).max(100).optional().nullable(),
+      docException: z.enum(["DSC", "AF"]).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const item = await prisma.purchaseOrderItem.findFirst({
+      where: { id: req.params.itemId, purchaseOrderId: req.params.id },
+    });
+    if (!item) return res.status(404).json({ error: "NOT_FOUND" });
+
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id } });
+    if (order?.deletedAt) return res.status(409).json({ error: "ELIMINADO" });
+    if (PT.paidAmount({ paymentPlan: await prisma.purchasePaymentPlan.findUnique({ where: { purchaseOrderId: req.params.id }, include: { installments: true } }) }) > 0) {
+      return res.status(409).json({
+        error: "JA_TEM_PAGAMENTOS",
+        message: "Já houve pagamentos neste pedido: a fiscalidade das linhas não se altera.",
+      });
+    }
+
+    await prisma.purchaseOrderItem.update({ where: { id: item.id }, data: parsed.data });
+
+    // O valor do pedido acompanha a fiscalidade das linhas
+    const fresh = await prisma.purchaseOrder.findUnique({ where: { id: req.params.id }, include: PURCHASE_ORDER_INCLUDE });
+    const total = PT.orderTotals(fresh).total;
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: { totalValue: total > 0 ? total : null },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
+  })
+);
+
+// ─── DELETE /purchase-orders/:id/with-reason — eliminar com motivo ───────────
+/**
+ * Só o administrador elimina, e sempre com motivo. Não apaga o registo: marca-o
+ * como eliminado, para o histórico não desaparecer.
+ */
+purchaseRouter.post(
+  "/:id/delete-with-reason",
+  requirePurchaseDelete,
+  asyncHandler(async (req, res) => {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "admin") {
+      return res.status(403).json({
+        error: "SO_ADMIN_ELIMINA",
+        message: "Só a administração elimina pedidos de pagamento.",
+      });
+    }
+    const schema = z.object({ reason: z.string().trim().min(3).max(500) });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "FALTA_MOTIVO", message: "Escreva o motivo da eliminação." });
+    }
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { paymentPlan: { include: { installments: true } } },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    if (order.deletedAt) return res.status(409).json({ error: "JA_ELIMINADO" });
+    if (PT.paidAmount(order) > 0) {
+      return res.status(409).json({
+        error: "JA_TEM_PAGAMENTOS",
+        message: "Este pedido já tem pagamentos registados: não se elimina.",
+      });
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id: req.params.id },
+      data: {
+        status: "CANCELADO",
+        deletedAt: new Date(),
+        deletedReason: parsed.data.reason,
+        history: {
+          create: {
+            action: "ELIMINADO",
+            fromStatus: order.status,
+            toStatus: "CANCELADO",
+            userId: req.user?.sub || null,
+            userName: req.user?.name || null,
+            notes: parsed.data.reason,
+          },
+        },
+      },
+      include: PURCHASE_ORDER_INCLUDE,
+    });
+    res.json(mapOrder(updated));
   })
 );
 

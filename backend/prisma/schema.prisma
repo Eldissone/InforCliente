@@ -41,6 +41,14 @@ model User {
   sectorsCreated           Sector[]                  @relation("SectorCreatedBy")
   personnelCreated         Personnel[]               @relation("PersonnelCreatedBy")
   registryImportBatches    RegistryImportBatch[]     @relation("RegistryImportBatchCreatedBy")
+  budgetsCreated           Budget[]                  @relation("BudgetCreatedBy")
+  baremItemsCreated        BaremItem[]               @relation("BaremCreatedBy")
+  baremPriceChanges        BaremPriceHistory[]       @relation("BaremPriceChangedBy")
+  companySettingsUpdated   CompanySetting[]          @relation("CompanySettingUpdatedBy")
+  proposalsCreated         Proposal[]                @relation("ProposalCreatedBy")
+  proposalsSent            Proposal[]                @relation("ProposalSentBy")
+  requisitionsRequested    MaterialRequisition[]     @relation("RequisitionRequestedBy")
+  requisitionsApproved     MaterialRequisition[]     @relation("RequisitionApprovedBy")
 
   @@index([clientId])
 }
@@ -257,6 +265,7 @@ model Client {
   primaryUsers User[]             @relation("PrimaryClient")
   users        UserClient[]
   invoices     Invoice[]
+  budgets      Budget[]
 
   @@index([name])
   @@index([status])
@@ -343,8 +352,11 @@ model Project {
   invoices            Invoice[]
   bankMovements       BankMovement[]
   notifications       Notification[]
+  materialRequisitions MaterialRequisition[]
   aiExclusion         AiDataExclusion?
   aiConversations     AiConversation[]
+  /// Orçamento que originou esta obra (adjudicação)
+  sourceBudget        Budget?
 
   // ─── Configuração de faturação da obra (Área Financeira) ───
   billingVatCativo          Boolean @default(false) // IVA cativo: recebimento não considera IVA
@@ -595,6 +607,8 @@ model Warehouse {
   movements       StockMovement[]
   project         Project?         @relation(fields: [projectId], references: [id])
   stock           WarehouseStock[]
+  requisitionsFrom MaterialRequisition[] @relation("RequisitionSourceWarehouse")
+  requisitionsTo   MaterialRequisition[] @relation("RequisitionTargetWarehouse")
 
   @@index([projectId])
 }
@@ -619,6 +633,7 @@ model Product {
   projectPlans       ProjectMaterialPlan[]
   aliases            ProductAlias[]
   supplierProducts   SupplierProduct[]
+  requisitionItems   MaterialRequisitionItem[]
 }
 
 model ProductAlias {
@@ -638,6 +653,9 @@ model WarehouseStock {
   productId   String
   ownerId     String?
   quantity    Decimal   @default(0) @db.Decimal(16, 4)
+  /// Custo medio ponderado deste produto NESTE armazem, mantido a cada entrada.
+  /// O custo da obra nasce na saida, a este valor.
+  avgCost     Decimal?  @db.Decimal(16, 4)
   updatedAt   DateTime  @updatedAt
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -692,12 +710,20 @@ model StockMovement {
   costDocNumber   String?
   costConfirmedAt DateTime?
   costConfirmedBy String?
+  /// Custo unitario usado neste movimento (entrada: o de compra; saida: o custo medio
+  /// do armazem no momento). Gravado quando o movimento e feito, para o custo da obra
+  /// nao mudar quando o custo medio mudar depois.
+  unitCost        Decimal?       @db.Decimal(16, 4)
+  totalValue      Decimal?       @db.Decimal(16, 2)
+  /// Requisicao de material que originou este movimento, quando ha.
+  requisitionId   String?
   photos          ProjectPhoto[]
   product         Product        @relation(fields: [productId], references: [id])
   project         Project?       @relation(fields: [projectId], references: [id])
   warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
   sourceQuote     NeedQuote?     @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   dailyPlan       DailyPlan?     @relation(fields: [dailyPlanId], references: [id], onDelete: SetNull)
+  requisition     MaterialRequisition? @relation(fields: [requisitionId], references: [id], onDelete: SetNull)
 
   @@index([sourceQuoteId])
   @@index([dailyPlanId])
@@ -1061,6 +1087,7 @@ model CostCenter {
   createdAt     DateTime             @default(now())
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   needs         WorkNeed[]
+  materialRequisitions MaterialRequisition[]
   payments      CostPayment[]
   transactions  ProjectTransaction[]
   extraRequests ExtraRequest[]
@@ -1223,6 +1250,7 @@ model PettyCashFund {
   reinforcementRequests PettyCashReinforcementRequest[]
 
   @@index([projectId])
+  purchaseOrders PurchaseOrder[]
 }
 
 enum PettyCashCardType {
@@ -1375,6 +1403,7 @@ model ExtraRequest {
   description    String
   /// Quantidade pedida (obrigatória para ferramentas/material).
   quantity       Decimal?           @db.Decimal(16, 4)
+  /// Valor pedido tal como foi escrito (em modo "gross" é o bruto, com IVA).
   amount         Decimal            @db.Decimal(16, 2)
   /// "base" = valor sem impostos | "gross" = valor já inclui IVA/outros
   fiscalInputMode        String?  @default("base")
@@ -1384,6 +1413,15 @@ model ExtraRequest {
   fiscalVatPercent         Decimal? @db.Decimal(5, 2)
   fiscalWithholdingPercent Decimal? @db.Decimal(5, 2)
   fiscalDiscountPercent    Decimal? @db.Decimal(5, 2)
+  /// Decomposição fiscal gravada (mesma convenção do CostPayment).
+  /// O `netAmount` é o que o beneficiário recebe — a retenção fica retida —
+  /// e é ele que manda em "Por pagar" e no valor por omissão do pagamento.
+  baseAmount        Decimal? @db.Decimal(16, 2)
+  grossAmount       Decimal? @db.Decimal(16, 2)
+  vatAmount         Decimal? @db.Decimal(16, 2)
+  withholdingAmount Decimal? @db.Decimal(16, 2)
+  discountAmount    Decimal? @db.Decimal(16, 2)
+  netAmount         Decimal? @db.Decimal(16, 2)
   currency       String             @default("AOA")
   paymentSource  ExtraPaymentSource @default(CAIXA)
   fundId         String?
@@ -1758,6 +1796,36 @@ enum PurchaseType {
   ORCAMENTO
 }
 
+/// Tipo de pedido de pagamento, como no protótipo (RP_TIPOS).
+enum PaymentRequestType {
+  /// Pedido geral da sede
+  SEDE
+  /// Pedido para uma obra
+  OBRA
+  /// Frota e equipamentos
+  FROTA
+  /// Impostos (AGT): RUPE, mês de referência, data-limite
+  IMPOSTOS
+  /// Pessoal: linhas por colaborador
+  PESSOAL
+  /// Empréstimo a devolver
+  EMPRESTIMO
+}
+
+/// Quem paga: o fornecedor por transferência, ou o fundo de maneio.
+enum PaymentMode {
+  FORN
+  FM
+}
+
+/// Excepção documental de uma linha.
+enum PurchaseDocException {
+  /// Despesa sem comprovativo: não há documento fiscal
+  DSC
+  /// Autofaturação: a empresa emite o documento depois
+  AF
+}
+
 enum PurchasePaymentStatus {
   PENDENTE
   PARCIAL
@@ -1791,14 +1859,40 @@ model PurchaseOrder {
   notes           String?
   projectId       String?
   costCenterId    String?
+
+  // ─── Pedido de pagamento (Fase 5) ───
+  /// Tipo do pedido. Os tipos sem itens (impostos, pessoal, empréstimo) guardam
+  /// os seus dados próprios em `typeData`.
+  requestType     PaymentRequestType  @default(SEDE)
+  paymentMode     PaymentMode         @default(FORN)
+  /// Dados próprios de cada tipo: impostos {tipo, mes, rupe, limite, valor},
+  /// pessoal {sub, mes, linhas:[{nome, iban, valor}]}, empréstimo {por, modo, valor, iban, fim, prest}
+  typeData        Json                @default("{}")
+  /// Fundo de maneio usado quando `paymentMode` = FM
+  pettyCashFundId String?
+  /// Condição acordada: PRONTO | CREDITO | PARCIAL
+  paymentTerm     String?             @default("PRONTO")
+  /// Dias de crédito, quando a condição é CREDITO
+  creditDays      Int?
+  /// Data pretendida de pagamento (pronto) ou vencimento (crédito)
+  dueDate         DateTime?
+  /// Marcado em pausa pela Direção, sem rejeitar
+  onHold          Boolean             @default(false)
+  holdReason      String?
+  /// Motivo da eliminação, quando o administrador apaga
+  deletedReason   String?
+  deletedAt       DateTime?
+
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
+  pettyCashFund PettyCashFund?            @relation(fields: [pettyCashFundId], references: [id], onDelete: SetNull)
   supplier     Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   project      Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
   costCenter   CostCenter?               @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   items        PurchaseOrderItem[]
   requisition  PurchaseRequisition?
+  materialRequisitions MaterialRequisition[]
   approvals    PurchaseApproval[]
   paymentPlan  PurchasePaymentPlan?
   history      PurchaseHistoryLog[]
@@ -1821,6 +1915,17 @@ model PurchaseOrderItem {
   totalPrice      Decimal?      @db.Decimal(16, 4)
   notes           String?
   order           Int           @default(0)
+
+  // ─── Fiscalidade da linha (Fase 5) ───
+  // Antes vinham escritas em texto nas `notes` ("IVA 14% · Ret. 6,5%") e eram lidas
+  // por expressão regular; a retenção era extraída e descartada, o que fazia o
+  // sistema mandar pagar mais do que o devido. Agora são colunas.
+  vatPercent         Decimal? @db.Decimal(5, 2)
+  withholdingPercent Decimal? @db.Decimal(5, 2)
+  discountPercent    Decimal? @db.Decimal(5, 2)
+  /// Excepção documental: sem comprovativo (DSC) ou autofaturação (AF)
+  docException       PurchaseDocException?
+
   createdAt       DateTime      @default(now())
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
@@ -2030,6 +2135,19 @@ model Personnel {
   category      String?
   photoUrl      String?
   active        Boolean        @default(true)
+
+  // ─── Ficha de funcionário (módulo Comercial › Base › Funcionários) ───
+  /// Departamento: ver a lista `departamentos` em CompanySetting("budget.lists")
+  department       String?
+  /// Vínculo: ver a lista `vinculos` em CompanySetting("budget.lists")
+  contractType     String?
+  admissionDate    DateTime?
+  idNumber         String?
+  taxNumber        String?
+  emergencyContact String?
+  emergencyPhone   String?
+  notes            String?
+
   legacyId      String?        @unique
   importBatchId String?
   createdById   String?
@@ -2046,6 +2164,7 @@ model Personnel {
   @@index([type])
   @@index([active])
   @@index([importBatchId])
+  @@index([department])
 }
 
 /// N:N funcionário ↔ obra. Fonte da verdade das alocações (internos: 0..N obras).
@@ -2417,4 +2536,327 @@ model AiMessage {
   conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MÓDULO COMERCIAL / ORÇAMENTAÇÃO (Fase 0 — fundação)
+// Ver .plans/"Plano Faseado — Módulo Comercial (Orçamentação) espelhado no protótipo MBT.md"
+// ════════════════════════════════════════════════════════════════════════════
+
+enum BudgetStatus {
+  EM_ELABORACAO
+  EM_ANALISE
+  APROVADO
+  PROPOSTA_ENVIADA
+  ADJUDICADO
+  PERDIDO
+  CANCELADO
+}
+
+enum PriceMethod {
+  MARGEM_SOBRE_VENDA
+  MARKUP_SOBRE_CUSTO
+}
+
+enum BaremKind {
+  COMBUSTIVEL
+  RH
+  EQUIPAMENTO
+  VIATURA
+  FERRAMENTA
+  LOGISTICA
+}
+
+enum ProposalStatus {
+  RASCUNHO
+  ENVIADA
+  ACEITE
+  RECUSADA
+}
+
+/// Orçamento (pré-adjudicação). O documento vive em `params`/`sheets`/`baremSnapshot`
+/// (JSONB, como o estado `S` do protótipo); as colunas servem listas, filtros e relatórios.
+model Budget {
+  id       String       @id @default(cuid())
+  /// ORC-2026-0001 (sequencial por ano). As revisoes mantem o numero: a chave e (number, revision).
+  number   String
+  revision String       @default("R0")
+  status   BudgetStatus @default(EM_ELABORACAO)
+  /// Adjudicado → só consulta (equivale a S.meta.locked)
+  locked   Boolean      @default(false)
+
+  clientId        String?
+  projectName     String
+  location        String?
+  /// Código do centro de custo reservado (CC-2026-0001). O CostCenter real nasce na adjudicação.
+  costCenterCode  String?
+  responsibleName String?
+  projectDirName  String?
+
+  date          DateTime  @default(now())
+  startDate     DateTime?
+  endDate       DateTime?
+  priceBaseDate DateTime?
+  validityDays  Int       @default(30)
+
+  currencyBase     String      @default("AOA")
+  currencyRef      String?
+  method           PriceMethod @default(MARGEM_SOBRE_VENDA)
+  marginMin        Decimal?    @db.Decimal(7, 4)
+  marginTarget     Decimal?    @db.Decimal(7, 4)
+  vatRate          Decimal?    @db.Decimal(7, 4)
+  commercialAdjust Decimal?    @db.Decimal(16, 2)
+
+  /// Parâmetros do orçamento (bloco A–E dos Parâmetros)
+  params        Json @default("{}")
+  /// Folhas de custo: mat, rh, eq, vi, fe, sub, log, eng, ind, fin, ris, prod
+  sheets        Json @default("{}")
+  /// Fotografia dos baremes no momento da criação / última aplicação
+  baremSnapshot Json @default("{}")
+  /// Listas de validação (funções, unidades, famílias, tipo de ferramenta, categoria de risco)
+  lists         Json @default("{}")
+  /// Condições de pagamento do cliente (modo, marcos, prazos, retenção)
+  paymentTerms  Json @default("{}")
+  /// Folha de despacho (decisão, preparado por, aprovado por, data, observações)
+  dispatch      Json @default("{}")
+
+  // Resultados materializados pelo motor de cálculo
+  directCost     Decimal? @db.Decimal(16, 2)
+  totalCost      Decimal? @db.Decimal(16, 2)
+  salePriceExVat Decimal? @db.Decimal(16, 2)
+  salePriceInVat Decimal? @db.Decimal(16, 2)
+  grossMargin    Decimal? @db.Decimal(16, 2)
+  grossMarginPct Decimal? @db.Decimal(7, 4)
+  /// good | warn | bad
+  marginState    String?
+
+  awardedProjectId String? @unique
+  /// Concorrência otimista: PATCH só avança se a versão coincidir
+  version          Int     @default(1)
+  createdById      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client         Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  awardedProject Project?   @relation(fields: [awardedProjectId], references: [id], onDelete: SetNull)
+  createdBy      User?      @relation("BudgetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  proposals      Proposal[]
+
+  @@unique([number, revision])
+  @@index([status, date])
+  @@index([clientId])
+  @@index([number])
+}
+
+/// Biblioteca de baremes da empresa (custos internos padrão). A ligação às folhas
+/// de custo é pelo NOME do recurso, como no protótipo.
+model BaremItem {
+  id   String    @id @default(cuid())
+  kind BaremKind
+  code String?
+  name String
+  unit String?
+  /// Campos próprios de cada tipo (mensal, encargos, consumo, depreciação…)
+  fields Json   @default("{}")
+  /// Custo calculado pelas fórmulas, materializado para listas e para as folhas
+  computedCost Decimal? @db.Decimal(16, 4)
+  /// Data do preço — base do estado Atualizado / Desatualizado
+  priceDate    DateTime?
+  /// Equipamentos: Próprio | Alugado
+  ownership    String?
+  active       Boolean   @default(true)
+  notes        String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User?               @relation("BaremCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  history   BaremPriceHistory[]
+
+  @@unique([kind, name])
+  @@index([kind, active])
+}
+
+/// Histórico de preços de cada barém — responde a «porque é que este custo subiu».
+model BaremPriceHistory {
+  id           String    @id @default(cuid())
+  baremId      String
+  fields       Json      @default("{}")
+  computedCost Decimal?  @db.Decimal(16, 4)
+  priceDate    DateTime?
+  changedById  String?
+  changedAt    DateTime  @default(now())
+
+  barem     BaremItem @relation(fields: [baremId], references: [id], onDelete: Cascade)
+  changedBy User?     @relation("BaremPriceChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([baremId, changedAt])
+}
+
+/// Parâmetros padrão da empresa e listas de validação (chave → valor JSON).
+/// Cada orçamento recebe uma cópia destes valores em `Budget.params` ao ser criado.
+model CompanySetting {
+  key         String   @id
+  value       Json
+  label       String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User? @relation("CompanySettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+/// Proposta ao cliente, gerada a partir do orçamento aprovado em despacho.
+model Proposal {
+  id         String         @id @default(cuid())
+  /// PROP-2026-0001 (sequencial por ano)
+  number     String         @unique
+  budgetId   String
+  status     ProposalStatus @default(RASCUNHO)
+  body       Json           @default("{}")
+  validUntil DateTime?
+  sentAt     DateTime?
+  pdfUrl     String?
+
+  /// Fotografia do orcamento no momento em que a proposta foi criada
+  currency   String    @default("AOA")
+  totalExVat Decimal?  @db.Decimal(16, 2)
+  totalInVat Decimal?  @db.Decimal(16, 2)
+  vatRate    Decimal?  @db.Decimal(7, 4)
+  /// Condicoes de pagamento propostas ao cliente
+  paymentTerms Json    @default("{}")
+  sentById   String?
+  decidedAt  DateTime?
+  decisionNotes String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  budget    Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ProposalCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  sentBy    User?  @relation("ProposalSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+
+  @@index([budgetId])
+  @@index([status])
+}
+
+/// Contadores sequenciais por ano (ORC, CC, PROP, OB). Incremento transacional.
+model DocumentCounter {
+  /// ex.: "ORC", "PROP", "CC"
+  kind      String
+  year      Int
+  last      Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([kind, year])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REQUISIÇÃO DE MATERIAL (Fase 4 do módulo Comercial / Logística)
+//
+// UM documento para os dois pedidos que o protótipo separava:
+//   destino ARMAZEM → o armazém atende do stock (era o `sreq`/`finReqInt`)
+//   destino COMPRA  → segue para compra (era o `oreq`)
+// O armazém pode mudar de ARMAZEM para COMPRA quando não há stock: é uma
+// transição, não um documento novo. Ver o plano, §S1.
+// ════════════════════════════════════════════════════════════════════════════
+
+enum RequisitionDestination {
+  /// O armazém atende do stock que tem
+  ARMAZEM
+  /// Não há stock (ou nunca houve): tem de se comprar
+  COMPRA
+}
+
+enum RequisitionStatus {
+  RASCUNHO
+  SUBMETIDA
+  APROVADA
+  /// Entregue em parte: falta material
+  PARCIAL
+  ATENDIDA
+  /// Convertida em pedido de compra
+  EM_COMPRA
+  RECUSADA
+  CANCELADA
+}
+
+model MaterialRequisition {
+  id     String                 @id @default(cuid())
+  /// RM-2026-0001 (sequencial por ano)
+  number String                 @unique
+  destination RequisitionDestination @default(ARMAZEM)
+  status RequisitionStatus      @default(RASCUNHO)
+
+  // ─── quem pede ───
+  /// Obra que pede. Vazio = um departamento da sede.
+  projectId       String?
+  department      String?
+  costCenterId    String?
+  /// Categoria de custo (MAT, FE, LOG…), para o custo cair no sítio certo
+  costCategory    String?
+  requestedById   String?
+  requestedByName String
+  neededBy        DateTime?
+  justification   String?
+
+  // ─── quem atende ───
+  /// Armazém de onde sai o material
+  sourceWarehouseId String?
+  /// Para onde vai: o armazém da obra, ou consumo direto na sede
+  targetWarehouseId String?
+
+  // ─── decisões ───
+  approvedById   String?
+  approvedByName String?
+  approvedAt     DateTime?
+  refusalReason  String?
+  deliveredAt    DateTime?
+  /// Pedido de compra criado quando o destino passou a COMPRA
+  purchaseOrderId String?
+
+  notes   String?
+  /// Histórico do documento: [{ at, by, action, detail }]
+  history Json    @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  costCenter      CostCenter?    @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  requestedBy     User?          @relation("RequisitionRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedBy      User?          @relation("RequisitionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  sourceWarehouse Warehouse?     @relation("RequisitionSourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: SetNull)
+  targetWarehouse Warehouse?     @relation("RequisitionTargetWarehouse", fields: [targetWarehouseId], references: [id], onDelete: SetNull)
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  items           MaterialRequisitionItem[]
+  movements       StockMovement[]
+
+  @@index([status, createdAt])
+  @@index([projectId])
+  @@index([destination, status])
+}
+
+model MaterialRequisitionItem {
+  id            String  @id @default(cuid())
+  requisitionId String
+  /// Produto do catálogo. Vazio = escrito à mão (o armazém identifica depois).
+  productId     String?
+  description   String
+  unit          String?
+  quantity      Decimal @db.Decimal(16, 4)
+  /// Quanto já foi entregue
+  fulfilledQuantity Decimal @default(0) @db.Decimal(16, 4)
+  /// Preço estimado, só para dar ideia do valor do pedido
+  estimatedUnitPrice Decimal? @db.Decimal(16, 4)
+  notes String?
+  order Int     @default(0)
+
+  requisition MaterialRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  product     Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([requisitionId])
+  @@index([productId])
 }
