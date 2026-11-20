@@ -20,15 +20,17 @@
 <body data-shell="figma" class="bg-surface font-body text-on-surface antialiased">
     <div id="appHeader"></div>
 
-    <header class="cm-budget-head" id="cmBudgetHead"></header>
+    <main class="cm-budget-main">
+        <header class="cm-budget-head" id="cmBudgetHead"></header>
 
-    <div class="cm-budget-layout">
-        <nav class="cm-sidenav" id="cmSideNav" aria-label="Folhas do orçamento"></nav>
-        <main class="cm-budget-body">
-            <a href="/comercial/orcamentos" class="cm-chip" style="margin-bottom:.75rem;display:inline-flex">‹ Todos os orçamentos</a>
-            <div id="cmContent"></div>
-        </main>
-    </div>
+        <div class="cm-budget-layout">
+            <nav class="cm-sidenav" id="cmSideNav" aria-label="Folhas do orçamento"></nav>
+            <div class="cm-budget-body">
+                <a href="/comercial/orcamentos" class="cm-chip" style="margin-bottom:.75rem;display:inline-flex">‹ Todos os orçamentos</a>
+                <div id="cmContent"></div>
+            </div>
+        </div>
+    </main>
 
     <div id="cmDrawer"></div>
     <div id="modalContainer"></div>

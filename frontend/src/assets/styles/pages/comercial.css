@@ -459,21 +459,23 @@ input.cell-manual[type="date"] {
    ========================================================================== */
 
 /* ─── Cabeçalho do orçamento (custo, preço e margem sempre à vista) ───────── */
+/*
+ * O cabeçalho do orçamento é o título da página e rola com ela. Era pegajoso em
+ * `top: 0`, o que o punha por baixo da barra de topo da app (fixa, top 1rem,
+ * 4rem de altura) — ficava escondido. Colá-lo mais abaixo obrigaria a lateral a
+ * saber a altura dele, que muda com o título; não vale a peça extra.
+ */
 .cm-budget-head {
-  position: sticky;
-  top: 0;
-  z-index: 30;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
-  padding: 0.75rem 1rem;
+  /* Cartão como os outros painéis da área comercial: o `main` já dá a margem
+     lateral, por isso aqui só o espaço de dentro. */
+  padding: 1rem 1.25rem;
   background: #fff;
-  border-bottom: 1px solid var(--cm-line);
-}
-
-@media (min-width: 768px) {
-  .cm-budget-head { padding: 0.875rem 2rem; }
+  border: 1px solid var(--cm-line);
+  border-radius: 14px;
 }
 
 .cm-bh-left { flex: 1 1 18rem; min-width: 0; }
@@ -518,19 +520,36 @@ input.cell-manual[type="date"] {
 }
 
 /* ─── Navegação lateral das folhas ───────────────────────────────────────── */
+/*
+ * `.cm-budget-main` é o <main> da página, filho directo do <body>, e é por isso
+ * que o shell lhe dá a margem da barra de ícones (5.5rem recolhida, 21rem
+ * fixada) e o espaço da barra de topo. As margens horizontais ficam aqui,
+ * porque o shell só manda nas verticais.
+ */
+.cm-budget-main {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .cm-budget-main {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
 .cm-budget-layout {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 1rem;
+  padding-top: 1rem;
 }
 
 @media (min-width: 1024px) {
   .cm-budget-layout {
     grid-template-columns: 17rem minmax(0, 1fr);
-    padding: 1.25rem 2rem 4rem;
+    gap: 1.5rem;
+    padding-top: 1.25rem;
   }
 }
 
@@ -543,9 +562,11 @@ input.cell-manual[type="date"] {
 @media (min-width: 1024px) {
   .cm-sidenav {
     position: sticky;
-    top: 6.5rem;
-    max-height: calc(100vh - 8rem);
+    /* Por baixo da barra de topo da app, que é fixa e acaba aos 5rem. */
+    top: 5.5rem;
+    max-height: calc(100vh - 7rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 
