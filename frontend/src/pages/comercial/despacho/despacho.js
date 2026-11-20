@@ -40,6 +40,7 @@ const pct = (v, d = 1) => (v === null || v === undefined ? "—" : `${(Number(v)
 const fmtDate = (v) => (v ? String(v).slice(0, 10).split("-").reverse().join("/") : "—");
 
 const MARGIN_STATE = {
+  SEM_CUSTO: ["is-muted", "Falta lançar o custo"],
   OBJETIVO_ATINGIDO: ["is-good", "Objetivo atingido"],
   ENTRE_MINIMO_E_OBJETIVO: ["is-warn", "Entre o mínimo e o objetivo"],
   ABAIXO_DO_MINIMO: ["is-bad", "Abaixo do mínimo"],
@@ -194,6 +195,16 @@ function render() {
           </tr>
         </tbody>
       </table></div>
+      ${
+        R.precoDado
+          ? `<div class="cm-note is-warn" style="margin-top:.625rem">
+               O preço desta obra é o que o cliente fixou: <b>${fmt(R.PVsi)}</b>, o total do mapa de
+               quantidades. As margens desta tabela <b>não o determinam</b> — servem para comparar o que
+               se cobraria a montar o preço de raiz (${fmt(R.PVcalc)}) com o que está contratado.
+               A margem que conta é a de baixo: preço menos custo total.
+             </div>`
+          : ""
+      }
     </section>
 
     <div style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(22rem,1fr))">
@@ -203,7 +214,12 @@ function render() {
           ${row("Custo direto", fmt(R.CD))}
           ${row("Indiretos, financeiros e contingência", fmt(R.C.IND + R.C.FIN + R.C.RIS))}
           ${row("CUSTO TOTAL DA OBRA", fmt(R.CT), true)}
-          ${row("Preço de venda calculado", fmt(R.PVcalc))}
+          ${
+            R.precoDado
+              ? `${row("Total do mapa de quantidades", fmt(R.QT))}
+                 ${row("Custo + margens, só para comparar", fmt(R.PVcalc))}`
+              : row("Preço de venda calculado", fmt(R.PVcalc))
+          }
           ${rowInput("Ajuste comercial / arredondamento", "ajuste", P.ajuste, editable)}
           ${row("PREÇO DE VENDA SEM IVA", fmt(R.PVsi), true)}
           ${row(`IVA (${pct(P.iva, 0)})`, fmt(R.imp))}

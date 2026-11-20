@@ -2556,6 +2556,9 @@ enum BudgetStatus {
 enum PriceMethod {
   MARGEM_SOBRE_VENDA
   MARKUP_SOBRE_CUSTO
+  /// Preço dado pelo cliente: o PV é o total do mapa de quantidades e a
+  /// margem é o que sobra depois do custo.
+  PRECO_DADO
 }
 
 enum BaremKind {

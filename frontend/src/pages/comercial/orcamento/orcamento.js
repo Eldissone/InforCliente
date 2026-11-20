@@ -42,6 +42,7 @@ const pct = (v, d = 1) => (v === null || v === undefined ? "—" : `${(Number(v)
 const fmtDate = (v) => (v ? String(v).slice(0, 10).split("-").reverse().join("/") : "—");
 
 const MARGIN_STATE = {
+  SEM_CUSTO: ["is-muted", "Falta lançar o custo"],
   OBJETIVO_ATINGIDO: ["is-good", "Objetivo atingido"],
   ENTRE_MINIMO_E_OBJETIVO: ["is-warn", "Entre o mínimo e o objetivo"],
   ABAIXO_DO_MINIMO: ["is-bad", "Abaixo do mínimo"],
@@ -107,6 +108,12 @@ function sections() {
         { id: "dash", tag: "01", label: "Dashboard" },
         { id: "par", tag: "16", label: "Parâmetros" },
       ],
+    },
+    // O mapa de quantidades é o lado da venda: fica num grupo só dele, para
+    // ninguém o confundir com uma folha de custo.
+    {
+      group: "O que se vende",
+      items: [{ id: "qt", tag: S.meta.sheets.qt?.tag || "00", label: S.meta.sheets.qt?.title || "Mapa de quantidades", total: S.R.QT || 0 }],
     },
     { group: "Custos diretos", items: ["mat", "rh", "eq", "vi", "fe", "sub", "log", "eng"].map(sheetItem) },
     { group: "Custos indiretos", items: ["ind", "fin", "ris"].map(sheetItem) },
@@ -192,6 +199,257 @@ function render() {
   else body.innerHTML = viewSheet(S.view);
 }
 
+/** Metodologias de preço, pela ordem em que se oferecem. */
+const METODOS = {
+  MARGEM_SOBRE_VENDA: "Margem sobre a venda",
+  MARKUP_SOBRE_CUSTO: "Markup sobre o custo",
+  PRECO_DADO: "Preço dado pelo cliente",
+};
+
+/** O rótulo da metodologia em vigor. */
+function metodoLabel() {
+  return METODOS[S.doc.params.metodo] || S.doc.params.metodo || "—";
+}
+
+// ───────────────────────── catálogo de artigos ───────────────────────────
+
+/*
+ * O que a empresa já vendeu, e por quanto.
+ *
+ * As tabelas de quantidades das obras são, na prática, uma lista de preços
+ * praticados. Ao escrever a descrição de uma linha do mapa, sugere-se o que já
+ * foi vendido com esse nome, com o último preço, a obra e a data; ao escolher,
+ * enchem-se a unidade e o preço.
+ *
+ * Mostra-se o preço **por moeda**, porque cinco obras estão em dólares e as
+ * outras em kwanzas: juntá-los fazia um eléctrodo de terra valer entre 7 e
+ * 24 189. Nada é convertido nem recomendado — a data está lá para quem decide
+ * poder pesar a inflação.
+ */
+
+let catTimer = null;
+let catBox = null;
+let catAlvo = null;
+
+function catalogoFechar() {
+  catBox?.remove();
+  catBox = null;
+  catAlvo = null;
+}
+
+function catalogoMoeda(a) {
+  const base = S.doc.params.moedaBase || "AOA";
+  return a.moedas.find((m) => m.cur === base) || a.moedas[0] || null;
+}
+
+function catalogoLinha(a, n) {
+  const m = catalogoMoeda(a);
+  const data = m?.ultimo?.data ? String(m.ultimo.data).slice(0, 10).split("-").reverse().join("/") : "";
+  const outras = a.moedas.filter((x) => x !== m);
+  return `<button type="button" class="cm-cat-item" data-cat="${n}">
+    <span class="cm-cat-desc">${esc(a.desc)}</span>
+    <span class="cm-cat-meta">
+      <span class="cm-cat-un">${esc(a.un || "—")}</span>
+      <span>${a.obras} obra${a.obras === 1 ? "" : "s"}</span>
+      ${m ? `<b>${esc(m.cur)} ${fmt(m.ultimo.preco)}</b><span>${esc(m.ultimo.obra || "")}${data ? ` · ${data}` : ""}</span>` : `<span>sem preço</span>`}
+      ${m && m.usos > 1 ? `<span class="cm-cat-faixa">${fmt(m.min)} – ${fmt(m.max)}</span>` : ""}
+      ${outras.length ? `<span class="cm-cat-faixa">também em ${outras.map((x) => esc(x.cur)).join(", ")}</span>` : ""}
+    </span>
+  </button>`;
+}
+
+async function catalogoAbrir(input) {
+  const q = input.value.trim();
+  if (q.length < 2) return catalogoFechar();
+
+  const [sheet, i] = input.dataset.artigo.split("|");
+  const un = S.doc.sheets[sheet]?.[Number(i)]?.un || "";
+
+  let r;
+  try {
+    r = await apiRequest(
+      `/budgets/articles?q=${encodeURIComponent(q)}&limit=8&history=0${un ? `&un=${encodeURIComponent(un)}` : ""}`
+    );
+  } catch {
+    return catalogoFechar(); // o catálogo é um extra: se falhar, escreve-se à mão
+  }
+  if (document.activeElement !== input) return;
+
+  const itens = r.items || [];
+  if (!itens.length) return catalogoFechar();
+
+  catalogoFechar();
+  catAlvo = { input, sheet, i: Number(i), itens };
+  catBox = document.createElement("div");
+  catBox.className = "cm-cat";
+  catBox.innerHTML =
+    itens.map(catalogoLinha).join("") +
+    `<div class="cm-cat-foot">Preços já praticados, por moeda e com a data. Não são convertidos nem recomendados.</div>`;
+
+  const r0 = input.getBoundingClientRect();
+  catBox.style.left = `${Math.round(r0.left + window.scrollX)}px`;
+  catBox.style.top = `${Math.round(r0.bottom + window.scrollY + 2)}px`;
+  catBox.style.minWidth = `${Math.round(r0.width)}px`;
+  document.body.appendChild(catBox);
+}
+
+function catalogoEscolher(n) {
+  if (!catAlvo) return;
+  const a = catAlvo.itens[n];
+  const linha = S.doc.sheets[catAlvo.sheet]?.[catAlvo.i];
+  if (!a || !linha) return catalogoFechar();
+
+  const m = catalogoMoeda(a);
+  linha.desc = a.desc;
+  if (a.un) linha.un = a.un;
+  if (m?.ultimo?.preco) linha.pu = m.ultimo.preco;
+
+  const base = S.doc.params.moedaBase || "AOA";
+  catalogoFechar();
+  markDirty();
+  render();
+
+  if (m && m.cur !== base) {
+    // `persist` em vez de "warn" (que o toast não conhece): um preço noutra
+    // moeda dentro do orçamento é coisa para não passar despercebida.
+    toast(`O preço veio em ${m.cur} (obra ${m.ultimo.obra}). Converta antes de usar — o orçamento é em ${base}.`, {
+      type: "info",
+      persist: true,
+    });
+  } else if (m) {
+    const data = m.ultimo.data ? String(m.ultimo.data).slice(0, 10).split("-").reverse().join("/") : "";
+    toast(`${fmt(m.ultimo.preco)} — praticado em ${m.ultimo.obra}${data ? ` a ${data}` : ""}.`, { type: "info" });
+  }
+}
+
+// ─────────────── importar o mapa de quantidades de uma obra ───────────────
+
+/**
+ * Traz a tabela de quantidades de uma obra para o mapa, sem lhe mexer nos
+ * valores. Mostra primeiro o que vai acontecer — quantas linhas, que total,
+ * que unidades mudam de grafia — e só grava depois de confirmado.
+ */
+async function openImportQt() {
+  if (S.dirty && !window.confirm("Há alterações por gravar que se perdem ao importar. Continuar?")) return;
+
+  let obras;
+  try {
+    const r = await apiRequest("/budgets/quantity-sources");
+    obras = r.items || [];
+  } catch (err) {
+    return toast(err.message || "Não foi possível ler as obras.", { type: "error" });
+  }
+  if (!obras.length) return toast("Nenhuma obra tem tabela de quantidades.", { type: "info" });
+
+  const temMapa = (S.doc.sheets.qt || []).length > 0;
+  const wrap = document.createElement("div");
+  wrap.className = "cm-modal-back";
+  wrap.innerHTML = `
+    <div class="cm-modal" role="dialog" aria-modal="true" aria-labelledby="qtImpTitle">
+      <h3 id="qtImpTitle" class="cm-panel-title">Importar mapa de quantidades</h3>
+      <p class="cm-lead">Os valores entram como estão na obra. As unidades passam para a grafia do orçamento e o original fica guardado.</p>
+      <label style="display:grid;gap:.25rem;font-size:.8125rem;color:var(--cm-muted)">
+        <span>Obra</span>
+        <select id="qtObra" class="cell-list">
+          <option value="">Escolher…</option>
+          ${obras
+            .map(
+              (o) =>
+                `<option value="${esc(o.id)}">${esc(o.code || "")} · ${esc(o.name)} — ${o.lines} linha(s), ${fmt(o.total)}</option>`
+            )
+            .join("")}
+        </select>
+      </label>
+      ${
+        temMapa
+          ? `<label style="display:flex;gap:.5rem;align-items:center;font-size:.8125rem;margin-top:.625rem">
+               <input type="checkbox" id="qtAppend"> Acrescentar às ${(S.doc.sheets.qt || []).length} linha(s) que já lá estão
+               <span class="cm-calc">(por omissão substitui tudo)</span>
+             </label>`
+          : ""
+      }
+      <div id="qtPrev" style="margin-top:.75rem"></div>
+      <div class="cm-modal-actions">
+        <button type="button" class="cm-chip" id="qtCancel">Cancelar</button>
+        <button type="button" class="cm-chip is-on" id="qtOk" disabled>Importar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+
+  const fechar = () => wrap.remove();
+  const sel = wrap.querySelector("#qtObra");
+  const prev = wrap.querySelector("#qtPrev");
+  const ok = wrap.querySelector("#qtOk");
+  let resumo = null;
+
+  wrap.querySelector("#qtCancel").addEventListener("click", fechar);
+  wrap.addEventListener("click", (e) => {
+    if (e.target === wrap) fechar();
+  });
+
+  sel.addEventListener("change", async () => {
+    resumo = null;
+    ok.disabled = true;
+    if (!sel.value) return (prev.innerHTML = "");
+    prev.innerHTML = `<p class="cm-calc">A ler a obra…</p>`;
+    try {
+      resumo = await apiRequest(`/budgets/${encodeURIComponent(S.id)}/import-quantities?preview=1`, {
+        method: "POST",
+        body: { projectId: sel.value },
+      });
+    } catch (err) {
+      prev.innerHTML = `<div class="cm-note is-bad">${esc((err.errors && err.errors[0]) || err.message || "Não foi possível ler a tabela.")}</div>`;
+      return;
+    }
+    const mudam = resumo.unidadesAlteradas || [];
+    const desconhecidas = resumo.unidadesPorReconhecer || [];
+    prev.innerHTML = `
+      <div class="cm-note">
+        <b>${resumo.linhas}</b> linha(s), total <b>${fmt(resumo.total)}</b> ${esc(resumo.obra.currency)}.
+        ${resumo.comTotalEscrito ? `<br>${resumo.comTotalEscrito} linha(s) trazem o total fechado do contrato.` : ""}
+        ${resumo.semPreco ? `<br><b>${resumo.semPreco}</b> linha(s) sem preço — entram a zero.` : ""}
+      </div>
+      ${
+        mudam.length
+          ? `<div class="cm-note is-warn" style="margin-top:.5rem">Unidades que mudam de grafia:
+               ${mudam.map((u) => `<b>${esc(u.original)}</b>→${esc(u.unit)} (${u.count})`).join(", ")}</div>`
+          : ""
+      }
+      ${
+        desconhecidas.length
+          ? `<div class="cm-note is-warn" style="margin-top:.5rem">Unidades por reconhecer, entram tal como estão:
+               ${desconhecidas.map((u) => `<b>${esc(u.original)}</b> (${u.count})`).join(", ")}</div>`
+          : ""
+      }`;
+    ok.disabled = false;
+  });
+
+  ok.addEventListener("click", async () => {
+    if (!resumo) return;
+    const append = wrap.querySelector("#qtAppend")?.checked === true;
+    ok.disabled = true;
+    ok.textContent = "A importar…";
+    try {
+      const r = await apiRequest(`/budgets/${encodeURIComponent(S.id)}/import-quantities`, {
+        method: "POST",
+        body: { projectId: sel.value, mode: append ? "append" : "replace", version: S.head.version },
+      });
+      setDoc(r);
+      S.dirty = false;
+      fechar();
+      render();
+      toast(`${r.importado.linhas} linha(s) importadas · ${fmt(r.importado.total)}`, { type: "success" });
+      if (S.doc.params.metodo !== "PRECO_DADO") {
+        toast("Para o mapa mandar no preço, escolha «Preço dado pelo cliente» nos parâmetros.", { type: "info" });
+      }
+    } catch (err) {
+      ok.disabled = false;
+      ok.textContent = "Importar";
+      toast((err.errors && err.errors[0]) || err.message || "Não foi possível importar.", { type: "error" });
+    }
+  });
+}
+
 // ───────────────────────── folhas ─────────────────────────
 
 function viewSheet(key) {
@@ -200,7 +458,8 @@ function viewSheet(key) {
   const rows = S.doc.sheets[key] || [];
   const res = S.R[key] || [];
   const cat = CATS.find((c) => c[3] === key);
-  const total = cat ? S.R.C[cat[0]] : 0;
+  const venda = Boolean(def.sale);
+  const total = venda ? S.R.QT || 0 : cat ? S.R.C[cat[0]] : 0;
   const pvTotal = cat ? S.R.PVbyCat[cat[0]] : 0;
   const editable = !S.readonly && !S.head.locked;
 
@@ -229,7 +488,9 @@ function viewSheet(key) {
           .map((c, j) =>
             j === 0
               ? "<td>Total</td>"
-              : c.calc === "ct"
+              : c.calc === "total"
+                ? `<td class="num">${fmt(total)}</td>`
+                : c.calc === "ct"
                 ? `<td class="num">${fmt(total)}</td>`
                 : c.calc === "pv"
                   ? `<td class="num">${fmt(pvTotal)}</td>`
@@ -250,10 +511,34 @@ function viewSheet(key) {
         <p class="cm-lead" style="margin-top:.25rem">${esc(def.lead)}</p>
       </div>
       <div class="cm-head-actions">
-        <span class="cm-chip"><span>Custo</span><b>${fmt(total)}</b></span>
-        ${cat && !["FIN", "IND", "RIS"].includes(cat[0]) ? `<span class="cm-chip"><span>Preço de venda</span><b>${fmt(pvTotal)}</b></span>` : ""}
+        ${
+          venda
+            ? `<span class="cm-chip"><span>Total do mapa</span><b>${fmt(total)}</b></span>
+               ${S.R.precoDado ? `<span class="cm-pill is-good">É o preço de venda</span>` : `<span class="cm-pill">Não é o preço de venda</span>`}
+               ${editable ? `<button class="cm-chip is-on" type="button" id="bImportQt">Importar de uma obra</button>` : ""}`
+            : `<span class="cm-chip"><span>Custo</span><b>${fmt(total)}</b></span>
+               ${cat && !["FIN", "IND", "RIS"].includes(cat[0]) ? `<span class="cm-chip"><span>Preço de venda</span><b>${fmt(pvTotal)}</b></span>` : ""}`
+        }
       </div>
     </div>
+    ${
+      venda && !S.R.precoDado && (S.R.QT || 0) > 0
+        ? `<div class="cm-note is-warn" style="margin-bottom:.625rem">
+             O mapa tem ${S.R.qtLinhas} linha(s), mas a metodologia de preço é
+             «${esc(metodoLabel())}»: o preço de venda está a sair do custo e das margens, não daqui.
+             Para o mapa mandar no preço, escolha <b>Preço dado pelo cliente</b> nos parâmetros.
+           </div>`
+        : ""
+    }
+    ${
+      venda && (S.R.QT || 0) > 0
+        ? `<div class="cm-grupos">${S.R.qtGrupos
+            .map(
+              (g) => `<span class="cm-chip"><span>${esc(g.nome)}</span><b>${fmt(g.total)}</b><i>${(g.pct * 100).toFixed(1)}%</i></span>`
+            )
+            .join("")}</div>`
+        : ""
+    }
     <div class="cm-legend">
       <span><i class="manual"></i>Escreve-se à mão</span>
       <span><i class="list"></i>Escolhe-se de uma lista</span>
@@ -302,6 +587,12 @@ function editCell(sheet, i, c, row, editable) {
     return `<input class="cell-list" list="${listId}" data-cell="${id}" value="${esc(v)}"
             style="min-width:${(c.w || 1) * 7}rem" placeholder="Do barém ou escreva um item novo" ${dis}>`;
   }
+  if (c.ty === "artigo") {
+    // Escreve-se à mão, mas sugere o que a casa já vendeu (ver `catalogoAbrir`).
+    return `<input class="cell-manual" data-cell="${id}" data-artigo="${sheet}|${i}" value="${esc(v)}"
+            style="min-width:${(c.w || 1) * 7}rem" autocomplete="off"
+            placeholder="Escreva e escolha do catálogo" ${dis}>`;
+  }
   if (c.ty === "pct") {
     const shown = v === null || v === undefined || v === "" ? "" : Number((Number(v) * 100).toFixed(6));
     return `<input class="cell-manual" type="number" step="any" data-cell="${id}" data-pct="1" value="${shown}" ${dis}>`;
@@ -334,8 +625,9 @@ function viewParams() {
       input = `<input class="cell-manual" type="date" data-par="${k}" value="${esc(v ? String(v).slice(0, 10) : "")}" ${dis}>`;
     } else if (ty === "metodo") {
       input = `<select class="cell-list" data-par="${k}" ${dis}>
-        <option value="MARGEM_SOBRE_VENDA"${v === "MARGEM_SOBRE_VENDA" ? " selected" : ""}>Margem sobre a venda</option>
-        <option value="MARKUP_SOBRE_CUSTO"${v === "MARKUP_SOBRE_CUSTO" ? " selected" : ""}>Markup sobre o custo</option>
+        ${Object.entries(METODOS)
+          .map(([mk, ml]) => `<option value="${mk}"${v === mk ? " selected" : ""}>${esc(ml)}</option>`)
+          .join("")}
       </select>`;
     } else {
       input = `<input class="cell-manual" data-par="${k}" value="${esc(v)}" ${dis}>`;
@@ -1167,6 +1459,25 @@ function showConflict(p) {
 
 function wire() {
   document.addEventListener("input", onCell);
+
+  // Catálogo de artigos no mapa de quantidades.
+  document.addEventListener("input", (e) => {
+    if (!e.target?.dataset?.artigo) return;
+    clearTimeout(catTimer);
+    catTimer = setTimeout(() => catalogoAbrir(e.target), 220);
+  });
+  document.addEventListener("mousedown", (e) => {
+    const pick = e.target.closest?.("[data-cat]");
+    if (pick) {
+      e.preventDefault(); // não tira o foco da célula antes de escolher
+      return catalogoEscolher(Number(pick.dataset.cat));
+    }
+    if (!e.target.closest?.("[data-artigo]")) catalogoFechar();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") catalogoFechar();
+  });
+  window.addEventListener("scroll", catalogoFechar, { passive: true });
   document.addEventListener("change", (e) => {
     const t = e.target;
     if (t?.dataset?.term) {
@@ -1186,9 +1497,10 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave");
+    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt");
     if (!t) return;
     if (t.id === "tSave") return saveTerms();
+    if (t.id === "bImportQt") return openImportQt();
     if (t.dataset.milx) {
       const [a, i] = t.dataset.milx.split("|");
       if (a === "add") S.terms.previstas.marcos.push({ desc: "Novo marco", pct: null, ev: "data", data: null });

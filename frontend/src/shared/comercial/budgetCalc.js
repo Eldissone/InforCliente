@@ -34,7 +34,13 @@ const CATS = [
 const DIRECT = CATS.slice(0, 8);
 const SHEET_KEYS = CATS.map((c) => c[3]);
 
-const PRICE_METHODS = ["MARGEM_SOBRE_VENDA", "MARKUP_SOBRE_CUSTO"];
+const PRICE_METHODS = ["MARGEM_SOBRE_VENDA", "MARKUP_SOBRE_CUSTO", "PRECO_DADO"];
+
+/**
+ * A folha do mapa de quantidades (o que se vende), que não é uma folha de
+ * custo: nunca entra no custo total. Fica à parte das CATS de propósito.
+ */
+const QTY_SHEET = "qt";
 
 /** Bases de incidência dos custos indiretos. */
 const IND_BASES = [
@@ -166,6 +172,9 @@ function calcBudget(budget = {}, today = new Date()) {
   const margens = dispatch.margens || {};
   const S = {};
   for (const k of SHEET_KEYS) S[k] = Array.isArray(sheets[k]) ? sheets[k] : [];
+  // O mapa de quantidades é o lado da venda. Lê-se à parte para não haver
+  // hipótese de entrar no custo por distração.
+  const QT = Array.isArray(sheets[QTY_SHEET]) ? sheets[QTY_SHEET] : [];
 
   const R = {};
   const hD = N(P.horasDia) || 8;
@@ -447,7 +456,43 @@ function calcBudget(budget = {}, today = new Date()) {
   });
 
   R.PVcalc = sum(CATS, (c) => PV[c[0]]);
-  R.PVsi = R.PVcalc + N(P.ajuste);
+
+  // ─── Mapa de quantidades (o que se vende) ───────────────────────────────
+  //
+  // Cada linha vale quantidade × preço unitário, ou o total escrito à mão
+  // quando existe (é assim que as tabelas das obras estão: algumas trazem o
+  // total fechado e esse é que manda, para o documento bater ao cêntimo).
+  R.qt = QT.map((l, i) => {
+    const q = N(l.q);
+    const pu = N(l.pu);
+    const escrito = l.tfix === null || l.tfix === undefined || l.tfix === "" ? null : N(l.tfix);
+    const tot = escrito !== null && escrito !== 0 ? escrito : q * pu;
+    return { i, grupo: l.grupo || "", cod: l.cod || "", desc: l.desc || "", un: l.un || "", q, pu, total: tot };
+  });
+  R.QT = R.qt.reduce((a, l) => a + l.total, 0);
+  R.qtLinhas = R.qt.length;
+
+  // Por grupo, que é como as tabelas das obras estão organizadas.
+  const porGrupo = new Map();
+  for (const l of R.qt) {
+    const g = l.grupo || "(sem grupo)";
+    porGrupo.set(g, (porGrupo.get(g) || 0) + l.total);
+  }
+  R.qtGrupos = [...porGrupo.entries()]
+    .map(([nome, total]) => ({ nome, total, pct: R.QT === 0 ? 0 : total / R.QT }))
+    .sort((a, b) => b.total - a.total);
+
+  /*
+   * Preço de venda.
+   *
+   * Nos dois métodos de sempre o preço SAI do custo e das margens. No método
+   * «preço dado» é ao contrário: o preço é o total do mapa de quantidades,
+   * porque foi o cliente que o fixou, e a margem passa a ser o que sobra. É o
+   * caso das obras que já estão em carteira — o preço está contratado e o que
+   * falta saber é se o custo cabe lá dentro.
+   */
+  R.precoDado = P.metodo === "PRECO_DADO";
+  R.PVsi = (R.precoDado ? R.QT : R.PVcalc) + N(P.ajuste);
   R.imp = R.PVsi * N(P.iva);
   R.PVfinal = R.PVsi + R.imp;
   R.MB = R.PVsi - CT;
@@ -457,8 +502,14 @@ function calcBudget(budget = {}, today = new Date()) {
   // pelo valor da margem, não pela percentagem.
   R.MBpct = R.PVsi > 0 ? R.MB / R.PVsi : 0;
   R.markupPct = CT === 0 ? 0 : R.MB / CT;
-  R.mgEstado =
-    R.MB < 0 || (R.PVsi <= 0 && CT > 0)
+  // Preço sem custo nenhum lançado dá 100% de margem e diria «objetivo
+  // atingido» — o que é falso: ainda ninguém somou o que a obra custa. Só
+  // acontece com o preço dado pelo cliente, porque nos outros métodos o preço
+  // vem do custo e sem custo não há preço.
+  R.semCusto = CT === 0 && R.PVsi > 0;
+  R.mgEstado = R.semCusto
+    ? "SEM_CUSTO"
+    : R.MB < 0 || (R.PVsi <= 0 && CT > 0)
       ? "MARGEM_NEGATIVA"
       : R.MBpct < N(P.margemMin)
         ? "ABAIXO_DO_MINIMO"
@@ -652,6 +703,7 @@ function buildAlerts(S, R, P, today) {
 /** Totais que ficam materializados nas colunas do Budget. */
 function budgetTotals(R) {
   const state = {
+    SEM_CUSTO: "unknown",
     MARGEM_NEGATIVA: "bad",
     ABAIXO_DO_MINIMO: "bad",
     ENTRE_MINIMO_E_OBJETIVO: "warn",
@@ -673,6 +725,7 @@ export {
   CATS,
   DIRECT,
   SHEET_KEYS,
+  QTY_SHEET,
   PRICE_METHODS,
   IND_BASES,
   IND_TYPES,

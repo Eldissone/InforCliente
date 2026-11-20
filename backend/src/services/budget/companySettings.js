@@ -143,6 +143,7 @@ const PARAM_GROUPS = Object.freeze([
         optionLabels: {
           MARGEM_SOBRE_VENDA: "Margem sobre a venda — PV = Custo ÷ (1 − Margem)",
           MARKUP_SOBRE_CUSTO: "Markup sobre o custo — PV = Custo × (1 + Markup)",
+          PRECO_DADO: "Preço dado pelo cliente — PV = total do mapa de quantidades, e a margem é o que sobra",
         },
       },
       { k: "margemMin", l: "Margem mínima aceitável (s/ venda)", ty: "pct", help: "Abaixo deste valor o orçamento fica em alerta vermelho." },

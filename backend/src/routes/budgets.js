@@ -14,8 +14,19 @@ const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requirePermission } = require("../middlewares/auth");
 const { asyncHandler } = require("../utils/http");
-const { calcBudget, budgetTotals, SHEET_KEYS, CATS, PRICE_METHODS } = require("../services/budget/calc");
-const { SHEETS, FIXED_LISTS, DEFAULT_ROWS, DEFAULT_MARGINS, DEFAULT_IMPACTS } = require("../services/budget/sheetDefs");
+const { calcBudget, QTY_SHEET, CATS, PRICE_METHODS } = require("../services/budget/calc");
+const { normalizeUnit, summarizeUnits } = require("../services/budget/units");
+const { buildCatalog, searchCatalog, catalogStats } = require("../services/budget/articleCatalog");
+
+const {
+  ALL_SHEETS,
+  COLUMN_FROM_PARAMS,
+  columnsFor,
+  snapshotFromLibrary,
+  buildBudgetDocument,
+  loadCompanyDefaults,
+} = require("../services/budget/create");
+const { SHEETS, FIXED_LISTS } = require("../services/budget/sheetDefs");
 const { allocate, peek, costCenterCodeFor, nextRevision } = require("../services/budget/numbering");
 const {
   getBudgetParams,
@@ -57,19 +68,6 @@ const DISPATCH_DECISIONS = ["Em análise", "Aprovado", "Aprovado com alteraçõe
 /** Decisoes que deixam o orcamento pronto para proposta e adjudicacao. */
 const DISPATCH_APPROVED = ["Aprovado", "Aprovado com alterações"];
 
-const COLUMN_FROM_PARAMS = {
-  projectName: "obra",
-  location: "local",
-  responsibleName: "respOrc",
-  projectDirName: "dirProj",
-  currencyBase: "moedaBase",
-  currencyRef: "moedaRef",
-  method: "metodo",
-  marginMin: "margemMin",
-  marginTarget: "margemObj",
-  vatRate: "iva",
-  commercialAdjust: "ajuste",
-};
 
 const optText = (max) =>
   z
@@ -146,22 +144,6 @@ function serialize(row, { withCalc = true } = {}) {
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 
 /** Colunas derivadas dos params + totais do cálculo. */
-function columnsFor(doc, R) {
-  const P = doc.params || {};
-  const cols = {};
-  for (const [col, key] of Object.entries(COLUMN_FROM_PARAMS)) {
-    const v = P[key];
-    cols[col] = v === "" || v === undefined ? null : v;
-  }
-  cols.projectName = String(P.obra || "").trim() || "(sem nome)";
-  cols.method = PRICE_METHODS.includes(P.metodo) ? P.metodo : "MARGEM_SOBRE_VENDA";
-  cols.currencyBase = P.moedaBase || "AOA";
-  cols.startDate = P.inicio ? new Date(`${P.inicio}T00:00:00Z`) : null;
-  cols.endDate = P.fim ? new Date(`${P.fim}T00:00:00Z`) : null;
-  cols.priceBaseDate = P.dataBase ? new Date(`${P.dataBase}T00:00:00Z`) : null;
-  cols.validityDays = Number(P.validade) || 30;
-  return { ...cols, ...budgetTotals(R) };
-}
 
 // ───────────────────────── metadados ─────────────────────────
 
@@ -172,7 +154,7 @@ budgetRoutes.get(
     res.json({
       categories: CATS.map(([k, nome, tipo, sheet]) => ({ k, nome, tipo, sheet })),
       sheets: SHEETS,
-      sheetOrder: SHEET_KEYS,
+      sheetOrder: ALL_SHEETS,
       fixedLists: FIXED_LISTS,
       statuses: BUDGET_STATUSES,
       priceMethods: PRICE_METHODS,
@@ -298,25 +280,6 @@ const createSchema = z.object({
 });
 
 /** Fotografia dos baremes, guardada dentro do orçamento. */
-async function snapshotFromLibrary() {
-  const rows = await prisma.baremItem.findMany({
-    where: { active: true },
-    orderBy: [{ kind: "asc" }, { code: "asc" }, { name: "asc" }],
-  });
-  return {
-    takenAt: new Date().toISOString(),
-    source: "empresa",
-    items: rows.map((r) => ({
-      kind: r.kind,
-      code: r.code,
-      name: r.name,
-      unit: r.unit,
-      ownership: r.ownership,
-      fields: r.fields || {},
-      priceDate: r.priceDate ? r.priceDate.toISOString().slice(0, 10) : null,
-    })),
-  };
-}
 
 budgetRoutes.post(
   "/",
@@ -339,11 +302,7 @@ budgetRoutes.post(
     }
     if (errors.length) return res.status(400).json({ error: "ORCAMENTO_INVALIDO", errors });
 
-    const [{ params: companyParams }, { lists }, { currencies }] = await Promise.all([
-      getBudgetParams(),
-      getBudgetLists(),
-      getCurrencies(),
-    ]);
+    const company = await loadCompanyDefaults();
 
     // Cliente
     let clientId = body.clientId || null;
@@ -384,46 +343,15 @@ budgetRoutes.post(
 
     const { number } = await allocate("ORC");
     const costCenterCode = costCenterCodeFor(number);
-    const today = new Date().toISOString().slice(0, 10);
 
-    const params = {
-      ...companyParams,
-      codOrc: number,
-      cc: costCenterCode,
-      revisao: "R0",
-      proposta: null,
-      codObra: null,
-      data: today,
-      estado: "Em elaboração",
-      clienteId: clientId,
-      cliente: client ? client.name : null,
-      obra: body.projectName,
-      local: body.location,
-      respOrc: body.responsibleName,
-      dirProj: body.projectDirName,
-      inicio: dateOnly(body.startDate),
-      fim: dateOnly(body.endDate),
-      dataBase: dateOnly(body.priceBaseDate) || today,
-      validade: body.validityDays,
-      moedaBase: body.currencyBase,
-      moedaRef: body.currencyRef,
-      metodo: body.method,
-      margemMin: body.marginMin ?? companyParams.margemMin,
-      margemObj: body.marginTarget ?? companyParams.margemObj,
-      iva: body.vatRate ?? companyParams.iva,
-      ajuste: 0,
-      currencies,
-    };
-
-    const sheets = Object.fromEntries(SHEET_KEYS.map((k) => [k, (DEFAULT_ROWS[k] || []).map((r) => ({ ...r }))]));
-    const doc = {
-      params,
-      sheets,
-      baremSnapshot: snapshot,
-      lists: { ...lists, impacto: DEFAULT_IMPACTS },
-      dispatch: { margens: { ...DEFAULT_MARGINS }, estado: "Em análise" },
-    };
-    const R = calcBudget(doc);
+    const { doc, R } = buildBudgetDocument({
+      number,
+      costCenterCode,
+      client,
+      snapshot,
+      company,
+      fields: body,
+    });
 
     const row = await prisma.budget.create({
       data: {
@@ -460,6 +388,134 @@ async function nextClientCode() {
 }
 
 // ───────────────────────── ler um ─────────────────────────
+
+// ───────────────────────── catálogo de artigos ───────────────────────────
+
+/**
+ * O catálogo é derivado das tabelas de quantidades das obras, a cada pedido.
+ * São ~1000 linhas: construir de novo custa milissegundos e nunca fica
+ * desactualizado. Guarda-se por pouco tempo em memória só para a escrita no
+ * campo de pesquisa não ir à base de dados a cada tecla.
+ */
+const CATALOG_TTL_MS = 60 * 1000;
+let catalogCache = { at: 0, catalog: null };
+
+async function loadCatalog() {
+  if (catalogCache.catalog && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.catalog;
+
+  const tasks = await prisma.projectProgressTask.findMany({
+    where: { parentId: null },
+    select: {
+      description: true,
+      unit: true,
+      expectedQty: true,
+      unitValue: true,
+      unitValueMaterial: true,
+      unitValueService: true,
+      createdAt: true,
+      projectId: true,
+      project: { select: { code: true, name: true, currency: true } },
+    },
+  });
+
+  const lines = tasks.map((t) => {
+    const direto = t.unitValue === null || t.unitValue === undefined ? null : Number(t.unitValue);
+    const partes = Number(t.unitValueMaterial || 0) + Number(t.unitValueService || 0);
+    return {
+      description: t.description,
+      unit: t.unit,
+      unitPrice: direto !== null && direto !== 0 ? direto : partes,
+      quantity: Number(t.expectedQty || 0),
+      currency: t.project?.currency || "AOA",
+      projectId: t.projectId,
+      projectCode: t.project?.code || null,
+      projectName: t.project?.name || null,
+      date: t.createdAt,
+    };
+  });
+
+  const catalog = buildCatalog(lines);
+  catalogCache = { at: Date.now(), catalog };
+  return catalog;
+}
+
+/**
+ * Procura no catálogo de artigos já vendidos.
+ *
+ * `q` texto a procurar · `un` filtra pela unidade · `cur` pela moeda ·
+ * `limit` quantos devolver (até 100) · `history=0` deixa de fora o histórico
+ * linha a linha, para a escrita no campo ser mais leve.
+ */
+budgetRoutes.get(
+  "/articles",
+  requirePermission(MODULE, "tab_orcamentos"),
+  asyncHandler(async (req, res) => {
+    const catalog = await loadCatalog();
+    const items = searchCatalog(catalog, String(req.query.q || ""), {
+      unit: req.query.un ? String(req.query.un) : null,
+      currency: req.query.cur ? String(req.query.cur) : null,
+      limit: Number(req.query.limit) || 20,
+    });
+
+    const comHistorico = req.query.history !== "0";
+    res.json({
+      items: comHistorico
+        ? items
+        : items.map((a) => ({ ...a, moedas: a.moedas.map(({ historico, ...m }) => m) })),
+      stats: catalogStats(catalog),
+      // Dito à vista, porque muda a leitura dos números: os preços de obras em
+      // dólares não são comparáveis com os de obras em kwanzas, e nada aqui
+      // converte nem recomenda um preço.
+      aviso: "Preços praticados, por moeda e com a data. Não são convertidos nem recomendados.",
+    });
+  })
+);
+
+/** Obras que têm tabela de quantidades, para escolher de onde importar. */
+budgetRoutes.get(
+  "/quantity-sources",
+  requirePermission(MODULE, "tab_orcamentos"),
+  asyncHandler(async (req, res) => {
+    const projects = await prisma.project.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        status: true,
+        client: { select: { id: true, name: true } },
+        progressTasks: {
+          select: { parentId: true, expectedQty: true, unitValue: true, unitValueMaterial: true, unitValueService: true, totalValue: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const rows = projects
+      .map((p) => {
+        const roots = p.progressTasks.filter((t) => !t.parentId);
+        const total = roots.reduce((a, t) => {
+          const escrito = t.totalValue === null || t.totalValue === undefined ? null : Number(t.totalValue);
+          if (escrito && escrito !== 0) return a + escrito;
+          const pu = Number(t.unitValue ?? (Number(t.unitValueMaterial || 0) + Number(t.unitValueService || 0)));
+          return a + pu * Number(t.expectedQty || 0);
+        }, 0);
+        return {
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          currency: p.currency || "AOA",
+          status: p.status,
+          client: p.client,
+          lines: roots.length,
+          total: Math.round(total * 100) / 100,
+        };
+      })
+      .filter((p) => p.lines > 0);
+
+    res.json({ items: rows });
+  })
+);
 
 budgetRoutes.get(
   "/:id",
@@ -522,7 +578,7 @@ budgetRoutes.patch(
     if (body.sheets) {
       doc.sheets = { ...doc.sheets };
       for (const [k, rows] of Object.entries(body.sheets)) {
-        if (!SHEET_KEYS.includes(k)) continue;
+        if (!ALL_SHEETS.includes(k)) continue;
         doc.sheets[k] = rows;
       }
     }
@@ -543,6 +599,156 @@ budgetRoutes.patch(
     });
 
     res.json(serialize(updated));
+  })
+);
+
+// ───────────────────── mapa de quantidades: importar de uma obra ─────────
+
+/**
+ * Converte a tabela de quantidades de uma obra em linhas do mapa.
+ *
+ * Os valores não se tocam: quantidade e preço unitário entram como estão, e o
+ * total só entra quando a obra o tem escrito (há tabelas em que o total está
+ * fechado e não bate exatamente com quantidade × preço — nesses casos manda o
+ * que foi contratado). A unidade é traduzida para a grafia do orçamento, com o
+ * original guardado em `unOrig` quando muda, para nada se perder.
+ */
+function quantityRowsFromTasks(tasks) {
+  const roots = (tasks || []).filter((t) => !t.parentId);
+  return roots.map((t) => {
+    const u = normalizeUnit(t.unit);
+    const q = t.expectedQty === null || t.expectedQty === undefined ? 0 : Number(t.expectedQty);
+    const puDireto = t.unitValue === null || t.unitValue === undefined ? null : Number(t.unitValue);
+    const puPartes = Number(t.unitValueMaterial || 0) + Number(t.unitValueService || 0);
+    const pu = puDireto !== null && puDireto !== 0 ? puDireto : puPartes;
+    const escrito = t.totalValue === null || t.totalValue === undefined ? null : Number(t.totalValue);
+    const row = {
+      grupo: t.itemGroup || "",
+      cod: t.wbsCode || "",
+      desc: t.description || "",
+      un: u.unit,
+      q,
+      pu,
+    };
+    if (escrito !== null && escrito !== 0) row.tfix = escrito;
+    if (u.matched && u.unit !== u.original) row.unOrig = u.original;
+    else if (!u.matched && u.original) row.unOrig = u.original;
+    return row;
+  });
+}
+
+/** O que a importação vai fazer, em números, para se poder ver antes de gravar. */
+function importPreview(tasks, rows) {
+  const unidades = summarizeUnits((tasks || []).filter((t) => !t.parentId).map((t) => t.unit));
+  const total = rows.reduce((a, r) => a + (r.tfix != null ? r.tfix : r.q * r.pu), 0);
+  const semPreco = rows.filter((r) => !(r.pu > 0) && !(r.tfix > 0)).length;
+  return {
+    linhas: rows.length,
+    total: Math.round(total * 100) / 100,
+    semPreco,
+    comTotalEscrito: rows.filter((r) => r.tfix != null).length,
+    unidades: unidades.rows,
+    unidadesAlteradas: unidades.changed,
+    unidadesPorReconhecer: unidades.unknown,
+  };
+}
+
+/**
+ * Importa a tabela de quantidades de uma obra para o mapa do orçamento.
+ *
+ * Com `?preview=1` não grava: devolve só o que ia acontecer (quantas linhas,
+ * que total, que unidades mudam), para se confirmar antes.
+ *
+ * `mode`: "replace" (por omissão) troca o mapa todo; "append" acrescenta ao
+ * que já lá está.
+ */
+budgetRoutes.post(
+  "/:id/import-quantities",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const projectId = String(req.body?.projectId || "");
+    const mode = req.body?.mode === "append" ? "append" : "replace";
+    const preview = req.query.preview === "1" || req.body?.preview === true;
+
+    if (!projectId) return res.status(400).json({ error: "PROJECT_REQUIRED", errors: ["Indique a obra de onde importar."] });
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    if (budget.locked) {
+      return res.status(409).json({
+        error: "ORCAMENTO_BLOQUEADO",
+        errors: ["O orçamento está adjudicado: só pode ser consultado."],
+      });
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        currency: true,
+        progressTasks: {
+          select: {
+            parentId: true,
+            itemGroup: true,
+            wbsCode: true,
+            description: true,
+            expectedQty: true,
+            unit: true,
+            unitValue: true,
+            unitValueMaterial: true,
+            unitValueService: true,
+            totalValue: true,
+          },
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+    if (!project) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+
+    const rows = quantityRowsFromTasks(project.progressTasks);
+    if (!rows.length) {
+      return res.status(422).json({
+        error: "SEM_TABELA_DE_QUANTIDADES",
+        errors: [`A obra ${project.code || project.name} não tem tabela de quantidades.`],
+      });
+    }
+
+    const resumo = importPreview(project.progressTasks, rows);
+    resumo.obra = { id: project.id, code: project.code, name: project.name, currency: project.currency || "AOA" };
+    resumo.modo = mode;
+
+    if (preview) return res.json({ preview: true, ...resumo, rows });
+
+    if (req.body?.version !== undefined && req.body.version !== budget.version) {
+      return res.status(409).json({
+        error: "VERSAO_DESATUALIZADA",
+        errors: [`Alguém gravou este orçamento entretanto (versão ${budget.version}, a sua é ${req.body.version}).`],
+        current: serialize(budget),
+      });
+    }
+
+    const doc = asDocument(budget);
+    const atuais = Array.isArray(doc.sheets[QTY_SHEET]) ? doc.sheets[QTY_SHEET] : [];
+    doc.sheets = { ...doc.sheets, [QTY_SHEET]: mode === "append" ? [...atuais, ...rows] : rows };
+
+    const R = calcBudget(doc);
+    const updated = await prisma.budget.update({
+      where: { id },
+      data: {
+        ...columnsFor(doc, R),
+        params: doc.params,
+        sheets: doc.sheets,
+        lists: doc.lists,
+        dispatch: doc.dispatch,
+        version: { increment: 1 },
+      },
+      include: { client: { select: { id: true, name: true, code: true } } },
+    });
+
+    res.json({ ...serialize(updated), importado: resumo });
   })
 );
 

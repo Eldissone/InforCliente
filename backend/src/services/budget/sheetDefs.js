@@ -16,7 +16,7 @@
  * f:   formato do valor calculado — "n0" (por omissão), "n1", "n2", "pct", "txt", "pill"
  */
 
-const { IND_BASES, IND_TYPES, FIN_TYPES, FIN_AUTO_RATE, FIN_AUTO_TERM, RIS_BASES, TIME_UNITS } = require("./calc");
+const { IND_BASES, IND_TYPES, FIN_TYPES, FIN_AUTO_RATE, FIN_AUTO_TERM, RIS_BASES, TIME_UNITS, QTY_SHEET } = require("./calc");
 
 const FIXED_LISTS = {
   simnao: ["Sim", "Não"],
@@ -39,6 +39,37 @@ const MARGIN_COLS = [
 ];
 
 const SHEETS = {
+  /*
+   * Mapa de quantidades — o que se VENDE, não o que custa.
+   *
+   * É a tabela que vai no contrato: grupo, código, descrição, quantidade,
+   * unidade e preço unitário de venda. Não tem margem por linha nem entra no
+   * custo total; serve o método de preço «dado pelo cliente», em que o total
+   * daqui é o preço de venda e a margem passa a ser o que sobra depois do
+   * custo. É também por aqui que entram, sem lhes mexer, as tabelas de
+   * quantidades das obras que já existem.
+   */
+  [QTY_SHEET]: {
+    tag: "01",
+    title: "Mapa de quantidades",
+    sale: true,
+    lead:
+      "O que se vende ao cliente, aos preços do contrato. Não é custo: não entra no custo total. " +
+      "Com a metodologia «Preço dado pelo cliente», o total desta folha é o preço de venda do orçamento " +
+      "e a margem passa a ser o que sobra depois de somar os custos. " +
+      "O total de cada linha é quantidade × preço unitário, salvo se escrever um total à mão — aí manda esse, " +
+      "para o documento bater ao cêntimo com o que foi contratado.",
+    cols: [
+      { k: "grupo", l: "Grupo", ty: "text", w: 2, help: "Capítulo da tabela: «1 - MÉDIA TENSÃO», «2 - BAIXA TENSÃO»…" },
+      { k: "cod", l: "Código", ty: "text" },
+      { k: "desc", l: "Descrição", ty: "artigo", w: 4, help: "Escreva e escolha do catálogo para trazer a unidade e o último preço praticado." },
+      { k: "un", l: "Un.", ty: "sel", src: "lists.unid" },
+      { k: "q", l: "Quantidade", ty: "num" },
+      { k: "pu", l: "Preço unit. de venda", ty: "num" },
+      { k: "tfix", l: "Total do contrato", ty: "num", help: "Deixe vazio para calcular quantidade × preço. Preencha só quando o contrato fixa um total que não bate com a multiplicação." },
+      { calc: "total", l: "Total da linha" },
+    ],
+  },
   mat: {
     cat: "MAT",
     tag: "03",
@@ -343,6 +374,9 @@ const DEFAULT_ROWS = {
     { n: 10, desc: "Alteração de âmbito", cat: "Âmbito/contrato", prob: 0.15, imp: "Alto", vbase: "Custo direto", fator: 0.05, mit: "Trabalhos a mais sempre por escrito" },
   ],
 };
+
+/** O mapa de quantidades arranca vazio: enche-se à mão ou importa-se de uma obra. */
+DEFAULT_ROWS[QTY_SHEET] = [];
 
 /** Margens de arranque por categoria (as do exemplo do protótipo). */
 const DEFAULT_MARGINS = {

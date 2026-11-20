@@ -654,6 +654,16 @@ test("o espelho do frontend (budgetCalc.js) dá os mesmos resultados", async () 
   completo.sheets.fe.push({ item: "Sem barém", q: 4, manual: 1200 });
   CASOS.push(["completo", completo]);
 
+  // Mapa de quantidades com preço dado pelo cliente.
+  const mapa = miniBudget();
+  mapa.params.metodo = "PRECO_DADO";
+  mapa.sheets.qt = [
+    { grupo: "1 - MT", cod: "1.1", desc: "Poste", un: "un", q: 3, pu: 100000 },
+    { grupo: "1 - MT", cod: "1.2", desc: "Travessa", un: "un", q: 2, pu: 50000, tfix: 99000 },
+    { grupo: "2 - BT", cod: "2.1", desc: "Ramal", un: "m", q: 250, pu: 1200 },
+  ];
+  CASOS.push(["mapa de quantidades", mapa]);
+
   for (const [nome, b] of CASOS) {
     const a = C.calcBudget(b, HOJE);
     const z = M.calcBudget(b, HOJE);
@@ -663,8 +673,145 @@ test("o espelho do frontend (budgetCalc.js) dá os mesmos resultados", async () 
 
   assert.deepEqual(M.CATS, C.CATS);
   assert.deepEqual(M.SHEET_KEYS, C.SHEET_KEYS);
+  assert.equal(M.QTY_SHEET, C.QTY_SHEET);
+  assert.deepEqual(M.PRICE_METHODS, C.PRICE_METHODS);
   assert.deepEqual(M.IND_BASES, C.IND_BASES);
   assert.deepEqual(M.FIN_TYPES, C.FIN_TYPES);
   assert.deepEqual(M.RIS_BASES, C.RIS_BASES);
   assert.equal(M.daysBetween("2026-01-01", "2026-01-10"), C.daysBetween("2026-01-01", "2026-01-10"));
+});
+
+// ─── Mapa de quantidades e preço dado pelo cliente ─────────────────────────
+
+const mapaBase = (over = {}) => {
+  const b = miniBudget();
+  b.params.metodo = "PRECO_DADO";
+  b.sheets.qt = [
+    { grupo: "1 - MT", cod: "1.1", desc: "Poste", un: "un", q: 3, pu: 100000 },
+    { grupo: "1 - MT", cod: "1.2", desc: "Travessa", un: "un", q: 2, pu: 50000 },
+    { grupo: "2 - BT", cod: "2.1", desc: "Ramal", un: "m", q: 250, pu: 1200 },
+  ];
+  Object.assign(b.params, over);
+  return b;
+};
+
+test("o total do mapa é a soma de quantidade × preço", () => {
+  const R = C.calcBudget(mapaBase(), HOJE);
+  // 3×100000 + 2×50000 + 250×1200 = 300000 + 100000 + 300000
+  assert.equal(R.QT, 700000);
+  assert.equal(R.qtLinhas, 3);
+});
+
+test("o total escrito à mão manda sobre quantidade × preço", () => {
+  const b = mapaBase();
+  b.sheets.qt[1].tfix = 99000; // em vez de 2 × 50000 = 100000
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.QT, 300000 + 99000 + 300000);
+  assert.equal(R.qt[1].total, 99000);
+});
+
+test("total escrito a zero não conta como escrito", () => {
+  const b = mapaBase();
+  b.sheets.qt[0].tfix = 0;
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.qt[0].total, 300000, "zero é «não escrito», senão a linha desaparecia");
+});
+
+test("com preço dado, o preço de venda é o total do mapa", () => {
+  const R = C.calcBudget(mapaBase(), HOJE);
+  assert.equal(R.PVsi, R.QT);
+  assert.equal(R.precoDado, true);
+});
+
+test("o ajuste continua a somar-se ao preço dado", () => {
+  const R = C.calcBudget(mapaBase({ ajuste: -700 }), HOJE);
+  assert.equal(R.PVsi, 700000 - 700);
+});
+
+test("o mapa nunca entra no custo", () => {
+  const semMapa = C.calcBudget(miniBudget(), HOJE);
+  const comMapa = C.calcBudget(mapaBase(), HOJE);
+  assert.equal(comMapa.CT, semMapa.CT, "o custo total não pode mexer por causa do mapa");
+  assert.equal(comMapa.CD, semMapa.CD);
+});
+
+test("com os métodos de sempre, o mapa não manda no preço", () => {
+  for (const metodo of ["MARGEM_SOBRE_VENDA", "MARKUP_SOBRE_CUSTO"]) {
+    const R = C.calcBudget(mapaBase({ metodo }), HOJE);
+    assert.equal(R.precoDado, false);
+    assert.equal(R.PVsi, R.PVcalc + 0, `${metodo}: o preço tem de vir do custo`);
+  }
+});
+
+test("a margem passa a ser o que sobra depois do custo", () => {
+  const R = C.calcBudget(mapaBase(), HOJE);
+  assert.equal(R.MB, R.PVsi - R.CT);
+});
+
+test("preço dado sem custo nenhum não diz «objetivo atingido»", () => {
+  const b = mapaBase();
+  for (const k of C.SHEET_KEYS) b.sheets[k] = [];
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.CT, 0);
+  assert.equal(R.semCusto, true);
+  assert.equal(R.mgEstado, "SEM_CUSTO", "100% de margem por falta de custo não é objetivo atingido");
+  assert.equal(C.budgetTotals(R).marginState, "unknown");
+});
+
+test("assim que há custo, o estado volta a ser calculado", () => {
+  const b = mapaBase();
+  for (const k of C.SHEET_KEYS) b.sheets[k] = [];
+  b.sheets.mat = [{ desc: "Cabo", un: "m", q: 100, preco: 6900, moeda: "AOA" }];
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.semCusto, false);
+  assert.notEqual(R.mgEstado, "SEM_CUSTO");
+});
+
+test("custo acima do preço dado dá margem negativa", () => {
+  const b = mapaBase();
+  for (const k of C.SHEET_KEYS) b.sheets[k] = [];
+  b.sheets.mat = [{ desc: "Cabo", un: "m", q: 1000, preco: 1000, moeda: "AOA" }]; // 1 000 000 > 700 000
+  const R = C.calcBudget(b, HOJE);
+  assert.ok(R.MB < 0);
+  assert.equal(R.mgEstado, "MARGEM_NEGATIVA");
+});
+
+test("os grupos somam ao total e vêm do maior para o menor", () => {
+  const R = C.calcBudget(mapaBase(), HOJE);
+  assert.deepEqual(R.qtGrupos.map((g) => g.nome), ["1 - MT", "2 - BT"]);
+  assert.equal(R.qtGrupos.reduce((a, g) => a + g.total, 0), R.QT);
+  assert.equal(R.qtGrupos[0].total, 400000);
+  assert.ok(Math.abs(R.qtGrupos.reduce((a, g) => a + g.pct, 0) - 1) < 1e-9);
+});
+
+test("linhas sem grupo juntam-se numa rubrica própria", () => {
+  const b = mapaBase();
+  b.sheets.qt.push({ desc: "Avulso", un: "un", q: 1, pu: 5000 });
+  const R = C.calcBudget(b, HOJE);
+  assert.ok(R.qtGrupos.some((g) => g.nome === "(sem grupo)"));
+});
+
+test("mapa vazio é mapa a zero, não erro", () => {
+  const b = mapaBase();
+  b.sheets.qt = [];
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.QT, 0);
+  assert.equal(R.qtLinhas, 0);
+  assert.deepEqual(R.qtGrupos, []);
+});
+
+test("sem folha de mapa nenhuma o cálculo não parte", () => {
+  const b = mapaBase();
+  delete b.sheets.qt;
+  const R = C.calcBudget(b, HOJE);
+  assert.equal(R.QT, 0);
+  assert.equal(R.PVsi, 0);
+});
+
+test("o IVA assenta no preço dado", () => {
+  const R = C.calcBudget(mapaBase(), HOJE);
+  // O motor não arredonda aqui (o arredondamento é do `budgetTotals`), por isso
+  // compara-se com tolerância de cêntimo.
+  assert.ok(Math.abs(R.imp - 98000) < 0.01, `IVA ${R.imp}`);
+  assert.equal(R.PVfinal, R.PVsi + R.imp);
 });
