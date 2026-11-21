@@ -22,6 +22,10 @@ const {
   buildCostLedger,
   computeSaleBudget,
   loadGeneralCosts,
+  OPEN_PURCHASE_STATUSES,
+  PAYABLE_PURCHASE_STATUSES,
+  purchasePayable,
+  purchaseRequestFields,
   SOURCE_LABELS,
 } = require("../services/financeLedgerService");
 const { listPendingFinanceScheduling } = require("../services/needInstallmentSchedulingService");
@@ -2124,6 +2128,18 @@ async function buildPayables(ledgerArg) {
       payable: round2(e.payable),
       status: e.status,
       currency: e.currency,
+      // Pedido de pagamento: tipo, modo, condição e beneficiário (só vêm
+      // preenchidos na fonte PEDIDO_COMPRA).
+      requestType: e.requestType || null,
+      paymentMode: e.paymentMode || null,
+      paymentTerm: e.paymentTerm || null,
+      creditDays: e.creditDays ?? null,
+      onHold: e.onHold || false,
+      fundName: e.fundName || null,
+      beneficiary: e.beneficiary || null,
+      shortDescription: e.shortDescription || null,
+      derivedStatusLabel: e.derivedStatusLabel || null,
+      derivedStatusSeverity: e.derivedStatusSeverity || null,
     }))
     .sort((a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity));
 }
@@ -2357,6 +2373,91 @@ async function loadGeneralExtraPayables() {
   }));
 }
 
+/**
+ * Pedidos de pagamento **sem obra**: sede, impostos, pessoal e empréstimo.
+ *
+ * O ledger de custos é por obra (`projectById.get(o.projectId)`): um pedido sem
+ * obra era deixado cair e **nunca chegava ao Centro de Pagamentos**. Os impostos,
+ * o pessoal e os empréstimos, que por natureza não têm obra, ficavam invisíveis
+ * a quem paga — tal como os pedidos extra gerais, que já tinham o seu caminho
+ * próprio (`loadGeneralExtraPayables`). Este é o mesmo caminho para os pedidos.
+ */
+async function loadGeneralPurchasePayables() {
+  const rows = await prisma.purchaseOrder.findMany({
+    where: {
+      projectId: null,
+      deletedAt: null,
+      type: "PEDIDO",
+      status: { in: OPEN_PURCHASE_STATUSES },
+      workNeeds: { none: {} },
+    },
+    select: {
+      id: true,
+      number: true,
+      description: true,
+      totalValue: true,
+      currency: true,
+      status: true,
+      supplierId: true,
+      supplierName: true,
+      createdAt: true,
+      requestType: true,
+      paymentMode: true,
+      paymentTerm: true,
+      creditDays: true,
+      dueDate: true,
+      onHold: true,
+      typeData: true,
+      pettyCashFund: { select: { name: true } },
+      items: {
+        select: {
+          quantity: true,
+          unitPrice: true,
+          totalPrice: true,
+          notes: true,
+          name: true,
+          vatPercent: true,
+          withholdingPercent: true,
+          discountPercent: true,
+          docException: true,
+        },
+      },
+      requisition: { select: { quotedValue: true } },
+      paymentPlan: { select: { installments: { select: { amount: true, dueDate: true, status: true } } } },
+    },
+  });
+  return rows
+    .map((o) => {
+      const { payable, dueDate } = purchasePayable(o);
+      return {
+        id: `pog:${o.id}`,
+        sourceId: o.id,
+        source: "PEDIDO_COMPRA",
+        sourceLabel: SOURCE_LABELS.PEDIDO_COMPRA,
+        detail: o.status,
+        stage: PAYABLE_PURCHASE_STATUSES.includes(o.status) ? "A_PAGAR" : "COMPROMISSO",
+        project: null,
+        projectId: null,
+        costCenter: { name: "Centros gerais" },
+        costCenterId: null,
+        supplier: o.supplierName || null,
+        supplierId: o.supplierId || null,
+        description: o.description,
+        docNumber: o.number || null,
+        date: o.createdAt,
+        dueDate: dueDate || null,
+        daysLate: daysPastDue(dueDate),
+        amount: round2(payable),
+        paidAmount: 0,
+        payable: round2(payable),
+        status: o.status,
+        currency: o.currency || "AOA",
+        ...purchaseRequestFields(o),
+      };
+    })
+    .filter((r) => r.payable > 0);
+}
+
 /** O que foi pago nos últimos `days` dias (liquidações registadas no sistema). */
 async function loadRecentPayments(days = 30) {
   const since = new Date(Date.now() - days * DAY_MS);
@@ -2466,9 +2567,10 @@ financeRoutes.get(
   "/payment-center",
   view,
   asyncHandler(async (_req, res) => {
-    const [payables, generalExtras, receivables, balances, schedule, reinforcements, paid] = await Promise.all([
+    const [payables, generalExtras, generalPurchases, receivables, balances, schedule, reinforcements, paid] = await Promise.all([
       buildPayables(),
       loadGeneralExtraPayables(),
+      loadGeneralPurchasePayables(),
       buildReceivables(),
       loadBankBalances(),
       listPendingFinanceScheduling().catch(() => []),
@@ -2488,7 +2590,7 @@ financeRoutes.get(
       loadRecentPayments(30),
     ]);
 
-    const items = [...payables, ...generalExtras].sort(
+    const items = [...payables, ...generalExtras, ...generalPurchases].sort(
       (a, b) => (a.dueDate ? new Date(a.dueDate) : Infinity) - (b.dueDate ? new Date(b.dueDate) : Infinity)
     );
     const due = items.filter((p) => p.stage === "A_PAGAR");

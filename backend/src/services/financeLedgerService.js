@@ -4,6 +4,7 @@ const {
   extraWithheldAmount,
 } = require("./extraRequestFiscal");
 const { computeProjectBudgetSummary } = require("./projectBudgetSummaryService");
+const PT = require("./purchase/purchaseTotals");
 
 /**
  * Fonte única de verdade dos números da Área Financeira.
@@ -227,6 +228,30 @@ async function loadCostInputs(whereProject) {
         supplierId: true,
         supplierName: true,
         createdAt: true,
+        // Pedido de pagamento: o total certo sai das linhas e de `typeData`
+        // (purchaseTotals), não de `totalValue`.
+        requestType: true,
+        paymentMode: true,
+        paymentTerm: true,
+        creditDays: true,
+        dueDate: true,
+        onHold: true,
+        typeData: true,
+        pettyCashFund: { select: { name: true } },
+        items: {
+          select: {
+            quantity: true,
+            unitPrice: true,
+            totalPrice: true,
+            notes: true,
+            name: true,
+            vatPercent: true,
+            withholdingPercent: true,
+            discountPercent: true,
+            docException: true,
+          },
+        },
+        requisition: { select: { quotedValue: true } },
         paymentPlan: { select: { installments: { select: { amount: true, dueDate: true, status: true } } } },
       },
     }),
@@ -832,12 +857,55 @@ function cashDueOf(payment) {
   );
 }
 
-/** Encomenda com plano de pagamento: prestações por pagar e a próxima data. */
+/**
+ * O que falta pagar de um pedido de pagamento, e quando.
+ *
+ * Com plano de prestações, são as prestações por liquidar. Sem plano, é o total
+ * do pedido pela **fonte única** (`purchaseTotals`): base + IVA − retenção, com
+ * os tipos sem itens (impostos, pessoal, empréstimo) a tirarem o valor de
+ * `typeData`. Era `totalValue`, a soma de quantidade × preço das linhas — duas
+ * contas diferentes para a mesma coisa:
+ *   - num pedido com IVA e retenção, o Centro de Pagamentos mandava pagar o
+ *     ilíquido (1 000 000 em vez de 1 021 250);
+ *   - os pedidos de impostos, pessoal e empréstimo não têm linhas, logo não têm
+ *     `totalValue`: valiam **zero** e desapareciam da fila (o filtro é
+ *     `payable > 0`).
+ * A data era `null` sem plano, mesmo quando o pedido traz a sua própria data —
+ * pronto pagamento com data pretendida, ou crédito com vencimento.
+ */
 function purchasePayable(order) {
-  const pending = (order.paymentPlan?.installments || []).filter((i) => i.status === "PENDENTE");
-  if (!order.paymentPlan) return { payable: round2(order.totalValue), dueDate: null };
-  const next = pending.map((i) => new Date(i.dueDate)).sort((a, b) => a - b)[0] || null;
-  return { payable: round2(pending.reduce((a, i) => a + toNumber(i.amount), 0)), dueDate: next };
+  if (order.paymentPlan) {
+    const pending = (order.paymentPlan.installments || []).filter((i) => i.status === "PENDENTE");
+    const next = pending.map((i) => new Date(i.dueDate)).sort((a, b) => a - b)[0] || null;
+    return {
+      payable: round2(pending.reduce((a, i) => a + toNumber(i.amount), 0)),
+      dueDate: next || PT.nextDueDate(order),
+    };
+  }
+  return { payable: round2(PT.orderTotals(order).total), dueDate: PT.nextDueDate(order) };
+}
+
+/**
+ * O que um pedido de pagamento acrescenta à linha do ledger: o tipo, como se
+ * paga e para quem. Serve tanto os pedidos de obra (aqui) como os que não têm
+ * obra (`loadGeneralPurchasePayables`, em finance.js), para os dois chegarem ao
+ * Centro de Pagamentos com os mesmos campos.
+ */
+function purchaseRequestFields(order) {
+  const status = PT.derivedStatus(order);
+  return {
+    requestType: order.requestType || "SEDE",
+    paymentMode: order.paymentMode || "FORN",
+    paymentTerm: order.paymentTerm || null,
+    creditDays: order.creditDays ?? null,
+    onHold: Boolean(order.onHold),
+    fundName: order.pettyCashFund?.name || null,
+    beneficiary: PT.beneficiary(order),
+    shortDescription: PT.shortDescription(order),
+    derivedStatus: status.code,
+    derivedStatusLabel: status.label,
+    derivedStatusSeverity: status.severity,
+  };
 }
 
 async function buildCostLedger({ projectId, status, source, from, to } = {}) {
@@ -1051,6 +1119,7 @@ async function buildCostLedger({ projectId, status, source, from, to } = {}) {
       kind: "COMPROMETIDO",
       remaining: round2(o.totalValue),
       ...purchasePayable(o),
+      ...purchaseRequestFields(o),
       // Encomenda aprovada já está autorizada para pagamento: é conta a pagar.
       // Antes disso (rascunho, requisição, aprovação) é só compromisso.
       payStage: PAYABLE_PURCHASE_STATUSES.includes(o.status) ? "A_PAGAR" : "COMPROMISSO",
@@ -1305,6 +1374,9 @@ module.exports = {
   computeCostControl,
   SOURCE_LABELS,
   OPEN_PURCHASE_STATUSES,
+  PAYABLE_PURCHASE_STATUSES,
+  purchasePayable,
+  purchaseRequestFields,
   PENDING_COST_STATUSES,
   round2,
   toNumber,

@@ -50,7 +50,7 @@ const optionalDate = z
   });
 
 /** `fields` é um objeto livre; limitamos a chaves conhecidas de cada tipo. */
-const fieldsSchema = z.record(z.any()).optional().default({});
+const fieldsSchema = z.record(z.string(), z.any()).optional().default({});
 
 const createSchema = z.object({
   kind: kindSchema,

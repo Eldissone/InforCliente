@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const http = require("http");
 const cors = require("cors");
 const { config } = require("./config");
@@ -154,6 +156,31 @@ app.use("/finance", financeRoutes);
 // Backups
 app.use("/backups", backupRoutes);
 
+/**
+ * Os erros 500 ficam também em `logs/erros-500.log`.
+ *
+ * O `console.error` escreve na janela onde o servidor arrancou, que nem sempre
+ * se tem à mão: quando um ecrã devolve 500, é neste ficheiro que se vê qual foi
+ * o pedido e onde rebentou. Guarda o método, o caminho, o utilizador e a pilha;
+ * não guarda o corpo do pedido, que pode trazer dados de clientes.
+ */
+function registarErro500(err, req) {
+  try {
+    const dir = path.join(__dirname, "..", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const linhas = [
+      `[${new Date().toISOString()}] ${req?.method || "?"} ${req?.originalUrl || req?.url || "?"}`,
+      `  utilizador: ${req?.user?.sub || "(sem sessão)"} ${req?.user?.email || ""}`.trimEnd(),
+      `  ${err?.name || "Error"}: ${err?.message || String(err)}`,
+      ...String(err?.stack || "").split("\n").slice(1, 9).map((l) => "  " + l.trim()),
+      "",
+    ];
+    fs.appendFileSync(path.join(dir, "erros-500.log"), linhas.join("\n") + "\n", "utf8");
+  } catch {
+    // Falhar a escrever o registo não pode agravar o erro que se está a tratar.
+  }
+}
+
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   // Zod validation
@@ -183,6 +210,7 @@ app.use((err, _req, res, _next) => {
 
   if (status >= 500) {
     console.error(err);
+    registarErro500(err, _req);
   }
 
   return res.status(status).json({

@@ -113,6 +113,9 @@ function notifyOrderForApproval(req, order) {
 const PURCHASE_ORDER_INCLUDE = {
   items: { orderBy: { order: "asc" } },
   supplier: { select: { id: true, name: true, nif: true, iban: true } },
+  // O fundo de maneio que paga o pedido (modo FM): sem ele, os ecrãs sabiam
+  // que o pedido sai do fundo mas não de qual.
+  pettyCashFund: { select: { id: true, name: true, currency: true } },
   project: { select: { id: true, name: true, code: true, referencia: true } },
   costCenter: { select: { id: true, name: true, code: true, currency: true } },
   requisition: {
@@ -242,7 +245,7 @@ purchaseRouter.get(
     const role = (req.user?.role || "").toLowerCase();
     if (!VIEWER_ROLES.includes(role)) return res.status(403).json({ error: "FORBIDDEN" });
 
-    const { status, priority, type, search, page: pg, pageSize: ps, projectId } = req.query;
+    const { status, priority, type, requestType, search, page: pg, pageSize: ps, projectId } = req.query;
     const page = Math.max(1, Number(pg || 1));
     const pageSize = Math.min(100, Math.max(1, Number(ps || 20)));
     const statuses = String(status || "")
@@ -257,6 +260,9 @@ purchaseRouter.get(
       ...(projectId && projectId !== "__null__" ? { projectId: String(projectId) } : {}),
       ...(priority ? { priority } : {}),
       ...(type ? { type } : {}),
+      // Tipo do pedido de pagamento (sede, obra, frota, impostos, pessoal,
+      // empréstimo): o ecrã precisa de poder ver um tipo de cada vez.
+      ...(PT.REQUEST_TYPES.some(([k]) => k === requestType) ? { requestType } : {}),
       ...(search
         ? {
             OR: [
@@ -264,6 +270,8 @@ purchaseRouter.get(
               { description: { contains: search, mode: "insensitive" } },
               { requestedByName: { contains: search, mode: "insensitive" } },
               { department: { contains: search, mode: "insensitive" } },
+              // Quem recebe também se procura pelo nome.
+              { supplierName: { contains: search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -412,7 +420,7 @@ const createOrderSchema = z.object({
   paymentMode: z.enum(["FORN", "FM"]).optional(),
   pettyCashFundId: z.string().optional().nullable(),
   /** Dados próprios dos tipos sem itens (impostos, pessoal, empréstimo) */
-  typeData: z.record(z.any()).optional(),
+  typeData: z.record(z.string(), z.any()).optional(),
   paymentTerm: z.enum(["PRONTO", "CREDITO", "PARCIAL"]).optional(),
   creditDays: z.number().int().nonnegative().optional().nullable(),
   dueDate: z.string().optional().nullable(),
@@ -480,26 +488,12 @@ purchaseRouter.post(
     }
 
     // Calcula valor total se preços fornecidos
-    let totalValue = null;
-    const itemsWithTotals = data.items.map((item, idx) => {
-      const tp = item.unitPrice != null ? item.quantity * item.unitPrice : null;
-      if (tp != null) {
-        totalValue = (totalValue || 0) + tp;
-      }
-      return {
-        name: item.name,
-        quantity: item.quantity,
-        unit: item.unit || null,
-        unitPrice: item.unitPrice || null,
-        totalPrice: tp,
-        notes: item.notes || null,
-        vatPercent: item.vatPercent ?? null,
-        withholdingPercent: item.withholdingPercent ?? null,
-        discountPercent: item.discountPercent ?? null,
-        docException: item.docException || null,
-        order: idx,
-      };
-    });
+    // A linha vai por uma regra só, partilhada com a edicao (PT.itemRowForDb).
+    const itemsWithTotals = data.items.map(PT.itemRowForDb);
+    let totalValue = itemsWithTotals.reduce(
+      (sum, r) => (r.totalPrice != null ? (sum || 0) + r.totalPrice : sum),
+      null
+    );
 
     // O valor do pedido é o que o fornecedor recebe: base + IVA − retenção
     const fiscalTotal = PT.orderTotals({
@@ -603,24 +597,35 @@ purchaseRouter.patch(
     let itemsWithTotals = null;
     let totalValue = order.totalValue;
     if (Array.isArray(data.items) && data.items.length) {
-      totalValue = null;
-      itemsWithTotals = data.items.map((item, idx) => {
-        const tp = item.unitPrice != null ? item.quantity * item.unitPrice : null;
-        if (tp != null) totalValue = (totalValue || 0) + tp;
-        return {
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit || null,
-          unitPrice: item.unitPrice || null,
-          totalPrice: tp,
-          notes: item.notes || null,
-          order: idx,
-        };
-      });
+      // Uma só regra para a linha, partilhada com a criação (PT.itemRowForDb):
+      // foram duas cópias que fizeram a edição perder a fiscalidade.
+      itemsWithTotals = data.items.map(PT.itemRowForDb);
+      totalValue = itemsWithTotals.reduce((sum, r) => (r.totalPrice != null ? (sum || 0) + r.totalPrice : sum), null);
+
+      // O valor do pedido é o que o fornecedor recebe: base + IVA − retenção,
+      // pela mesma conta que a criação usa.
+      const fiscalTotal = PT.orderTotals({
+        requestType: data.requestType || order.requestType,
+        typeData: data.typeData !== undefined ? data.typeData || {} : order.typeData || {},
+        items: itemsWithTotals,
+        totalValue,
+      }).total;
+      if (fiscalTotal > 0) totalValue = fiscalTotal;
     }
 
     const nextRequiresQuote =
       data.requiresQuote != null ? data.requiresQuote : order.requiresQuote;
+    // `undefined` = não mexer; `null` = limpar. A condição de crédito manda na
+    // data, como na criação.
+    const dueFromTerm =
+      data.dueDate !== undefined
+        ? data.dueDate
+          ? new Date(data.dueDate)
+          : null
+        : data.paymentTerm === "CREDITO" && data.creditDays
+          ? new Date(Date.now() + Number(data.creditDays) * 86400000)
+          : undefined;
+
     const reopenAfterReject = order.status === "NAO_APROVADO";
     const nextStatus = reopenAfterReject
       ? nextRequiresQuote
@@ -657,6 +662,20 @@ purchaseRouter.patch(
           ...(data.supplierId !== undefined ? { supplierId: data.supplierId || null } : {}),
           ...(data.supplierName !== undefined ? { supplierName: data.supplierName || null } : {}),
           ...(itemsWithTotals ? { totalValue } : {}),
+
+          // ─── Requisição de pagamento ───
+          // Estes campos existiam na base de dados e na validação, mas a
+          // actualização não os escrevia: o tipo, a condição e os dados próprios
+          // do tipo gravavam-se na criação e desapareciam na primeira edição.
+          ...(data.requestType ? { requestType: data.requestType } : {}),
+          ...(data.paymentMode ? { paymentMode: data.paymentMode } : {}),
+          ...(data.pettyCashFundId !== undefined
+            ? { pettyCashFundId: data.pettyCashFundId || null }
+            : {}),
+          ...(data.typeData !== undefined ? { typeData: data.typeData || {} } : {}),
+          ...(data.paymentTerm ? { paymentTerm: data.paymentTerm } : {}),
+          ...(data.creditDays !== undefined ? { creditDays: data.creditDays ?? null } : {}),
+          ...(dueFromTerm !== undefined ? { dueDate: dueFromTerm } : {}),
           status: nextStatus,
           history: {
             create: {

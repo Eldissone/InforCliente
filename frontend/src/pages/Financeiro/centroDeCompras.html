@@ -45,6 +45,33 @@
         <div id="centrosPanelCompras" class="hidden" aria-labelledby="pageTitleCompras">
 
             <div class="cc-layout">
+                <!-- ── Áreas do Centro de Compras ──
+                     O `centroDeCompras.js` já trocava de área (`switchCCSubTab`)
+                     e o `centros.css` já tinha o desenho desta barra, mas os
+                     botões nunca chegaram ao HTML: o Plano de Pagamentos existia
+                     e não havia como lá chegar. -->
+                <aside id="ccSidebar" class="cc-sidebar" aria-label="Áreas do Centro de Compras">
+                    <div class="cc-sidebar-header">
+                        <span class="cc-sidebar-label">Centro de Compras</span>
+                        <button id="btnToggleCCSidebar" type="button" class="cc-sidebar-toggle"
+                            aria-expanded="true" aria-controls="ccSidebar" title="Ocultar ou expandir as áreas">
+                            <span class="material-symbols-outlined text-base">menu_open</span>
+                        </button>
+                    </div>
+                    <nav class="flex flex-col gap-1" role="tablist" aria-label="Áreas">
+                        <button type="button" class="cc-sub-tab" data-cc-tab="pedidos" role="tab"
+                            aria-selected="true" aria-controls="ccPanelPedidos" title="Pedidos">
+                            <span class="material-symbols-outlined cc-tab-icon">list_alt</span>
+                            <span class="cc-tab-label">Pedidos</span>
+                        </button>
+                        <button type="button" class="cc-sub-tab" data-cc-tab="planoPagamentos" role="tab"
+                            aria-selected="false" aria-controls="ccPanelPlanoPagamentos" title="Plano de Pagamentos">
+                            <span class="material-symbols-outlined cc-tab-icon">calendar_month</span>
+                            <span class="cc-tab-label">Plano de Pagamentos</span>
+                        </button>
+                    </nav>
+                </aside>
+
                 <!-- ── Área de conteúdo principal ── -->
                 <div class="cc-main">
 
@@ -93,6 +120,16 @@
                                         <option value="CONCLUIDO">Concluído</option>
                                         <option value="CANCELADO">Cancelado</option>
                                     </select>
+                                    <select id="ccPedidosFilterType"
+                                        class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
+                                        <option value="">Todos os tipos</option>
+                                        <option value="SEDE">Sede</option>
+                                        <option value="OBRA">Obra</option>
+                                        <option value="FROTA">Frota</option>
+                                        <option value="IMPOSTOS">Impostos</option>
+                                        <option value="PESSOAL">Pessoal</option>
+                                        <option value="EMPRESTIMO">Empréstimo</option>
+                                    </select>
                                     <select id="ccPedidosFilterPriority"
                                         class="h-9 px-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none">
                                         <option value="">Todas as prioridades</option>
@@ -110,7 +147,7 @@
                                                 <th class="px-4 py-3">Pedido Relacionado</th>
                                                 <th class="px-4 py-3">Solicitante</th>
                                                 <th class="px-4 py-3 text-right">Valor s/ impostos</th>
-                                                <th class="px-4 py-3 text-right">Preço total c/ impostos</th>
+                                                <th class="px-4 py-3 text-right" title="Base + IVA − retenção na fonte: o que o beneficiário recebe">Total a pagar</th>
                                                 <th class="px-4 py-3">Prioridade</th>
                                                 <th class="px-4 py-3">Estado</th>
                                                 <th class="px-4 py-3 text-center">Acção</th>

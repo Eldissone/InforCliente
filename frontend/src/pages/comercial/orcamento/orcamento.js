@@ -163,7 +163,7 @@ function renderHead() {
     <div class="cm-bh-left">
       <div class="cm-head-num">${esc(b.number)} · ${esc(b.revision)} · ${esc(b.client ? b.client.name : "sem cliente")}</div>
       <h1 class="cm-title" style="font-size:1.25rem">${esc(S.doc.params.obra || b.projectName)}</h1>
-      <div class="cm-calc" style="font-size:.75rem">${esc(S.doc.params.local || "")} · CC ${esc(b.costCenterCode || "—")}</div>
+      <div class="cm-calc" style="font-size:.75rem">${esc(S.doc.params.local || "")} · ${esc(b.costCenterCode || "sem centro de custo")}</div>
     </div>
     <div class="cm-bh-kpis">
       <div><span>Custo total</span><b>${fmt(R.CT)}</b><small>${esc(mb)}</small></div>

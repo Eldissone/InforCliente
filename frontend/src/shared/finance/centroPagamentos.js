@@ -35,6 +35,26 @@ const STAGES = {
 
 const SOURCE_TONE = { PAGAMENTO: "blue", PEDIDO_EXTRA: "violet", LANCAMENTO: "amber", PEDIDO_COMPRA: "emerald", FRETE: "slate" };
 
+/**
+ * Tipos de pedido de pagamento (§2.4 da base de referência). Os três últimos
+ * não têm itens: o valor vem dos dados próprios do tipo.
+ */
+const REQUEST_TYPE = {
+  SEDE: { label: "Sede", tone: "slate" },
+  GERAL: { label: "Sede", tone: "slate" }, // valor antigo, antes dos seis tipos
+  OBRA: { label: "Obra", tone: "emerald" },
+  FROTA: { label: "Frota", tone: "blue" },
+  IMPOSTOS: { label: "Impostos", tone: "red" },
+  PESSOAL: { label: "Pessoal", tone: "violet" },
+  EMPRESTIMO: { label: "Empréstimo", tone: "amber" },
+};
+
+/** Condição acordada com quem recebe. */
+const TERM_LABEL = { PRONTO: "Pronto pagamento", CREDITO: "Crédito", PARCIAL: "Prestações" };
+
+/** Gravidade do estado derivado → cor do rótulo. */
+const SEVERITY_TONE = { bad: "red", warn: "amber", good: "emerald", neutral: "slate" };
+
 const STATUS_LABEL = {
   PENDENTE: "Pendente",
   EM_ESPERA: "Em espera",
@@ -75,6 +95,54 @@ function dateOnly(value) {
 
 function canPay() {
   return can("financeiro", "edit") || can("financeiro", "approve") || can("financeiro", "manage");
+}
+
+/** Quem recebe: o beneficiário do pedido (fornecedor, AGT, colaboradores, fundo). */
+function partyOf(p) {
+  return p.beneficiary || p.supplier || "Sem fornecedor";
+}
+
+function typeOf(p) {
+  return REQUEST_TYPE[p.requestType] || null;
+}
+
+/**
+ * A coluna «Fonte». Num pedido de pagamento é o **tipo** que diz algo a quem
+ * paga — «Pedido de Compra» era igual para os seis — com o modo FM à frente
+ * quando sai do fundo de maneio.
+ */
+function sourceCellHtml(p) {
+  const t = typeOf(p);
+  if (!t) {
+    return `<span class="finance-chip finance-chip--${SOURCE_TONE[p.source] || "slate"}">${esc(p.sourceLabel || p.source)}</span>`;
+  }
+  const fund = p.fundName ? `Fundo de maneio: ${p.fundName}` : "Fundo de maneio";
+  return `<div class="cp-type">
+      <span class="finance-chip finance-chip--${t.tone}" title="${esc(p.sourceLabel || "Pedido de pagamento")}">${esc(t.label)}</span>
+      ${p.paymentMode === "FM" ? `<span class="cp-fm" title="${esc(fund)}">FM</span>` : ""}
+    </div>`;
+}
+
+/** A condição acordada, debaixo do vencimento. */
+function termHtml(p) {
+  if (!p.paymentTerm) return "";
+  const label =
+    p.paymentTerm === "CREDITO" && p.creditDays ? `Crédito ${p.creditDays} dias` : TERM_LABEL[p.paymentTerm] || p.paymentTerm;
+  return `<small class="cp-sub">${esc(label)}</small>`;
+}
+
+/**
+ * O estado. Nos pedidos de pagamento é o estado **derivado** do servidor
+ * (em pausa, atrasado, pago parcial), que diz mais do que «Aprovado».
+ */
+function statusHtml(p) {
+  const label = p.derivedStatusLabel || STATUS_LABEL[p.status] || p.status || "—";
+  const tone = p.derivedStatusSeverity
+    ? SEVERITY_TONE[p.derivedStatusSeverity] || "slate"
+    : p.stage === "A_PAGAR"
+      ? "slate"
+      : "violet";
+  return `<span class="finance-badge finance-badge--${tone}">${esc(label)}</span>`;
 }
 
 function payableItems() {
@@ -129,10 +197,11 @@ function renderShell() {
               <button type="button" data-group="priority" class="active"><span class="material-symbols-outlined">sort</span><span>Prioridade</span></button>
               <button type="button" data-group="supplier"><span class="material-symbols-outlined">local_shipping</span><span>Fornecedor</span></button>
               <button type="button" data-group="project"><span class="material-symbols-outlined">apartment</span><span>Obra</span></button>
+              <button type="button" data-group="type"><span class="material-symbols-outlined">category</span><span>Tipo</span></button>
             </div>
             <label class="ov-search">
               <span class="material-symbols-outlined">search</span>
-              <input id="cpSearch" type="search" placeholder="Fornecedor, descrição ou obra…" autocomplete="off" />
+              <input id="cpSearch" type="search" placeholder="Beneficiário, tipo, descrição ou obra…" autocomplete="off" />
             </label>
           </div>
         </header>
@@ -346,8 +415,8 @@ function renderPlan() {
               <li>
                 <span class="ac-feed-icon ${p.daysLate > 0 ? "ac-feed-icon--late" : "ac-feed-icon--out"}"><span class="material-symbols-outlined">${p.daysLate > 0 ? "priority_high" : "north_east"}</span></span>
                 <div>
-                  <strong>${esc(p.supplier || p.description || "—")}</strong>
-                  <small>${esc([p.project?.name, p.sourceLabel].filter(Boolean).join(" · "))}</small>
+                  <strong>${esc(p.beneficiary || p.supplier || p.description || "—")}</strong>
+                  <small>${esc([p.project?.name, typeOf(p)?.label || p.sourceLabel].filter(Boolean).join(" · "))}</small>
                 </div>
                 <div class="ac-feed-value">
                   <strong>${esc(compact(p.payable))}</strong>
@@ -520,11 +589,11 @@ function payRowsHtml(items) {
       const due = p.stage === "A_PAGAR";
       return `
       <tr class="${due && p.daysLate > 0 ? "fin-row--overdue" : ""}">
-        <td><div class="inv-due-cell">${esc(p.dueDate ? dateOnly(p.dueDate) : "—")}${due ? dueChip(p.daysLate) : ""}</div></td>
+        <td><div class="inv-due-cell">${esc(p.dueDate ? dateOnly(p.dueDate) : "—")}${due ? dueChip(p.daysLate) : ""}</div>${termHtml(p)}</td>
         <td>
           <div class="ov-project cr-desc">
-            <span class="ov-project-name cr-desc-title">${esc(p.supplier || "Sem fornecedor")}</span>
-            <span class="ov-project-meta">${esc([p.docNumber, p.description].filter(Boolean).join(" · "))}</span>
+            <span class="ov-project-name cr-desc-title">${esc(partyOf(p))}</span>
+            <span class="ov-project-meta">${esc([p.docNumber, p.shortDescription || p.description].filter(Boolean).join(" · "))}</span>
           </div>
         </td>
         <td>
@@ -533,11 +602,11 @@ function payRowsHtml(items) {
             <span class="ov-project-meta">${esc(p.project ? p.costCenter?.name || p.project.code || "" : "")}</span>
           </div>
         </td>
-        <td><span class="finance-chip finance-chip--${SOURCE_TONE[p.source] || "slate"}">${esc(p.sourceLabel || p.source)}</span></td>
+        <td>${sourceCellHtml(p)}</td>
         <td class="fin-num ${due && p.daysLate > 0 ? "ov-neg" : ""}"><strong>${esc(money(p.payable, cur))}</strong>${
           num(p.paidAmount) > 0 ? `<small class="cp-sub">de ${esc(compact(p.amount))}</small>` : ""
         }</td>
-        <td><span class="finance-badge finance-badge--${due ? "slate" : "violet"}">${esc(STATUS_LABEL[p.status] || p.status || "—")}</span></td>
+        <td>${statusHtml(p)}</td>
         <td>${payActionHtml(p)}</td>
       </tr>`;
     })
@@ -546,7 +615,12 @@ function payRowsHtml(items) {
 
 function renderPayTable(wrap, items) {
   if (state.group !== "priority") {
-    const keyOf = state.group === "supplier" ? (p) => p.supplier || "Sem fornecedor" : (p) => p.project?.name || p.costCenter?.name || "Sem obra";
+    const keyOf =
+      state.group === "supplier"
+        ? partyOf
+        : state.group === "type"
+          ? (p) => typeOf(p)?.label || p.sourceLabel || p.source || "Outros"
+          : (p) => p.project?.name || p.costCenter?.name || "Sem obra";
     const groups = new Map();
     items.forEach((p) => {
       const k = keyOf(p);
@@ -558,7 +632,7 @@ function renderPayTable(wrap, items) {
       .sort((a, b) => b.total - a.total);
     wrap.innerHTML = `
       <table class="fin-table ac-table">
-        <thead><tr><th>Vencimento</th><th>Fornecedor · Documento</th><th>Obra · Centro</th><th>Fonte</th><th style="text-align:right">Por pagar</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Vencimento</th><th>Beneficiário · Documento</th><th>Obra · Centro</th><th>Fonte</th><th style="text-align:right">Por pagar</th><th>Estado</th><th></th></tr></thead>
         <tbody>${ordered
           .map(
             (g) => `
@@ -574,7 +648,7 @@ function renderPayTable(wrap, items) {
     const sorted = [...items].sort((a, b) => (b.daysLate ?? -1e9) - (a.daysLate ?? -1e9));
     wrap.innerHTML = `
       <table class="fin-table ac-table">
-        <thead><tr><th>Vencimento</th><th>Fornecedor · Documento</th><th>Obra · Centro</th><th>Fonte</th><th style="text-align:right">Por pagar</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Vencimento</th><th>Beneficiário · Documento</th><th>Obra · Centro</th><th>Fonte</th><th style="text-align:right">Por pagar</th><th>Estado</th><th></th></tr></thead>
         <tbody>${payRowsHtml(sorted)}</tbody>
         <tfoot><tr><td colspan="4">Total (${items.length})</td><td class="fin-num">${esc(money(items.reduce((a, p) => a + num(p.payable), 0)))}</td><td colspan="2"></td></tr></tfoot>
       </table>`;
@@ -695,7 +769,16 @@ function renderTable() {
   const items = (state.data?.items || []).filter((p) => {
     if (state.stage === "commitments" ? p.stage !== "COMPROMISSO" : p.stage !== "A_PAGAR") return false;
     if (state.stage === "overdue" && !(p.daysLate > 0)) return false;
-    return matches([p.supplier, p.description, p.docNumber, p.project?.name, p.costCenter?.name]);
+    return matches([
+      p.supplier,
+      p.beneficiary,
+      p.description,
+      p.shortDescription,
+      p.docNumber,
+      typeOf(p)?.label,
+      p.project?.name,
+      p.costCenter?.name,
+    ]);
   });
   if (!items.length) {
     wrap.innerHTML = `<div class="ov-empty ov-empty--lg"><span class="material-symbols-outlined">task_alt</span>Nada nesta etapa.</div>`;

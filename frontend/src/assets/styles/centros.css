@@ -539,9 +539,34 @@ body {
 /* ── CSS do Centro de Compras ── */
 .cc-layout {
     display: flex;
-    gap: 0;
+    gap: 1rem;
     align-items: flex-start;
     min-height: 600px;
+}
+
+/* Em ecrã estreito a barra passa para cima, em linha. */
+@media (max-width: 860px) {
+    .cc-layout {
+        flex-direction: column;
+    }
+
+    .cc-sidebar {
+        width: 100%;
+        position: static;
+    }
+
+    .cc-sidebar nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .cc-sidebar .cc-sub-tab {
+        width: auto;
+    }
+
+    .cc-sidebar-toggle {
+        display: none;
+    }
 }
 
 /* Sidebar */

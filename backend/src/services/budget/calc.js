@@ -32,6 +32,17 @@ const CATS = [
 ];
 
 const DIRECT = CATS.slice(0, 8);
+
+/**
+ * «Do cliente?» é uma lista de "Sim"/"Não". Testar só a verdade do campo fazia
+ * de "Não" um sim — qualquer texto é verdadeiro em JavaScript — e o material
+ * ficava com custo zero quando se dizia expressamente que não era do cliente.
+ * Só conta o que começa por «s» (Sim, sim, S); vazio é não.
+ */
+function isYes(value) {
+  const v = String(value ?? "").trim().toLowerCase();
+  return v.startsWith("s") || v === "true" || v === "1" || value === true;
+}
 const SHEET_KEYS = CATS.map((c) => c[3]);
 
 const PRICE_METHODS = ["MARGEM_SOBRE_VENDA", "MARKUP_SOBRE_CUSTO", "PRECO_DADO"];
@@ -238,7 +249,7 @@ function calcBudget(budget = {}, today = new Date()) {
     const rate = !r.desc ? 0 : !moeda ? 1 : (rates[moeda] ?? 1);
     const qc = N(r.q) * (1 + N(r.desp) + N(r.perd));
     const encPct = 1 + N(r.tr) + N(r.fr) + N(r.seg) + N(r.tax) + N(r.dsc);
-    const cu = r.cli ? 0 : N(r.preco) * rate * encPct;
+    const cu = isYes(r.cli) ? 0 : N(r.preco) * rate * encPct;
     const ct = qc * cu;
     const estrangeira = !!moeda && moeda !== String(P.moedaBase || "").toUpperCase();
     return {
@@ -628,7 +639,7 @@ function buildAlerts(S, R, P, today) {
 
   // Custo unitário a zero
   const zeroUnit =
-    S.mat.filter((r) => r.desc && !r.cli && N(r.preco) === 0).length +
+    S.mat.filter((r) => r.desc && !isYes(r.cli) && N(r.preco) === 0).length +
     R.rh.filter((x, i) => S.rh[i].funcao && N(x.ch) === 0).length +
     R.eq.filter((x, i) => S.eq[i].equip && N(x.bh) === 0).length +
     R.vi.filter((x, i) => S.vi[i].viat && N(x.bd) === 0).length +
@@ -722,6 +733,7 @@ function budgetTotals(R) {
 }
 
 module.exports = {
+  isYes,
   CATS,
   DIRECT,
   SHEET_KEYS,

@@ -128,7 +128,9 @@ test("03 Materiais: câmbio, encargos e quantidade corrigida", () => {
 
 test("03 Materiais: material do cliente não tem custo", () => {
   const b = miniBudget();
-  b.sheets.mat[0].cli = "Cliente";
+  // "Sim", que é o valor da lista. Antes este teste passava com qualquer texto,
+  // porque o motor tratava tudo o que estivesse escrito como «sim» — era o bug.
+  b.sheets.mat[0].cli = "Sim";
   const R = C.calcBudget(b, HOJE);
   close(R.mat[0].cu, 0, "custo unitário");
   close(R.mat[0].ct, 0, "custo total");
@@ -814,4 +816,61 @@ test("o IVA assenta no preço dado", () => {
   // compara-se com tolerância de cêntimo.
   assert.ok(Math.abs(R.imp - 98000) < 0.01, `IVA ${R.imp}`);
   assert.equal(R.PVfinal, R.PVsi + R.imp);
+});
+
+// ─── «Do cliente?»: uma lista de Sim/Não, não um campo preenchido/vazio ────
+
+const matBudget = (cli, preco) => {
+  const b = miniBudget();
+  for (const k of C.SHEET_KEYS) b.sheets[k] = [];
+  b.sheets.mat = [{ desc: "Cabo", un: "m", q: 10, preco, moeda: "AOA", cli }];
+  return b;
+};
+const alertaSemPreco = (R) => R.alerts.find((a) => a.t === "Custo unitário não preenchido").n;
+
+test("dizer «Não» não pode pôr o custo do material a zero", () => {
+  // Era o que acontecia: o teste era `r.cli ?`, e em JavaScript "Não" é
+  // verdadeiro. Escolher "Não" na lista fazia exactamente o contrário do que
+  // se escolhia.
+  const R = C.calcBudget(matBudget("Não", 1000), HOJE);
+  assert.equal(R.C.MAT, 10000);
+});
+
+test("material do cliente continua a entrar a custo zero", () => {
+  assert.equal(C.calcBudget(matBudget("Sim", 1000), HOJE).C.MAT, 0);
+});
+
+test("a coluna vazia é «não é do cliente»", () => {
+  for (const v of ["", null, undefined]) {
+    assert.equal(C.calcBudget(matBudget(v, 1000), HOJE).C.MAT, 10000, `cli=${JSON.stringify(v)}`);
+  }
+});
+
+test("sim escreve-se de várias maneiras", () => {
+  for (const v of ["Sim", "sim", "SIM", " s ", true]) {
+    assert.equal(C.calcBudget(matBudget(v, 1000), HOJE).C.MAT, 0, `cli=${JSON.stringify(v)}`);
+  }
+});
+
+test("não escreve-se de várias maneiras", () => {
+  for (const v of ["Não", "nao", "NAO", "n"]) {
+    assert.equal(C.calcBudget(matBudget(v, 1000), HOJE).C.MAT, 10000, `cli=${JSON.stringify(v)}`);
+  }
+});
+
+test("material sem preço entra no alerta — a menos que seja do cliente", () => {
+  assert.equal(alertaSemPreco(C.calcBudget(matBudget("Não", null), HOJE)), 1, "devia avisar");
+  assert.equal(alertaSemPreco(C.calcBudget(matBudget("", null), HOJE)), 1, "devia avisar");
+  assert.equal(alertaSemPreco(C.calcBudget(matBudget("Sim", null), HOJE)), 0, "material do cliente não tem preço, e está certo");
+});
+
+test("material com preço não aparece no alerta", () => {
+  assert.equal(alertaSemPreco(C.calcBudget(matBudget("Não", 1000), HOJE)), 0);
+});
+
+test("isYes está exportado e é o mesmo nos dois lados", () => {
+  assert.equal(typeof C.isYes, "function");
+  assert.equal(C.isYes("Sim"), true);
+  assert.equal(C.isYes("Não"), false);
+  assert.equal(C.isYes(""), false);
 });

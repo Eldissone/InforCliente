@@ -572,7 +572,7 @@ function createRegistryRouter(def) {
   const importBodySchema = z.object({
     sourceKey: z.string().trim().min(1).max(200),
     deviceLabel: optionalText(200),
-    items: z.array(z.record(z.any())).min(1).max(MAX_IMPORT_ITEMS),
+    items: z.array(z.record(z.string(), z.any())).min(1).max(MAX_IMPORT_ITEMS),
   });
 
   // Rotas fixas antes de /:id.

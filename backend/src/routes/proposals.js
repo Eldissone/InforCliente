@@ -237,8 +237,8 @@ proposalRoutes.get(
 // ───────────────────────── alterar ─────────────────────────
 
 const patchSchema = z.object({
-  body: z.record(z.any()).optional(),
-  paymentTerms: z.record(z.any()).optional(),
+  body: z.record(z.string(), z.any()).optional(),
+  paymentTerms: z.record(z.string(), z.any()).optional(),
   validUntil: optDate,
   pdfUrl: optText(500),
 });

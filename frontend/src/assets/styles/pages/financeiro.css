@@ -2140,6 +2140,8 @@ a.cr-act { text-decoration: none; }
 .cp-week-alert .material-symbols-outlined { font-size: 16px; }
 .cp-more { margin-top: 0.5rem; }
 .cp-sub { display: block; font-size: 10.5px; font-weight: 600; color: #94a3b8; }
+.cp-type { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.cp-fm { padding: 0.1rem 0.32rem; border-radius: 0.35rem; background: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-size: 10px; font-weight: 800; }
 .cp-group-row td { background: #f8fafc; padding-top: 0.55rem !important; padding-bottom: 0.55rem !important; }
 .cp-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.9rem; font-size: 12px; color: #64748b; font-weight: 600; }
 .cp-group-head strong { color: #0f172a; font-size: 13px; }

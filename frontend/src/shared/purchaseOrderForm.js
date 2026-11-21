@@ -32,6 +32,48 @@ const cache = {
 let notify = (msg, type = "info") => uiToast(msg, { type });
 let describeError = defaultDescribeError;
 
+/**
+ * Os seis tipos de requisição de pagamento da base de referência.
+ *
+ * `hasItems` diz quais se descrevem por linhas de item. Os outros três trazem o
+ * valor nos seus próprios dados (`typeData`), que é de onde o servidor o lê:
+ * impostos `{tipo, mes, rupe, limite, valor}`, pessoal `{sub, mes, linhas[]}` e
+ * empréstimo `{por, modo, valor, iban, fim, prest}`.
+ *
+ * O ecrã confirma esta lista contra `GET /purchase-orders/payment/meta`, para a
+ * lista do servidor continuar a ser a única que manda.
+ */
+const REQUEST_TYPES = [
+  ["SEDE", "Pedido geral (sede)", true],
+  ["OBRA", "Pedido para obra", true],
+  ["FROTA", "Frota e equipamentos", true],
+  ["IMPOSTOS", "Impostos", false],
+  ["PESSOAL", "Pessoal", false],
+  ["EMPRESTIMO", "Empréstimo", false],
+];
+
+function typeHasItems(type) {
+  const hit = REQUEST_TYPES.find(([k]) => k === type);
+  return hit ? hit[2] : true;
+}
+
+/** O tipo escolhido. «GERAL» era o valor antigo do ecrã e lê-se como sede. */
+function currentRequestType() {
+  const v = String(document.getElementById("ccPedidoType")?.value || "SEDE").toUpperCase();
+  if (v === "GERAL") return "SEDE";
+  return REQUEST_TYPES.some(([k]) => k === v) ? v : "SEDE";
+}
+
+function typeLabel(type) {
+  const hit = REQUEST_TYPES.find(([k]) => k === type);
+  return hit ? hit[1] : type;
+}
+
+const numOrNull = (value) => {
+  const n = parseFloat(String(value ?? "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+
 function escapeHtml(str) {
   return String(str ?? "")
     .replace(/&/g, "&amp;")
@@ -489,6 +531,14 @@ export function addItemRow() {
     <td><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-vat pf-cell-input pf-cell-input--right"></td>
     <td><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-wh pf-cell-input pf-cell-input--right"></td>
     <td><input type="number" min="0" max="100" step="0.01" placeholder="0" class="cc-item-disc pf-cell-input pf-cell-input--right"></td>
+    <td><input type="text" placeholder="observações" class="cc-item-obs pf-cell-input"></td>
+    <td>
+      <select class="cc-item-doc pf-cell-input" title="Excepção ao documento fiscal">
+        <option value="">Fatura</option>
+        <option value="DSC">Sem comprovativo</option>
+        <option value="AF">Autofaturação</option>
+      </select>
+    </td>
     <td class="cc-item-line-total pf-cell-total">0.00</td>
     <td style="width:44px">
       <button type="button" class="cc-item-del pf-row-remove" aria-label="Remover item">
@@ -509,9 +559,10 @@ export function addItemRow() {
 }
 
 export function refreshTotals() {
+  // O painel (incluindo a retenção) vem do `computePedidoItemsTotals`, que é a
+  // mesma conta do servidor. Aqui só se escreve o total de cada linha.
   refreshPedidoTotalsFromRows("ccPedido", "#ccItemsBody .cc-item-row");
 
-  let retention = 0;
   document.querySelectorAll("#ccItemsBody .cc-item-row").forEach((row) => {
     const qty = parseFloat(row.querySelector(".cc-item-qty")?.value || "0") || 0;
     const price = parseFloat(row.querySelector(".cc-item-price")?.value || "0") || 0;
@@ -520,14 +571,11 @@ export function refreshTotals() {
     const ret = parseFloat(row.querySelector(".cc-item-wh")?.value || "0") || 0;
     const liquido = qty * price * (1 - disc / 100);
     const retLinha = (liquido * ret) / 100;
-    retention += retLinha;
     const cell = row.querySelector(".cc-item-line-total");
     // O total da linha é o que o fornecedor recebe: base + IVA − retenção.
     // A retenção fica retida e é entregue ao Estado, por isso não se paga.
     if (cell) cell.textContent = formatPedidoTotalNumber(liquido * (1 + vat / 100) - retLinha);
   });
-  const retEl = document.getElementById("ccPedidoTotal_retencao");
-  if (retEl) retEl.textContent = formatPedidoTotalNumber(retention);
 }
 
 export function fillItemRows(items) {
@@ -554,19 +602,221 @@ export function fillItemRows(items) {
     set(".cc-item-vat", rate("vatPercent", legacy.vat));
     set(".cc-item-wh", rate("withholdingPercent", legacy.retention));
     set(".cc-item-disc", rate("discountPercent", legacy.discount));
+    set(".cc-item-obs", it.notes || "");
+    set(".cc-item-doc", it.docException || "");
   });
   refreshTotals();
 }
 
 // ── Visibilidade condicional ────────────────────────────────
 
+const show = (id, on) => document.getElementById(id)?.classList.toggle("hidden", !on);
+
 export function applyTypeVisibility() {
-  const type = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
-  const obraProj = document.getElementById("cc_rowObraProject");
-  const obraCent = document.getElementById("cc_rowObraCenter");
-  if (obraProj) obraProj.classList.toggle("hidden", type !== "OBRA");
-  if (obraCent) obraCent.classList.toggle("hidden", type !== "OBRA");
+  const type = currentRequestType();
+
+  show("cc_rowObraProject", type === "OBRA");
+  show("cc_rowObraCenter", type === "OBRA");
+  show("cc_rowFrota", type === "FROTA");
+  show("cc_blockImpostos", type === "IMPOSTOS");
+  show("cc_blockPessoal", type === "PESSOAL");
+  show("cc_blockEmprestimo", type === "EMPRESTIMO");
+
+  // Impostos, pessoal e empréstimo não se descrevem por itens: o valor está nos
+  // dados do tipo. Mostrar uma tabela de itens vazia convidava a escrevê-lo duas
+  // vezes e o servidor só leria uma.
+  const comItens = typeHasItems(type);
+  show("ccItemsSection", comItens);
+  show("ccTotalsWrap", comItens);
+
+  if (type === "IMPOSTOS") {
+    // O beneficiário é a AGT e não há cotação a pedir a ninguém.
+    const cot = document.getElementById("ccPedidoRequerCotacao");
+    if (cot?.checked) {
+      cot.checked = false;
+      applyQuoteRequirementVisibility();
+    }
+    const nome = document.getElementById("ccExtraSupplierName");
+    if (nome && !nome.value.trim()) nome.value = "AGT";
+  }
+  if (type === "PESSOAL" && !document.querySelector("#ccPessoalBody .cc-pes-row")) addPersonRow();
+
   populateCentrosGerais();
+}
+
+/** Fundo de maneio: o dinheiro sai do fundo, não há transferência ao fornecedor. */
+export function applyPaymentModeVisibility() {
+  const fm = (document.getElementById("ccPedidoModo")?.value || "FORN") === "FM";
+  show("cc_rowFundo", fm);
+  applyQuoteRequirementVisibility();
+}
+
+/** Pronto / crédito / prestações, como na base de referência. */
+export function applyPaymentTermVisibility() {
+  const term = document.getElementById("ccPedidoCondicao")?.value || "PRONTO";
+  // No parcial a data pretendida é a da primeira prestação, por isso fica à vista.
+  show("cc_rowPronto", term !== "CREDITO");
+  show("cc_rowCredito", term === "CREDITO");
+  show("cc_rowParcial", term === "PARCIAL");
+  updateDueDateHint();
+}
+
+/** A data de vencimento que os dias de crédito dão, escrita por extenso. */
+function updateDueDateHint() {
+  const hint = document.getElementById("ccPedidoVencimentoHint");
+  if (!hint) return;
+  const days = numOrNull(document.getElementById("ccPedidoDiasCredito")?.value);
+  if (days === null || days < 0) {
+    hint.textContent = "";
+    return;
+  }
+  hint.textContent = `Vence a ${creditDueDate(days)}.`;
+}
+
+/** Hoje + dias de crédito, em AAAA-MM-DD. */
+function creditDueDate(days) {
+  const base = new Date();
+  base.setHours(12, 0, 0, 0);
+  return new Date(base.getTime() + Math.round(days) * 86400000).toISOString().slice(0, 10);
+}
+
+// ── Pessoal: uma linha por colaborador ──────────────────────
+
+export function addPersonRow(data = {}) {
+  const tbody = document.getElementById("ccPessoalBody");
+  if (!tbody) return null;
+  const tr = document.createElement("tr");
+  tr.className = "cc-pes-row";
+  tr.innerHTML = `
+    <td><input type="text" class="cc-pes-nome pf-cell-input" placeholder="Nome do colaborador"></td>
+    <td><input type="text" class="cc-pes-iban pf-cell-input" placeholder="AO06 ..."></td>
+    <td><input type="number" step="0.01" min="0" class="cc-pes-valor pf-cell-input pf-cell-input--right" placeholder="0.00"></td>
+    <td style="width:44px">
+      <button type="button" class="cc-pes-del pf-row-remove" aria-label="Remover colaborador">
+        <span class="material-symbols-outlined">delete</span>
+      </button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  const set = (sel, value) => {
+    const el = tr.querySelector(sel);
+    if (el && value != null && value !== "") el.value = String(value);
+  };
+  set(".cc-pes-nome", data.nome);
+  set(".cc-pes-iban", data.iban);
+  set(".cc-pes-valor", data.valor);
+  tr.querySelector(".cc-pes-del")?.addEventListener("click", () => {
+    tr.remove();
+    if (!tbody.querySelector(".cc-pes-row")) addPersonRow();
+    refreshPessoalTotal();
+  });
+  refreshPessoalTotal();
+  return tr;
+}
+
+export function refreshPessoalTotal() {
+  const el = document.getElementById("ccPessoalTotal");
+  if (!el) return;
+  let total = 0;
+  document.querySelectorAll("#ccPessoalBody .cc-pes-row").forEach((tr) => {
+    total += numOrNull(tr.querySelector(".cc-pes-valor")?.value) || 0;
+  });
+  el.textContent = formatPedidoTotalNumber(total);
+}
+
+function collectPessoalRows() {
+  return Array.from(document.querySelectorAll("#ccPessoalBody .cc-pes-row"))
+    .map((tr) => ({
+      nome: tr.querySelector(".cc-pes-nome")?.value?.trim() || "",
+      iban: tr.querySelector(".cc-pes-iban")?.value?.trim() || "",
+      valor: numOrNull(tr.querySelector(".cc-pes-valor")?.value) || 0,
+    }))
+    .filter((l) => l.nome && l.valor > 0);
+}
+
+// ── Dados próprios de cada tipo ─────────────────────────────
+
+/** O que vai em `typeData`, com os nomes que o servidor lê. */
+function collectTypeData(type) {
+  const val = (id) => document.getElementById(id)?.value?.trim() || "";
+  if (type === "FROTA") {
+    const viatura = val("ccPedidoViatura");
+    return viatura ? { viatura } : {};
+  }
+  if (type === "IMPOSTOS") {
+    return {
+      tipo: val("ccImpTipo"),
+      mes: val("ccImpMes"),
+      rupe: val("ccImpRupe"),
+      limite: val("ccImpLimite"),
+      valor: numOrNull(val("ccImpValor")) || 0,
+    };
+  }
+  if (type === "PESSOAL") {
+    return { sub: val("ccPesSub"), mes: val("ccPesMes"), linhas: collectPessoalRows() };
+  }
+  if (type === "EMPRESTIMO") {
+    return {
+      por: val("ccEmpPor"),
+      modo: val("ccEmpModo"),
+      valor: numOrNull(val("ccEmpValor")) || 0,
+      iban: val("ccEmpIban"),
+      fim: val("ccEmpFim"),
+      prest: numOrNull(val("ccEmpPrest")) || 1,
+    };
+  }
+  return {};
+}
+
+/** O que falta nos dados do tipo, em palavras, ou null se estiver tudo. */
+function missingTypeData(type, d) {
+  if (type === "IMPOSTOS") {
+    if (!d.mes) return "Indique o mês de referência do imposto.";
+    if (!(d.valor > 0)) return "Indique o valor do imposto.";
+  }
+  if (type === "PESSOAL") {
+    if (!d.mes) return "Indique o mês do pedido de pessoal.";
+    if (!d.linhas.length) return "Acrescente pelo menos um colaborador, com nome e valor.";
+  }
+  if (type === "EMPRESTIMO") {
+    if (!d.por) return "Indique quem pede o empréstimo.";
+    if (!(d.valor > 0)) return "Indique o valor do empréstimo.";
+  }
+  return null;
+}
+
+/** Repõe no ecrã os dados próprios de um pedido já gravado. */
+function fillTypeData(order) {
+  const type = order.requestType || (order.projectId ? "OBRA" : "SEDE");
+  const d = order.typeData || {};
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value == null ? "" : String(value);
+  };
+  if (type === "FROTA") set("ccPedidoViatura", d.viatura || "");
+  if (type === "IMPOSTOS") {
+    set("ccImpTipo", d.tipo || "IVA");
+    set("ccImpMes", d.mes || "");
+    set("ccImpRupe", d.rupe || "");
+    set("ccImpLimite", toDateInput(d.limite));
+    set("ccImpValor", d.valor != null ? d.valor : "");
+  }
+  if (type === "PESSOAL") {
+    set("ccPesSub", d.sub || "Salários");
+    set("ccPesMes", d.mes || "");
+    const tbody = document.getElementById("ccPessoalBody");
+    if (tbody) tbody.innerHTML = "";
+    const linhas = Array.isArray(d.linhas) && d.linhas.length ? d.linhas : [{}];
+    linhas.forEach((l) => addPersonRow(l));
+  }
+  if (type === "EMPRESTIMO") {
+    set("ccEmpPor", d.por || "");
+    set("ccEmpModo", d.modo || "TRANSFERENCIA");
+    set("ccEmpValor", d.valor != null ? d.valor : "");
+    set("ccEmpIban", d.iban || "");
+    set("ccEmpFim", d.fim || "");
+    set("ccEmpPrest", d.prest != null ? d.prest : "");
+  }
 }
 
 function selectCostCategory(categoryId) {
@@ -602,7 +852,8 @@ export async function applyPedidoPresets({
 } = {}) {
   const typeSel = document.getElementById("ccPedidoType");
   if (type && typeSel) {
-    typeSel.value = String(type).toUpperCase() === "OBRA" ? "OBRA" : "GERAL";
+    const wanted = String(type).toUpperCase() === "GERAL" ? "SEDE" : String(type).toUpperCase();
+    typeSel.value = REQUEST_TYPES.some(([k]) => k === wanted) ? wanted : "SEDE";
   }
   if (lockType && typeSel) typeSel.disabled = true;
   applyTypeVisibility();
@@ -621,8 +872,10 @@ export async function applyPedidoPresets({
 
 export function applyQuoteRequirementVisibility() {
   const requiresQuote = Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked);
+  const fm = (document.getElementById("ccPedidoModo")?.value || "FORN") === "FM";
   document.getElementById("cc_extraSupplierBlock")?.classList.toggle("hidden", requiresQuote);
-  document.getElementById("cc_extraPaymentBlock")?.classList.toggle("hidden", requiresQuote);
+  // Com fundo de maneio não se pergunta como se transfere ao fornecedor.
+  document.getElementById("cc_extraPaymentBlock")?.classList.toggle("hidden", requiresQuote || fm);
   // A proforma é entregue na requisição, por isso os anexos só fazem sentido aqui
   // quando o pedido dispensa cotação.
   document.getElementById("ccAttachmentsCard")?.classList.toggle("hidden", requiresQuote);
@@ -801,6 +1054,31 @@ export async function ensureReferenceDataLoaded() {
     });
   }
 
+  // Os tipos, as condições e os fundos de maneio vêm do servidor: a lista do
+  // ecrã é só o que se vê antes da resposta chegar.
+  const fundSel = document.getElementById("ccPedidoFundId");
+  const typeSel = document.getElementById("ccPedidoType");
+  if (fundSel && !fundSel.dataset.ccLoaded) {
+    try {
+      const meta = await apiRequest("/purchase-orders/payment/meta");
+      fundSel.dataset.ccLoaded = "1";
+      (meta?.funds || []).forEach((f) => {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = f.name || f.id;
+        fundSel.appendChild(opt);
+      });
+      const tipos = meta?.requestTypes || [];
+      if (typeSel && tipos.length) {
+        const prev = typeSel.value;
+        typeSel.innerHTML = tipos
+          .map((t) => `<option value="${escapeHtml(t.k)}">${escapeHtml(t.label)}</option>`)
+          .join("");
+        if ([...typeSel.options].some((o) => o.value === prev)) typeSel.value = prev;
+      }
+    } catch { /* fica a lista do ecrã */ }
+  }
+
   const cardSel = document.getElementById("ccExtraCardId");
   if (cardSel && cardSel.options.length <= 1) {
     try {
@@ -879,8 +1157,10 @@ function collectItems() {
       vatPercent: pct(vat),
       withholdingPercent: pct(wh),
       discountPercent: pct(disc),
-      // O formulario nao tem campo de notas por linha; fica livre para notas de facto.
-      notes: null,
+      notes: tr.querySelector(".cc-item-obs")?.value?.trim() || null,
+      // DSC (despesa sem comprovativo) e AF (autofaturação) dispensam a fatura
+      // nesta linha — é o controlo documental da base de referência.
+      docException: tr.querySelector(".cc-item-doc")?.value || null,
     };
   }).filter((it) => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
 }
@@ -902,9 +1182,19 @@ async function buildPedidoPayload() {
     return null;
   }
 
-  const items = collectItems();
-  if (!items.length) {
+  const type = currentRequestType();
+  const comItens = typeHasItems(type);
+
+  const items = comItens ? collectItems() : [];
+  if (comItens && !items.length) {
     notify("Adicione pelo menos um item ao pedido", "error");
+    return null;
+  }
+
+  const typeData = collectTypeData(type);
+  const falta = missingTypeData(type, typeData);
+  if (falta) {
+    notify(falta, "error");
     return null;
   }
 
@@ -918,7 +1208,16 @@ async function buildPedidoPayload() {
   }
 
   const requiresQuote = Boolean(document.getElementById("ccPedidoRequerCotacao")?.checked ?? true);
-  if (!requiresQuote) {
+  const paymentMode = document.getElementById("ccPedidoModo")?.value === "FM" ? "FM" : "FORN";
+  const pettyCashFundId = paymentMode === "FM" ? (document.getElementById("ccPedidoFundId")?.value || "") : "";
+  if (paymentMode === "FM" && !pettyCashFundId) {
+    notify("Seleccione o fundo de maneio de onde sai o dinheiro.", "error");
+    return null;
+  }
+
+  // Impostos, pessoal e empréstimo não têm fornecedor a cotar nem IBAN de
+  // fornecedor a validar: o beneficiário está nos dados do tipo.
+  if (!requiresQuote && comItens && paymentMode === "FORN") {
     const supplierId = document.getElementById("ccExtraSupplierId")?.value || "";
     const nif = normalizeNif(document.getElementById("ccExtraSupplierNif")?.value);
     const validated = document.getElementById("ccExtraSupplierNif")?.dataset?.validatedNif || "";
@@ -962,7 +1261,7 @@ async function buildPedidoPayload() {
     return null;
   }
 
-  const classification = (document.getElementById("ccPedidoType")?.value || "GERAL").toUpperCase();
+  const classification = type;
   const projectId = classification === "OBRA" ? (document.getElementById("ccExtraProjectId")?.value || null) : null;
   const costCenterId = classification === "OBRA" ? (document.getElementById("ccExtraCostCenterId")?.value || null) : null;
   if (classification === "OBRA") {
@@ -981,13 +1280,13 @@ async function buildPedidoPayload() {
     document.getElementById("ccPedidoJust")?.value?.trim() || "",
     classification === "OBRA"
       ? `Classificação: Obra${projectLabel ? " · " + projectLabel : ""}`
-      : "Classificação: Geral",
+      : `Classificação: ${typeLabel(type)}`,
     `Centro geral: ${centroSel?.selectedOptions?.[0]?.textContent || group.tipo2}`,
     realTipo3.length
       ? `Categoria: ${document.getElementById("ccExtraCostCategoryId")?.selectedOptions?.[0]?.textContent || ""}`
       : null,
     document.getElementById("ccExtraCostDetailDesc")?.value?.trim() || null,
-    !requiresQuote
+    !requiresQuote && paymentMode === "FORN"
       ? [
           `Origem pagamento: ${document.getElementById("ccExtraSource")?.selectedOptions?.[0]?.textContent || document.getElementById("ccExtraSource")?.value || ""}`,
           document.getElementById("ccExtraSource")?.value === "CARTAO"
@@ -996,6 +1295,22 @@ async function buildPedidoPayload() {
         ].filter(Boolean).join("\n")
       : null,
   ].filter(Boolean).join("\n");
+
+  // Condição de pagamento: pronto com data pretendida, crédito com dias (que
+  // dão o vencimento) e prestações a partir da data pretendida.
+  const paymentTerm = document.getElementById("ccPedidoCondicao")?.value || "PRONTO";
+  const creditDaysRaw = numOrNull(document.getElementById("ccPedidoDiasCredito")?.value);
+  if (paymentTerm === "CREDITO" && (creditDaysRaw === null || creditDaysRaw < 0)) {
+    notify("Indique os dias de crédito.", "error");
+    return null;
+  }
+  const wantedDate = document.getElementById("ccPedidoDataPretendida")?.value || null;
+  const installments = numOrNull(document.getElementById("ccPedidoPrestacoes")?.value);
+  if (paymentTerm === "PARCIAL" && (installments === null || installments < 2)) {
+    notify("Indique em quantas prestações se paga (pelo menos 2).", "error");
+    return null;
+  }
+  const dueDate = paymentTerm === "CREDITO" ? creditDueDate(creditDaysRaw) : wantedDate;
 
   const user = getSessionUser();
   return {
@@ -1014,6 +1329,17 @@ async function buildPedidoPayload() {
     currency: "AOA",
     notes: notes || null,
     items,
+
+    // ─── Requisição de pagamento ───
+    requestType: type,
+    paymentMode,
+    pettyCashFundId: pettyCashFundId || null,
+    typeData,
+    paymentTerm,
+    creditDays: paymentTerm === "CREDITO" ? Math.round(creditDaysRaw) : null,
+    dueDate,
+    /** Não vai para o servidor: serve para dividir o plano depois de gravar. */
+    _installments: paymentTerm === "PARCIAL" ? Math.round(installments) : null,
   };
 }
 
@@ -1054,11 +1380,30 @@ export async function savePedido() {
   }
 
   const editId = document.getElementById("ccPedidoEditId")?.value || "";
+  const { _installments: parcelas, ...body } = payload;
   const saved = editId
-    ? await apiRequest(`/purchase-orders/${editId}`, { method: "PATCH", body: payload })
-    : await apiRequest("/purchase-orders", { method: "POST", body: payload });
+    ? await apiRequest(`/purchase-orders/${editId}`, { method: "PATCH", body })
+    : await apiRequest("/purchase-orders", { method: "POST", body });
 
-  return { saved, isEdit: Boolean(editId), requiresQuote: payload.requiresQuote };
+  // O plano de prestações é outro documento e precisa do pedido já gravado.
+  // Quem pede não tem sempre a permissão de pagamentos: se não puder, diz-se
+  // onde se faz em vez de se perder o pedido.
+  let plan = null;
+  if (parcelas && saved?.id) {
+    try {
+      plan = await apiRequest(`/purchase-orders/${saved.id}/payment-plan/split`, {
+        method: "POST",
+        body: { count: parcelas, firstDate: body.dueDate || null },
+      });
+    } catch {
+      notify(
+        `O pedido ficou gravado, mas as ${parcelas} prestações têm de ser criadas no Centro de Pagamentos.`,
+        "info"
+      );
+    }
+  }
+
+  return { saved, isEdit: Boolean(editId), requiresQuote: payload.requiresQuote, plan };
 }
 
 // ── Anexos ──────────────────────────────────────────────────
@@ -1078,6 +1423,11 @@ export function resetPedidoForm() {
   hideAllItemSuggest();
   const itemsBody = document.getElementById("ccItemsBody");
   if (itemsBody) itemsBody.innerHTML = "";
+  const pessoalBody = document.getElementById("ccPessoalBody");
+  if (pessoalBody) pessoalBody.innerHTML = "";
+  applyTypeVisibility();
+  applyPaymentModeVisibility();
+  applyPaymentTermVisibility();
 }
 
 /** Preenche o formulário com um pedido existente. Devolve o pedido carregado. */
@@ -1097,8 +1447,29 @@ export async function fillPedidoForm(order, { extra = false } = {}) {
   document.getElementById("ccPedidoDesc").value = order.description || "";
   document.getElementById("ccPedidoJust").value = order.justification || "";
   document.getElementById("ccPedidoRequerCotacao").checked = Boolean(order.requiresQuote ?? true);
-  document.getElementById("ccPedidoType").value = order.projectId ? "OBRA" : "GERAL";
+
+  const typeSel = document.getElementById("ccPedidoType");
+  typeSel.value = order.requestType || (order.projectId ? "OBRA" : "SEDE");
+  if (extra) {
+    // Um pedido extra da obra grava-se noutra rota, que só conhece itens.
+    [...typeSel.options].forEach((o) => {
+      o.hidden = !typeHasItems(o.value);
+    });
+    if (!typeHasItems(typeSel.value)) typeSel.value = "OBRA";
+  }
+
+  document.getElementById("ccPedidoModo").value = order.paymentMode === "FM" ? "FM" : "FORN";
+  document.getElementById("ccPedidoCondicao").value = order.paymentTerm || "PRONTO";
+  document.getElementById("ccPedidoDiasCredito").value = order.creditDays != null ? order.creditDays : "";
+  document.getElementById("ccPedidoDataPretendida").value =
+    order.paymentTerm === "CREDITO" ? "" : toDateInput(order.dueDate);
+  const parcelas = (order.paymentPlan?.installments || []).length;
+  document.getElementById("ccPedidoPrestacoes").value = parcelas >= 2 ? parcelas : "";
+
+  fillTypeData(order);
   applyTypeVisibility();
+  applyPaymentModeVisibility();
+  applyPaymentTermVisibility();
   applyQuoteRequirementVisibility();
   fillItemRows(order.items || []);
 
@@ -1109,6 +1480,9 @@ export async function fillPedidoForm(order, { extra = false } = {}) {
     if (projSel) projSel.value = order.projectId;
     await loadCostCentersForProject(order.projectId, order.costCenterId || "");
   }
+  const fundSel = document.getElementById("ccPedidoFundId");
+  if (fundSel && order.pettyCashFundId) fundSel.value = order.pettyCashFundId;
+
   if (!order.requiresQuote && (order.supplierId || order.supplierName)) {
     if (order.supplierId) {
       upsertSupplierOption(order.supplier || { id: order.supplierId, name: order.supplierName });
@@ -1132,6 +1506,11 @@ export function initPurchaseOrderForm({ showToast, apiError } = {}) {
   document.getElementById("ccPedidoType")?.addEventListener("change", applyTypeVisibility);
   document.getElementById("ccPedidoRequerCotacao")?.addEventListener("change", applyQuoteRequirementVisibility);
   document.getElementById("ccExtraSource")?.addEventListener("change", applyPaymentSourceVisibility);
+  document.getElementById("ccPedidoModo")?.addEventListener("change", applyPaymentModeVisibility);
+  document.getElementById("ccPedidoCondicao")?.addEventListener("change", applyPaymentTermVisibility);
+  document.getElementById("ccPedidoDiasCredito")?.addEventListener("input", updateDueDateHint);
+  document.getElementById("btnCCAddPessoa")?.addEventListener("click", () => addPersonRow());
+  document.getElementById("ccPessoalTable")?.addEventListener("input", refreshPessoalTotal);
   document.getElementById("btnCCAddItem")?.addEventListener("click", () => addItemRow());
   document.getElementById("ccItemsTable")?.addEventListener("input", refreshTotals);
   document.getElementById("ccItemsTable")?.addEventListener("change", refreshTotals);

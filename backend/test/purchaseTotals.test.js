@@ -172,6 +172,17 @@ test("estado derivado: atrasado quando o vencimento já passou", () => {
   assert.equal(PT.derivedStatus(porVencer, hoje).code, "EM_ABERTO");
 });
 
+test("estado derivado: vencer hoje não é estar atrasado", () => {
+  // A data guardada é meia-noite; comparada com o instante atual, qualquer hora
+  // do dia dava o pedido como atrasado. No ecrã isso punha «Atrasado» em
+  // vermelho ao lado de «vence hoje» na mesma linha.
+  const hoje = new Date(2026, 2, 1, 15, 30);
+  const venceHoje = withPlan([{ status: "PENDENTE", amount: 1000, dueDate: new Date(2026, 2, 1) }]);
+  assert.equal(PT.derivedStatus(venceHoje, hoje).code, "EM_ABERTO");
+  const venceuOntem = withPlan([{ status: "PENDENTE", amount: 1000, dueDate: new Date(2026, 1, 28) }]);
+  assert.equal(PT.derivedStatus(venceuOntem, hoje).code, "ATRASADO");
+});
+
 test("estado derivado: o atraso ganha ao pagamento parcial", () => {
   // Uma prestação paga e a seguinte vencida: o que interessa a quem paga é que
   // está atrasado, não que já se pagou parte.
@@ -336,4 +347,65 @@ test("decorateOrder: pedido vazio não rebenta", () => {
   close(d.totals.total, 0, "total");
   close(d.paid, 0, "pago");
   assert.ok(d.status);
+});
+
+// ─── A linha como vai para a base de dados ─────────────────────────────────
+//
+// Esta função existe porque o mapeamento estava escrito duas vezes, uma por
+// rota, e as cópias divergiram: a de editar não copiava as percentagens nem a
+// excepção documental. Editar um pedido apagava o IVA e a retenção de todas as
+// linhas e o total voltava a ser quantidade × preço.
+
+test("a linha leva a fiscalidade para a base de dados", () => {
+  const r = PT.itemRowForDb(
+    {
+      name: "Cimento",
+      quantity: 100,
+      unit: "sc",
+      unitPrice: 10000,
+      notes: "entrega no estaleiro",
+      vatPercent: 14,
+      withholdingPercent: 6.5,
+      discountPercent: 5,
+      docException: "DSC",
+    },
+    3
+  );
+  assert.equal(r.vatPercent, 14);
+  assert.equal(r.withholdingPercent, 6.5);
+  assert.equal(r.discountPercent, 5);
+  assert.equal(r.docException, "DSC");
+  assert.equal(r.notes, "entrega no estaleiro");
+  assert.equal(r.order, 3, "a ordem é a da lista");
+});
+
+test("o total da linha é quantidade × preço, e nulo sem preço", () => {
+  assert.equal(PT.itemRowForDb({ name: "x", quantity: 100, unitPrice: 10000 }).totalPrice, 1000000);
+  assert.equal(PT.itemRowForDb({ name: "x", quantity: 100 }).totalPrice, null, "sem preço não se inventa total");
+  assert.equal(PT.itemRowForDb({ name: "x", quantity: 100, unitPrice: 0 }).totalPrice, null, "preço zero é como não ter preço");
+});
+
+test("uma percentagem a zero não é o mesmo que não ter percentagem", () => {
+  // Zero é uma escolha: «esta linha não tem IVA». Null é «não foi preenchido»,
+  // e é o null que manda o cálculo recuperar as percentagens do texto antigo.
+  assert.equal(PT.itemRowForDb({ name: "x", quantity: 1, vatPercent: 0 }).vatPercent, 0);
+  assert.equal(PT.itemRowForDb({ name: "x", quantity: 1 }).vatPercent, null);
+});
+
+test("os campos vazios ficam nulos, não a cadeia vazia", () => {
+  const r = PT.itemRowForDb({ name: "x", quantity: 1, unit: "", notes: "", docException: "" });
+  assert.equal(r.unit, null);
+  assert.equal(r.notes, null);
+  assert.equal(r.docException, null);
+});
+
+test("a linha que sai daqui é lida de volta pelo mesmo cálculo", () => {
+  // O que se grava e o que se soma têm de concordar: a conta da base de
+  // referência é base = qtd × preço × (1 − desc), total = base + IVA − retenção.
+  const row = PT.itemRowForDb({ name: "x", quantity: 100, unitPrice: 10000, vatPercent: 14, withholdingPercent: 6.5, discountPercent: 5 });
+  const t = PT.lineTotals(row);
+  assert.equal(t.base, 950000);
+  assert.equal(t.vat, 133000);
+  assert.equal(t.withheld, 61750);
+  assert.equal(t.total, 1021250);
 });

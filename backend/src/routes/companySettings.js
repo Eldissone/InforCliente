@@ -60,7 +60,7 @@ const paramsSchema = z
   })
   .strict();
 
-const listsSchema = z.record(z.array(z.string().trim().min(1).max(200)));
+const listsSchema = z.record(z.string(), z.array(z.string().trim().min(1).max(200)));
 
 const currenciesSchema = z.array(
   z.object({

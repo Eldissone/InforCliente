@@ -43,8 +43,12 @@
                     <div class="pf-field">
                         <label class="pf-label pf-label--lg" for="ccPedidoType">Tipo</label>
                         <select id="ccPedidoType" class="pf-select" required>
-                            <option value="GERAL">Geral</option>
-                            <option value="OBRA">Obra</option>
+                            <option value="SEDE">Pedido geral (sede)</option>
+                            <option value="OBRA">Pedido para obra</option>
+                            <option value="FROTA">Frota e equipamentos</option>
+                            <option value="IMPOSTOS">Impostos</option>
+                            <option value="PESSOAL">Pessoal</option>
+                            <option value="EMPRESTIMO">Empréstimo</option>
                         </select>
                     </div>
                     <div class="pf-field">
@@ -79,6 +83,11 @@
                         <option value="">Seleccione projecto...</option>
                     </select>
                 </div>
+                <div id="cc_rowFrota" class="pf-field hidden">
+                    <label class="pf-label pf-label--lg" for="ccPedidoViatura">Viatura / equipamento</label>
+                    <input id="ccPedidoViatura" type="text" class="pf-input"
+                        placeholder="Matrícula ou identificação">
+                </div>
                 <div id="cc_rowObraCenter" class="pf-field hidden">
                     <label class="pf-label pf-label--lg" for="ccExtraCostCenterId">Centro de Custo (Obra)</label>
                     <select id="ccExtraCostCenterId" class="pf-select">
@@ -106,6 +115,126 @@
                     <input id="ccPedidoJust" type="text" class="pf-input" placeholder="Motivo da compra">
                 </div>
             </div>
+
+            <!-- ═══ Dados próprios dos tipos sem itens ═══ -->
+            <section id="cc_blockImpostos" class="hidden pf-section pf-section--pad">
+                <h2 class="pf-card-title">
+                    <span class="material-symbols-outlined">account_balance</span>
+                    Impostos
+                </h2>
+                <p class="pf-hint">O beneficiário é a AGT. Este tipo não leva itens: o valor é o que se escreve aqui.</p>
+                <div class="pf-grid pf-grid--2">
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccImpTipo">Imposto *</label>
+                        <select id="ccImpTipo" class="pf-select">
+                            <option value="IVA">IVA</option>
+                            <option value="IRT">IRT</option>
+                            <option value="Imposto Industrial">Imposto Industrial</option>
+                            <option value="Segurança Social">Segurança Social</option>
+                            <option value="Imposto de Selo">Imposto de Selo</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccImpMes">Mês de referência *</label>
+                        <input id="ccImpMes" type="month" class="pf-input">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccImpRupe">RUPE</label>
+                        <input id="ccImpRupe" type="text" class="pf-input" placeholder="Referência para pagamento">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccImpLimite">Data-limite</label>
+                        <input id="ccImpLimite" type="date" class="pf-input">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccImpValor">Valor *</label>
+                        <input id="ccImpValor" type="number" step="0.01" min="0" class="pf-input" placeholder="0.00">
+                    </div>
+                </div>
+            </section>
+
+            <section id="cc_blockPessoal" class="hidden pf-section pf-section--pad">
+                <h2 class="pf-card-title">
+                    <span class="material-symbols-outlined">groups</span>
+                    Pessoal
+                </h2>
+                <p class="pf-hint">Uma linha por colaborador. O valor do pedido é a soma das linhas.</p>
+                <div class="pf-grid pf-grid--2">
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccPesSub">Natureza *</label>
+                        <select id="ccPesSub" class="pf-select">
+                            <option value="Salários">Salários</option>
+                            <option value="Adiantamento">Adiantamento</option>
+                            <option value="Ajudas de custo">Ajudas de custo</option>
+                            <option value="Subsídio">Subsídio</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccPesMes">Mês *</label>
+                        <input id="ccPesMes" type="month" class="pf-input">
+                    </div>
+                </div>
+                <div class="pf-table-head">
+                    <span class="pf-label">Colaboradores</span>
+                    <button type="button" id="btnCCAddPessoa" class="pf-btn-link">
+                        <span class="material-symbols-outlined">add</span>
+                        Acrescentar colaborador
+                    </button>
+                </div>
+                <div class="pf-table-scroll">
+                    <table class="pf-table" id="ccPessoalTable">
+                        <thead>
+                            <tr>
+                                <th style="width:46%">Nome</th>
+                                <th style="width:32%">IBAN</th>
+                                <th class="pf-th-right" style="width:18%">Valor</th>
+                                <th style="width:44px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ccPessoalBody"></tbody>
+                    </table>
+                </div>
+                <p class="pf-hint" style="text-align:right">Total das linhas: kz <span id="ccPessoalTotal">0.00</span></p>
+            </section>
+
+            <section id="cc_blockEmprestimo" class="hidden pf-section pf-section--pad">
+                <h2 class="pf-card-title">
+                    <span class="material-symbols-outlined">payments</span>
+                    Empréstimo
+                </h2>
+                <div class="pf-grid pf-grid--2">
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpPor">Solicitante *</label>
+                        <input id="ccEmpPor" type="text" class="pf-input" placeholder="Quem pede">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpModo">Modo de entrega</label>
+                        <select id="ccEmpModo" class="pf-select">
+                            <option value="TRANSFERENCIA">Transferência</option>
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="DESCONTO_SALARIO">Desconto no salário</option>
+                        </select>
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpValor">Valor *</label>
+                        <input id="ccEmpValor" type="number" step="0.01" min="0" class="pf-input" placeholder="0.00">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpIban">IBAN</label>
+                        <input id="ccEmpIban" type="text" class="pf-input" placeholder="AO06 ...">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpPrest">Prestações</label>
+                        <input id="ccEmpPrest" type="number" min="1" max="24" step="1" class="pf-input" placeholder="1">
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccEmpFim">Finalidade</label>
+                        <input id="ccEmpFim" type="text" class="pf-input" placeholder="Para que é">
+                    </div>
+                </div>
+            </section>
 
             <!-- ═══ Fornecedor + Datas ═══ -->
             <div class="pf-grid pf-grid--12">
@@ -186,6 +315,43 @@
                         <label class="pf-label" for="ccPedidoData">Data prevista de entrega</label>
                         <input id="ccPedidoData" type="date" class="pf-input">
                     </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccPedidoModo">Modo de pagamento</label>
+                        <select id="ccPedidoModo" class="pf-select">
+                            <option value="FORN">Transferência ao fornecedor</option>
+                            <option value="FM">Fundo de maneio</option>
+                        </select>
+                    </div>
+                    <div id="cc_rowFundo" class="pf-field hidden">
+                        <label class="pf-label" for="ccPedidoFundId">Fundo de maneio *</label>
+                        <select id="ccPedidoFundId" class="pf-select">
+                            <option value="">Seleccione o fundo...</option>
+                        </select>
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="ccPedidoCondicao">Condição de pagamento</label>
+                        <select id="ccPedidoCondicao" class="pf-select">
+                            <option value="PRONTO">Pronto pagamento</option>
+                            <option value="CREDITO">Crédito</option>
+                            <option value="PARCIAL">Prestações</option>
+                        </select>
+                    </div>
+                    <div id="cc_rowPronto" class="pf-field">
+                        <label class="pf-label" for="ccPedidoDataPretendida">Data pretendida de pagamento</label>
+                        <input id="ccPedidoDataPretendida" type="date" class="pf-input">
+                    </div>
+                    <div id="cc_rowCredito" class="pf-field hidden">
+                        <label class="pf-label" for="ccPedidoDiasCredito">Dias de crédito *</label>
+                        <input id="ccPedidoDiasCredito" type="number" min="0" max="365" step="1" class="pf-input"
+                            placeholder="30">
+                        <p id="ccPedidoVencimentoHint" class="pf-hint"></p>
+                    </div>
+                    <div id="cc_rowParcial" class="pf-field hidden">
+                        <label class="pf-label" for="ccPedidoPrestacoes">Número de prestações *</label>
+                        <input id="ccPedidoPrestacoes" type="number" min="2" max="24" step="1" class="pf-input"
+                            placeholder="3">
+                        <p class="pf-hint">Iguais, de 30 em 30 dias a partir da data pretendida.</p>
+                    </div>
                 </div>
             </div>
 
@@ -213,7 +379,7 @@
             </section>
 
             <!-- ═══ Itens ═══ -->
-            <section class="pf-section">
+            <section id="ccItemsSection" class="pf-section">
                 <div class="pf-table-head">
                     <h2 class="pf-card-title">
                         <span class="material-symbols-outlined">table_rows</span>
@@ -221,7 +387,7 @@
                     </h2>
                     <button type="button" id="btnCCAddItem" class="pf-btn-link">
                         <span class="material-symbols-outlined">add</span>
-                        Add Item
+                        Acrescentar item
                     </button>
                 </div>
                 <p id="ccItemsToolHint" class="hidden px-4 pt-3 text-[11px] font-semibold"
@@ -232,14 +398,16 @@
                     <table class="pf-table" id="ccItemsTable">
                         <thead>
                             <tr>
-                                <th style="width:26%">Description</th>
-                                <th style="width:9%">Qty</th>
-                                <th style="width:9%">Unit</th>
-                                <th style="width:12%">Unit Price</th>
-                                <th style="width:9%">IVA %</th>
-                                <th style="width:9%">Ret. %</th>
-                                <th style="width:9%">Disc. %</th>
-                                <th class="pf-th-right" style="width:13%">Line Total</th>
+                                <th style="width:22%">Descrição</th>
+                                <th style="width:7%">Qtd.</th>
+                                <th style="width:6%">Un.</th>
+                                <th style="width:11%">Preço unit.</th>
+                                <th style="width:7%">IVA %</th>
+                                <th style="width:7%">Ret. %</th>
+                                <th style="width:7%">Desc. %</th>
+                                <th style="width:12%">Obs.</th>
+                                <th style="width:10%">Documento</th>
+                                <th class="pf-th-right" style="width:11%">Total da linha</th>
                                 <th style="width:44px"></th>
                             </tr>
                         </thead>
@@ -249,7 +417,7 @@
             </section>
 
             <!-- ═══ Totais ═══ -->
-            <div class="pf-totals-wrap">
+            <div id="ccTotalsWrap" class="pf-totals-wrap">
                 <dl id="ccPedidoTotalsPanel" class="pf-totals">
                     <div class="pf-totals-rows">
                         <div class="pf-totals-row">

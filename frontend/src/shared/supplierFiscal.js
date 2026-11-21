@@ -238,22 +238,34 @@ export function defaultFiscalFlagsFromSupplier(supplier, product = null) {
   };
 }
 
-/** Totais de um pedido de compra (IVA sobre o líquido, após desconto). */
+/**
+ * Totais de um pedido de compra (IVA sobre o líquido, após desconto).
+ *
+ * A **retenção na fonte** entra na conta: o total do documento é o que o
+ * fornecedor recebe, `líquido + IVA − retenção`, a mesma fórmula do
+ * `purchaseTotals.js` no servidor. Faltava aqui, e o painel do ecrã mostrava
+ * um total maior do que o da linha e do que o que o servidor gravava — num
+ * pedido de 1 000 000 com IVA 14%, retenção 6,5% e desconto 5%, dizia
+ * 1 083 000 quando o pedido vale 1 021 250.
+ */
 export function computePedidoItemsTotals(lines = []) {
   let iliquido = 0;
   let descontos = 0;
   let iva = 0;
+  let retencao = 0;
   for (const line of lines) {
     const qty = Number(line.quantity) || 0;
     const price = Number(line.unitPrice) || 0;
     const discPct = Number(line.discountPercent) || 0;
     const vatPct = Number(line.vatPercent) || 0;
+    const whPct = Number(line.withholdingPercent) || 0;
     const base = qty * price;
     const discount = (base * discPct) / 100;
     const liquidoLinha = base - discount;
     iliquido += base;
     descontos += discount;
     iva += (liquidoLinha * vatPct) / 100;
+    retencao += (liquidoLinha * whPct) / 100;
   }
   const liquido = iliquido - descontos;
   return {
@@ -261,7 +273,8 @@ export function computePedidoItemsTotals(lines = []) {
     descontos,
     liquido,
     iva,
-    doc: liquido + iva,
+    retencao,
+    doc: liquido + iva - retencao,
   };
 }
 
@@ -278,6 +291,7 @@ export function pedidoTotalsPanelMarkup(idPrefix) {
     ["descontos", "Total Descontos:"],
     ["liquido", "Total Liquido:"],
     ["iva", "Total IVA:"],
+    ["retencao", "Total Retenção:"],
     ["doc", "Total Doc.:"],
   ];
   return `
@@ -304,6 +318,7 @@ export function collectPedidoTotalsFromItemRows(rowSelector) {
       quantity: parseFloat(row.querySelector(".cc-item-qty")?.value || "0"),
       unitPrice: parseFloat(row.querySelector(".cc-item-price")?.value || "0"),
       vatPercent: parseFloat(row.querySelector(".cc-item-vat")?.value || "0"),
+      withholdingPercent: parseFloat(row.querySelector(".cc-item-wh")?.value || "0"),
       discountPercent: parseFloat(row.querySelector(".cc-item-disc")?.value || "0"),
     });
   });
@@ -316,6 +331,7 @@ export function renderPedidoTotalsPanel(idPrefix, totals) {
     descontos: totals.descontos,
     liquido: totals.liquido,
     iva: totals.iva,
+    retencao: totals.retencao,
     doc: totals.doc,
   };
   Object.entries(map).forEach(([key, val]) => {

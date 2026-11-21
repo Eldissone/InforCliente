@@ -18,7 +18,6 @@ import {
   normalizeNif,
   setNifLookupStatus,
 } from "/shared/supplierNifLookup.js";
-import { parseItemTax } from "/shared/purchaseOrderForm.js";
 
 let allProjects = [];
 let centrosMainTab = "compras";
@@ -38,7 +37,7 @@ function switchCentrosMainTab(tab) {
   document.getElementById("centrosPanelCompras")?.classList.toggle("hidden", tab !== "compras");
 
   if (tab === "compras") {
-    switchCCSubTab("pedidos");
+    switchCCSubTab(initialCCSubTab());
   }
 
   try {
@@ -519,6 +518,22 @@ function closeCCModal(id) {
   el.classList.remove("open", "active");
 }
 
+/** As áreas que existem mesmo nesta página, pela ordem dos botões. */
+const CC_SUB_TABS = ["pedidos", "planoPagamentos"];
+
+/** A área a abrir: a da URL (`?sub=`), senão os Pedidos. */
+function initialCCSubTab() {
+  try {
+    const pedida = new URLSearchParams(window.location.search).get("sub");
+    if (CC_SUB_TABS.includes(pedida) && document.getElementById(`ccPanel${pedida.charAt(0).toUpperCase()}${pedida.slice(1)}`)) {
+      return pedida;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "pedidos";
+}
+
 function switchCCSubTab(tab) {
   document.querySelectorAll(".cc-sub-tab").forEach((b) => {
     const active = b.dataset.ccTab === tab;
@@ -533,6 +548,15 @@ function switchCCSubTab(tab) {
   if (tab === "planoPagamentos") {
     if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
     else loadCCPagamentos();
+  }
+
+  // A área fica na URL, para se poder ligar diretamente ao Plano de Pagamentos.
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("sub", tab);
+    window.history.replaceState({}, "", url);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -579,12 +603,13 @@ function initCentroCompras() {
   let pedidosSearchTimer = null;
   bindFilter("ccPedidosFilterStatus", () => { ccCache.pedidosPage = 1; loadCCPedidos(); });
   bindFilter("ccPedidosFilterPriority", () => { ccCache.pedidosPage = 1; loadCCPedidos(); });
+  bindFilter("ccPedidosFilterType", () => { ccCache.pedidosPage = 1; loadCCPedidos(); });
   document.getElementById("ccPedidosSearch")?.addEventListener("input", () => {
     clearTimeout(pedidosSearchTimer);
     pedidosSearchTimer = setTimeout(() => { ccCache.pedidosPage = 1; loadCCPedidos(); }, 300);
   });
 
-  switchCCSubTab("pedidos");
+  switchCCSubTab(initialCCSubTab());
 }
 
 // ======================== API CALLS ========================
@@ -626,28 +651,31 @@ function ccRequestedBy(r) {
   return r?.requestedByName || r?.requestedBy || "—";
 }
 
+/** O valor sem impostos: a base que o servidor decompôs (`fiscal`). */
 function ccOrderValue(r) {
   const cotacaoVal = Number(r?.cotacao?.quotedValue);
   if (r?.cotacao?.quoted && Number.isFinite(cotacaoVal) && cotacaoVal > 0 && !r.cotacao.overridden) {
     return cotacaoVal;
   }
+  const base = Number(r?.fiscal?.base);
+  if (Number.isFinite(base) && base > 0) return base;
+  // Os tipos sem itens (impostos, pessoal, empréstimo) não têm `totalValue`:
+  // o valor deles vive em `typeData` e chega decomposto em `fiscal`.
   return r?.requisition?.quotedValue ?? r?.totalValue ?? 0;
 }
 
-function ccItemGross(item) {
-  const qty = Number(item?.quantity) || 0;
-  const price = Number(item?.unitPrice) || 0;
-  const base = qty && price ? qty * price : Number(item?.totalPrice) || 0;
-  const { vat, discount } = parseItemTax(item?.notes);
-  const liquido = base - (base * discount) / 100;
-  return liquido + (liquido * vat) / 100;
-}
-
+/**
+ * O que se paga: **vem do servidor**, não se recalcula aqui.
+ *
+ * ⚠️ Era recalculado nesta página, por uma fórmula própria que lia as
+ * percentagens do **texto das notas** e **ignorava a retenção na fonte**: num
+ * pedido de 1 000 000 com IVA 14%, retenção 6,5% e desconto 5%, esta coluna
+ * dizia 1 083 000 enquanto o pedido vale 1 021 250. Era a última cópia da
+ * fórmula que o `purchaseTotals.js` veio substituir.
+ */
 function ccOrderTotalWithTax(r) {
-  const items = r?.items || [];
-  const fromItems = items.reduce((sum, item) => sum + ccItemGross(item), 0);
-  if (fromItems > 0) return fromItems;
-  if (r?.totalWithTax != null && r.totalWithTax !== "") return Number(r.totalWithTax) || 0;
+  const fromServer = Number(r?.fiscal?.total ?? r?.totalWithTax);
+  if (Number.isFinite(fromServer) && fromServer > 0) return fromServer;
   return Number(ccOrderValue(r)) || 0;
 }
 
@@ -674,6 +702,64 @@ function ccQuoteInputDefault(order) {
   if (Number.isFinite(quoted) && quoted > 0) return quoted;
   if (Number.isFinite(base) && base > 0) return base;
   return "";
+}
+
+/**
+ * Tipos de pedido de pagamento (§2.4 da base de referência), com a cor da
+ * etiqueta. Os pedidos extra não têm tipo: ficam sem etiqueta.
+ */
+const CC_REQUEST_TYPE = {
+  SEDE: { label: "Sede", cls: "bg-slate-100 text-slate-700" },
+  GERAL: { label: "Sede", cls: "bg-slate-100 text-slate-700" }, // valor antigo
+  OBRA: { label: "Obra", cls: "bg-emerald-50 text-emerald-700" },
+  FROTA: { label: "Frota", cls: "bg-blue-50 text-blue-700" },
+  IMPOSTOS: { label: "Impostos", cls: "bg-red-50 text-red-700" },
+  PESSOAL: { label: "Pessoal", cls: "bg-violet-50 text-violet-700" },
+  EMPRESTIMO: { label: "Empréstimo", cls: "bg-amber-50 text-amber-700" },
+};
+
+const CC_TERM_LABEL = { PRONTO: "Pronto pagamento", CREDITO: "Crédito", PARCIAL: "Prestações" };
+
+/** A etiqueta do tipo, com o modo «fundo de maneio» à frente quando é o caso. */
+function ccTypeChipHtml(r) {
+  const t = CC_REQUEST_TYPE[r?.requestType];
+  if (!t || r?._isExtra) return "";
+  const chip = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${t.cls}">${escapeHtml(t.label)}</span>`;
+  const fm =
+    r.paymentMode === "FM"
+      ? `<span class="px-1 py-0.5 rounded text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-200" title="${escapeAttr(
+          r.pettyCashFund?.name ? `Fundo de maneio: ${r.pettyCashFund.name}` : "Fundo de maneio"
+        )}">FM</span>`
+      : "";
+  return `<div class="flex items-center gap-1 mt-1">${chip}${fm}</div>`;
+}
+
+/** Quem recebe e em que condição, debaixo da descrição. */
+function ccPartyLineHtml(r) {
+  const quem = r?._isExtra ? r.supplierName : r?.beneficiary;
+  const termo =
+    r?.paymentTerm === "CREDITO" && r?.creditDays
+      ? `Crédito ${r.creditDays} dias`
+      : CC_TERM_LABEL[r?.paymentTerm] || "";
+  const partes = [quem, termo].filter(Boolean);
+  if (!partes.length) return "";
+  return `<div class="text-[10px] text-slate-400 font-semibold truncate">${escapeHtml(partes.join(" · "))}</div>`;
+}
+
+/**
+ * O estado derivado só aparece quando diz algo que o estado gravado não diz:
+ * em pausa, atrasado ou pago em parte. O filtro continua a ser pelo gravado.
+ */
+function ccDerivedChipHtml(r) {
+  const extra = {
+    EM_PAUSA: "bg-amber-50 text-amber-700",
+    ATRASADO: "bg-red-50 text-red-700",
+    PAGO_PARCIAL: "bg-indigo-50 text-indigo-700",
+  }[r?.derivedStatus];
+  if (!extra) return "";
+  return `<div class="mt-1"><span class="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${extra}">${escapeHtml(
+    r.derivedStatusLabel || ""
+  )}</span></div>`;
 }
 
 function ccSupplierName(r) {
@@ -821,8 +907,12 @@ function mapExtraToCCPedido(extra) {
     const line = qty && price ? qty * price : Number(item?.totalPrice) || 0;
     return sum + line;
   }, 0);
-  const withTaxFromItems = items.reduce((sum, item) => sum + ccItemGross(item), 0);
+  // A fiscalidade do pedido extra também vem decomposta do servidor
+  // (`extraRequestFiscal`): base, IVA, retenção e o líquido que o beneficiário
+  // recebe. Era recalculada aqui, sem a retenção.
   const amount = Number(extra.amount) || 0;
+  const baseDoServidor = Number(extra.baseAmount);
+  const liquidoDoServidor = Number(extra.netAmount);
   return {
     ...extra,
     _isExtra: true,
@@ -830,8 +920,12 @@ function mapExtraToCCPedido(extra) {
     requestedByName: extra.requestedBy,
     status: mapExtraStatusToCC(extra),
     extraStatus: extra.status,
-    totalValue: baseFromItems > 0 ? baseFromItems : amount,
-    totalWithTax: withTaxFromItems > 0 ? withTaxFromItems : amount,
+    totalValue: Number.isFinite(baseDoServidor) && baseDoServidor > 0 ? baseDoServidor : baseFromItems > 0 ? baseFromItems : amount,
+    totalWithTax: Number.isFinite(liquidoDoServidor) && liquidoDoServidor > 0 ? liquidoDoServidor : amount,
+    fiscal: {
+      base: Number.isFinite(baseDoServidor) && baseDoServidor > 0 ? baseDoServidor : baseFromItems > 0 ? baseFromItems : amount,
+      total: Number.isFinite(liquidoDoServidor) && liquidoDoServidor > 0 ? liquidoDoServidor : amount,
+    },
     supplierName: extra.supplierName || extra.supplierRef?.name || extra.supplier?.name || null,
   };
 }
@@ -878,11 +972,13 @@ async function loadCCPedidos() {
     const pageSize = 20;
     const status = document.getElementById("ccPedidosFilterStatus")?.value || "";
     const priority = document.getElementById("ccPedidosFilterPriority")?.value || "";
+    const requestType = document.getElementById("ccPedidosFilterType")?.value || "";
     const search = document.getElementById("ccPedidosSearch")?.value?.trim().toLowerCase() || "";
 
     const poParams = new URLSearchParams({ page: "1", pageSize: "100" });
     if (status) poParams.set("status", status);
     if (priority) poParams.set("priority", priority);
+    if (requestType) poParams.set("requestType", requestType);
     if (search) poParams.set("search", search);
 
     const [res, extraPedidos] = await Promise.all([
@@ -890,7 +986,10 @@ async function loadCCPedidos() {
       fetchCCExtraPedidos(),
     ]);
     const poItems = res.items || [];
-    const extrasFiltered = extraPedidos.filter((e) => extraMatchesCCFilters(e, { status, priority, search }));
+    // Pedido extra não tem tipo: escolhido um tipo, não entra na lista.
+    const extrasFiltered = requestType
+      ? []
+      : extraPedidos.filter((e) => extraMatchesCCFilters(e, { status, priority, search }));
     const combined = [...poItems, ...extrasFiltered]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     const total = combined.length;
@@ -950,13 +1049,16 @@ function renderCCPedidos(data) {
   }
   tbody.innerHTML = data.map((r) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-            <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}</td>
-            <td class="px-4 py-3 text-xs text-slate-600 max-w-[200px] truncate">${escapeHtml(r.description || "—")}</td>
+            <td class="px-4 py-3 text-xs font-semibold text-slate-900">${escapeHtml(ccOrderNumber(r))}${ccTypeChipHtml(r)}</td>
+            <td class="px-4 py-3 text-xs text-slate-600 max-w-[220px]">
+                <div class="truncate">${escapeHtml(r.shortDescription || r.description || "—")}</div>
+                ${ccPartyLineHtml(r)}
+            </td>
             <td class="px-4 py-3 text-xs text-slate-600">${escapeHtml(ccRequestedBy(r))}</td>
             <td class="px-4 py-3 text-xs text-slate-500 text-right">${formatCurrency(ccOrderValue(r))}</td>
             <td class="px-4 py-3 text-xs font-bold text-slate-900 text-right">${formatCurrency(ccOrderTotalWithTax(r))}</td>
             <td class="px-4 py-3 text-xs">${ccPriorityHtml(r.priority)}</td>
-            <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span></td>
+            <td class="px-4 py-3"><span class="${ccGetStatusClass(r.status)}">${ccFormatStatus(r.status)}</span>${ccDerivedChipHtml(r)}</td>
             <td class="px-4 py-3 text-center">
                 ${ccPedidoActionsHtml(r)}
             </td>
@@ -969,7 +1071,12 @@ async function loadCCPagamentos() {
     const res = await apiRequest("/purchase-orders?status=EM_PAGAMENTO&pageSize=50");
     const data = res.items || [];
     ccCache.pagamentos = data;
-    const tbody = document.getElementById("ccPagTableBody") || document.getElementById("planTableBody");
+    // ⚠️ Havia aqui um recurso ao `planTableBody`, que é a lista do Plano de
+    // Pagamentos — uma tabela de 11 colunas desenhada pelo `financeiro.js`.
+    // Como o `ccPagTableBody` não existe nesta página, criar um plano de
+    // pagamento escrevia estas 6 colunas por cima dela e dava a lista por
+    // estragada até se recarregar a página.
+    const tbody = document.getElementById("ccPagTableBody");
     if (!tbody) return;
     if (!data.length) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-slate-400 text-xs">Nenhum pagamento pendente.</td></tr>`;
@@ -1497,7 +1604,9 @@ async function submitCCPlano(e) {
     closeCCModal("modalPlanoPagamento");
     showToast("Plano de pagamento criado", "success");
     await openCCReqDrawer(id);
-    loadCCPagamentos();
+    // O plano é do `financeiro.js`: quem o redesenha é ele.
+    if (typeof window.reloadFinanceiroPlan === "function") window.reloadFinanceiroPlan();
+    else loadCCPagamentos();
     loadCCPedidos();
   } catch (err) {
     showToast(ccApiError(err), "error");

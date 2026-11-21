@@ -154,6 +154,40 @@ function orderTotals(order) {
   return { base: v, vat: 0, withheld: 0, total: v, lines: [], source: quoted > 0 ? "cotacao" : "pedido" };
 }
 
+/**
+ * Uma linha do pedido como vai para a base de dados — **para criar e para editar**.
+ *
+ * Estava escrita duas vezes, uma em cada rota, e as duas cópias divergiram: a de
+ * editar não copiava `vatPercent`, `withholdingPercent`, `discountPercent` nem
+ * `docException`. Editar um pedido apagava a fiscalidade de todas as linhas e
+ * punha o total a quantidade × preço outra vez. Duas cópias da mesma regra é
+ * uma a mais.
+ *
+ * @param {object} item a linha validada que vem do pedido HTTP
+ * @param {number} index a ordem em que aparece
+ */
+function itemRowForDb(item, index = 0) {
+  const quantity = N(item?.quantity);
+  // Sem preço utilizável, o total fica **nulo**, não zero: zero diria que a
+  // linha custa nada, quando o que se passa é que ainda não tem preço — é o
+  // caso de tudo o que vai à cotação. (Antes gravava-se preço nulo e total
+  // zero na mesma linha, o que era dizer as duas coisas ao mesmo tempo.)
+  const unitPrice = N(item?.unitPrice) > 0 ? N(item.unitPrice) : null;
+  return {
+    name: item?.name,
+    quantity: item?.quantity,
+    unit: item?.unit || null,
+    unitPrice,
+    totalPrice: unitPrice === null ? null : quantity * unitPrice,
+    notes: item?.notes || null,
+    vatPercent: item?.vatPercent ?? null,
+    withholdingPercent: item?.withholdingPercent ?? null,
+    discountPercent: item?.discountPercent ?? null,
+    docException: item?.docException || null,
+    order: index,
+  };
+}
+
 /** Quanto já foi pago, pelas prestações liquidadas. */
 function paidAmount(order) {
   const inst = order?.paymentPlan?.installments || [];
@@ -167,6 +201,12 @@ function nextDueDate(order) {
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   if (inst.length) return inst[0].dueDate;
   return order?.dueDate || null;
+}
+
+/** O dia (sem horas), para comparar vencimentos sem o instante contar. */
+function dayOf(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 /**
@@ -194,8 +234,14 @@ function derivedStatus(order, today = new Date()) {
   // O atraso vem antes do pagamento parcial, como no protótipo: um pedido com
   // uma prestação paga e a seguinte vencida está **atrasado** — é isso que
   // interessa a quem paga, não que já se pagou parte.
+  //
+  // Compara-se o **dia**, não o instante: vencer hoje não é estar atrasado. A
+  // data guardada é meia-noite, por isso qualquer hora do dia a dava como
+  // passada — no Centro de Pagamentos um pedido que vence hoje aparecia
+  // «Atrasado» em vermelho ao lado do seu próprio «vence hoje». É a mesma
+  // regra do `daysPastDue` do financeiro (dia local, sem horas).
   const due = nextDueDate(order);
-  if (due && new Date(due) < today) return { code: "ATRASADO", label: "Atrasado", severity: "bad" };
+  if (due && dayOf(new Date(due)) < dayOf(today)) return { code: "ATRASADO", label: "Atrasado", severity: "bad" };
 
   if (paid > 0) return { code: "PAGO_PARCIAL", label: "Pago parcial", severity: "warn" };
 
@@ -308,6 +354,7 @@ module.exports = {
   REQUEST_TYPES,
   ITEM_TYPES,
   hasItems,
+  itemRowForDb,
   itemRates,
   parseRatesFromNotes,
   itemGross,

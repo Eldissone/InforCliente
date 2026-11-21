@@ -144,4 +144,30 @@ function summarizeUnits(rawUnits) {
   };
 }
 
-module.exports = { CANONICAL, ALIASES, normalizeUnit, summarizeUnits };
+/**
+ * Unidade de um produto do armazém (`enum ProductUnit`) na grafia do orçamento.
+ *
+ * O armazém tem o seu próprio enum, mais curto que a lista do orçamento. O que
+ * não tem correspondência passa pelo `normalizeUnit`, e se continuar por
+ * reconhecer volta tal e qual — nunca se adivinha.
+ */
+const PRODUCT_UNITS = {
+  UN: "un",
+  KG: "kg",
+  M: "m",
+  L: "L",
+  MT2: "m2",
+  MT3: "m3",
+  // CX (caixa) e PAR não têm equivalente na lista do orçamento. Não se
+  // traduzem para «un», que seria perder a informação de que vêm em caixa ou
+  // ao par; passam como estão, assinalados.
+};
+
+function productUnit(value) {
+  const key = String(value ?? "").trim().toUpperCase();
+  const hit = PRODUCT_UNITS[key];
+  if (hit) return { unit: hit, original: String(value ?? "").trim(), matched: true };
+  return normalizeUnit(value);
+}
+
+module.exports = { CANONICAL, ALIASES, PRODUCT_UNITS, normalizeUnit, productUnit, summarizeUnits };

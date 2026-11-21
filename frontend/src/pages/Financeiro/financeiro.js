@@ -91,11 +91,17 @@ function mapExtraToTimelineItem(extra) {
   }
   return {
     id: extra.id,
-    description: extra.description,
+    // A descrição curta do tipo («IVA · 2026-10») diz mais numa linha estreita
+    // do que o texto livre do pedido.
+    description: extra.shortDescription || extra.description,
     budgetedAmount: extra.amount,
     paymentDate: refDate,
     project: extra.project,
     costCenter: extra.costCenter,
+    // Quem recebe. Faltava: o calendário escrevia «Sem fornecedor» em todas as
+    // linhas, mesmo nas que têm fornecedor — e mais ainda nos pedidos de
+    // impostos, pessoal e empréstimo, onde quem recebe não é um fornecedor.
+    supplier: extra.beneficiary || extra.supplierName || extra.supplierRef?.name || null,
     currency: extra.currency || "AOA",
     status: extra.status === "PAGO" ? "CONFIRMADO" : "PENDENTE",
     timelineStatus,
@@ -207,6 +213,12 @@ function mapPurchaseOrderToPlanExtra(order) {
     order.requisition?.supplierName ||
     order.requisition?.supplier?.name ||
     null;
+  // Os tipos sem fornecedor guardam o IBAN nos seus próprios dados: o
+  // empréstimo tem um, o pessoal tem um por colaborador (só se mostra quando é
+  // um só — com vários, a lista do pedido é que os tem).
+  const linhasPessoal = Array.isArray(order.typeData?.linhas) ? order.typeData.linhas : [];
+  const ibanDoTipo =
+    order.typeData?.iban || (linhasPessoal.length === 1 ? linhasPessoal[0].iban : null) || null;
 
   return {
     id: order.id,
@@ -222,7 +234,10 @@ function mapPurchaseOrderToPlanExtra(order) {
     createdAt: order.createdAt,
     approvedAt: approval?.decidedAt || null,
     approvedBy: approval?.approverName || null,
-    paymentDueDate: pendingInstallment?.dueDate || approval?.decidedAt || order.createdAt,
+    // A data que o pedido traz (pronto pagamento com data pretendida, crédito
+    // com vencimento) vem antes da data da aprovação: era ignorada, e o pedido
+    // caía no calendário no dia em que foi aprovado.
+    paymentDueDate: pendingInstallment?.dueDate || order.dueDate || approval?.decidedAt || order.createdAt,
     paidAt:
       extraStatus === "PAGO"
         ? paidInstallment?.paidAt || paidHistory?.createdAt || order.updatedAt
@@ -234,7 +249,21 @@ function mapPurchaseOrderToPlanExtra(order) {
     costCenterId: order.costCenterId || null,
     supplierName,
     supplierNif: order.supplier?.nif || order.requisition?.supplier?.nif || null,
-    supplierIban: order.supplier?.iban || order.requisition?.supplier?.iban || null,
+    supplierIban: order.supplier?.iban || order.requisition?.supplier?.iban || ibanDoTipo,
+    // Pedido de pagamento (§2.4): o tipo verdadeiro, quem recebe e a condição.
+    // O `type` acima é só «OBRA» ou «GERAL», que é o que os filtros desta
+    // página usam; os seis tipos ficavam pelo caminho e no plano aparecia
+    // «Extra» em todos — até num pedido de impostos.
+    requestType: order.requestType || null,
+    paymentMode: order.paymentMode || null,
+    paymentTerm: order.paymentTerm || null,
+    creditDays: order.creditDays ?? null,
+    onHold: Boolean(order.onHold),
+    fundName: order.pettyCashFund?.name || null,
+    beneficiary: order.beneficiary || null,
+    shortDescription: order.shortDescription || null,
+    derivedStatus: order.derivedStatus || null,
+    derivedStatusLabel: order.derivedStatusLabel || null,
     supplierRef: order.supplier || order.requisition?.supplier || null,
     proformaUrl: docs.proformaUrl,
     comprovativoUrl: docs.comprovativoUrl,
@@ -542,19 +571,70 @@ function renderPlanPaymentRow(p) {
     </tr>`;
 }
 
+/**
+ * Tipos de pedido de pagamento (§2.4), com a cor da etiqueta. Um pedido extra
+ * não tem tipo: continua a ser «Extra».
+ */
+const PLAN_REQUEST_TYPE = {
+  SEDE: { label: "Sede", cls: "text-slate-600 bg-slate-100" },
+  GERAL: { label: "Sede", cls: "text-slate-600 bg-slate-100" },
+  OBRA: { label: "Obra", cls: "text-emerald-700 bg-emerald-50" },
+  FROTA: { label: "Frota", cls: "text-blue-700 bg-blue-50" },
+  IMPOSTOS: { label: "Impostos", cls: "text-red-700 bg-red-50" },
+  PESSOAL: { label: "Pessoal", cls: "text-violet-700 bg-violet-50" },
+  EMPRESTIMO: { label: "Empréstimo", cls: "text-amber-700 bg-amber-50" },
+};
+
+const PLAN_TERM_LABEL = { PRONTO: "Pronto pagamento", CREDITO: "Crédito", PARCIAL: "Prestações" };
+
+function planTypeOf(extra) {
+  return (extra?._isPurchaseOrder && PLAN_REQUEST_TYPE[extra?.requestType]) || null;
+}
+
+/** A etiqueta à frente da descrição: o tipo do pedido, ou «Extra». */
+function planTypeChip(extra) {
+  const t = planTypeOf(extra);
+  if (!t) {
+    return `<span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>`;
+  }
+  const fm =
+    extra.paymentMode === "FM"
+      ? `<span class="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1 py-0.5 rounded mr-1.5" title="${escapeAttr(
+          extra.fundName ? `Fundo de maneio: ${extra.fundName}` : "Fundo de maneio"
+        )}">FM</span>`
+      : "";
+  return `<span class="text-[10px] font-black uppercase tracking-wide ${t.cls} px-1.5 py-0.5 rounded mr-1.5">${escapeHtml(
+    t.label
+  )}</span>${fm}`;
+}
+
+/** A condição acordada, para a dica da linha. */
+function planTermLabel(extra) {
+  if (!extra?.paymentTerm) return "";
+  return extra.paymentTerm === "CREDITO" && extra.creditDays
+    ? `Crédito ${extra.creditDays} dias`
+    : PLAN_TERM_LABEL[extra.paymentTerm] || "";
+}
+
 function renderPlanExtraRow(extra, p) {
   const meta = EXTRA_STATUS_META[extra?.status] || EXTRA_STATUS_META.PENDENTE;
   const cur = extra?.currency || "AOA";
+  // Quem recebe: nos pedidos de pagamento é o beneficiário (a AGT, os
+  // colaboradores, quem pediu o empréstimo), não só o fornecedor.
   const supplier =
+    extra?.beneficiary ||
     extra?.supplierName ||
     extra?.supplierRef?.name ||
     extraRequestPaymentLabel(extra);
+  const titulo = [extra?.number, extra?.shortDescription || extra?.description, planTermLabel(extra)]
+    .filter(Boolean)
+    .join(" · ");
 
   return `
     <tr class="group">
       <td>${planRowDate(p, extra)}</td>
-      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr([extra?.number, extra?.description].filter(Boolean).join(" · "))}">
-        <span class="text-[10px] font-black uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mr-1.5">Extra</span>${escapeHtml(extra?.description || extra?.number || "—")}
+      <td class="text-sm font-medium text-slate-900 max-w-xs truncate" title="${escapeAttr(titulo)}">
+        ${planTypeChip(extra)}${escapeHtml(extra?.shortDescription || extra?.description || extra?.number || "—")}
       </td>
       <td class="text-xs text-slate-600 max-w-[160px] truncate" title="${escapeAttr(supplier)}">${escapeHtml(supplier)}</td>
       <td>${formatIbanCell(extra?.supplierIban || extra?.supplierRef?.iban)}</td>
@@ -564,8 +644,14 @@ function renderPlanExtraRow(extra, p) {
     comprovativoUrl: extra?.comprovativoUrl,
     faturaUrl: extra?.faturaUrl,
   })}
-      <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">Extra</span></td>
-      <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}</td>
+      <td class="text-center"><span class="text-[10px] font-bold text-slate-400 uppercase">${escapeHtml(
+        planTypeOf(extra)?.label || "Extra"
+      )}</span></td>
+      <td class="text-center">${renderStatusBadge(meta.label, meta.badge, meta.icon)}${
+        extra?.onHold
+          ? `<div class="mt-1"><span class="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Em pausa</span></div>`
+          : ""
+      }</td>
       <td class="text-center">${renderPlanExtraActions(extra)}</td>
     </tr>`;
 }
@@ -584,7 +670,11 @@ const PLAN_TABLE_COLSPAN = 11;
 function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) {
   const cur = extra.currency || "AOA";
   const fields = [
-    { label: "Tipo", value: extra.type === "GERAL" ? "Geral" : "Obra", wide: false },
+    {
+      label: "Tipo",
+      value: planTypeOf(extra)?.label || (extra.type === "GERAL" ? "Geral" : "Obra"),
+      wide: false,
+    },
     { label: "Referência", value: extraRequestReference(extra), wide: false },
     { label: "Descrição", value: extra.description || "—", wide: true },
     {
@@ -669,6 +759,11 @@ function renderExtraDetailGrid(extra, { showNotes = true, dense = false } = {}) 
   }
   if (extra._isPurchaseOrder) {
     fields.push({ label: "Nº pedido", value: extra.number || "—", wide: false });
+    if (planTermLabel(extra)) fields.push({ label: "Condição", value: planTermLabel(extra), wide: false });
+    if (extra.beneficiary) fields.push({ label: "Quem recebe", value: extra.beneficiary, wide: false });
+    if (extra.paymentMode === "FM") {
+      fields.push({ label: "Pago pelo fundo", value: extra.fundName || "Fundo de maneio", wide: false });
+    }
     if (extra.paymentSource !== "SOLICITACAO_TRANSFERENCIA") {
       fields.push(
         {

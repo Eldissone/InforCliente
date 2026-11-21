@@ -17,6 +17,7 @@ const { asyncHandler } = require("../utils/http");
 const { calcBudget, QTY_SHEET, CATS, PRICE_METHODS } = require("../services/budget/calc");
 const { normalizeUnit, summarizeUnits } = require("../services/budget/units");
 const { buildCatalog, searchCatalog, catalogStats } = require("../services/budget/articleCatalog");
+const { consumptionRows, CONSUMPTION_TYPES } = require("../services/budget/stockConsumption");
 
 const {
   ALL_SHEETS,
@@ -534,10 +535,10 @@ budgetRoutes.get(
 
 const patchSchema = z.object({
   version: z.coerce.number().int().positive(),
-  params: z.record(z.any()).optional(),
-  sheets: z.record(z.array(z.record(z.any()))).optional(),
-  lists: z.record(z.any()).optional(),
-  dispatch: z.record(z.any()).optional(),
+  params: z.record(z.string(), z.any()).optional(),
+  sheets: z.record(z.string(), z.array(z.record(z.string(), z.any()))).optional(),
+  lists: z.record(z.string(), z.any()).optional(),
+  dispatch: z.record(z.string(), z.any()).optional(),
   status: z.enum(BUDGET_STATUSES).optional(),
 });
 
@@ -749,6 +750,111 @@ budgetRoutes.post(
     });
 
     res.json({ ...serialize(updated), importado: resumo });
+  })
+);
+
+// ──────────── materiais: trazer o que a obra consumiu do armazém ──────────
+
+/**
+ * Traz para a folha de Materiais o que saiu do armazém para a obra.
+ *
+ * Só as quantidades: **o preço fica por preencher**, porque o armazém não o
+ * sabe (nem o stock tem custo médio nem os movimentos têm custo unitário). O
+ * orçamento fica com o alerta «Custo unitário não preenchido» a apontar ao que
+ * falta valorizar.
+ *
+ * `?preview=1` não grava. `mode`: "replace" (por omissão) ou "append".
+ */
+budgetRoutes.post(
+  "/:id/import-consumption",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const mode = req.body?.mode === "append" ? "append" : "replace";
+    const preview = req.query.preview === "1" || req.body?.preview === true;
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    if (budget.locked) {
+      return res.status(409).json({
+        error: "ORCAMENTO_BLOQUEADO",
+        errors: ["O orçamento está adjudicado: só pode ser consultado."],
+      });
+    }
+
+    // A obra é a que o orçamento diz, ou a que vier no corpo.
+    const projectCode = budget.params?.codObra || null;
+    const projectId =
+      String(req.body?.projectId || "") ||
+      (projectCode
+        ? (await prisma.project.findFirst({ where: { code: projectCode }, select: { id: true } }))?.id
+        : null);
+
+    if (!projectId) {
+      return res.status(400).json({
+        error: "PROJECT_REQUIRED",
+        errors: ["Este orçamento não está ligado a nenhuma obra. Indique de que obra importar."],
+      });
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, code: true, name: true },
+    });
+    if (!project) return res.status(404).json({ error: "PROJECT_NOT_FOUND" });
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { projectId, type: { in: CONSUMPTION_TYPES } },
+      select: {
+        productId: true,
+        type: true,
+        quantity: true,
+        product: { select: { name: true, sku: true, unit: true } },
+      },
+    });
+
+    const { rows, resumo } = consumptionRows(movements, { currency: budget.currencyBase || "AOA" });
+    if (!rows.length) {
+      return res.status(422).json({
+        error: "SEM_CONSUMO",
+        errors: [`A obra ${project.code || project.name} não tem saídas de armazém registadas.`],
+      });
+    }
+
+    const info = { ...resumo, obra: { id: project.id, code: project.code, name: project.name }, modo: mode };
+    if (preview) return res.json({ preview: true, ...info, rows });
+
+    if (req.body?.version !== undefined && req.body.version !== budget.version) {
+      return res.status(409).json({
+        error: "VERSAO_DESATUALIZADA",
+        errors: [`Alguém gravou este orçamento entretanto (versão ${budget.version}, a sua é ${req.body.version}).`],
+        current: serialize(budget),
+      });
+    }
+
+    const doc = asDocument(budget);
+    const atuais = Array.isArray(doc.sheets.mat) ? doc.sheets.mat : [];
+    // Em "replace" só se substituem as linhas que ninguém preencheu: uma linha
+    // já valorizada é trabalho de alguém e não se deita fora em silêncio.
+    const preservadas = mode === "append" ? atuais : atuais.filter((r) => Number(r.preco) > 0);
+    doc.sheets = { ...doc.sheets, mat: [...preservadas, ...rows] };
+    info.preservadas = preservadas.length;
+
+    const R = calcBudget(doc);
+    const updated = await prisma.budget.update({
+      where: { id },
+      data: {
+        ...columnsFor(doc, R),
+        params: doc.params,
+        sheets: doc.sheets,
+        lists: doc.lists,
+        dispatch: doc.dispatch,
+        version: { increment: 1 },
+      },
+      include: { client: { select: { id: true, name: true, code: true } } },
+    });
+
+    res.json({ ...serialize(updated), importado: info });
   })
 );
 
@@ -1123,7 +1229,7 @@ budgetRoutes.post(
         awardDate: optDate,
         contractNumber: optText(80),
         actualStartDate: optDate,
-        paymentTerms: z.record(z.any()).optional(),
+        paymentTerms: z.record(z.string(), z.any()).optional(),
       })
       .parse(req.body || {});
 
