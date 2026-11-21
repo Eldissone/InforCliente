@@ -10,6 +10,7 @@
  */
 
 const express = require("express");
+const multer = require("multer");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requirePermission } = require("../middlewares/auth");
@@ -17,6 +18,17 @@ const { asyncHandler } = require("../utils/http");
 const { calcBudget } = require("../services/budget/calc");
 const { allocate, peek } = require("../services/budget/numbering");
 const { normalizeTerms, validateTerms, describeTerms, buildClientSchedule } = require("../services/budget/paymentTerms");
+const PD = require("../services/proposal/document");
+const PR = require("../services/proposal/render");
+const { STANDARD_SETTING_KEY } = require("../services/proposal/standard");
+const { uploadToSupabase } = require("../utils/storage");
+
+/** Imagens do documento: capa, fotografias, mapas e a assinatura. */
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
+const IMAGENS_ACEITES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const MODULE = "comercial";
 const proposalRoutes = express.Router();
@@ -57,6 +69,50 @@ function defaultBody(budget, R, terms) {
   };
 }
 
+/**
+ * O texto-padrão da empresa, se estiver gravado.
+ *
+ * `CompanySetting` é uma tabela chave/valor: a empresa edita uma vez o seu
+ * texto (identificação, condições de pagamento, garantia, contactos…) e todas
+ * as propostas novas nascem com ele. Sem nada gravado, vale o padrão do código.
+ */
+async function loadStandard() {
+  const row = await prisma.companySetting.findUnique({ where: { key: STANDARD_SETTING_KEY } });
+  const v = row?.value;
+  return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+}
+
+/** Os orçamentos da proposta: o principal primeiro, depois os outros lotes. */
+async function loadBudgets(row) {
+  const extra = Array.isArray(row.extraBudgetIds) ? row.extraBudgetIds.filter((x) => typeof x === "string") : [];
+  const ids = [row.budgetId, ...extra.filter((id) => id !== row.budgetId)];
+  const rows = await prisma.budget.findMany({ where: { id: { in: ids } } });
+  // Pela ordem pedida, não pela que a base devolve.
+  return ids.map((id) => rows.find((b) => b.id === id)).filter(Boolean);
+}
+
+/**
+ * O documento pronto a desenhar.
+ *
+ * Guardado, devolve-se o que está guardado (foi editado por alguém). Vazio,
+ * monta-se a partir do orçamento — é o que acontece às propostas feitas antes
+ * de o documento existir.
+ */
+async function documentOf(row) {
+  const options = { ...PD.DEFAULT_OPTIONS, ...(row.docOptions || {}) };
+  const stored = row.document;
+  if (stored && typeof stored === "object" && stored.documento) return { doc: stored, options, built: false };
+  const budgets = await loadBudgets(row);
+  if (!budgets.length) return { doc: null, options, built: false };
+  const doc = PD.buildDocument(budgets, {
+    standard: await loadStandard(),
+    options,
+    reference: row.number,
+    revision: 0,
+  });
+  return { doc, options, built: true };
+}
+
 function serialize(row, { withSchedule = false } = {}) {
   const out = {
     id: row.id,
@@ -75,6 +131,9 @@ function serialize(row, { withSchedule = false } = {}) {
         }
       : null,
     body: row.body || {},
+    document: row.document && row.document.documento ? row.document : null,
+    docOptions: { ...PD.DEFAULT_OPTIONS, ...(row.docOptions || {}) },
+    extraBudgetIds: Array.isArray(row.extraBudgetIds) ? row.extraBudgetIds : [],
     paymentTerms: row.paymentTerms || {},
     currency: row.currency,
     totalExVat: num(row.totalExVat),
@@ -124,11 +183,31 @@ proposalRoutes.get(
   requirePermission(MODULE, "tab_propostas"),
   asyncHandler(async (_req, res) => {
     const next = await peek("PROP");
-    res.json({ statuses: STATUSES, nextNumber: next.number });
+    res.json({ statuses: STATUSES, nextNumber: next.number, priceListFormats: PD.PRICE_LIST_FORMATS });
   })
 );
 
 // ───────────────────────── lista ─────────────────────────
+
+/**
+ * O modelo em branco, para o navegador desenhar a pré-visualização.
+ *
+ * É o mesmo ficheiro que o servidor usa para o PDF, por isso o que se vê no
+ * ecrã é o que sai no ficheiro. São ~470 KB (as fontes e os ícones vão lá
+ * dentro), pelo que se pede ao navegador que o guarde: só muda quando o
+ * ficheiro mudar.
+ */
+proposalRoutes.get(
+  "/template",
+  requirePermission(MODULE, "tab_propostas"),
+  asyncHandler(async (_req, res) => {
+    const { mtime, size } = PR.templateStat();
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "private, max-age=86400");
+    res.set("ETag", `W/"${size}-${mtime.getTime()}"`);
+    res.send(PR.loadTemplate());
+  })
+);
 
 proposalRoutes.get(
   "/",
@@ -195,12 +274,23 @@ proposalRoutes.post(
       ? new Date(new Date(`${P.data}T00:00:00Z`).getTime() + (Number(P.validade) || 30) * 86400000)
       : new Date(Date.now() + (Number(P.validade) || 30) * 86400000);
 
+    // O documento nasce aqui: a lista de preços sai do orçamento e os textos do
+    // padrão da empresa. Fica gravado para se poder editar sem mexer no orçamento.
+    const document = PD.buildDocument([budget], {
+      standard: await loadStandard(),
+      options: PD.DEFAULT_OPTIONS,
+      reference: number,
+      revision: 0,
+    });
+
     const row = await prisma.proposal.create({
       data: {
         number,
         budgetId: budget.id,
         status: "RASCUNHO",
         body: defaultBody(budget, R, terms),
+        document,
+        docOptions: PD.DEFAULT_OPTIONS,
         paymentTerms: terms,
         currency: budget.currencyBase || "AOA",
         totalExVat: Math.round(R.PVsi * 100) / 100,
@@ -238,6 +328,15 @@ proposalRoutes.get(
 
 const patchSchema = z.object({
   body: z.record(z.string(), z.any()).optional(),
+  /** O documento completo (o que o modelo desenha). */
+  document: z.record(z.string(), z.any()).optional(),
+  docOptions: z
+    .object({
+      fmt: z.enum(["mapa", "detalhada", "artigo_incl", "artigo_sep", "capitulos", "global"]).optional(),
+      mat: z.enum(["linhas", "capitulo"]).optional(),
+      serv: z.enum(["linhas", "capitulo", "global"]).optional(),
+    })
+    .optional(),
   paymentTerms: z.record(z.string(), z.any()).optional(),
   validUntil: optDate,
   pdfUrl: optText(500),
@@ -267,6 +366,11 @@ proposalRoutes.patch(
 
     const data = {};
     if (input.body) data.body = { ...(existing.body || {}), ...input.body };
+    // O documento grava-se inteiro, não campo a campo: as secções, os anexos e
+    // a lista de preços são um conjunto, e juntar metades de duas versões dava
+    // um documento que ninguém escreveu.
+    if (input.document) data.document = input.document;
+    if (input.docOptions) data.docOptions = { ...PD.DEFAULT_OPTIONS, ...(existing.docOptions || {}), ...input.docOptions };
     if (input.validUntil !== undefined) data.validUntil = input.validUntil;
     if (input.pdfUrl !== undefined) data.pdfUrl = input.pdfUrl;
     if (input.paymentTerms) {
@@ -373,6 +477,168 @@ proposalRoutes.delete(
     }
     await prisma.proposal.delete({ where: { id } });
     res.json({ ok: true, deleted: true });
+  })
+);
+
+// ───────────────────────── o documento ─────────────────────────
+
+/** O documento de uma proposta, montado do orçamento se ainda não existir. */
+proposalRoutes.get(
+  "/:id/document",
+  requirePermission(MODULE, "tab_propostas"),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.proposal.findUnique({ where: { id: String(req.params.id) } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    const { doc, options, built } = await documentOf(row);
+    if (!doc) return res.status(409).json({ error: "ORCAMENTO_NAO_EXISTE" });
+    res.json({ document: doc, options, built, total: PD.documentTotal(doc) });
+  })
+);
+
+/**
+ * Refazer a lista de preços a partir do orçamento, **sem perder os textos**.
+ *
+ * Serve para duas coisas: mudar o formato da lista (detalhada, por artigo, por
+ * capítulos, global) e trazer o orçamento outra vez depois de ele mudar. O que
+ * foi escrito à mão — memória descritiva, condições técnicas, cronograma,
+ * organograma, anexos — fica como estava: só a parte comercial é refeita.
+ */
+proposalRoutes.post(
+  "/:id/document/rebuild",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const row = await prisma.proposal.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    if (["ACEITE", "RECUSADA"].includes(row.status)) {
+      return res.status(409).json({ error: "PROPOSTA_DECIDIDA", errors: ["A proposta já tem decisão do cliente: não se altera."] });
+    }
+    const input = z
+      .object({
+        fmt: z.enum(["mapa", "detalhada", "artigo_incl", "artigo_sep", "capitulos", "global"]).optional(),
+        mat: z.enum(["linhas", "capitulo"]).optional(),
+        serv: z.enum(["linhas", "capitulo", "global"]).optional(),
+        /** `true` refaz o documento todo, textos incluídos. */
+        tudo: z.boolean().optional(),
+      })
+      .parse(req.body || {});
+
+    const options = { ...PD.DEFAULT_OPTIONS, ...(row.docOptions || {}), ...input };
+    const budgets = await loadBudgets(row);
+    if (!budgets.length) return res.status(409).json({ error: "ORCAMENTO_NAO_EXISTE" });
+    const fresh = PD.buildDocument(budgets, {
+      standard: await loadStandard(),
+      options,
+      reference: row.number,
+      revision: (row.document || {}).documento?.revisao ?? 0,
+    });
+
+    const antigo = row.document && row.document.documento ? row.document : null;
+    const document = !antigo || input.tudo ? fresh : { ...antigo, comercial: { ...antigo.comercial, lotes: fresh.comercial.lotes } };
+
+    const R = calcBudget(budgets[0]);
+    const updated = await prisma.proposal.update({
+      where: { id },
+      data: {
+        document,
+        docOptions: options,
+        totalExVat: Math.round(R.PVsi * 100) / 100,
+        totalInVat: Math.round(R.PVfinal * 100) / 100,
+      },
+      include: INCLUDE,
+    });
+
+    /*
+     * Uma lista vazia num orçamento que tem preço é um aviso, não um erro.
+     *
+     * Acontece quando se pede um formato derivado das folhas de custo
+     * (detalhada, por artigo, por capítulos) num orçamento cujo preço vem do
+     * mapa de quantidades e cujas folhas de custo ainda não têm preços — é o
+     * caso de quase todos os orçamentos em carteira. Deixa-se passar, porque
+     * pode estar a meio do trabalho, mas diz-se, para ninguém enviar ao cliente
+     * uma proposta com a lista em branco.
+     */
+    const total = PD.documentTotal(document);
+    const aviso =
+      total < 0.01 && R.PVsi > 0.01
+        ? `A lista de preços ficou vazia: o orçamento vale ${Math.round(R.PVsi)} mas as folhas de custo não têm preços. Use o formato «mapa de quantidades» ou preencha os preços no orçamento.`
+        : null;
+    res.json({ ...serialize(updated, { withSchedule: true }), total, aviso });
+  })
+);
+
+/**
+ * Uma imagem para o documento (capa, fotografia, mapa ou assinatura).
+ *
+ * Fica guardada como qualquer outro anexo do sistema e o documento guarda só o
+ * caminho. Na extração é que as imagens entram dentro do ficheiro (ver
+ * `render.inlineImages`), para o PDF e o HTML não dependerem do servidor.
+ */
+proposalRoutes.post(
+  "/:id/images",
+  requirePermission(MODULE, "edit"),
+  imageUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.proposal.findUnique({ where: { id: String(req.params.id) }, select: { id: true, status: true } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    if (["ACEITE", "RECUSADA"].includes(row.status)) {
+      return res.status(409).json({ error: "PROPOSTA_DECIDIDA", errors: ["A proposta já tem decisão do cliente: não se altera."] });
+    }
+    if (!req.file) return res.status(400).json({ error: "SEM_FICHEIRO" });
+    if (!IMAGENS_ACEITES.has(req.file.mimetype)) {
+      return res.status(400).json({ error: "FORMATO_NAO_ACEITE", errors: ["Aceita-se JPEG, PNG, WebP ou GIF."] });
+    }
+    const ext = (req.file.originalname || "img.jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const url = await uploadToSupabase(`propostas/${row.id}/${Date.now()}.${ext}`, req.file.buffer, req.file.mimetype);
+    res.status(201).json({ url, name: req.file.originalname || null, size: req.file.size });
+  })
+);
+
+// ───────────────────────── extrair ─────────────────────────
+
+/** O documento em HTML, igual ao que se vê, para guardar ou imprimir. */
+proposalRoutes.get(
+  "/:id/export.html",
+  requirePermission(MODULE, "tab_propostas"),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.proposal.findUnique({ where: { id: String(req.params.id) } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    const { doc, options } = await documentOf(row);
+    if (!doc) return res.status(409).json({ error: "ORCAMENTO_NAO_EXISTE" });
+    const final = await PR.inlineImages(PD.finalizeDocument(doc, options));
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="${PR.fileName(final, "html")}"`);
+    res.send(PR.renderHtml(final, { preview: false }));
+  })
+);
+
+/**
+ * O PDF, impresso do mesmo HTML pelo navegador do servidor.
+ *
+ * Sai em vector e com o texto pesquisável — o protótipo fotografava cada página
+ * e o PDF ficava pesado e sem texto.
+ */
+proposalRoutes.get(
+  "/:id/export.pdf",
+  requirePermission(MODULE, "tab_propostas"),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.proposal.findUnique({ where: { id: String(req.params.id) } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    const { doc, options } = await documentOf(row);
+    if (!doc) return res.status(409).json({ error: "ORCAMENTO_NAO_EXISTE" });
+    const final = PD.finalizeDocument(doc, options);
+    try {
+      const pdf = await PR.renderPdf(final);
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="${PR.fileName(final, "pdf")}"`);
+      res.send(pdf);
+    } catch (err) {
+      // Sem Chrome instalado no servidor o PDF não se faz; o HTML faz-se sempre.
+      res.status(503).json({
+        error: "PDF_INDISPONIVEL",
+        errors: [`Não foi possível gerar o PDF (${err.message}). Use a extração em HTML e imprima a partir do navegador.`],
+      });
+    }
   })
 );
 

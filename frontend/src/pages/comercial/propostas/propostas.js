@@ -8,7 +8,10 @@
  * Enviar ao cliente exige `comercial:approve`.
  */
 
-import { apiRequest } from "/services/api.js";
+import { apiRequest, getApiBaseUrl, getAssetUrl } from "/services/api.js";
+import { getToken } from "/services/auth.js";
+import { renderEditor, wireEditor, lerAbertas } from "/shared/comercial/propostaEditor.js";
+import { mapImages } from "/shared/comercial/propostaDoc.js";
 import { toast, escapeHtml } from "/shared/ui.js";
 import { initComercialPage, canEdit, canApprove } from "/shared/comercial/page.js";
 
@@ -27,7 +30,61 @@ const S = {
   dirty: false,
   readonly: false,
   canApprove: false,
+  /** O documento da proposta e o modelo que o desenha. */
+  doc: null,
+  docOptions: null,
+  modelo: null,
+  prevTimer: null,
+  /** O documento tem alterações por gravar. */
+  docDirty: false,
 };
+
+/** Como a lista de preços se apresenta ao cliente. */
+const FORMATOS = [
+  ["mapa", "Mapa de quantidades (como está no orçamento)"],
+  ["detalhada", "Detalhada (materiais por família + serviços)"],
+  ["artigo_incl", "Por artigo, com o serviço incluído no preço"],
+  ["artigo_sep", "Por artigo, fornecimento e montagem separados"],
+  ["capitulos", "Por capítulos (uma linha por família)"],
+  ["global", "Só o valor global (sem lista)"],
+];
+
+/**
+ * Pedidos que não devolvem JSON: o modelo do documento e as extrações.
+ * O `apiRequest` lê sempre JSON, por isso estes vão de `fetch` com o token.
+ */
+async function apiRaw(path) {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+  });
+  if (!res.ok) {
+    let msg = `Erro ${res.status}`;
+    try {
+      const j = await res.json();
+      msg = (j.errors && j.errors[0]) || j.error || msg;
+    } catch {
+      /* não era JSON */
+    }
+    throw new Error(msg);
+  }
+  return res;
+}
+
+/** Descarregar o que o servidor gerou, com o nome que ele deu. */
+async function descarregar(path, fallback) {
+  const res = await apiRaw(path);
+  const cd = res.headers.get("content-disposition") || "";
+  const nome = /filename="([^"]+)"/.exec(cd)?.[1] || fallback;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return nome;
+}
 
 const STATUS = {
   RASCUNHO: ["", "Rascunho"],
@@ -111,6 +168,69 @@ async function loadOne() {
   S.prop = await apiRequest(`/proposals/${S.id}`);
   S.terms = S.prop.paymentTerms || {};
   S.dirty = false;
+}
+
+/**
+ * O modelo do documento, lido uma vez por sessão.
+ *
+ * São ~470 KB (as fontes e os ícones vão lá dentro). É o **mesmo** ficheiro que
+ * o servidor imprime no PDF: por isso o que se vê aqui é o que sai lá.
+ */
+async function carregarModelo() {
+  if (S.modelo) return S.modelo;
+  S.modelo = await (await apiRaw("/proposals/template")).text();
+  return S.modelo;
+}
+
+/** O documento da proposta, montado do orçamento se ainda não existir. */
+async function carregarDocumento() {
+  try {
+    const r = await apiRequest(`/proposals/${encodeURIComponent(S.id)}/document`);
+    S.doc = r.document;
+    S.docOptions = r.options;
+  } catch (err) {
+    S.doc = null;
+    S.docErro = err.message;
+  }
+}
+
+/** Desenhar a pré-visualização: o documento dentro do modelo, num iframe. */
+async function previsualizar() {
+  const caixa = el("pPreview");
+  if (!caixa || !S.doc) return;
+  const estado = el("pPrevSt");
+  try {
+    const modelo = await carregarModelo();
+    // Numa cópia: o documento continua a guardar caminhos, não endereços.
+    const paraVer = mapImages(JSON.parse(JSON.stringify(S.doc)), getAssetUrl);
+    const json = JSON.stringify(paraVer).replace(/<\//g, "<\\/");
+    const html = modelo
+      .replace("/*DADOS*/", json)
+      .replace(
+        "</head>",
+        "<style>#barra{display:none!important}body{background:#dfe5ea!important;margin:0}.page{margin:6mm auto!important}</style></head>"
+      );
+    let f = el("pFrame");
+    if (!f) {
+      caixa.innerHTML = `<iframe id="pFrame" title="Pré-visualização da proposta"></iframe>`;
+      f = el("pFrame");
+    }
+    // O documento tem 830 px de largura: encolhe-se para caber na coluna.
+    const largura = caixa.clientWidth || 820;
+    const escala = Math.min(1, largura / 830);
+    f.style.cssText = `width:830px;height:${Math.round((caixa.clientHeight || 900) / escala)}px;border:0;transform:scale(${escala});transform-origin:0 0;background:#dfe5ea`;
+    f.srcdoc = html;
+    if (estado) estado.textContent = "";
+  } catch (err) {
+    if (estado) estado.textContent = err.message;
+  }
+}
+
+function previsualizarDepois(ms = 1200) {
+  clearTimeout(S.prevTimer);
+  const estado = el("pPrevSt");
+  if (estado) estado.textContent = "Há alterações por mostrar…";
+  S.prevTimer = setTimeout(previsualizar, ms);
 }
 
 function render() {
@@ -260,6 +380,41 @@ function render() {
         ${p.budget?.locked ? `<span class="cm-pill is-good">Orçamento adjudicado</span>` : ""}
       </div>
       <span id="pMsg" class="cm-lead" style="margin:.5rem 0 0;display:block"></span>
+    </section>
+
+    <section class="cm-panel">
+      <h3 class="cm-panel-title">Documento da proposta</h3>
+      <p class="cm-panel-sub">
+        É isto que o cliente recebe: capa, memória descritiva, condições técnicas, cronograma,
+        lista de preços e condições comerciais. O que se vê aqui é exactamente o que sai no PDF.
+      </p>
+      <div class="cm-head-actions" style="margin:.5rem 0 .75rem;flex-wrap:wrap;gap:.5rem">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.8125rem;color:var(--cm-muted)">
+          <span>Lista de preços</span>
+          <select class="cell-manual" id="pFmt" ${dis} style="min-width:16rem">
+            ${FORMATOS.map(
+              ([k, l]) => `<option value="${k}"${(S.docOptions || {}).fmt === k ? " selected" : ""}>${esc(l)}</option>`
+            ).join("")}
+          </select>
+        </label>
+        ${
+          editable
+            ? `<button class="cm-chip${S.docDirty ? " is-on" : ""}" type="button" id="pDocSave">${
+                S.docDirty ? "Guardar o documento" : "Documento guardado"
+              }</button>
+               <button class="cm-chip" type="button" id="pRebuild">Refazer do orçamento</button>`
+            : ""
+        }
+        <button class="cm-chip" type="button" id="pPdf">Extrair PDF</button>
+        <button class="cm-chip" type="button" id="pHtml">Extrair HTML</button>
+        <span id="pPrevSt" class="cm-lead" style="margin:0"></span>
+      </div>
+      <div class="pe-wrap">
+        <div id="pEditor" class="pe-col">${S.doc ? renderEditor(S.doc, { editable, resolve: getAssetUrl }) : ""}</div>
+        <div id="pPreview" class="cm-preview">${
+          S.doc ? "" : `<p class="cm-lead">${esc(S.docErro || "A preparar o documento…")}</p>`
+        }</div>
+      </div>
     </section>`;
 }
 
@@ -423,6 +578,7 @@ function wire() {
 
   document.addEventListener("change", (e) => {
     const t = e.target;
+    if (t.id === "pFmt") return refazerLista(t.value);
     if (t.dataset?.term) {
       S.terms = { ...S.terms, [t.dataset.term]: t.value };
       markDirty();
@@ -438,7 +594,7 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-status],[data-dec],[data-milx],#pSave,#pSend,#pPrint");
+    const t = e.target.closest("[data-status],[data-dec],[data-milx],#pSave,#pSend,#pPrint,#pDocSave,#pRebuild,#pPdf,#pHtml");
     if (!t) return;
     if (t.dataset.status !== undefined) {
       S.status = t.dataset.status;
@@ -454,18 +610,151 @@ function wire() {
       render();
       return;
     }
+    if (t.id === "pDocSave") return guardarDocumento();
+    if (t.id === "pRebuild") return refazerLista();
+    if (t.id === "pPdf" || t.id === "pHtml") {
+      const ext = t.id === "pPdf" ? "pdf" : "html";
+      const antes = t.textContent;
+      t.textContent = ext === "pdf" ? "A gerar o PDF…" : "A gerar…";
+      t.disabled = true;
+      try {
+        const nome = await descarregar(`/proposals/${encodeURIComponent(S.id)}/export.${ext}`, `proposta.${ext}`);
+        toast(`${nome} transferido.`, { type: "success" });
+      } catch (err) {
+        toast(err.message, { type: "error" });
+      } finally {
+        t.textContent = antes;
+        t.disabled = false;
+      }
+      return;
+    }
     if (t.id === "pSave") return save();
     if (t.id === "pSend") return send();
     if (t.id === "pPrint") return window.print();
     if (t.dataset.dec) return decide(t.dataset.dec);
   });
 
+  // O editor escreve no documento e avisa; guardar e redesenhar são daqui.
+  wireEditor({
+    getDoc: () => S.doc,
+    onChange: docMudou,
+    onStructure: redesenharEditor,
+    onUpload: async (file) => {
+      try {
+        const url = await carregarImagem(file);
+        toast("Imagem carregada.", { type: "success" });
+        // O documento guarda o **caminho**; quem mostra é que resolve o
+        // endereço. Guardar o endereço completo prendia o documento ao
+        // servidor onde foi escrito — e a extração deixava de o reconhecer
+        // como ficheiro seu, por isso não o metia dentro do PDF.
+        return url;
+      } catch (err) {
+        toast(err.message || "Não foi possível carregar a imagem.", { type: "error" });
+        throw err;
+      }
+    },
+    host: () => el("pEditor"),
+  });
+
   window.addEventListener("beforeunload", (e) => {
-    if (S.dirty) {
+    if (S.dirty || S.docDirty) {
       e.preventDefault();
       e.returnValue = "";
     }
   });
+}
+
+/**
+ * Refazer a lista de preços a partir do orçamento.
+ *
+ * Os textos escritos à mão — memória descritiva, condições técnicas, cronograma
+ * — ficam como estão: só a parte comercial é que volta a sair do orçamento.
+ */
+/** Guardar o documento (as secções, os anexos, os textos). */
+async function guardarDocumento() {
+  if (!S.doc) return;
+  const estado = el("pPrevSt");
+  if (estado) estado.textContent = "A guardar…";
+  try {
+    S.prop = await apiRequest(`/proposals/${encodeURIComponent(S.id)}`, {
+      method: "PATCH",
+      body: { document: S.doc },
+    });
+    S.docDirty = false;
+    const bt = el("pDocSave");
+    if (bt) {
+      bt.textContent = "Documento guardado";
+      bt.classList.remove("is-on");
+    }
+    if (estado) estado.textContent = "";
+    toast("Documento guardado.", { type: "success" });
+  } catch (err) {
+    if (estado) estado.textContent = err.message;
+    toast(err.message || "Não foi possível guardar o documento.", { type: "error" });
+  }
+}
+
+/** Alguma coisa mudou no documento. */
+function docMudou() {
+  S.docDirty = true;
+  const bt = el("pDocSave");
+  if (bt) {
+    bt.textContent = "Guardar o documento";
+    bt.classList.add("is-on");
+  }
+  previsualizarDepois();
+}
+
+/** Redesenhar só o editor, mantendo as secções abertas. */
+function redesenharEditor() {
+  const host = el("pEditor");
+  if (!host || !S.doc) return;
+  lerAbertas(host);
+  const editable = !S.readonly && !["ACEITE", "RECUSADA"].includes(S.prop?.status);
+  host.innerHTML = renderEditor(S.doc, { editable, resolve: getAssetUrl });
+}
+
+/** Carregar uma imagem para o documento. */
+async function carregarImagem(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${getApiBaseUrl()}/proposals/${encodeURIComponent(S.id)}/images`, {
+    method: "POST",
+    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    body: form,
+  });
+  if (!res.ok) {
+    let msg = `Erro ${res.status}`;
+    try {
+      const j = await res.json();
+      msg = (j.errors && j.errors[0]) || j.error || msg;
+    } catch {
+      /* não era JSON */
+    }
+    throw new Error(msg);
+  }
+  const { url } = await res.json();
+  return url;
+}
+
+async function refazerLista(fmt) {
+  const estado = el("pPrevSt");
+  if (estado) estado.textContent = "A refazer a lista de preços…";
+  try {
+    const r = await apiRequest(`/proposals/${encodeURIComponent(S.id)}/document/rebuild`, {
+      method: "POST",
+      body: fmt ? { fmt } : {},
+    });
+    S.prop = r;
+    await carregarDocumento();
+    render();
+    await previsualizar();
+    if (r.aviso) toast(r.aviso, { type: "error" });
+    else toast("Lista de preços refeita.", { type: "success" });
+  } catch (err) {
+    if (estado) estado.textContent = err.message;
+    toast(err.message, { type: "error" });
+  }
 }
 
 async function save() {
@@ -533,7 +822,11 @@ initComercialPage({
       wire();
       if (S.id) {
         await loadOne();
+        await carregarDocumento();
         render();
+        // A pré-visualização vem a seguir ao ecrã: o modelo são ~470 KB e não
+        // se faz esperar por ele para ver a proposta.
+        previsualizar();
       } else {
         await loadList();
         renderList();

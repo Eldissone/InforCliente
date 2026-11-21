@@ -2718,6 +2718,12 @@ model Proposal {
   budgetId   String
   status     ProposalStatus @default(RASCUNHO)
   body       Json           @default("{}")
+  /// O documento completo da Proposta Tecnica e Comercial (o que o modelo desenha)
+  document   Json           @default("{}")
+  /// Como a lista de precos se apresenta: fmt, mat, serv
+  docOptions Json           @default("{}")
+  /// Outros orcamentos, quando a proposta junta varios lotes
+  extraBudgetIds Json       @default("[]")
   validUntil DateTime?
   sentAt     DateTime?
   pdfUrl     String?
