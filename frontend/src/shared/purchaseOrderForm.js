@@ -494,7 +494,7 @@ function collectItems() {
 // ── Centros de custo (Geral / Obra) ─────────────────────────
 
 function obrasAtivas(manter) {
-  return cache.projects.filter((p) => p.id === manter || !/conclu|cancel|arquiv/i.test(String(p.status || p.estado || "")));
+  return cache.projects.filter((p) => p.id === manter || !/complet|conclu|cancel|arquiv/i.test(String(p.status || "")));
 }
 const nomeObra = (p) => [p.referencia, p.name].filter(Boolean).join(" · ") || p.code || p.id;
 
@@ -963,7 +963,7 @@ export async function ensureReferenceDataLoaded() {
   const tarefas = [];
   if (!cache.projects.length) {
     tarefas.push(
-      apiRequest("/projects?limit=500")
+      apiRequest("/projects?pageSize=100")
         .then((r) => {
           cache.projects = (Array.isArray(r) ? r : r?.items || r?.data || []).sort((a, b) => nomeObra(a).localeCompare(nomeObra(b), "pt"));
         })

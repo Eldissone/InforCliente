@@ -140,3 +140,11 @@ textarea.rq-in { height: auto; min-height: 44px; resize: vertical; }
   .rq-items { display: block; overflow-x: auto; }
   .rq-totline { justify-content: flex-start; gap: 12px; }
 }
+
+/* A letra do protótipo em todo o formulário (a página base usa Inter). */
+.rq-page .rq-wrap, .rq-page .rq-wrap input, .rq-page .rq-wrap select, .rq-page .rq-wrap textarea, .rq-page .rq-wrap button {
+  font-family: var(--pt-body, "Source Sans 3", "Segoe UI", sans-serif);
+}
+.rq-page .rq-head .pf-back { text-transform: none; letter-spacing: normal; font-weight: 400; color: inherit; gap: 0; }
+.rq-obsbtn { white-space: nowrap; }
+.rq-dist td, .rq-parc td { vertical-align: middle; }
