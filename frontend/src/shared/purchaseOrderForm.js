@@ -371,7 +371,7 @@ export function addItemRow() {
     <td class="rq-x"><input type="number" min="0" max="100" step="any" class="cc-item-wh rq-in rq-r"></td>
     <td class="rq-x"><input type="number" min="0" max="100" step="any" class="cc-item-disc rq-in rq-r"></td>
     <td class="cc-item-line-total rq-cell-tot">0,00</td>
-    <td><div class="rq-rowacts"><button type="button" class="rq-obsbtn" title="Observação e documento da linha">✎ obs</button><button type="button" class="rq-del" aria-label="Remover item">×</button></div></td>`;
+    <td><div class="rq-rowacts"><button type="button" class="rq-obsbtn" title="Observação e documento da linha"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">edit</span> obs</button><button type="button" class="rq-del" aria-label="Remover item"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button></div></td>`;
   const det = document.createElement("tr");
   det.className = "rq-detail hidden";
   det.innerHTML = `<td colspan="11"><div class="rq-grid">
@@ -527,12 +527,12 @@ function renderDist() {
           : `<input class="rq-in rq-r" type="number" step="any" data-dk="${k}" data-df="val" value="${esc(d.val ?? "")}" style="width:130px">`
       }</td>
       <td class="rq-r rq-muted" style="width:150px">${pc ? fmt(V[k]) : T ? `${(V[k] / T * 100).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} %` : ""}</td>
-      <td style="width:28px">${ST.dist.length > 1 ? `<button type="button" class="rq-del" data-dx="${k}">×</button>` : ""}</td></tr>`
+      <td style="width:28px">${ST.dist.length > 1 ? `<button type="button" class="rq-del" data-dx="${k}"><span class="material-symbols-outlined" style="font-size:15px;vertical-align:text-bottom">close</span></button>` : ""}</td></tr>`
       )
       .join("") +
     `<tr class="rq-tot"><td><button type="button" class="rq-lnk" data-dadd="1">+ Centro de custo</button>${ST.dist.length > 1 ? ` · <button type="button" class="rq-lnk" data-dig="1">partes iguais</button>` : ""}</td>
       <td class="rq-r${ok ? "" : " rq-warn"}">${pc ? `${somaPct.toLocaleString("pt-PT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %` : fmt(S)}</td>
-      <td class="rq-r ${ok ? "rq-ok" : "rq-warn"}">${ok ? `✓ ${fmt(T)}` : pc ? `falta ${(100 - somaPct).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} %` : `falta ${fmt(T - S)}`}</td><td></td></tr>`;
+      <td class="rq-r ${ok ? "rq-ok" : "rq-warn"}">${ok ? `<span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">check</span> ${fmt(T)}` : pc ? `falta ${(100 - somaPct).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} %` : `falta ${fmt(T - S)}`}</td><td></td></tr>`;
 }
 
 function bindDist() {
@@ -657,7 +657,7 @@ function renderParcelas(ajustar) {
   const ok = Math.abs(S - T) <= 0.5;
   const tot = $("rqParcTotal");
   if (tot) {
-    tot.textContent = `${fmt(S)} de ${fmt(T)} ${ok ? "✓" : ""}`;
+    tot.innerHTML = `${fmt(S)} de ${fmt(T)} ${ok ? '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:text-bottom">check</span>' : ""}`;
     tot.classList.toggle("rq-warn", !ok);
   }
 }
