@@ -43,6 +43,11 @@ export const SECTIONS = [
     zona: "objectivo",
     titulo: "01 · Objectivo e documentação de referência",
     anexos: true,
+    ia: {
+      tarefa: "textos",
+      label: "✦ Redigir os textos técnicos",
+      ajuda: "Escreve o objectivo, a documentação de referência, a introdução e as fases das condições técnicas e o texto do traçado.",
+    },
     campos: [
       { path: "objectivo", label: "Objectivo", kind: "area", linhas: 3 },
       { path: "documentacao_referencia", label: "Documentação de referência", kind: "area", linhas: 2 },
@@ -53,6 +58,11 @@ export const SECTIONS = [
     titulo: "02 · Memória descritiva e justificativa",
     anexos: true,
     ajuda: "Explica o projecto: o que se vai fazer, a solução técnica escolhida e porquê.",
+    ia: {
+      tarefa: "memoria",
+      label: "✦ Redigir a memória",
+      ajuda: "Escreve a introdução e os pontos da memória a partir do orçamento. Substitui o que lá estiver.",
+    },
     campos: [
       { path: "memoria.texto", label: "Introdução", kind: "area", linhas: 3 },
       {

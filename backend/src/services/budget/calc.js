@@ -679,6 +679,12 @@ function buildAlerts(S, R, P, today) {
     "CRÍTICO",
     "desp"
   );
+  /*
+   * Preço sem custo nenhum: o orçamento diz 100% de margem e não é verdade —
+   * ainda ninguém somou o que a obra custa. Sem este alerta, um orçamento
+   * inteiro podia ir a despacho com uma margem inventada pela aritmética.
+   */
+  add("Sem custo nenhum lançado", R.semCusto ? 1 : 0, "CRÍTICO", "orc");
   add("Margem abaixo do mínimo", R.mgEstado === "ABAIXO_DO_MINIMO" ? 1 : 0, "CRÍTICO", "desp");
   add("Margem entre o mínimo e o objetivo", R.mgEstado === "ENTRE_MINIMO_E_OBJETIVO" ? 1 : 0, "ATENÇÃO", "desp");
   add(

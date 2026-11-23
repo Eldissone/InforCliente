@@ -22,6 +22,7 @@ const PD = require("../services/proposal/document");
 const PR = require("../services/proposal/render");
 const { STANDARD_SETTING_KEY } = require("../services/proposal/standard");
 const { uploadToSupabase } = require("../utils/storage");
+const PAI = require("../services/proposal/ai");
 
 /** Imagens do documento: capa, fotografias, mapas e a assinatura. */
 const imageUpload = multer({
@@ -591,6 +592,65 @@ proposalRoutes.post(
     const ext = (req.file.originalname || "img.jpg").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const url = await uploadToSupabase(`propostas/${row.id}/${Date.now()}.${ext}`, req.file.buffer, req.file.mimetype);
     res.status(201).json({ url, name: req.file.originalname || null, size: req.file.size });
+  })
+);
+
+// ───────────────────────── a IA redige ─────────────────────────
+
+/**
+ * A IA redige um texto da proposta.
+ *
+ * Três tarefas: a `memoria` descritiva, os `textos` técnicos (objectivo,
+ * documentação, condições técnicas, traçado) e um `bloco` novo para uma secção.
+ *
+ * A IA **não grava**: devolve o documento com o texto já no sítio, e é quem
+ * está a escrever a proposta que decide se o guarda. Se o ecrã mandar o seu
+ * documento, é sobre esse que se escreve — para não se perder o que lá está por
+ * gravar.
+ *
+ * O contexto que vai para a IA não leva custos, preços nem margens.
+ */
+proposalRoutes.post(
+  "/:id/ai",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.proposal.findUnique({ where: { id: String(req.params.id) } });
+    if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+    if (["ACEITE", "RECUSADA"].includes(row.status)) {
+      return res.status(409).json({ error: "PROPOSTA_DECIDIDA", errors: ["A proposta já tem decisão do cliente: não se altera."] });
+    }
+
+    const input = z
+      .object({
+        tarefa: z.enum(["memoria", "textos", "bloco"]),
+        zona: z.string().trim().max(40).optional(),
+        pedido: z.string().trim().max(1000).optional(),
+        document: z.record(z.string(), z.any()).optional(),
+      })
+      .parse(req.body || {});
+
+    const base = input.document && input.document.documento ? input.document : (await documentOf(row)).doc;
+    if (!base) return res.status(409).json({ error: "ORCAMENTO_NAO_EXISTE" });
+    const budgets = await loadBudgets(row);
+
+    try {
+      const { resultado, model } = await PAI.writeText({
+        tarefa: input.tarefa,
+        budgets,
+        doc: base,
+        zona: input.zona,
+        pedido: input.pedido,
+        userId: req.user?.sub,
+        io: req.app.get("io"),
+      });
+      const document = JSON.parse(JSON.stringify(base));
+      const tocados = PAI.applyToDocument(document, input.tarefa, resultado, { zona: input.zona });
+      return res.json({ tarefa: input.tarefa, resultado, document, tocados, model });
+    } catch (err) {
+      // A IA desligada ou sem chave não é um erro do programa: diz-se porquê.
+      const status = err.status || 503;
+      return res.status(status).json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message] });
+    }
   })
 );
 

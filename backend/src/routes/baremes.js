@@ -23,9 +23,11 @@ const {
   validateBarem,
   decorateBarem,
   buildFuelPrices,
+  computeBaremCost,
 } = require("../services/budget/baremCost");
-const { getBudgetCalcContext, DEFAULT_BUDGET_PARAMS } = require("../services/budget/companySettings");
+const { getBudgetCalcContext, getBudgetParams, getCurrencies, DEFAULT_BUDGET_PARAMS } = require("../services/budget/companySettings");
 const { BAREM_SEED } = require("../services/budget/baremSeed");
+const BAI = require("../services/budget/baremAi");
 
 const MODULE = "comercial";
 const baremRoutes = express.Router();
@@ -453,6 +455,95 @@ baremRoutes.post(
 
     const recalculated = await recalcFuelDependents();
     res.status(201).json({ ok: true, created, skipped, recalculated });
+  })
+);
+
+// ───────────────────────── assistente de baremes (IA) ─────────────────────
+
+/** O contexto da empresa que a IA precisa: parâmetros, câmbios e combustíveis. */
+async function contextoParaIA() {
+  const [{ params }, { currencies }, combustiveis] = await Promise.all([
+    getBudgetParams(),
+    getCurrencies(),
+    prisma.baremItem.findMany({ where: { kind: "COMBUSTIVEL", active: true }, select: { name: true, fields: true } }),
+  ]);
+  const fuelPrices = Object.fromEntries(combustiveis.map((c) => [c.name, Number((c.fields || {}).preco) || 0]));
+  return { contexto: BAI.buildContext({ params, fuelPrices, currencies }), params };
+}
+
+/**
+ * A IA calcula um barem a partir de uma descrição, ou responde a uma dúvida.
+ *
+ * Não grava nada: devolve os campos, a conta que fez em cada um, o que assumiu
+ * e perguntas para afinar. Quem aplica ao barem é quem está a olhar — e aplica
+ * pelo formulário de sempre, com as mesmas validações.
+ */
+baremRoutes.post(
+  "/ai",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const input = z
+      .object({
+        modo: z.enum(["calcular", "duvida"]).default("calcular"),
+        kind: z.enum(["RH", "EQUIPAMENTO", "VIATURA", "FERRAMENTA", "LOGISTICA"]).optional(),
+        descricao: z.string().trim().max(4000).optional(),
+        unidade: z.string().trim().max(20).optional(),
+        /** Para afinar: a proposta anterior e o que o utilizador respondeu. */
+        anterior: z.record(z.string(), z.any()).optional(),
+        respostas: z.string().trim().max(2000).optional(),
+        pergunta: z.string().trim().max(1000).optional(),
+      })
+      .parse(req.body || {});
+
+    try {
+      const { contexto } = await contextoParaIA();
+
+      if (input.modo === "duvida") {
+        const out = await BAI.perguntar({ pergunta: input.pergunta, contexto, userId: req.user?.sub, io: req.app.get("io") });
+        return res.json(out);
+      }
+
+      if (!input.kind) return res.status(400).json({ error: "SEM_TIPO", errors: ["Escolha o tipo de barem."] });
+
+      // Os baremes que já existem deste tipo, para a IA manter os critérios.
+      const existentes = await prisma.baremItem.findMany({
+        where: { kind: input.kind, active: true },
+        select: { name: true, fields: true },
+        orderBy: { name: "asc" },
+        take: 30,
+      });
+
+      const out = await BAI.calcular({
+        kind: input.kind,
+        descricao: input.descricao,
+        anterior: input.anterior,
+        respostas: input.respostas,
+        unidade: input.unidade,
+        contexto,
+        existentes,
+        userId: req.user?.sub,
+        io: req.app.get("io"),
+      });
+
+      // O custo que o programa calcula com os campos propostos: é este o número
+      // que vai aparecer na lista, e é melhor vê-lo antes de aplicar.
+      const ctx = await getBudgetCalcContext();
+      const fuelPrices = buildFuelPrices(await prisma.baremItem.findMany({ where: { kind: "COMBUSTIVEL", active: true } }));
+      let calculado = null;
+      try {
+        calculado = computeBaremCost(
+          input.kind,
+          { fields: out.resultado.campos, unit: out.resultado.unit, ownership: out.resultado.ownership },
+          { ...ctx, fuelPrices }
+        );
+      } catch {
+        /* campos insuficientes: mostra-se a proposta na mesma */
+      }
+      return res.json({ ...out, calculado });
+    } catch (err) {
+      const status = err.status || 503;
+      return res.status(status).json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message] });
+    }
   })
 );
 

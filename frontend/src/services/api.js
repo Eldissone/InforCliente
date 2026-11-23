@@ -118,6 +118,17 @@ const API_ERROR_MESSAGES = {
 
 function resolveApiErrorMessage(data, status) {
   if (data?.message) return data.message;
+  /*
+   * A frase que o servidor escreveu para este caso.
+   *
+   * Quase todas as rotas respondem `{ error: "CODIGO", errors: ["frase"] }`, e
+   * a frase era deitada fora: o utilizador via «AI_FEATURE_DISABLED» em vez de
+   * «Esta funcionalidade de IA está desligada na Gestão do Sistema». Vem logo a
+   * seguir à `message` e antes do dicionário de códigos, porque é escrita para
+   * a situação concreta e o dicionário é genérico.
+   */
+  const doServidor = Array.isArray(data?.errors) ? data.errors.filter((x) => typeof x === "string" && x.trim()) : [];
+  if (doServidor.length) return doServidor.join(" ");
   if (data?.error && API_ERROR_MESSAGES[data.error]) return API_ERROR_MESSAGES[data.error];
   if (data?.code && API_ERROR_MESSAGES[data.code]) return API_ERROR_MESSAGES[data.code];
   if (status === 403 || String(data?.error || "").includes("FORBIDDEN")) {

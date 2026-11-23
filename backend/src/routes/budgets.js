@@ -10,6 +10,7 @@
  */
 
 const express = require("express");
+const multer = require("multer");
 const { z } = require("zod");
 const { prisma } = require("../db");
 const { authRequired, requirePermission } = require("../middlewares/auth");
@@ -17,6 +18,7 @@ const { asyncHandler } = require("../utils/http");
 const { calcBudget, QTY_SHEET, CATS, PRICE_METHODS } = require("../services/budget/calc");
 const { normalizeUnit, summarizeUnits } = require("../services/budget/units");
 const { buildCatalog, searchCatalog, catalogStats } = require("../services/budget/articleCatalog");
+const PC = require("../services/budget/purchaseCatalog");
 const { consumptionRows, CONSUMPTION_TYPES } = require("../services/budget/stockConsumption");
 
 const {
@@ -34,6 +36,8 @@ const {
   getBudgetLists,
   getCurrencies,
 } = require("../services/budget/companySettings");
+const AIMP = require("../services/budget/aiImport");
+const CMP = require("../services/budget/aiCompose");
 const { decorateBarem } = require("../services/budget/baremCost");
 const {
   normalizeTerms,
@@ -296,12 +300,30 @@ budgetRoutes.post(
       throw err;
     }
 
+    const feito = await criarOrcamento(body, { userId: req.user.sub });
+    if (feito.error) return res.status(feito.status || 400).json(feito.error);
+    res.status(201).json(serialize(feito.row));
+  })
+);
+
+/**
+ * Criar um orçamento — o caminho único.
+ *
+ * Usam-no o formulário («Novo orçamento») e a importação de Excel, que só
+ * difere numa coisa: já traz as folhas preenchidas. Ter dois caminhos para
+ * criar um orçamento era ter duas regras de numeração, de centro de custo e de
+ * fotografia dos baremes — e mais cedo ou mais tarde divergiam.
+ *
+ * @param {object} body campos já validados pelo `createSchema`
+ * @param {object} [opts.sheets] folhas iniciais (a importação traz-nas)
+ */
+async function criarOrcamento(body, { userId, sheets } = {}) {
     const errors = [];
     if (!body.clientId && !body.newClient) errors.push("Escolha o cliente ou crie um novo.");
     if (body.startDate && body.endDate && body.endDate < body.startDate) {
       errors.push("A data de conclusão tem de ser depois da data de início.");
     }
-    if (errors.length) return res.status(400).json({ error: "ORCAMENTO_INVALIDO", errors });
+    if (errors.length) return { status: 400, error: { error: "ORCAMENTO_INVALIDO", errors } };
 
     const company = await loadCompanyDefaults();
 
@@ -323,23 +345,26 @@ budgetRoutes.post(
       clientId = created.id;
     }
     const client = clientId ? await prisma.client.findUnique({ where: { id: clientId } }) : null;
-    if (clientId && !client) return res.status(400).json({ error: "CLIENTE_NAO_EXISTE" });
+    if (clientId && !client) return { status: 400, error: { error: "CLIENTE_NAO_EXISTE" } };
 
     // Baremes
     let snapshot;
     if (body.baremSource.startsWith("orcamento:")) {
       const srcId = body.baremSource.slice("orcamento:".length);
       const src = await prisma.budget.findUnique({ where: { id: srcId }, select: { baremSnapshot: true } });
-      if (!src) return res.status(400).json({ error: "ORCAMENTO_DE_ORIGEM_NAO_EXISTE" });
+      if (!src) return { status: 400, error: { error: "ORCAMENTO_DE_ORIGEM_NAO_EXISTE" } };
       snapshot = { ...(src.baremSnapshot || {}), takenAt: new Date().toISOString(), source: `orcamento:${srcId}` };
     } else {
       snapshot = await snapshotFromLibrary();
     }
     if (!snapshot.items || !snapshot.items.length) {
-      return res.status(400).json({
-        error: "SEM_BAREMES",
-        errors: ["Ainda não há baremes na biblioteca da empresa. Carregue-os em Comercial › Base › Baremes."],
-      });
+      return {
+        status: 400,
+        error: {
+          error: "SEM_BAREMES",
+          errors: ["Ainda não há baremes na biblioteca da empresa. Carregue-os em Comercial › Base › Baremes."],
+        },
+      };
     }
 
     const { number } = await allocate("ORC");
@@ -352,6 +377,7 @@ budgetRoutes.post(
       snapshot,
       company,
       fields: body,
+      sheets,
     });
 
     const row = await prisma.budget.create({
@@ -369,12 +395,152 @@ budgetRoutes.post(
         lists: doc.lists,
         dispatch: doc.dispatch,
         paymentTerms: {},
-        createdById: req.user.sub,
+        createdById: userId,
       },
       include: { client: { select: { id: true, name: true, code: true } } },
     });
 
-    res.status(201).json(serialize(row));
+    return { row, doc, R };
+}
+
+// ───────────────────────── importar de Excel (IA) ─────────────────────────
+
+/** A folha que se importa: fica em memória, não se guarda em lado nenhum. */
+const sheetUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
+const FOLHAS_ACEITES = new Set([
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+  "application/csv",
+]);
+
+/** Os baremes da empresa agrupados por tipo, como a IA os precisa de ver. */
+async function baremesParaIA() {
+  const rows = await prisma.baremItem.findMany({
+    where: { active: true },
+    select: { kind: true, name: true },
+    orderBy: [{ kind: "asc" }, { name: "asc" }],
+  });
+  const porTipo = {};
+  for (const r of rows) {
+    const k = String(r.kind || "").toLowerCase();
+    porTipo[k] = porTipo[k] || [];
+    porTipo[k].push({ name: r.name });
+  }
+  return porTipo;
+}
+
+/**
+ * A IA lê a folha e devolve as linhas classificadas, **para revisão**.
+ *
+ * Não cria nada: o ficheiro nem sequer fica guardado. Quem importa é que
+ * confirma, corrige e só depois manda criar.
+ */
+budgetRoutes.post(
+  "/import/analyze",
+  requirePermission(MODULE, "create"),
+  sheetUpload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "SEM_FICHEIRO", errors: ["Escolha a folha de Excel."] });
+    const nome = String(req.file.originalname || "");
+    if (!FOLHAS_ACEITES.has(req.file.mimetype) && !/\.(xlsx|xls|csv)$/i.test(nome)) {
+      return res.status(400).json({ error: "FORMATO_NAO_ACEITE", errors: ["Aceita-se .xlsx, .xls ou .csv."] });
+    }
+
+    const folhas = String(req.body.sheets || "")
+      .split(",")
+      .map((x) => Number(x))
+      .filter((n) => Number.isInteger(n) && n >= 0);
+
+    const [porTipo, { lists }] = await Promise.all([baremesParaIA(), getBudgetLists()]);
+
+    try {
+      const out = await AIMP.analyze({
+        buffer: req.file.buffer,
+        sheets: folhas,
+        baremesPorTipo: porTipo,
+        familias: lists?.familias || [],
+        userId: req.user?.sub,
+        io: req.app.get("io"),
+      });
+      // O custo de cada linha, para quem revê ver no que dá antes de criar.
+      const { currencies } = await getCurrencies();
+      const cambios = Object.fromEntries((currencies || []).map((c) => [c.moeda || c.code, Number(c.cambio ?? c.rate) || 0]));
+      out.itens = out.itens.map((x) => ({ ...x, custo: AIMP.itemCost(x, { cambios }) }));
+      return res.json({ ...out, ficheiro: nome });
+    } catch (err) {
+      const status = err.status || 503;
+      return res.status(status).json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message] });
+    }
+  })
+);
+
+/**
+ * Cria o orçamento com as linhas que ficaram marcadas.
+ *
+ * Passa pelo mesmo caminho do «Novo orçamento» (`criarOrcamento`): mesma
+ * numeração, mesmo centro de custo, mesma fotografia dos baremes. A única
+ * diferença é que as folhas já vêm preenchidas.
+ */
+budgetRoutes.post(
+  "/import/create",
+  requirePermission(MODULE, "create"),
+  asyncHandler(async (req, res) => {
+    const schema = createSchema.extend({
+      destino: z.enum(["mapa", "custo"]).default("mapa"),
+      itens: z.array(z.record(z.string(), z.any())).min(1),
+    });
+    let body;
+    try {
+      body = schema.parse(req.body || {});
+    } catch (err) {
+      if (err instanceof Error && err.message === "DATA_INVALIDA") return res.status(400).json({ error: "DATA_INVALIDA" });
+      throw err;
+    }
+
+    const itens = body.itens.map(AIMP.shapeItem).filter(Boolean);
+    if (!itens.length) return res.status(400).json({ error: "SEM_LINHAS", errors: ["Nenhuma linha marcada para importar."] });
+
+    /*
+     * O cliente que a IA leu do cabeçalho pode já existir.
+     *
+     * Sem isto, cada importação criava um cliente novo com o mesmo nome — e ao
+     * fim de três folhas do mesmo cliente havia três fichas dele. Procura-se
+     * pelo nome (sem distinguir maiúsculas); só se não houver é que se cria.
+     */
+    if (!body.clientId && body.newClient?.name) {
+      const existente = await prisma.client.findFirst({
+        where: { name: { equals: body.newClient.name.trim(), mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (existente) {
+        body.clientId = existente.id;
+        body.newClient = null;
+      }
+    }
+
+    const [{ params }, { currencies }] = await Promise.all([getBudgetParams(), getCurrencies()]);
+    const cambios = Object.fromEntries((currencies || []).map((c) => [c.moeda || c.code, Number(c.cambio ?? c.rate) || 0]));
+    const { sheets, novosBaremes, semPreco } = AIMP.toSheets(itens, {
+      destino: body.destino,
+      cambios,
+      diasMes: Number(params?.diasMes) || 22,
+      horasDia: Number(params?.horasDia) || 8,
+    });
+
+    const feito = await criarOrcamento(body, { userId: req.user.sub, sheets });
+    if (feito.error) return res.status(feito.status || 400).json(feito.error);
+
+    res.status(201).json({
+      ...serialize(feito.row),
+      importacao: {
+        linhas: itens.length,
+        destino: body.destino,
+        semPreco,
+        // Os baremes que faltam **não** se criam sozinhos: diz-se quais são.
+        baremesEmFalta: novosBaremes.map((b) => ({ tipo: b.kind, nome: b.name })),
+      },
+    });
   })
 );
 
@@ -468,6 +634,214 @@ budgetRoutes.get(
       // dólares não são comparáveis com os de obras em kwanzas, e nada aqui
       // converte nem recomenda um preço.
       aviso: "Preços praticados, por moeda e com a data. Não são convertidos nem recomendados.",
+    });
+  })
+);
+
+// ─────────────────── catálogo de preços de compra ────────────────────────
+
+/**
+ * Os preços de compra, derivados a cada pedido como o catálogo de venda.
+ *
+ * As fontes são só registos de coisas que se compraram, se cotaram ou que um
+ * fornecedor pôs por escrito. As folhas de custo dos **outros orçamentos**
+ * ficam de fora de propósito: um orçamento é uma intenção, não uma compra, e os
+ * preços aproximados que alguém lá pôs voltariam a sair daqui como factos.
+ */
+const PURCHASE_TTL_MS = 60 * 1000;
+let purchaseCache = { at: 0, catalog: null, fontes: null };
+
+async function loadPurchaseCatalog() {
+  if (purchaseCache.catalog && Date.now() - purchaseCache.at < PURCHASE_TTL_MS) return purchaseCache;
+
+  const [needs, quotes, produtos, entradas, itensOC] = await Promise.all([
+    prisma.workNeed.findMany({
+      where: { unitPrice: { gt: 0 } },
+      select: {
+        description: true,
+        unit: true,
+        unitPrice: true,
+        date: true,
+        project: { select: { code: true, currency: true } },
+      },
+    }),
+    prisma.needQuote.findMany({
+      where: { selected: true, quotedPrice: { gt: 0 } },
+      select: {
+        quotedPrice: true,
+        currency: true,
+        createdAt: true,
+        supplier: { select: { name: true } },
+        need: { select: { description: true, unit: true } },
+      },
+    }),
+    prisma.supplierProduct.findMany({
+      where: { price: { gt: 0 } },
+      select: {
+        name: true,
+        unit: true,
+        price: true,
+        currency: true,
+        updatedAt: true,
+        supplier: { select: { name: true } },
+      },
+    }),
+    prisma.stockMovement.findMany({
+      where: { unitCost: { gt: 0 }, type: { in: ["ENTRY", "TRANSFER_IN"] } },
+      select: { unitCost: true, createdAt: true, product: { select: { name: true, unit: true } } },
+    }),
+    prisma.purchaseOrderItem.findMany({
+      where: { unitPrice: { gt: 0 } },
+      select: {
+        name: true,
+        unit: true,
+        unitPrice: true,
+        createdAt: true,
+        purchaseOrder: { select: { currency: true, supplierName: true, supplier: { select: { name: true } } } },
+      },
+    }),
+  ]);
+
+  const records = [
+    // A necessidade de obra não tem moeda própria: vale a da obra.
+    ...needs.map((n) => ({
+      description: n.description,
+      unit: n.unit,
+      unitPrice: n.unitPrice,
+      currency: n.project?.currency || "AOA",
+      source: "necessidade",
+      sourceLabel: "necessidade de obra",
+      supplier: n.project?.code || null,
+      date: n.date,
+    })),
+    ...quotes.map((q) => ({
+      description: q.need?.description,
+      unit: q.need?.unit,
+      unitPrice: q.quotedPrice,
+      currency: q.currency,
+      source: "cotacao",
+      sourceLabel: "cotação escolhida",
+      supplier: q.supplier?.name || null,
+      date: q.createdAt,
+    })),
+    ...produtos.map((p) => ({
+      description: p.name,
+      unit: p.unit,
+      unitPrice: p.price,
+      currency: p.currency,
+      source: "catalogo",
+      sourceLabel: "catálogo de fornecedor",
+      supplier: p.supplier?.name || null,
+      date: p.updatedAt,
+    })),
+    ...entradas.map((m) => ({
+      description: m.product?.name,
+      unit: m.product?.unit,
+      unitPrice: m.unitCost,
+      currency: "AOA",
+      source: "armazem",
+      sourceLabel: "entrada em armazém",
+      supplier: null,
+      date: m.createdAt,
+    })),
+    ...itensOC.map((it) => ({
+      description: it.name,
+      unit: it.unit,
+      unitPrice: it.unitPrice,
+      currency: it.purchaseOrder?.currency || "AOA",
+      source: "ordem",
+      sourceLabel: "ordem de compra",
+      supplier: it.purchaseOrder?.supplier?.name || it.purchaseOrder?.supplierName || null,
+      date: it.createdAt,
+    })),
+  ];
+
+  const catalog = PC.buildPurchaseCatalog(records);
+  const fontes = {
+    necessidade: needs.length,
+    cotacao: quotes.length,
+    catalogo: produtos.length,
+    armazem: entradas.length,
+    ordem: itensOC.length,
+    artigos: catalog.length,
+  };
+  purchaseCache = { at: Date.now(), catalog, fontes };
+  return purchaseCache;
+}
+
+/**
+ * Procura um preço de compra no histórico.
+ *
+ * `q` descrição a procurar · `un` unidade da linha · `cur` moedas aceitáveis
+ * (separadas por vírgula) · `linha` a descrição da linha que se está a preçar,
+ * quando `q` é uma procura à mão: o texto escolhe os artigos, mas a confiança
+ * mede-se sempre contra a linha · `limit` quantos candidatos (até 20).
+ */
+budgetRoutes.get(
+  "/purchase-prices",
+  requirePermission(MODULE, "tab_orcamentos"),
+  asyncHandler(async (req, res) => {
+    const { catalog, fontes } = await loadPurchaseCatalog();
+    const moedas = String(req.query.cur || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    res.json({
+      items: PC.matchPrices(catalog, String(req.query.q || ""), {
+        unit: req.query.un ? String(req.query.un) : null,
+        currencies: moedas.length ? moedas : null,
+        contra: req.query.linha ? String(req.query.linha) : null,
+        limit: Number(req.query.limit) || 6,
+      }),
+      fontes,
+      aviso: "Preços de compra já praticados, com a origem e a data. Nada é convertido nem recomendado.",
+    });
+  })
+);
+
+/**
+ * Candidatos de preço para as linhas de uma folha de custo deste orçamento.
+ *
+ * Não grava nada: devolve, por linha, os preços do histórico que podem servir,
+ * cada um com a confiança da correspondência. Quem revê é que escolhe, e a
+ * gravação é a normal (`PATCH`), com a versão do documento.
+ */
+budgetRoutes.post(
+  "/:id/purchase-prices",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const budget = await prisma.budget.findUnique({ where: { id: String(req.params.id) } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+
+    const input = z
+      .object({
+        folha: z.enum(Object.keys(PC.SHEET_FIELDS)).default("mat"),
+        apenasSemPreco: z.coerce.boolean().default(true),
+        limit: z.coerce.number().int().min(1).max(20).default(6),
+        // As linhas como estão no ecrã, quando há coisas por gravar. Nada se
+        // escreve aqui, por isso não é preciso obrigar a gravar primeiro; sem
+        // isto, uma linha acabada de acrescentar não aparecia na procura.
+        linhas: z.array(z.record(z.string(), z.any())).optional(),
+      })
+      .parse(req.body || {});
+
+    const doc = asDocument(budget);
+    const { catalog, fontes } = await loadPurchaseCatalog();
+    const r = PC.matchSheet(catalog, {
+      folha: input.folha,
+      rows: input.linhas || doc.sheets?.[input.folha] || [],
+      moedaBase: doc.params?.moedaBase || "AOA",
+      moedas: (doc.params?.currencies || []).map((c) => c.moeda).filter(Boolean),
+      apenasSemPreco: input.apenasSemPreco,
+      limit: input.limit,
+    });
+
+    res.json({
+      ...r,
+      version: budget.version,
+      fontes,
+      comCandidatos: r.linhas.filter((l) => l.candidatos.length).length,
+      semCandidatos: r.linhas.filter((l) => !l.candidatos.length).length,
     });
   })
 );
@@ -1261,6 +1635,128 @@ budgetRoutes.post(
       if (err && err.payload) return res.status(err.status || 400).json(err.payload);
       throw err;
     }
+  })
+);
+
+// ───────── compor os custos a partir do mapa de quantidades (IA) ──────────
+
+/** Os baremes da empresa por categoria de recurso, como o compositor os quer. */
+async function baremesPorCategoria() {
+  const rows = await prisma.baremItem.findMany({
+    where: { active: true },
+    select: { kind: true, name: true },
+    orderBy: [{ kind: "asc" }, { name: "asc" }],
+  });
+  const de = (kind) => rows.filter((r) => r.kind === kind).map((r) => ({ name: r.name }));
+  return {
+    rh: de("RH"),
+    equipamento: de("EQUIPAMENTO"),
+    viatura: de("VIATURA"),
+    ferramenta: de("FERRAMENTA"),
+    logistica: de("LOGISTICA"),
+  };
+}
+
+/**
+ * A IA propõe a composição de custos dos trabalhos escolhidos.
+ *
+ * Não grava: devolve, por trabalho, os recursos e **o consumo por unidade**,
+ * já multiplicado pela quantidade do trabalho (a multiplicação é nossa). Quem
+ * revê é que decide o que entra.
+ */
+budgetRoutes.post(
+  "/:id/ai/compose",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const budget = await prisma.budget.findUnique({ where: { id: String(req.params.id) } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    if (budget.locked) return res.status(409).json({ error: "ORCAMENTO_ADJUDICADO", errors: ["O orçamento está adjudicado: não se altera."] });
+
+    const input = z.object({ cods: z.array(z.string().trim().max(20)).optional() }).parse(req.body || {});
+    try {
+      const [baremes, { lists }] = await Promise.all([baremesPorCategoria(), getBudgetLists()]);
+      const out = await CMP.propor({
+        budget,
+        cods: input.cods,
+        baremesPorTipo: baremes,
+        familias: lists?.familias || [],
+        userId: req.user?.sub,
+        io: req.app.get("io"),
+      });
+      return res.json(out);
+    } catch (err) {
+      return res.status(err.status || 503).json({ error: err.code || "IA_INDISPONIVEL", errors: [err.message] });
+    }
+  })
+);
+
+/**
+ * Junta as linhas revistas às folhas de custo do orçamento.
+ *
+ * Acrescenta — nunca substitui: o que já estava escrito à mão fica. O mesmo
+ * recurso usado em vários trabalhos entra numa linha só, com a observação a
+ * dizer de que trabalhos veio.
+ */
+budgetRoutes.post(
+  "/:id/ai/compose/apply",
+  requirePermission(MODULE, "edit"),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget) return res.status(404).json({ error: "NOT_FOUND" });
+    if (budget.locked) return res.status(409).json({ error: "ORCAMENTO_ADJUDICADO", errors: ["O orçamento está adjudicado: não se altera."] });
+
+    const input = z
+      .object({
+        version: z.coerce.number().int().positive().optional(),
+        itens: z.array(z.record(z.string(), z.any())).min(1),
+      })
+      .parse(req.body || {});
+
+    if (input.version !== undefined && input.version !== budget.version) {
+      return res.status(409).json({
+        error: "VERSAO_DESATUALIZADA",
+        errors: [`Alguém gravou este orçamento entretanto (versão ${budget.version}, a sua é ${input.version}).`],
+        current: serialize(budget),
+      });
+    }
+
+    const { params } = await getBudgetParams();
+    const { sheets: novas, semBarem, materiaisSemPreco, recursos } = CMP.toSheetRows(input.itens, {
+      horasDia: Number(params?.horasDia) || 8,
+    });
+    if (!recursos) return res.status(400).json({ error: "SEM_LINHAS", errors: ["Nenhuma linha marcada."] });
+
+    const doc = asDocument(budget);
+    const juntas = { ...doc.sheets };
+    for (const [folha, linhas] of Object.entries(novas)) {
+      juntas[folha] = [...(Array.isArray(juntas[folha]) ? juntas[folha] : []), ...linhas];
+    }
+    doc.sheets = juntas;
+
+    const R = calcBudget(doc);
+    const updated = await prisma.budget.update({
+      where: { id },
+      data: {
+        ...columnsFor(doc, R),
+        params: doc.params,
+        sheets: doc.sheets,
+        lists: doc.lists,
+        dispatch: doc.dispatch,
+        version: { increment: 1 },
+      },
+      include: { client: { select: { id: true, name: true, code: true } } },
+    });
+
+    res.json({
+      ...serialize(updated),
+      composicao: {
+        recursos,
+        semBarem,
+        materiaisSemPreco,
+        porFolha: Object.fromEntries(Object.entries(novas).map(([k, v]) => [k, v.length])),
+      },
+    });
   })
 );
 

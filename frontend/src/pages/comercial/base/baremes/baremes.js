@@ -10,6 +10,7 @@
 
 import { apiRequest } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
+import { abrirAssistente, wireAssistente } from "/shared/comercial/baremAssistente.js";
 import { initComercialPage, canEdit } from "/shared/comercial/page.js";
 import { computeBaremCost, computeBaremStatus, buildFuelPrices } from "/shared/comercial/baremFormulas.js";
 
@@ -107,6 +108,11 @@ function renderTabs() {
     <label class="cm-chip" style="cursor:pointer">
       <input id="bqInactive" type="checkbox" ${S.includeInactive ? "checked" : ""}> Incluir arquivados
     </label>
+    ${
+      S.readonly || S.kind === "COMBUSTIVEL"
+        ? ""
+        : `<button id="bqIA" class="cm-chip" type="button" data-cm-write="1" title="Descreva o recurso por palavras e a IA calcula os campos">✦ Calcular com IA</button>`
+    }
     ${S.readonly ? "" : `<button id="bqNew" class="cm-chip" type="button" data-cm-write="1">+ Novo barém</button>`}
     ${S.readonly || S.items.length ? "" : `<button id="bqSeed" class="cm-chip is-on" type="button" data-cm-write="1">Carregar baremes de referência</button>`}
   `;
@@ -548,7 +554,37 @@ async function seedDefaults() {
   }
 }
 
+/**
+ * O assistente abre com o tipo do separador aberto e, quando se aceita a
+ * proposta, **enche o formulário de «Novo barém»** — não grava nada. Fica tudo
+ * a passar pelo mesmo caminho e pelas mesmas validações.
+ */
+function abrirIA() {
+  abrirAssistente({
+    kind: S.kind,
+    campos: fieldsFor(S.kind),
+    onAplicar: ({ campos, ownership, unit, nome }) => {
+      openNew();
+      const nomeEl = el("nbName");
+      if (nomeEl && nome) nomeEl.value = nome;
+      if (ownership && el("nbOwnership")) el("nbOwnership").value = ownership;
+      if (unit && el("nbUnit")) el("nbUnit").value = unit;
+      for (const f of fieldsFor(S.kind)) {
+        const input = el(`nb_${f.k}`);
+        if (!input) continue;
+        const v = campos[f.k];
+        if (v === null || v === undefined) continue;
+        input.value = f.ty === "pct" ? Math.round(Number(v) * 1e6) / 1e4 : v;
+      }
+      const msg = el("nbMsg");
+      if (msg) msg.textContent = "Valores propostos pela IA. Reveja-os e dê um nome antes de criar.";
+      nomeEl?.focus();
+    },
+  });
+}
+
 function wire() {
+  wireAssistente();
   document.addEventListener("input", (e) => {
     if (e.target?.dataset?.cell) onCellInput(e);
   });
@@ -560,8 +596,9 @@ function wire() {
     }
   });
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-kind],[data-save],[data-history],[data-del],#bqNew,#bqSeed,#bqSaveAll");
+    const t = e.target.closest("[data-kind],[data-save],[data-history],[data-del],#bqNew,#bqSeed,#bqSaveAll,#bqIA");
     if (!t) return;
+    if (t.id === "bqIA") return abrirIA();
     if (t.dataset.kind) {
       S.kind = t.dataset.kind;
       render();

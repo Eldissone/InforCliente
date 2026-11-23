@@ -874,3 +874,33 @@ test("isYes está exportado e é o mesmo nos dois lados", () => {
   assert.equal(C.isYes("Não"), false);
   assert.equal(C.isYes(""), false);
 });
+
+test("um orçamento com preço e sem custo nenhum é assinalado", () => {
+  /*
+   * O caso real que levantou isto: um orçamento com o mapa de quantidades
+   * cheio (44 238 057) e as folhas de custo vazias mostrava «100,0%» de margem
+   * e **nenhum alerta**. A aritmética está certa — 100% de nada é 100% — mas o
+   * que o orçamento está a dizer é que ainda ninguém somou o que a obra custa.
+   */
+  const b = {
+    params: { metodo: "PRECO_DADO", moedaBase: "AOA", iva: 0.14, margemMin: 0.1, margemObj: 0.2 },
+    sheets: { qt: [{ cod: "1.1", desc: "Montagem de colunas", un: "un", q: 154, pu: 287260 }] },
+    lists: {},
+    dispatch: {},
+  };
+  const R = C.calcBudget(b);
+  assert.ok(R.PVsi > 0);
+  assert.equal(R.CT, 0);
+  assert.equal(R.semCusto, true);
+  assert.equal(R.mgEstado, "SEM_CUSTO");
+  const alerta = (R.alerts || []).find((a) => a.t === "Sem custo nenhum lançado");
+  assert.ok(alerta, "tem de haver um alerta");
+  assert.equal(alerta.n, 1);
+  assert.equal(alerta.estado, "CRÍTICO");
+
+  // Com custo lançado, o alerta desaparece.
+  b.sheets.sub = [{ desc: "Empreitada", un: "vg", q: 1, pu: 30000000 }];
+  const R2 = C.calcBudget(b);
+  assert.equal(R2.semCusto, false);
+  assert.equal((R2.alerts || []).find((a) => a.t === "Sem custo nenhum lançado")?.n, 0);
+});

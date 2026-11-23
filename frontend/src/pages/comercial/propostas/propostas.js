@@ -37,6 +37,8 @@ const S = {
   prevTimer: null,
   /** O documento tem alterações por gravar. */
   docDirty: false,
+  /** O documento como estava antes da última escrita da IA, para se poder anular. */
+  docAntesIA: null,
 };
 
 /** Como a lista de preços se apresenta ao cliente. */
@@ -244,7 +246,7 @@ function render() {
     <a class="cm-chip" href="/comercial/propostas">‹ Todas as propostas</a>
     ${p.budget ? `<a class="cm-chip" href="/comercial/orcamento?id=${esc(p.budget.id)}">Abrir o orçamento</a>` : ""}
     ${editable ? `<button class="cm-chip${S.dirty ? " is-on" : ""}" type="button" id="pSave">${S.dirty ? "Guardar" : "Guardado"}</button>` : ""}
-    <button class="cm-chip" type="button" id="pPrint">Imprimir / PDF</button>`;
+   `;
 
   const area = (k, l, rows = 3, help = "") => `
     <label style="display:grid;gap:.25rem;font-size:.8125rem;color:var(--cm-muted)">
@@ -405,6 +407,7 @@ function render() {
                <button class="cm-chip" type="button" id="pRebuild">Refazer do orçamento</button>`
             : ""
         }
+        ${S.docAntesIA ? `<button class="cm-chip" type="button" id="pUndoIA">Anular a escrita da IA</button>` : ""}
         <button class="cm-chip" type="button" id="pPdf">Extrair PDF</button>
         <button class="cm-chip" type="button" id="pHtml">Extrair HTML</button>
         <span id="pPrevSt" class="cm-lead" style="margin:0"></span>
@@ -594,7 +597,7 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-status],[data-dec],[data-milx],#pSave,#pSend,#pPrint,#pDocSave,#pRebuild,#pPdf,#pHtml");
+    const t = e.target.closest("[data-status],[data-dec],[data-milx],#pSave,#pSend,#pPrint,#pDocSave,#pRebuild,#pPdf,#pHtml,#pUndoIA");
     if (!t) return;
     if (t.dataset.status !== undefined) {
       S.status = t.dataset.status;
@@ -610,6 +613,7 @@ function wire() {
       render();
       return;
     }
+    if (t.id === "pUndoIA") return anularIA();
     if (t.id === "pDocSave") return guardarDocumento();
     if (t.id === "pRebuild") return refazerLista();
     if (t.id === "pPdf" || t.id === "pHtml") {
@@ -653,6 +657,7 @@ function wire() {
         throw err;
       }
     },
+    onAi: pedirIA,
     host: () => el("pEditor"),
   });
 
@@ -670,6 +675,52 @@ function wire() {
  * Os textos escritos à mão — memória descritiva, condições técnicas, cronograma
  * — ficam como estão: só a parte comercial é que volta a sair do orçamento.
  */
+/**
+ * Pedir à IA que redija um texto.
+ *
+ * A IA não grava: devolve o documento com o texto no sítio, fica por gravar, e
+ * guarda-se o que lá estava antes para se poder anular numa tecla.
+ */
+async function pedirIA({ tarefa, zona, pedido, botao, campo }) {
+  if (!S.doc) return;
+  const antes = botao?.textContent;
+  if (botao) {
+    botao.disabled = true;
+    botao.textContent = "A redigir…";
+  }
+  try {
+    const r = await apiRequest(`/proposals/${encodeURIComponent(S.id)}/ai`, {
+      method: "POST",
+      body: { tarefa, zona, pedido, document: S.doc },
+    });
+    S.docAntesIA = S.doc;
+    S.doc = r.document;
+    if (campo) campo.value = "";
+    redesenharEditor();
+    docMudou();
+    previsualizar();
+    toast("A IA escreveu. Reveja antes de guardar.", { type: "success" });
+  } catch (err) {
+    toast(err.message || "A IA não está disponível.", { type: "error" });
+  } finally {
+    if (botao) {
+      botao.disabled = false;
+      botao.textContent = antes;
+    }
+  }
+}
+
+/** Desfazer a última escrita da IA. */
+function anularIA() {
+  if (!S.docAntesIA) return;
+  S.doc = S.docAntesIA;
+  S.docAntesIA = null;
+  redesenharEditor();
+  render();
+  previsualizar();
+  toast("Escrita da IA anulada.", { type: "success" });
+}
+
 /** Guardar o documento (as secções, os anexos, os textos). */
 async function guardarDocumento() {
   if (!S.doc) return;

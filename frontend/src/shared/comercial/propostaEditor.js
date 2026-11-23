@@ -172,6 +172,10 @@ function anexosHtml(doc, zona, dis) {
           ${TIPOS_ANEXO.map(([t, l]) => `<button type="button" class="cm-chip" data-pax="${attr(zona)}|${attr(t)}" ${dis}>+ ${esc(l)}</button>`).join("")}
         </span>
       </div>
+      <div class="pe-ia-pedido">
+        <input class="cell-manual" type="text" data-piatxt="${attr(zona)}" placeholder="Pedir um bloco à IA: o que deve dizer…" ${dis}>
+        <button type="button" class="cm-chip" data-pia="bloco|${attr(zona)}" ${dis}>✦ Redigir</button>
+      </div>
       ${
         meus.length
           ? meus
@@ -212,6 +216,14 @@ export function renderEditor(doc, { editable = true, resolve } = {}) {
       <summary>${esc(s.titulo)}</summary>
       <div class="pe-sec-corpo">
         ${s.ajuda ? `<p class="pe-ajuda">${esc(s.ajuda)}</p>` : ""}
+        ${
+          s.ia
+            ? `<div class="pe-ia">
+                 <button type="button" class="cm-chip" data-pia="${attr(s.ia.tarefa)}|${attr(s.zona)}" ${dis}>${esc(s.ia.label)}</button>
+                 <small>${esc(s.ia.ajuda || "")}</small>
+               </div>`
+            : ""
+        }
         ${s.campos
           .map((c) => {
             if (c.kind === "list" && c.arvore) return organogramaHtml(doc, c, dis);
@@ -235,7 +247,7 @@ export function renderEditor(doc, { editable = true, resolve } = {}) {
  * @param {(file: File) => Promise<string>} o.onUpload carrega uma imagem e devolve o endereço
  * @param {() => HTMLElement|null} o.host onde o editor está desenhado
  */
-export function wireEditor({ getDoc, onChange, onStructure, onUpload, host }) {
+export function wireEditor({ getDoc, onChange, onStructure, onUpload, onAi, host }) {
   const doc = () => getDoc();
 
   /** O valor de um campo, pelo tipo. */
@@ -273,6 +285,20 @@ export function wireEditor({ getDoc, onChange, onStructure, onUpload, host }) {
   document.addEventListener("click", async (e) => {
     const d = doc();
     if (!d) return;
+    const ia = e.target.closest("[data-pia]");
+    if (ia && onAi) {
+      const [tarefa, zona] = ia.dataset.pia.split("|");
+      const campo = tarefa === "bloco" ? document.querySelector(`[data-piatxt="${zona}"]`) : null;
+      const pedido = campo?.value?.trim() || "";
+      if (tarefa === "bloco" && !pedido) {
+        campo?.focus();
+        return;
+      }
+      lerAbertas(host?.());
+      await onAi({ tarefa, zona, pedido, botao: ia, campo });
+      return;
+    }
+
     const alvo = e.target.closest("[data-pla],[data-plx],[data-pax],[data-pxx],[data-pimgx]");
     if (!alvo) return;
 

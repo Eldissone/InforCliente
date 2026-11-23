@@ -11,6 +11,10 @@ const FEATURES = [
   { key: "digests", label: "Resumos diários e semanais", default: false },
   { key: "alerts", label: "Alertas preditivos", default: false },
   { key: "needs_assist", label: "Necessidades assistidas (texto ou foto)", default: false },
+  { key: "proposal_texts", label: "Textos da proposta ao cliente", default: false },
+  { key: "budget_import", label: "Importar orçamento de uma folha de Excel", default: false },
+  { key: "barem_assist", label: "Assistente de baremes (calcular e tirar dúvidas)", default: false },
+  { key: "budget_compose", label: "Compor os custos a partir do mapa de quantidades", default: false },
   { key: "documents_draft", label: "Rascunhos de documentos (autos e relatório mensal)", default: false },
   { key: "photos", label: "Análise de fotos", default: false },
 ];

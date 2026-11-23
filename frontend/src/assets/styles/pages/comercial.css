@@ -1071,3 +1071,332 @@ table.cm-table tr.cm-total td:first-child { background: #f6f8fb; }
     font-size: 0.72rem;
     white-space: pre;
 }
+
+.pe-ia {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px dashed #bae6fd;
+    border-radius: 0.5rem;
+    background: #f0f9ff;
+}
+
+.pe-ia small {
+    font-size: 0.68rem;
+    color: #0369a1;
+}
+
+.pe-ia-pedido {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.pe-ia-pedido input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ─── Importar Excel com IA ───────────────────────────────────────────────── */
+.imp-wizard {
+    width: min(78rem, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.imp-drop {
+    display: grid;
+    gap: 0.4rem;
+    padding: 1.25rem;
+    border: 2px dashed var(--cm-line, #e2e8f0);
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    text-align: center;
+}
+
+.imp-drop small {
+    color: #94a3b8;
+    font-size: 0.72rem;
+}
+
+.imp-cab {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.6rem;
+    margin: 0.75rem 0;
+}
+
+.imp-resumo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.5rem;
+    background: #f1f5f9;
+    font-size: 0.78rem;
+    color: #475569;
+}
+
+.imp-resumo .imp-acts {
+    margin-left: auto;
+    display: flex;
+    gap: 0.3rem;
+}
+
+.imp-tabela {
+    max-height: 48vh;
+    overflow: auto;
+    margin-top: 0.5rem;
+    border: 1px solid var(--cm-line, #e2e8f0);
+    border-radius: 0.5rem;
+}
+
+.imp-tabela table {
+    width: 100%;
+    font-size: 0.75rem;
+}
+
+.imp-tabela thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8fafc;
+    padding: 0.4rem 0.45rem;
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    border-bottom: 1px solid var(--cm-line, #e2e8f0);
+}
+
+.imp-tabela td {
+    padding: 0.3rem 0.45rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+}
+
+.imp-tabela tr.imp-off {
+    opacity: 0.45;
+}
+
+.imp-meta {
+    font-size: 0.66rem;
+    color: #94a3b8;
+    margin-top: 0.15rem;
+}
+
+.imp-barem {
+    color: #047857;
+}
+
+.imp-dup,
+.imp-falta {
+    display: inline-block;
+    padding: 0 0.3rem;
+    border-radius: 0.3rem;
+    font-weight: 700;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.imp-dup {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.imp-falta {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* ─── Assistente de baremes (IA) ──────────────────────────────────────────── */
+.ba-wizard {
+    width: min(60rem, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.ba-res {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--cm-line, #e2e8f0);
+}
+
+.ba-res-cab {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.ba-res-cab h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.ba-custo {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--cm-muted, #64748b);
+}
+
+.ba-tabela {
+    width: 100%;
+    font-size: 0.78rem;
+    margin-top: 0.5rem;
+}
+
+.ba-tabela th {
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    padding: 0.3rem 0.4rem;
+    border-bottom: 1px solid var(--cm-line, #e2e8f0);
+}
+
+.ba-tabela td {
+    padding: 0.3rem 0.4rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.ba-conta {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.ba-res h4 {
+    margin: 0.9rem 0 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.ba-lista {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-size: 0.78rem;
+    color: #475569;
+    display: grid;
+    gap: 0.15rem;
+}
+
+.ba-nota {
+    margin: 0.6rem 0 0;
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.ba-resposta {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: #f8fafc;
+    border: 1px solid var(--cm-line, #e2e8f0);
+    font-size: 0.82rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+/* ─── Compor custos a partir do mapa ──────────────────────────────────────── */
+.cc-wizard {
+    width: min(72rem, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.cc-trabalho td {
+    background: #f1f5f9;
+    font-size: 0.75rem;
+    color: #0f172a;
+}
+
+.cc-trabalho .imp-meta {
+    display: inline;
+    margin-left: 0.4rem;
+}
+
+/* ─── Preços do histórico de compras ─────────────────────────────────────── */
+.ph-wizard {
+    width: min(72rem, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.ph-tabela td {
+    vertical-align: top;
+}
+
+.ph-linha td {
+    background: #f1f5f9;
+    font-size: 0.75rem;
+    color: #0f172a;
+}
+
+.ph-linha .imp-meta {
+    display: inline;
+    margin-left: 0.4rem;
+}
+
+.ph-cands {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0.25rem 0;
+}
+
+.ph-cand {
+    display: grid;
+    grid-template-columns: 1.25rem 10rem 1fr auto;
+    align-items: start;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+
+.ph-cand:hover {
+    background: #f8fafc;
+}
+
+.ph-cand.is-on {
+    border-color: #2afc8d;
+    background: #f0fdf4;
+}
+
+.ph-cand-preco {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ph-cand-desc .cm-pill,
+.ph-cand-desc .imp-dup {
+    margin-left: 0.35rem;
+}
+
+.ph-cand-desc .imp-meta {
+    display: block;
+}
+
+.ph-cand-total {
+    color: #64748b;
+    white-space: nowrap;
+    font-size: 0.7rem;
+}
+
+.ph-procura {
+    display: flex;
+    gap: 0.4rem;
+    margin: 0.35rem 0 0.6rem;
+}
+
+.ph-procura input {
+    flex: 1;
+    min-width: 0;
+}

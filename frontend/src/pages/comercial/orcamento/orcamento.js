@@ -14,6 +14,8 @@ import { apiRequest } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
 import { initComercialPage, canEdit } from "/shared/comercial/page.js";
 import { calcBudget, CATS, SHEET_KEYS } from "/shared/comercial/budgetCalc.js";
+import { abrirComposicao, wireComposicao } from "/shared/comercial/comporCustos.js";
+import { abrirPrecosHistorico, wirePrecosHistorico } from "/shared/comercial/precosHistorico.js";
 
 const el = (id) => document.getElementById(id);
 const esc = (v) => escapeHtml(String(v ?? ""));
@@ -205,6 +207,13 @@ const METODOS = {
   MARKUP_SOBRE_CUSTO: "Markup sobre o custo",
   PRECO_DADO: "Preço dado pelo cliente",
 };
+
+/**
+ * Folhas cujo preço unitário se pode procurar no histórico de compras, e o
+ * campo da descrição que serve para o procurar. As outras folhas custam por
+ * barém, não por preço de compra.
+ */
+const PRECAVEIS = { mat: "desc", sub: "desc" };
 
 /** O rótulo da metodologia em vigor. */
 function metodoLabel() {
@@ -515,9 +524,19 @@ function viewSheet(key) {
           venda
             ? `<span class="cm-chip"><span>Total do mapa</span><b>${fmt(total)}</b></span>
                ${S.R.precoDado ? `<span class="cm-pill is-good">É o preço de venda</span>` : `<span class="cm-pill">Não é o preço de venda</span>`}
+               ${
+                 editable && (S.doc.sheets.qt || []).some((l) => l.desc && Number(l.q) > 0)
+                   ? `<button class="cm-chip" type="button" id="bComporQt" title="A IA propõe os recursos que cada trabalho leva por unidade">✦ Compor custos</button>`
+                   : ""
+               }
                ${editable ? `<button class="cm-chip is-on" type="button" id="bImportQt">Importar de uma obra</button>` : ""}`
             : `<span class="cm-chip"><span>Custo</span><b>${fmt(total)}</b></span>
-               ${cat && !["FIN", "IND", "RIS"].includes(cat[0]) ? `<span class="cm-chip"><span>Preço de venda</span><b>${fmt(pvTotal)}</b></span>` : ""}`
+               ${cat && !["FIN", "IND", "RIS"].includes(cat[0]) ? `<span class="cm-chip"><span>Preço de venda</span><b>${fmt(pvTotal)}</b></span>` : ""}
+               ${
+                 editable && PRECAVEIS[key] && (S.doc.sheets[key] || []).some((l) => l[PRECAVEIS[key]])
+                   ? `<button class="cm-chip" type="button" id="bPrecosHist" title="Preços que a casa já pagou: necessidades de obra, cotações escolhidas, catálogo dos fornecedores">Preços do histórico</button>`
+                   : ""
+               }`
         }
       </div>
     </div>
@@ -1458,6 +1477,8 @@ function showConflict(p) {
 // ───────────────────────── eventos ─────────────────────────
 
 function wire() {
+  wireComposicao();
+  wirePrecosHistorico();
   document.addEventListener("input", onCell);
 
   // Catálogo de artigos no mapa de quantidades.
@@ -1497,10 +1518,57 @@ function wire() {
   });
 
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt");
+    const t = e.target.closest("[data-view],[data-addrow],[data-delrow],[data-cfx],[data-milx],#bSave,#bApply,#tSave,#bImportQt,#bComporQt,#bPrecosHist");
     if (!t) return;
     if (t.id === "tSave") return saveTerms();
     if (t.id === "bImportQt") return openImportQt();
+    if (t.id === "bPrecosHist") {
+      const folha = S.view;
+      if (!PRECAVEIS[folha]) return;
+      abrirPrecosHistorico({
+        id: S.id,
+        folha,
+        // As linhas como estão no ecrã: a procura não escreve nada no
+        // servidor, por isso não obriga a gravar primeiro.
+        rows: () => S.doc.sheets[folha] || [],
+        onAplicar: ({ campos, escolhas }) => {
+          const linhas = S.doc.sheets[folha] || [];
+          let n = 0;
+          for (const { i, candidato } of escolhas) {
+            const linha = linhas[i];
+            if (!linha) continue;
+            linha[campos.preco] = candidato.preco;
+            // A folha de subempreitadas não tem coluna de moeda: o serviço só
+            // lhe oferece preços na moeda-base, por isso não há nada a escrever.
+            if (campos.moeda) linha[campos.moeda] = candidato.moeda;
+            if (campos.obs) linha[campos.obs] = [linha[campos.obs], candidato.nota].filter(Boolean).join(" · ");
+            n += 1;
+          }
+          markDirty();
+          render();
+          toast(`${n} preço(s) preenchido(s) com a origem nas observações. Por gravar.`, { type: "success" });
+        },
+      });
+      return;
+    }
+    if (t.id === "bComporQt") {
+      // Gravar primeiro o que estiver por gravar: a composição escreve no
+      // servidor, e o que estivesse só no ecrã perdia-se.
+      if (S.dirty) {
+        toast("Grave o orçamento antes de compor os custos.", { type: "error" });
+        return;
+      }
+      abrirComposicao({
+        id: S.id,
+        trabalhos: S.doc.sheets.qt || [],
+        version: () => S.head.version,
+        onAplicado: (r) => {
+          setDoc(r);
+          render();
+        },
+      });
+      return;
+    }
     if (t.dataset.milx) {
       const [a, i] = t.dataset.milx.split("|");
       if (a === "add") S.terms.previstas.marcos.push({ desc: "Novo marco", pct: null, ev: "data", data: null });

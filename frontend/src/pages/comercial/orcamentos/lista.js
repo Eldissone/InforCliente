@@ -8,6 +8,7 @@
 import { apiRequest } from "/services/api.js";
 import { toast, escapeHtml } from "/shared/ui.js";
 import { initComercialPage, canEdit } from "/shared/comercial/page.js";
+import { abrirImportacao, wireImportacao } from "/shared/comercial/importarExcel.js";
 
 const el = (id) => document.getElementById(id);
 const esc = (v) => escapeHtml(String(v ?? ""));
@@ -48,7 +49,12 @@ function render() {
   el("cmHeadActions").innerHTML = `
     <input id="oqSearch" class="cell-list" style="min-width:260px" type="search"
            placeholder="Procurar por número, obra, cliente ou responsável…" value="${esc(S.q)}" aria-label="Procurar orçamentos">
-    ${S.readonly ? "" : `<button class="cm-chip is-on" type="button" id="oqNew" data-cm-write="1">+ Novo orçamento</button>`}`;
+    ${
+      S.readonly
+        ? ""
+        : `<button class="cm-chip" type="button" id="oqImport" data-cm-write="1" title="A IA lê a folha e mostra as linhas para rever">✦ Importar Excel</button>
+           <button class="cm-chip is-on" type="button" id="oqNew" data-cm-write="1">+ Novo orçamento</button>`
+    }`;
 
   const total = Object.values(S.counts).reduce((a, b) => a + b, 0);
   const chip = (k, l) =>
@@ -370,6 +376,7 @@ async function createNew(btn) {
 // ───────────────────────── eventos ─────────────────────────
 
 function wire() {
+  wireImportacao();
   document.addEventListener("input", (e) => {
     if (e.target?.dataset?.nv || e.target?.dataset?.nc) return readNew(e);
     if (e.target?.id === "oqSearch") {
@@ -390,8 +397,17 @@ function wire() {
     if (e.target?.dataset?.nv || e.target?.dataset?.nc) readNew(e);
   });
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-status],[data-nvx],#oqNew");
+    const t = e.target.closest("[data-status],[data-nvx],#oqNew,#oqImport");
     if (!t) return;
+    if (t.id === "oqImport") {
+      abrirImportacao({
+        onCriado: async () => {
+          await load();
+          render();
+        },
+      });
+      return;
+    }
     if (t.dataset.status !== undefined) {
       S.status = t.dataset.status;
       await load();
