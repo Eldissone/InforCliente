@@ -16,6 +16,9 @@ import { initComercialPage, canEdit } from "/shared/comercial/page.js";
 import { calcBudget, CATS, SHEET_KEYS } from "/shared/comercial/budgetCalc.js";
 import { abrirComposicao, wireComposicao } from "/shared/comercial/comporCustos.js";
 import { abrirPrecosHistorico, wirePrecosHistorico } from "/shared/comercial/precosHistorico.js";
+import { viewProducao, wireProducao, PRODUCAO } from "/shared/comercial/producao.js";
+import { viewT1, viewT2, wireFinObra, FIN_OBRA } from "/shared/comercial/financeiroObra.js";
+import { viewR1, wireRelatorios } from "/shared/comercial/relatorios.js";
 
 const el = (id) => document.getElementById(id);
 const esc = (v) => escapeHtml(String(v ?? ""));
@@ -61,10 +64,20 @@ async function load() {
 
 function setDoc(b) {
   S.head = b;
-  S.doc = { params: b.params, sheets: b.sheets, baremSnapshot: b.baremSnapshot, lists: b.lists, dispatch: b.dispatch };
+  S.doc = { params: b.params, sheets: b.sheets, baremSnapshot: b.baremSnapshot, lists: b.lists, dispatch: b.dispatch, production: b.production || {} };
   for (const k of SHEET_KEYS) if (!Array.isArray(S.doc.sheets[k])) S.doc.sheets[k] = [];
   S.dirty = false;
   recalc();
+}
+
+/** O que o T1/T2 precisam: o orçamento, as condições de pagamento (T3) e a produção. */
+function finObraCtx() {
+  return { S, markDirty, render, loadTerms, editable: !S.readonly && !S.head?.locked };
+}
+
+/** O que os ecrãs de Produção precisam do orçamento aberto. */
+function producaoCtx() {
+  return { S, markDirty, render, optionsFor, editable: !S.readonly && !S.head?.locked };
 }
 
 function recalc() {
@@ -111,6 +124,8 @@ function sections() {
         { id: "par", tag: "16", label: "Parâmetros" },
       ],
     },
+    // Produção (P1–P8): o planeamento das tarefas, de onde saem RH, equipamentos e materiais.
+    { group: "Produção", items: PRODUCAO.map(([id, tag, label]) => ({ id, tag, label })) },
     // O mapa de quantidades é o lado da venda: fica num grupo só dele, para
     // ninguém o confundir com uma folha de custo.
     {
@@ -121,7 +136,7 @@ function sections() {
     { group: "Custos indiretos", items: ["ind", "fin", "ris"].map(sheetItem) },
     {
       group: "Financeiro da obra",
-      items: [{ id: "fcond", tag: "T3", label: "Condições de pagamento" }],
+      items: [...FIN_OBRA.map(([id, tag, label]) => ({ id, tag, label })), { id: "fcond", tag: "T3", label: "Condições de pagamento" }],
     },
     {
       group: "Análise",
@@ -131,6 +146,7 @@ function sections() {
         { id: "bar", tag: "14", label: "Baremes do orçamento" },
       ],
     },
+    { group: "Relatórios", items: [{ id: "rel", tag: "R1", label: "Relatórios e documentos" }] },
   ];
 }
 
@@ -197,6 +213,10 @@ function render() {
   else if (S.view === "verif") body.innerHTML = viewVerif();
   else if (S.view === "abc") body.innerHTML = viewAbc();
   else if (S.view === "bar") body.innerHTML = viewBaremes();
+  else if (PRODUCAO.some(([id]) => id === S.view)) body.innerHTML = viewProducao(S.view, producaoCtx());
+  else if (S.view === "pfinc") body.innerHTML = viewT1(finObraCtx());
+  else if (S.view === "pfin") body.innerHTML = viewT2(finObraCtx());
+  else if (S.view === "rel") body.innerHTML = viewR1(finObraCtx());
   else body.innerHTML = viewSheet(S.view);
 }
 
@@ -1024,12 +1044,16 @@ function viewTerms() {
 }
 
 async function loadTerms() {
+  if (S.termsLoading) return;
+  S.termsLoading = true;
   try {
     S.terms = await apiRequest(`/budgets/${S.id}/payment-terms`);
     S.termsDirty = false;
-    if (S.view === "fcond") render();
+    if (["fcond", "pfinc", "pfin"].includes(S.view)) render();
   } catch (err) {
     toast(err?.message || "Não foi possível carregar as condições de pagamento.", { type: "error" });
+  } finally {
+    S.termsLoading = false;
   }
 }
 
@@ -1536,6 +1560,7 @@ async function save() {
         sheets: S.doc.sheets,
         lists: S.doc.lists,
         dispatch: S.doc.dispatch,
+        production: S.doc.production || {},
       },
     });
     setDoc(saved);
@@ -1596,6 +1621,9 @@ function showConflict(p) {
 function wire() {
   wireComposicao();
   wirePrecosHistorico();
+  wireProducao(producaoCtx);
+  wireFinObra(finObraCtx);
+  wireRelatorios(finObraCtx);
   document.addEventListener("input", onCell);
 
   // Catálogo de artigos no mapa de quantidades.

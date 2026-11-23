@@ -2680,6 +2680,8 @@ model Budget {
   paymentTerms  Json @default("{}")
   /// Folha de despacho (decisão, preparado por, aprovado por, data, observações)
   dispatch      Json @default("{}")
+  /// Produção (P1–P8): calendário, tarefas, pessoal indireto, organograma, EPI e alimentação
+  production   Json         @default("{}")
 
   // Resultados materializados pelo motor de cálculo
   directCost     Decimal? @db.Decimal(16, 2)

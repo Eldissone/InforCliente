@@ -45,6 +45,7 @@ const APP_MENU = [
       },
       { label: "Folha de Despacho", icon: "fact_check", href: "/comercial/despacho", perm: "comercial:tab_despacho" },
       { label: "Propostas", icon: "forward_to_inbox", href: "/comercial/propostas", perm: "comercial:tab_propostas" },
+      { label: "Necessidades em orçamento", icon: "shopping_basket", href: "/comercial/necessidades", perm: "comercial:tab_orcamentos" },
       {
         label: "Base",
         icon: "dataset",

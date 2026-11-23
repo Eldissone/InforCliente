@@ -765,3 +765,57 @@ button.fx2-k:hover { background: #f8fafc; }
 
 /* R5: nota de crédito no extrato */
 .fx2-tp--NC { background: #fdf0d4; color: #8a5a00; }
+
+/* ─── Orçamento › Produção (P1–P8) ────────────────────────────────────────── */
+.pr-cal { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; padding: 10px 12px; margin-bottom: 10px; font-size: 13px; }
+.pr-cal label { display: inline-flex; flex-direction: column; gap: 2px; color: var(--cm-muted, #56636f); }
+.pr-cal .pr-fer { min-width: 280px; flex: 1; }
+.pr-n { width: 90px; text-align: right; }
+.pr-t td { vertical-align: top; }
+.pr-falta { color: #c0392b; font-weight: 600; }
+.pr-acts { white-space: nowrap; }
+.pr-lin { display: flex; gap: 6px; margin-bottom: 4px; }
+.pr-lin input { flex: 1; min-width: 0; }
+.pr-lin input[type="number"] { flex: 0 0 110px; }
+.pr-gantt th.pr-w { font-size: 11px; white-space: nowrap; }
+.pr-gantt .pr-hoje { background: #eaf6ef; }
+.pr-cel { min-width: 38px; padding: 2px 3px !important; font-size: 12px; }
+.pr-bar { display: block; height: 12px; border-radius: 3px; background: #1fa36a; }
+.pr-tot td { font-weight: 600; border-top: 1px solid var(--cm-line, #e3e7ec); }
+.pr-org { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.pr-org-n { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.pr-org-l { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.pr-org-c { border: 1px solid var(--cm-line, #e3e7ec); border-top: 3px solid #1fa36a; border-radius: 8px; padding: 6px 10px; background: #fff; display: flex; flex-direction: column; gap: 2px; min-width: 160px; font-size: 13px; }
+.pr-org-c span { color: var(--cm-muted, #56636f); font-size: 12px; }
+
+/* ─── Orçamento › T1/T2 ───────────────────────────────────────────────────── */
+.fo-panel { padding: 10px 12px; margin: 10px 0; }
+.fo-bars { display: flex; align-items: flex-end; gap: 6px; height: 150px; overflow-x: auto; padding-top: 6px; }
+.fo-bar { flex: 0 0 46px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; }
+.fo-bar i { display: block; width: 28px; border-radius: 3px 3px 0 0; }
+.fo-bar span { font-size: 10.5px; color: var(--cm-muted, #56636f); white-space: nowrap; }
+.fo-mes { max-width: 640px; margin-top: 10px; }
+.fo-regras { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 14px; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+.fo-regras label { display: inline-flex; flex-direction: column; gap: 2px; color: var(--cm-muted, #56636f); }
+.fo-n { width: 100px; text-align: right; }
+.fo-neg { color: #b42318 !important; }
+.fo-pos { color: #1d7a4a; }
+
+/* ─── Comercial › C0 Necessidades em orçamento ────────────────────────────── */
+.nc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.nc-card { text-align: left; font: inherit; background: #fff; border: 1px solid var(--cm-line, #e3e7ec); border-left: 3px solid #1fa36a; border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.nc-card:hover { background: #f6f7f9; }
+.nc-o { font-weight: 600; }
+.nc-m, .nc-s { font-size: 12.5px; color: var(--cm-muted, #56636f); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.nc-a { align-self: flex-end; font-size: 12.5px; color: #1f5fd1; }
+
+/* ─── Orçamento › R1 Relatórios e documentos ──────────────────────────────── */
+.rel-g { margin: 1rem 0 .5rem; }
+.rel-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.rel-card { display: flex; gap: 10px; align-items: flex-start; text-align: left; font: inherit; background: #fff; border: 1px solid var(--cm-line, #e3e7ec); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.rel-card:hover { background: #f6f7f9; border-color: #1fa36a; }
+.rel-ic { font-size: 20px; line-height: 1; }
+.rel-card b { display: block; font-size: 14px; }
+.rel-card small { display: block; color: var(--cm-muted, #56636f); font-size: 12px; margin-top: 2px; }
+.rel-rep { margin-top: 1.25rem; padding-top: .75rem; border-top: 2px solid #1fa36a; }
+.rel-rep h3 { margin: .9rem 0 .4rem; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #56636f; }

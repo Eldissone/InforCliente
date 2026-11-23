@@ -19,6 +19,7 @@ const { calcBudget, QTY_SHEET, CATS, PRICE_METHODS } = require("../services/budg
 const { normalizeUnit, summarizeUnits } = require("../services/budget/units");
 const { buildCatalog, searchCatalog, catalogStats } = require("../services/budget/articleCatalog");
 const PC = require("../services/budget/purchaseCatalog");
+const NEEDS = require("../services/budget/needs");
 const { readInvoiceDocument } = require("../services/invoiceScanService");
 const { resolveInvoiceAiConfig } = require("../services/ai/settingsService");
 const { dispatchNotification, CHANNELS } = require("../services/notifications/dispatcher");
@@ -108,6 +109,7 @@ function asDocument(row) {
     baremSnapshot: row.baremSnapshot || {},
     lists: row.lists || {},
     dispatch: row.dispatch || {},
+    production: row.production || {},
   };
 }
 
@@ -966,6 +968,39 @@ budgetRoutes.post(
   })
 );
 
+/**
+ * C0 Necessidades em orçamento: os orçamentos em curso com o que precisam de
+ * comprar e o estado do preço de cada artigo. `?id=` dá os artigos de um
+ * orçamento; `?todos=1` a vista consolidada (o mesmo artigo de vários).
+ */
+budgetRoutes.get(
+  "/needs",
+  requirePermission(MODULE, "tab_orcamentos"),
+  asyncHandler(async (req, res) => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const rows = await prisma.budget.findMany({
+      where: { status: { in: ["EM_ELABORACAO", "EM_ANALISE", "APROVADO", "PROPOSTA_ENVIADA"] } },
+      orderBy: [{ date: "desc" }],
+      take: 200,
+    });
+    const { catalog } = await loadPurchaseCatalog();
+    const porOrcamento = rows.map((b) => {
+      const doc = asDocument(b);
+      const lista = NEEDS.artigos(doc, catalog, hoje);
+      return { b, doc, lista, orc: NEEDS.resumo({ ...b, params: doc.params }, lista) };
+    });
+    if (req.query.id) {
+      const x = porOrcamento.find((o) => o.b.id === String(req.query.id));
+      if (!x) return res.status(404).json({ error: "NOT_FOUND", errors: ["Orçamento fora das necessidades (adjudicado, perdido ou cancelado)."] });
+      return res.json({ hoje, cats: NEEDS.CATS, validade: NEEDS.VALIDADE_DIAS, orcamento: x.orc, artigos: x.lista, pedidos: x.doc.params?.pedidosCotacao || [] });
+    }
+    if (req.query.todos) {
+      return res.json({ hoje, cats: NEEDS.CATS, validade: NEEDS.VALIDADE_DIAS, artigos: NEEDS.consolidar(porOrcamento.filter((x) => x.lista.length)) });
+    }
+    return res.json({ hoje, cats: NEEDS.CATS, validade: NEEDS.VALIDADE_DIAS, orcamentos: porOrcamento.map((x) => x.orc).filter((o) => o.artigos > 0) });
+  })
+);
+
 /** Obras que têm tabela de quantidades, para escolher de onde importar. */
 budgetRoutes.get(
   "/quantity-sources",
@@ -1033,6 +1068,7 @@ const patchSchema = z.object({
   sheets: z.record(z.string(), z.array(z.record(z.string(), z.any()))).optional(),
   lists: z.record(z.string(), z.any()).optional(),
   dispatch: z.record(z.string(), z.any()).optional(),
+  production: z.record(z.string(), z.any()).optional(),
   status: z.enum(BUDGET_STATUSES).optional(),
 });
 
@@ -1070,6 +1106,7 @@ budgetRoutes.patch(
     if (body.params) doc.params = { ...doc.params, ...body.params };
     if (body.lists) doc.lists = { ...doc.lists, ...body.lists };
     if (body.dispatch) doc.dispatch = { ...doc.dispatch, ...body.dispatch };
+    if (body.production) doc.production = body.production;
     if (body.sheets) {
       doc.sheets = { ...doc.sheets };
       for (const [k, rows] of Object.entries(body.sheets)) {
@@ -1088,6 +1125,7 @@ budgetRoutes.patch(
         sheets: doc.sheets,
         lists: doc.lists,
         dispatch: doc.dispatch,
+        production: doc.production,
         version: { increment: 1 },
       },
       include: { client: { select: { id: true, name: true, code: true } } },
